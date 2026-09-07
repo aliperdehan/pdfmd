@@ -33,10 +33,26 @@ AUTO_METADATA_DISABLED = object()
 # Engines are tried in this order only when the user did not request one.
 # An explicit --engine is never overridden.
 PDF_ENGINES = (
-    "lualatex", "xelatex", "pdflatex", "typst", "weasyprint",
-    "wkhtmltopdf", "prince", "context", "pdfroff",
+    "lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "typst",
+    "weasyprint", "wkhtmltopdf", "pagedjs-cli", "prince", "context",
+    "groff", "pdfroff",
 )
-LATEX_ENGINES = frozenset({"lualatex", "xelatex", "pdflatex", "context"})
+ENGINE_ALIASES = {
+    "1": "lualatex", "lua": "lualatex",
+    "2": "xelatex", "xe": "xelatex",
+    "3": "pdflatex", "pdf": "pdflatex",
+    "4": "latexmk", "mk": "latexmk",
+    "5": "tectonic", "tect": "tectonic",
+    "6": "typst",
+    "7": "weasyprint", "weasy": "weasyprint",
+    "8": "wkhtmltopdf", "wkhtml": "wkhtmltopdf",
+    "9": "pagedjs-cli", "pagedjs": "pagedjs-cli",
+    "10": "prince",
+    "11": "context",
+    "12": "groff",
+    "13": "pdfroff", "roff": "pdfroff",
+}
+LATEX_ENGINES = frozenset({"lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "context"})
 PREAMBLE_FILENAMES = ("preamble.tex", "latex-preamble.tex")
 
 
@@ -48,6 +64,7 @@ def installed_engines() -> list[str]:
 def select_engines(requested: str | None, presentation: bool) -> list[str]:
     """Select installed engines in fallback order, or explain what is missing."""
     if requested:
+        requested = ENGINE_ALIASES.get(requested.casefold(), requested)
         if which(requested):
             return [requested]
         raise SystemExit(
@@ -74,9 +91,9 @@ def dependency_report() -> bool:
     """Print executable availability and return whether conversion can run."""
     pandoc = which("pandoc")
     print(f"{'OK  ' if pandoc else 'MISS'}  pandoc" + (f"  ({pandoc})" if pandoc else ""))
-    for engine in PDF_ENGINES:
+    for number, engine in enumerate(PDF_ENGINES, start=1):
         path = which(engine)
-        print(f"{'OK  ' if path else 'MISS'}  {engine}" + (f"  ({path})" if path else ""))
+        print(f"{'OK  ' if path else 'MISS'}  {number}. {engine}" + (f"  ({path})" if path else ""))
     return bool(pandoc and installed_engines())
 
 
@@ -209,6 +226,114 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool) -> Iterator[lis
     finally:
         for path in temporary_paths:
             path.unlink(missing_ok=True)
+
+
+def document_header_includes(text: str) -> str | None:
+    """Return the LaTeX in a document's own ``header-includes:`` block.
+
+    Pandoc feeds ``--include-in-header`` files into the very same
+    ``header-includes`` template variable, and a variable set on the command
+    line beats one set in metadata. So the moment a preamble is auto-included
+    beside a document, a ``header-includes`` block in that document's own front
+    matter is silently discarded. Extracting it here lets the caller re-append
+    it as a second ``--include-in-header``, after the preambles, which is where
+    a per-document override belongs.
+    """
+    front_matter = re.match(r"^(---\s*\n)(.*?)(\n(?:---|\.\.\.)\s*(?:\n|$))", text, re.DOTALL)
+    if not front_matter:
+        return None
+
+    lines = front_matter.group(2).splitlines(keepends=True)
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(?P<indent>\s*)header-includes\s*:\s*\|[+-]?\s*(?:#.*)?(?:\r?\n)?$", lines[index])
+        if not match:
+            index += 1
+            continue
+        base_indent = len(match.group("indent"))
+        start = index + 1
+        index = start
+        while index < len(lines):
+            line = lines[index]
+            if line.strip() and len(line) - len(line.lstrip(" \t")) <= base_indent:
+                break
+            index += 1
+        block = dedent("".join(lines[start:index])).strip()
+        return block or None
+    return None
+
+
+# Front-matter keys that are not pandoc variables but that a LaTeX preamble may
+# want. Each becomes \\renewcommand{\\<macro>}{<value>}, appended after the
+# preambles so the preamble can supply a default with \\newcommand.
+DOCUMENT_LATEX_KEYS = {
+    "experiment": "LabExperiment",
+    "group": "LabGroup",
+    # title-page fields (nulabreport's `titlepage` layout); all optional
+    "course": "LabCourse",
+    "section": "LabSection",
+    "instructor": "LabInstructor",
+    "performed": "LabPerformed",
+}
+
+
+def document_latex_definitions(md_path: Path) -> str:
+    """Return \\renewcommand lines for the front-matter keys listed above."""
+    lines = []
+    for key, macro in DOCUMENT_LATEX_KEYS.items():
+        value = frontmatter_value(md_path, key)
+        if value:
+            lines.append(f"\\renewcommand{{\\{macro}}}{{{value}}}")
+    return "\n".join(lines)
+
+
+@contextmanager
+def document_header_file(md_path: Path, active: bool) -> Iterator[Path | None]:
+    """Yield a temporary .tex holding the document's own preamble additions."""
+    if not active:
+        yield None
+        return
+    try:
+        parts = [document_latex_definitions(md_path)]
+        parts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+    except OSError:
+        parts = []
+    block = "\n".join(part for part in parts if part)
+    if not block:
+        yield None
+        return
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex",
+                            prefix=f".{md_path.stem}.pdfmd-header-", dir=md_path.parent,
+                            delete=False) as temporary:
+        temporary.write(block + "\n")
+        temporary_path = Path(temporary.name)
+    try:
+        yield temporary_path
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+
+def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
+    """Find Pandoc Lua filters that belong to a document, without guessing.
+
+    Only two names are auto-applied: a filter matching the document's own stem
+    (report.md -> report.lua) and "nulabreport.lua" beside the document or its
+    metadata. Anything else has to be passed explicitly, so an unrelated .lua
+    file sitting in a folder can never silently change a render.
+    """
+    directories: list[Path] = [md_path.parent]
+    directories += [metadata.parent for metadata in metadata_files]
+    wanted = (f"{md_path.stem}.lua", "nulabreport.lua")
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for directory in directories:
+        for name in wanted:
+            candidate = (directory / name).resolve()
+            if candidate.is_file() and candidate not in seen:
+                seen.add(candidate)
+                found.append(candidate)
+    return found
 
 
 def latin_candidates(value: str) -> list[str]:
@@ -510,9 +635,13 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
     explicit_font = document_font or bool(font)
 
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
+    lua_filters = find_lua_filters(md_path, metadata_files)
+    for lua_filter in lua_filters:
+        print(f"AUTO LUA   {lua_filter}")
     result = None
     for engine_index, engine in enumerate(engines):
-        with prepared_latex_inputs([md_path, *metadata_files], engine in LATEX_ENGINES) as prepared:
+        with prepared_latex_inputs([md_path, *metadata_files], engine in LATEX_ENGINES) as prepared, \
+                document_header_file(md_path, bool(preamble_files) and engine in LATEX_ENGINES) as header_file:
             source, *prepared_metadata = prepared
 
             def run(selected_font: str | None, fallback: bool = False):
@@ -534,8 +663,18 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 if preamble_files and engine in LATEX_ENGINES:
                     for preamble_file in preamble_files:
                         cmd += ["--include-in-header", str(preamble_file)]
+                    # Last, so a document's own header-includes can override
+                    # anything the shared preamble defined (pandoc would
+                    # otherwise drop it entirely; see document_header_file).
+                    if header_file is not None:
+                        cmd += ["--include-in-header", str(header_file)]
                 if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                     cmd.append("--citeproc")
+                # Lua filters go last: pandoc applies --citeproc and filters in
+                # command-line order, and a filter that renders cell contents to
+                # LaTeX needs the citations already resolved.
+                for lua_filter in lua_filters:
+                    cmd += ["--lua-filter", str(lua_filter)]
                 return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
 
             result = run(None if document_font else font, fallback=document_font)
@@ -566,7 +705,8 @@ def build_parser() -> argparse.ArgumentParser:
                         dest="destination_cwd",
                         help="save PDFs in the current working directory")
     parser.add_argument("-f", "--font", default=None, help="font to use if glyph fallback is needed")
-    parser.add_argument("-e", "--engine", help="PDF engine to use (default: first installed supported engine)")
+    parser.add_argument("-e", "--engine",
+                        help="PDF engine, numeric shortcut, or alias; run --check-dependencies to see choices")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -593,6 +733,18 @@ def main() -> None:
         raise SystemExit("Choose either --batch or --report/--book, not both")
     if args.presentation and args.report:
         raise SystemExit("--presentation cannot be combined with --report/--book")
+    if not args.path and not args.batch and not args.report:
+        markdown_files = sorted(Path.cwd().glob("*.md"), key=lambda path: path.name.casefold())
+        if not markdown_files:
+            raise SystemExit("No Markdown files found in the current directory.")
+        if len(markdown_files) > 1:
+            names = ", ".join(path.name for path in markdown_files)
+            raise SystemExit(
+                f"Multiple Markdown files found: {names}\n"
+                "Specify one file, use -b to convert all separately, or use -r to combine them."
+            )
+        paths = [markdown_files[0]]
+        print(f"AUTO MD    {paths[0]}")
     if args.report:
         files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive)
         if not files:
