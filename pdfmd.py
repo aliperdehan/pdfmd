@@ -133,9 +133,21 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     require PyYAML and a document that already has a `---` block; silently
     ignored (not an error) if PyYAML isn't installed.
 """
+# Versioned from here on -- see ~/dev/python-projects/CHANGELOG-pdfmd.md.
+# This script began as a one-line `pandoc file.md -o file.pdf` wrapper and
+# was revised many times since, across ChatGPT, ChatGPT Codex, Claude Chat,
+# Cowork, and Claude Code sessions, with no version marker or changelog kept
+# at any point -- there is no reliable "v1.x" history left to backfill,
+# only inconsistent backups/pdfmd.py.bak-* snapshots from a handful of
+# points in that history. Rather than fabricate a precise-looking but
+# unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
+# (2026-09-16, Ali's call) as an honest baseline: this is where real
+# changelog tracking begins, not a claim about how many changes preceded it.
+PDFMD_VERSION = "2.0.0"
 import argparse
 from fnmatch import fnmatchcase
 import re
+import shlex
 import subprocess
 import sys
 import unicodedata
@@ -284,15 +296,49 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
 # always produces, see resolve_from_format()) instead gets plain unwrapped
 # `l`/`c`/`r` columns, so a long cell just runs past the page margin instead
 # of breaking. This filter leaves any table that already has explicit widths
-# alone, and for one that doesn't, sizes each column proportionally to its
+# alone, and for one that doesn't AND whose content is actually wide enough
+# to risk overflowing the page, sizes each column proportionally to its
 # longest cell's text length (spreading a spanning cell's length evenly
 # across the columns it covers) instead of Pandoc's own default-`markdown`
 # behaviour of forcing every column to the same equal fraction regardless of
 # content -- see resolve_from_format()'s docstring for why that's also worth
 # avoiding. A floor keeps a column with only short labels from collapsing to
 # unreadable thinness next to a verbose neighbor.
+#
+# BUG, found and fixed 2026-09-16 (Ali, via a nulabreport/QCA report): this
+# used to fire on EVERY table with any default-width column, regardless of
+# whether the table's own content came anywhere near overflowing -- a short
+# 4-column numeric table ("Sample #" / four-digit masses / a percentage) got
+# stretched across the FULL page width for no reason, fighting a downstream
+# package Lua filter (nulabreport.lua) that deliberately sizes such a table
+# to its natural content width instead. The intent (see the paragraph above,
+# unchanged) was always "rescue a table that would otherwise overflow," not
+# "give every unwidthed table an opinion" -- this was never meant to fire on
+# a table that already fits comfortably. Fixed with a real, if approximate,
+# overflow check: estimate the table's total natural width by summing each
+# column's longest-cell character count (same measurement already used for
+# the proportions below) and comparing against CHAR_BUDGET, a rough
+# characters-per-line figure for this project's own default document shape
+# (12pt serif body text, ~1in margins on A4/Letter -- see DEFAULT_MARGIN).
+# This is deliberately an ESTIMATE, not a real width computation (Pandoc's
+# Lua filters run before any font is ever measured, so an exact figure isn't
+# available here at all) -- it only needs to be good enough to distinguish
+# "a handful of short numeric columns" from "a table with real prose cells,"
+# which a raw character count comfortably does. A table with an unusual
+# fontsize/geometry front-matter override is not specially accounted for;
+# revisit CHAR_BUDGET (or make it geometry-aware) if that turns out to
+# matter in practice, rather than assuming this estimate transfers exactly.
 TABLE_WIDTH_LUA_FILTER = r"""
 local MIN_FRACTION = 0.08
+-- ~95 characters is a commonly-cited rule of thumb for how much 12pt serif
+-- text fits on one line within a standard 1in-margin A4/Letter page -- see
+-- the long comment above this filter's Python source for what this is and
+-- is not measuring, and why an estimate is all that's available here.
+local CHAR_BUDGET = 95
+-- Rough per-column overhead (rule padding + inter-column gap) so a table
+-- with many columns, each individually short, doesn't dodge the budget
+-- check on a technicality -- \tabcolsep-scale, not a real measurement.
+local PER_COLUMN_OVERHEAD = 3
 
 local function cell_length(cell)
   return #pandoc.utils.stringify(cell.contents)
@@ -327,6 +373,11 @@ function Table(tbl)
 
   local total = 0
   for i = 1, ncols do total = total + max_len[i] end
+  -- The table's own content already fits a reasonable line width -- leave
+  -- it at its natural size (nil widths preserved) rather than opinion-ate
+  -- a table nobody asked to have stretched or rebalanced.
+  if total + ncols * PER_COLUMN_OVERHEAD <= CHAR_BUDGET then return nil end
+
   local fractions = {}
   for i = 1, ncols do fractions[i] = max_len[i] / total end
   local sum_clamped = 0
@@ -1392,6 +1443,26 @@ def open_file(path: Path) -> None:
         print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
 
 
+def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
+    """Print the exact subprocess command about to run, under --verbose.
+
+    Added 2026-09-16 after a real debugging session (the pdfmd.py table-
+    width/nulabreport.lua interaction, see TABLE_WIDTH_LUA_FILTER's own
+    comment) that would have taken a fraction of the time if --verbose had
+    shown this from the start -- it previously only ever printed pdfmd's
+    OWN "AUTO ..." decisions (which metadata/preamble/font it picked), never
+    the actual command line those decisions built, so which lua-filters
+    were passed and in what order was invisible without editing this file
+    to find out by hand. shlex.quote so a copy-pasted line is directly
+    re-runnable even when an argument has spaces (a metadata file path
+    under a directory with one, for instance).
+    """
+    if not verbose:
+        return
+    print("CMD  " + " ".join(shlex.quote(str(part)) for part in cmd) + f"  (cwd={cwd})",
+          file=sys.stderr)
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -1461,6 +1532,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
+                log_cmd(cmd, pandoc_cwd, verbose)
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             flush_summary()
             return md_path, result.returncode == 0, result.stderr[-3000:]
@@ -1533,6 +1605,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                         cmd += ["--lua-filter", str(width_filter)]
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
+                    log_cmd(cmd, pandoc_cwd, verbose)
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
 
                 first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
@@ -1593,6 +1666,7 @@ def convert_qmd(source: Path, output: Path, target_format: str,
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.")
+    parser.add_argument("--version", action="version", version=f"pdfmd {PDFMD_VERSION}")
     parser.add_argument("path", type=Path, nargs="*", help="Markdown name, files, or directory (default: current directory)")
     parser.add_argument("-p", "--presentation", action="store_true", help="create Beamer slides")
     parser.add_argument("--slide-level", type=int, help="Beamer heading level used for slide breaks")
@@ -1784,6 +1858,7 @@ def main() -> None:
                         cmd.append("--citeproc")
                     if target_format == "latex" and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
+                    log_cmd(cmd, pandoc_cwd, args.verbose)
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             else:
                 preambles = ([] if auto_disabled(report_no_auto, "preamble")
@@ -1835,6 +1910,7 @@ def main() -> None:
                             cmd.append("--citeproc")
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += ["--lua-filter", str(width_filter)]
+                        log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
                     if result.returncode == 0:
                         break
