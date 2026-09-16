@@ -33,18 +33,23 @@ Output formats:
     --to always wins over the filename. A PDF engine (-e/--engine, or the
     fallback list below) is only relevant, and only required to be installed,
     when the target is actually PDF. A document can request its own default
-    engine with a `pdf-engine: lualatex` (or `engine: lualatex`) front-matter
-    key -- one engine name/alias, or a family keyword (`tex`, `html`,
-    `typst`) to restrict automatic fallback to that paradigm instead of one
-    specific engine, e.g. `pdf-engine: tex` for a chemfig-heavy document that
-    must never fall back to an HTML engine that can't render its LaTeX
-    macros, or `pdf-engine: html` for a plain document that should never pay
-    for a slow LaTeX run. Front matter is consulted only when -e/--engine is
-    absent from the command line; report mode reads it from the first file,
-    batch mode reads each file's own. A *bare* `-e` (no value) always means
-    the full, unrestricted fallback chain, overriding even a family
-    restriction in front matter -- the escape hatch when a family-restricted
-    document needs output produced at all costs.
+    engine with a `pdfmd-options: {pdf-engine: lualatex}` (or `engine:`)
+    front-matter key -- one engine name/alias, or a family keyword (`tex`,
+    `html`, `typst`) to restrict automatic fallback to that paradigm instead
+    of one specific engine, e.g. `pdf-engine: tex` for a chemfig-heavy
+    document that must never fall back to an HTML engine that can't render
+    its LaTeX macros, or `pdf-engine: html` for a plain document that should
+    never pay for a slow LaTeX run. The older bare top-level `pdf-engine:`/
+    `engine:` spelling (no `pdfmd-options:` nesting) still works unchanged
+    for documents already using it, but `pdfmd-options:` is where a new
+    document should put this -- Pandoc itself doesn't read `pdf-engine`/
+    `engine` at all, unlike e.g. `documentclass:`/`header-includes:`, which
+    are real Pandoc keys and stay bare. Front matter is consulted only when
+    -e/--engine is absent from the command line; report mode reads it from
+    the first file, batch mode reads each file's own. A *bare* `-e` (no
+    value) always means the full, unrestricted fallback chain, overriding
+    even a family restriction in front matter -- the escape hatch when a
+    family-restricted document needs output produced at all costs.
 
     On LaTeX-family engines, a document with no geometry/margin setting at
     all (no -V, no `geometry:`/`margin:` in its own front matter, a linked
@@ -92,29 +97,41 @@ Reader selection for a Markdown source:
     numbered top-level section), with the rest of its headings shifted up a
     level to match.
 
-Suppressing pdfmd's own defaults:
+Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth
-    defaults documented above -- bare --no-auto disables all of them; --no-auto
-    KIND [KIND ...] disables only those (KIND is one of reader, title, margin,
-    mainfont, monofont, font (mainfont+monofont together), tablewidth). A
-    document's own front matter, a linked metadata file, or an explicit
-    -f/-V/--from still always wins regardless of --no-auto -- it only stops
-    pdfmd from filling in what's otherwise unset.
+    defaults documented above, plus pdfmd's own file-discovery (auto-attached
+    metadata YAML, LaTeX preambles, Lua filters) -- bare --no-auto disables
+    all of it; --no-auto KIND [KIND ...] disables only those. KIND is one of:
+    reader, title, margin, mainfont, monofont, font (mainfont+monofont),
+    tablewidth, metadata/yaml (the auto-discovered --metadata-file),
+    preamble/tex (auto-included preamble.tex etc.), lua (auto-included
+    <stem>.lua/nulabreport.lua), files (metadata+preamble+lua). An explicit
+    -y/-H/-f/-V/--from still always wins over --no-auto metadata/preamble
+    regardless of this flag -- it only stops pdfmd from filling in or
+    discovering what's otherwise unset.
 
     A document can ask for the same thing itself, without the caller having
-    to remember a flag, via a `pdfmd-options:` front-matter block:
+    to remember a flag, via a `pdfmd-options:` front-matter block -- the
+    namespace for settings that are entirely pdfmd's own invention and mean
+    nothing to Pandoc itself (unlike e.g. `documentclass:`/`chapter:`/
+    `header-includes:`, which are real Pandoc/report-assembly keys and stay
+    bare at the top level):
 
         ---
         pdfmd-options:
           no-auto: [monofont, margin]
+          pdf-engine: lualatex
         ---
 
-    `no-auto` there accepts the same KIND names, `true`/`all` for
-    everything, or a single bare name. It's additive with a CLI --no-auto
-    (whichever source disables a given kind wins for that kind), and
-    (like everything else keyed off front matter) is only read for a
-    document that already has a `---` block -- requires PyYAML; silently
-    ignored if it isn't installed.
+    Two keys live there today: `no-auto` (same KIND names as --no-auto
+    above, plus `true`/`all` for everything or a single bare name --
+    additive with a CLI --no-auto, whichever source disables a given kind
+    wins for that kind) and `pdf-engine`/`engine` (same values as
+    -e/--engine; see frontmatter_engine()'s docstring for why this one in
+    particular moved here rather than staying a bare top-level key -- the
+    older bare spelling still works for documents already using it). Both
+    require PyYAML and a document that already has a `---` block; silently
+    ignored (not an error) if PyYAML isn't installed.
 """
 import argparse
 from fnmatch import fnmatchcase
@@ -154,8 +171,16 @@ AUTO_METADATA_DISABLED = object()
 
 # --no-auto KIND values, and its "font" shorthand for both font kinds at
 # once. See build_parser()'s --no-auto help text for what each kind does.
-NO_AUTO_KINDS = frozenset({"reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth"})
-NO_AUTO_ALIASES = {"font": frozenset({"mainfont", "monofont"})}
+NO_AUTO_KINDS = frozenset({
+    "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
+    "metadata", "yaml", "preamble", "tex", "lua", "files",
+})
+NO_AUTO_ALIASES = {
+    "font": frozenset({"mainfont", "monofont"}),
+    "yaml": frozenset({"metadata"}),
+    "tex": frozenset({"preamble"}),
+    "files": frozenset({"metadata", "preamble", "lua"}),
+}
 
 
 def auto_disabled(no_auto: list[str] | None, kind: str) -> bool:
@@ -235,6 +260,22 @@ def frontmatter_no_auto(md_path: Path) -> list[str] | None:
     if isinstance(value, list):
         return [str(item) for item in value]
     return None
+
+
+def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str] | None:
+    """Merge a CLI --no-auto with md_path's own pdfmd-options.no-auto, and
+    validate the result. The one place this logic lives -- both convert_one
+    and main()'s pre-discovery gating (metadata/preamble auto-discovery
+    happens before convert_one is even called) need the same answer for
+    the same file.
+    """
+    merged = merge_no_auto(cli_no_auto, frontmatter_no_auto(md_path))
+    if merged:
+        unknown = sorted(set(merged) - NO_AUTO_KINDS)
+        if unknown:
+            raise SystemExit(f"{md_path}: unknown pdfmd-options.no-auto kind(s): {', '.join(unknown)}. "
+                             f"Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
+    return merged
 
 
 # Auto-applied on every LaTeX-family render (see table_width_filter() below).
@@ -929,6 +970,24 @@ def has_yaml_frontmatter(text: str) -> bool:
     return bool(re.match(r"^---\s*\n", text))
 
 
+PERCENT_TITLE_BLOCK_RE = re.compile(r"^%(?:[ \t]|$)")
+
+
+def has_percent_title_block(text: str) -> bool:
+    """Detect Pandoc's legacy ``% title`` / ``% author`` / ``% date`` block.
+
+    Only the ``pandoc_title_block`` extension -- enabled by Pandoc's default
+    ``markdown`` reader, but not by ``gfm`` -- parses this. A document
+    written this way needs the same treatment as one with ``---`` YAML front
+    matter: resolve_from_format() must not downgrade it to ``gfm`` (which
+    would leave the ``%`` lines as literal text instead of parsing them into
+    title/author/date metadata), and promote_bare_title() must not mistake
+    its leading ``%`` line for a bare ATX heading to promote.
+    """
+    first_line = next((line for line in text.splitlines() if line.strip()), "")
+    return bool(PERCENT_TITLE_BLOCK_RE.match(first_line))
+
+
 def has_definition_list(text: str) -> bool:
     """Detect Pandoc's ``Term\\n: definition`` syntax.
 
@@ -944,10 +1003,14 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     """Pick the Pandoc reader for one Markdown source.
 
     An explicit --from always wins (returned as-is, with no message). A
-    document that already has ``---`` YAML front matter is assumed to
-    already be written for Pandoc's own default ``markdown`` reader and is
-    left alone (returns ``None``, meaning "don't pass -f, let Pandoc use its
-    default"). So is one with a linked --metadata-file (explicit or
+    document that already has ``---`` YAML front matter, or a leading
+    ``%``-line title block (``% title`` / ``% author`` / ``% date``), is
+    assumed to already be written for Pandoc's own default ``markdown``
+    reader and is left alone (returns ``None``, meaning "don't pass -f, let
+    Pandoc use its default") -- gfm has no ``pandoc_title_block`` extension,
+    so switching a ``%``-block document to gfm would leave those lines as
+    literal text instead of parsing them into title/author/date metadata.
+    So is one with a linked --metadata-file (explicit or
     auto-discovered) attached: a document (or a folder of them) set up with
     its own metadata.yaml is assumed to already be Pandoc-aware, and gfm's
     reader has no ``citations`` extension to fall back to the way the plain
@@ -982,7 +1045,7 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     if cli_from:
         return cli_from, None
     text = md_path.read_text(encoding="utf-8-sig")
-    if has_yaml_frontmatter(text):
+    if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
     if metadata_files:
         names = ", ".join(metadata_file.name for metadata_file in metadata_files)
@@ -1021,7 +1084,7 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     ``--shift-heading-level-by=-1`` for the rest of the document's
     ``##``/``###`` sections to land at the levels they were written for.
     """
-    if has_yaml_frontmatter(text) or has_external_metadata:
+    if has_yaml_frontmatter(text) or has_external_metadata or has_percent_title_block(text):
         return text, False
     lines = text.splitlines(keepends=True)
     index = 0
@@ -1085,11 +1148,21 @@ def frontmatter_engine(md_path: Path) -> str | None:
     """Read a document's own default PDF engine from its front matter.
 
     ``pdf-engine`` mirrors Pandoc's own ``--pdf-engine`` flag name; ``engine``
-    is accepted as a shorter alias -- the same dual-key pattern already used
-    for documentclass/class. A single engine name/alias/numeric shortcut, or
-    an ENGINE_GROUPS family keyword ("tex", "html", "typst") to restrict
-    fallback to that paradigm -- same values -e/--engine accepts.
+    is accepted as a shorter alias. A single engine name/alias/numeric
+    shortcut, or an ENGINE_GROUPS family keyword ("tex", "html", "typst") to
+    restrict fallback to that paradigm -- same values -e/--engine accepts.
+
+    Unlike documentclass/class or header-includes, ``pdf-engine``/``engine``
+    mean nothing to Pandoc itself -- they're entirely pdfmd's own invention
+    -- so this checks the nested ``pdfmd-options:`` spelling first (where a
+    new document should put pdfmd-only settings) and falls back to the
+    older bare top-level key for documents already written with that
+    spelling, which keeps working unchanged.
     """
+    options = frontmatter_pdfmd_options(md_path)
+    value = options.get("pdf-engine") or options.get("engine")
+    if value is not None:
+        return str(value)
     return frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
 
 
@@ -1306,6 +1379,19 @@ def default_output_path(path: Path, target_format: str) -> Path:
     return path.with_suffix(FORMAT_EXTENSION.get(target_format, f".{target_format}"))
 
 
+def open_file(path: Path) -> None:
+    """Open a finished file with the platform's default viewer, for --open."""
+    opener = "open" if sys.platform == "darwin" else "xdg-open" if sys.platform.startswith("linux") else None
+    if opener is None or not which(opener):
+        print(f"WARN  --open: no '{opener or 'file opener'}' found for this platform; "
+              f"open {path} yourself", file=sys.stderr)
+        return
+    try:
+        subprocess.run([opener, str(path)])
+    except OSError as error:
+        print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -1314,34 +1400,43 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 preamble_files: list[Path] | None = None,
                 target_format: str = "pdf",
                 from_format: str | None = None,
-                no_auto: list[str] | None = None) -> tuple[Path, bool, str]:
+                no_auto: list[str] | None = None,
+                verbose: bool = False) -> tuple[Path, bool, str]:
+    auto_summary: list[str] = []
+
+    def note(kind: str, detail: str) -> None:
+        if verbose:
+            print(f"AUTO {kind}  {detail}")
+        else:
+            auto_summary.append(kind)
+
+    def flush_summary() -> None:
+        if not verbose and auto_summary:
+            kinds = " ".join(dict.fromkeys(auto_summary))
+            print(f"AUTO: {kinds}. Use --verbose to see in full")
+
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-    no_auto = merge_no_auto(no_auto, frontmatter_no_auto(md_path))
-    if no_auto:
-        unknown = sorted(set(no_auto) - NO_AUTO_KINDS)
-        if unknown:
-            raise SystemExit(f"{md_path}: unknown pdfmd-options.no-auto kind(s): {', '.join(unknown)}. "
-                             f"Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
+    no_auto = effective_no_auto(md_path, no_auto)
     effective_from, reader_reason = (
         (from_format, None) if auto_disabled(no_auto, "reader")
         else resolve_from_format(md_path, from_format, metadata_files)
     )
     if reader_reason:
-        print(f"AUTO READER  {reader_reason}")
+        note("READER", reader_reason)
     output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
     output = output_file or (
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    lua_filters = find_lua_filters(md_path, metadata_files)
+    lua_filters = [] if auto_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
     for lua_filter in lua_filters:
-        print(f"AUTO LUA   {lua_filter}")
+        note("LUA", str(lua_filter))
 
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
             table_width_filter() as width_filter:
         if title_shifted:
-            print(f"AUTO TITLE   {md_path}: promoted leading '# ' heading to Pandoc title metadata")
+            note("TITLE", f"{md_path}: promoted leading '# ' heading to Pandoc title metadata")
         shift_heading = title_shifted and not has_shift_heading_option(pandoc_options)
 
         if target_format != "pdf":
@@ -1367,6 +1462,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+            flush_summary()
             return md_path, result.returncode == 0, result.stderr[-3000:]
 
         document_font = has_mainfont(md_path, variables)
@@ -1376,14 +1472,14 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         geometry_needed = (not auto_disabled(no_auto, "margin")
                           and not has_geometry(md_path, variables, metadata_files, preamble_files or []))
         if geometry_needed:
-            print(f"AUTO MARGIN  {md_path}: no geometry/margin set; "
-                  f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
+            note("MARGIN", f"{md_path}: no geometry/margin set; "
+                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
         monofont_needed = (not auto_disabled(no_auto, "monofont")
                           and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
                           and not has_monofont(md_path, variables))
         if monofont_needed:
-            print(f"AUTO MONOFONT  {md_path}: has code but no monofont set; "
-                  f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+            note("MONOFONT", f"{md_path}: has code but no monofont set; "
+                            f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
         result = None
         failed_families: set[str] = set()
         for engine_index, engine in enumerate(engines):
@@ -1452,6 +1548,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             if remaining:
                 print(f"WARN  {md_path}: {engine} failed; trying {remaining[0]}...", file=sys.stderr)
         assert result is not None
+        flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
 
@@ -1544,15 +1641,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exclude-unnumbered", action="store_true",
                         help="exclude Markdown files without a chapter field in report/book mode")
     parser.add_argument("--no-auto", nargs="*", default=None, metavar="KIND",
-                        help="disable pdfmd's own automatic per-document defaults. Bare --no-auto "
-                             "disables all of them; or name one or more of: reader (the gfm switch "
+                        help="disable pdfmd's own automatic per-document behavior. Bare --no-auto "
+                             "disables all of it; or name one or more of: reader (the gfm switch "
                              "for front-matter-less documents), title (bare '# Title' promotion), "
                              "margin (geometry:margin=1in), mainfont (the STIX Two Text/DejaVu Serif "
                              "fallback), monofont (JetBrains Mono for code), font (mainfont and "
-                             "monofont together), tablewidth (proportional pipe-table column widths). "
-                             "A document's own front matter, a linked metadata file, or an explicit "
-                             "-f/-V/--from always overrides these regardless of this flag -- "
-                             "--no-auto only stops pdfmd from filling in what's otherwise unset")
+                             "monofont together), tablewidth (proportional pipe-table column widths), "
+                             "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
+                             "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
+                             "files (metadata+preamble+lua together). An explicit -y/-H/-f/-V/--from "
+                             "always wins over --no-auto metadata/preamble regardless of this flag -- "
+                             "--no-auto only stops pdfmd from filling in or discovering what's "
+                             "otherwise unset. Same KIND names work in a document's own "
+                             "pdfmd-options.no-auto front matter (see the module docstring)")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="show each AUTO decision's full explanation as it happens. Default is "
+                             "a single condensed 'AUTO: KIND KIND ...' line per document (naming "
+                             "only the reader/title/margin/mainfont/monofont/lua kinds that actually "
+                             "fired) so a normal run stays quiet; AUTO YAML/TEX/ENGINE/MD are "
+                             "unaffected by this flag and always print in full, since they're rarer "
+                             "and already name a specific file/engine rather than a generic default")
+    parser.add_argument("--open", action="store_true",
+                        help="open the finished file (via macOS 'open'/Linux 'xdg-open') once "
+                             "conversion succeeds. Applies to single-file and report/book mode, "
+                             "each of which produce exactly one output; ignored in batch mode "
+                             "(-b), which would otherwise pop open every file in the directory")
     return parser
 
 
@@ -1605,33 +1718,41 @@ def main() -> None:
         files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive)
         if not files:
             raise SystemExit("No Markdown files found for the report")
+        # --no-auto and its pdfmd-options counterpart are decided from
+        # files[0] only, same as the reader/documentclass/pdf-engine
+        # front matter below -- a report can't mix per-chapter overrides
+        # in one Pandoc invocation.
+        report_no_auto = effective_no_auto(files[0], args.no_auto)
+        report_auto_summary: list[str] = []
+
+        def report_note(kind: str, detail: str) -> None:
+            if args.verbose:
+                print(f"AUTO {kind}  {detail}")
+            else:
+                report_auto_summary.append(kind)
+
         try:
             document_class = (frontmatter_value(files[0], "documentclass")
                               or frontmatter_value(files[0], "class"))
             metadata_directory = paths[0] if len(paths) == 1 and paths[0].is_dir() else files[0].parent
-            metadata = find_metadata(metadata_directory.resolve(), args.metadata_file, report=True,
+            # An explicit -y/--metadata-file always wins over --no-auto
+            # metadata; only auto-discovery (args.metadata_file is None) is
+            # what --no-auto metadata/yaml suppresses.
+            metadata_request = ([] if args.metadata_file is None and auto_disabled(report_no_auto, "metadata")
+                                else args.metadata_file)
+            metadata = find_metadata(metadata_directory.resolve(), metadata_request, report=True,
                                      document_class=document_class, document_stem=files[0].stem)
         except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
         engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format)
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                           (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
-        # --no-auto and its pdfmd-options counterpart are decided from
-        # files[0] only, same as the reader/documentclass/pdf-engine
-        # front matter above -- a report can't mix per-chapter overrides
-        # in one Pandoc invocation.
-        report_no_auto = merge_no_auto(args.no_auto, frontmatter_no_auto(files[0]))
-        if report_no_auto:
-            unknown = sorted(set(report_no_auto) - NO_AUTO_KINDS)
-            if unknown:
-                raise SystemExit(f"{files[0]}: unknown pdfmd-options.no-auto kind(s): "
-                                 f"{', '.join(unknown)}. Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
         report_from, report_reader_reason = (
             (args.from_format, None) if auto_disabled(report_no_auto, "reader")
             else resolve_from_format(files[0], args.from_format, metadata_files)
         )
         if report_reader_reason:
-            print(f"AUTO READER  {report_reader_reason}")
+            report_note("READER", report_reader_reason)
         output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
         if args.out:
             # Check is-a-directory BEFORE adding a default suffix -- a dot-less
@@ -1665,20 +1786,21 @@ def main() -> None:
                         cmd += ["--lua-filter", str(width_filter)]
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             else:
-                preambles = find_preambles(files[0].parent, files[0].stem, pandoc_options)
+                preambles = ([] if auto_disabled(report_no_auto, "preamble")
+                            else find_preambles(files[0].parent, files[0].stem, pandoc_options))
                 announce_preambles(preambles)
                 report_tablewidth_auto = not auto_disabled(report_no_auto, "tablewidth")
                 geometry_needed = (not auto_disabled(report_no_auto, "margin")
                                   and not has_geometry(files[0], variables, metadata_files, preambles))
                 if geometry_needed:
-                    print(f"AUTO MARGIN  REPORT: no geometry/margin set; "
-                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
+                    report_note("MARGIN", "REPORT: no geometry/margin set; "
+                                         f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
                 monofont_needed = (not auto_disabled(report_no_auto, "monofont")
                                   and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
                                   and not has_monofont(files[0], variables))
                 if monofont_needed:
-                    print(f"AUTO MONOFONT  REPORT: has code but no monofont set; "
-                          f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+                    report_note("MONOFONT", "REPORT: has code but no monofont set; "
+                                           f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
                 # Reports need one Pandoc invocation, so retry each usable engine here.
                 result = None
                 failed_families: set[str] = set()
@@ -1731,18 +1853,30 @@ def main() -> None:
             for metadata_file in metadata_files:
                 label = "AUTO YAML" if args.metadata_file is None else "YAML"
                 print(f"{label}  {metadata_file}")
+        if not args.verbose and report_auto_summary:
+            kinds = " ".join(dict.fromkeys(report_auto_summary))
+            print(f"AUTO: {kinds}. Use --verbose to see in full")
         print(f"{'OK  ' if result.returncode == 0 else 'FAIL'}  REPORT  {output}")
         if result.stderr:
             print(result.stderr[-3000:])
         if result.returncode:
             raise SystemExit(1)
+        if args.open:
+            open_file(output)
         return
     metadata_by_dir = {}
     def metadata_for(file, document_class=None):
         directory = file.parent.resolve()
         cache_key = (directory, file.stem.casefold())
         if cache_key not in metadata_by_dir:
-            metadata_by_dir[cache_key] = find_metadata(directory, args.metadata_file,
+            # An explicit -y/--metadata-file always wins over --no-auto
+            # metadata; only auto-discovery (args.metadata_file is None) is
+            # what --no-auto metadata/yaml suppresses -- per file, since
+            # each file's own pdfmd-options can differ even in one batch.
+            requested = ([] if args.metadata_file is None
+                        and auto_disabled(effective_no_auto(file, args.no_auto), "metadata")
+                        else args.metadata_file)
+            metadata_by_dir[cache_key] = find_metadata(directory, requested,
                                                         document_class=document_class,
                                                         document_stem=file.stem)
             discovered = metadata_by_dir[cache_key]
@@ -1767,16 +1901,19 @@ def main() -> None:
             output.mkdir(parents=True, exist_ok=True)
         jobs = max(1, args.jobs)
         def preamble_for(file):
-            if target_format != "pdf":
+            if target_format != "pdf" or auto_disabled(effective_no_auto(file, args.no_auto), "preamble"):
                 return []
             preambles = find_preambles(file.parent, file.stem, pandoc_options)
             announce_preambles(preambles)
             return preambles
-        work = lambda file: convert_one(file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto)
+        if args.open:
+            print("WARN  --open is ignored in batch mode (-b); it would open every converted file",
+                 file=sys.stderr)
+        work = lambda file: convert_one(file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
-                futures = [executor.submit(convert_one, file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), None, preamble_for(file), target_format, args.from_format, args.no_auto) for file in files]
+                futures = [executor.submit(convert_one, file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose) for file in files]
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -1801,12 +1938,12 @@ def main() -> None:
             output_file = default_output_path(requested_output, target_format)
         elif args.destination_cwd:
             output_file = Path.cwd() / f"{source.stem}{output_extension}"
+        output = output_file or ((out_dir / f"{source.stem}{output_extension}") if out_dir
+                                 else source.with_suffix(output_extension))
         if source.suffix.lower() == ".qmd":
             if args.presentation:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
                                  "format in the document's own Quarto front matter instead")
-            output = output_file or ((out_dir / f"{source.stem}{output_extension}") if out_dir
-                                     else source.with_suffix(output_extension))
             results = [convert_qmd(source, output, target_format, variables, pandoc_options)]
         else:
             document_class = (frontmatter_value(source, "documentclass")
@@ -1816,11 +1953,13 @@ def main() -> None:
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             preambles = []
-            if target_format == "pdf":
+            if target_format == "pdf" and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble"):
                 preambles = find_preambles(source.parent, source.stem, pandoc_options)
                 announce_preambles(preambles)
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)]
+        if args.open and results[0][1]:
+            open_file(output)
     failures = [result for result in results if not result[1]]
     for source, ok, error in results:
         print(f"{'OK  ' if ok else 'FAIL'}  {source}")
