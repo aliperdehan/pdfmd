@@ -747,6 +747,8 @@ DOCUMENT_LATEX_KEYS = {
     "instructor": "LabInstructor",
     "performed": "LabPerformed",
     "unknown": "LabUnknown",
+    "unknowns": "LabUnknown",  # same macro; either spelling works, whichever
+                                # reads right for a singular or plural value
 }
 
 
