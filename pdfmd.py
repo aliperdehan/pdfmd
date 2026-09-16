@@ -44,11 +44,16 @@ Output formats:
     for documents already using it, but `pdfmd-options:` is where a new
     document should put this -- Pandoc itself doesn't read `pdf-engine`/
     `engine` at all, unlike e.g. `documentclass:`/`header-includes:`, which
-    are real Pandoc keys and stay bare. Front matter is consulted only when
-    -e/--engine is absent from the command line; report mode reads it from
-    the first file, batch mode reads each file's own. A *bare* `-e` (no
+    are real Pandoc keys and stay bare. The document's own front matter is
+    checked first; if it sets nothing, each of its linked --metadata-file
+    YAML files (auto-discovered or -y) is checked next, in order, for the
+    same key -- a shared metadata.yaml can set `pdf-engine: tex` once for
+    every document that finds it, and any one document can still override
+    it in its own front matter. Consulted only when -e/--engine is absent
+    from the command line; report mode reads it from the first file, batch
+    mode reads each file's own (and its own metadata). A *bare* `-e` (no
     value) always means the full, unrestricted fallback chain, overriding
-    even a family restriction in front matter -- the escape hatch when a
+    even a family restriction from either source -- the escape hatch when a
     family-restricted document needs output produced at all costs.
 
     On LaTeX-family engines, a document with no geometry/margin setting at
@@ -143,7 +148,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.0.0"
+PDFMD_VERSION = "2.1.0"
 import argparse
 from fnmatch import fnmatchcase
 import re
@@ -525,8 +530,10 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
 
 
 def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
-                    presentation: bool, target_format: str) -> list[str]:
-    """Fall back to a document's own pdf-engine/engine front matter.
+                    presentation: bool, target_format: str,
+                    metadata_files: list[Path] = ()) -> list[str]:
+    """Fall back to a document's own pdf-engine/engine setting, or its
+    linked metadata file's.
 
     Only consulted when -e/--engine was not given AT ALL on the CLI
     (cli_engine is None). A *bare* -e (cli_engine == "", from nargs="?" with
@@ -537,14 +544,19 @@ def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
     (both go through the top-level ``engines`` this function is handed,
     already computed by select_engines(args.engine, ...) in main()). Also
     skipped whenever the target isn't PDF (no engine is involved).
+
+    ``metadata_files`` (a document's already-resolved --metadata-file list,
+    from find_metadata -- empty unless the caller already has it) lets
+    frontmatter_engine fall through to a course-wide default there when the
+    document's own front matter sets none; see its docstring.
     """
     if cli_engine is not None or target_format != "pdf":
         return engines
-    requested = frontmatter_engine(md_path)
+    requested = frontmatter_engine(md_path, metadata_files)
     if not requested:
         return engines
     resolved = select_engines(requested, presentation,
-                              label=f"pdf-engine front matter in {md_path.name}")
+                              label=f"pdf-engine setting for {md_path.name}")
     print(f"AUTO ENGINE  {md_path}: " + " -> ".join(resolved))
     return resolved
 
@@ -1198,8 +1210,33 @@ def frontmatter_value(md_path: Path, key: str) -> str | None:
     return match.group(1).strip().strip("'\"") if match else None
 
 
-def frontmatter_engine(md_path: Path) -> str | None:
-    """Read a document's own default PDF engine from its front matter.
+def metadata_file_yaml(path: Path) -> dict:
+    """Parse a --metadata-file's own YAML content as a plain dict.
+
+    Unlike a document's front matter, a --metadata-file has no ``---``/
+    ``...`` fence to find first -- the whole file already IS the YAML
+    mapping Pandoc's own ``--metadata-file`` reads. Returns {} on a parse
+    error, a non-mapping top level, or no PyYAML -- same permissiveness as
+    frontmatter_pdfmd_options, since a metadata file's pdfmd-only settings
+    are optional sugar, never a hard dependency.
+    """
+    if yaml is None:
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except (yaml.YAMLError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | None:
+    """Read the effective default PDF engine: the document's own front
+    matter first, then (in order) each linked --metadata-file's own
+    ``pdf-engine``/``pdfmd-options`` as a course-wide default the document
+    can still override. This is what lets nulabreport's shared
+    metadata.yaml -- symlinked into every course folder -- set
+    ``pdfmd-options: {pdf-engine: tex}`` once for every report that finds
+    it, instead of repeating the block in each report's own front matter.
 
     ``pdf-engine`` mirrors Pandoc's own ``--pdf-engine`` flag name; ``engine``
     is accepted as a shorter alias. A single engine name/alias/numeric
@@ -1211,13 +1248,29 @@ def frontmatter_engine(md_path: Path) -> str | None:
     -- so this checks the nested ``pdfmd-options:`` spelling first (where a
     new document should put pdfmd-only settings) and falls back to the
     older bare top-level key for documents already written with that
-    spelling, which keeps working unchanged.
+    spelling, which keeps working unchanged. A metadata file gets the same
+    nested-then-bare check, in the order metadata_files is given (find_metadata's
+    own order); this deliberately does NOT extend to `no-auto` -- no-auto
+    decides whether metadata auto-discovery runs at all, so it cannot also
+    depend on the metadata file that discovery itself would find.
     """
     options = frontmatter_pdfmd_options(md_path)
     value = options.get("pdf-engine") or options.get("engine")
     if value is not None:
         return str(value)
-    return frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
+    own = frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
+    if own is not None:
+        return own
+    for metadata_file in metadata_files:
+        data = metadata_file_yaml(metadata_file)
+        options = data.get("pdfmd-options")
+        value = (options.get("pdf-engine") or options.get("engine")) if isinstance(options, dict) else None
+        if value is None:
+            top = data.get("pdf-engine") or data.get("engine")
+            value = str(top) if top is not None else None
+        if value is not None:
+            return str(value)
+    return None
 
 
 def yaml_autoinclude(path: Path) -> bool:
@@ -1821,9 +1874,9 @@ def main() -> None:
                                      document_class=document_class, document_stem=files[0].stem)
         except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
-        engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format)
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                           (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+        engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files)
         report_from, report_reader_reason = (
             (args.from_format, None) if auto_disabled(report_no_auto, "reader")
             else resolve_from_format(files[0], args.from_format, metadata_files)
@@ -1988,11 +2041,24 @@ def main() -> None:
         if args.open:
             print("WARN  --open is ignored in batch mode (-b); it would open every converted file",
                  file=sys.stderr)
-        work = lambda file: convert_one(file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)
+        def file_metadata_and_engines(file):
+            # metadata_for(file) is looked up once and reused for both the
+            # engine restriction (which may now fall through to this same
+            # metadata file's own pdf-engine setting -- see resolve_engines)
+            # and the actual conversion, rather than calling it twice.
+            metadata = metadata_for(file)
+            metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
+            return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files)
+        def work(file):
+            metadata, file_engines = file_metadata_and_engines(file)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
-                futures = [executor.submit(convert_one, file, output, args.presentation, args.font, resolve_engines(file, args.engine, engines, args.presentation, target_format), variables, args.slide_level, pandoc_options, metadata_for(file), None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose) for file in files]
+                futures = []
+                for file in files:
+                    metadata, file_engines = file_metadata_and_engines(file)
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -2035,7 +2101,8 @@ def main() -> None:
             if target_format == "pdf" and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble"):
                 preambles = find_preambles(source.parent, source.stem, pandoc_options)
                 announce_preambles(preambles)
-            file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format)
+            engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
+            file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)]
         if args.open and results[0][1]:
             open_file(output)
