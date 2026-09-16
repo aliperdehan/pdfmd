@@ -746,6 +746,7 @@ DOCUMENT_LATEX_KEYS = {
     "section": "LabSection",
     "instructor": "LabInstructor",
     "performed": "LabPerformed",
+    "unknown": "LabUnknown",
 }
 
 
