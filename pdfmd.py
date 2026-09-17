@@ -148,7 +148,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.1.0"
+PDFMD_VERSION = "2.1.1"
 import argparse
 from fnmatch import fnmatchcase
 import re
@@ -531,7 +531,7 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
 
 def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
                     presentation: bool, target_format: str,
-                    metadata_files: list[Path] = ()) -> list[str]:
+                    metadata_files: list[Path] = (), verbose: bool = False) -> list[str]:
     """Fall back to a document's own pdf-engine/engine setting, or its
     linked metadata file's.
 
@@ -549,6 +549,13 @@ def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
     from find_metadata -- empty unless the caller already has it) lets
     frontmatter_engine fall through to a course-wide default there when the
     document's own front matter sets none; see its docstring.
+
+    The resolved chain is only ever printed under ``--verbose`` -- same
+    convention as every other "AUTO ..." discovery note (see convert_one's
+    own note()/flush_summary()) -- as a plain ``ENGINE`` line, not
+    ``AUTO ENGINE``: this one restriction can come from either the document
+    or its metadata file, so "AUTO" would misattribute a document-level
+    setting as auto-discovered when it's an explicit request.
     """
     if cli_engine is not None or target_format != "pdf":
         return engines
@@ -557,7 +564,8 @@ def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
         return engines
     resolved = select_engines(requested, presentation,
                               label=f"pdf-engine setting for {md_path.name}")
-    print(f"AUTO ENGINE  {md_path}: " + " -> ".join(resolved))
+    if verbose:
+        print(f"ENGINE  {md_path}: " + " -> ".join(resolved))
     return resolved
 
 
@@ -1876,7 +1884,7 @@ def main() -> None:
             raise SystemExit(str(error))
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                           (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
-        engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files)
+        engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         report_from, report_reader_reason = (
             (args.from_format, None) if auto_disabled(report_no_auto, "reader")
             else resolve_from_format(files[0], args.from_format, metadata_files)
@@ -2048,7 +2056,7 @@ def main() -> None:
             # and the actual conversion, rather than calling it twice.
             metadata = metadata_for(file)
             metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-            return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files)
+            return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
             return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)
@@ -2102,7 +2110,7 @@ def main() -> None:
                 preambles = find_preambles(source.parent, source.stem, pandoc_options)
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-            file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files)
+            file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)]
         if args.open and results[0][1]:
             open_file(output)
