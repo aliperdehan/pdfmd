@@ -75,6 +75,28 @@ Output formats:
     Unicode notes tend to use in running text. -f/--font, or the
     document's own `mainfont:`, always wins outright over both.
 
+    Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
+    ending `.tex`) produces a complete, standalone document -- the same
+    `\\documentclass`...`\\begin{document}`...`\\end{document}` a direct PDF
+    render goes through, not a bare Pandoc-LaTeX fragment that only compiles
+    once pasted into a preamble of its own -- so the same margin/mainfont/
+    monofont defaults above apply, and a project's own discovered preamble
+    (PREAMBLE_FILENAMES beside the document, e.g. `preamble.tex`) and
+    `header-includes`/`pdfmd-options` front matter are included the same way
+    they would be for a PDF made through that same writer, via
+    `--include-in-header`. `--no-auto standalone` (or `pdfmd-options:
+    no-auto: [standalone]`) turns off just the `--standalone` addition, for
+    the fragment-only behavior other non-PDF targets still have by default
+    -- e.g. a `.tex` meant to be `\\input`/`\\include`d into another
+    document, not compiled on its own. One thing this can't reproduce: the
+    PDF path's missing-glyph detect-and-retry between `mainfont: STIX Two
+    Text` and `mainfont: DejaVu Serif` needs an actual compile to check
+    against, which nothing here performs, so the emitted document keeps
+    whichever of the two it tried first (PREFERRED_FONT, unless the document
+    or -f/--font already names one) -- override it by hand with -f/--font or
+    by editing the emitted `\\setmainfont` line if that turns out to be the
+    wrong one for a particular document's glyphs.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -103,17 +125,18 @@ Reader selection for a Markdown source:
     level to match.
 
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
-    --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth
-    defaults documented above, plus pdfmd's own file-discovery (auto-attached
-    metadata YAML, LaTeX preambles, Lua filters) -- bare --no-auto disables
-    all of it; --no-auto KIND [KIND ...] disables only those. KIND is one of:
-    reader, title, margin, mainfont, monofont, font (mainfont+monofont),
-    tablewidth, metadata/yaml (the auto-discovered --metadata-file),
-    preamble/tex (auto-included preamble.tex etc.), lua (auto-included
-    <stem>.lua/nulabreport.lua), files (metadata+preamble+lua). An explicit
-    -y/-H/-f/-V/--from still always wins over --no-auto metadata/preamble
-    regardless of this flag -- it only stops pdfmd from filling in or
-    discovering what's otherwise unset.
+    --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
+    standalone defaults documented above, plus pdfmd's own file-discovery
+    (auto-attached metadata YAML, LaTeX preambles, Lua filters) -- bare
+    --no-auto disables all of it; --no-auto KIND [KIND ...] disables only
+    those. KIND is one of: reader, title, margin, mainfont, monofont, font
+    (mainfont+monofont), tablewidth, standalone (the --to latex/beamer/
+    context --standalone default), metadata/yaml (the auto-discovered
+    --metadata-file), preamble/tex (auto-included preamble.tex etc.), lua
+    (auto-included <stem>.lua/nulabreport.lua), files (metadata+preamble+
+    lua). An explicit -y/-H/-f/-V/--from still always wins over --no-auto
+    metadata/preamble regardless of this flag -- it only stops pdfmd from
+    filling in or discovering what's otherwise unset.
 
     A document can ask for the same thing itself, without the caller having
     to remember a flag, via a `pdfmd-options:` front-matter block -- the
@@ -148,7 +171,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.1.1"
+PDFMD_VERSION = "2.2.0"
 import argparse
 from fnmatch import fnmatchcase
 import re
@@ -190,7 +213,7 @@ AUTO_METADATA_DISABLED = object()
 # once. See build_parser()'s --no-auto help text for what each kind does.
 NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
-    "metadata", "yaml", "preamble", "tex", "lua", "files",
+    "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -424,6 +447,16 @@ ENGINE_ALIASES = {
 LATEX_ENGINES = frozenset({"lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "context"})
 PREAMBLE_FILENAMES = ("preamble.tex", "latex-preamble.tex")
 
+# Pandoc *writer* names (as opposed to LATEX_ENGINES' *engine* names --
+# "context" unavoidably appears in both, since it is both) that need a real
+# LaTeX preamble (\documentclass, font/geometry setup, a project's own
+# preamble.tex) to be a complete, independently compilable document rather
+# than a bare Pandoc-LaTeX fragment. Drives the --standalone default and the
+# preamble/header-includes/font/margin auto-discovery for --to (or an -o
+# file with one of FORMAT_EXTENSION's matching extensions) targeting one of
+# these, mirroring what happens on the way to a PDF through the same writer.
+TEX_STANDALONE_FORMATS = frozenset({"latex", "beamer", "context"})
+
 # Engines that share the same underlying TeX engine, grouped by family. If one
 # member of a family fails, the others are very unlikely to succeed on the
 # same document (they see the same fonts, the same package errors, the same
@@ -593,6 +626,20 @@ def has_shift_heading_option(options: list[str]) -> bool:
     """Return whether the caller already explicitly supplied --shift-heading-level-by."""
     return any(option == "--shift-heading-level-by"
                or option.startswith("--shift-heading-level-by=")
+               for option in options)
+
+
+def has_standalone_option(options: list[str]) -> bool:
+    """Return whether the caller already explicitly supplied -s/--standalone.
+
+    Also true for ``--template``, since Pandoc treats an explicit template
+    as already asking for a standalone document (and passing both is
+    harmless but redundant) -- so a caller who wants their own template
+    driving a TEX_STANDALONE_FORMATS render isn't fighting pdfmd's own
+    ``--standalone`` default.
+    """
+    return any(option in {"-s", "--standalone"}
+               or option == "--template" or option.startswith("--template=")
                for option in options)
 
 
@@ -1575,24 +1622,83 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         shift_heading = title_shifted and not has_shift_heading_option(pandoc_options)
 
         if target_format != "pdf":
-            # No PDF engine and no font-fallback machinery here: those are
-            # LaTeX/PDF-only concerns. This is a single, direct Pandoc conversion.
-            with prepared_latex_inputs([title_source, *metadata_files], False) as prepared:
+            # No PDF engine here -- but a TEX_STANDALONE_FORMATS writer
+            # (latex/beamer/context) is asked for specifically to hand the
+            # caller a document THEY compile themselves, so unlike every
+            # other non-PDF target it gets the same preamble/font/margin/
+            # header-includes treatment as the PDF-via-LaTeX-engine path
+            # below -- just without ever running an engine, so there is no
+            # missing-glyph retry: a mainfontfallback is set up front
+            # instead, since there is no compile output here to inspect for
+            # a retry to react to.
+            is_tex_target = target_format in TEX_STANDALONE_FORMATS
+            document_font = has_mainfont(md_path, variables)
+            mainfont_auto = not auto_disabled(no_auto, "mainfont")
+            tablewidth_auto = not auto_disabled(no_auto, "tablewidth")
+            standalone_auto = (not auto_disabled(no_auto, "standalone")
+                               and not has_standalone_option(pandoc_options))
+            geometry_needed = (not auto_disabled(no_auto, "margin")
+                              and not has_geometry(md_path, variables, metadata_files, preamble_files or []))
+            monofont_needed = (not auto_disabled(no_auto, "monofont")
+                              and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
+                              and not has_monofont(md_path, variables))
+            if is_tex_target and geometry_needed:
+                note("MARGIN", f"{md_path}: no geometry/margin set; "
+                              f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
+            if is_tex_target and monofont_needed:
+                note("MONOFONT", f"{md_path}: has code but no monofont set; "
+                                f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
+            with prepared_latex_inputs([title_source, *metadata_files], is_tex_target) as prepared, \
+                    document_header_file(md_path, bool(preamble_files) and is_tex_target) as header_file:
                 source, *prepared_metadata = prepared
                 cmd = ["pandoc", str(source), "-o", str(output), "-t", target_format]
+                if is_tex_target and standalone_auto:
+                    note("STANDALONE", f"{md_path}: --to {target_format} needs a complete, "
+                                       "independently compilable document; adding --standalone")
+                    cmd.append("--standalone")
                 if effective_from:
                     cmd += ["-f", effective_from]
                 for metadata in prepared_metadata:
                     cmd += ["--metadata-file", str(metadata)]
                 pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                if is_tex_target:
+                    # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
+                    # explicit font/document mainfont) is reproduced here --
+                    # its missing-glyph retry needs an actual compile to
+                    # detect against, which nothing here performs. No
+                    # mainfontfallback either: see PREFERRED_FONT's own
+                    # comment above -- Pandoc's mainfontfallback mechanism is
+                    # already known to crash lualatex outright in this
+                    # environment, which is exactly why the PDF path uses a
+                    # detect-then-retry-with-a-different-mainfont approach
+                    # instead of that Pandoc mechanism. If the emitted
+                    # mainfont turns out to have missing glyphs when this
+                    # .tex is compiled by hand, override it with -f/--font
+                    # (or edit \\setmainfont directly) the way the PDF path's
+                    # retry would have.
+                    first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
+                    if first_font:
+                        cmd += ["-V", f"mainfont={first_font}"]
+                    if geometry_needed:
+                        cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                    if monofont_needed:
+                        cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
                 for variable in variables:
                     cmd += ["-V", variable]
                 if shift_heading:
                     cmd += ["--shift-heading-level-by=-1"]
                 cmd += pandoc_options
+                if preamble_files and is_tex_target:
+                    for preamble_file in preamble_files:
+                        cmd += ["--include-in-header", str(preamble_file)]
+                    # Last, so a document's own header-includes can override
+                    # anything the shared preamble defined (pandoc would
+                    # otherwise drop it entirely; see document_header_file).
+                    if header_file is not None:
+                        cmd += ["--include-in-header", str(header_file)]
                 if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                     cmd.append("--citeproc")
-                if target_format == "latex" and not auto_disabled(no_auto, "tablewidth"):
+                if is_tex_target and tablewidth_auto:
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
@@ -1785,6 +1891,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "margin (geometry:margin=1in), mainfont (the STIX Two Text/DejaVu Serif "
                              "fallback), monofont (JetBrains Mono for code), font (mainfont and "
                              "monofont together), tablewidth (proportional pipe-table column widths), "
+                             "standalone (the --to latex/beamer/context --standalone default), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
                              "files (metadata+preamble+lua together). An explicit -y/-H/-f/-V/--from "
@@ -1904,23 +2011,72 @@ def main() -> None:
 
         with table_width_filter() as width_filter:
             if target_format != "pdf":
-                with prepared_latex_inputs([*files, *metadata_files], False) as prepared:
+                # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
+                # writer here still gets --standalone plus the same
+                # preamble/font/margin/header-includes treatment as the PDF
+                # report path below (all decided from files[0] only, same as
+                # report_no_auto/report_from/documentclass above), just
+                # without an engine ever actually running.
+                is_tex_target = target_format in TEX_STANDALONE_FORMATS
+                report_preambles = ([] if not is_tex_target or auto_disabled(report_no_auto, "preamble")
+                                    else find_preambles(files[0].parent, files[0].stem, pandoc_options))
+                if report_preambles:
+                    announce_preambles(report_preambles)
+                report_document_font = is_tex_target and has_mainfont(files[0], variables)
+                report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
+                report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
+                                          and not has_standalone_option(pandoc_options))
+                report_geometry_needed = (is_tex_target and not auto_disabled(report_no_auto, "margin")
+                                          and not has_geometry(files[0], variables, metadata_files, report_preambles))
+                if report_geometry_needed:
+                    report_note("MARGIN", "REPORT: no geometry/margin set; "
+                                         f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
+                report_monofont_needed = (is_tex_target and not auto_disabled(report_no_auto, "monofont")
+                                          and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
+                                          and not has_monofont(files[0], variables))
+                if report_monofont_needed:
+                    report_note("MONOFONT", "REPORT: has code but no monofont set; "
+                                           f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
+                with prepared_latex_inputs([*files, *metadata_files], is_tex_target) as prepared, \
+                        document_header_file(files[0], bool(report_preambles) and is_tex_target) as report_header_file:
                     prepared_files = prepared[:len(files)]
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
+                    if is_tex_target and report_standalone_auto:
+                        report_note("STANDALONE", f"REPORT: --to {target_format} needs a complete, "
+                                                  "independently compilable document; adding --standalone")
+                        cmd.append("--standalone")
                     if report_from:
                         cmd += ["-f", report_from]
                     if metadata is not AUTO_METADATA_DISABLED:
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]
+                    if is_tex_target:
+                        # See convert_one's matching comment: no
+                        # mainfontfallback here -- it's the Pandoc mechanism
+                        # PREFERRED_FONT's own comment already documents as
+                        # crashing lualatex outright in this environment.
+                        report_first_font = None if report_document_font else (
+                            args.font or (PREFERRED_FONT if report_mainfont_auto else None))
+                        if report_first_font:
+                            cmd += ["-V", f"mainfont={report_first_font}"]
+                        if report_geometry_needed:
+                            cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                        if report_monofont_needed:
+                            cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
                     for variable in variables:
                         cmd += ["-V", variable]
                     cmd += pandoc_options
+                    if report_preambles and is_tex_target:
+                        for preamble in report_preambles:
+                            cmd += ["--include-in-header", str(preamble)]
+                        if report_header_file is not None:
+                            cmd += ["--include-in-header", str(report_header_file)]
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
                             and "--no-citeproc" not in pandoc_options):
                         cmd.append("--citeproc")
-                    if target_format == "latex" and not auto_disabled(report_no_auto, "tablewidth"):
+                    if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
                     log_cmd(cmd, pandoc_cwd, args.verbose)
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
@@ -2041,7 +2197,8 @@ def main() -> None:
             output.mkdir(parents=True, exist_ok=True)
         jobs = max(1, args.jobs)
         def preamble_for(file):
-            if target_format != "pdf" or auto_disabled(effective_no_auto(file, args.no_auto), "preamble"):
+            if (target_format not in {"pdf", *TEX_STANDALONE_FORMATS}
+                    or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
                 return []
             preambles = find_preambles(file.parent, file.stem, pandoc_options)
             announce_preambles(preambles)
@@ -2106,7 +2263,8 @@ def main() -> None:
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             preambles = []
-            if target_format == "pdf" and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble"):
+            if (target_format in {"pdf", *TEX_STANDALONE_FORMATS}
+                    and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble")):
                 preambles = find_preambles(source.parent, source.stem, pandoc_options)
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
