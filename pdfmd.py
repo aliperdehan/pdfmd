@@ -162,6 +162,17 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     ignored (not an error) if PyYAML isn't installed.
 """
 # Versioned from here on -- see ~/dev/python-projects/CHANGELOG-pdfmd.md.
+#
+# BEFORE EDITING THIS FILE: read ~/dev/python-projects/CLAUDE.md first. In
+# short -- back this file up to backups/pdfmd.py.bak-YYYYMMDD[letter] (same
+# naming pattern already in that directory) before changing anything, and
+# add a CHANGELOG-pdfmd.md entry (bump PDFMD_VERSION below) IN THE SAME
+# EDIT, not after. This is a shared dependency across multiple, unrelated
+# Markdown-to-PDF pipelines (nulabreport is one, but not the only one) --
+# CLAUDE.md explains why a fix that looks scoped to one project's document
+# can still break another, and why a fix should be verified through the
+# full `pdfmd` pipeline, not just by compiling the `.tex` it produced.
+#
 # This script began as a one-line `pandoc file.md -o file.pdf` wrapper and
 # was revised many times since, across ChatGPT, ChatGPT Codex, Claude Chat,
 # Cowork, and Claude Code sessions, with no version marker or changelog kept
@@ -171,7 +182,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.2.0"
+PDFMD_VERSION = "2.3.0"
 import argparse
 from fnmatch import fnmatchcase
 import re
@@ -1574,6 +1585,59 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
           file=sys.stderr)
 
 
+def engine_failure_reason(stderr: str) -> str | None:
+    """Pull the single most useful line out of a failed engine's stderr.
+
+    Added 2026-09-17: before this, a failed engine only ever produced a bare
+    "WARN ... {engine} failed; trying {next}..." with no hint why -- finding
+    the actual cause meant rerunning by hand with --engine {engine} --verbose
+    to see the raw LaTeX log, which is real friction for a mistake that's
+    often one glance at the log away from obvious (an undefined environment,
+    a missing package, a stray unescaped character). A LaTeX fatal error
+    always starts its own line with '!' (e.g. '! LaTeX Error: ...'); Pandoc's
+    own errors are usually 'Error producing PDF.' or 'pandoc: ...'. Preferring
+    those over the raw tail keeps the one-line summary meaningful instead of
+    a trailing context line like 'l.612 ...' or a blank line. Returns None
+    for empty/whitespace-only stderr (nothing useful to show).
+    """
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    for line in lines:
+        if line.startswith("!"):
+            return line
+    for line in lines:
+        if line.startswith(("Error", "pandoc:", "pandoc.exe:")):
+            return line
+    return lines[-1] if lines else None
+
+
+def report_engine_failure(label: str, engine: str, result: subprocess.CompletedProcess,
+                          remaining: list[str], debug: bool) -> None:
+    """Print why one PDF-engine attempt failed -- always, not just under --verbose.
+
+    Added 2026-09-17 alongside engine_failure_reason() (see its docstring):
+    every engine failure now gets at least a one-line reason for free.
+    --debug goes further and dumps the engine's full captured stderr right
+    here, inline, for when that one-line reason is too compressed to
+    actually diagnose from (several stacked LaTeX errors, or a Pandoc-level
+    error with no leading '!'/'Error' line at all) -- the previous way to
+    see this was rerunning by hand with --engine <name> --verbose, which
+    means already suspecting which engine to force before you've seen why
+    any of them failed.
+    """
+    reason = engine_failure_reason(result.stderr)
+    hint = f" ({reason})" if reason else ""
+    if remaining:
+        print(f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
+    else:
+        print(f"WARN  {label}: {engine} failed{hint}; no more engines to try. "
+              f"Rerun with --engine {engine} --verbose (or --debug) for the full log.",
+              file=sys.stderr)
+    if debug and result.stderr.strip():
+        print(f"----- {label}: {engine} stderr (--debug) -----", file=sys.stderr)
+        print(result.stderr.strip(), file=sys.stderr)
+        print("-" * 40, file=sys.stderr)
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -1583,7 +1647,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 target_format: str = "pdf",
                 from_format: str | None = None,
                 no_auto: list[str] | None = None,
-                verbose: bool = False) -> tuple[Path, bool, str]:
+                verbose: bool = False,
+                debug: bool = False) -> tuple[Path, bool, str]:
     auto_summary: list[str] = []
 
     def note(kind: str, detail: str) -> None:
@@ -1788,8 +1853,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 break
             failed_families.add(family)
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-            if remaining:
-                print(f"WARN  {md_path}: {engine} failed; trying {remaining[0]}...", file=sys.stderr)
+            report_engine_failure(str(md_path), engine, result, remaining, debug)
         assert result is not None
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
@@ -1906,6 +1970,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "fired) so a normal run stays quiet; AUTO YAML/TEX/ENGINE/MD are "
                              "unaffected by this flag and always print in full, since they're rarer "
                              "and already name a specific file/engine rather than a generic default")
+    parser.add_argument("--debug", action="store_true",
+                        help="on ANY PDF-engine failure -- even one a later engine in the fallback "
+                             "chain recovers from -- print the engine's full captured stderr inline, "
+                             "not just the one-line reason every failure now shows by default (see "
+                             "'WARN ... failed (...)' -- that short reason needs no flag at all). "
+                             "Implies --verbose. Use this instead of guessing which engine to force "
+                             "with --engine when a document's rendered output doesn't match what the "
+                             "Markdown predicts and the short reason alone isn't enough to tell why")
     parser.add_argument("--open", action="store_true",
                         help="open the finished file (via macOS 'open'/Linux 'xdg-open') once "
                              "conversion succeeds. Applies to single-file and report/book mode, "
@@ -1916,6 +1988,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
+    if args.debug:
+        args.verbose = True
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if not which("pandoc"):
@@ -2136,8 +2210,7 @@ def main() -> None:
                         break
                     failed_families.add(family)
                     remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-                    if remaining:
-                        print(f"WARN  REPORT: {engine} failed; trying {remaining[0]}...", file=sys.stderr)
+                    report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
         for file in files:
             if not has_chapter_field(file):
@@ -2216,14 +2289,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -2269,7 +2342,7 @@ def main() -> None:
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug)]
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
