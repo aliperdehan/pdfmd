@@ -187,19 +187,49 @@ Build-provenance stamping (--stamp):
     never touched.
 
     --stamp-mode controls repeats: `replace` (default) overwrites the
-    previous stamp line in place; `history` never overwrites -- each run
-    inserts a new line above the previous ones, directly under the BUILD
-    NOTES heading, so the newest entry always reads first. --stamp-packages
-    NAME [NAME ...] names LaTeX packages (e.g. `nulabreport`) whose version
-    to include, found via `kpsewhich NAME.sty` and that file's own
-    `\\ProvidesPackage` line -- a named package is silently left off the
-    line if this document doesn't actually load it, or its version can't be
-    determined. --stamp-scope decides which compiles write a stamp at all:
-    `always` (default), `report` (only as part of a -r/--report build, not
-    a standalone/batch one), or `standalone` (the opposite). --stamp-output
-    names the rendered output file in the stamp line even outside report
-    mode (a report/book chapter's stamp always names the shared output,
-    "Compiled as part of `book.pdf` with ...", regardless of this flag).
+    current stamp line in place. `history` keeps exactly one live stamp
+    line at the top (right under BUILD NOTES, so the latest compile is
+    always the first thing read) and demotes whatever was there before
+    into a "Compile History:" list of bullets at the END of the comment,
+    just before its closing `===...-->`, newest-demoted-first -- so hand-
+    written notes in between never get pushed further down with each
+    compile the way a plain top-of-block history would. Switching back to
+    `replace` afterward freezes that history list rather than deleting it,
+    which prints a WARN so it isn't silently forgotten about.
+
+    --stamp-packages NAME [NAME ...] names LaTeX packages (e.g.
+    `nulabreport`) whose version to include, found via `kpsewhich
+    NAME.sty` and that file's own `\\ProvidesPackage` line -- a named
+    package is silently left off the line if this document doesn't
+    actually load it, or its version can't be determined. --stamp-scope
+    decides which compiles write a stamp at all: `always` (default),
+    `report` (only as part of a -r/--report build, not a standalone/batch
+    one), or `standalone` (the opposite). --stamp-output names the
+    rendered output file in the stamp line even outside report mode (a
+    report/book chapter's stamp always names the shared output, "Compiled
+    as part of `book.pdf` with ...", regardless of this flag).
+
+    PDF metadata is a separate concern from all of the above, and ON by
+    default (--no-stamp-pdf-metadata turns it off): every LaTeX-engine
+    compile embeds the same package/pdfmd version info directly into the
+    rendered PDF's own Info dictionary, as two custom keys (`PdfmdVersions`,
+    `PdfmdBuildDate`) -- invisible on the rendered page and in a normal
+    "Document Properties" panel, but readable with `exiftool`/`pdfinfo
+    -meta`, and additive (a second `\\hypersetup{pdfinfo=...}` call, merging
+    with Pandoc's own rather than overwriting pdftitle/pdfauthor/etc.).
+    Unlike `enabled` (which edits the visible .md source and stays off
+    until asked), this has no visible effect on anything a reader or a
+    "Get Info" panel would normally show, so it defaults to on rather than
+    needing --stamp/pdfmd-options.stamp.enabled first -- the two are
+    otherwise independent switches: PDF metadata with the .md stamp off,
+    the .md stamp with PDF metadata explicitly turned off, or both, are all
+    valid combinations. Only takes effect on a LaTeX-family engine; a
+    non-LaTeX PDF engine (weasyprint, typst, ...) has no equivalent
+    mechanism this reaches, so it's silently skipped there. Unlike the .md
+    stamp (written after a successful compile), this has to be baked into
+    the LaTeX source before the engine even runs, so its timestamp is
+    captured moments earlier than the .md stamp's from the same compile --
+    both still land within the same run.
 
     Same settings via a document's own front matter or a --metadata-file's,
     nested under `pdfmd-options: stamp:` -- same precedence as
@@ -241,7 +271,7 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.5.0"
+PDFMD_VERSION = "3.0.0"
 import argparse
 from fnmatch import fnmatchcase
 import os
@@ -1465,6 +1495,17 @@ DEFAULT_STAMP_OPTIONS = {
     "packages": [],
     "scope": "always",
     "include_output": False,
+    # On by default, unlike 'enabled' -- embedding two custom, invisible PDF
+    # Info-dictionary keys (see pdf_metadata_snippet) has no visible effect
+    # on the rendered page or a normal "Document Properties" panel, and
+    # never overwrites a document's real metadata, so there's little to
+    # protect a caller from the way 'enabled' (which edits the visible .md
+    # source) protects them by staying off until asked. Independent of
+    # 'enabled': PDF metadata still needs a LaTeX-family engine and a scope
+    # match (see stamp_scope_matches), but happens on every such compile
+    # unless --no-stamp-pdf-metadata/pdf_metadata:false turns it off, with
+    # or without --stamp/enabled ever being turned on for the .md stamp.
+    "pdf_metadata": True,
 }
 
 
@@ -1474,8 +1515,9 @@ def normalize_stamp_value(value) -> dict:
     Accepts the same range of shapes --no-auto's own settings do: a bare
     bool (on/off, everything else default), a single package name or list
     of names (shorthand for enabling stamping with just those packages), or
-    a full dict of {enabled, mode, packages, scope, include_output}. A dict
-    with no explicit ``enabled`` key is treated as on -- bothering to
+    a full dict of {enabled, mode, packages, scope, include_output,
+    pdf_metadata}. A dict with no explicit ``enabled`` key is treated as on
+    -- bothering to
     configure packages/mode/scope implies wanting it active; write
     ``enabled: false`` explicitly to keep a shared default off until a
     document (or --stamp on the command line) turns it on.
@@ -1502,6 +1544,9 @@ def normalize_stamp_value(value) -> dict:
         include_output = value.get("include_output", value.get("include-output"))
         if include_output is not None:
             options["include_output"] = bool(include_output)
+        pdf_metadata = value.get("pdf_metadata", value.get("pdf-metadata"))
+        if pdf_metadata is not None:
+            options["pdf_metadata"] = bool(pdf_metadata)
     return options
 
 
@@ -1629,7 +1674,15 @@ BUILD_NOTES_RE = re.compile(
 )
 
 
-def update_build_notes(text: str, new_line: str, mode: str) -> str:
+def stamp_line_pattern(indent: str) -> re.Pattern:
+    return re.compile(rf"^{re.escape(indent)}Compiled\b.*?\bpdfmd\s+v[0-9][^\r\n]*$", re.MULTILINE)
+
+
+def history_heading_pattern(indent: str) -> re.Pattern:
+    return re.compile(rf"^{re.escape(indent)}Compile History:[ \t]*\n", re.MULTILINE)
+
+
+def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | None]:
     """Insert/replace pdfmd's own stamp line inside a document's BUILD NOTES
     comment, wherever that comment sits in the file (found by BUILD_NOTES_RE
     -- not assumed to be the file's last line: a report chapter's own
@@ -1638,37 +1691,109 @@ def update_build_notes(text: str, new_line: str, mode: str) -> str:
     Everything else inside the comment -- hand-written notes before or
     after the line pdfmd owns -- is left untouched byte-for-byte. Creates a
     fresh comment at the true end of the file if none is found there yet.
+    Returns (updated_text, warning) -- warning is a one-line string to
+    surface to the caller (never raised/logged here) or None.
 
-    "replace" mode overwrites the first recognized stamp line in place (a
-    line starting with "Compiled" that mentions "pdfmd vX"); if there is no
-    such line yet, one is inserted right after the "BUILD NOTES" heading,
-    the same position a fresh history entry would take. "history" mode
-    never overwrites -- it always inserts a new line in that position,
-    pushing whatever was already there (including past stamps) down, so the
-    newest entry always reads first.
+    "replace" mode overwrites the current stamp line (the one right under
+    "BUILD NOTES") in place; if there is none yet, one is inserted there.
+    It never touches a "Compile History:" trailer even if one already
+    exists from an earlier history-mode run -- that history is simply
+    frozen, not extended, while stamping runs in replace mode, which is
+    worth a warning back to the caller since it's easy to not notice.
+
+    "history" mode keeps exactly one live stamp line at the top (right
+    under "BUILD NOTES", so the most recent compile is always the first
+    thing read) and demotes whatever was previously there into a
+    "Compile History:" list of "  - " bullets at the END of the comment,
+    just before its closing "===...-->" -- newest-demoted-first, so the
+    whole comment reads newest-to-oldest top to bottom. The heading is
+    created there the first time a demotion has nowhere to go.
     """
     match = BUILD_NOTES_RE.search(text)
     if not match:
         indent = "     "
         block = f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}{new_line}\n{indent}{'=' * 60} -->\n"
-        return text.rstrip("\n") + "\n\n" + block
+        return text.rstrip("\n") + "\n\n" + block, None
+
     indent = match.group("indent")
     body = match.group("body")
-    stamp_line_re = re.compile(rf"^{re.escape(indent)}Compiled\b.*?\bpdfmd\s+v[0-9][^\r\n]*$", re.MULTILINE)
-    existing = stamp_line_re.search(body)
-    if mode == "history" or not existing:
+    stamp_re = stamp_line_pattern(indent)
+    current = stamp_re.search(body)
+    warning = None
+
+    if mode == "replace":
+        history_match = history_heading_pattern(indent).search(body)
+        if history_match:
+            bullet_count = len(re.findall(rf"^{re.escape(indent)}  - Compiled\b", body, re.MULTILINE))
+            warning = (f"--stamp: 'Compile History' already holds {bullet_count} "
+                      "entr" + ("y" if bullet_count == 1 else "ies") + " but --stamp-mode is "
+                      "'replace' this run -- history stays frozen (not extended) while in "
+                      "replace mode; switch back to --stamp-mode history to keep recording it")
+        if current:
+            new_body = body[:current.start()] + f"{indent}{new_line}" + body[current.end():]
+        else:
+            new_body = f"{indent}\n{indent}{new_line}\n\n{body}"
+        return text[:match.start("body")] + new_body + text[match.end("body"):], warning
+
+    # history mode
+    if not current:
         new_body = f"{indent}\n{indent}{new_line}\n\n{body}"
+        return text[:match.start("body")] + new_body + text[match.end("body"):], None
+
+    demoted = current.group(0)[len(indent):]
+    remainder = body[current.end():]
+    if remainder.startswith("\n"):
+        remainder = remainder[1:]
+    blank_line = re.match(r"^[ \t]*\n", remainder)
+    if blank_line:
+        remainder = remainder[blank_line.end():]
+    # body[:current.start()] is just the leading blank line the original
+    # template put between "BUILD NOTES" and the current line -- dropped
+    # rather than kept, since the new current line gets that same leading
+    # blank fresh, further down; keeping both would double it up.
+    body_without_current = remainder
+
+    bullet = f"{indent}  - {demoted}\n"
+    history_match = history_heading_pattern(indent).search(body_without_current)
+    if history_match:
+        insert_at = history_match.end()
+        body_without_current = (body_without_current[:insert_at] + bullet
+                                + body_without_current[insert_at:])
     else:
-        new_body = body[:existing.start()] + f"{indent}{new_line}" + body[existing.end():]
-    return text[:match.start("body")] + new_body + text[match.end("body"):]
+        trimmed = body_without_current.rstrip("\n")
+        heading_block = f"{indent}Compile History:\n{bullet}"
+        body_without_current = f"{trimmed}\n\n{heading_block}" if trimmed else heading_block
+
+    new_body = f"{indent}\n{indent}{new_line}\n\n{body_without_current}"
+    return text[:match.start("body")] + new_body + text[match.end("body"):], None
 
 
 def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
     text = md_path.read_text(encoding="utf-8-sig")
-    updated = update_build_notes(text, new_line, mode)
+    updated, warning = update_build_notes(text, new_line, mode)
     md_path.write_text(updated, encoding="utf-8")
+    if warning:
+        print(f"WARN  {md_path}: {warning}", file=sys.stderr)
     if verbose:
         print(f"AUTO STAMP  {md_path}: {new_line}")
+
+
+def gather_stamp_texts(md_path: Path, preamble_files: list[Path]) -> list[str]:
+    """Raw LaTeX text stamp_summary checks for \\usepackage{...}: a
+    document's discovered preambles plus its own header-includes block.
+    """
+    texts = [preamble.read_text(encoding="utf-8-sig") for preamble in preamble_files]
+    texts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+    return texts
+
+
+def stamp_scope_matches(options: dict, report_output: Path | None) -> bool:
+    """Whether options['scope'] allows stamping in this context -- shared by
+    the pre-compile PDF-metadata path and the post-compile .md-stamp path,
+    so both always agree on when to fire (see DEFAULT_STAMP_OPTIONS).
+    """
+    wanted_scope = "report" if report_output is not None else "standalone"
+    return options["scope"] in ("always", wanted_scope)
 
 
 def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
@@ -1684,15 +1809,72 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     "always" (default), "report"-only, or "standalone"-only.
     """
     options = resolve_stamp_options(md_path, metadata_files, cli_overrides)
-    if not options["enabled"]:
+    if not options["enabled"] or not stamp_scope_matches(options, report_output):
         return
-    wanted_scope = "report" if report_output is not None else "standalone"
-    if options["scope"] not in ("always", wanted_scope):
-        return
-    texts = [preamble.read_text(encoding="utf-8-sig") for preamble in preamble_files]
-    texts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+    texts = gather_stamp_texts(md_path, preamble_files)
     line = build_stamp_line(options, texts, output, report_output, verbose)
     apply_stamp(md_path, line, options["mode"], verbose)
+
+
+# PDF Info-dictionary key names pdfmd writes when pdf_metadata is on. Two
+# separate keys, not one combined "Compiled with ... -- TIMESTAMP" line like
+# the .md stamp's: LuaTeX/XeTeX apply their usual typographic ligatures
+# (-- becomes an en dash) to hypersetup's pdfinfo strings same as any other
+# typeset text, so a literal "--" separator doesn't survive intact -- kept
+# out entirely here rather than fought with escaping.
+PDF_INFO_VERSIONS_KEY = "PdfmdVersions"
+PDF_INFO_BUILD_DATE_KEY = "PdfmdBuildDate"
+
+
+def pdf_metadata_snippet(options: dict, texts: list[str], verbose: bool) -> str | None:
+    """Return \\AtBeginDocument{...\\hypersetup{pdfinfo={...}}} LaTeX
+    embedding the same package/pdfmd version info as the .md stamp
+    directly into the PDF's own Info dictionary (PdfmdVersions/
+    PdfmdBuildDate) -- inspectable with exiftool or pdfinfo, invisible on
+    the rendered page. None if options['pdf_metadata'] is off.
+
+    Deferred with \\AtBeginDocument rather than run inline: pandoc's own
+    template inserts --include-in-header content INTO THE PREAMBLE BEFORE
+    \\usepackage{bookmark} (which is what actually loads hyperref
+    indirectly -- there is no literal \\usepackage{hyperref} to be after),
+    so \\hypersetup is not yet defined at the point this file is read --
+    confirmed by generating the actual .tex and inspecting the order.
+    \\AtBeginDocument defers until \\begin{document}, by which point every
+    package is loaded regardless of --include-in-header ordering; the
+    \\ifdefined guard inside it is now just cheap extra insurance, not
+    load-bearing. A second \\hypersetup call merges with Pandoc's own
+    (which sets pdftitle/pdfauthor/etc.) rather than overwriting it, so
+    this never clobbers a document's real metadata.
+    """
+    if not options.get("pdf_metadata"):
+        return None
+    summary = stamp_summary(options, texts, verbose)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return (
+        "\\AtBeginDocument{\\ifdefined\\hypersetup\n"
+        f"  \\hypersetup{{pdfinfo={{{PDF_INFO_VERSIONS_KEY}={{{summary}}},"
+        f"{PDF_INFO_BUILD_DATE_KEY}={{{timestamp}}}}}}}\n"
+        "\\fi}\n"
+    )
+
+
+@contextmanager
+def pdf_metadata_header_file(snippet: str | None) -> Iterator[Path | None]:
+    """Materialize pdf_metadata_snippet's LaTeX to a temp file for
+    --include-in-header -- same pattern as table_width_filter's fixed,
+    non-document-specific content, so a plain system-tempdir file is fine.
+    """
+    if not snippet:
+        yield None
+        return
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex",
+                            prefix="pdfmd-pdfmeta-", delete=False) as temporary:
+        temporary.write(snippet)
+        temporary_path = Path(temporary.name)
+    try:
+        yield temporary_path
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def yaml_autoinclude(path: Path) -> bool:
@@ -2043,6 +2225,17 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
     for lua_filter in lua_filters:
         note("LUA", str(lua_filter))
 
+    # Resolved once, up front, since PDF metadata (unlike the .md BUILD
+    # NOTES stamp, written after a successful compile) has to already be
+    # baked into the LaTeX source before pandoc/the engine even runs.
+    # stamp_after_success() resolves its own copy after the fact -- cheap
+    # to redo, and keeps that already-tested path untouched.
+    pdf_meta_options = resolve_stamp_options(md_path, metadata_files, stamp_overrides)
+    pdf_meta_snippet_text = (
+        pdf_metadata_snippet(pdf_meta_options, gather_stamp_texts(md_path, preamble_files or []), verbose)
+        if pdf_meta_options["pdf_metadata"] and stamp_scope_matches(pdf_meta_options, None) else None
+    )
+
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
             table_width_filter() as width_filter:
@@ -2078,7 +2271,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
                                 f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target) as prepared, \
-                    document_header_file(md_path, bool(preamble_files) and is_tex_target) as header_file:
+                    document_header_file(md_path, bool(preamble_files) and is_tex_target) as header_file, \
+                    pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
                 cmd = ["pandoc", str(source), "-o", str(output), "-t", target_format]
                 if is_tex_target and standalone_auto:
@@ -2126,6 +2320,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     # otherwise drop it entirely; see document_header_file).
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
+                if pdf_meta_file is not None:
+                    cmd += ["--include-in-header", str(pdf_meta_file)]
                 if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                     cmd.append("--citeproc")
                 if is_tex_target and tablewidth_auto:
@@ -2163,7 +2359,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                       f"failure; skipping", file=sys.stderr)
                 continue
             with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES) as prepared, \
-                    document_header_file(md_path, bool(preamble_files) and engine in LATEX_ENGINES) as header_file:
+                    document_header_file(md_path, bool(preamble_files) and engine in LATEX_ENGINES) as header_file, \
+                    pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
 
                 def run(selected_font: str | None, fallback: bool = False):
@@ -2199,6 +2396,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                         # otherwise drop it entirely; see document_header_file).
                         if header_file is not None:
                             cmd += ["--include-in-header", str(header_file)]
+                    if pdf_meta_file is not None:
+                        cmd += ["--include-in-header", str(pdf_meta_file)]
                     if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                         cmd.append("--citeproc")
                     # Lua filters go last: pandoc applies --citeproc and filters in
@@ -2367,10 +2566,12 @@ def build_parser() -> argparse.ArgumentParser:
                               help="force stamping off for this run, overriding pdfmd-options.stamp "
                                    "even if a document or metadata file turns it on")
     parser.add_argument("--stamp-mode", choices=sorted(STAMP_MODES), default=None,
-                        help="'replace' (default): overwrite the previous stamp line in place. "
-                             "'history': keep every previous stamp line, inserting the new one "
-                             "above them, directly under the BUILD NOTES heading -- both leave any "
-                             "other hand-written notes in the block untouched")
+                        help="'replace' (default): overwrite the current stamp line in place. "
+                             "'history': keep one live stamp line at the top (right under BUILD "
+                             "NOTES) and demote the previous one into a 'Compile History:' list at "
+                             "the end of the comment, newest-demoted-first -- both leave any other "
+                             "hand-written notes in the block untouched. Switching back to 'replace' "
+                             "later freezes rather than deletes an existing history list (warns)")
     parser.add_argument("--stamp-packages", nargs="+", default=None, metavar="PKG",
                         help="LaTeX package name(s) (e.g. nulabreport) whose version to include in "
                              "the stamp line, found via 'kpsewhich PKG.sty' and that file's own "
@@ -2392,6 +2593,23 @@ def build_parser() -> argparse.ArgumentParser:
     stamp_output.add_argument("--no-stamp-output", action="store_true", default=None,
                               help="never name the output file in a standalone/batch stamp line, "
                                    "even if pdfmd-options.stamp.include_output turned it on")
+    stamp_pdf = parser.add_mutually_exclusive_group()
+    stamp_pdf.add_argument("--stamp-pdf-metadata", action="store_true", default=None,
+                           help="force PDF-metadata embedding on (it's already on by default -- see "
+                                "--no-stamp-pdf-metadata); only useful to override a document/"
+                                "metadata file that set pdf_metadata: false")
+    stamp_pdf.add_argument("--no-stamp-pdf-metadata", action="store_true", default=None,
+                           help="on by default, independently of --stamp/pdfmd-options.stamp.enabled "
+                                "(which only gates the .md BUILD NOTES comment): embeds the same "
+                                "package/pdfmd version info as two custom PDF Info-dictionary keys "
+                                "(PdfmdVersions, PdfmdBuildDate) on every LaTeX-engine compile -- "
+                                "inspectable with exiftool/pdfinfo, invisible on the rendered page "
+                                "and in a normal 'Document Properties' panel, and additive (never "
+                                "overwrites pdftitle/pdfauthor/etc., a document's own or Pandoc's). "
+                                "This flag turns it off; --stamp-pdf-metadata forces it back on over "
+                                "a document/metadata file that disabled it. No effect on a non-LaTeX "
+                                "PDF engine (weasyprint, typst, ...), which has no equivalent "
+                                "mechanism this reaches")
     return parser
 
 
@@ -2420,6 +2638,10 @@ def main() -> None:
         stamp_overrides["include_output"] = True
     if args.no_stamp_output:
         stamp_overrides["include_output"] = False
+    if args.stamp_pdf_metadata:
+        stamp_overrides["pdf_metadata"] = True
+    if args.no_stamp_pdf_metadata:
+        stamp_overrides["pdf_metadata"] = False
     if args.no_auto:
         unknown = sorted(set(args.no_auto) - NO_AUTO_KINDS)
         if unknown:
@@ -2522,6 +2744,13 @@ def main() -> None:
                 if report_preambles:
                     announce_preambles(report_preambles)
                 stamp_preambles = report_preambles
+                report_pdf_meta_options = resolve_stamp_options(files[0], metadata_files, stamp_overrides)
+                report_pdf_meta_snippet_text = (
+                    pdf_metadata_snippet(report_pdf_meta_options,
+                                         gather_stamp_texts(files[0], stamp_preambles), args.verbose)
+                    if (report_pdf_meta_options["pdf_metadata"] and is_tex_target
+                        and stamp_scope_matches(report_pdf_meta_options, output)) else None
+                )
                 report_document_font = is_tex_target and has_mainfont(files[0], variables)
                 report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
                 report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
@@ -2538,7 +2767,8 @@ def main() -> None:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target) as prepared, \
-                        document_header_file(files[0], bool(report_preambles) and is_tex_target) as report_header_file:
+                        document_header_file(files[0], bool(report_preambles) and is_tex_target) as report_header_file, \
+                        pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
                     prepared_files = prepared[:len(files)]
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
@@ -2573,6 +2803,8 @@ def main() -> None:
                             cmd += ["--include-in-header", str(preamble)]
                         if report_header_file is not None:
                             cmd += ["--include-in-header", str(report_header_file)]
+                    if report_pdf_meta_file is not None:
+                        cmd += ["--include-in-header", str(report_pdf_meta_file)]
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
                             and "--no-citeproc" not in pandoc_options):
@@ -2586,6 +2818,13 @@ def main() -> None:
                             else find_preambles(files[0].parent, files[0].stem, pandoc_options))
                 announce_preambles(preambles)
                 stamp_preambles = preambles
+                report_pdf_meta_options = resolve_stamp_options(files[0], metadata_files, stamp_overrides)
+                report_pdf_meta_snippet_text = (
+                    pdf_metadata_snippet(report_pdf_meta_options,
+                                         gather_stamp_texts(files[0], stamp_preambles), args.verbose)
+                    if (report_pdf_meta_options["pdf_metadata"]
+                        and stamp_scope_matches(report_pdf_meta_options, output)) else None
+                )
                 report_tablewidth_auto = not auto_disabled(report_no_auto, "tablewidth")
                 geometry_needed = (not auto_disabled(report_no_auto, "margin")
                                   and not has_geometry(files[0], variables, metadata_files, preambles))
@@ -2607,7 +2846,10 @@ def main() -> None:
                         print(f"SKIP  REPORT: {engine} shares the {family} engine with an earlier "
                               f"failure; skipping", file=sys.stderr)
                         continue
-                    with prepared_latex_inputs([*files, *metadata_files], engine in LATEX_ENGINES) as prepared:
+                    with prepared_latex_inputs([*files, *metadata_files], engine in LATEX_ENGINES) as prepared, \
+                            pdf_metadata_header_file(
+                                report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
+                            ) as report_pdf_meta_file:
                         prepared_files = prepared[:len(files)]
                         prepared_metadata = prepared[len(files):]
                         cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
@@ -2627,6 +2869,8 @@ def main() -> None:
                         if preambles and engine in LATEX_ENGINES:
                             for preamble in preambles:
                                 cmd += ["--include-in-header", str(preamble)]
+                        if report_pdf_meta_file is not None:
+                            cmd += ["--include-in-header", str(report_pdf_meta_file)]
                         if (any(contains_citations(file) for file in files)
                                 and "--citeproc" not in pandoc_options
                                 and "--no-citeproc" not in pandoc_options):
