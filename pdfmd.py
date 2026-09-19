@@ -100,6 +100,21 @@ Output formats:
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
+Auto-discovered metadata YAML, preambles, and Lua filters (see "Suppressing
+pdfmd's own defaults" below for what each of these is) are looked for beside
+the document itself -- the original convention -- and, if present, inside a
+`metadata/` subdirectory beside it as well, so a report's own top-level
+folder can hold nothing but its .md source and rendered output while
+metadata.yaml, a shared .bib/.csl, preamble.tex, and Lua filters live out of
+sight together in `metadata/`. Both locations are always searched; nothing
+needs to opt in. Whichever directory a document's --metadata-file (explicit
+or auto-discovered) ends up in also becomes the working directory Pandoc
+itself runs in, so a preamble's own raw LaTeX `\\input{...}` and a
+metadata.yaml's own relative `bibliography:`/`csl:` paths can live in that
+same `metadata/` folder and still resolve -- pdfmd adds `--resource-path`
+pointing back at the document's own directory in that case, so the
+document's own relative image paths keep resolving too.
+
 Reader selection for a Markdown source:
     A document with no `---` YAML front matter at all -- ordinary
     GitHub-Flavored Markdown, not written with Pandoc's own stricter rules
@@ -182,9 +197,10 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.3.0"
+PDFMD_VERSION = "2.4.0"
 import argparse
 from fnmatch import fnmatchcase
+import os
 import re
 import shlex
 import subprocess
@@ -219,6 +235,15 @@ DEFAULT_MONOFONT = "JetBrains Mono"
 DEFAULT_MARGIN = "1in"
 DEFAULT_VARS = []
 AUTO_METADATA_DISABLED = object()
+
+# Auto-discovered yaml/tex/lua files may live directly beside the document
+# (the original convention) or inside this subdirectory instead, so a
+# report's own top-level folder can hold just its .md source and rendered
+# output -- everything else (metadata.yaml, a shared .bib/.csl a metadata.yaml
+# points at, preamble.tex, lua filters, and anything a preamble's own raw
+# LaTeX \input pulls in relative to pandoc's cwd -- see resource_path_option's
+# docstring) can sit out of sight together. See accessory_directories().
+ACCESSORY_DIRNAME = "metadata"
 
 # --no-auto KIND values, and its "font" shorthand for both font kinds at
 # once. See build_parser()'s --no-auto help text for what each kind does.
@@ -261,6 +286,44 @@ def merge_no_auto(cli: list[str] | None, doc: list[str] | None) -> list[str] | N
     if cli == [] or doc == []:
         return []
     return sorted({*(cli or []), *(doc or [])})
+
+
+def accessory_directories(directory: Path) -> list[Path]:
+    """Return `directory`, plus its ACCESSORY_DIRNAME subdirectory if present.
+
+    Every filename-based auto-discovery (metadata YAML, preambles, Lua
+    filters) searches both: a document's own directory (files placed
+    directly beside it, the original convention) and, when it exists, a
+    metadata/ subfolder holding the same kind of files, so a report's own
+    top-level folder can hold nothing but its .md source and rendered
+    output. Checked fresh on every call rather than cached -- cheap, and a
+    directory created between calls (unlikely, but free to support this way)
+    is picked up.
+    """
+    accessory = directory / ACCESSORY_DIRNAME
+    return [directory, accessory] if accessory.is_dir() else [directory]
+
+
+def resource_path_option(document_directory: Path, pandoc_cwd: Path) -> list[str]:
+    """--resource-path to keep image/include lookups anchored to the
+    document's own directory even when pandoc_cwd points elsewhere.
+
+    pandoc_cwd (see convert_one and main()'s report-mode branch) normally
+    equals document_directory, but is set to the first discovered metadata
+    file's own directory instead -- an ACCESSORY_DIRNAME subfolder (see
+    accessory_directories()), or an explicit -y from a shared directory --
+    so that a preamble's raw LaTeX \\input (e.g. a shared chemicals.tex) and
+    a metadata.yaml's own relative bibliography:/csl: keys resolve against
+    THAT directory. Without this, a document's own relative image paths
+    would silently resolve against the same directory instead of the
+    document's, the moment metadata moves out of the document's own folder.
+    A no-op whenever the two already coincide -- every pipeline that doesn't
+    use a metadata/ subfolder or an out-of-tree -y keeps its exact previous
+    command line.
+    """
+    if document_directory == pandoc_cwd:
+        return []
+    return ["--resource-path", f"{document_directory}{os.pathsep}."]
 
 
 def frontmatter_pdfmd_options(md_path: Path) -> dict:
@@ -665,14 +728,15 @@ def preamble_candidates(directory: Path, document_stem: str) -> list[Path]:
     """Return intentionally named generic and document-specific preambles."""
     stem = document_stem.casefold()
     candidates: list[Path] = []
-    for path in directory.glob("*.tex"):
-        name = path.name.casefold()
-        if name in PREAMBLE_FILENAMES:
-            candidates.append(path)
-            continue
-        if (name == f"{stem}.tex" or name in {f"{stem}_preamble.tex", f"{stem}-preamble.tex"}
-                or re.fullmatch(r"(?:latex-)?preamble-[^.]+\.tex", name)):
-            candidates.append(path)
+    for folder in accessory_directories(directory):
+        for path in folder.glob("*.tex"):
+            name = path.name.casefold()
+            if name in PREAMBLE_FILENAMES:
+                candidates.append(path)
+                continue
+            if (name == f"{stem}.tex" or name in {f"{stem}_preamble.tex", f"{stem}-preamble.tex"}
+                    or re.fullmatch(r"(?:latex-)?preamble-[^.]+\.tex", name)):
+                candidates.append(path)
     # Generic files load first; document-specific settings then override them.
     def priority(path: Path) -> tuple[int, str]:
         name = path.name.casefold()
@@ -875,7 +939,7 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
     metadata. Anything else has to be passed explicitly, so an unrelated .lua
     file sitting in a folder can never silently change a render.
     """
-    directories: list[Path] = [md_path.parent]
+    directories: list[Path] = accessory_directories(md_path.parent)
     directories += [metadata.parent for metadata in metadata_files]
     wanted = (f"{md_path.stem}.lua", "nulabreport.lua")
     found: list[Path] = []
@@ -1366,11 +1430,14 @@ def resolve_yaml(directory: Path, value: str) -> Path:
     path = Path(value)
     candidates = [path]
     if not path.is_absolute():
+        accessory = directory / ACCESSORY_DIRNAME
         candidates.append(Path.cwd() / path)
         candidates.append(directory / path)
+        candidates.append(accessory / path)
         if not path.suffix:
             candidates.extend((Path.cwd() / path.with_suffix(".yaml"),
-                               directory / path.with_suffix(".yaml")))
+                               directory / path.with_suffix(".yaml"),
+                               accessory / path.with_suffix(".yaml")))
     for candidate in candidates:
         if candidate.is_file():
             return candidate
@@ -1383,13 +1450,16 @@ def find_metadata(directory: Path, requested: list[str] | None, report: bool = F
     """Choose metadata files, supporting explicit stacks and automatic discovery."""
     if requested == []:
         return AUTO_METADATA_DISABLED
+    search_dirs = accessory_directories(directory)
     if requested is not None:
         if requested == ["all"]:
-            candidates = [item for item in sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+            candidates = [item for folder in search_dirs
+                          for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
                           if item.name.lower() != "defaults.yaml" and yaml_autoinclude(item)]
             return order_metadata(candidates)
         return order_metadata([resolve_yaml(directory, value) for value in requested])
-    candidates = [item for item in sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+    candidates = [item for folder in search_dirs
+                  for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
                   if item.name.lower() != "defaults.yaml" and yaml_autoinclude(item)]
     metadata = next((item for item in candidates if item.name.lower() == "metadata.yaml"), None)
     document_metadata = ([item for item in candidates
@@ -1726,6 +1796,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 for metadata in prepared_metadata:
                     cmd += ["--metadata-file", str(metadata)]
                 pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                cmd += resource_path_option(md_path.parent, pandoc_cwd)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
                     # explicit font/document mainfont) is reproduced here --
@@ -1806,6 +1877,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     for metadata in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata)]
                     pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                    cmd += resource_path_option(md_path.parent, pandoc_cwd)
                     if presentation:
                         cmd += ["-t", "beamer"]
                         if slide_level is not None:
@@ -2082,6 +2154,7 @@ def main() -> None:
             output = Path.cwd() / f"book{output_extension}"
         output = output.resolve()
         pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
+        report_resource_path = resource_path_option(files[0].parent, pandoc_cwd)
 
         with table_width_filter() as width_filter:
             if target_format != "pdf":
@@ -2125,6 +2198,7 @@ def main() -> None:
                     if metadata is not AUTO_METADATA_DISABLED:
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]
+                    cmd += report_resource_path
                     if is_tex_target:
                         # See convert_one's matching comment: no
                         # mainfontfallback here -- it's the Pandoc mechanism
@@ -2188,6 +2262,7 @@ def main() -> None:
                         if metadata is not AUTO_METADATA_DISABLED:
                             for metadata_file in prepared_metadata:
                                 cmd += ["--metadata-file", str(metadata_file)]
+                        cmd += report_resource_path
                         if geometry_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                         if monofont_needed and engine in LATEX_ENGINES:
