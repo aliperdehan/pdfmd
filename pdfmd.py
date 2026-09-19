@@ -175,6 +175,50 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     older bare spelling still works for documents already using it). Both
     require PyYAML and a document that already has a `---` block; silently
     ignored (not an error) if PyYAML isn't installed.
+
+Build-provenance stamping (--stamp):
+    Off by default. On a successful compile, appends or updates a
+    `<!-- ===... BUILD NOTES ...=== -->` HTML comment near the end of the
+    .md source recording what compiled it and when -- invisible in the
+    rendered output (every writer pdfmd targets drops a raw HTML comment),
+    visible to anyone reading the source later. This automates a convention
+    already kept by hand in real reports; anything else already written
+    inside that same BUILD NOTES comment (by hand, for unrelated notes) is
+    never touched.
+
+    --stamp-mode controls repeats: `replace` (default) overwrites the
+    previous stamp line in place; `history` never overwrites -- each run
+    inserts a new line above the previous ones, directly under the BUILD
+    NOTES heading, so the newest entry always reads first. --stamp-packages
+    NAME [NAME ...] names LaTeX packages (e.g. `nulabreport`) whose version
+    to include, found via `kpsewhich NAME.sty` and that file's own
+    `\\ProvidesPackage` line -- a named package is silently left off the
+    line if this document doesn't actually load it, or its version can't be
+    determined. --stamp-scope decides which compiles write a stamp at all:
+    `always` (default), `report` (only as part of a -r/--report build, not
+    a standalone/batch one), or `standalone` (the opposite). --stamp-output
+    names the rendered output file in the stamp line even outside report
+    mode (a report/book chapter's stamp always names the shared output,
+    "Compiled as part of `book.pdf` with ...", regardless of this flag).
+
+    Same settings via a document's own front matter or a --metadata-file's,
+    nested under `pdfmd-options: stamp:` -- same precedence as
+    `pdf-engine`/`engine` above (document wins over metadata file; either
+    lets a shared metadata.yaml turn stamping on for every report that
+    finds it). Accepts a bare `true`/`false`, a package name or list of
+    names (shorthand for `{packages: [...]}`), or the full form:
+
+        ---
+        pdfmd-options:
+          stamp:
+            packages: [nulabreport]
+            mode: history
+            scope: report
+        ---
+
+    An explicit --stamp/--no-stamp/--stamp-mode/--stamp-packages/
+    --stamp-scope/--stamp-output on the command line always wins over
+    front matter, field by field.
 """
 # Versioned from here on -- see ~/dev/python-projects/CHANGELOG-pdfmd.md.
 #
@@ -197,7 +241,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "2.4.0"
+PDFMD_VERSION = "2.5.0"
 import argparse
 from fnmatch import fnmatchcase
 import os
@@ -208,6 +252,7 @@ import sys
 import unicodedata
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from shutil import which
@@ -1403,6 +1448,253 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     return None
 
 
+# --stamp / pdfmd-options.stamp: appends (or updates) a "BUILD NOTES" HTML
+# comment at/near the end of a document recording what compiled it and when
+# -- a lab-notebook-style provenance note, invisible in the rendered output
+# (every writer pdfmd targets drops a raw HTML comment) but visible to
+# anyone reading the .md source later. Modeled on a convention already kept
+# by hand in real reports (a `<!-- ===... BUILD NOTES ... ===-->` block
+# ending in a "Compiled with X vY, pdfmd vZ" line) -- this automates just
+# that one line, never touching whatever else the block already holds. Off
+# by default. See resolve_stamp_options, build_stamp_line and apply_stamp.
+STAMP_MODES = frozenset({"replace", "history"})
+STAMP_SCOPES = frozenset({"always", "report", "standalone"})
+DEFAULT_STAMP_OPTIONS = {
+    "enabled": False,
+    "mode": "replace",
+    "packages": [],
+    "scope": "always",
+    "include_output": False,
+}
+
+
+def normalize_stamp_value(value) -> dict:
+    """Normalize a pdfmd-options.stamp value into a complete options dict.
+
+    Accepts the same range of shapes --no-auto's own settings do: a bare
+    bool (on/off, everything else default), a single package name or list
+    of names (shorthand for enabling stamping with just those packages), or
+    a full dict of {enabled, mode, packages, scope, include_output}. A dict
+    with no explicit ``enabled`` key is treated as on -- bothering to
+    configure packages/mode/scope implies wanting it active; write
+    ``enabled: false`` explicitly to keep a shared default off until a
+    document (or --stamp on the command line) turns it on.
+    """
+    options = dict(DEFAULT_STAMP_OPTIONS)
+    if isinstance(value, bool):
+        options["enabled"] = value
+    elif isinstance(value, str):
+        options["enabled"] = True
+        options["packages"] = [value]
+    elif isinstance(value, list):
+        options["enabled"] = True
+        options["packages"] = [str(item) for item in value]
+    elif isinstance(value, dict):
+        options["enabled"] = bool(value.get("enabled", True))
+        if "mode" in value:
+            options["mode"] = str(value["mode"])
+        if "packages" in value:
+            packages = value["packages"]
+            options["packages"] = ([str(item) for item in packages] if isinstance(packages, list)
+                                   else [str(packages)])
+        if "scope" in value:
+            options["scope"] = str(value["scope"])
+        include_output = value.get("include_output", value.get("include-output"))
+        if include_output is not None:
+            options["include_output"] = bool(include_output)
+    return options
+
+
+def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | None:
+    """Cascade a document's own pdfmd-options.stamp, then each linked
+    metadata file's, in that order -- same precedence as frontmatter_engine
+    (see its docstring): a shared metadata.yaml can turn stamping on for
+    every report that finds it, and any one document can still override it
+    with its own pdfmd-options.stamp. Returns None (not
+    DEFAULT_STAMP_OPTIONS) when nothing sets it at all, so
+    resolve_stamp_options can tell "nowhere set" apart from "set to off".
+    """
+    options = frontmatter_pdfmd_options(md_path)
+    if "stamp" in options:
+        return normalize_stamp_value(options["stamp"])
+    for metadata_file in metadata_files:
+        data = metadata_file_yaml(metadata_file)
+        nested = data.get("pdfmd-options")
+        if isinstance(nested, dict) and "stamp" in nested:
+            return normalize_stamp_value(nested["stamp"])
+    return None
+
+
+def resolve_stamp_options(md_path: Path, metadata_files: list[Path], cli_overrides: dict) -> dict:
+    """Effective --stamp settings: document/metadata front matter first (see
+    frontmatter_stamp), then CLI flags win field-by-field on top of that --
+    same "explicit CLI always wins" convention as -e/--engine and -y. Raises
+    SystemExit for an unrecognized mode/scope, matching
+    effective_no_auto's unknown-KIND check.
+    """
+    options = frontmatter_stamp(md_path, metadata_files) or dict(DEFAULT_STAMP_OPTIONS)
+    options.update(cli_overrides)
+    if options["mode"] not in STAMP_MODES:
+        raise SystemExit(f"{md_path}: unknown --stamp mode '{options['mode']}'. "
+                         f"Valid: {', '.join(sorted(STAMP_MODES))}")
+    if options["scope"] not in STAMP_SCOPES:
+        raise SystemExit(f"{md_path}: unknown --stamp scope '{options['scope']}'. "
+                         f"Valid: {', '.join(sorted(STAMP_SCOPES))}")
+    return options
+
+
+def package_version(name: str) -> str | None:
+    """Locate name.sty via kpsewhich and pull the version out of its own
+    \\ProvidesPackage{name}[...] line -- the convention this project's own
+    packages (nulabreport.sty included) already follow: a date followed by
+    free text that itself starts with a bare vX.Y.Z. Returns None silently
+    (a --stamp package is best-effort, never a hard requirement) if
+    kpsewhich isn't installed, the package isn't found, or its
+    ProvidesPackage line has no bare v-prefixed token to extract.
+    """
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return None
+    result = subprocess.run([kpsewhich, f"{name}.sty"], capture_output=True, text=True)
+    sty_path = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
+    if result.returncode != 0 or not sty_path:
+        return None
+    try:
+        text = Path(sty_path).read_text(encoding="utf-8-sig")
+    except OSError:
+        return None
+    provides = re.search(rf"\\ProvidesPackage\{{{re.escape(name)}\}}\[([^\]]*)\]", text)
+    if not provides:
+        return None
+    version = re.search(r"\bv\d+(?:\.\d+)*[a-zA-Z]*\b", provides.group(1))
+    return version.group(0) if version else None
+
+
+def package_is_used(name: str, texts: list[str]) -> bool:
+    """Return whether \\usepackage/\\RequirePackage{...name...} appears in
+    any of the given raw LaTeX texts (a document's preambles and its own
+    header-includes) -- so a --stamp-packages entry the document doesn't
+    actually load is silently left out of the stamp line, rather than
+    reporting a version for a package that played no part in this compile.
+    """
+    pattern = re.compile(rf"\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{{[^}}]*\b{re.escape(name)}\b[^}}]*\}}")
+    return any(pattern.search(text) for text in texts)
+
+
+def stamp_summary(options: dict, texts: list[str], verbose: bool) -> str:
+    """Build the 'nulabreport v1.14.7, pdfmd v2.4.0' portion of a stamp
+    line: one 'name vVERSION' per options['packages'] entry that's both
+    actually loaded (package_is_used) and has a detectable version
+    (package_version), in the order given, followed by pdfmd's own version.
+    """
+    parts = []
+    for name in options["packages"]:
+        if not package_is_used(name, texts):
+            continue
+        version = package_version(name)
+        if version:
+            parts.append(f"{name} {version}")
+        elif verbose:
+            print(f"WARN  --stamp: {name} is loaded but its version could not be "
+                 "determined (kpsewhich missing, package not installed, or no "
+                 "\\ProvidesPackage line)", file=sys.stderr)
+    parts.append(f"pdfmd v{PDFMD_VERSION}")
+    return ", ".join(parts)
+
+
+def build_stamp_line(options: dict, texts: list[str], output: Path,
+                     report_output: Path | None = None, verbose: bool = False) -> str:
+    """Compose one stamp line: 'Compiled [as part of `X`/to `X`] with
+    PACKAGES, pdfmd vVERSION -- TIMESTAMP'. report_output (this document
+    compiled as one chapter of a report/book) always names the shared
+    output, since "as part of" is meaningless without it; options
+    ['include_output'] opts into naming it for an otherwise plain
+    single-file/batch compile too.
+    """
+    summary = stamp_summary(options, texts, verbose)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if report_output is not None:
+        return f"Compiled as part of `{report_output.name}` with {summary} -- {timestamp}"
+    if options["include_output"]:
+        return f"Compiled to `{output.name}` with {summary} -- {timestamp}"
+    return f"Compiled with {summary} -- {timestamp}"
+
+
+BUILD_NOTES_RE = re.compile(
+    r"<!--[ \t]*=+[ \t]*\n"
+    r"(?P<indent>[ \t]*)BUILD NOTES[ \t]*\n"
+    r"(?P<body>.*?)"
+    r"(?P=indent)=+[ \t]*-->",
+    re.DOTALL,
+)
+
+
+def update_build_notes(text: str, new_line: str, mode: str) -> str:
+    """Insert/replace pdfmd's own stamp line inside a document's BUILD NOTES
+    comment, wherever that comment sits in the file (found by BUILD_NOTES_RE
+    -- not assumed to be the file's last line: a report chapter's own
+    comment can end up anywhere once concatenated with others for a book
+    build, and even a lone document's notes might not literally be last).
+    Everything else inside the comment -- hand-written notes before or
+    after the line pdfmd owns -- is left untouched byte-for-byte. Creates a
+    fresh comment at the true end of the file if none is found there yet.
+
+    "replace" mode overwrites the first recognized stamp line in place (a
+    line starting with "Compiled" that mentions "pdfmd vX"); if there is no
+    such line yet, one is inserted right after the "BUILD NOTES" heading,
+    the same position a fresh history entry would take. "history" mode
+    never overwrites -- it always inserts a new line in that position,
+    pushing whatever was already there (including past stamps) down, so the
+    newest entry always reads first.
+    """
+    match = BUILD_NOTES_RE.search(text)
+    if not match:
+        indent = "     "
+        block = f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}{new_line}\n{indent}{'=' * 60} -->\n"
+        return text.rstrip("\n") + "\n\n" + block
+    indent = match.group("indent")
+    body = match.group("body")
+    stamp_line_re = re.compile(rf"^{re.escape(indent)}Compiled\b.*?\bpdfmd\s+v[0-9][^\r\n]*$", re.MULTILINE)
+    existing = stamp_line_re.search(body)
+    if mode == "history" or not existing:
+        new_body = f"{indent}\n{indent}{new_line}\n\n{body}"
+    else:
+        new_body = body[:existing.start()] + f"{indent}{new_line}" + body[existing.end():]
+    return text[:match.start("body")] + new_body + text[match.end("body"):]
+
+
+def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
+    text = md_path.read_text(encoding="utf-8-sig")
+    updated = update_build_notes(text, new_line, mode)
+    md_path.write_text(updated, encoding="utf-8")
+    if verbose:
+        print(f"AUTO STAMP  {md_path}: {new_line}")
+
+
+def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
+                        cli_overrides: dict, output: Path, verbose: bool,
+                        report_output: Path | None = None) -> None:
+    """Write/update md_path's BUILD NOTES stamp after a successful compile,
+    if --stamp/pdfmd-options.stamp says to for this context.
+
+    report_output being given means md_path is one chapter of a report/book
+    compile (main()'s -r/--report path) rather than a standalone/batch
+    compile (convert_one) -- options['scope'] decides which context(s)
+    actually write a stamp (see DEFAULT_STAMP_OPTIONS/resolve_stamp_options):
+    "always" (default), "report"-only, or "standalone"-only.
+    """
+    options = resolve_stamp_options(md_path, metadata_files, cli_overrides)
+    if not options["enabled"]:
+        return
+    wanted_scope = "report" if report_output is not None else "standalone"
+    if options["scope"] not in ("always", wanted_scope):
+        return
+    texts = [preamble.read_text(encoding="utf-8-sig") for preamble in preamble_files]
+    texts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+    line = build_stamp_line(options, texts, output, report_output, verbose)
+    apply_stamp(md_path, line, options["mode"], verbose)
+
+
 def yaml_autoinclude(path: Path) -> bool:
     """Return whether automatic discovery may select this YAML file."""
     text = path.read_text(encoding="utf-8-sig")
@@ -1718,7 +2010,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 from_format: str | None = None,
                 no_auto: list[str] | None = None,
                 verbose: bool = False,
-                debug: bool = False) -> tuple[Path, bool, str]:
+                debug: bool = False,
+                stamp_overrides: dict | None = None) -> tuple[Path, bool, str]:
+    stamp_overrides = stamp_overrides or {}
     auto_summary: list[str] = []
 
     def note(kind: str, detail: str) -> None:
@@ -1840,6 +2134,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     cmd += ["--lua-filter", str(lua_filter)]
                 log_cmd(cmd, pandoc_cwd, verbose)
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+            if result.returncode == 0:
+                stamp_after_success(md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
             return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -1927,6 +2223,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         assert result is not None
+        if result.returncode == 0:
+            stamp_after_success(md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -2055,6 +2353,45 @@ def build_parser() -> argparse.ArgumentParser:
                              "conversion succeeds. Applies to single-file and report/book mode, "
                              "each of which produce exactly one output; ignored in batch mode "
                              "(-b), which would otherwise pop open every file in the directory")
+    stamp_enable = parser.add_mutually_exclusive_group()
+    stamp_enable.add_argument("--stamp", action="store_true", default=None,
+                              help="on a successful compile, append/update a 'BUILD NOTES' HTML "
+                                   "comment near the end of the .md source recording what compiled "
+                                   "it and when -- invisible in the rendered output, visible in the "
+                                   "source. Off by default; also settable (and this is where a "
+                                   "shared default belongs) via pdfmd-options.stamp in a document's "
+                                   "own front matter or a --metadata-file, which this always "
+                                   "overrides when given. See --stamp-mode/--stamp-packages/"
+                                   "--stamp-scope/--stamp-output for the rest of its settings")
+    stamp_enable.add_argument("--no-stamp", action="store_true", default=None,
+                              help="force stamping off for this run, overriding pdfmd-options.stamp "
+                                   "even if a document or metadata file turns it on")
+    parser.add_argument("--stamp-mode", choices=sorted(STAMP_MODES), default=None,
+                        help="'replace' (default): overwrite the previous stamp line in place. "
+                             "'history': keep every previous stamp line, inserting the new one "
+                             "above them, directly under the BUILD NOTES heading -- both leave any "
+                             "other hand-written notes in the block untouched")
+    parser.add_argument("--stamp-packages", nargs="+", default=None, metavar="PKG",
+                        help="LaTeX package name(s) (e.g. nulabreport) whose version to include in "
+                             "the stamp line, found via 'kpsewhich PKG.sty' and that file's own "
+                             "\\ProvidesPackage line. A named package is silently left out of the "
+                             "line if it isn't actually \\usepackage'd by this document's preambles/ "
+                             "header-includes, or if its version can't be determined this way. "
+                             "Default: none -- the stamp line then names only pdfmd's own version")
+    parser.add_argument("--stamp-scope", choices=sorted(STAMP_SCOPES), default=None,
+                        help="when stamping actually happens: 'always' (default) -- every successful "
+                             "compile, standalone/batch or as part of a report/book; 'report' -- only "
+                             "when this document is compiled as one chapter of a -r/--report build, "
+                             "not on its own; 'standalone' -- the opposite, only outside -r/--report")
+    stamp_output = parser.add_mutually_exclusive_group()
+    stamp_output.add_argument("--stamp-output", action="store_true", default=None,
+                              help="name the rendered output file in a standalone/batch stamp line "
+                                   "('Compiled to `report.pdf` with ...') -- a report/book chapter's "
+                                   "stamp always names the shared output ('...as part of `book.pdf`') "
+                                   "regardless of this flag")
+    stamp_output.add_argument("--no-stamp-output", action="store_true", default=None,
+                              help="never name the output file in a standalone/batch stamp line, "
+                                   "even if pdfmd-options.stamp.include_output turned it on")
     return parser
 
 
@@ -2068,6 +2405,21 @@ def main() -> None:
         raise SystemExit("Pandoc was not found on PATH. Install Pandoc, then run --check-dependencies.")
     paths = args.path or [Path.cwd()]
     variables = DEFAULT_VARS + args.variable
+    stamp_overrides: dict = {}
+    if args.stamp:
+        stamp_overrides["enabled"] = True
+    if args.no_stamp:
+        stamp_overrides["enabled"] = False
+    if args.stamp_mode:
+        stamp_overrides["mode"] = args.stamp_mode
+    if args.stamp_packages:
+        stamp_overrides["packages"] = args.stamp_packages
+    if args.stamp_scope:
+        stamp_overrides["scope"] = args.stamp_scope
+    if args.stamp_output:
+        stamp_overrides["include_output"] = True
+    if args.no_stamp_output:
+        stamp_overrides["include_output"] = False
     if args.no_auto:
         unknown = sorted(set(args.no_auto) - NO_AUTO_KINDS)
         if unknown:
@@ -2169,6 +2521,7 @@ def main() -> None:
                                     else find_preambles(files[0].parent, files[0].stem, pandoc_options))
                 if report_preambles:
                     announce_preambles(report_preambles)
+                stamp_preambles = report_preambles
                 report_document_font = is_tex_target and has_mainfont(files[0], variables)
                 report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
                 report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
@@ -2232,6 +2585,7 @@ def main() -> None:
                 preambles = ([] if auto_disabled(report_no_auto, "preamble")
                             else find_preambles(files[0].parent, files[0].stem, pandoc_options))
                 announce_preambles(preambles)
+                stamp_preambles = preambles
                 report_tablewidth_auto = not auto_disabled(report_no_auto, "tablewidth")
                 geometry_needed = (not auto_disabled(report_no_auto, "margin")
                                   and not has_geometry(files[0], variables, metadata_files, preambles))
@@ -2287,6 +2641,10 @@ def main() -> None:
                     remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
+        if result.returncode == 0:
+            for file in files:
+                stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
+                                    output, args.verbose, report_output=output)
         for file in files:
             if not has_chapter_field(file):
                 print(f"[WARNING] unnumbered Markdown included: {file}")
@@ -2364,14 +2722,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -2417,7 +2775,7 @@ def main() -> None:
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides)]
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
