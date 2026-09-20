@@ -263,15 +263,23 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
           pdf-engine: lualatex
         ---
 
-    Three keys live there today: `no-auto` (same KIND names as --no-auto
+    Four keys live there today: `no-auto` (same KIND names as --no-auto
     above, plus `true`/`all` for everything or a single bare name --
     additive with a CLI --no-auto, whichever source disables a given kind
     wins for that kind), `pdf-engine`/`engine` (same values as
     -e/--engine; see frontmatter_engine()'s docstring for why this one in
     particular moved here rather than staying a bare top-level key -- the
-    older bare spelling still works for documents already using it), and
-    `citation-engine`: `citeproc` (the default -- a document only needs
-    this key at all to opt into something else), `natbib`, or `biblatex`.
+    older bare spelling still works for documents already using it),
+    `preamble` (a bare string or a YAML list -- one or more LaTeX preamble
+    files to `--include-in-header`, resolved relative to the document's own
+    directory; merged with, not a replacement for, whatever
+    PREAMBLE_FILENAMES auto-discovery already finds beside it, and subject
+    to the same `--no-auto preamble` gate -- see
+    frontmatter_extra_preambles()'s own docstring for why an explicit `-H`
+    on the command line is the escape hatch when a preamble must survive
+    even that), and `citation-engine`: `citeproc` (the default -- a document
+    only needs this key at all to opt into something else), `natbib`, or
+    `biblatex`.
     The last one routes a LaTeX-family PDF target's (or `--to latex`/
     `beamer`/`context`'s) bibliography through Pandoc's own `--natbib`/
     `--biblatex` flags -- native biber/bibtex processing via the engine's
@@ -389,7 +397,7 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.5.1"
+PDFMD_VERSION = "3.6.0"
 import argparse
 from fnmatch import fnmatchcase
 import os
@@ -431,6 +439,37 @@ DEFAULT_MARGIN = "1in"
 DEFAULT_VARS = []
 AUTO_METADATA_DISABLED = object()
 
+# Cosmetic-only (never affects what pdfmd actually does, only how a path is
+# PRINTED), so a plain module-level flag rather than threading a parameter
+# through every AUTO-announcement/log_cmd call site -- set once from
+# args.full_paths at the top of main(), before any conversion work starts.
+# Added 2026-09-20 (Ali): the default full-absolute-path printing that
+# announce_preambles()/log_cmd()/the AUTO YAML and AUTO MD lines used before
+# this is fine from a shallow directory (Downloads) but genuinely hard to
+# read from a deep one (a real example that prompted this: a path under
+# .../Library/CloudStorage/OneDrive-.../Documents/Fall26/CHEM341/guides/M1).
+SHOW_FULL_PATHS = False
+
+
+def display_path(path: Path) -> str:
+    """Format `path` for a user-facing AUTO/CMD message.
+
+    Relative to the current working directory by default (SHOW_FULL_PATHS
+    False, the default -- see --full-paths), which is what a caller
+    actually invoking pdfmd from a project directory wants to read; falls
+    back to the absolute path when `path` isn't under cwd at all (a system
+    temp file, e.g.) since a relative path can't reach it, or when
+    SHOW_FULL_PATHS is True (--full-paths, for a copy-pasteable absolute
+    path -- e.g. to hand to another tool, or when cwd itself is ambiguous
+    in a script's own log).
+    """
+    if SHOW_FULL_PATHS:
+        return str(path)
+    try:
+        return str(path.resolve().relative_to(Path.cwd()))
+    except (OSError, ValueError):
+        return str(path)
+
 # Auto-discovered yaml/tex/lua files may live directly beside the document
 # (the original convention) or inside this subdirectory instead, so a
 # report's own top-level folder can hold just its .md source and rendered
@@ -446,6 +485,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
+    "papersize",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -1270,7 +1310,7 @@ def find_preambles(directory: Path, document_stem: str, options: list[str]) -> l
 
 def announce_preambles(preambles: list[Path]) -> None:
     for preamble in preambles:
-        print(f"AUTO TEX   {preamble}")
+        print(f"AUTO TEX   {display_path(preamble)}")
     if len(preambles) > 1:
         print("WARN  Multiple preambles discovered; later files may override earlier definitions.",
               file=sys.stderr)
@@ -1685,6 +1725,88 @@ def has_geometry(md_path: Path, variables: list[str], metadata_files: list[Path]
                for preamble in preamble_files)
 
 
+def pagesize_typo_value(md_path: Path, variables: list[str]) -> str | None:
+    """Return a document's own ``pagesize:`` value, IF ``papersize:`` isn't
+    already set anywhere Pandoc would see it -- a -V variable or the
+    document's own front matter.
+
+    ``pagesize`` is not a Pandoc variable at all (the real one is
+    ``papersize:``) -- LaTeX's own \\documentclass options include a
+    same-named ``a4paper``/``letterpaper`` *class* option, and it's an easy,
+    silent mistake to write ``pagesize: a4`` expecting the same effect
+    ``papersize: a4`` gets from Pandoc's own template. Pandoc's metadata
+    system doesn't error on an unrecognized key -- it just sits there
+    unused -- so a document can carry this typo indefinitely with no
+    warning, quietly rendering at whatever the default paper size is (US
+    Letter) instead of the one actually intended. Found directly (CHEM 341
+    session, 2026-09-20): the task brief for that document already knew
+    about this exact trap (`pagesize: a4` producing a Letter PDF) and had to
+    document it as a known caveat rather than get it fixed -- worth pdfmd
+    catching automatically instead. Only checked when ``papersize`` is
+    absent so a document that deliberately sets both (maybe mid-migration)
+    is left alone -- its own explicit ``papersize:`` always wins.
+    """
+    if any(variable.startswith("papersize") for variable in variables):
+        return None
+    text = md_path.read_text(encoding="utf-8-sig")
+    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    if not front_matter:
+        return None
+    block = front_matter.group(1)
+    if re.search(r"^papersize\s*:", block, re.MULTILINE):
+        return None
+    match = re.search(r"^pagesize\s*:\s*(.+?)\s*$", block, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip().strip("'\"")
+    return value or None
+
+
+def frontmatter_papersize_value(md_path: Path) -> str | None:
+    """Return a document's own ``papersize:`` value straight from its front
+    matter (a real Pandoc variable, unlike ``pagesize:`` above) -- used only
+    to feed typst_papersize_translation() below, not for the pagesize-typo
+    detection this sits next to.
+    """
+    text = md_path.read_text(encoding="utf-8-sig")
+    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    if not front_matter:
+        return None
+    match = re.search(r"^papersize\s*:\s*(.+?)\s*$", front_matter.group(1), re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip().strip("'\"")
+    return value or None
+
+
+# Pandoc's own `papersize:` variable is LaTeX-shaped by convention ("letter",
+# "legal", "a4", ...matching what a LaTeX \documentclass option expects), and
+# Pandoc's LaTeX template maps it accordingly -- but Pandoc's TYPST template
+# passes the same string straight through to typst's own `page(paper: ...)`
+# set rule, which does NOT accept "letter"/"legal" at all; typst's own names
+# are "us-letter"/"us-legal" (most other names, "a4"/"a3"/"a5"/..., already
+# match typst's own naming and need no translation -- only these two are
+# known to differ). A document with `papersize: letter` compiles fine on
+# every LaTeX-family engine and then silently errors (or falls back to
+# typst's own default) the moment --to typst is used instead -- raised
+# directly (2026-09-20): "works with tex, but not with typst". Only these
+# two confirmed aliases are included; extend TYPST_PAPERSIZE_ALIASES if
+# another one is found to differ the same way.
+TYPST_PAPERSIZE_ALIASES = {
+    "letter": "us-letter",
+    "legal": "us-legal",
+}
+
+
+def typst_papersize_translation(value: str | None) -> str | None:
+    """Return typst's own name for a Pandoc papersize value, or None when
+    `value` is falsy or already fine as-is (either it's not one of the
+    known-different names, or it's already typst-shaped)."""
+    if not value:
+        return None
+    return TYPST_PAPERSIZE_ALIASES.get(value.strip().casefold())
+
+
 def has_monofont(md_path: Path, variables: list[str]) -> bool:
     if any(variable.startswith("monofont=") for variable in variables):
         return True
@@ -2083,6 +2205,57 @@ def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) 
         if value is not None:
             return str(value).casefold()
     return None
+
+
+def frontmatter_extra_preambles(md_path: Path) -> list[Path]:
+    """Read ``pdfmd-options: preamble: ...`` -- a document naming its own
+    LaTeX preamble file(s) explicitly, instead of relying on the fixed
+    ``preamble.tex``/``latex-preamble.tex`` auto-discovered names
+    (PREAMBLE_FILENAMES) or a project's own conventions elsewhere.
+
+    Accepts a bare string or a YAML list of strings; each path is resolved
+    relative to `md_path`'s own directory (not cwd -- a document should be
+    runnable from any directory). A path that doesn't exist is a hard
+    SystemExit, not a silent skip: the whole point of naming a preamble
+    explicitly is that it's required, unlike auto-discovery's own
+    best-effort search.
+
+    Merged with (not a replacement for) whatever find_preambles() already
+    discovered by name -- see its call sites, all of which now do
+    ``find_preambles(...) + frontmatter_extra_preambles(md_path)`` -- and
+    appended AFTER them, so an explicit pdfmd-options.preamble can override
+    a same-named auto-discovered definition. Reuses the existing "preamble"
+    --no-auto KIND at every call site (both calls sit behind the same
+    ``not auto_disabled(no_auto, "preamble")`` guard) -- unlike an explicit
+    CLI -H, which always wins over --no-auto per this file's own documented
+    rule, a pdfmd-options.preamble key is written IN the document, so
+    --no-auto preamble (or a bare --no-auto) suppresses it the same as
+    auto-discovery. Use an actual -H on the command line instead when a
+    preamble truly must survive --no-auto preamble.
+
+    Added 2026-09-20, directly requested alongside a real use case that
+    turned out NOT to need it after all (a preamble whose own
+    \\setchemfig/\\usetikzlibrary calls need chemfig/tikz loaded first,
+    which only \\input from inside a document's own header-includes -- not
+    any --include-in-header ordering, explicit-named or auto-discovered
+    alike -- guarantees; see midterm_preamble.tex's own header comment for
+    that specific case) -- but is still useful in general for a preamble
+    with no such ordering dependency, and for naming one under any filename
+    rather than only the two PREAMBLE_FILENAMES.
+    """
+    value = frontmatter_pdfmd_options(md_path).get("preamble")
+    if value is None:
+        return []
+    names = [value] if isinstance(value, str) else (
+        [str(item) for item in value] if isinstance(value, list) else [])
+    resolved = []
+    for name in names:
+        path = (md_path.parent / name).resolve()
+        if not path.is_file():
+            raise SystemExit(f"{md_path}: pdfmd-options.preamble names {name!r}, "
+                             f"which doesn't exist at {path}")
+        resolved.append(path)
+    return resolved
 
 
 # --stamp / pdfmd-options.stamp: appends (or updates) a "BUILD NOTES" HTML
@@ -2732,8 +2905,8 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     """
     if not verbose:
         return
-    print("CMD  " + " ".join(shlex.quote(str(part)) for part in cmd) + f"  (cwd={cwd})",
-          file=sys.stderr)
+    print("CMD  " + " ".join(shlex.quote(display_path(Path(part))) for part in cmd)
+          + f"  (cwd={display_path(cwd)})", file=sys.stderr)
 
 
 def engine_failure_reason(stderr: str) -> str | None:
@@ -3415,6 +3588,13 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             if is_tex_target and monofont_needed:
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
                                 f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
+            pagesize_typo = (None if auto_disabled(no_auto, "papersize")
+                             else pagesize_typo_value(md_path, variables))
+            if is_tex_target and pagesize_typo:
+                note("PAPERSIZE", f"{md_path}: pagesize: {pagesize_typo!r} is not a Pandoc variable "
+                                  f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
+                                  "targets. Set papersize: yourself, or --no-auto papersize, to silence "
+                                  "this and keep the Letter default")
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
                                          and is_tex_target) as header_file, \
@@ -3453,8 +3633,20 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     if monofont_needed:
                         cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                    if pagesize_typo:
+                        cmd += ["-V", f"papersize={pagesize_typo}"]
                 for variable in variables:
                     cmd += ["-V", variable]
+                if target_format == "typst" and not auto_disabled(no_auto, "papersize"):
+                    typst_size = typst_papersize_translation(
+                        pagesize_typo or next((v.split("=", 1)[1] for v in variables
+                                               if v.startswith("papersize=")), None)
+                        or frontmatter_papersize_value(md_path))
+                    if typst_size:
+                        note("PAPERSIZE", f"{md_path}: translating papersize for --to typst "
+                                          f"-> {typst_size} (typst doesn't accept Pandoc's own "
+                                          "LaTeX-shaped paper names)")
+                        cmd += ["-V", f"papersize={typst_size}"]
                 if shift_heading:
                     cmd += ["--shift-heading-level-by=-1"]
                 cmd += pandoc_options
@@ -3509,6 +3701,13 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         if monofont_needed:
             note("MONOFONT", f"{md_path}: has code but no monofont set; "
                             f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+        pagesize_typo = (None if auto_disabled(no_auto, "papersize")
+                         else pagesize_typo_value(md_path, variables))
+        if pagesize_typo:
+            note("PAPERSIZE", f"{md_path}: pagesize: {pagesize_typo!r} is not a Pandoc variable "
+                              f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
+                              "engines. Set papersize: yourself, or --no-auto papersize, to silence "
+                              "this and keep the Letter default")
 
         citation_engine = (None if auto_disabled(no_auto, "citationengine")
                            else frontmatter_citation_engine(md_path, metadata_files))
@@ -3581,8 +3780,20 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     if monofont_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                    if pagesize_typo and engine in LATEX_ENGINES:
+                        cmd += ["-V", f"papersize={pagesize_typo}"]
                     for variable in variables:
                         cmd += ["-V", variable]
+                    if engine == "typst" and not auto_disabled(no_auto, "papersize"):
+                        typst_size = typst_papersize_translation(
+                            pagesize_typo or next((v.split("=", 1)[1] for v in variables
+                                                   if v.startswith("papersize=")), None)
+                            or frontmatter_papersize_value(md_path))
+                        if typst_size:
+                            note("PAPERSIZE", f"{md_path}: translating papersize for the typst "
+                                              f"engine -> {typst_size} (typst doesn't accept "
+                                              "Pandoc's own LaTeX-shaped paper names)")
+                            cmd += ["-V", f"papersize={typst_size}"]
                     if shift_heading:
                         cmd += ["--shift-heading-level-by=-1"]
                     cmd += pandoc_options
@@ -3760,7 +3971,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
                              "docstring; disabling this KIND always means plain --citeproc), csvtable "
                              "(the .csv-div table inclusion -- see 'CSV/TSV table inclusion' in the module "
-                             "docstring). An "
+                             "docstring), papersize (a document's own pagesize: front-matter key, "
+                             "auto-translated to Pandoc's real papersize: variable since pagesize: alone "
+                             "silently does nothing -- disabling this KIND leaves that typo uncorrected, "
+                             "same as before this existed). An "
                              "explicit -y/-H/-f/-V/--from always wins over --no-auto metadata/preamble "
                              "regardless of this flag -- --no-auto only stops pdfmd from filling in or "
                              "discovering what's otherwise unset. Same KIND names work in a document's "
@@ -3772,6 +3986,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "fired) so a normal run stays quiet; AUTO YAML/TEX/ENGINE/MD are "
                              "unaffected by this flag and always print in full, since they're rarer "
                              "and already name a specific file/engine rather than a generic default")
+    parser.add_argument("--full-paths", action="store_true",
+                        help="print full/absolute paths in AUTO YAML/TEX/MD lines and (with -v) the "
+                             "CMD line, instead of the default -- relative to the current directory, "
+                             "falling back to absolute only for a path that isn't under it (a system "
+                             "temp file, e.g.). The default reads fine from a shallow directory but "
+                             "gets hard to read fast from a deep one; --full-paths is the escape hatch "
+                             "for a copy-pasteable absolute path, or when cwd itself is ambiguous in a "
+                             "script's own log. -v/--verbose (or --debug) already implies this -- more "
+                             "detail is the point of asking for it -- so --full-paths on its own is "
+                             "only needed to get full paths WITHOUT the rest of --verbose's output")
     parser.add_argument("--debug", action="store_true",
                         help="on ANY PDF-engine failure -- even one a later engine in the fallback "
                              "chain recovers from -- print the engine's full captured stderr inline, "
@@ -3918,6 +4142,12 @@ def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
     if args.debug:
         args.verbose = True
+    global SHOW_FULL_PATHS
+    # -v/--verbose already means "more detail than the quiet default," and a
+    # full path is exactly that kind of detail -- so --verbose (or --debug,
+    # which implies it just above) turns this on too, not just --full-paths
+    # on its own.
+    SHOW_FULL_PATHS = args.full_paths or args.verbose
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if not which("pandoc"):
@@ -3979,7 +4209,7 @@ def main() -> None:
                 "Specify one file, use -b to convert all separately, or use -r to combine them."
             )
         paths = [markdown_files[0]]
-        print(f"AUTO MD    {paths[0]}")
+        print(f"AUTO MD    {display_path(paths[0])}")
     if args.watch:
         if args.batch or args.report:
             raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
@@ -4052,7 +4282,8 @@ def main() -> None:
                 # without an engine ever actually running.
                 is_tex_target = target_format in TEX_STANDALONE_FORMATS
                 report_preambles = ([] if not is_tex_target or auto_disabled(report_no_auto, "preamble")
-                                    else find_preambles(files[0].parent, files[0].stem, pandoc_options))
+                                    else find_preambles(files[0].parent, files[0].stem, pandoc_options)
+                                    + frontmatter_extra_preambles(files[0]))
                 if report_preambles:
                     announce_preambles(report_preambles)
                 stamp_preambles = report_preambles
@@ -4134,7 +4365,8 @@ def main() -> None:
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             else:
                 preambles = ([] if auto_disabled(report_no_auto, "preamble")
-                            else find_preambles(files[0].parent, files[0].stem, pandoc_options))
+                            else find_preambles(files[0].parent, files[0].stem, pandoc_options)
+                            + frontmatter_extra_preambles(files[0]))
                 announce_preambles(preambles)
                 stamp_preambles = preambles
                 report_pdf_meta_options = resolve_stamp_options(files[0], metadata_files, stamp_overrides)
@@ -4227,18 +4459,18 @@ def main() -> None:
                                     output, args.verbose, report_output=output)
         for file in files:
             if not has_chapter_field(file):
-                print(f"[WARNING] unnumbered Markdown included: {file}")
-            print(f"OK    {file}")
+                print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")
+            print(f"OK    {display_path(file)}")
         for file in excluded:
-            print(f"SKIP  {file}")
+            print(f"SKIP  {display_path(file)}")
         if metadata is not AUTO_METADATA_DISABLED:
             for metadata_file in metadata_files:
                 label = "AUTO YAML" if args.metadata_file is None else "YAML"
-                print(f"{label}  {metadata_file}")
+                print(f"{label}  {display_path(metadata_file)}")
         if not args.verbose and report_auto_summary:
             kinds = " ".join(dict.fromkeys(report_auto_summary))
             print(f"AUTO: {kinds}. Use --verbose to see in full")
-        print(f"{'OK  ' if result.returncode == 0 else 'FAIL'}  REPORT  {output}")
+        print(f"{'OK  ' if result.returncode == 0 else 'FAIL'}  REPORT  {display_path(output)}")
         if result.stderr:
             print(result.stderr[-3000:])
         if result.returncode:
@@ -4265,7 +4497,7 @@ def main() -> None:
             if args.metadata_file is None and discovered is not None and discovered is not AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]
                 for path in paths:
-                    print(f"AUTO YAML  {path}")
+                    print(f"AUTO YAML  {display_path(path)}")
         value = metadata_by_dir[cache_key]
         return None if value is AUTO_METADATA_DISABLED else value
     if args.batch:
@@ -4286,7 +4518,7 @@ def main() -> None:
             if (target_format not in {"pdf", *TEX_STANDALONE_FORMATS}
                     or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
                 return []
-            preambles = find_preambles(file.parent, file.stem, pandoc_options)
+            preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
             announce_preambles(preambles)
             return preambles
         if args.open:
@@ -4371,7 +4603,7 @@ def main() -> None:
             preambles = []
             if (target_format in {"pdf", *TEX_STANDALONE_FORMATS}
                     and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble")):
-                preambles = find_preambles(source.parent, source.stem, pandoc_options)
+                preambles = find_preambles(source.parent, source.stem, pandoc_options) + frontmatter_extra_preambles(source)
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
@@ -4380,7 +4612,7 @@ def main() -> None:
             open_file(output)
     failures = [result for result in results if not result[1]]
     for source, ok, error in results:
-        print(f"{'OK  ' if ok else 'FAIL'}  {source}")
+        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}")
         if error:
             print(error)
     if failures:
