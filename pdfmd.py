@@ -389,7 +389,7 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.5.0"
+PDFMD_VERSION = "3.5.1"
 import argparse
 from fnmatch import fnmatchcase
 import os
@@ -1357,12 +1357,54 @@ def document_header_includes(text: str) -> str | None:
 
     Pandoc feeds ``--include-in-header`` files into the very same
     ``header-includes`` template variable, and a variable set on the command
-    line beats one set in metadata. So the moment a preamble is auto-included
-    beside a document, a ``header-includes`` block in that document's own front
-    matter is silently discarded. Extracting it here lets the caller re-append
-    it as a second ``--include-in-header``, after the preambles, which is where
-    a per-document override belongs.
+    line beats one set in metadata. So the moment ANY ``--include-in-header``
+    reaches the command line -- an auto-included preamble, or pdfmd's own
+    PDF-metadata stamp header (on by default; see ``--stamp-pdf-metadata``) --
+    a ``header-includes`` block in that document's own front matter is
+    silently discarded, even if nothing about preambles is otherwise in play.
+    Confirmed directly (2026-09-20, CHEM 341 session): a document with its
+    own YAML ``header-includes`` and no preamble.tex/latex-preamble.tex beside
+    it still lost that block, because the PDF-metadata stamp header alone was
+    enough to trigger it. Extracting it here lets the caller re-append it as a
+    trailing ``--include-in-header``, after anything else, which is where a
+    per-document override belongs -- so every call site that may add ANY
+    other ``--include-in-header`` must pass ``active=True`` here too, not just
+    the ones adding a preamble.
+
+    Handles both YAML shapes a ``header-includes:`` value can take: a block
+    scalar (``header-includes: |`` ... indented lines), the ORIGINAL and
+    only shape this function understood before 2026-09-20, and a sequence
+    (``header-includes:\\n  - \\usepackage{mhchem}\\n  - ...``) -- the more
+    common form in practice, and the one that silently defeated this whole
+    safeguard for any document using it: the block-scalar-only regex below
+    simply never matched, so `active` calculations based on this function
+    looked right while the document's actual header-includes kept vanishing
+    anyway. A real YAML parse (PyYAML, already an optional/soft dependency
+    elsewhere in this file -- see `frontmatter_pdfmd_options`) handles the
+    sequence shape correctly, one raw LaTeX line per list item, joined with
+    newlines, matching how Pandoc's own template concatenates such a list.
+    Falls back to the original block-scalar-only regex when PyYAML isn't
+    installed -- worse than a real parse, but not a new limitation; a
+    sequence-style document with no PyYAML available is simply back to the
+    pre-2026-09-20 (bugged) behavior for this one shape, same as it always
+    was.
     """
+    if yaml is not None:
+        loose_front_matter = re.match(r"^---\s*\n(.*?)\n(?:---|\.\.\.)\s*(?:\n|$)", text, re.DOTALL)
+        if loose_front_matter:
+            try:
+                data = yaml.safe_load(loose_front_matter.group(1))
+            except yaml.YAMLError:
+                data = None
+            if isinstance(data, dict):
+                value = data.get("header-includes")
+                if isinstance(value, list):
+                    lines_out = [str(item) for item in value if item is not None]
+                    return "\n".join(lines_out).strip() or None
+                if isinstance(value, str):
+                    return value.strip() or None
+                return None
+
     front_matter = re.match(r"^(---\s*\n)(.*?)(\n(?:---|\.\.\.)\s*(?:\n|$))", text, re.DOTALL)
     if not front_matter:
         return None
@@ -3168,7 +3210,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     tex_path = Path(tex_path_str)
     try:
         with prepared_latex_inputs([title_source, *metadata_files], True) as prepared, \
-                document_header_file(md_path, bool(preamble_files)) as header_file, \
+                document_header_file(md_path, bool(preamble_files) or bool(pdf_meta_snippet_text)) as header_file, \
                 pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), "-o", str(tex_path), "-t", "beamer" if presentation else "latex",
@@ -3196,10 +3238,17 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if preamble_files:
                 for preamble_file in preamble_files:
                     cmd += ["--include-in-header", str(preamble_file)]
-                if header_file is not None:
-                    cmd += ["--include-in-header", str(header_file)]
             if pdf_meta_file is not None:
                 cmd += ["--include-in-header", str(pdf_meta_file)]
+            # Last, so a document's own header-includes can override anything
+            # the shared preamble/pdf-meta files above defined (Pandoc would
+            # otherwise drop it entirely; see document_header_file). Added
+            # whenever header_file exists, not only when preamble_files is
+            # non-empty -- pdf_meta_file alone is enough to trigger the drop
+            # this guards against (see document_header_includes()'s own
+            # docstring for the 2026-09-20 fix this is part of).
+            if header_file is not None:
+                cmd += ["--include-in-header", str(header_file)]
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
@@ -3367,7 +3416,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
                                 f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target) as prepared, \
-                    document_header_file(md_path, bool(preamble_files) and is_tex_target) as header_file, \
+                    document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
+                                         and is_tex_target) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
                 cmd = ["pandoc", str(source), "-o", str(output), "-t", target_format]
@@ -3411,13 +3461,16 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 if preamble_files and is_tex_target:
                     for preamble_file in preamble_files:
                         cmd += ["--include-in-header", str(preamble_file)]
-                    # Last, so a document's own header-includes can override
-                    # anything the shared preamble defined (pandoc would
-                    # otherwise drop it entirely; see document_header_file).
-                    if header_file is not None:
-                        cmd += ["--include-in-header", str(header_file)]
                 if pdf_meta_file is not None:
                     cmd += ["--include-in-header", str(pdf_meta_file)]
+                # Last, so a document's own header-includes can override
+                # anything the shared preamble/pdf-meta files above defined
+                # (Pandoc would otherwise drop it entirely; see
+                # document_header_file). Added whenever header_file exists,
+                # not only when preamble_files is non-empty -- see
+                # document_header_includes()'s own docstring.
+                if header_file is not None:
+                    cmd += ["--include-in-header", str(header_file)]
                 cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
                 cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
                 if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
@@ -3503,7 +3556,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
             with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES) as prepared, \
-                    document_header_file(md_path, bool(preamble_files) and engine in LATEX_ENGINES) as header_file, \
+                    document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
+                                         and engine in LATEX_ENGINES) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
 
@@ -3535,13 +3589,16 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     if preamble_files and engine in LATEX_ENGINES:
                         for preamble_file in preamble_files:
                             cmd += ["--include-in-header", str(preamble_file)]
-                        # Last, so a document's own header-includes can override
-                        # anything the shared preamble defined (pandoc would
-                        # otherwise drop it entirely; see document_header_file).
-                        if header_file is not None:
-                            cmd += ["--include-in-header", str(header_file)]
                     if pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(pdf_meta_file)]
+                    # Last, so a document's own header-includes can override
+                    # anything the shared preamble/pdf-meta files above
+                    # defined (Pandoc would otherwise drop it entirely; see
+                    # document_header_file). Added whenever header_file
+                    # exists, not only when preamble_files is non-empty --
+                    # see document_header_includes()'s own docstring.
+                    if header_file is not None:
+                        cmd += ["--include-in-header", str(header_file)]
                     cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
                     if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                         cmd.append("--citeproc")
@@ -3559,7 +3616,21 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
 
                 first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
-                result = run(first_font, fallback=document_font)
+                # fallback=False, not fallback=document_font: Pandoc's own
+                # mainfontfallback mechanism is the one PREFERRED_FONT's
+                # comment (and the is_tex_target path's own comment above)
+                # already document as crashing lualatex outright in this
+                # environment -- that's exactly why a document with its own
+                # mainfont gets no swap-retry (nothing to safely swap to)
+                # AND, as of 2026-09-20, no auto mainfontfallback either. A
+                # document that wants one can still set mainfontfallback:
+                # itself in its own front matter (or a linked metadata file)
+                # -- that routes through Pandoc's normal metadata merge, not
+                # this -V injection, so it never hits the crash. Confirmed
+                # directly: a document with mainfont: set of its own crashed
+                # lualatex on this line's old `fallback=document_font` even
+                # though nothing was actually missing a glyph yet.
+                result = run(first_font, fallback=False)
                 combined_output = result.stdout + result.stderr
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and missing_glyph_warning(combined_output)):
@@ -4008,7 +4079,8 @@ def main() -> None:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target) as prepared, \
-                        document_header_file(files[0], bool(report_preambles) and is_tex_target) as report_header_file, \
+                        document_header_file(files[0], (bool(report_preambles) or bool(report_pdf_meta_snippet_text))
+                                             and is_tex_target) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
                     prepared_files = prepared[:len(files)]
                     prepared_metadata = prepared[len(files):]
@@ -4042,10 +4114,14 @@ def main() -> None:
                     if report_preambles and is_tex_target:
                         for preamble in report_preambles:
                             cmd += ["--include-in-header", str(preamble)]
-                        if report_header_file is not None:
-                            cmd += ["--include-in-header", str(report_header_file)]
                     if report_pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(report_pdf_meta_file)]
+                    # Last -- see convert_one's matching comment; report_header_file
+                    # is added whenever it exists, not only when report_preambles
+                    # is non-empty (report_pdf_meta_file alone can trigger the drop
+                    # this guards against).
+                    if report_header_file is not None:
+                        cmd += ["--include-in-header", str(report_header_file)]
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                     if (any(contains_citations(file) for file in files)
@@ -4081,6 +4157,21 @@ def main() -> None:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
                 # Reports need one Pandoc invocation, so retry each usable engine here.
+                #
+                # KNOWN GAP (2026-09-20, not yet fixed): this PDF-target branch never
+                # calls document_header_file() at all, unlike its is_tex_target sibling
+                # above and every convert_one call site -- so files[0]'s own YAML
+                # header-includes can still be silently dropped here whenever
+                # report_pdf_meta_file (or a report_preambles entry) triggers Pandoc's
+                # --include-in-header/header-includes collision (see
+                # document_header_includes()'s docstring for the mechanism). Left
+                # unfixed rather than patched blind: CLAUDE.md's own process note
+                # requires verifying a pdfmd command-building fix through the full
+                # pipeline, and this session had no report/book-mode document to
+                # verify against. Next report-mode session: add the same
+                # document_header_file(files[0], ...) wiring the block above and
+                # every convert_one call site now use, then verify with an actual
+                # -r/--report build of a file that has its own header-includes.
                 result = None
                 failed_families: set[str] = set()
                 for engine_index, engine in enumerate(engines):
