@@ -25,6 +25,56 @@ Input formats:
     instead of Pandoc, since Pandoc can't execute Quarto's R/Python/Julia
     code chunks and would silently drop figures and computed output.
 
+    A real .tex file targeting PDF is another special case, as of v3.1.0:
+    it is already a complete, independently compilable document (its own
+    `\\documentclass`...`\\begin{document}`...`\\end{document}`), so instead
+    of handing it to Pandoc -- which would read it with Pandoc's own LaTeX
+    reader and regenerate it through Pandoc's LaTeX writer before an engine
+    ever saw it, a lossy round-trip for hand-written LaTeX macros (chemfig,
+    tikz, ...) that don't survive re-serialization -- pdfmd runs a LaTeX
+    engine on it directly. The -e/--engine fallback chain (or a document's
+    own `pdf-engine:`/`engine:` setting) still applies, restricted to its
+    LaTeX-family members (lualatex, xelatex, pdflatex, latexmk, tectonic --
+    not context, whose CLI and markup are unrelated to the other five).
+    lualatex/xelatex/pdflatex are rerun automatically, up to
+    MAX_TEX_DIRECT_PASSES times, whenever the engine's own .log asks for
+    another pass (the same "Rerun to get..."/"Label(s) may have changed"
+    signal latexmk itself watches for) -- covering both a bibliography
+    (`\\bibliography{...}`/`\\addbibresource{...}` triggers a bibtex/biber
+    pass between engine runs, chosen automatically) and any other multi-
+    pass need, such as a chemfig diagram whose arrow angles depend on a
+    label resolved in a previous pass. latexmk and tectonic already manage
+    all of this internally and are each given a single wrapped call instead.
+    Every engine writes into a scratch directory that is discarded once the
+    final PDF is copied out, so -- like tectonic itself -- the source
+    directory never ends up holding `.aux`/`.log`/`.out`/etc.; --keep-aux
+    turns this off and compiles in place instead, for inspecting a failing
+    or suspicious build's own .log by hand. None of pdfmd's own Pandoc-
+    side auto-discovery (metadata YAML, preambles, Lua filters, font/
+    margin defaults, PDF-metadata/BUILD-NOTES stamping) applies to this
+    path, since none of it goes through Pandoc -- a document that actually
+    needs pdfmd's own injection applied to raw LaTeX should keep going
+    through Pandoc instead, via `--no-auto texdirect` or an explicit
+    `--from` other than latex/tex.
+
+    An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
+    .xlsx, .xls, .ods) targeting PDF is a third special case, as of
+    v3.2.0: it converts straight to PDF via headless LibreOffice
+    (`soffice --convert-to pdf`), no Pandoc involved at all -- a default
+    change for .docx/.odt specifically, which Pandoc CAN also read as
+    input (lossily -- through the same kind of AST round-trip the .tex
+    case above exists to avoid, here losing the original document's own
+    layout instead of raw macros); .pptx/.xlsx/.ppt/.xls/etc. have no
+    Pandoc reader at all and could never reach a PDF through pdfmd before
+    this. Unlike `.tex`, there is no working "opt back into Pandoc" route
+    for any of these: --no-auto officedirect, an explicit --from, or a
+    non-PDF --to target all raise a clear error instead of the crash they
+    used to reach a few calls later, since Pandoc's own docx/odt reader
+    is a strictly worse outcome here anyway (loses the original
+    formatting soffice preserves) and every Pandoc-side auto-discovery
+    helper (front matter, citations, Lua filters, font/margin defaults)
+    assumes text input, which a binary office document never is.
+
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
     writer name: html, latex/tex, typst, plain/txt, docx, ...), or just give
@@ -35,8 +85,8 @@ Output formats:
     when the target is actually PDF. A document can request its own default
     engine with a `pdfmd-options: {pdf-engine: lualatex}` (or `engine:`)
     front-matter key -- one engine name/alias, or a family keyword (`tex`,
-    `html`, `typst`) to restrict automatic fallback to that paradigm instead
-    of one specific engine, e.g. `pdf-engine: tex` for a chemfig-heavy
+    `html`, `typst`, `office`) to restrict automatic fallback to that
+    paradigm instead of one specific engine, e.g. `pdf-engine: tex` for a chemfig-heavy
     document that must never fall back to an HTML engine that can't render
     its LaTeX macros, or `pdf-engine: html` for a plain document that should
     never pay for a slow LaTeX run. The older bare top-level `pdf-engine:`/
@@ -139,6 +189,40 @@ Reader selection for a Markdown source:
     numbered top-level section), with the rest of its headings shifted up a
     level to match.
 
+CSV/TSV table inclusion:
+    A fenced Div with class `csv` --
+
+        ::: {.csv file="data.csv"}
+        :::
+
+    -- is replaced with an actual table read from that file, instead of a
+    hand-transcribed pipe table (`contains_csv_table()`,
+    CSV_TABLE_LUA_FILTER). Delimiter is auto-detected from the extension
+    (`.tsv` -> tab, otherwise comma), or set explicitly with a
+    `delimiter="..."` attribute; the first row is treated as a header
+    unless `header="false"`. Capped at 10 rows and 7 columns by default --
+    `rows`/`cols` attributes override either (a number, or `all` for no
+    cap) -- so an accidentally-huge CSV doesn't produce a many-page table
+    nobody intended; a truncated table gets both a one-line `WARN` (naming
+    how many of how many rows/columns were kept) and a note printed
+    directly under the table itself, in the rendered output, not just on
+    the compiling terminal. A `.csv` div with no `file=` attribute, or one
+    naming a file that can't be opened, gets a `WARN` and is left empty
+    rather than failing the whole compile. Works for any output format
+    (not LaTeX-specific, unlike the table-width filter above) -- Markdown/
+    Pandoc input, single-file/batch/report modes, and the soffice PDF-
+    engine fallback all support it; a real .tex or office-document INPUT
+    does not (there is no Pandoc AST -- and so no Div -- on either of
+    those paths). `--no-auto csvtable` turns it off.
+
+    A fenced Div, not a new raw-text sigil/key scanned over the Markdown
+    source before Pandoc ever sees it, deliberately: Pandoc has already
+    told code blocks/spans apart from real content by the time a Lua
+    filter's own Div() callback fires, so `::: {.csv ...} :::` typed
+    inside a fenced code block as a literal example is never mistaken for
+    the real thing -- a raw-text approach keyed on some other character
+    would not have that guarantee.
+
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
     standalone defaults documented above, plus pdfmd's own file-discovery
@@ -149,9 +233,22 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     context --standalone default), metadata/yaml (the auto-discovered
     --metadata-file), preamble/tex (auto-included preamble.tex etc.), lua
     (auto-included <stem>.lua/nulabreport.lua), files (metadata+preamble+
-    lua). An explicit -y/-H/-f/-V/--from still always wins over --no-auto
-    metadata/preamble regardless of this flag -- it only stops pdfmd from
-    filling in or discovering what's otherwise unset.
+    lua), texdirect (the v3.1.0 direct-.tex-compile path under "Input
+    formats" above -- disabling it routes a .tex input back through Pandoc
+    the old way), officedirect (the direct office-document-to-PDF path,
+    also under "Input formats" -- disabling it on a .docx/.odt is an
+    error in this version, not a route back through Pandoc; see that
+    section for why), crossref (the auto-detected `--filter pandoc-
+    crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
+    `{#fig:...}`-style attribute -- see crossref_filter_args()),
+    citationengine (a document's own `pdfmd-options.citation-engine`
+    setting -- see "Output formats" below; disabling this KIND always
+    means plain `--citeproc`, regardless of what the document's own front
+    matter or metadata file requests), csvtable (the `.csv`-div table
+    inclusion under "CSV/TSV table inclusion" above). An explicit
+    -y/-H/-f/-V/--from still always wins over --no-auto metadata/preamble
+    regardless of this flag -- it only stops pdfmd from filling in or
+    discovering what's otherwise unset.
 
     A document can ask for the same thing itself, without the caller having
     to remember a flag, via a `pdfmd-options:` front-matter block -- the
@@ -166,15 +263,36 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
           pdf-engine: lualatex
         ---
 
-    Two keys live there today: `no-auto` (same KIND names as --no-auto
+    Three keys live there today: `no-auto` (same KIND names as --no-auto
     above, plus `true`/`all` for everything or a single bare name --
     additive with a CLI --no-auto, whichever source disables a given kind
-    wins for that kind) and `pdf-engine`/`engine` (same values as
+    wins for that kind), `pdf-engine`/`engine` (same values as
     -e/--engine; see frontmatter_engine()'s docstring for why this one in
     particular moved here rather than staying a bare top-level key -- the
-    older bare spelling still works for documents already using it). Both
-    require PyYAML and a document that already has a `---` block; silently
-    ignored (not an error) if PyYAML isn't installed.
+    older bare spelling still works for documents already using it), and
+    `citation-engine`: `citeproc` (the default -- a document only needs
+    this key at all to opt into something else), `natbib`, or `biblatex`.
+    The last one routes a LaTeX-family PDF target's (or `--to latex`/
+    `beamer`/`context`'s) bibliography through Pandoc's own `--natbib`/
+    `--biblatex` flags -- native biber/bibtex processing via the engine's
+    own tooling, using the document's existing `bibliography:` field --
+    instead of `--citeproc` (which renders citations directly into the
+    LaTeX Pandoc generates, via a CSL style, without touching biber/bibtex
+    at all). For a PDF target specifically, this compiles by generating a
+    complete standalone `.tex` via Pandoc first, then handing it to the
+    same direct-compile engine+rerun+bibtex/biber loop `.tex` input uses
+    above (`compile_tex_direct()`) -- necessary because confirmed
+    empirically that Pandoc's own PDF-making pipeline never runs bibtex/
+    biber itself when it calls a LaTeX engine directly (only `--pdf-
+    engine=latexmk` manages that on its own); this way `natbib`/`biblatex`
+    work with any LaTeX-family engine, not just latexmk. Meaningless (and
+    silently ignored) for a non-LaTeX target -- HTML, typst, docx, an
+    office document, or the soffice PDF-engine fallback -- same as e.g.
+    LaTeX-only geometry/monofont defaults already are; a document that
+    sets it but ends up on a fallback chain with no LaTeX-family engine
+    available at all gets one clear WARN and `--citeproc` instead. All
+    three keys require PyYAML and a document that already has a `---`
+    block; silently ignored (not an error) if PyYAML isn't installed.
 
 Build-provenance stamping (--stamp):
     Off by default. On a successful compile, appends or updates a
@@ -271,14 +389,16 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.0.0"
+PDFMD_VERSION = "3.5.0"
 import argparse
 from fnmatch import fnmatchcase
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import time
 import unicodedata
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -286,7 +406,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from shutil import which
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
 from textwrap import dedent
 from typing import Iterator
 
@@ -325,6 +445,7 @@ ACCESSORY_DIRNAME = "metadata"
 NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
+    "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -411,9 +532,15 @@ def frontmatter_pdfmd_options(md_path: Path) -> dict:
     Returns {} if there's no front matter, no ``pdfmd-options`` key, the
     front matter doesn't parse as YAML, or PyYAML isn't installed --
     document-level pdfmd-options are optional sugar, not a hard dependency
-    of the rest of the script.
+    of the rest of the script. Also {} for a binary office document
+    (OFFICE_INPUT_EXTENSIONS) without even trying to read it as text --
+    caught via a real crash (UnicodeDecodeError) the first time an actual
+    .docx/.pptx was fed through pdfmd for this round's own office-direct
+    feature: effective_no_auto()/resolve_engines() call this
+    unconditionally for every input, .tex and now office documents
+    included, on the way to either one's own direct (non-Pandoc) branch.
     """
-    if yaml is None:
+    if yaml is None or md_path.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
         return {}
     text = md_path.read_text(encoding="utf-8-sig")
     front_matter = re.match(r"^---\s*\n(.*?)\n(?:---|\.\.\.)\s*(?:\n|$)", text, re.DOTALL)
@@ -516,9 +643,36 @@ local CHAR_BUDGET = 95
 -- with many columns, each individually short, doesn't dodge the budget
 -- check on a technicality -- \tabcolsep-scale, not a real measurement.
 local PER_COLUMN_OVERHEAD = 3
+-- pandoc.utils.stringify() renders a Math inline as its raw LaTeX SOURCE
+-- (e.g. "\frac{1.0 \times 10^{-14}}{[OH^-]}", 34 characters), not its
+-- typeset width (a fraction that renders at a fraction of that) -- found
+-- via a real chemistry-report table (Ksp/uncertainty-propagation cells)
+-- getting stretched by cell_length() treating that raw command text as
+-- 34 characters of visual width. No exact fix is possible here either
+-- (same reasoning as CHAR_BUDGET above -- no font has been measured yet
+-- when this filter runs), so this is a flat divisor, not a real LaTeX-
+-- width estimator: a short subscript/superscript like "K_{sp}" (6 raw
+-- characters, renders about as wide as "Ksp") and a stacked fraction
+-- like the one above (34 raw characters, renders roughly as wide as its
+-- widest of numerator/denominator, maybe 10-12) both land closer to
+-- their real rendered width divided by roughly 3 than left undivided.
+local MATH_LENGTH_DIVISOR = 3
+
+local function math_overcount(contents)
+  local overcount = 0
+  contents:walk({
+    Math = function(m)
+      local source_len = #m.text
+      overcount = overcount + (source_len - math.ceil(source_len / MATH_LENGTH_DIVISOR))
+    end
+  })
+  return overcount
+end
 
 local function cell_length(cell)
-  return #pandoc.utils.stringify(cell.contents)
+  local length = #pandoc.utils.stringify(cell.contents) - math_overcount(cell.contents)
+  if length < 1 then length = 1 end
+  return length
 end
 
 local function scan_row(row, max_len)
@@ -571,12 +725,256 @@ function Table(tbl)
 end
 """
 
+# Auto-applied whenever a document uses a `.csv`-classed fenced Div (see
+# contains_csv_table()) -- turns a Div like
+#
+#     ::: {.csv file="data.csv"}
+#     :::
+#
+# into an actual table, read from that CSV/TSV file, instead of a hand-
+# transcribed pipe table -- requested directly (2026-09-19, Ali), alongside
+# a size cap so an accidentally-huge file doesn't produce a many-page
+# table nobody intended: 10 rows and 7 columns by default (`rows`/`cols`
+# attributes override either, or set to `all` for no cap), matching the
+# request's own suggested numbers. A Div, not raw-text substitution keyed
+# on some new sigil character (`\input`-style inclusion was floated for
+# the same underlying reason, and rejected for exactly the risk this
+# avoids): Pandoc has already correctly told code blocks/spans apart from
+# real content by the time a Lua filter's Div() callback ever fires, so
+# `::: {.csv ...}` typed inside a fenced code block as a literal example
+# is never mistaken for the real thing -- the false-fire risk Ali raised
+# for a raw-text approach simply can't happen at this level.
+#
+# Builds the table via pandoc.read() on a hand-assembled GFM pipe-table
+# string, rather than constructing pandoc.Table's own AST nodes directly
+# -- both produce an equivalent Table block, but this one reuses Pandoc's
+# own (already-correct) pipe-table parser instead of this filter needing
+# to get every field of TableHead/TableBody/Cell/ColSpec exactly right by
+# hand, and it guarantees the result looks EXACTLY like a table pdfmd
+# already knows how to handle everywhere else (including
+# TABLE_WIDTH_LUA_FILTER re-balancing it afterward, since a pipe-table's
+# parsed colspecs are the same "default width" shape a document's own
+# hand-written table would produce).
+#
+# The CSV/TSV line parser handles quoted fields (comma/tab inside a
+# quoted cell, and a doubled `""` for a literal quote) but, deliberately,
+# not a quoted field containing a literal embedded newline spanning
+# multiple physical lines -- a genuine RFC 4180 parser is real added
+# complexity for a case simple spreadsheet exports essentially never
+# produce, and this filter is explicitly meant to stay simple.
+CSV_TABLE_LUA_FILTER = r"""
+local DEFAULT_MAX_ROWS = 10
+local DEFAULT_MAX_COLS = 7
+
+local function parse_csv_line(line, delim)
+  local fields = {}
+  local field = {}
+  local in_quotes = false
+  local i = 1
+  local n = #line
+  while i <= n do
+    local c = line:sub(i, i)
+    if in_quotes then
+      if c == '"' then
+        if line:sub(i + 1, i + 1) == '"' then
+          table.insert(field, '"')
+          i = i + 1
+        else
+          in_quotes = false
+        end
+      else
+        table.insert(field, c)
+      end
+    else
+      if c == '"' then
+        in_quotes = true
+      elseif c == delim then
+        table.insert(fields, table.concat(field))
+        field = {}
+      else
+        table.insert(field, c)
+      end
+    end
+    i = i + 1
+  end
+  table.insert(fields, table.concat(field))
+  return fields
+end
+
+local function limit_or_all(value, default)
+  if value == nil or value == "" then return default end
+  if value:lower() == "all" then return math.huge end
+  return tonumber(value) or default
+end
+
+local function escape_cell(text)
+  text = (text or ""):gsub("\r", ""):gsub("\n", " ")
+  -- A leading/trailing "|" (already escaped) still needs the pipe-table
+  -- delimiter itself escaped; a literal backslash is left alone, unlike
+  -- a general Markdown escaper, since a CSV cell's own backslashes (a
+  -- Windows path, a regex) should render as typed, not be mistaken for
+  -- Markdown escape sequences. Wrapped in parens: string.gsub returns
+  -- TWO values (the string, and a count of substitutions made), and a
+  -- bare `return text:gsub(...)` -- as the LAST argument to a later
+  -- table.insert(escaped, escape_cell(...)) call -- leaks that count as
+  -- a second, unwanted argument, which table.insert then misreads as
+  -- its own `pos` parameter. Caught directly, as a real Lua runtime
+  -- error ("bad argument #2 to 'insert' (number expected, got
+  -- string)"), the first time this filter ran against an actual CSV.
+  return (text:gsub("|", "\\|"))
+end
+
+function Div(div)
+  if not div.classes:includes("csv") then return nil end
+  local path = div.attributes["file"]
+  if not path then
+    io.stderr:write("WARN  .csv div has no file= attribute; leaving it empty\n")
+    return {}
+  end
+  local file = io.open(path, "r")
+  if not file then
+    io.stderr:write("WARN  .csv: could not open '" .. path .. "'; leaving it empty\n")
+    return {}
+  end
+
+  local delim = div.attributes["delimiter"]
+  if delim == nil or delim == "" then
+    delim = path:match("%.tsv$") and "\t" or ","
+  end
+  local max_rows = limit_or_all(div.attributes["rows"], DEFAULT_MAX_ROWS)
+  local max_cols = limit_or_all(div.attributes["cols"], DEFAULT_MAX_COLS)
+  local has_header = div.attributes["header"] ~= "false"
+
+  local header_fields = nil
+  local data_rows = {}
+  local total_data_rows = 0
+  local total_cols = 0
+  local rows_truncated = false
+  local cols_truncated = false
+
+  for line in file:lines() do
+    if line ~= "" then
+      local fields = parse_csv_line(line, delim)
+      if #fields > total_cols then total_cols = #fields end
+      if #fields > max_cols then
+        cols_truncated = true
+        local kept = {}
+        for i = 1, max_cols do kept[i] = fields[i] end
+        fields = kept
+      end
+      if has_header and header_fields == nil then
+        header_fields = fields
+      else
+        total_data_rows = total_data_rows + 1
+        if #data_rows < max_rows then
+          table.insert(data_rows, fields)
+        else
+          rows_truncated = true
+        end
+      end
+    end
+  end
+  file:close()
+
+  local shown_cols = math.min(total_cols, max_cols)
+  if not header_fields then
+    header_fields = {}
+    for i = 1, math.max(shown_cols, 1) do
+      header_fields[i] = "Column " .. i
+    end
+  end
+
+  local lines = {}
+  local function emit_row(fields)
+    local escaped = {}
+    for i = 1, #header_fields do
+      table.insert(escaped, escape_cell(fields[i]))
+    end
+    table.insert(lines, "| " .. table.concat(escaped, " | ") .. " |")
+  end
+  emit_row(header_fields)
+  table.insert(lines, "|" .. string.rep(" --- |", #header_fields))
+  for _, row in ipairs(data_rows) do
+    emit_row(row)
+  end
+
+  if rows_truncated or cols_truncated then
+    local shown_rows = #data_rows
+    local note = string.format(
+      "*(showing %d of %d row%s, %d of %d column%s -- use `rows=all`/`cols=all`, or " ..
+      "`rows=N`/`cols=N`, on this `.csv` div to include more)*",
+      shown_rows, total_data_rows, total_data_rows == 1 and "" or "s",
+      shown_cols, total_cols, total_cols == 1 and "" or "s")
+    table.insert(lines, "")
+    table.insert(lines, note)
+    io.stderr:write("WARN  " .. path .. ": showing " .. shown_rows .. " of " ..
+                     total_data_rows .. " row(s), " .. shown_cols .. " of " ..
+                     total_cols .. " column(s) -- see the note under the table\n")
+  end
+
+  -- Trailing blank line required: confirmed directly (a real generated
+  -- table's last row rendered as a stray, unparsed Str/Space paragraph
+  -- instead of the table's own last row) that pandoc.read(), called from
+  -- inside a Lua filter, needs one to correctly close out a pipe table's
+  -- final row -- pandoc's own CLI reading the identical text from a file
+  -- does not need this, so this is specifically a pandoc.read()-from-a-
+  -- filter quirk, not a general GFM pipe-table requirement.
+  local parsed = pandoc.read(table.concat(lines, "\n") .. "\n\n", "gfm")
+  return parsed.blocks
+end
+"""
+
+
+@contextmanager
+def csv_table_filter() -> Iterator[Path]:
+    """Materialize CSV_TABLE_LUA_FILTER to a temp file for --lua-filter.
+
+    Same reasoning as table_width_filter(): fixed content, so a plain
+    system-tempdir file, not one placed beside the document.
+    """
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua",
+                            prefix="pdfmd-csvtable-", delete=False) as temporary:
+        temporary.write(CSV_TABLE_LUA_FILTER)
+        temporary_path = Path(temporary.name)
+    try:
+        yield temporary_path
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+CSV_DIV_RE = re.compile(r"\{[^}\n]*\.csv\b[^}\n]*\}")
+
+
+def contains_csv_table(md_path: Path) -> bool:
+    """Detect a `.csv`-classed fenced Div (see CSV_TABLE_LUA_FILTER)."""
+    text = md_path.read_text(encoding="utf-8-sig")
+    return bool(CSV_DIV_RE.search(text))
+
+
+def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
+                          csv_filter_path: Path) -> list[str]:
+    """``--lua-filter`` for CSV_TABLE_LUA_FILTER, only when actually needed.
+
+    Mirrors crossref_filter_args()'s own shape and reasoning: silently a
+    no-op when --no-auto csvtable disables it or no source actually uses
+    a `.csv` div. Must run BEFORE the table-width filter (the caller is
+    responsible for that ordering) so a CSV-generated table gets the same
+    width-balancing pass a hand-written one would.
+    """
+    if auto_disabled(no_auto, "csvtable"):
+        return []
+    files = sources if isinstance(sources, list) else [sources]
+    if not any(contains_csv_table(file) for file in files):
+        return []
+    return ["--lua-filter", str(csv_filter_path)]
+
+
 # Engines are tried in this order only when the user did not request one.
 # An explicit --engine is never overridden.
 PDF_ENGINES = (
     "lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "typst",
     "weasyprint", "wkhtmltopdf", "pagedjs-cli", "prince", "context",
-    "groff", "pdfroff",
+    "groff", "pdfroff", "soffice",
 )
 ENGINE_ALIASES = {
     "1": "lualatex", "lua": "lualatex",
@@ -592,6 +990,7 @@ ENGINE_ALIASES = {
     "11": "context",
     "12": "groff",
     "13": "pdfroff", "roff": "pdfroff",
+    "14": "soffice", "libreoffice": "soffice", "office": "soffice",
 }
 LATEX_ENGINES = frozenset({"lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "context"})
 PREAMBLE_FILENAMES = ("preamble.tex", "latex-preamble.tex")
@@ -637,12 +1036,48 @@ ENGINE_GROUPS: dict[str, tuple[str, ...]] = {
     "tex": tuple(engine for engine in PDF_ENGINES if engine in LATEX_ENGINES),
     "html": ("weasyprint", "wkhtmltopdf", "pagedjs-cli", "prince"),
     "typst": ("typst",),
+    "office": ("soffice",),
 }
+
+
+def resolve_soffice() -> str | None:
+    """Locate the LibreOffice/soffice binary, beyond a bare PATH lookup.
+
+    A common real-world setup (confirmed on this machine) has `soffice`
+    reachable only through an interactive shell alias pointing straight at
+    the macOS .app bundle's own binary -- invisible to both which() and
+    subprocess (neither one consults shell aliases, only PATH), so a plain
+    which("soffice") silently reports it missing even though it works
+    fine for the user every day at a terminal prompt. Checked, in order:
+    `soffice` on PATH, `libreoffice` on PATH (the usual Linux package
+    name -- often a symlink to the same binary), then the standard macOS
+    app-bundle path directly.
+    """
+    for name in ("soffice", "libreoffice"):
+        found = which(name)
+        if found:
+            return found
+    if sys.platform == "darwin":
+        mac_path = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
+        if mac_path.exists():
+            return str(mac_path)
+    return None
+
+
+def engine_executable(engine: str) -> str | None:
+    """which(), except for "soffice" -- see resolve_soffice()'s docstring.
+
+    Every PDF_ENGINES membership check (installed_engines, select_engines,
+    dependency_report) goes through this instead of a bare which() so
+    "soffice" is recognized as available under the same real-world
+    condition the pipeline will actually invoke it under.
+    """
+    return resolve_soffice() if engine == "soffice" else which(engine)
 
 
 def installed_engines() -> list[str]:
     """Return PDF engines that are currently executable, in fallback order."""
-    return [engine for engine in PDF_ENGINES if which(engine)]
+    return [engine for engine in PDF_ENGINES if engine_executable(engine)]
 
 
 def select_engines(requested: str | None, presentation: bool, label: str = "--engine") -> list[str]:
@@ -663,7 +1098,7 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
         group = ENGINE_GROUPS.get(requested.casefold())
         if group is not None:
             family = requested.casefold()
-            installed_in_group = [engine for engine in group if which(engine)]
+            installed_in_group = [engine for engine in group if engine_executable(engine)]
             if not installed_in_group:
                 raise SystemExit(
                     f"{label} restricted to the '{family}' engine family, but none of "
@@ -689,7 +1124,7 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
                 "(-p/--presentation): Pandoc's Beamer writer requires a LaTeX/ConTeXt "
                 "engine, one of " + ", ".join(sorted(LATEX_ENGINES))
             )
-        if which(requested):
+        if engine_executable(requested):
             return [requested]
         raise SystemExit(
             f"Requested PDF engine '{requested}' was not found on PATH. "
@@ -756,7 +1191,7 @@ def dependency_report() -> bool:
     pandoc = which("pandoc")
     print(f"{'OK  ' if pandoc else 'MISS'}  pandoc" + (f"  ({pandoc})" if pandoc else ""))
     for number, engine in enumerate(PDF_ENGINES, start=1):
-        path = which(engine)
+        path = engine_executable(engine)
         print(f"{'OK  ' if path else 'MISS'}  {number}. {engine}" + (f"  ({path})" if path else ""))
     quarto = which("quarto")
     print(f"{'OK  ' if quarto else 'MISS'}  quarto (only needed for .qmd files)"
@@ -1237,6 +1672,63 @@ def contains_citations(md_path: Path) -> bool:
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
 
+CROSSREF_LABEL_KINDS = ("fig", "eq", "tbl", "sec", "lst")
+CROSSREF_RE = re.compile(
+    r"\{[^}\n]*#(?:" + "|".join(CROSSREF_LABEL_KINDS) + r"):[-\w]+[^}\n]*\}"
+    r"|@(?:" + "|".join(CROSSREF_LABEL_KINDS) + r"):[-\w]+"
+)
+
+
+def contains_crossref(md_path: Path) -> bool:
+    """Detect pandoc-crossref's own attribute/reference syntax.
+
+    Two shapes: a numbered-element attribute definition (``{#fig:setup}``
+    on an image/table/heading -- crossref auto-numbers and prefixes the
+    caption even if nothing ever references it back elsewhere) and a
+    reference to one (``@fig:...``/``@eq:...``/``@tbl:...``/``@sec:...``/
+    ``@lst:...``). Deliberately distinct from contains_citations()'s much
+    broader ``@key`` match, which already matches ``@fig:setup`` too (a
+    colon is a valid citation-key character) -- that overlap is exactly
+    the bug this exists to fix: a crossref-only document was already
+    getting `--citeproc` added (harmlessly finding no bibliography entry
+    named "fig:setup"), but nothing ever added `--filter pandoc-crossref`,
+    so the reference/numbering itself never actually resolved.
+    """
+    text = md_path.read_text(encoding="utf-8-sig")
+    return bool(CROSSREF_RE.search(text))
+
+
+def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
+                         no_auto: list[str] | None, label: str) -> list[str]:
+    """``--filter pandoc-crossref``, added before --citeproc, when needed.
+
+    Ordering matters: pandoc-crossref resolves/numbers `@fig:`/`@eq:`/
+    `@tbl:`/`@sec:`/`@lst:` references and rewrites the AST accordingly
+    BEFORE citeproc ever runs, so citeproc only ever sees genuine
+    bibliography citations left over -- the same reasoning the existing
+    "Lua filters go last" comment already documents for the table-width
+    filter needing citations resolved first, just the opposite ordering
+    constraint (crossref before citeproc, not after). Silently a no-op
+    when --no-auto crossref disables it, the filter is already given
+    explicitly, or no source actually uses crossref syntax; a document
+    that DOES use it but has no pandoc-crossref binary gets one clear
+    WARN instead of silently shipping unresolved `@fig:...`/`{#fig:...}`
+    text into the rendered output.
+    """
+    if auto_disabled(no_auto, "crossref") or "pandoc-crossref" in pandoc_options:
+        return []
+    files = sources if isinstance(sources, list) else [sources]
+    if not any(contains_crossref(file) for file in files):
+        return []
+    if which("pandoc-crossref") is None:
+        print(f"WARN  {label}: uses pandoc-crossref syntax (@fig:/@eq:/@tbl:/@sec:/@lst: or a "
+              "{#fig:...}-style attribute) but pandoc-crossref isn't installed; the reference/"
+              "numbering will not resolve. Install it (e.g. `brew install pandoc-crossref`), "
+              "or rewrite without crossref syntax to silence this.", file=sys.stderr)
+        return []
+    return ["--filter", "pandoc-crossref"]
+
+
 def has_yaml_frontmatter(text: str) -> bool:
     return bool(re.match(r"^---\s*\n", text))
 
@@ -1312,9 +1804,26 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     ``gfm+citations`` outright -- so a document using citation syntax falls
     all the way back to the plain ``markdown`` reader instead, trading away
     the table/blank-line fixes to keep citeproc resolving its citations.
+
+    None of this heuristic applies to a file that isn't actually Markdown
+    in the first place: it looks only at front-matter/title-block/
+    metadata-file presence, never at the file's own extension, so a real
+    ``.tex``/``.html``/``.rst``/etc. file with no YAML front matter of its
+    own used to be silently misread as ``gfm`` too, whenever it reached
+    Pandoc at all -- rare in practice since PDF output normally goes
+    through the direct-.tex-compile path instead now (see v3.1.0), but
+    still live for `--to` a non-PDF format or `--no-auto texdirect`.
+    Found during that same v3.1.0 round's own edge-case testing; fixed
+    here rather than left for later since it is a pre-existing,
+    independent bug, not something v3.1.0 introduced. Guarding on suffix
+    up front (below) makes this a no-op for anything but a real
+    ``.md``/``.markdown`` source, matching what Pandoc's own extension-
+    based reader inference would have picked anyway.
     """
     if cli_from:
         return cli_from, None
+    if md_path.suffix.lower() not in (".md", ".markdown"):
+        return None, None
     text = md_path.read_text(encoding="utf-8-sig")
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
@@ -1325,7 +1834,18 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     if contains_citations(md_path):
         return None, (f"{md_path}: no YAML front matter, but it uses @citation syntax "
                       "gfm can't parse; keeping the default markdown reader")
-    reader = "gfm+definition_lists" if has_definition_list(text) else "gfm"
+    reader = "gfm"
+    if has_definition_list(text):
+        reader += "+definition_lists"
+    if contains_csv_table(md_path):
+        # A `.csv` div is Pandoc's fenced_divs syntax (`::: {.csv ...} :::`),
+        # which -- unlike Pandoc's own default `markdown` reader, where it's
+        # on by default -- gfm doesn't enable at all, so without this a
+        # front-matter-less document's `.csv` div is read as literal text
+        # instead of a real Div (caught directly: a first real test of this
+        # feature rendered the div's own source text verbatim in the PDF,
+        # smart-quoted, instead of a table at all).
+        reader += "+fenced_divs"
     return reader, f"{md_path}: no YAML front matter; reading as {reader}"
 
 
@@ -1475,6 +1995,51 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
             value = str(top) if top is not None else None
         if value is not None:
             return str(value)
+    return None
+
+
+# pdfmd-options.citation-engine: "citeproc" (the default -- a document only
+# needs this key at all to opt into something else), "natbib", or
+# "biblatex". Routes a LaTeX-family PDF target's (or --to latex/beamer/
+# context's) bibliography through Pandoc's own --natbib/--biblatex flags
+# (native biber/bibtex, handled by the engine's own bibliography tooling)
+# instead of --citeproc (which renders citations into the LaTeX Pandoc
+# generates directly, using a CSL style, and never touches biber/bibtex at
+# all). Meaningless for a non-LaTeX target (HTML/typst/docx/office) --
+# silently ignored there, same as e.g. LaTeX-only geometry/monofont
+# defaults already are. See convert_via_native_bibliography()'s own
+# docstring for the real complication this runs into for a PDF target
+# specifically: confirmed empirically that Pandoc's own PDF-making
+# pipeline, when it calls a LaTeX engine directly via --pdf-engine=, never
+# actually runs bibtex/biber itself (only --pdf-engine=latexmk does, since
+# latexmk manages that on its own) -- lualatex/xelatex/pdflatex all leave
+# citations undefined with a bare --natbib/--biblatex. Routed around by
+# generating a complete standalone .tex via Pandoc first (same as the
+# TEX_STANDALONE_FORMATS branch already does for --to latex), then handing
+# it to compile_tex_direct()'s own engine+bibtex/biber rerun loop instead
+# of letting Pandoc invoke the engine itself.
+CITATION_ENGINES = frozenset({"citeproc", "natbib", "biblatex"})
+
+
+def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | None:
+    """Read pdfmd-options.citation-engine -- see the module comment above.
+
+    Document's own front matter wins over a linked metadata file's,
+    checked in the same metadata_files order as frontmatter_engine(), same
+    precedence rule. No legacy bare-top-level spelling to support here
+    (unlike pdf-engine/engine) -- this is a brand new key with no existing
+    documents written against an older spelling.
+    """
+    options = frontmatter_pdfmd_options(md_path)
+    value = options.get("citation-engine")
+    if value is not None:
+        return str(value).casefold()
+    for metadata_file in metadata_files:
+        data = metadata_file_yaml(metadata_file)
+        options = data.get("pdfmd-options")
+        value = options.get("citation-engine") if isinstance(options, dict) else None
+        if value is not None:
+            return str(value).casefold()
     return None
 
 
@@ -2182,6 +2747,484 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
         print("-" * 40, file=sys.stderr)
 
 
+# Direct .tex compilation (v3.1.0): a real .tex input -- already a complete,
+# independently compilable document with its own \documentclass/preamble --
+# used to be handed to Pandoc anyway, which reads it with Pandoc's LaTeX
+# reader and regenerates it through Pandoc's LaTeX writer before an engine
+# ever sees it. That round-trip is lossy for exactly the raw LaTeX a .tex
+# input is likely to contain on purpose (chemfig, tikz, custom macros) --
+# see CHANGELOG-pdfmd.md v3.1.0. compile_tex_direct() instead runs a LaTeX
+# engine straight on the file, handles the rerun-for-cross-references and
+# bibtex/biber passes by hand (mirroring what latexmk already does
+# internally for the two engines -- latexmk/tectonic -- that manage this
+# themselves), and cleans up after itself the way tectonic always has:
+# every engine writes into a scratch -output-directory, and only the
+# finished PDF is copied back out, so the source directory is never left
+# holding .aux/.log/.out/etc. --keep-aux (KEEP_AUX below) turns this off
+# and restores the old in-place-with-leftovers behavior, for when a failed
+# or suspicious compile needs its .log inspected by hand.
+#
+# Not attempted for "context": ConTeXt's CLI and markup are unrelated to
+# the other five LATEX_ENGINES members, and a hand-written raw .tex file
+# targeting it is not a realistic case this needs to cover.
+MAX_TEX_DIRECT_PASSES = 5
+TEX_RERUN_TRIGGERS = ("Rerun to get", "Please rerun LaTeX", "Rerun LaTeX")
+# texmf.cnf's own max_print_line default -- see tex_log_dewrap()'s docstring.
+TEX_LOG_WRAP_WIDTH = 79
+
+
+def tex_wants_rerun(log_text: str) -> bool:
+    """Whether a LaTeX engine's own .log is asking for another pass.
+
+    Covers the standard hyperref/natbib/label-tracking messages
+    (TEX_RERUN_TRIGGERS) -- the same signal latexmk itself watches for.
+    """
+    return any(trigger in log_text for trigger in TEX_RERUN_TRIGGERS)
+
+
+def tex_log_dewrap(text: str, width: int = TEX_LOG_WRAP_WIDTH) -> str:
+    """Undo a LaTeX engine's own hard line-wrap in its .log, mid-word,
+    at ~max_print_line columns -- confirmed on this machine (kpsewhich
+    -var-value=max_print_line) at 79, observed wrapping at 80 in
+    practice. Any physical line at or past ``width`` is assumed
+    continued verbatim (no space added) on the next; a real short
+    line ends a logical line. Needed before any pattern match against
+    the log: without it, a single sentence like "Fatal error occurred,
+    no output PDF file produced!" is split across two physical lines
+    with the break landing mid-word, and naive last-line/regex
+    matching returns only the truncated tail (caught the hard way, by
+    reading an actual failed compile's captured reason rather than
+    trusting a clean synthetic one -- see CHANGELOG-pdfmd.md v3.1.0).
+    """
+    lines = text.split("\n")
+    joined: list[str] = []
+    buffer = ""
+    for line in lines:
+        buffer += line
+        if len(line) >= width:
+            continue
+        joined.append(buffer)
+        buffer = ""
+    if buffer:
+        joined.append(buffer)
+    return "\n".join(joined)
+
+
+def tex_log_failure_reason(log_text: str) -> str | None:
+    """Pull the single most useful line out of a failed direct-.tex compile.
+
+    Dewraps first (see tex_log_dewrap), then prefers a classic ``! ...``
+    LaTeX error line same as engine_failure_reason(); falls back to a
+    ``-file-line-error``-style ``path:line: message`` line (used here
+    since it names the offending source line directly), skipping the
+    generic ``... Fatal error occurred, no output PDF file produced!``
+    trailer every halted run ends with, which names no actual cause.
+    """
+    lines = [line.strip() for line in tex_log_dewrap(log_text).splitlines() if line.strip()]
+    for line in lines:
+        if line.startswith("!"):
+            return line
+    for line in lines:
+        match = re.match(r".+:\d+:\s+(.+)", line)
+        if match and "Fatal error occurred" not in line:
+            return match.group(1)
+    return lines[-1] if lines else None
+
+
+def tex_bibliography_tool(text: str) -> str | None:
+    """Detect which bibliography processor a raw .tex document needs, if any.
+
+    biblatex (``\\usepackage{biblatex}``/``\\addbibresource``) is processed
+    by biber; the older bibtex/natbib style (bare ``\\bibliography{...}``)
+    by bibtex. Returns None for a document with no bibliography at all.
+    """
+    if re.search(r"\\addbibresource\{|\\usepackage(?:\[[^\]]*\])?\{biblatex\}", text):
+        return "biber"
+    if re.search(r"\\bibliography\{", text):
+        return "bibtex"
+    return None
+
+
+def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[str] | None:
+    """Build one direct-compile pass's command line for ``engine``.
+
+    lualatex/xelatex/pdflatex share an identical CLI shape and are run
+    through compile_tex_direct's own manual rerun/bibliography loop.
+    latexmk and tectonic already manage multi-pass compilation and
+    bibtex/biber internally, so each gets a single wrapped call instead.
+    Returns None for anything else (namely "context" -- see the module-
+    level comment above compile_tex_direct).
+    """
+    if engine in {"lualatex", "xelatex", "pdflatex"}:
+        return [engine, "-interaction=nonstopmode", "-halt-on-error", "-file-line-error",
+                f"-output-directory={output_dir}", str(tex_path)]
+    if engine == "latexmk":
+        return ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error",
+                f"-output-directory={output_dir}", str(tex_path)]
+    if engine == "tectonic":
+        return ["tectonic", "-o", str(output_dir), str(tex_path)]
+    return None
+
+
+def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
+                    verbose: bool) -> tuple[bool, str]:
+    """Run ``engine`` on ``tex_path`` to completion, output landing in
+    ``output_dir``. Returns (success, one-line failure reason -- empty on
+    success). Always run with cwd=tex_path.parent, so a raw \\input/
+    \\includegraphics/\\bibliography relative path beside the source keeps
+    resolving; only *output* is redirected via -output-directory/-o.
+    """
+    log_path = output_dir / f"{tex_path.stem}.log"
+
+    def log_text() -> str:
+        return log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+
+    def run(cmd: list[str], cwd: Path, env: dict | None = None) -> subprocess.CompletedProcess:
+        log_cmd(cmd, cwd, verbose)
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+
+    cmd = latex_engine_command(engine, tex_path, output_dir)
+    if cmd is None:
+        return False, f"{engine} is not supported for direct .tex compilation"
+
+    if engine in ("latexmk", "tectonic"):
+        # Both already handle reruns and bibtex/biber internally.
+        result = run(cmd, tex_path.parent)
+        if result.returncode != 0 or not (output_dir / f"{tex_path.stem}.pdf").exists():
+            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+        return True, ""
+
+    result = run(cmd, tex_path.parent)
+    if result.returncode != 0:
+        return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+
+    bib_tool = tex_bibliography_tool(tex_path.read_text(encoding="utf-8-sig"))
+    if bib_tool:
+        # Run WITH cwd=output_dir (the .aux/.bcf's own directory), not
+        # tex_path.parent: bibtex (and, defensively, biber too) is
+        # subject to TeX's own "openout_any" file-writing security
+        # policy, which -- at MacTeX's paranoid default -- refuses to
+        # write a .bbl/.blg anywhere outside the current directory tree.
+        # Pointing bibtex at a scratch -output-directory while running
+        # it from the source directory silently tripped exactly that
+        # check (caught by actually inspecting the rendered PDF's
+        # citation, not just the exit code -- bibtex still printed a
+        # "Not writing to ..." warning and returned nonzero, but the
+        # compile otherwise looked like it had succeeded). BIBINPUTS
+        # points bibtex back at the source directory to find the .bib
+        # file, since it has no --input-directory flag of its own.
+        bib_env = os.environ.copy()
+        bib_env["BIBINPUTS"] = f"{tex_path.parent}:{bib_env.get('BIBINPUTS', '')}"
+        bib_cmd = (["biber", f"--input-directory={tex_path.parent}", tex_path.stem] if bib_tool == "biber"
+                   else ["bibtex", tex_path.stem])
+        bib_result = run(bib_cmd, output_dir, env=bib_env)
+        if bib_result.returncode != 0:
+            print(f"WARN  {tex_path}: {bib_tool} reported errors; continuing"
+                  + (f" ({bib_result.stderr.strip().splitlines()[-1]})" if bib_result.stderr.strip() else ""),
+                  file=sys.stderr)
+        result = run(cmd, tex_path.parent)
+        if result.returncode != 0:
+            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+
+    passes = 1
+    while tex_wants_rerun(log_text()) and passes < MAX_TEX_DIRECT_PASSES:
+        result = run(cmd, tex_path.parent)
+        passes += 1
+        if result.returncode != 0:
+            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+    if verbose:
+        print(f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes} pass(es)"
+              + (f" + {bib_tool}" if bib_tool else ""))
+    return True, ""
+
+
+def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
+                       keep_aux: bool, verbose: bool, debug: bool) -> tuple[bool, str]:
+    """Compile a standalone .tex document directly, without Pandoc.
+
+    See the module-level comment above for why, and this file's docstring
+    ("Input formats") for the user-facing summary. ``engines`` is the
+    already-resolved fallback chain (from select_engines/resolve_engines);
+    only its LATEX_ENGINES members other than "context" are usable here --
+    a chain left with none (e.g. a document/metadata pdf-engine restricted
+    to the "html" family) is reported as a failure rather than silently
+    falling back to the old, lossier Pandoc round-trip.
+    """
+    tex_engines = [engine for engine in engines if engine in LATEX_ENGINES and engine != "context"]
+    if not tex_engines:
+        return False, (f"{tex_path}: no LaTeX engine available for direct .tex compilation "
+                       "(need one of lualatex/xelatex/pdflatex/latexmk/tectonic)")
+
+    failed_families: set[str] = set()
+    last_reason = ""
+    for engine_index, engine in enumerate(tex_engines):
+        family = ENGINE_FAMILY.get(engine, engine)
+        if family in failed_families:
+            print(f"SKIP  {tex_path}: {engine} shares the {family} engine with an earlier "
+                  f"failure; skipping", file=sys.stderr)
+            continue
+        scratch = None if keep_aux else Path(mkdtemp(prefix="pdfmd-tex-"))
+        output_dir = tex_path.parent if scratch is None else scratch
+        try:
+            ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose)
+            if ok:
+                produced = output_dir / f"{tex_path.stem}.pdf"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                # --keep-aux compiles straight into tex_path.parent, so
+                # ``produced`` and ``output`` are the same file whenever
+                # no -o/--out redirected the output elsewhere -- shutil
+                # refuses to "copy" a file onto itself.
+                if produced.resolve() != output.resolve():
+                    shutil.copy2(produced, output)
+                if verbose:
+                    where = "in place (--keep-aux)" if keep_aux else "in a scratch directory, then discarded"
+                    print(f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
+                return True, ""
+            last_reason = reason
+        finally:
+            if scratch is not None:
+                shutil.rmtree(scratch, ignore_errors=True)
+        failed_families.add(family)
+        remaining = [e for e in tex_engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
+        fake_result = subprocess.CompletedProcess(args=[engine], returncode=1, stdout="", stderr=last_reason)
+        report_engine_failure(str(tex_path), engine, fake_result, remaining, debug)
+    return False, last_reason
+
+
+# Direct office-document conversion, and the "soffice" PDF-engine fallback
+# (v-next / Phase 2 of the round documented in v3.1.0's own changelog
+# entry): both go through run_soffice_convert(), which shells out to
+# headless LibreOffice with a fresh --env:UserInstallation profile per
+# call -- concurrent/rapid-fire soffice invocations (batch mode's -j)
+# otherwise collide on the shared default profile's lock file and fail
+# with "another instance is already running."
+#
+# .docx/.pptx/.xlsx/.odt/etc. INPUT (convert_office_direct) skips Pandoc
+# entirely, the same reasoning as compile_tex_direct for raw .tex: Pandoc
+# can read .docx/.odt but round-trips them through its own AST first,
+# losing layout Pandoc's writer doesn't reproduce; it can't read .pptx/
+# .xlsx/.ppt/.xls at all, so those never reached a PDF through pdfmd
+# before this. See module docstring ("Input formats") for the "officedirect"
+# --no-auto KIND that opts a .docx/.odt back into the old Pandoc route.
+#
+# "soffice" as a PDF-engine CANDIDATE (convert_via_soffice_bridge) is a
+# different thing: a Markdown (or other Pandoc-readable) SOURCE, tried as
+# the very last resort in an unrestricted fallback chain, after every
+# tex/typst/html engine has failed or is missing. Pandoc has no native
+# "write ODT, then shell out to LibreOffice" --pdf-engine, so this is
+# special-cased in convert_one's own fallback loop rather than built as a
+# real --pdf-engine=soffice command the way every other candidate is.
+OFFICE_INPUT_EXTENSIONS = frozenset({
+    ".docx", ".doc", ".odt", ".ott", ".rtf",
+    ".pptx", ".ppt", ".odp",
+    ".xlsx", ".xls", ".ods",
+})
+
+
+def run_soffice_convert(input_path: Path, output: Path, verbose: bool) -> tuple[bool, str]:
+    """Convert one file to PDF via headless LibreOffice, into ``output``.
+
+    Runs entirely in a scratch directory (both the conversion's own
+    output and its throwaway --env:UserInstallation profile), deleted
+    afterward regardless of outcome -- soffice leaves no equivalent of a
+    LaTeX engine's .aux/.log, but the scratch profile itself would
+    otherwise accumulate under /tmp across every call.
+    """
+    binary = resolve_soffice()
+    if binary is None:
+        return False, "soffice/LibreOffice not found (checked PATH, 'libreoffice', and the standard macOS app bundle)"
+    scratch = Path(mkdtemp(prefix="pdfmd-soffice-"))
+    try:
+        profile_dir = scratch / "profile"
+        cmd = [binary, "--headless", "--norestore",
+              f"-env:UserInstallation=file://{profile_dir}",
+              "--convert-to", "pdf", "--outdir", str(scratch), str(input_path)]
+        log_cmd(cmd, input_path.parent, verbose)
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=input_path.parent)
+        produced = scratch / f"{input_path.stem}.pdf"
+        if result.returncode != 0 or not produced.exists():
+            reason = result.stderr.strip() or result.stdout.strip() or "soffice failed to produce a PDF"
+            return False, reason.splitlines()[-1]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if produced.resolve() != output.resolve():
+            shutil.copy2(produced, output)
+        return True, ""
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def convert_office_direct(input_path: Path, output: Path, verbose: bool, debug: bool) -> tuple[bool, str]:
+    """Convert an office document straight to PDF -- no Pandoc involved."""
+    ok, reason = run_soffice_convert(input_path, output, verbose)
+    if ok:
+        if verbose:
+            print(f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)")
+    else:
+        fake_result = subprocess.CompletedProcess(args=["soffice"], returncode=1, stdout="", stderr=reason)
+        report_engine_failure(str(input_path), "soffice", fake_result, [], debug)
+    return ok, reason
+
+
+def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str | None,
+                               metadata_files: list[Path], variables: list[str],
+                               pandoc_options: list[str], lua_filters: list[Path],
+                               csv_filter: Path, no_auto: list[str] | None,
+                               verbose: bool) -> tuple[bool, str]:
+    """The "soffice" PDF-engine fallback: Pandoc -> .odt -> headless
+    LibreOffice -> PDF. Deliberately skips every LaTeX-only concern
+    convert_one's own per-engine run() closure applies for a real engine
+    (geometry/mainfont/monofont/preamble/table-width filter) -- none of
+    it means anything for an ODT target. Citeproc and a document's own
+    auto-discovered Lua filters still apply, same as every other engine.
+    """
+    scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
+    try:
+        odt = scratch / f"{md_path.stem}.odt"
+        cmd = ["pandoc", str(md_path), "-o", str(odt), "-t", "odt"]
+        if effective_from:
+            cmd += ["-f", effective_from]
+        for metadata in metadata_files:
+            cmd += ["--metadata-file", str(metadata)]
+        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        cmd += resource_path_option(md_path.parent, pandoc_cwd)
+        for variable in variables:
+            cmd += ["-V", variable]
+        cmd += pandoc_options
+        cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+        cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+        if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
+            cmd.append("--citeproc")
+        for lua_filter in lua_filters:
+            cmd += ["--lua-filter", str(lua_filter)]
+        log_cmd(cmd, pandoc_cwd, verbose)
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+        if result.returncode != 0 or not odt.exists():
+            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .odt"
+        return run_soffice_convert(odt, output, verbose)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def convert_via_native_bibliography(md_path: Path, output: Path, effective_from: str | None,
+                                    metadata_files: list[Path], variables: list[str],
+                                    pandoc_options: list[str], lua_filters: list[Path],
+                                    preamble_files: list[Path], title_source: Path,
+                                    pdf_meta_snippet_text: str | None, citation_engine: str,
+                                    presentation: bool, slide_level: int | None, shift_heading: bool,
+                                    font: str, document_font: bool, mainfont_auto: bool,
+                                    geometry_needed: bool, monofont_needed: bool,
+                                    tablewidth_auto: bool, width_filter: Path, csv_filter: Path,
+                                    no_auto: list[str] | None, engines: list[str], keep_aux: bool,
+                                    verbose: bool, debug: bool) -> tuple[bool, str]:
+    """Route a PDF compile's bibliography through Pandoc's own --natbib/
+    --biblatex instead of --citeproc, for pdfmd-options.citation-engine.
+
+    Not as simple as adding --natbib/--biblatex next to the usual
+    --pdf-engine=<engine> pandoc invocation: confirmed empirically (a real
+    document, `pandoc ... --pdf-engine=lualatex --natbib`) that Pandoc's
+    own PDF-making pipeline never runs bibtex/biber at all when it invokes
+    a LaTeX engine directly this way -- citations come out undefined
+    ("Citing ? here.") regardless of engine, EXCEPT --pdf-engine=latexmk,
+    since latexmk is the one engine in the chain that manages bibtex/biber
+    itself. Rather than restrict this feature to latexmk only, this
+    generates a complete standalone .tex via Pandoc first (mirroring
+    convert_one's own TEX_STANDALONE_FORMATS branch, just always writing
+    to a scratch file instead of the real --to latex output) and hands it
+    to compile_tex_direct() -- which already runs exactly the
+    rerun-until-stable + automatic bibtex/biber loop this needs, for
+    ANY of lualatex/xelatex/pdflatex/latexmk/tectonic, not just latexmk.
+    No missing-glyph mainfont retry here, for the same reason
+    TEX_STANDALONE_FORMATS doesn't have one either: that needs an actual
+    compile's output to react to, and by the time compile_tex_direct runs,
+    this function itself is done inspecting anything Pandoc produced.
+    """
+    # The intermediate .tex has to live NEXT TO md_path, not in an unrelated
+    # scratch directory: compile_tex_direct() (and, before that, bibtex/
+    # biber) run with cwd=tex_path.parent, so a relative `\bibliography{}`/
+    # `\addbibresource{}` -- or any raw \input/\includegraphics -- only
+    # resolves if that's the document's own real directory. Caught directly:
+    # a first version of this using a throwaway mkdtemp() scratch directory
+    # compiled without error but left the citation completely unresolved
+    # ("Citing ? here.") because bibtex/biber could never find refs.bib
+    # relative to a /tmp path that had nothing to do with the source
+    # document -- same class of bug as the openout_any one in v3.1.0,
+    # just from the opposite direction (wrong directory, not wrong
+    # security policy).
+    #
+    # NOT dot-prefixed, unlike prepared_latex_inputs()'s own temp files:
+    # this one gets compiled directly as a LaTeX jobname (by
+    # compile_tex_direct), and a leading dot breaks that outright --
+    # confirmed with a standalone repro (`lualatex .hidden.tex`): LaTeX
+    # derives its jobname from the input filename up to the FIRST period,
+    # which is empty for a dotfile, so it silently ignores
+    # -output-directory and tries to write ITS OWN .log next to the
+    # source instead, tripping the exact same openout_any=p wall a second,
+    # unrelated way. prepared_latex_inputs()'s temp files never hit this
+    # because they're only ever Pandoc INPUT (--metadata-file/a title
+    # source) -- Pandoc has no concept of "jobname" to derive.
+    fd, tex_path_str = mkstemp(suffix=".tex", prefix=f"{md_path.stem}-pdfmd-nativebib-",
+                               dir=md_path.parent)
+    os.close(fd)
+    tex_path = Path(tex_path_str)
+    try:
+        with prepared_latex_inputs([title_source, *metadata_files], True) as prepared, \
+                document_header_file(md_path, bool(preamble_files)) as header_file, \
+                pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file:
+            source, *prepared_metadata = prepared
+            cmd = ["pandoc", str(source), "-o", str(tex_path), "-t", "beamer" if presentation else "latex",
+                  "--standalone"]
+            if effective_from:
+                cmd += ["-f", effective_from]
+            for metadata in prepared_metadata:
+                cmd += ["--metadata-file", str(metadata)]
+            pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+            cmd += resource_path_option(md_path.parent, pandoc_cwd)
+            if presentation and slide_level is not None:
+                cmd += ["--slide-level=" + str(slide_level)]
+            first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
+            if first_font:
+                cmd += ["-V", f"mainfont={first_font}"]
+            if geometry_needed:
+                cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+            if monofont_needed:
+                cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+            for variable in variables:
+                cmd += ["-V", variable]
+            if shift_heading:
+                cmd += ["--shift-heading-level-by=-1"]
+            cmd += pandoc_options
+            if preamble_files:
+                for preamble_file in preamble_files:
+                    cmd += ["--include-in-header", str(preamble_file)]
+                if header_file is not None:
+                    cmd += ["--include-in-header", str(header_file)]
+            if pdf_meta_file is not None:
+                cmd += ["--include-in-header", str(pdf_meta_file)]
+            cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+            if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
+                cmd.append(f"--{citation_engine}")
+            cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            if tablewidth_auto:
+                cmd += ["--lua-filter", str(width_filter)]
+            for lua_filter in lua_filters:
+                cmd += ["--lua-filter", str(lua_filter)]
+            log_cmd(cmd, pandoc_cwd, verbose)
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+        if result.returncode != 0 or not tex_path.exists():
+            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
+        if verbose:
+            where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
+            print(f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
+                  f"instead of --citeproc; intermediate .tex {where}")
+        return compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug)
+    finally:
+        # Under --keep-aux, leave the intermediate .tex for inspection too --
+        # it's the one artifact from THIS function (compile_tex_direct's own
+        # --keep-aux already leaves the resulting .aux/.log/.out beside it).
+        if not keep_aux:
+            tex_path.unlink(missing_ok=True)
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -2193,7 +3236,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 no_auto: list[str] | None = None,
                 verbose: bool = False,
                 debug: bool = False,
-                stamp_overrides: dict | None = None) -> tuple[Path, bool, str]:
+                stamp_overrides: dict | None = None,
+                keep_aux: bool = False) -> tuple[Path, bool, str]:
     stamp_overrides = stamp_overrides or {}
     auto_summary: list[str] = []
 
@@ -2210,17 +3254,63 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
 
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     no_auto = effective_no_auto(md_path, no_auto)
+    output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
+    output = output_file or (
+        (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if (target_format == "pdf" and md_path.suffix.lower() == ".tex"
+            and (from_format is None or from_format.casefold() in ("latex", "tex"))
+            and not auto_disabled(no_auto, "texdirect")):
+        # A real .tex file is already a complete document -- compile it
+        # directly instead of round-tripping it through Pandoc's LaTeX
+        # reader/writer first (see compile_tex_direct()'s own comment).
+        # Checked before any of Pandoc's own reader/metadata/lua/font/
+        # stamp auto-discovery below runs, since none of it applies here
+        # -- --no-auto texdirect (or a bare --from other than latex/tex)
+        # opts back into the old Pandoc-mediated route for a document
+        # that specifically needs pdfmd's own injection applied to it.
+        ok, reason = compile_tex_direct(md_path, output, engines, keep_aux, verbose, debug)
+        flush_summary()
+        return md_path, ok, reason[-3000:]
+
+    if md_path.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
+        # A .docx/.pptx/.xlsx/.odt/etc. source converts straight to PDF
+        # via headless soffice -- no Pandoc involved (see the module-level
+        # comment above convert_office_direct). Unlike the .tex branch
+        # above, there is no working "opt back into Pandoc" route here:
+        # every Pandoc-mediated helper below this point (has_mainfont,
+        # contains_citations, find_lua_filters, promote_bare_title, ...)
+        # unconditionally reads md_path as text, which crashes outright on
+        # a binary office document even for .docx/.odt (the two formats
+        # Pandoc's reader actually supports) -- caught directly, as a real
+        # traceback, testing --no-auto officedirect against a real .docx.
+        # Properly supporting that route would mean auditing/guarding
+        # every one of those helpers for binary input, out of scope for
+        # this phase (and arguably not worth it: direct soffice conversion
+        # already preserves the original document's own formatting better
+        # than Pandoc's docx/odt reader would). So a non-PDF --to, an
+        # explicit --from, or --no-auto officedirect on an office document
+        # is a clear error instead of a route that would only crash a few
+        # calls later.
+        if target_format != "pdf" or from_format is not None or auto_disabled(no_auto, "officedirect"):
+            raise SystemExit(
+                f"{md_path}: only direct PDF conversion (via soffice) is supported for an "
+                f"office document in this version -- a non-PDF --to, --no-auto officedirect, "
+                f"and --from all have no working Pandoc-mediated route for {md_path.suffix} "
+                "input (see CHANGELOG-pdfmd.md's known-limitation note)."
+            )
+        ok, reason = convert_office_direct(md_path, output, verbose, debug)
+        flush_summary()
+        return md_path, ok, reason[-3000:]
+
     effective_from, reader_reason = (
         (from_format, None) if auto_disabled(no_auto, "reader")
         else resolve_from_format(md_path, from_format, metadata_files)
     )
     if reader_reason:
         note("READER", reader_reason)
-    output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
-    output = output_file or (
-        (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
-    )
-    output.parent.mkdir(parents=True, exist_ok=True)
     lua_filters = [] if auto_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
     for lua_filter in lua_filters:
         note("LUA", str(lua_filter))
@@ -2238,7 +3328,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
 
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
-            table_width_filter() as width_filter:
+            table_width_filter() as width_filter, \
+            csv_table_filter() as csv_filter:
         if title_shifted:
             note("TITLE", f"{md_path}: promoted leading '# ' heading to Pandoc title metadata")
         shift_heading = title_shifted and not has_shift_heading_option(pandoc_options)
@@ -2259,6 +3350,11 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             tablewidth_auto = not auto_disabled(no_auto, "tablewidth")
             standalone_auto = (not auto_disabled(no_auto, "standalone")
                                and not has_standalone_option(pandoc_options))
+            citation_engine = (None if auto_disabled(no_auto, "citationengine")
+                               else frontmatter_citation_engine(md_path, metadata_files))
+            if citation_engine is not None and citation_engine not in CITATION_ENGINES:
+                raise SystemExit(f"{md_path}: unknown pdfmd-options.citation-engine value "
+                                 f"{citation_engine!r}. Valid: {', '.join(sorted(CITATION_ENGINES))}")
             geometry_needed = (not auto_disabled(no_auto, "margin")
                               and not has_geometry(md_path, variables, metadata_files, preamble_files or []))
             monofont_needed = (not auto_disabled(no_auto, "monofont")
@@ -2322,8 +3418,18 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                         cmd += ["--include-in-header", str(header_file)]
                 if pdf_meta_file is not None:
                     cmd += ["--include-in-header", str(pdf_meta_file)]
+                cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+                cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
                 if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
-                    cmd.append("--citeproc")
+                    if (is_tex_target and citation_engine in ("natbib", "biblatex")
+                            and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
+                        # No compile-and-rerun concern here the way the PDF path's
+                        # convert_via_native_bibliography() has -- this branch never
+                        # runs an engine at all, it just hands the caller a .tex to
+                        # compile (and resolve its own bibliography in) themselves.
+                        cmd.append(f"--{citation_engine}")
+                    else:
+                        cmd.append("--citeproc")
                 if is_tex_target and tablewidth_auto:
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
@@ -2350,6 +3456,27 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         if monofont_needed:
             note("MONOFONT", f"{md_path}: has code but no monofont set; "
                             f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+
+        citation_engine = (None if auto_disabled(no_auto, "citationengine")
+                           else frontmatter_citation_engine(md_path, metadata_files))
+        if citation_engine is not None and citation_engine not in CITATION_ENGINES:
+            raise SystemExit(f"{md_path}: unknown pdfmd-options.citation-engine value "
+                             f"{citation_engine!r}. Valid: {', '.join(sorted(CITATION_ENGINES))}")
+        if citation_engine in ("natbib", "biblatex") and contains_citations(md_path):
+            if not any(engine in LATEX_ENGINES for engine in engines):
+                print(f"WARN  {md_path}: pdfmd-options.citation-engine: {citation_engine} needs a "
+                      "LaTeX-family engine, but none is available in this fallback chain; "
+                      "using --citeproc instead.", file=sys.stderr)
+            else:
+                ok, reason = convert_via_native_bibliography(
+                    md_path, output, effective_from, metadata_files, variables, pandoc_options,
+                    lua_filters, preamble_files or [], title_source, pdf_meta_snippet_text,
+                    citation_engine, presentation, slide_level, shift_heading, font, document_font,
+                    mainfont_auto, geometry_needed, monofont_needed, tablewidth_auto, width_filter,
+                    csv_filter, no_auto, engines, keep_aux, verbose, debug)
+                flush_summary()
+                return md_path, ok, reason[-3000:]
+
         result = None
         failed_families: set[str] = set()
         for engine_index, engine in enumerate(engines):
@@ -2357,6 +3484,23 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             if family in failed_families:
                 print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
+                continue
+            if engine == "soffice":
+                # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's
+                # own docstring for why this is special-cased here instead.
+                ok, reason = convert_via_soffice_bridge(md_path, output, effective_from, metadata_files,
+                                                        variables, pandoc_options, lua_filters, csv_filter,
+                                                        no_auto, verbose)
+                result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
+                                                     stdout="", stderr="" if ok else reason)
+                if ok:
+                    if verbose:
+                        print(f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .odt -> soffice "
+                              "(last-resort fallback)")
+                    break
+                failed_families.add(family)
+                remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
+                report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
             with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES) as prepared, \
                     document_header_file(md_path, bool(preamble_files) and engine in LATEX_ENGINES) as header_file, \
@@ -2398,11 +3542,15 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                             cmd += ["--include-in-header", str(header_file)]
                     if pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(pdf_meta_file)]
+                    cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
                     if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
                         cmd.append("--citeproc")
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
-                    # LaTeX needs the citations already resolved.
+                    # LaTeX needs the citations already resolved. csv-table has to
+                    # come before table-width so a CSV-generated table gets the same
+                    # width-balancing pass a hand-written one would.
+                    cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += ["--lua-filter", str(width_filter)]
                     for lua_filter in lua_filters:
@@ -2488,8 +3636,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="save PDFs in the current working directory")
     parser.add_argument("-f", "--font", default=None, help="font to use if glyph fallback is needed")
     parser.add_argument("-e", "--engine", nargs="?", const="", default=None,
-                        help="PDF engine, family (tex/html/typst), numeric shortcut, or alias; run "
-                             "--check-dependencies to see engine choices. Meaningless (and ignored) when "
+                        help="PDF engine, family (tex/html/typst/office), numeric shortcut, or alias; run "
+                             "--check-dependencies to see engine choices. 'soffice' (family 'office') is "
+                             "a last-resort fallback for Markdown/Pandoc input -- Pandoc -> .odt -> "
+                             "headless LibreOffice -- tried only after every tex/typst/html engine has "
+                             "failed or is missing in the unrestricted chain, or on request. Meaningless "
+                             "(and ignored) when "
                              "--to targets a non-PDF format. Always wins over a document's own "
                              "pdf-engine/engine front-matter key (see below). A bare -e (no value) "
                              "explicitly requests the full, unrestricted fallback chain across every "
@@ -2527,11 +3679,21 @@ def build_parser() -> argparse.ArgumentParser:
                              "standalone (the --to latex/beamer/context --standalone default), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
-                             "files (metadata+preamble+lua together). An explicit -y/-H/-f/-V/--from "
-                             "always wins over --no-auto metadata/preamble regardless of this flag -- "
-                             "--no-auto only stops pdfmd from filling in or discovering what's "
-                             "otherwise unset. Same KIND names work in a document's own "
-                             "pdfmd-options.no-auto front matter (see the module docstring)")
+                             "files (metadata+preamble+lua together), texdirect (the direct-.tex-"
+                             "compile path -- see 'Input formats' in the module docstring; disabling "
+                             "it routes .tex input back through Pandoc the pre-v3.1.0 way), "
+                             "officedirect (the direct office-document-to-PDF path, same section -- "
+                             "disabling it on a .docx/.odt is an error in this version, not a route "
+                             "back through Pandoc), crossref (the auto-detected --filter pandoc-crossref "
+                             "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
+                             "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
+                             "docstring; disabling this KIND always means plain --citeproc), csvtable "
+                             "(the .csv-div table inclusion -- see 'CSV/TSV table inclusion' in the module "
+                             "docstring). An "
+                             "explicit -y/-H/-f/-V/--from always wins over --no-auto metadata/preamble "
+                             "regardless of this flag -- --no-auto only stops pdfmd from filling in or "
+                             "discovering what's otherwise unset. Same KIND names work in a document's "
+                             "own pdfmd-options.no-auto front matter (see the module docstring)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="show each AUTO decision's full explanation as it happens. Default is "
                              "a single condensed 'AUTO: KIND KIND ...' line per document (naming "
@@ -2552,6 +3714,19 @@ def build_parser() -> argparse.ArgumentParser:
                              "conversion succeeds. Applies to single-file and report/book mode, "
                              "each of which produce exactly one output; ignored in batch mode "
                              "(-b), which would otherwise pop open every file in the directory")
+    parser.add_argument("--keep-aux", action="store_true",
+                        help="for a direct .tex compile (see 'Input formats' in the module "
+                             "docstring), keep .aux/.log/.out/etc. beside the source instead of "
+                             "the v3.1.0-default scratch-directory cleanup that leaves only the "
+                             "PDF -- use this to inspect a failing or suspicious compile's own "
+                             ".log by hand. No effect on a Markdown (Pandoc-mediated) input")
+    parser.add_argument("-w", "--watch", action="store_true",
+                        help="recompile automatically whenever the source file, or anything in its "
+                             "own directory/metadata subfolder, changes on disk -- polling, not a "
+                             "filesystem-events library, so it can miss a change made and reverted "
+                             "within one poll interval (WATCH_INTERVAL, 1 second). Single-file mode "
+                             "only, not -b/--batch or -r/--report. Compiles once immediately, then "
+                             "again on each detected change, until Ctrl+C")
     stamp_enable = parser.add_mutually_exclusive_group()
     stamp_enable.add_argument("--stamp", action="store_true", default=None,
                               help="on a successful compile, append/update a 'BUILD NOTES' HTML "
@@ -2611,6 +3786,61 @@ def build_parser() -> argparse.ArgumentParser:
                                 "PDF engine (weasyprint, typst, ...), which has no equivalent "
                                 "mechanism this reaches")
     return parser
+
+
+WATCH_INTERVAL = 1.0
+
+
+def watch_signature(source: Path) -> float:
+    """Max mtime across ``source``'s own directory and its ``metadata/``
+    subfolder (if present) -- the same two locations pdfmd's own metadata/
+    preamble/Lua-filter auto-discovery already searches
+    (accessory_directories()), reused as a cheap, dependency-free,
+    non-recursive proxy for "has anything --watch should react to
+    changed". Non-recursive is deliberate: an unbounded directory tree
+    scan polled every WATCH_INTERVAL seconds would be a real cost in a
+    large project directory, for no real benefit -- pdfmd's own auto-
+    discovery never looks any deeper than these two directories either.
+    """
+    latest = 0.0
+    for directory in accessory_directories(source.parent):
+        for path in directory.glob("*"):
+            if path.is_file():
+                try:
+                    latest = max(latest, path.stat().st_mtime)
+                except OSError:
+                    continue
+    return latest
+
+
+def run_watch(source: Path, argv: list[str]) -> None:
+    """Recompile ``source`` immediately, then again on each later change.
+
+    Deliberately a thin wrapper that re-execs the whole, already-tested
+    CLI as a fresh subprocess (the original argv, minus -w/--watch) on
+    every recompile, rather than threading a rebuild loop through main()'s
+    own batch/report/single-file branching -- disproportionate
+    engineering for a feature expected to see light use (Ali's own words,
+    asking for this: "just feature for a feature ... I will rarely use
+    it"). Polling a directory's own file mtimes (watch_signature(), not a
+    filesystem-events library like watchdog) keeps this dependency-free,
+    matching every other part of pdfmd. The signature is re-snapshotted
+    AFTER each recompile, not just before, so the compile's own output
+    file (and a --stamp write back into the source itself) never falsely
+    re-triggers another immediate recompile.
+    """
+    rerun_argv = [arg for arg in argv if arg not in ("-w", "--watch")]
+    script = str(Path(__file__).resolve())
+    print(f"WATCH  {source}: watching {source.parent} for changes (Ctrl+C to stop)")
+    try:
+        while True:
+            subprocess.run([sys.executable, script, *rerun_argv])
+            signature = watch_signature(source)
+            while watch_signature(source) == signature:
+                time.sleep(WATCH_INTERVAL)
+            print(f"WATCH  change detected, recompiling {source}...")
+    except KeyboardInterrupt:
+        print("\nWATCH  stopped")
 
 
 def main() -> None:
@@ -2679,6 +3909,17 @@ def main() -> None:
             )
         paths = [markdown_files[0]]
         print(f"AUTO MD    {paths[0]}")
+    if args.watch:
+        if args.batch or args.report:
+            raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
+        if len(paths) != 1:
+            raise SystemExit("-w/--watch accepts one Markdown name or path")
+        try:
+            watch_source = find_markdown(paths[0])
+        except FileNotFoundError as error:
+            raise SystemExit(str(error))
+        run_watch(watch_source, sys.argv[1:])
+        return
     if args.report:
         files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive)
         if not files:
@@ -2730,7 +3971,7 @@ def main() -> None:
         pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
         report_resource_path = resource_path_option(files[0].parent, pandoc_cwd)
 
-        with table_width_filter() as width_filter:
+        with table_width_filter() as width_filter, csv_table_filter() as csv_filter:
             if target_format != "pdf":
                 # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
                 # writer here still gets --standalone plus the same
@@ -2805,6 +4046,8 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_header_file)]
                     if report_pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(report_pdf_meta_file)]
+                    cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
+                    cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
                             and "--no-citeproc" not in pandoc_options):
@@ -2871,6 +4114,8 @@ def main() -> None:
                                 cmd += ["--include-in-header", str(preamble)]
                         if report_pdf_meta_file is not None:
                             cmd += ["--include-in-header", str(report_pdf_meta_file)]
+                        cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
+                        cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                         if (any(contains_citations(file) for file in files)
                                 and "--citeproc" not in pandoc_options
                                 and "--no-citeproc" not in pandoc_options):
@@ -2966,14 +4211,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -3005,6 +4250,26 @@ def main() -> None:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
                                  "format in the document's own Quarto front matter instead")
             results = [convert_qmd(source, output, target_format, variables, pandoc_options)]
+        elif source.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
+            # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no
+            # YAML front matter, documentclass, or LaTeX preamble to go
+            # looking for -- frontmatter_value()/metadata_for() below both
+            # read the file as text, which crashes outright on a zip-based
+            # binary format (caught testing this Phase's own new feature: a
+            # real .docx/.pptx crashed here immediately, unrelated to
+            # convert_one, before this branch existed). convert_one's own
+            # OFFICE_INPUT_EXTENSIONS branch handles the actual conversion
+            # -- including raising a clear error for --to/--from/--no-auto
+            # officedirect combinations that have no working route, rather
+            # than reaching this branch's own only-slightly-later crash.
+            if args.presentation:
+                raise SystemExit("-p/--presentation isn't supported for an office-document input")
+            # No resolve_engines() call: it would read the file as text
+            # looking for a pdf-engine front-matter key, which an office
+            # document never has and can't be read as (same crash as
+            # above) -- engines (from select_engines(args.engine, ...) at
+            # the top of main()) is used as-is.
+            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)]
         else:
             document_class = (frontmatter_value(source, "documentclass")
                               or frontmatter_value(source, "class"))
@@ -3019,7 +4284,7 @@ def main() -> None:
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)]
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
