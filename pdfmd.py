@@ -412,7 +412,7 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.7.0"
+PDFMD_VERSION = "3.7.1"
 import argparse
 from fnmatch import fnmatchcase
 import logging
@@ -582,6 +582,42 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path) -> list[str
     if document_directory == pandoc_cwd:
         return []
     return ["--resource-path", f"{document_directory}{os.pathsep}."]
+
+
+def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str] | None:
+    """TEXINPUTS for the pdf-engine subprocess, so a raw LaTeX command with a
+    relative path still resolves against the document's own directory even
+    when pandoc_cwd points elsewhere (see resource_path_option's docstring
+    for why pandoc_cwd can differ from document_directory at all).
+
+    --resource-path (resource_path_option, above) only helps PANDOC'S OWN
+    image resolution -- a real Image AST node from Markdown ``![]()``
+    syntax. Per pandoc's own manual, it "only has an effect when pandoc
+    itself needs to find an image... It will not cause image paths to be
+    rewritten in other cases (e.g., when pandoc is generating LaTeX)." Raw
+    LaTeX passed through untouched -- a bare ``\\includegraphics{...}``, or
+    any package macro that reads a data file by relative path (e.g.
+    nulabreport's ``\\irspectrum``/``\\irspectrumcompare``, which hand a
+    relative CSV path to pgfplots' own table-reading machinery) -- is
+    resolved entirely by the TeX engine's own kpathsea search relative to
+    ITS working directory (pandoc_cwd), not document_directory. Found via a
+    real report (LR4-5): a metadata/ subfolder pulled pandoc_cwd away from
+    the document's own directory and broke BOTH kinds of reference the same
+    way -- \\includegraphics (TLC contour figures) and pgfplots table reads
+    (IR spectra CSVs). A report-local \\graphicspath fixed the first alone;
+    TEXINPUTS is the one mechanism kpathsea honors for every one of these at
+    once, so it belongs here rather than in a per-project preamble.
+
+    Returns None (meaning: leave the subprocess's environment untouched --
+    exactly today's behavior) when document_directory == pandoc_cwd, the
+    common case with no metadata/ subfolder or out-of-tree -y in play,
+    where nothing is broken and nothing needs fixing.
+    """
+    if document_directory == pandoc_cwd:
+        return None
+    env = os.environ.copy()
+    env["TEXINPUTS"] = f"{document_directory}{os.pathsep}{env.get('TEXINPUTS', '')}"
+    return env
 
 
 def frontmatter_pdfmd_options(md_path: Path) -> dict:
@@ -3919,7 +3955,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     log_cmd(cmd, pandoc_cwd, verbose)
-                    return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                    return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
+                                          env=tex_search_env(md_path.parent, pandoc_cwd))
 
                 first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
                 # fallback=False, not fallback=document_font: Pandoc's own
@@ -4541,7 +4578,8 @@ def main() -> None:
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += ["--lua-filter", str(width_filter)]
                         log_cmd(cmd, pandoc_cwd, args.verbose)
-                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
+                                                env=tex_search_env(files[0].parent, pandoc_cwd))
                     if result.returncode == 0:
                         break
                     failed_families.add(family)
