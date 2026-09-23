@@ -336,26 +336,41 @@ Build-provenance stamping (--stamp):
     as part of `book.pdf` with ...", regardless of this flag).
 
     PDF metadata is a separate concern from all of the above, and ON by
-    default (--no-stamp-pdf-metadata turns it off): every LaTeX-engine
-    compile embeds the same package/pdfmd version info directly into the
-    rendered PDF's own Info dictionary, as two custom keys (`PdfmdVersions`,
-    `PdfmdBuildDate`) -- invisible on the rendered page and in a normal
-    "Document Properties" panel, but readable with `exiftool`/`pdfinfo
-    -meta`, and additive (a second `\\hypersetup{pdfinfo=...}` call, merging
-    with Pandoc's own rather than overwriting pdftitle/pdfauthor/etc.).
-    Unlike `enabled` (which edits the visible .md source and stays off
-    until asked), this has no visible effect on anything a reader or a
-    "Get Info" panel would normally show, so it defaults to on rather than
-    needing --stamp/pdfmd-options.stamp.enabled first -- the two are
-    otherwise independent switches: PDF metadata with the .md stamp off,
-    the .md stamp with PDF metadata explicitly turned off, or both, are all
-    valid combinations. Only takes effect on a LaTeX-family engine; a
-    non-LaTeX PDF engine (weasyprint, typst, ...) has no equivalent
-    mechanism this reaches, so it's silently skipped there. Unlike the .md
-    stamp (written after a successful compile), this has to be baked into
-    the LaTeX source before the engine even runs, so its timestamp is
-    captured moments earlier than the .md stamp's from the same compile --
-    both still land within the same run.
+    default (--no-stamp-pdf-metadata turns it off): after every successful
+    compile that actually produces a PDF, pdfmd writes the same package/
+    pdfmd version info directly into the rendered PDF's own Info dictionary,
+    as two custom keys (`PdfmdVersions`, `PdfmdBuildDate`) -- invisible on
+    the rendered page and in a normal "Document Properties" panel, but
+    readable with `exiftool`/`pdfinfo -meta`, and additive (merged with the
+    engine's own existing Info dictionary -- pdftitle/pdfauthor/etc. are
+    never overwritten). Unlike `enabled` (which edits the visible .md
+    source and stays off until asked), this has no visible effect on
+    anything a reader or a "Get Info" panel would normally show, so it
+    defaults to on rather than needing --stamp/pdfmd-options.stamp.enabled
+    first -- the two are otherwise independent switches: PDF metadata with
+    the .md stamp off, the .md stamp with PDF metadata explicitly turned
+    off, or both, are all valid combinations.
+
+    As of v3.7.0 (2026-09-21) this is a post-hoc edit of the finished PDF
+    (via the optional `pypdf` dependency -- silently skipped with a WARN if
+    it isn't installed), not something baked into the LaTeX source before
+    the engine runs. Two reasons for the change, not just a refactor:
+    it now works on every engine that produces a PDF (weasyprint, typst,
+    soffice, ... -- previously silently skipped on anything outside
+    LATEX_ENGINES, which had no equivalent injection point this reached at
+    all); and the old \\hypersetup-injection approach (a second
+    --include-in-header file) could silently discard a *different*
+    --include-in-header/header-includes source entirely -- confirmed
+    directly: an external --metadata-file's own `header-includes:` (not the
+    .md document's own front matter, which pdfmd already protects via
+    document_header_file/wrap_latex_header_includes) shares pandoc's single
+    `header-includes` template slot with --include-in-header, and
+    --include-in-header wins outright, not merges -- so a metadata file's
+    entire package load could vanish with no error at that point, surfacing
+    later as a confusing "Undefined control sequence" the first time the
+    document used one of that package's macros. A post-hoc PDF edit cannot
+    collide with a document's preamble at all, closing this whole class of
+    bug rather than one instance of it.
 
     Same settings via a document's own front matter or a --metadata-file's,
     nested under `pdfmd-options: stamp:` -- same precedence as
@@ -397,9 +412,10 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.6.0"
+PDFMD_VERSION = "3.7.0"
 import argparse
 from fnmatch import fnmatchcase
+import logging
 import os
 import re
 import shlex
@@ -408,6 +424,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import datetime
@@ -422,6 +439,11 @@ try:
     import yaml
 except ImportError:
     yaml = None
+
+try:
+    import pypdf
+except ImportError:
+    pypdf = None
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -2589,9 +2611,15 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     "always" (default), "report"-only, or "standalone"-only.
     """
     options = resolve_stamp_options(md_path, metadata_files, cli_overrides)
-    if not options["enabled"] or not stamp_scope_matches(options, report_output):
+    if not stamp_scope_matches(options, report_output):
         return
     texts = gather_stamp_texts(md_path, preamble_files)
+    # Independent of options["enabled"] below on purpose -- pdf_metadata is
+    # its own always-on-by-default switch (DEFAULT_STAMP_OPTIONS), separate
+    # from the .md-source BUILD NOTES stamp that "enabled" actually gates.
+    stamp_pdf_metadata_posthoc(output, options, texts, verbose)
+    if not options["enabled"]:
+        return
     line = build_stamp_line(options, texts, output, report_output, verbose)
     apply_stamp(md_path, line, options["mode"], verbose)
 
@@ -2607,35 +2635,94 @@ PDF_INFO_BUILD_DATE_KEY = "PdfmdBuildDate"
 
 
 def pdf_metadata_snippet(options: dict, texts: list[str], verbose: bool) -> str | None:
-    """Return \\AtBeginDocument{...\\hypersetup{pdfinfo={...}}} LaTeX
-    embedding the same package/pdfmd version info as the .md stamp
-    directly into the PDF's own Info dictionary (PdfmdVersions/
-    PdfmdBuildDate) -- inspectable with exiftool or pdfinfo, invisible on
-    the rendered page. None if options['pdf_metadata'] is off.
+    """SUPERSEDED, v3.7.0 (2026-09-21) -- now always returns None.
 
-    Deferred with \\AtBeginDocument rather than run inline: pandoc's own
-    template inserts --include-in-header content INTO THE PREAMBLE BEFORE
-    \\usepackage{bookmark} (which is what actually loads hyperref
-    indirectly -- there is no literal \\usepackage{hyperref} to be after),
-    so \\hypersetup is not yet defined at the point this file is read --
-    confirmed by generating the actual .tex and inspecting the order.
-    \\AtBeginDocument defers until \\begin{document}, by which point every
-    package is loaded regardless of --include-in-header ordering; the
-    \\ifdefined guard inside it is now just cheap extra insurance, not
-    load-bearing. A second \\hypersetup call merges with Pandoc's own
-    (which sets pdftitle/pdfauthor/etc.) rather than overwriting it, so
-    this never clobbers a document's real metadata.
+    Used to return \\AtBeginDocument{...\\hypersetup{pdfinfo={...}}} LaTeX for
+    --include-in-header, baking the PdfmdVersions/PdfmdBuildDate keys into
+    the PDF Info dictionary from inside the LaTeX compile itself. Replaced
+    by stamp_pdf_metadata_posthoc() below, which does the identical thing
+    with pypdf AFTER a successful compile instead: confirmed directly (a
+    real nulabreport `prelab` document, `\\usepackage[prelab]{nulabreport}`
+    loaded via a --metadata-file's own header-includes rather than a
+    preamble.tex) that pandoc's own template gives --include-in-header
+    content and a metadata file's header-includes THE SAME template slot,
+    and --include-in-header simply WINS -- the metadata file's
+    header-includes vanished from the preamble entirely the moment this
+    function's old --include-in-header snippet was also present, silently
+    undoing an entire package load with no error at that point, surfacing
+    only later as "Undefined control sequence" the first time the document
+    used one of that package's macros. A post-hoc PDF edit sidesteps the
+    whole class of --include-in-header/header-includes interaction (this
+    one and any similar one not yet found) and, as a real improvement over
+    the LaTeX-side version, now also works on every engine, not only
+    LATEX_ENGINES (a non-LaTeX target such as weasyprint/typst previously
+    had no equivalent mechanism this reached at all -- see this function's
+    pre-v3.7.0 docstring history if needed). Left defined (rather than
+    deleted) and still called from every site it always was, all of which
+    already treat a None return as "no --include-in-header entry needed" --
+    the safest way to retire it without touching pdfmd's own multi-engine
+    fallback/native-bibliography/report/batch call sites, several of which
+    thread pdf_meta_snippet_text through as a plain parameter.
+    """
+    return None
+
+
+def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], verbose: bool) -> None:
+    """Write PdfmdVersions/PdfmdBuildDate into pdf_path's own PDF Info
+    dictionary after a successful compile -- see pdf_metadata_snippet's
+    docstring for why this replaced an in-LaTeX \\hypersetup injection.
+    Silently does nothing if options['pdf_metadata'] is off, pdf_path isn't
+    a real PDF (e.g. a --to other than pdf), or pypdf isn't installed (a
+    soft dependency, same convention as this module's own `yaml` import --
+    a WARN either way, since unlike PyYAML's front-matter sugar this is an
+    always-on-by-default feature quietly not doing its job).
     """
     if not options.get("pdf_metadata"):
-        return None
+        return
+    if pypdf is None:
+        if verbose:
+            print("WARN  --stamp: pdf_metadata is on but pypdf is not installed "
+                  "(pip install pypdf) -- skipping the PDF Info-dictionary stamp",
+                  file=sys.stderr)
+        return
+    if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
+        return
     summary = stamp_summary(options, texts, verbose)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return (
-        "\\AtBeginDocument{\\ifdefined\\hypersetup\n"
-        f"  \\hypersetup{{pdfinfo={{{PDF_INFO_VERSIONS_KEY}={{{summary}}},"
-        f"{PDF_INFO_BUILD_DATE_KEY}={{{timestamp}}}}}}}\n"
-        "\\fi}\n"
-    )
+    try:
+        # pypdf's own "Annotation sizes differ" message fires on essentially
+        # every hyperref-linked document (link-annotation bookkeeping quirk
+        # of read-then-rewrite) and is not this function's business to
+        # surface -- it changes nothing about whether the metadata write
+        # below succeeds. pypdf logs this (and similar notices) through the
+        # stdlib `logging` module, not `warnings.warn` -- confirmed directly
+        # (grepped pypdf's own source) -- so both need silencing.
+        pypdf_logger = logging.getLogger("pypdf")
+        previous_level = pypdf_logger.level
+        pypdf_logger.setLevel(logging.ERROR)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                reader = pypdf.PdfReader(pdf_path)
+                existing = dict(reader.metadata) if reader.metadata else {}
+                writer = pypdf.PdfWriter()
+                writer.append(reader)
+                writer.add_metadata({
+                    **existing,
+                    f"/{PDF_INFO_VERSIONS_KEY}": summary,
+                    f"/{PDF_INFO_BUILD_DATE_KEY}": timestamp,
+                })
+                with NamedTemporaryFile("wb", suffix=".pdf", delete=False,
+                                        dir=pdf_path.parent) as temporary:
+                    writer.write(temporary)
+                    temporary_path = Path(temporary.name)
+        finally:
+            pypdf_logger.setLevel(previous_level)
+        temporary_path.replace(pdf_path)
+    except Exception as error:  # noqa: BLE001 -- best-effort, like package_version()
+        print(f"WARN  --stamp: could not write the PDF Info-dictionary stamp "
+              f"into {pdf_path} ({error}) -- the compile itself still succeeded",
+              file=sys.stderr)
 
 
 @contextmanager
@@ -3726,6 +3813,14 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                     citation_engine, presentation, slide_level, shift_heading, font, document_font,
                     mainfont_auto, geometry_needed, monofont_needed, tablewidth_auto, width_filter,
                     csv_filter, no_auto, engines, keep_aux, verbose, debug)
+                # Pre-existing gap, closed here rather than left (2026-09-21):
+                # this branch never called stamp_after_success at all, so a
+                # citation-engine: natbib/biblatex document got neither the
+                # .md BUILD NOTES stamp nor a PDF-metadata one -- every other
+                # success path in this function does call it.
+                if ok:
+                    stamp_after_success(md_path, metadata_files, preamble_files or [],
+                                        stamp_overrides, output, verbose)
                 flush_summary()
                 return md_path, ok, reason[-3000:]
 
