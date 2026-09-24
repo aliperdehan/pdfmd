@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.9.0"
+PDFMD_VERSION = "3.9.1"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -1697,8 +1697,16 @@ def cyrillic_candidates(value: str) -> list[str]:
     return ["".join(table.get(letter, letter) for letter in value.lower())]
 
 
+def strip_lookup_suffix(name: str) -> str:
+    """Drop a trailing .md/.markdown/.pdf from a bare-name lookup, and nothing
+    else. Path.stem would also eat a dot that is part of the name itself, so
+    'prelab5.5' silently resolved to prelab5.md instead of prelab5.5.md."""
+    path = Path(name)
+    return path.stem if path.suffix.lower() in {".md", ".markdown", ".pdf"} else name
+
+
 def name_candidates(value: str) -> list[str]:
-    value = Path(value).stem
+    value = strip_lookup_suffix(value)
     candidates = [value]
     if re.search("[А-Яа-яЁё]", value):
         candidates += cyrillic_candidates(value)
@@ -1744,8 +1752,7 @@ def find_markdown(value: Path, recursive: bool = False) -> Path:
     if wildcard_match:
         return wildcard_match.resolve()
     directory = value if value.is_dir() else Path.cwd()
-    requested = value.name if value.suffix != ".pdf" else value.stem
-    requested = Path(requested).stem
+    requested = strip_lookup_suffix(value.name)
     search_dirs = [directory]
     if recursive:
         search_dirs = [directory] + [item for item in directory.rglob("*") if item.is_dir()]
