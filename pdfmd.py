@@ -390,6 +390,30 @@ Build-provenance stamping (--stamp):
     An explicit --stamp/--no-stamp/--stamp-mode/--stamp-packages/
     --stamp-scope/--stamp-output on the command line always wins over
     front matter, field by field.
+
+Automatic source backups (--backup, v3.8.0):
+    Off by default. After every successful compile (single-file, batch,
+    report/book chapter, .qmd, direct .tex, office), copies the source to
+    `backup/<name>.bak.YYYYMMDDHHMMSS` beside it -- the naming real report
+    folders already used by hand, so old manual snapshots and new automatic
+    ones sort together. Runs after the BUILD NOTES stamp, so a recompile of
+    an unedited document finds an identical newest snapshot and writes
+    nothing. --no-backup forces it off for one run. Same front-matter/
+    metadata-file cascade as `stamp:` above, as a bare `true`/`false`, a
+    directory name, or the full form:
+
+        ---
+        pdfmd-options:
+          backup:
+            dir: backup    # relative to the document; default `backup`
+            keep: 30       # newest N snapshots of this file; default 0 = all
+        ---
+
+    `keep:` only ever deletes files named `<this file>.bak.<14 digits>`
+    in that directory -- never anything else stored there. A .qmd only
+    reads its own front matter (no metadata.yaml lookup, same as the rest
+    of the Quarto path); a .tex or office document has no front matter, so
+    only --backup reaches it unless a metadata file is involved.
 """
 # Versioned from here on -- see ~/dev/python-projects/CHANGELOG-pdfmd.md.
 #
@@ -412,8 +436,9 @@ Build-provenance stamping (--stamp):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, Ali's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.7.1"
+PDFMD_VERSION = "3.8.0"
 import argparse
+import filecmp
 from fnmatch import fnmatchcase
 import logging
 import os
@@ -2660,6 +2685,136 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     apply_stamp(md_path, line, options["mode"], verbose)
 
 
+# --backup / pdfmd-options.backup: after a successful compile, copy the
+# source into a sibling backup directory as <name>.bak.YYYYMMDDHHMMSS -- the
+# same naming already used by hand in real report folders (e.g.
+# LR2/backup/report.md.bak.20260923212449), so automatic and manual
+# snapshots sort together. Taken AFTER stamp_after_success on purpose, so
+# the snapshot is exactly the file on disk; recompiling an unedited
+# document then matches the newest snapshot (see backup_unchanged) and
+# writes nothing. Off by default. Added v3.8.0 (2026-09-24).
+DEFAULT_BACKUP_OPTIONS = {
+    "enabled": False,
+    # Relative to the document's own directory (absolute also accepted).
+    # Singular "backup" to match the per-report folders that already exist.
+    "dir": "backup",
+    # Newest N snapshots of this one file kept; 0 keeps all of them.
+    "keep": 0,
+}
+BACKUP_NAME_PATTERN = r"\.bak\.\d{14}(?:-\d+)?"
+# Lines a --stamp writes (the live "Compiled ... pdfmd vX" line, its demoted
+# "- Compiled ..." history bullets, and the "Compile History:" heading),
+# ignored when deciding whether a source changed since its last snapshot --
+# otherwise stamp mode: history, which rewrites a timestamp on every
+# compile, would make every compile look like an edit. Found testing
+# v3.8.0 against a real LR2 report.
+BACKUP_IGNORED_LINE_RE = re.compile(
+    r"^[ \t]*(?:(?:- )?Compiled\b.*?\bpdfmd\s+v[0-9][^\r\n]*|Compile History:[ \t]*)\r?\n?",
+    re.MULTILINE,
+)
+
+
+def backup_unchanged(previous: Path, current: Path) -> bool:
+    """Whether current matches the snapshot previous, apart from --stamp's
+    own lines (BACKUP_IGNORED_LINE_RE). Byte comparison for anything that
+    isn't UTF-8 text (an office document).
+    """
+    try:
+        old_text = previous.read_text(encoding="utf-8")
+        new_text = current.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return filecmp.cmp(previous, current, shallow=False)
+    return BACKUP_IGNORED_LINE_RE.sub("", old_text) == BACKUP_IGNORED_LINE_RE.sub("", new_text)
+
+
+def normalize_backup_value(value) -> dict:
+    """Normalize a pdfmd-options.backup value: a bare bool, a directory name
+    (shorthand for enabling it with that directory), or a full dict of
+    {enabled, dir, keep}. A dict with no explicit ``enabled`` counts as on,
+    same as normalize_stamp_value's rule.
+    """
+    options = dict(DEFAULT_BACKUP_OPTIONS)
+    if isinstance(value, bool):
+        options["enabled"] = value
+    elif isinstance(value, str):
+        options["enabled"] = True
+        options["dir"] = value
+    elif isinstance(value, dict):
+        options["enabled"] = bool(value.get("enabled", True))
+        if value.get("dir"):
+            options["dir"] = str(value["dir"])
+        if "keep" in value:
+            try:
+                options["keep"] = max(0, int(value["keep"] or 0))
+            except (TypeError, ValueError):
+                raise SystemExit(f"pdfmd-options.backup.keep must be a whole number, got {value['keep']!r}")
+    return options
+
+
+def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None) -> dict:
+    """Document front matter first, then each metadata file in order (same
+    cascade as frontmatter_stamp), then --backup/--no-backup on top.
+    """
+    options = None
+    own = frontmatter_pdfmd_options(md_path)
+    if "backup" in own:
+        options = normalize_backup_value(own["backup"])
+    else:
+        for metadata_file in metadata_files:
+            nested = metadata_file_yaml(metadata_file).get("pdfmd-options")
+            if isinstance(nested, dict) and "backup" in nested:
+                options = normalize_backup_value(nested["backup"])
+                break
+    options = options or dict(DEFAULT_BACKUP_OPTIONS)
+    if cli_enabled is not None:
+        options["enabled"] = cli_enabled
+    return options
+
+
+def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
+                         verbose: bool) -> None:
+    """Snapshot md_path into its backup directory if --backup/
+    pdfmd-options.backup says to -- skipped when the newest existing
+    snapshot is already identical (ignoring --stamp's own lines), then
+    pruned to ``keep`` if set. Only
+    snapshots matching BACKUP_NAME_PATTERN for this exact file name are ever
+    compared or pruned; anything else in the directory is left alone.
+    Best-effort: an OSError warns rather than failing a compile that
+    already succeeded.
+    """
+    options = resolve_backup_options(md_path, metadata_files, cli_enabled)
+    if not options["enabled"]:
+        return
+    backup_dir = Path(os.path.expanduser(options["dir"]))
+    if not backup_dir.is_absolute():
+        backup_dir = md_path.parent / backup_dir
+    name_re = re.compile(re.escape(md_path.name) + BACKUP_NAME_PATTERN + r"$")
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        existing = sorted(path for path in backup_dir.iterdir() if name_re.match(path.name))
+        if existing and backup_unchanged(existing[-1], md_path):
+            if verbose:
+                print(f"AUTO BACKUP  {display_path(md_path)}: unchanged since "
+                      f"{display_path(existing[-1])}; skipped")
+            return
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        target = backup_dir / f"{md_path.name}.bak.{stamp}"
+        suffix = 2
+        while target.exists():
+            target = backup_dir / f"{md_path.name}.bak.{stamp}-{suffix}"
+            suffix += 1
+        shutil.copy2(md_path, target)
+        print(f"BACKUP  {display_path(target)}")
+        existing.append(target)
+        if options["keep"] and len(existing) > options["keep"]:
+            for old in existing[:-options["keep"]]:
+                old.unlink()
+                if verbose:
+                    print(f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
+    except OSError as error:
+        print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+
+
 # PDF Info-dictionary key names pdfmd writes when pdf_metadata is on. Two
 # separate keys, not one combined "Compiled with ... -- TIMESTAMP" line like
 # the .md stamp's: LuaTeX/XeTeX apply their usual typographic ligatures
@@ -3570,7 +3725,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             tex_path.unlink(missing_ok=True)
 
 
-def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
+def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
                 metadata_file: Path | list[Path] | None = None,
@@ -3990,6 +4145,37 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
 
+def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
+                engines: list[str], variables: list[str], slide_level: int | None,
+                pandoc_options: list[str],
+                metadata_file: Path | list[Path] | None = None,
+                output_file: Path | None = None,
+                preamble_files: list[Path] | None = None,
+                target_format: str = "pdf",
+                from_format: str | None = None,
+                no_auto: list[str] | None = None,
+                verbose: bool = False,
+                debug: bool = False,
+                stamp_overrides: dict | None = None,
+                keep_aux: bool = False,
+                backup: bool | None = None) -> tuple[Path, bool, str]:
+    """_convert_one, plus the --backup snapshot on success -- wrapped here
+    rather than threaded into each of _convert_one's own success returns
+    (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
+    gets it, including any added later.
+    """
+    result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
+                          pandoc_options, metadata_file, output_file, preamble_files,
+                          target_format=target_format, from_format=from_format, no_auto=no_auto,
+                          verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
+                          keep_aux=keep_aux)
+    if result[1]:
+        metadata_files = (metadata_file if isinstance(metadata_file, list)
+                          else ([metadata_file] if metadata_file else []))
+        backup_after_success(md_path, metadata_files, backup, verbose)
+    return result
+
+
 def convert_qmd(source: Path, output: Path, target_format: str,
                 variables: list[str], pandoc_options: list[str]) -> tuple[Path, bool, str]:
     """Render a Quarto document (.qmd) via the Quarto CLI, not Pandoc directly.
@@ -4212,6 +4398,16 @@ def build_parser() -> argparse.ArgumentParser:
                                 "a document/metadata file that disabled it. No effect on a non-LaTeX "
                                 "PDF engine (weasyprint, typst, ...), which has no equivalent "
                                 "mechanism this reaches")
+    backup_enable = parser.add_mutually_exclusive_group()
+    backup_enable.add_argument("--backup", action="store_true", default=None,
+                               help="after a successful compile, copy the source to "
+                                    "backup/<name>.bak.YYYYMMDDHHMMSS beside it (skipped when the "
+                                    "newest backup is already identical). Off by default; also "
+                                    "settable via pdfmd-options.backup in a document's own front "
+                                    "matter or a --metadata-file (with dir:/keep: there), which this "
+                                    "overrides when given")
+    backup_enable.add_argument("--no-backup", action="store_false", dest="backup", default=None,
+                               help="force backups off for this run, overriding pdfmd-options.backup")
     return parser
 
 
@@ -4590,6 +4786,7 @@ def main() -> None:
             for file in files:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                     output, args.verbose, report_output=output)
+                backup_after_success(file, metadata_files, args.backup, args.verbose)
         for file in files:
             if not has_chapter_field(file):
                 print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")
@@ -4667,14 +4864,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -4706,6 +4903,10 @@ def main() -> None:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
                                  "format in the document's own Quarto front matter instead")
             results = [convert_qmd(source, output, target_format, variables, pandoc_options)]
+            if results[0][1]:
+                # Front matter only: Quarto has its own metadata system, so no
+                # metadata.yaml is looked up for a .qmd (see convert_qmd).
+                backup_after_success(source, [], args.backup, args.verbose)
         elif source.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
             # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no
             # YAML front matter, documentclass, or LaTeX preamble to go
@@ -4725,7 +4926,7 @@ def main() -> None:
             # document never has and can't be read as (same crash as
             # above) -- engines (from select_engines(args.engine, ...) at
             # the top of main()) is used as-is.
-            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup)]
         else:
             document_class = (frontmatter_value(source, "documentclass")
                               or frontmatter_value(source, "class"))
@@ -4740,7 +4941,7 @@ def main() -> None:
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup)]
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
