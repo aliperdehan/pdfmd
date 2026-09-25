@@ -428,12 +428,12 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     only reads its own front matter (no metadata.yaml, same as the rest
     of the Quarto path).
 """
-# Versioned from here on -- see ~/dev/python-projects/CHANGELOG-pdfmd.md.
+# Versioned from here on -- see CHANGELOG.md next to this file.
 #
-# BEFORE EDITING THIS FILE: read ~/dev/python-projects/CLAUDE.md first. In
+# BEFORE EDITING THIS FILE: read CLAUDE.md next to this file first. In
 # short -- back this file up to backups/pdfmd.py.bak-YYYYMMDD[letter] (same
 # naming pattern already in that directory) before changing anything, and
-# add a CHANGELOG-pdfmd.md entry (bump PDFMD_VERSION below) IN THE SAME
+# add a CHANGELOG.md entry (bump PDFMD_VERSION below) IN THE SAME
 # EDIT, not after. This is a shared dependency across multiple, unrelated
 # Markdown-to-PDF pipelines (nulabreport is one, but not the only one) --
 # CLAUDE.md explains why a fix that looks scoped to one project's document
@@ -447,9 +447,9 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # only inconsistent backups/pdfmd.py.bak-* snapshots from a handful of
 # points in that history. Rather than fabricate a precise-looking but
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
-# (2026-09-16, Ali's call) as an honest baseline: this is where real
+# (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.9.1"
+PDFMD_VERSION = "3.9.2"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -503,7 +503,7 @@ AUTO_METADATA_DISABLED = object()
 # PRINTED), so a plain module-level flag rather than threading a parameter
 # through every AUTO-announcement/log_cmd call site -- set once from
 # args.full_paths at the top of main(), before any conversion work starts.
-# Added 2026-09-20 (Ali): the default full-absolute-path printing that
+# Added 2026-09-20 (the author): the default full-absolute-path printing that
 # announce_preambles()/log_cmd()/the AUTO YAML and AUTO MD lines used before
 # this is fine from a shallow directory (Downloads) but genuinely hard to
 # read from a deep one (a real example that prompted this: a path under
@@ -745,7 +745,7 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
 # avoiding. A floor keeps a column with only short labels from collapsing to
 # unreadable thinness next to a verbose neighbor.
 #
-# BUG, found and fixed 2026-09-16 (Ali, via a nulabreport/QCA report): this
+# BUG, found and fixed 2026-09-16 (the author, via a nulabreport/QCA report): this
 # used to fire on EVERY table with any default-width column, regardless of
 # whether the table's own content came anywhere near overflowing -- a short
 # 4-column numeric table ("Sample #" / four-digit masses / a percentage) got
@@ -868,7 +868,7 @@ end
 #     :::
 #
 # into an actual table, read from that CSV/TSV file, instead of a hand-
-# transcribed pipe table -- requested directly (2026-09-19, Ali), alongside
+# transcribed pipe table -- requested directly (2026-09-19, the author), alongside
 # a size cap so an accidentally-huge file doesn't produce a many-page
 # table nobody intended: 10 rows and 7 columns by default (`rows`/`cols`
 # attributes override either, or set to `all` for no cap), matching the
@@ -878,7 +878,7 @@ end
 # avoids): Pandoc has already correctly told code blocks/spans apart from
 # real content by the time a Lua filter's Div() callback ever fires, so
 # `::: {.csv ...}` typed inside a fenced code block as a literal example
-# is never mistaken for the real thing -- the false-fire risk Ali raised
+# is never mistaken for the real thing -- the false-fire risk the author raised
 # for a raw-text approach simply can't happen at this level.
 #
 # Builds the table via pandoc.read() on a hand-assembled GFM pipe-table
@@ -2715,7 +2715,7 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
 # Snapshot names come from `format:` -- a preset name from BACKUP_FORMATS
 # or a custom template: {name} (report.md), {stem} (report), {ext} (.md),
 # plus any strftime code (%Y%m%d-%H%M%S, ...). Every preset is a naming
-# convention already in real use in Ali's folders (2026-09-24 survey), so
+# convention already in real use in the author's folders (2026-09-24 survey), so
 # any folder can keep the style it already has.
 BACKUP_FORMATS = {
     # report.md.bak.20260924091500 -- LR2/backup, nulabreport/_superseded
@@ -4626,7 +4626,7 @@ def run_watch(source: Path, argv: list[str]) -> None:
     CLI as a fresh subprocess (the original argv, minus -w/--watch) on
     every recompile, rather than threading a rebuild loop through main()'s
     own batch/report/single-file branching -- disproportionate
-    engineering for a feature expected to see light use (Ali's own words,
+    engineering for a feature expected to see light use (the author's own words,
     asking for this: "just feature for a feature ... I will rarely use
     it"). Polling a directory's own file mtimes (watch_signature(), not a
     filesystem-events library like watchdog) keeps this dependency-free,
