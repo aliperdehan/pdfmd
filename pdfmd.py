@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.11.1"
+PDFMD_VERSION = "3.11.2"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -1301,7 +1301,8 @@ def resolve_soffice() -> str | None:
     fine for the user every day at a terminal prompt. Checked, in order:
     `soffice` on PATH, `libreoffice` on PATH (the usual Linux package
     name -- often a symlink to the same binary), then the standard macOS
-    app-bundle path directly.
+    app-bundle path directly, or on Windows the default install folders
+    under %ProgramFiles% / %ProgramFiles(x86)%.
     """
     for name in ("soffice", "libreoffice"):
         found = which(name)
@@ -1311,6 +1312,12 @@ def resolve_soffice() -> str | None:
         mac_path = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
         if mac_path.exists():
             return str(mac_path)
+    if sys.platform == "win32":
+        # The Windows installer doesn't add LibreOffice to PATH.
+        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+            base = os.environ.get(variable)
+            if base and (Path(base) / "LibreOffice" / "program" / "soffice.exe").exists():
+                return str(Path(base) / "LibreOffice" / "program" / "soffice.exe")
     return None
 
 
@@ -3446,6 +3453,12 @@ def default_output_path(path: Path, target_format: str) -> Path:
 
 def open_file(path: Path) -> None:
     """Open a finished file with the platform's default viewer, for --open."""
+    if sys.platform == "win32":
+        try:
+            os.startfile(path)  # Windows' own "open with default app"
+        except OSError as error:
+            print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
+        return
     opener = "open" if sys.platform == "darwin" else "xdg-open" if sys.platform.startswith("linux") else None
     if opener is None or not which(opener):
         print(f"WARN  --open: no '{opener or 'file opener'}' found for this platform; "
@@ -3697,7 +3710,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         # points bibtex back at the source directory to find the .bib
         # file, since it has no --input-directory flag of its own.
         bib_env = os.environ.copy()
-        bib_env["BIBINPUTS"] = f"{tex_path.parent}:{bib_env.get('BIBINPUTS', '')}"
+        bib_env["BIBINPUTS"] = f"{tex_path.parent}{os.pathsep}{bib_env.get('BIBINPUTS', '')}"
         bib_cmd = (["biber", f"--input-directory={tex_path.parent}", tex_path.stem] if bib_tool == "biber"
                    else ["bibtex", tex_path.stem])
         bib_result = run(bib_cmd, output_dir, env=bib_env)
@@ -4618,7 +4631,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "with --engine when a document's rendered output doesn't match what the "
                              "Markdown predicts and the short reason alone isn't enough to tell why")
     parser.add_argument("--open", action="store_true",
-                        help="open the finished file (via macOS 'open'/Linux 'xdg-open') once "
+                        help="open the finished file (via macOS 'open', Linux 'xdg-open' or Windows' default app) once "
                              "conversion succeeds. Applies to single-file and report/book mode, "
                              "each of which produce exactly one output; ignored in batch mode "
                              "(-b), which would otherwise pop open every file in the directory")

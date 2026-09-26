@@ -31,6 +31,31 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.11.2 — 2026-09-26
+
+Pre-edit state: commit `452e83d` (v3.11.1). Windows fixes found by reading
+the code. Not yet run on Windows; the macOS/Linux behavior is unchanged.
+
+### Fixed
+
+- **`BIBINPUTS` joined paths with a hard-coded `:`** for a direct `.tex`
+  compile with a bibliography. That's wrong on Windows, where the separator
+  is `;` and the `:` in a drive letter (`C:\`) splits the path. It now uses
+  `os.pathsep`, like `TEXINPUTS` and `--resource-path` already did.
+  Re-verified on macOS: a direct `.tex` with `\bibliography{refs}` still
+  resolves its citation.
+- **`--open` did nothing on Windows** (it only knew `open`/`xdg-open`). It
+  now uses `os.startfile`, Windows' "open with the default app".
+- **LibreOffice wasn't found on Windows** unless it was on PATH, which the
+  Windows installer doesn't do. `resolve_soffice()` now also checks
+  `%ProgramFiles%` and `%ProgramFiles(x86)%\LibreOffice\program\soffice.exe`.
+
+The two Windows-only branches were checked by running `open_file()` and
+`resolve_soffice()` with `sys.platform` patched to `win32` (`os.startfile`
+called; a fake `%ProgramFiles%` install found).
+
+---
+
 ## v3.11.1 — 2026-09-26
 
 Pre-edit state: commit `2d64619` (v3.11.0). First version published to PyPI.

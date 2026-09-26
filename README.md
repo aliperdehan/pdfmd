@@ -72,6 +72,14 @@ brew install --cask mactex-no-gui           # optional: full LaTeX (large)
 sudo apt install pipx pandoc texlive-xetex  # Debian/Ubuntu
 ```
 
+```powershell
+py -m pip install --user pipx; py -m pipx ensurepath          # Windows
+winget install --id JohnMacFarlane.Pandoc; winget install --id Typst.Typst
+```
+
+Windows should work (paths, encodings and temporary files are handled
+portably), but it hasn't been tested there yet. Reports are welcome.
+
 Optional extras: [Quarto](https://quarto.org) for `.qmd` files,
 `pandoc-crossref` for `@fig:`/`@tbl:` references, and LibreOffice for
 Office files.
