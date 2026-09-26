@@ -1,0 +1,308 @@
+# pdfmd
+
+**One command from Markdown to a good-looking PDF.** `pdfmd` wraps
+[Pandoc](https://pandoc.org) and fills in everything you would otherwise
+have to remember: sensible fonts and margins, the right Markdown dialect,
+your project's metadata/preamble/filter files, and a fallback chain across
+every PDF engine you have installed.
+
+```console
+$ pdfmd lecture
+AUTO: READER TITLE MARGIN MONOFONT. Use --verbose to see in full
+OK    lecture.md
+```
+
+<p align="center">
+  <img src="docs/lecture.png" width="560" alt="lecture.md rendered to PDF">
+</p>
+
+That PDF came from [`examples/lecture.md`](examples/lecture.md), a plain
+Markdown file with no front matter and no configuration. Plain `pandoc
+lecture.md -o lecture.pdf` doesn't even get that far: its default engine,
+`pdflatex`, stops at the `Δ` on line 5 with an error. With a Unicode engine
+it would build, but with wide default margins, and with the `# Title`
+line as an ordinary section heading instead of a title.
+
+## Why
+
+Pandoc can do nearly anything, but its defaults assume you'll pass the right
+flags every time. In practice that means one of two things: a long command
+you copy from an old shell history, or a Makefile in every folder. `pdfmd`
+turns that knowledge into defaults:
+
+- **It decides per document, not globally.** A file with no YAML front
+  matter is treated as ordinary GitHub-flavoured Markdown. A file that has
+  front matter is assumed to be written for Pandoc and is left alone.
+- **It finds your project files.** A `metadata.yaml`, `preamble.tex` or
+  `<name>.lua` beside the document (or in a `metadata/` folder next to it)
+  is picked up automatically, so every document in a folder shares one
+  house style without any flags.
+- **It doesn't give up on the first engine.** If `lualatex` fails or isn't
+  installed, it tries the next engine, then the next, and tells you why each
+  one failed.
+- **It shows what it did.** Every automatic decision prints an `AUTO` line,
+  `-v` shows the exact Pandoc command, and every default can be switched off.
+
+## Install
+
+`pdfmd` is a single Python file.
+
+**Requirements:**
+- Python 3.10+
+- [Pandoc](https://pandoc.org/installing.html)
+- For PDF output, at least one PDF engine. A TeX distribution (MacTeX,
+  TeX Live) gives you the best results; `typst`, `weasyprint`,
+  `tectonic` or LibreOffice also work.
+
+**Optional:**
+- `pip install pyyaml` for `pdfmd-options:` front matter.
+- `pip install pypdf` to write build info into the PDF's metadata.
+- [Quarto](https://quarto.org) for `.qmd` files.
+- `pandoc-crossref` for `@fig:`/`@tbl:` cross-references.
+
+```sh
+git clone https://github.com/aliperdehan/pdfmd.git ~/pdfmd
+echo 'alias pdfmd="python3 ~/pdfmd/pdfmd.py"' >> ~/.zshrc   # or ~/.bashrc
+```
+
+Check what `pdfmd` can find on your system:
+
+```console
+$ pdfmd --check-dependencies
+OK    pandoc  (/opt/homebrew/bin/pandoc)
+OK    1. lualatex  (/Library/TeX/texbin/lualatex)
+OK    2. xelatex  (/Library/TeX/texbin/xelatex)
+OK    3. pdflatex  (/Library/TeX/texbin/pdflatex)
+OK    4. latexmk  (/Library/TeX/texbin/latexmk)
+OK    5. tectonic  (/opt/homebrew/bin/tectonic)
+OK    6. typst  (/opt/homebrew/bin/typst)
+OK    7. weasyprint  (/opt/homebrew/bin/weasyprint)
+MISS  8. wkhtmltopdf
+...
+OK    14. soffice  (/Applications/LibreOffice.app/Contents/MacOS/soffice)
+OK    quarto (only needed for .qmd files)  (/usr/local/bin/quarto)
+```
+
+The numbers are the fallback order, and also shortcuts: `-e 6` means
+`-e typst`.
+
+## Usage
+
+Every command below can be run from inside [`examples/`](examples/).
+
+### One document
+
+```sh
+pdfmd lecture                 # finds lecture.md, writes lecture.pdf beside it
+pdfmd lecture.md --open       # ...and opens it when done
+pdfmd ~/notes/lecture.md -d   # write the PDF into the current directory instead
+pdfmd lecture -w              # watch: rebuild on every save, until Ctrl+C
+```
+
+A bare name is looked up as `<name>.md`. The name can contain dots:
+`pdfmd notes-v1.2` builds `notes-v1.2.md`.
+
+### Other output formats
+
+The format is taken from `-o`'s extension, or given explicitly with `--to`:
+
+```sh
+pdfmd lecture -o lecture.html
+pdfmd lecture -o lecture.docx
+pdfmd lecture --to typst -o lecture.typ
+pdfmd lecture -o lecture.tex      # a complete, compilable .tex, not a fragment
+```
+
+### Slides
+
+```sh
+pdfmd slides -p                   # Beamer slides; each heading starts a slide
+```
+
+<p align="center">
+  <img src="docs/slides.png" width="380" alt="A Beamer slide from examples/slides.md">
+</p>
+
+### A whole folder
+
+```console
+$ pdfmd notes -b
+AUTO: READER TITLE MARGIN MONOFONT. Use --verbose to see in full
+AUTO: MARGIN. Use --verbose to see in full
+AUTO: MARGIN. Use --verbose to see in full
+OK    notes/lecture.md
+OK    notes/week1.md
+OK    notes/week2.md
+```
+
+`-b` converts every `.md` in the folder into its own PDF, in parallel
+(`-j N` sets the number of workers). Add `--recursive` to include
+subfolders, and `-o DIR` to collect the PDFs somewhere else.
+
+### A book or report from several files
+
+```console
+$ pdfmd book -r -o book.pdf
+OK    book/01-intro.md
+OK    book/02-methods.md
+AUTO: MARGIN. Use --verbose to see in full
+OK    REPORT  book.pdf
+```
+
+`-r` (also spelled `--report` or `--book`) joins every `.md` in the folder
+into a single PDF, in the order of each file's `chapter:` front-matter
+field. See [`examples/book/`](examples/book/). `-i FILE` leaves one file
+out, and `--exclude-unnumbered` skips files without a `chapter:`.
+
+### Tables straight from a CSV file
+
+```markdown
+Measured values:
+
+::: {.csv file="data.csv"}
+:::
+```
+
+<p align="center">
+  <img src="docs/results.png" width="480" alt="A CSV file rendered as a table">
+</p>
+
+- The delimiter is detected from the extension (`.tsv` means tab), or set
+  with `delimiter=";"`.
+- The first row is the header unless you add `header="false"`.
+- Large files are capped at 10 rows × 7 columns, so a huge CSV can't
+  silently fill 40 pages. `rows=all` or `cols=20` raise the cap. When a
+  table is cut, the PDF itself shows a note saying so.
+
+This works for every output format.
+
+### Not just Markdown
+
+```sh
+pdfmd paper.tex          # compiled directly with a LaTeX engine: reruns until
+                         # references settle, runs bibtex/biber, and leaves
+                         # no .aux/.log clutter (--keep-aux keeps them)
+pdfmd minutes.docx       # Word/PowerPoint/Excel/ODF: converted by LibreOffice
+pdfmd analysis.qmd       # handed to Quarto, so code chunks actually run
+pdfmd page.html          # anything else Pandoc can read (give the extension)
+```
+
+## What it does automatically
+
+Each of these prints one `AUTO` line and can be switched off individually.
+
+| `AUTO` kind | When | What happens |
+|---|---|---|
+| `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
+| `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
+| `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, retried with DejaVu Serif if any glyph is missing |
+| `MONOFONT` | the document contains code | JetBrains Mono for code |
+| `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
+| `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
+| `crossref` | `@fig:`/`@tbl:` references | adds the `pandoc-crossref` filter |
+| `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
+
+`-v` explains each decision and prints the exact command it runs:
+
+```console
+$ pdfmd lecture -v
+CMD  pandoc lecture.md -o lecture.pdf --pdf-engine=lualatex -f gfm -V 'mainfont=STIX Two Text' -V geometry:margin=1in -V 'monofont=JetBrains Mono' --shift-heading-level-by=-1 --lua-filter .../pdfmd-tablewidth.lua
+CMD  pandoc lecture.md -o lecture.pdf --pdf-engine=lualatex -f gfm -V 'mainfont=DejaVu Serif' ...
+AUTO READER  lecture.md: no YAML front matter; reading as gfm
+AUTO TITLE  lecture.md: promoted leading '# ' heading to Pandoc title metadata
+AUTO MARGIN  lecture.md: no geometry/margin set; using geometry:margin=1in on LaTeX-family engines
+AUTO MONOFONT  lecture.md: has code but no monofont set; using JetBrains Mono on LaTeX-family engines
+OK    lecture.md
+```
+
+The second `CMD` line is the font fallback at work: STIX Two Text was
+missing a glyph, so the document was rebuilt with DejaVu Serif. (Temporary
+file paths are shortened here.)
+
+**When a PDF doesn't look the way the Markdown suggests, run `-v` first.**
+The cause is usually one of these automatic decisions, and `-v` names it.
+
+### Switching defaults off
+
+```sh
+pdfmd lecture --no-auto                  # everything off: close to plain pandoc
+pdfmd lecture --no-auto margin mainfont  # only these
+```
+
+Or put it in the document itself, so nobody has to remember the flag:
+
+```yaml
+---
+title: Lab report
+pdfmd-options:
+  no-auto: [margin, monofont]
+  pdf-engine: tex        # only TeX engines; never fall back to HTML ones
+---
+```
+
+`pdf-engine:` takes an engine name (`lualatex`, `typst`, ...) or a family:
+`tex`, `typst`, `html` or `office`. A family limits the fallback chain to
+that kind of engine. For example, a document full of chemical structures
+can require TeX, and a plain memo can skip the slow LaTeX run. `-e` on the
+command line always wins, and a bare `-e` means "try every engine".
+
+## Project files
+
+`pdfmd` looks next to the document, and in a `metadata/` folder beside it,
+for:
+
+| File | Used as |
+|---|---|
+| `metadata.yaml` | shared Pandoc metadata (fonts, bibliography, CSL, ...) |
+| `<name>.yaml` | per-document metadata, layered on top of `metadata.yaml` |
+| `report.yaml` / `book.yaml` | metadata for `-r` builds |
+| `preamble.tex`, `latex-preamble.tex`, `<name>-preamble.tex`, `preamble-*.tex` | LaTeX added to the header, generic files first |
+| `<name>.lua` | a Pandoc Lua filter for that document |
+
+**Only these names are picked up automatically.** An unrelated `.lua` or
+`.tex` file lying in the folder never changes a render. When several YAML
+files could apply and none is clearly meant, `pdfmd` stops and asks you to
+choose with `-y FILE`, rather than guessing. `-y` alone turns discovery
+off.
+
+With a `metadata/` folder, a report's own folder can hold nothing but
+`report.md` and `report.pdf`. Relative paths inside the metadata (such as
+`bibliography: refs.bib`) resolve from `metadata/`, and image paths in the
+document still resolve from the document's own folder.
+
+## Build stamps and snapshots
+
+Both are off by default.
+
+- **`--stamp`** keeps a `BUILD NOTES` HTML comment at the end of the `.md`
+  up to date. It records when the document was compiled and with which
+  `pdfmd` version, plus the versions of any LaTeX packages you name with
+  `--stamp-packages`. The comment is invisible in the PDF. `--stamp-mode history` also keeps a list of past compiles.
+- **`--backup`** saves a timestamped copy of the source into `backup/`
+  after every successful build. A copy is skipped when nothing changed,
+  and `keep: 30` limits how many are kept.
+
+Both can be turned on for a whole folder from `metadata.yaml`:
+
+```yaml
+pdfmd-options:
+  stamp: true
+  backup: { dir: backup, keep: 30 }
+```
+
+Separately, when `pypdf` is installed, every PDF built by `pdfmd` gets two
+hidden metadata keys, `PdfmdVersions` and `PdfmdBuildDate`, which you can
+read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
+
+## Reference
+
+- `pdfmd --help` lists every flag.
+- The docstring at the top of [`pdfmd.py`](pdfmd.py) is the full reference
+  for each behaviour and its edge cases.
+- [`CHANGELOG.md`](CHANGELOG.md) records what changed in each version and
+  why.
+
+## License
+
+[MIT](LICENSE)

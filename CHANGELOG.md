@@ -1,0 +1,1527 @@
+# Changelog — pdfmd.py
+
+Newest first. Versions follow semver loosely: a **major** bump changes
+behavior in a way that could surprise an existing user (a default flips, a
+flag's meaning changes), a **minor** bump adds a capability, a **patch**
+bump fixes a bug without changing what any flag does.
+
+The version string lives in one place, `pdfmd.py`, right after the module
+docstring:
+
+```python
+PDFMD_VERSION = "2.0.0"
+```
+
+`pdfmd --version` prints it. Bump it there and add an entry here in the
+same edit.
+
+## Why this starts at 2.0.0, not 1.0.0
+
+`pdfmd.py` began as a one-line `pandoc file.md -o file.pdf` wrapper and was
+revised many times since — across ChatGPT, ChatGPT Codex, Claude Chat,
+Cowork, and Claude Code sessions — with no version marker or changelog kept
+at any point. `backups/pdfmd.py.bak-*` has snapshots from a handful of
+points in that history, but not from the ChatGPT/Codex/Cowork era at all,
+so reconstructing an honest "v1.x" changelog from what's actually on disk
+isn't possible — only a partial, misleadingly-precise-looking one. Decided
+2026-09-16 (the author): start real changelog tracking now, at 2.0.0, rather than
+fabricate the gap. If the full history ever matters, it would need pulling
+the actual chat transcripts from each of those tools, not guessing from
+diffs between inconsistent backup snapshots.
+
+---
+
+## v3.9.2 — 2026-09-25
+
+Backup references: `backups/pdfmd.py.bak-20260925a` and `-20260926a` (in
+the old `~/dev/python-projects/backups/`, like every backup reference
+below). This is the last version with a backup file; from here on each
+change is a git commit instead, and entries cite the commit.
+
+### Changed
+
+- **Moved to its own folder, `~/dev/py/pdfmd/`, to be published as a git
+  repository.** `~/dev/python-projects/pdfmd.py` is now a symlink to the
+  new location, so every existing alias and documented command keeps
+  working unchanged. This file was renamed from `CHANGELOG-pdfmd.md` to
+  `CHANGELOG.md` (an old-name symlink remains in `python-projects`).
+  Backups made before this version stay in `~/dev/python-projects/backups/`.
+- **Process: "commit before editing" replaces manual backups.** The
+  header comment in `pdfmd.py` and `CLAUDE.md` now say so.
+- **Licensed under MIT** (`LICENSE`).
+- **Comments and changelog only, no behavior change:** the author's
+  first name and absolute home-directory paths were replaced with "the
+  author" and `~/` paths ahead of publishing, verbatim chat quotes were
+  paraphrased, the docstring's example file names were made generic
+  (`pdfmd report`, `pdfmd slides -p`), and the header comment now
+  points at `CHANGELOG.md` / `CLAUDE.md` next to the script.
+
+### Added
+
+- **`README.md`**, with usage examples and real output, plus runnable
+  sources in `examples/` (lecture notes, a CSV table, Beamer slides, a
+  two-chapter book) and cropped page previews in `docs/`, rendered from
+  those examples.
+
+---
+
+## v3.9.1 — 2026-09-24
+
+Backup reference: `backups/pdfmd.py.bak-20260924c`.
+
+### Fixed
+
+- **A bare name containing a dot built the wrong file.** `pdfmd prelab5.5`
+  compiled `prelab5.md` → `prelab5.pdf` and reported `OK prelab5.md`, never
+  touching `prelab5.5.md`. `find_markdown()` and `name_candidates()` both ran
+  `Path(...).stem` unconditionally, so the `.5` was taken for an extension
+  and stripped. When a sibling with the shorter name existed, the wrong
+  document was built (and its PDF overwritten) with no error. Both now go
+  through a new `strip_lookup_suffix()`, which only drops `.md`,
+  `.markdown` or `.pdf` (case-insensitive). `pdfmd prelab5.5` now resolves
+  to `prelab5.5.md`; `prelab5` still resolves to `prelab5.md`. A name that
+  is already an existing file, and wildcard patterns, return before this
+  lookup and are unchanged.
+
+---
+
+## v3.9.0 — 2026-09-24
+
+Backup reference: `backups/pdfmd.py.bak-20260924b`.
+
+### Added
+
+- **`pdfmd-options.backup.format` / `--backup-format`: choose how snapshots
+  are named.** Presets cover every convention found in a survey of the
+  real backup folders (LR2/backup, LR3/backups, LR4-5/backup and prelab/
+  backups, ir/webbook/backups, nulabreport/backups and _superseded):
+  `compact` (`report.md.bak.20260924091500`, still the default, so
+  v3.8.0 behavior is unchanged), `dashed` (`report.md.bak.20260924-091500`),
+  `stem` (`report_20260924-091500.md`), `suffix`
+  (`report.md.20260924-091500.bak`), `short`
+  (`report.md.09-24_09-15-00.bak`). A custom template also works: `{name}`
+  `{stem}` `{ext}` plus strftime codes. It is validated, so a template
+  without `{name}`/`{stem}` or without any strftime code is refused, since
+  every snapshot or every file would then collide. A same-second clash gets
+  `-2`, `-3`, ... before the extension (or before `.bak`).
+- **Every existing naming form is recognized as a snapshot of its file**,
+  whatever `format:` is currently set to. That covers the dedupe check,
+  ordering (date parsed from the name, else mtime) and `keep:` pruning.
+  Changing format therefore never makes old snapshots invisible.
+  Recognition was dry-run against those real folders: every hand-made
+  backup was attributed to the right source, and unrelated files (`test.tex`,
+  `chat.md`, `.dotx` templates) were ignored.
+
+### Changed
+
+- `keep:` now prunes only **plain-timestamp** snapshots. A tagged name
+  (`nulabreport.sty.pre-irstack.20260923-211848.bak`,
+  `chemicals.tex.before-LR1-2`, `prelab5.md.09-21_18-27-50.pre-migration.bak`)
+  is a deliberate milestone, never deleted and not counted toward `keep`.
+  v3.8.0 only ever matched its own compact names, so it could not have
+  pruned these either. This makes that guarantee explicit now that other
+  forms are recognized.
+
+---
+
+## v3.8.0 — 2026-09-24
+
+Backup reference: `backups/pdfmd.py.bak-20260924a`.
+
+### Added
+
+- **Automatic source backups on compile: `--backup` / `--no-backup` and
+  `pdfmd-options: backup:`.** After a successful compile, the source is
+  copied to `backup/<name>.bak.YYYYMMDDHHMMSS` beside it. That is the
+  naming already used by hand in report folders (`LR2/backup/
+  report.md.bak.20260923212449`, ...), so manual and automatic snapshots
+  sort together. Front matter / metadata-file cascade is the same as
+  `stamp:` (document wins, then each metadata file in order, then the CLI).
+  Accepts `true`/`false`, a directory name, or `{enabled, dir, keep}`.
+  `keep: N` prunes to the newest N snapshots of that one file, and only
+  ever touches files matching `<name>.bak.<14 digits>[-n]`.
+- The snapshot is taken **after** the BUILD NOTES stamp and skipped when
+  the newest existing snapshot matches, ignoring the stamp's own lines (the
+  live `Compiled ... pdfmd vX` line, its `- Compiled ...` history bullets,
+  and the `Compile History:` heading). Recompiling unedited source (or a
+  `--watch` recompile triggered by something else in the folder) therefore
+  doesn't pile up copies. The line filter is needed because `stamp: {mode:
+  history}` rewrites a timestamp on every compile, so a plain byte
+  comparison never matched. That was caught on the first real run against
+  `LR2/report.md`. Binary (office) sources fall back to a byte comparison. A backup failure (OSError) only warns and
+  never fails a compile that already succeeded.
+- Implemented as a thin `convert_one` wrapper around the old body (now
+  `_convert_one`), so every success path gets it (Pandoc, natbib/biblatex
+  direct compile, direct `.tex`, office). This avoids adding a call at
+  each return. Report mode backs up each chapter after its stamp. `.qmd`
+  reads only its own front matter (no metadata.yaml, same as the rest of
+  the Quarto path).
+- `--watch` is unaffected: `watch_signature()` is non-recursive and never
+  sees `backup/`.
+
+---
+
+## v3.7.1 — 2026-09-23
+
+Backup reference: `backups/pdfmd.py.bak-20260923a`. Found and fixed live
+while building `LR4-5/report.md`, which has a `metadata/` subfolder (see
+`accessory_directories()`).
+
+### Fixed
+
+- **A `metadata/` subfolder broke every raw-LaTeX relative-path reference
+  in a document, not just Pandoc-resolved images.** When pdfmd
+  auto-discovers a metadata file inside `metadata/`, it runs Pandoc with
+  `cwd=metadata/` instead of the document's own directory
+  (`resource_path_option()`'s own `pandoc_cwd` parameter), and compensates
+  with `--resource-path`. But `--resource-path` only helps Pandoc's own
+  image resolution — a real `Image` AST node from Markdown `![]()` syntax.
+  Per pandoc's own manual, it "will not cause image paths to be rewritten
+  in other cases (e.g., when pandoc is generating LaTeX)." A raw
+  `\includegraphics{...}` in the document's own hand-written LaTeX, or a
+  package macro that reads a relative-path data file (confirmed directly:
+  nulabreport's `\irspectrum`/`\irspectrumcompare`, which hand a relative
+  CSV path to pgfplots' own table-reading code), is resolved entirely by
+  the TeX engine's own kpathsea search relative to `pandoc_cwd` — broken
+  the moment that differs from the document's own directory, which is
+  exactly what a `metadata/` subfolder does. Reproduced directly on
+  `LR4-5/report.md`: lualatex failed first on
+  `tlc/contour/plate-1_contour.png` (a raw `\includegraphics`), and again
+  — after a report-local `\graphicspath` workaround fixed that one — on
+  `ir/own-15.09/plain/aldehyde_plain.csv` (an `\irspectrumcompare` pgfplots
+  table read), the same underlying cause surfacing through two unrelated
+  macros. Fixed generally, not per-macro: new `tex_search_env()` sets
+  `TEXINPUTS` (the one mechanism kpathsea honors for every one of these
+  lookups at once) to include the document's own directory, passed via
+  `env=` to both `--pdf-engine=`-invoking `subprocess.run()` calls
+  (single-file/batch mode's `run()`, and report mode's engine loop). A
+  no-op — `env=None`, subprocess inherits the parent environment exactly
+  as before — whenever `pandoc_cwd == document_directory`, the common case
+  with no `metadata/` subfolder or out-of-tree `-y` in play, mirroring
+  `resource_path_option()`'s own condition exactly.
+
+## v3.7.0 — 2026-09-21
+
+Backup reference: `backups/pdfmd.py.bak-20260921a`. Found and fixed live
+while migrating a `nulabreport` pre-lab document onto a shared
+`--metadata-file` (`nulabreport/prelab-metadata.yaml`) in place of a
+per-document `preamble.tex` — see that project's own `docs/CHANGELOG.md`
+v1.15.0 entry and `LR4-5/prelab/backups/findings.md` for the document side.
+
+### Changed
+
+- **PDF-metadata stamping (`PdfmdVersions`/`PdfmdBuildDate`, on by default —
+  see `--stamp-pdf-metadata`) is now a post-hoc edit of the finished PDF via
+  the optional `pypdf` dependency, not LaTeX baked in before the engine
+  runs.** Two real reasons, not a refactor for its own sake:
+  1. **It silently broke a document's own package loads.** The old approach
+     added a small `\hypersetup{pdfinfo=...}` snippet via a second
+     `--include-in-header` file. Confirmed directly: pandoc's default LaTeX
+     template gives `--include-in-header` and a metadata file's own
+     `header-includes:` key THE SAME template slot, and `--include-in-header`
+     wins outright rather than merging — so any `--metadata-file` that set
+     `header-includes:` (not the `.md` document's own front matter, which
+     `document_header_file()`/`wrap_latex_header_includes()` already
+     protects) had its entire header-includes silently discarded the moment
+     PDF-metadata stamping was also on, with no error at that point —
+     surfacing only later as a confusing "Undefined control sequence" the
+     first time the document used a macro from whatever it just lost.
+  2. **It only ever worked on `LATEX_ENGINES`.** A non-LaTeX PDF engine
+     (weasyprint, typst, soffice, ...) had no equivalent injection point
+     this reached at all, so `pdf_metadata: true` silently did nothing
+     there. A post-hoc edit of the produced PDF works identically regardless
+     of which engine made it.
+  - `pdf_metadata_snippet()` is left in place (now always returns `None`)
+    rather than removed, since several call sites across the engine-
+    fallback/native-bibliography/report/batch paths already thread its
+    return value through as a plain parameter and already treat `None` as
+    "no extra `--include-in-header` entry" — this retires the mechanism
+    without touching any of that surrounding control flow. The real
+    implementation is the new `stamp_pdf_metadata_posthoc()`, called from
+    inside `stamp_after_success()` (now independent of `options["enabled"]`,
+    which only ever gated the separate `.md`-source BUILD NOTES stamp).
+  - Silently skipped, with a `WARN` under `--verbose`, if `pypdf` isn't
+    installed — same soft-dependency convention this file already uses for
+    `PyYAML`.
+
+### Fixed
+
+- **`citation-engine: natbib`/`biblatex` never called `stamp_after_success`
+  at all** (`convert_via_native_bibliography`'s own call site in
+  `convert_one`) — neither the `.md` BUILD NOTES stamp nor a PDF-metadata
+  one ever fired for a document using this option, unlike every other
+  success path in the same function. Found while verifying the change
+  above through the full `pdfmd` pipeline (not just a synthetic `pandoc`/
+  engine invocation, per this file's own process note); fixed by calling
+  `stamp_after_success()` there too, on success, matching the other paths.
+
+### Known gap, not fixed here
+
+- Report/book mode's PDF-target branch (`main()`, the block whose own
+  2026-09-20 comment already flags this) still never calls
+  `document_header_file()`, so `files[0]`'s own front-matter
+  `header-includes:` can still collide with `--include-in-header` from a
+  report preamble the same way PDF-metadata used to — this change removes
+  PDF-metadata as one trigger of that collision, but a report preamble
+  itself can still cause it. Left as previously flagged: no report/book-mode
+  document was available this session to verify a fix against.
+
+## v3.6.0 — 2026-09-20
+
+Backup reference: `backups/pdfmd.py.bak-20260920b`. Same CHEM 341 session as
+v3.5.1 just below, requests raised directly while watching that build's own
+output.
+
+### Added
+
+- **`--full-paths`** (default off): AUTO YAML/TEX/MD, the OK/FAIL/SKIP/
+  `[WARNING] unnumbered Markdown` status lines, and (with `-v`) the CMD line
+  now print a path relative to the current directory by default, falling
+  back to the absolute path only when it isn't under cwd at all (a system
+  temp file, e.g.). `-v`/`--verbose` (and `--debug`, which already implies
+  it) turns full paths back on too -- more detail is the point of asking for
+  verbose -- so `--full-paths` on its own is really for getting full paths
+  WITHOUT the rest of `--verbose`'s output. Raised directly: the previous
+  always-full-path default is fine from a shallow directory (Downloads) but
+  genuinely hard to read from a deep one -- the concrete example was a path
+  under `.../Library/CloudStorage/OneDrive-.../Documents/Fall26/CHEM341/
+  guides/M1`. New `display_path()` helper; applied at every AUTO YAML/TEX/MD
+  and status-line call site plus `log_cmd()`, but NOT the `MARGIN`/
+  `MONOFONT`/`PAPERSIZE`/etc. `note()` detail strings (those still embed
+  `{md_path}` in full) -- narrower scope than a complete sweep, chosen to
+  match what was actually asked for ("auto md, auto yaml, auto tex") rather
+  than guess at a larger one under time pressure; a `note()`-detail pass is
+  a reasonable follow-up if the same complaint comes up there too.
+- **`pagesize:` -> `papersize:` auto-correction** (`pagesize_typo_value()`,
+  new `papersize` `--no-auto`/`pdfmd-options.no-auto` KIND): a document that
+  sets `pagesize:` (not a real Pandoc variable -- `papersize:` is) and no
+  `papersize:` of its own now gets `-V papersize=<value>` added
+  automatically on LaTeX-family targets, with a `PAPERSIZE` AUTO note
+  explaining the substitution. Raised directly: the CHEM 341 document this
+  session was built around already had `pagesize: a4` in its own front
+  matter and a task brief that KNEW it silently produced a Letter PDF
+  instead -- documented as an accepted caveat rather than fixed, because
+  nothing was catching it (that document has since been fixed by hand --
+  `papersize: a4` directly -- once this made the gap obvious). Wired into
+  `convert_one`'s two PDF-and-`-t`-latex-target branches, the same two
+  places `geometry_needed`/`DEFAULT_MARGIN` already live -- NOT into
+  `convert_via_native_bibliography` or either report-mode branch (same
+  scoping call as the v3.5.1 fixes below: unverified paths left alone
+  rather than patched blind).
+- **`papersize:` translation for the typst engine** (`typst_papersize_translation()`,
+  `TYPST_PAPERSIZE_ALIASES`, reuses the `papersize` KIND above): Pandoc's
+  `papersize:` variable is LaTeX-shaped by convention ("letter", "legal",
+  "a4", ...) and Pandoc's typst template passes that string straight through
+  to typst's own `page(paper: ...)` rule, which does not accept "letter" or
+  "legal" at all (typst's own names are "us-letter"/"us-legal"; most other
+  names, "a4" included, already match and need no translation). Raised
+  directly: letter and legal paper sizes worked with TeX engines but not
+  with typst.
+  Confirmed as a hard failure, not just a wrong default: `papersize: letter`
+  through `--pdf-engine=typst` errored outright before this fix (typst
+  rejects the unrecognized paper name), and produced a correct 612x792pt
+  Letter PDF after it. Only the two confirmed-different names are aliased;
+  extend `TYPST_PAPERSIZE_ALIASES` if another is found to differ the same
+  way. Applies whether the size came from the document's own `papersize:`,
+  a `-V papersize=`, or this session's own `pagesize:` auto-correction above
+  -- wired into the same two `convert_one` branches, gated on `--to typst`/
+  `engine == "typst"` respectively.
+- **`pdfmd-options: preamble: ...`** (`frontmatter_extra_preambles()`): a
+  document can now name its own LaTeX preamble file(s) explicitly -- a bare
+  string or a YAML list, resolved relative to the document's own directory
+  -- instead of relying on the fixed `preamble.tex`/`latex-preamble.tex`
+  auto-discovered names. Merged with (appended after, so it can override)
+  whatever `PREAMBLE_FILENAMES` auto-discovery already finds, and gated by
+  the same `--no-auto preamble` as auto-discovery (an explicit CLI `-H`
+  remains the one thing that survives even that). A path that doesn't exist
+  is a hard `SystemExit`, not a silent skip. Wired into all four
+  `find_preambles()` call sites (single-file, batch, report x2). Directly
+  requested (`is it worth it?`) alongside a real use case that, on
+  inspection, turned out NOT to need it after all -- see
+  `frontmatter_extra_preambles()`'s own docstring for why (a preamble whose
+  own `\setchemfig`/`\usetikzlibrary` calls need chemfig/tikz loaded first
+  can only get that from `\input` inside a document's own header-includes,
+  not from any `--include-in-header` ordering, named or auto-discovered
+  alike) -- but the capability is still useful in general, and is what that
+  document would reach for if it didn't have this specific ordering need.
+  `metadata`/`filter` equivalents were asked about in the same breath but
+  NOT implemented this round -- metadata-file discovery is more deeply
+  woven into per-directory caching and `-y`/CLI-arg interplay than preamble
+  discovery is, and deserves its own careful pass rather than a rushed
+  version bolted on under the same time budget as everything else here.
+
+### Verified
+
+`--full-paths`: confirmed default (relative) and `--full-paths`/`-v`
+(absolute) output on a real `pdfmd Midterm_guide.md ...` run against the
+same CHEM 341 document. `pagesize`/`papersize` auto-correction: confirmed
+against a synthetic `pagesize: a4` document (`pdfinfo` reporting `595.276 x
+841.89 pts (A4)` by default, `612 x 792 pts (letter)` under `--no-auto
+papersize`) -- not re-tested against the CHEM 341 document itself, which no
+longer needs it (fixed by hand at the source instead once this made the gap
+visible). typst translation: confirmed against a synthetic `papersize:
+letter` document targeting `--pdf-engine=typst` (hard failure before the
+fix, correct 612x792pt PDF after it). `pdfmd-options.preamble`: confirmed
+end-to-end against a synthetic document (a `\newcommand` in a separately-
+named preamble file, invoked in the body, rendering correctly in the output
+PDF) -- the normal case, `--no-auto preamble` correctly suppressing it
+(`\mygreeting` came back undefined, as expected), and a nonexistent named
+file raising the intended `SystemExit` with a clear message. Only
+single-file mode was run against a real `pdfmd` invocation; batch and
+report mode use the identical `find_preambles(...) +
+frontmatter_extra_preambles(...)` pattern at their own call sites but were
+not separately exercised.
+
+## v3.5.1 — 2026-09-20
+
+Backup reference: `backups/pdfmd.py.bak-20260920a`. Found while building a
+real document (a CHEM 341 study guide with its own `mainfont:`/
+`header-includes:` front matter) end-to-end through `pdfmd`, not a synthetic
+test -- both bugs below needed a document that both sets its own font AND
+has its own YAML `header-includes` to surface, and only on the actual
+direct-to-PDF path (`--stamp-pdf-metadata` is on by default there).
+
+### Fixed
+
+- **A document's own YAML `header-includes:` block silently vanished from
+  ANY PDF build**, whenever `--stamp-pdf-metadata` was on (the default) --
+  even with no preamble.tex/latex-preamble.tex auto-discovery involved at
+  all. Root cause: Pandoc feeds every `--include-in-header` file into the
+  same `header-includes` template slot as the document's own metadata, and
+  a command-line-set variable silently replaces the metadata one rather than
+  merging with it. `document_header_file()`/`document_header_includes()`
+  already existed specifically to work around this -- by re-materializing
+  the document's own header-includes into a trailing `--include-in-header`
+  of pdfmd's own -- but all three call sites only turned it on when
+  `preamble_files` was non-empty, not when the (unconditional-by-default)
+  PDF-metadata stamp header was the thing about to trigger the bug. Fixed by
+  turning the safeguard on whenever EITHER source will add an
+  `--include-in-header` (`convert_via_native_bibliography`,
+  `convert_one`'s `-t`/`-o` non-PDF-target branch, and its direct-PDF `run()`
+  closure -- all three had the same gap). `document_header_includes()`'s own
+  docstring updated to say so plainly, since it undersold the trigger before.
+- **`-V mainfontfallback=<font>` crashed lualatex outright on the very
+  first PDF attempt** for any document that sets its own `mainfont:` --
+  before a single glyph was even confirmed missing. Cause: `run(first_font,
+  fallback=document_font)` in `convert_one`'s direct-PDF path added Pandoc's
+  own `mainfontfallback` mechanism whenever `document_font` was true, which
+  is exactly backwards from the rest of the file's own stated design:
+  `PREFERRED_FONT`'s docstring, and a comment on the `-t latex` non-PDF
+  path right above this one, both already explain that Pandoc's
+  `mainfontfallback` is known to crash lualatex in this environment, which
+  is supposedly why pdfmd uses its own detect-then-retry-with-a-different-
+  mainfont approach instead of ever touching it -- except this one call site
+  still did, for exactly the one case (document already has its own
+  mainfont) where the safe swap-retry can't apply either, so nothing ever
+  covered it. Fixed to `fallback=False` unconditionally: a document that
+  wants a fallback font can still set `mainfontfallback:` itself in its own
+  front matter (or a linked metadata file), which reaches Pandoc through the
+  normal metadata merge, not this `-V` injection, so it doesn't hit the
+  crash.
+
+### Verified
+
+Both confirmed via the FULL `pdfmd` pipeline (not just the Pandoc/LaTeX
+commands it constructs), per this file's own process note above: a real
+document (`mainfont: "STIX Two Text"`, its own `header-includes:` with
+`\usepackage{mhchem}` etc.) built clean end-to-end with `--stamp-pdf-metadata`
+left at its default (on) -- header-includes survived in the rendered PDF's
+own LaTeX, and no lualatex crash on the first pass. Not re-tested against a
+document using `mainfont_auto`'s own STIX Two Text -> DejaVu Serif swap-retry
+path (that path's `fallback` was already `False` before this fix and is
+untouched by it), or against `-r`/`--report` mode's own separate font-
+selection code (unaffected -- report mode doesn't call this `run()` closure).
+
+## v3.5.0 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919c` (same one used for the
+whole of this session's work).
+
+Two more items from later in the same conversation, requested together:
+watch mode (a convenience feature, expected to see light use) and CSV/TSV table inclusion (one of the ideas raised
+alongside the rejected `\input`-style raw-text inclusion syntax).
+
+### Added
+
+- **`-w`/`--watch`**: recompiles once immediately, then again on each
+  later change to the source file's own directory or its `metadata/`
+  subfolder (`watch_signature()` -- polls file mtimes, non-recursive,
+  same two locations `accessory_directories()` already searches; no new
+  dependency). Deliberately a thin wrapper (`run_watch()`) that re-execs
+  the whole CLI as a fresh subprocess on each recompile (the original
+  argv, minus `-w`/`--watch`) rather than threading a rebuild loop
+  through `main()`'s own batch/report/single-file branching --
+  disproportionate engineering for a feature expected to see light use.
+  Single-file mode only; combining it with `-b`/`-r` is a clear error.
+  Signature is re-snapshotted AFTER each recompile, not just before, so
+  the compile's own output file (or a `--stamp` write back into the
+  source) never falsely re-triggers another immediate recompile.
+- **CSV/TSV table inclusion**: a fenced Div with class `csv` (`::: {.csv
+  file="data.csv"} :::`) is replaced with an actual table read from that
+  file (`CSV_TABLE_LUA_FILTER`, `contains_csv_table()`,
+  `csv_table_filter_args()`). Capped at 10 rows/7 columns by default
+  (`rows`/`cols` attributes override either, including `all`), per the
+  request's own suggested numbers, with a truncated table getting both a
+  `WARN` and a note printed directly under the table in the rendered
+  output itself. Delimiter auto-detected from the extension
+  (`.tsv`/comma otherwise) or set via `delimiter=`; `header="false"` for
+  a header-less CSV. A Div, deliberately, not a new raw-text sigil/key
+  scanned over the Markdown source before Pandoc sees it -- the same
+  `\input`-style inclusion idea raised in the same conversation was
+  passed over for exactly the risk this avoids (firing inside a fenced
+  code block containing a literal syntax example): Pandoc has already
+  told code blocks apart from real content by the time a Lua filter's
+  `Div()` callback fires, so this can't happen at the AST level the way
+  it could with a raw-text approach. Works for any output format (not
+  LaTeX-specific, unlike the table-width filter) -- single-file, batch,
+  report mode, and the v3.2.0 soffice PDF-engine bridge all support it.
+  `csvtable` added to the `--no-auto`/`pdfmd-options.no-auto` KIND set.
+  Builds the table via `pandoc.read()` on a hand-assembled GFM pipe-table
+  string rather than constructing `pandoc.Table`'s AST nodes directly --
+  reuses Pandoc's own already-correct pipe-table parser instead of this
+  filter needing to get every field of `TableHead`/`TableBody`/`Cell`/
+  `ColSpec` right by hand, and guarantees the result is indistinguishable
+  from a hand-written table, including to `TABLE_WIDTH_LUA_FILTER`
+  re-balancing it afterward (ordered to run first, for exactly that
+  reason).
+
+### Fixed (found building the CSV feature's own tests, before release)
+
+- **A `.csv` div in a front-matter-less document rendered as literal,
+  smart-quoted source text** (`::: {.csv file="small.csv"} :::`) instead
+  of being recognized as a Div at all: `resolve_from_format()` bumps a
+  front-matter-less document to the `gfm` reader (see its own docstring),
+  which -- unlike Pandoc's default `markdown` reader, where it's on by
+  default -- does not enable `fenced_divs` at all. Fixed by adding
+  `+fenced_divs` onto `gfm` specifically when `contains_csv_table()`
+  detects the document needs it, mirroring the existing
+  `+definition_lists` pattern right above it.
+- **A real Lua runtime error**, once the Div was actually being
+  recognized: `"bad argument #2 to 'insert' (number expected, got
+  string)"`. Cause: `string.gsub` returns TWO values (the result string,
+  and a count of substitutions), and `escape_cell()`'s bare `return
+  text:gsub("|", "\\|")` leaked both -- as the LAST argument to a later
+  `table.insert(escaped, escape_cell(...))` call, ALL of a Lua function's
+  return values get spliced in as separate arguments, so this silently
+  became the 3-argument `table.insert(list, pos, value)` form, with the
+  escaped string misread as `pos`. Fixed by wrapping the return in
+  parens (`return (text:gsub(...))`), which truncates to one value.
+- **The table's own last data row rendered as a stray, unparsed
+  paragraph** ("| Bob | 25 | Boston |" as literal text) instead of the
+  table's actual last row, even after both bugs above were fixed.
+  Isolated with a minimal standalone repro: `pandoc.read(text, "gfm")`,
+  called from inside a Lua filter, needs an explicit trailing blank line
+  to correctly close out a pipe table's final row -- the IDENTICAL text
+  read by Pandoc's own CLI (`pandoc -f gfm`) from a file does not need
+  this, so it's specifically a `pandoc.read()`-from-a-filter quirk, not a
+  general GFM pipe-table requirement. Fixed by appending `"\n\n"` before
+  calling `pandoc.read()`.
+
+### Verified
+
+Through the actual `pdfmd` CLI: `-w`/`--watch` compiled a real document
+immediately, then correctly recompiled after the source was edited a
+second time (confirmed by reading the regenerated PDF's text each time);
+`-b`/`-r` combined with `-w` confirmed to raise the documented clear
+error. CSV inclusion: a real 2-row CSV with a quoted, comma-containing
+field ("New York, NY") rendered correctly as a proper table (confirmed by
+reading the PDF's text, not just a successful exit code -- this is
+exactly the test that caught both Lua bugs above); a 20-row/9-column CSV
+correctly truncated to 10/7 with the WARN and in-document note, then
+correctly included in full with `rows=all cols=all`, then correctly
+limited to exactly 1 row/2 columns with `rows=1 cols=2`; a `.tsv` file
+auto-detected via extension; `--no-auto csvtable` confirmed to drop the
+filter and leave the div inert; a `.csv` div naming a nonexistent file
+confirmed to `WARN` and leave it empty rather than failing the compile;
+report mode confirmed to support CSV inclusion too. Regression: a plain
+`.md`, a direct `.tex`, and a direct `.docx` were all re-run after every
+change in this round and confirmed unaffected.
+
+---
+
+## v3.4.0 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919c` (same one used for the
+whole of this session's work -- v3.1.0 through this release were all
+developed back-to-back in one sitting, no real-world use of any
+intermediate version in between).
+
+The last of the items from the original round started in v3.1.0: citation
+engine routing (`citeproc` vs. native `biblatex`/`natbib`), decided
+("opt-in via pdfmd-options") in the very first planning round for this
+whole session but never assigned to a numbered phase alongside the other
+three -- built now as a follow-up once flagged.
+
+### Added
+
+- **`pdfmd-options.citation-engine: natbib`/`biblatex`** routes a LaTeX-
+  family PDF target's (or `--to latex`/`beamer`/`context`'s) bibliography
+  through Pandoc's own `--natbib`/`--biblatex` flags instead of
+  `--citeproc` -- native biber/bibtex processing via the engine's own
+  bibliography tooling, using the document's existing `bibliography:`
+  field, rather than citations rendered directly into the generated LaTeX
+  via a CSL style. Default stays `citeproc` -- a document only needs this
+  key at all to opt into something else, per the original decision.
+  `frontmatter_citation_engine()` reads it with the same document-then-
+  metadata-file precedence as `frontmatter_engine()`; an unknown value
+  raises a clear `SystemExit` naming the three valid ones.
+- **`convert_via_native_bibliography()`** does the actual work for a PDF
+  target, and it is NOT as simple as adding `--natbib`/`--biblatex` next
+  to the usual `--pdf-engine=<engine>` invocation. Confirmed empirically,
+  before writing any of this: a real document compiled with `pandoc ...
+  --pdf-engine=lualatex --natbib` came out with citations completely
+  undefined ("Citing ? here.") -- Pandoc's own PDF-making pipeline never
+  runs bibtex/biber at all when it calls a LaTeX engine directly this way,
+  *regardless* of engine, except `--pdf-engine=latexmk` (latexmk manages
+  that itself). Rather than restrict this feature to latexmk only, it
+  generates a complete standalone `.tex` via Pandoc first (mirroring
+  `convert_one`'s own `TEX_STANDALONE_FORMATS` branch), then hands it to
+  v3.1.0's `compile_tex_direct()` -- which already runs exactly the
+  rerun-until-stable + automatic bibtex/biber loop this needs, for ANY of
+  lualatex/xelatex/pdflatex/latexmk/tectonic, reusing that work directly
+  rather than duplicating it.
+- For the non-PDF `--to latex`/`beamer`/`context` branch, the equivalent
+  substitution (`--natbib`/`--biblatex` instead of `--citeproc`) needed no
+  bridge at all -- that branch never runs an engine itself, it just hands
+  the caller a `.tex` to compile (and resolve its own bibliography in)
+  themselves.
+- **`citationengine`** added to the `--no-auto`/`pdfmd-options.no-auto`
+  KIND set. Meaningless (silently ignored) for any non-LaTeX target --
+  HTML, typst, docx, an office document, or the v3.2.0 soffice PDF-engine
+  fallback -- same as e.g. LaTeX-only geometry/monofont defaults already
+  are; a document that sets it but resolves to a fallback chain with no
+  LaTeX-family engine available at all gets one clear `WARN` and falls
+  back to `--citeproc` rather than silently ignoring the setting or
+  hard-failing.
+
+### Fixed (found building this feature's own tests, before release)
+
+- **A first version of `convert_via_native_bibliography()` generated its
+  intermediate `.tex` into a throwaway `mkdtemp()` scratch directory --
+  compiled without any reported error, but left the citation completely
+  unresolved** ("Citing ? here.") because bibtex/biber run with
+  `cwd=tex_path.parent` (same as `compile_tex_direct()` always has), and a
+  `/tmp` scratch directory has no relationship to the document's own
+  `refs.bib`. Same underlying class of bug as v3.1.0's `openout_any`
+  fix, just from the opposite direction (wrong directory entirely, not a
+  security policy blocking the right one). Fixed by generating the
+  intermediate `.tex` directly beside `md_path` instead (`mkstemp(dir=
+  md_path.parent, ...)`, cleaned up in a `finally` unless `--keep-aux`),
+  so a relative `\bibliography{}`/`\addbibresource{}` resolves the same
+  way it would for a real, hand-written `.tex` in that directory.
+- **The fix above then hit a second, unrelated bug of its own**: the
+  first attempt named that temp file with a leading dot
+  (`.natbib.pdfmd-nativebib-xxxx.tex`), matching the convention
+  `prepared_latex_inputs()` already uses for ITS OWN temp files -- except
+  those are only ever Pandoc *input* (a `--metadata-file`/title source),
+  never something a LaTeX engine compiles directly as its own jobname.
+  Confirmed with a standalone repro (`lualatex .hidden.tex`): a LaTeX
+  engine derives its jobname from the input filename up to the FIRST
+  period, which is empty for a dotfile, so it silently ignores
+  `-output-directory` and tries to write its own `.log` next to the
+  source instead -- tripping the exact same `openout_any=p` wall a
+  second, unrelated way. Fixed by dropping the leading dot from this
+  specific temp filename (`{stem}-pdfmd-nativebib-xxxx.tex`, not
+  `.{stem}.pdfmd-nativebib-xxxx.tex`).
+
+### Verified
+
+Through the actual `pdfmd` CLI: a real document with `pdfmd-options:
+{citation-engine: natbib}` and one with `citation-engine: biblatex` both
+compiled correctly, confirmed by reading the rendered PDF's text -- natbib
+produced "Einstein [1905]" (natbib's own bracket-year style), biblatex
+produced "Einstein [1]" with a numbered reference list entry, both
+visibly different from citeproc's "Einstein (1905)" default, confirming
+each engine's own real bibliography backend actually ran (not just that
+compilation succeeded). A plain document with no `citation-engine` key set
+confirmed unaffected (`--citeproc`, unchanged). `--keep-aux` combined with
+`citation-engine: natbib` confirmed to leave the intermediate `.tex` AND
+its own `.aux`/`.log` behind for inspection, correctly named and readable.
+An unknown `citation-engine` value confirmed to raise a clear error. A
+document requesting `natbib` while restricted to `--engine html`
+confirmed to print the clear `WARN` and fall back to `--citeproc`
+successfully rather than failing outright. Regression: a plain `.md`, a
+direct `.tex`, a direct `.docx`, and a crossref-using `--to latex` output
+were all re-run after every change in this round and confirmed unaffected.
+No leftover files in any test directory after any of the above.
+
+---
+
+## v3.3.0 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919c` (same one used for the
+whole of this session's work -- v3.1.0 through this release were all
+developed back-to-back in one sitting, no real-world use of any
+intermediate version in between).
+
+Phase 3 of the round started in v3.1.0 (see that entry for the full list
+and the phasing rationale): pandoc-crossref auto-detection, and a math-
+aware fix for the table-width Lua filter. Both were among the specific
+items suggested (by another AI, per the author) at the start of this round.
+
+### Added
+
+- **pandoc-crossref auto-detection**: a document using `@fig:`/`@eq:`/
+  `@tbl:`/`@sec:`/`@lst:` reference syntax, or a `{#fig:...}`-style
+  numbered-element attribute, now automatically gets `--filter pandoc-
+  crossref` (`contains_crossref()`, `crossref_filter_args()`) -- added
+  BEFORE `--citeproc` in the command array in every one of the five
+  places pandoc-crossref could apply (both single-file/batch `convert_one`
+  PDF paths, the non-PDF `TEX_STANDALONE_FORMATS` branch, the v3.2.0
+  soffice bridge, and both of report/book mode's own inline command-
+  builders), since pandoc-crossref has to resolve/number references
+  before citeproc runs or citeproc treats the leftovers as unresolvable
+  bibliography keys. That ordering bug was real and already live before
+  this fix: `contains_citations()`'s generic `@key` regex already matches
+  `@fig:setup` too (a colon is a valid citation-key character), so a
+  crossref-only document was already getting `--citeproc` added --
+  confirmed directly (see "Verified" below) that citeproc alone reports
+  `citation fig:setup not found`/`citation tbl:results not found` for
+  exactly this reason. A document that needs crossref but doesn't have
+  the `pandoc-crossref` binary installed gets one clear `WARN` instead of
+  silently shipping unresolved references into the rendered output.
+  `crossref` added to the `--no-auto`/`pdfmd-options.no-auto` KIND set.
+- **Math-aware table-width Lua filter**: `TABLE_WIDTH_LUA_FILTER`'s
+  `cell_length()` used to measure a `Math` inline via
+  `pandoc.utils.stringify()`, which returns its raw LaTeX SOURCE (e.g.
+  `\frac{1.0 \times 10^{-14}}{[OH^-]}`, 34 characters) rather than
+  anything close to its typeset width -- exactly the chemistry-table
+  scenario (Ksp calculations, uncertainty propagation) flagged in the
+  original suggestion. Fixed with `math_overcount()`, which walks each
+  cell's content for `Math` nodes and discounts each one's raw source
+  length by a flat `MATH_LENGTH_DIVISOR = 3` before it factors into the
+  column's natural-width estimate -- a rough heuristic, like every other
+  measurement this filter already makes (see its own long Python-side
+  comment), not a real LaTeX-width calculation, which nothing at Lua-
+  filter time has the means to do.
+
+### Verified
+
+Through the actual `pdfmd` CLI and real Pandoc invocations, not synthetic
+assertions: a document mixing `@fig:`/`@tbl:` crossref syntax, an
+attribute-defined figure/table, AND a genuine `@einstein` bibliography
+citation all resolved correctly in one compile (`pdftotext` showed
+"Figure 1"/"Table 1"/"fig. 1"/"tbl. 1" numbering from pandoc-crossref
+alongside a properly formatted "Einstein (1905)" citation and reference-
+list entry from citeproc -- both filters firing correctly in the same
+run, in the right order); `--no-auto crossref` confirmed to drop the
+filter from the command line; a plain citation-only document (no crossref
+syntax) confirmed to never get the filter added at all; pandoc-crossref
+temporarily moved aside (`mv` its real binary, restored immediately after)
+to confirm the missing-binary WARN fires, and that citeproc alone then
+visibly mishandles the crossref keys exactly as described above -- direct
+evidence the bug this fixes was real, not hypothetical. For the table
+filter: extracted both the OLD (pre-fix, from `backups/
+pdfmd.py.bak-20260919c`) and NEW filter to real `.lua` files and ran both
+through actual `pandoc --lua-filter` on the same synthetic math-heavy
+table, comparing the emitted LaTeX `\real{...}` column-width fractions
+directly -- old gave the math column 19.15% (inflated by its 34-character
+raw source) and the genuinely long prose column only 73.23%; new gives
+them 7.80%/84.55%, correctly reflecting where the real width need is.
+Then compiled the same table through the full `pdfmd` pipeline to a real
+PDF (not just Pandoc's intermediate LaTeX) to confirm it still renders
+correctly end to end. Regression, per CLAUDE.md's own explicit "test both
+directions" instruction from the original 2026-09-16 table-width fix: a
+plain short table (old and new both correctly return nil/natural-width,
+no `\real{...}` at all) and a deliberately-overflowing table with NO math
+in it (old and new produce byte-identical fractions, 7.59%/92.41%,
+confirming zero behavior change for any table that never touches a Math
+node) were both re-run against both filter versions side by side.
+
+---
+
+## v3.2.0 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919c` (same one v3.1.0/v3.1.1
+used -- v3.1.0, v3.1.1, and this release were all developed back-to-back
+in one sitting, no real-world use of the intermediate versions in between).
+
+Phase 2 of the round started in v3.1.0 (see that entry for the full list
+and the phasing rationale). This phase: a soffice/LibreOffice fallback in
+the PDF-engine chain, and direct office-document-to-PDF conversion.
+
+### Added
+
+- **soffice as a last-resort PDF-engine fallback** for Markdown/Pandoc
+  input: `-e/--engine soffice` (alias `office`/`libreoffice`, numeric
+  `14`), or left to the unrestricted chain, where it is tried only after
+  every tex/typst/html engine has failed or is missing
+  (`convert_via_soffice_bridge()`). Not a real Pandoc `--pdf-engine` --
+  Pandoc has no native "write ODT, then shell out to LibreOffice" engine
+  -- so this is special-cased directly in `convert_one`'s own fallback
+  loop: Pandoc renders an intermediate `.odt`, then headless soffice
+  converts that to PDF. Citeproc and a document's own auto-discovered Lua
+  filters still apply; LaTeX-only concerns (geometry/mainfont/monofont/
+  preamble/table-width filter) don't, since none of them mean anything
+  for an ODT target. New `ENGINE_GROUPS["office"]` family keyword for
+  `-e office`/a document's `pdf-engine: office` front-matter restriction.
+- **Direct office-document-to-PDF conversion**: a `.docx`/`.doc`/`.odt`/
+  `.ott`/`.rtf`/`.pptx`/`.ppt`/`.odp`/`.xlsx`/`.xls`/`.ods` input targeting
+  PDF converts straight through headless soffice (`convert_office_direct()`
+  / `run_soffice_convert()`), no Pandoc involved -- requested directly,
+  to stop having to type out `soffice --headless --convert-to pdf <path>`
+  by hand. Every soffice invocation (both
+  this and the fallback above) gets its own scratch
+  `-env:UserInstallation` profile, since concurrent/rapid-fire calls
+  (batch mode's `-j`) otherwise collide on the shared default profile's
+  lock and fail with "another instance is already running."
+- **`resolve_soffice()`/`engine_executable()`**: `soffice` is reachable on
+  this machine (and plausibly others) only through an interactive shell
+  alias pointing straight at the macOS `.app` bundle's own binary --
+  invisible to `which()`/`subprocess`, neither of which consults shell
+  aliases. Caught immediately (`--check-dependencies` reported soffice as
+  MISS despite it working fine at a real terminal prompt) before this
+  round's own feature could even be tested. `engine_executable()` (used
+  everywhere `PDF_ENGINES` membership is checked: `installed_engines`,
+  `select_engines`, `dependency_report`) checks `soffice`/`libreoffice` on
+  PATH, then the standard macOS app-bundle path directly, before
+  reporting an engine missing.
+- **`officedirect`** added to the `--no-auto`/`pdfmd-options.no-auto` KIND
+  set -- see "Known limitation" below for what disabling it actually does
+  (not what the equivalent `texdirect` kind does for `.tex`).
+
+### Changed
+
+- **A `.docx`/`.odt` input targeting PDF now converts via soffice by
+  default instead of the old Pandoc-mediated route** -- a default
+  behavior change for anyone already running `pdfmd report.docx` today
+  (flagged per CLAUDE.md's semver rule, same as v3.1.0's `.tex` change).
+  Pandoc's own docx/odt reader can produce a PDF too, but loses the
+  original document's layout going through Pandoc's AST and LaTeX writer;
+  soffice preserves it directly. `.pptx`/`.ppt`/`.xlsx`/`.xls`/`.odp`/etc.
+  have no Pandoc reader at all and could never reach a PDF through pdfmd
+  before this version -- pure addition for those, not a flip.
+
+### Fixed (found wiring up this phase's own new feature, before release)
+
+- **`pdfmd source.docx` and `pdfmd source.pptx` both crashed outright**
+  the first time this phase's own new feature was tested against a real
+  office file, well before reaching any of the new soffice code: `main()`
+  unconditionally calls `frontmatter_value()`/`metadata_for()` on every
+  single-file input looking for a `documentclass`/`class` front-matter
+  key, and both read the file as UTF-8 text -- fatal on a zip-based
+  binary format. This bug predates this phase entirely (feeding pdfmd a
+  `.docx` would have hit the exact same crash before any of this round's
+  changes existed, just apparently never actually tried); fixed here
+  since it sits directly in the path of the feature this phase adds, not
+  filed as a separate known-issue the way v3.1.0 did for the unrelated
+  `resolve_from_format` bug. Fixed with a new early dispatch branch in
+  `main()` (mirroring the existing `.qmd` special case) that routes an
+  `OFFICE_INPUT_EXTENSIONS` file straight to `convert_one` without any of
+  that Markdown-oriented front-matter/preamble discovery.
+- **The same crash recurred one level deeper**: `effective_no_auto()` and
+  `resolve_engines()` both call `frontmatter_pdfmd_options()`
+  unconditionally too (looking for a document's own `no-auto`/`pdf-engine`
+  front-matter settings), which has the identical text-read-on-binary-
+  file problem -- reached even after the `main()` fix above, and also
+  reachable for a `.tex` file (though rarely hit in practice there, since
+  most `.tex` input now goes through v3.1.0's own direct-compile branch
+  first). Fixed at the source instead of patching each caller:
+  `frontmatter_pdfmd_options()` now returns `{}` immediately for anything
+  in `OFFICE_INPUT_EXTENSIONS`, without attempting to read it.
+- **`--no-auto officedirect` (and a non-PDF `--to`, or an explicit
+  `--from`) on an office document crashed too**, one call further into
+  `convert_one`'s generic Pandoc-oriented machinery (`has_mainfont`,
+  `contains_citations`, `find_lua_filters`, `promote_bare_title`, ... --
+  all assume text input). Unlike `.tex`'s `texdirect`, there is no
+  supported way to make this route actually work without auditing every
+  one of those helpers for binary-safety, judged out of scope for this
+  phase (see "Known limitation" below) -- so instead of leaving a
+  flag that reliably crashes a few calls later, these combinations now
+  raise one clear `SystemExit` explaining that only direct PDF conversion
+  is supported for an office document in this version.
+
+### Verified
+
+Through the actual `pdfmd` CLI: a real `.docx` and a real `.pptx`
+(generated via `pandoc source.md -o source.docx`/`-t pptx`, then fed back
+into `pdfmd`) both converted correctly, confirmed by extracting and
+reading the rendered PDF's text, not just checking for a successful exit
+code -- `.pptx` specifically confirms a format Pandoc cannot read at all
+now reaches a PDF; `--engine soffice` forced directly on a `.md` source
+(the fallback-bridge path, not the direct-input path) also verified by
+reading its rendered text; `--no-auto officedirect`, a non-PDF `--to` on
+an office file, and an explicit `--from` all confirmed to fail with the
+new clear error instead of a traceback; `--check-dependencies` confirmed
+`soffice` now reports OK via `engine_executable()` instead of MISS; and,
+for regression, a plain `.md` document (still routes through Pandoc with
+`--pdf-engine=lualatex`, unchanged) and a `.tex` document (still uses
+v3.1.0's direct-compile path, unchanged) -- both re-run after every
+change in this round, confirming the new per-engine-loop `soffice`
+branch and the two office-input branches don't touch either existing
+path. No leftover scratch directories after any of the above.
+
+### Known limitation
+
+Unlike `.tex`'s `texdirect`, disabling `officedirect` does **not** route
+a `.docx`/`.odt` back through the old Pandoc-mediated path -- it raises a
+clear error instead (see "Fixed" above for why: that route crashes deeper
+in, in code this phase didn't audit for binary-safety, and arguably isn't
+worth making work at all, since it would only produce a worse-formatted
+PDF than direct soffice conversion already does). If a genuine need for
+Pandoc-mediated `.docx`/`.odt` conversion ever comes up, that would be its
+own follow-up, auditing `has_mainfont`/`contains_citations`/
+`find_lua_filters`/`promote_bare_title`/etc. for binary input rather than
+just the two front-matter functions this phase fixed.
+
+---
+
+## v3.1.1 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919c` (same one v3.1.0 used --
+developed back-to-back in the same sitting, no real-world use of v3.1.0 in
+between).
+
+### Fixed
+
+- **The "known issue" flagged in v3.1.0's own changelog entry, fixed the
+  same day it was found**: `resolve_from_format()` decided the Pandoc
+  reader purely from front-matter/metadata-file presence, never from the
+  file's own extension, so any non-Markdown Pandoc input (`.tex`, `.html`,
+  `.rst`, ...) with no YAML front matter of its own was silently read as
+  `gfm` instead of Pandoc inferring the right reader from its extension --
+  live for a `.tex` file specifically via `--to` a non-PDF target or
+  `--no-auto texdirect` (the direct-.tex-compile path added in v3.1.0
+  doesn't go through this function at all, so most `.tex` input no longer
+  hits it in practice, but both escape hatches still do). Fixed by
+  returning early (no override) for anything other than a real
+  `.md`/`.markdown` suffix -- the gfm heuristic is specifically about
+  ordinary GitHub-Flavored-Markdown authoring conventions and was never
+  meant to apply to another format's own file. Pre-existing bug, unrelated
+  to v3.1.0's own changes; not a default flip for any document this was
+  ever working correctly for (a `.md`/`.markdown` file's behavior is
+  unchanged), hence a patch bump rather than another major one.
+
+---
+
+## v3.1.0 — 2026-09-19
+
+Backup taken before this round: `backups/pdfmd.py.bak-20260919c`.
+
+**Versioning note (the author's call, this session only):** this entry and the
+two after it (v3.1.1, v3.2.0) were originally released as v4.0.0, v4.0.1,
+and v5.0.0 -- each bump to the leading digit exactly per the semver rule
+above (a default behavior change), since a real `.tex`/`.docx` input
+changing how it's processed by default is precisely what that rule calls
+major. The author's own judgment, after the fact: none of the three actually
+break the script's core functionality (the Markdown/Pandoc pipeline this
+script exists for is untouched by all three), so the leading digit stays
+capped at 3 for this round and these three are renumbered as minor/patch
+bumps instead. The semver rule itself is unchanged for future entries --
+this is a one-time relabeling of this round only, not a standing
+exception. Any "flagged here per CLAUDE.md's own semver rule"-type
+language below describing these as major bumps is accordingly stale;
+left as-is/see this note rather than rewritten line-by-line.
+
+Phase 1 of a larger round of changes the author asked for (direct .tex compilation
+with rerun detection and tectonic-style cleanup; a soffice/LibreOffice
+fallback and direct office-to-PDF conversion; pandoc-crossref auto-
+detection and a math-aware table-width filter; watch mode) -- scoped and
+phased per the author's own call, one backup+changelog+verify cycle per phase
+rather than one large patch, specifically so a regression in one phase
+doesn't get tangled up with an unrelated one. This is phase 1 only; the
+rest follow in later versions.
+
+### Changed
+
+- **A real `.tex` input targeting PDF is now compiled directly with a
+  LaTeX engine, instead of being handed to Pandoc first** -- a default
+  behavior change for every existing `pdfmd notes.tex` invocation, flagged
+  here per CLAUDE.md's own semver rule even though raw `.tex` input is a
+  much rarer case than the Markdown pipeline this script exists for.
+  Previously, `.tex` input was read by Pandoc's own LaTeX reader and
+  regenerated through Pandoc's LaTeX writer before an engine ever saw it --
+  a lossy round-trip for exactly the kind of hand-written raw LaTeX (chemfig,
+  tikz, custom macros) a `.tex` file is likely to contain on purpose. The
+  new path (`compile_tex_direct()`, `run_tex_engine()`) skips Pandoc
+  entirely: the `-e/--engine` fallback chain still applies, restricted to
+  its LaTeX-family members (lualatex, xelatex, pdflatex, latexmk, tectonic
+  -- not context, whose CLI/markup are unrelated to the other five).
+  `--no-auto texdirect`, or an explicit `--from` other than `latex`/`tex`,
+  opts back into the old Pandoc-mediated route for a document that
+  specifically needs pdfmd's own font/margin/metadata/stamp injection
+  applied to raw LaTeX; a non-PDF `--to` target was never affected (Pandoc
+  is still the only way to get `.tex` into another format).
+
+### Added
+
+- **Automatic multi-pass compilation**: lualatex/xelatex/pdflatex are
+  rerun (up to `MAX_TEX_DIRECT_PASSES` = 5 times) whenever the engine's own
+  `.log` asks for another pass -- the same "Rerun to get..."/"Label(s) may
+  have changed" signal latexmk itself watches for (`tex_wants_rerun()`),
+  covering both a forward cross-reference (verified against a real
+  `\ref` used before its `\label`: correctly took 2 passes, 1 on a
+  second run where the label was already resolved) and, more generally,
+  anything else that only settles after a previous pass's output feeds
+  back in (this is also what would make a chemfig diagram's arrow
+  angles/positions converge, per the author's own question when asking for this
+  feature -- not separately tested here, no such diagram on hand, but the
+  mechanism is the same generic log-driven rerun loop, not anything
+  specific to bibliographies).
+- **Automatic bibtex/biber**: `tex_bibliography_tool()` detects
+  `\addbibresource{`/`\usepackage{biblatex}` (biber) vs. bare
+  `\bibliography{` (bibtex/natbib) in the source and runs the matching
+  tool once between engine passes, no flag needed. latexmk/tectonic
+  already manage this (and their own reruns) internally and are each
+  given a single wrapped call instead of pdfmd's own loop.
+- **Scratch-directory cleanup, on by default, mimicking tectonic**: every
+  engine pass writes into a fresh `-output-directory`/`-o` scratch
+  directory; only the finished PDF is copied back out, and the scratch
+  directory is deleted (even on failure -- verified no leftover
+  `pdfmd-tex-*` directories after a synthetic 3-engine failure chain).
+  The source directory is never touched, so a pre-existing `.aux`/`.log`
+  from a previous manual/`--keep-aux` compile is left alone rather than
+  swept up -- verified directly (a stale `.aux`/`.log`/`.out` set from an
+  earlier `--keep-aux` run survived an unrelated later default-mode
+  compile in the same directory untouched).
+- **`--keep-aux`** turns the above off: compiles in place (no
+  `-output-directory` at all) and leaves every `.aux`/`.log`/`.out`/etc.
+  beside the source, for inspecting a failing or suspicious compile's own
+  `.log` by hand -- restores the exact pre-v3.1.0-for-.tex behavior.
+- **`texdirect`** added to the `--no-auto`/`pdfmd-options.no-auto` KIND set.
+
+### Fixed (caught during this round's own verification, before release)
+
+- **bibtex silently failed to resolve citations** (`Citing [?]` instead of
+  `Citing [Einstein, 1905]`) the first time this was tested against a real
+  `natbib`/`\bibliography{}` document -- exactly the kind of thing CLAUDE.md
+  warns a synthetic/isolated check won't catch; this was only caught by
+  reading the actual rendered PDF's text, not just checking bibtex's exit
+  code or trusting a clean compile log. Cause: bibtex was run from the
+  source directory but pointed at a target path inside the scratch
+  `-output-directory`, which MacTeX's default `openout_any=p` (paranoid)
+  security policy silently refuses to write outside of -- bibtex printed
+  its own "Not writing to ... (openout_any = p; no extended check)"
+  warning and returned nonzero, but the compile still "succeeded" with an
+  unresolved citation. Fixed by running bibtex with `cwd` set to the
+  scratch directory itself (satisfying the policy trivially) and
+  `BIBINPUTS` pointing back at the source directory so it can still find
+  the `.bib` file (bibtex has no `--input-directory` flag the way biber
+  does). Re-verified against the same document: citation now resolves
+  correctly. biber was unaffected (its own `--input-directory` sidesteps
+  this) and needed no fix.
+- **A failed direct-.tex compile's one-line reason was silently truncated
+  mid-word** (e.g. "ed, no output PDF file produced!" instead of "...Fatal
+  error occurred, no output PDF file produced!") -- caught the same way,
+  by reading an actual failure's printed reason rather than trusting that
+  a WARN line was produced at all. Two compounding causes: (1) `-file-
+  line-error` (added for its own sake, to name the offending source line)
+  changes LaTeX's error format from a leading `! ...` to `path:line:
+  ...`, which the existing `engine_failure_reason()` helper (built only
+  ever seeing Pandoc's own unwrapped stderr) doesn't recognize; (2)
+  LaTeX's `.log` hard-wraps every physical line at `max_print_line`
+  (confirmed 79 on this machine via `kpsewhich -var-value=max_print_line`,
+  observed wrapping in practice at 80) with no word-boundary awareness,
+  splitting exactly the tail-end summary line mid-word. Fixed with two new,
+  direct-.tex-specific helpers instead of changing the shared
+  `engine_failure_reason()` (which still works correctly for its original
+  Pandoc-stderr callers and had no reason to change): `tex_log_dewrap()`
+  rejoins physical log lines wrapped at/past that width before anything
+  else inspects the text, and `tex_log_failure_reason()` prefers a `!
+  ...` line, then a `path:line: ...` line (skipping the generic "Fatal
+  error occurred..." trailer every halted run ends with, which names no
+  actual cause), then falls back to the last non-blank line. Re-verified
+  against the same synthetic `\thisisnotarealcommand` failure: reason now
+  reads exactly "Undefined control sequence."
+- **`shutil.copy2` crashed with `SameFileError`** under `--keep-aux` when
+  no `-o`/`--out` redirected the output elsewhere: the engine already
+  writes its PDF straight to the same path pdfmd would otherwise "copy"
+  it to, since `--keep-aux` uses no `-output-directory` at all. Fixed by
+  skipping the copy when the produced file and the target output already
+  resolve to the same path.
+
+### Verified
+
+Per CLAUDE.md's "verify through the full pipeline, not a synthetic test"
+rule -- all through the actual `pdfmd` CLI, not by hand-invoking Pandoc/
+LaTeX/bibtex directly: a real forward-cross-reference document (2-pass
+rerun, then 1-pass on a stable second compile); a `natbib`/bibtex
+document and a `biblatex`/biber document (both citations confirmed
+resolved by reading the rendered PDF's text, not just the exit code); a
+deliberately broken document exhausting all five direct-compile engines
+in order with correct family-skip behavior (lualatex/xelatex/pdflatex
+fail together as expected, latexmk correctly skipped as sharing pdflatex's
+pdftex family, tectonic correctly skipped as sharing xelatex's xetex
+family) and no leftover scratch directories afterward; `latexmk` and
+`tectonic` each run directly as the sole engine; `--keep-aux` (aux files
+left in place, correct PDF) immediately followed by a default-mode compile
+in the same directory (stale aux files from the `--keep-aux` run left
+untouched, confirming cleanup only ever touches pdfmd's own scratch
+directory); a `.tex` input targeting `--to html` and a `.tex` input with
+`--no-auto texdirect` (both correctly still routed through Pandoc, per
+this version's own documented escape hatches); and, for regression, a
+plain `.md` document with a table and a bare title (identical Pandoc
+command line and AUTO decisions as before this round, confirming the new
+`.tex`-only branch -- gated strictly on file extension -- doesn't touch
+the Markdown/Pandoc path at all).
+
+### Known issue, found during this verification, not fixed here
+
+`resolve_from_format()` (pre-existing, untouched by this round) decides
+the Pandoc reader purely from front-matter/metadata-file presence, never
+from the file's own extension -- so a `.tex` file routed through the old
+Pandoc-mediated path (via `--to html`, or `--no-auto texdirect`) with no
+YAML front matter of its own is read as `gfm`, not `latex`, unless
+`--from` is given explicitly. Surfaced by this round's own edge-case
+testing (`--to html`/`--no-auto texdirect` on a `.tex` file are both rare
+paths that this version newly exercises more than before), not something
+this round introduced or is in scope to fix -- noted here so it isn't
+lost, in case a `.tex`-to-non-PDF or `--no-auto texdirect` user hits it.
+
+---
+
+## v3.0.0 — 2026-09-19
+
+Backup reference: `backups/pdfmd.py.bak-20260919b` (taken before v2.6.0 AND
+this release both -- they were developed back-to-back in one sitting with
+no real-world use of v2.6.0 in between, so there is no clean pre-v3.0.0-
+only snapshot; rolling back to this one undoes both releases together).
+
+### Added
+
+- **`--stamp-pdf-metadata` embeds the same package/pdfmd version info
+  directly into the rendered PDF's own Info dictionary**, as two custom
+  keys (`PdfmdVersions`, `PdfmdBuildDate`) -- prompted by the author asking
+  whether pdfmd's PDFs carry any metadata at all (checked with
+  `pdfinfo`/`exiftool` against a real report: yes -- Title/Author from
+  document metadata, Creator "LaTeX via pandoc", Producer the engine's own
+  signature, Subject/Keywords empty by default) and whether pdfmd could
+  insert its own version there as well. Implemented as a second, additive
+  `\hypersetup{pdfinfo={...}}` call -- merges with Pandoc's own rather
+  than overwriting pdftitle/pdfauthor/etc., so a document's real metadata
+  is never touched. Invisible on the rendered page and in a normal
+  "Document Properties" panel; readable with `exiftool`/`pdfinfo -meta`.
+  LaTeX-family engines only -- a non-LaTeX PDF engine (weasyprint, typst,
+  ...) has no equivalent mechanism this reaches, so it's silently skipped
+  there. Verified against a real compile with `exiftool`: both custom
+  keys present, Author/Title/Creator/Producer all unchanged.
+- **Independent of `enabled`/the .md BUILD NOTES stamp**, per the author's direct
+  follow-up asking for the .md and PDF stamps to be controllable
+  separately (e.g. PDF on, .md off): `options['pdf_metadata']` is its own switch, checked on
+  its own at each call site, not gated behind `options['enabled']` the
+  way it was in the first cut of this feature (a real bug caught before
+  release -- `--stamp-pdf-metadata` alone did nothing without `--stamp`
+  too, verified and fixed). `--stamp` with PDF metadata off,
+  `--stamp-pdf-metadata`/`pdf_metadata: true` with the .md stamp off, or
+  both together, are all valid combinations now, confirmed with a 4-way
+  test matrix.
+
+### Changed
+
+- **`pdf_metadata` now defaults to ON, unlike `enabled`** -- a deliberate
+  default flip, the author's own call (the PDF stamp is harmless compared
+  with the .md one): embedding two invisible,
+  additive Info-dictionary keys has no visible effect on the rendered
+  page or a normal "Document Properties" panel, unlike `enabled` (which
+  edits the visible .md source and rightly stays off until asked). This
+  means **every LaTeX-engine PDF pdfmd produces, across every pipeline
+  that uses this script**, now carries a `PdfmdVersions`/`PdfmdBuildDate`
+  Info entry unless `--no-stamp-pdf-metadata`/`pdfmd-options.stamp.
+  pdf_metadata: false` turns it off -- flagged here explicitly because a
+  default flip is exactly the kind of change CLAUDE.md's own semver
+  section calls out as major, even though `pdf_metadata` itself only
+  existed for a few hours before this flip and nothing has depended on
+  the old default yet.
+
+### Fixed
+
+- **`pdf_metadata_snippet`'s `\ifdefined\hypersetup` guard never actually
+  fired for a document with no LaTeX-loaded package of its own** (i.e.
+  the exact bare-document case the new default-on behavior now hits
+  constantly): generating the real `.tex` Pandoc produces showed
+  `--include-in-header` content lands in the preamble BEFORE
+  `\usepackage{bookmark}` (which is what actually loads hyperref
+  indirectly -- there is no literal `\usepackage{hyperref}` line to be
+  after), so `\hypersetup` was undefined at the point the guard checked
+  it, and the whole block silently no-opped. It happened to work in
+  every nulabreport-based test only because nulabreport.sty's own
+  `--include-in-header`'d preamble loads hyperref itself, earlier in the
+  same `-H` file list. Fixed by wrapping the whole call in
+  `\AtBeginDocument{...}`, which defers it until every package is loaded
+  regardless of `--include-in-header` ordering; the `\ifdefined` guard
+  stays as cheap extra insurance, no longer load-bearing. Re-verified
+  against the original failing bare-document case, all four
+  enabled/pdf_metadata combinations, and a real nulabreport report/book
+  build.
+- **`--stamp-mode history`'s v2.6.0 redesign (see below) also gained a
+  helper refactor here**: `gather_stamp_texts()`/`stamp_scope_matches()`
+  extracted out of `stamp_after_success()` so the new pre-compile
+  PDF-metadata path and the existing post-compile .md-stamp path share
+  one implementation instead of two copies that could drift.
+
+## v2.6.0 — 2026-09-19
+
+Backup taken before this round: `backups/pdfmd.py.bak-20260919b`.
+
+### Changed
+
+- **`--stamp-mode history` restructured into a "Compile History:" trailer,
+  same day it shipped.** The original v2.5.0 shape kept every past stamp
+  line stacked at the TOP of the block, so each successive compile pushed
+  a report's own hand-written BUILD NOTES (compound-library additions,
+  values to recheck, etc.) one more line further from "BUILD NOTES" --
+  clutter the author flagged immediately on trying it for real. `history` mode
+  now keeps exactly ONE live stamp line at the top (so the latest compile
+  is still always the first thing read) and demotes whatever was
+  previously there into a `Compile History:` list of `  - ` bullets at the
+  END of the comment, just before its closing `===...-->`,
+  newest-demoted-first -- hand-written notes in between stay exactly where
+  they are, at a fixed position, regardless of how many compiles happen.
+  `update_build_notes()` now returns `(text, warning)`; `replace` mode
+  never touches an existing history list (by design -- that log is meant
+  to survive a mode switch), but now prints a WARN via `apply_stamp()`
+  when one exists and has entries, since silently freezing a history a
+  document was actively building was flagged as a real footgun by the author:
+  switching to `replace` should only replace the last entry and leave
+  every earlier entry below it untouched.
+  Verified against a synthetic multi-step history-then-replace sequence
+  and a real copy of LR1's report.md.
+- **`~/dev/tex/nulabreport/metadata.yaml`** (the shared
+  file symlinked into every course folder) now sets
+  `pdfmd-options: stamp: {packages: [nulabreport], mode: history}`, so
+  every report that finds it gets stamped automatically -- no per-report
+  `--stamp` needed. `pdf-engine: tex` (already there) is untouched; `stamp:`
+  was added as a sibling key under the same `pdfmd-options:` mapping.
+
+## v2.5.0 — 2026-09-19
+
+Backup taken before this round: `backups/pdfmd.py.bak-20260919a`.
+
+### Added
+
+- **New `--stamp` (and `pdfmd-options: stamp:`) feature automates a
+  build-provenance note the author was already keeping by hand.** Real reports
+  (LR1, LR3) already end in a `<!-- ===... BUILD NOTES ...=== -->` HTML
+  comment -- invisible in the rendered PDF, visible in the .md source --
+  whose one load-bearing line reads "Compiled with nulabreport vX.Y.Z,
+  pdfmd vA.B.C", updated by hand after each real compile, sometimes with
+  other freeform notes (compound-library additions, TODOs, values to
+  recheck) written around it. `--stamp` automates just that one line --
+  now with a timestamp appended -- and never touches anything else already
+  in the block:
+  - `resolve_stamp_options()`/`frontmatter_stamp()` cascade a document's
+    own `pdfmd-options.stamp`, then each linked metadata file's, same
+    precedence as `pdf-engine` (see `frontmatter_engine`) -- a shared
+    `metadata.yaml` can turn stamping on for every report that finds it.
+    CLI flags (`--stamp`/`--no-stamp`, `--stamp-mode`, `--stamp-packages`,
+    `--stamp-scope`, `--stamp-output`/`--no-stamp-output`) win field by
+    field on top of that.
+  - `--stamp-mode replace` (default) overwrites the previous stamp line in
+    place; `history` never overwrites -- each run inserts a new line above
+    the previous ones, directly under "BUILD NOTES", so the newest entry
+    always reads first (the author's spec: newest entry directly below
+    BUILD NOTES).
+  - `--stamp-packages nulabreport` includes a package's version via
+    `kpsewhich <name>.sty` + that file's own `\ProvidesPackage` line --
+    matching `nulabreport.sty`'s real `\ProvidesPackage{nulabreport}
+    [2026/09/18 v1.14.7 ...]` line exactly. A named package is silently
+    left out of the line if this document doesn't actually `\usepackage`
+    it, or no version could be determined -- never a hard failure.
+  - `--stamp-scope` (`always`/`report`/`standalone`) answers the author's own
+    follow-up question: a document can ask to be stamped only when
+    compiled as a whole report/book, not on its own, or the reverse.
+    `--stamp-output` names the rendered file even outside report mode; a
+    report/book chapter's stamp always names the shared output ("Compiled
+    as part of `book.pdf` with ..."), regardless of this flag, and gets
+    written into every chapter file that's part of that report, not just
+    the first.
+  - `BUILD_NOTES_RE`/`update_build_notes()` locate the comment anywhere in
+    the file (not assumed to be the last line -- a report chapter's own
+    comment can end up mid-file once concatenated with others, per the author's
+    own concern), and only ever touch the single recognized stamp line
+    inside it, identified by pattern (a line starting "Compiled" that
+    mentions "pdfmd vX") rather than by any new, differently-styled marker
+    -- so it reads as a natural extension of what the author already writes by
+    hand, not a second, redundant-looking line next to it. Verified
+    against real copies of LR1's and LR3's `report.md` (the latter's
+    multi-paragraph hand-written notes below the stamp line came back
+    byte-for-byte unchanged, confirmed by diff) and a from-scratch
+    document with no BUILD NOTES block at all.
+
+## v2.4.0 — 2026-09-18
+
+Backup taken before this round: `backups/pdfmd.py.bak-20260918a`.
+
+### Added
+
+- **Auto-discovered metadata YAML, preambles, and Lua filters can now live in
+  a `metadata/` subfolder instead of directly beside the document.** Raised
+  by the author: a report's own top-level folder currently holds nothing but a
+  symlinked `metadata.yaml`/`nulab.bib`/`nulabreport.lua`, a copied-and-edited
+  `preamble.tex`, and sometimes a symlinked `chemicals.tex` -- entirely
+  because pdfmd only ever looked beside the document, which leaves a folder
+  that's supposed to hold just a report's `.md` source and rendered PDF
+  cluttered with files an outsider has no reason to recognize. Every
+  filename-based auto-discovery function (`find_metadata`'s YAML glob,
+  `preamble_candidates`'s `.tex` glob, `find_lua_filters`, and `-y`'s bare-name
+  `resolve_yaml` lookup) now also searches a `metadata/` subdirectory beside
+  the document, via a new shared `accessory_directories()` helper -- nothing
+  needs to opt in, and a pipeline with no `metadata/` folder sees no change
+  at all. Pandoc's own working directory for a render already follows
+  wherever the first discovered metadata file lives (`pandoc_cwd =
+  metadata_files[0].parent`, pre-existing, originally there for an explicit
+  `-y` pointing at a shared directory elsewhere) -- so once `metadata.yaml`
+  moves into `metadata/`, a preamble's raw LaTeX `\input{chemicals}` and a
+  `metadata.yaml`'s own relative `bibliography:`/`csl:` keys keep resolving
+  for free, as long as `chemicals.tex`/`nulab.bib`/`nu-labreport.csl` move
+  into that same `metadata/` folder alongside it.
+- **New `resource_path_option()` guards a document's own relative paths
+  (e.g. an image) against that same `pandoc_cwd` shift.** Before this
+  change, `pandoc_cwd` always happened to equal the document's own
+  directory in every pipeline that kept its metadata beside the document --
+  so nothing exercised the gap. The moment metadata moves into
+  `metadata/`, `pandoc_cwd` moves with it, and a document's own relative
+  image path would otherwise silently resolve against `metadata/` instead
+  of the document's actual directory. pdfmd now adds `--resource-path
+  <document dir>:.` to the Pandoc command whenever `pandoc_cwd` differs
+  from the document's own directory -- a no-op, with zero command-line
+  change, for every pipeline where the two already coincide.
+
+## v2.3.0 — 2026-09-17
+
+Backup taken before this round: `backups/pdfmd.py.bak-20260917a`.
+
+### Added
+
+- **Every failed PDF-engine attempt now prints a one-line reason, with no
+  flag needed** — found debugging a `testref` (SOC203) reference sheet
+  whose `\begin{multicols}{2}...\end{multicols}` two-column function index
+  failed on every engine (missing `\usepackage{multicol}`, then a second,
+  subtler bug: Pandoc's Markdown reader treats a bare `\begin{ENV}...
+  \end{ENV}` paragraph as one opaque raw-LaTeX block and stops parsing
+  Markdown inside it, so the index's backtick code spans and underscores
+  were passed to LaTeX literally instead of becoming `\texttt{}`). Bare
+  `pdfmd file.md` gave only `WARN ... {engine} failed; trying {next}...`
+  with no hint why — finding the actual cause meant already guessing which
+  engine to force via `--engine {name} --verbose` to see the raw LaTeX log.
+  New `engine_failure_reason()` pulls the single most useful line out of a
+  failed attempt's stderr (a LaTeX fatal error's own `!`-prefixed line if
+  there is one, else a `Error`/`pandoc:`-prefixed line, else the last
+  non-empty line) and a new shared `report_engine_failure()` prints it on
+  EVERY `WARN`, including — new — the final engine's failure, which
+  previously printed nothing at all beyond the eventual bare `FAIL <path>`.
+  Both the single-file/batch engine loop (`convert_one`) and report/book
+  mode's separate inline loop now go through this one function instead of
+  each having their own bare `WARN` print.
+- **New `--debug` flag** for when the one-line reason above still isn't
+  enough (several stacked LaTeX errors, or a Pandoc-level error with no
+  leading `!`/`Error` line at all): dumps the failed engine's FULL captured
+  stderr inline, at the point of failure, for every engine that fails —
+  even one a later engine in the fallback chain goes on to recover from —
+  instead of only the final one. Implies `--verbose`. Threaded through
+  every `convert_one` call site, including the positional
+  `ProcessPoolExecutor.submit` call in parallel batch mode (`-j`), and
+  through report/book mode's own inline engine loop via `args.debug`
+  directly (that loop was never refactored into `convert_one`).
+- **A pointer comment for future editors** (human or AI) was added right
+  above `PDFMD_VERSION` in `pdfmd.py` itself, naming this project's
+  `CLAUDE.md` and its backup-before-editing / changelog-in-the-same-edit
+  requirement explicitly — found worth adding after noticing an editor can
+  reach `pdfmd.py` directly (e.g. asked to fix a specific compile failure)
+  without ever having opened this directory's `CLAUDE.md` first.
+
+### Verified
+
+- Reran the `testref` reference sheet that surfaced this through the real
+  fallback chain (no `--engine` override): `lualatex` still fails for the
+  pre-existing, unrelated `mainfontfallback`/lualatex crash documented at
+  `PREFERRED_FONT`'s own comment, and the new `WARN` line surfaced ITS
+  reason too (previously silent), before `xelatex` picked it up and
+  produced a correct PDF.
+- A synthetic deliberately-broken `\begin{multicols}` document confirmed:
+  (1) no flags — the undefined-environment reason shows on the very first
+  `WARN`, and a NEW final-failure `WARN` (with the same reason plus a
+  `--verbose`/`--debug` hint) appears right before `FAIL`, where past
+  versions printed nothing between the last engine's silent failure and
+  `FAIL`; (2) `--debug` with an unrestricted chain — every attempted
+  engine's full stderr prints inline as each one fails in turn, not only
+  the last.
+- A normal, successful compile (a working document, default flags) was
+  confirmed unchanged: no new output at all, since `report_engine_failure`
+  is only ever reached on a non-zero return code.
+
+## v2.2.0 — 2026-09-17
+
+Backup taken before this round: `~/dev/tex/nulabreport/_superseded/
+pdfmd.py.pre-standalonetex.20260917-131249.bak`.
+
+### Fixed
+
+- **`--to latex`/`beamer`/`context` (or `-o file.tex`) produced a bare
+  Pandoc-LaTeX fragment, not a document that compiles on its own** — the author hit
+  this running `pdfmd -o test.tex` on a lab report: the `.tex` had no
+  `\documentclass`/`\begin{document}`/`\end{document}`, no `--standalone`,
+  and (since preamble/header-includes discovery was gated on `target_format
+  == "pdf"`) none of the project's own `preamble.tex` (its `nulabreport`
+  package load, course/instructor front-matter, `\input{chemicals}`) or the
+  margin/mainfont/monofont defaults a PDF render of the same source would
+  have gotten — none of it compiled. Fixed by giving `latex`/`beamer`/
+  `context` targets (new `TEX_STANDALONE_FORMATS`) the same preamble/
+  header-includes/margin/monofont/mainfont treatment as the PDF-via-
+  LaTeX-engine path, plus `--standalone`, in `convert_one` (single-file and
+  batch modes) and the report/book mode's non-PDF branch alike; a new
+  `--no-auto standalone` (also settable via `pdfmd-options: no-auto:
+  [standalone]`) turns just the `--standalone` addition back off, for a
+  `.tex` that's deliberately meant to be `\input`/`\include`d into another
+  document rather than compiled on its own. One thing this deliberately
+  does NOT reproduce: the PDF path's missing-glyph detect-and-retry between
+  `STIX Two Text` and `DejaVu Serif` needs an actual compile to check
+  against, which nothing here performs, so the emitted document keeps
+  whichever font it tried first; a first attempt at closing that gap with
+  Pandoc's own `mainfontfallback` variable was reverted after it reproduced
+  PREFERRED_FONT's already-documented crash under lualatex in this
+  environment (confirmed with a real `lualatex` compile of the generated
+  `.tex` — `luaotfload | resolve : sequence of 3 lookups yielded nothing
+  appropriate` immediately followed by a fatal `attempt to index a nil
+  value` in `luaotfload-fallback.lua`), so it isn't attempted at all here,
+  same as the PDF path's own reasoning for avoiding it. Verified end to end
+  on the report that surfaced this: the generated `.tex` now compiles
+  cleanly with `lualatex` (two passes, for cross-references) to a PDF whose
+  `pdftotext` output is byte-identical to, and whose page count (39) matches,
+  a PDF made by running `pdfmd` directly on the same Markdown source.
+
+## v2.1.1 — 2026-09-17
+
+Backup taken before this round: `~/dev/tex/nulabreport/_superseded/
+pdfmd.py.pre-enginequiet.20260917-001806.bak`.
+
+### Fixed
+
+- **v2.1.0's `AUTO ENGINE  <path>: chain` line printed unconditionally,
+  every run, regardless of `-v`/`--verbose`** — the one auto-discovery
+  message in the whole script that bypassed the established
+  note()/flush_summary() convention (every other "AUTO ..." line is either
+  shown in full under `--verbose` or folded into one `AUTO: KINDS. Use
+  --verbose to see in full` summary otherwise). Caught immediately on real
+  use (the author, building a report normally with no `-v`). Fixed two ways at
+  once: `resolve_engines()` takes a new `verbose: bool = False` parameter
+  and only prints when it's true (all four call sites in `main()` now pass
+  `args.verbose` through); and the label itself changed from `AUTO ENGINE`
+  to plain `ENGINE`, since as of v2.1.0 this restriction can come from
+  either a document's own front matter (an explicit per-document request,
+  not really "auto") or its linked metadata file (genuinely a default,
+  closer to "auto") -- one shared "AUTO" prefix no longer described both
+  sources accurately. No silent summary line was added for the
+  non-verbose case (unlike the note()-based messages) -- this one is
+  either fully shown or fully hidden, since the caller already knows
+  whether it asked for a restriction at all.
+
+---
+
+## v2.1.0 — 2026-09-17
+
+Backup taken before this round: `~/dev/tex/nulabreport/_superseded/
+pdfmd.py.pre-unknownskey.20260916-235642.bak` (before the DOCUMENT_LATEX_KEYS
+change) and `pdfmd.py.pre-metadataengine.20260917-000621.bak` (before the
+engine-resolution change) — kept in the `nulabreport` package's own
+`_superseded/` since that's the session that prompted both, not this
+project's own `backups/`.
+
+### Added
+
+- **`pdf-engine`/`engine` (and `pdfmd-options` generally, for that one key)
+  now also falls through to a document's linked `--metadata-file` YAML, not
+  only the document's own front matter.** Found while verifying a
+  `nulabreport` course's shared `metadata.yaml` (symlinked into every course
+  folder) after the author added `pdfmd-options:\n  pdf-engine: tex` to it, expecting
+  every report in that course to restrict fallback to the LaTeX family by
+  default: `resolve_engines()`/`frontmatter_engine()` only ever inspected the
+  source `.md`'s own front matter, so the setting was silently inert — no
+  `AUTO ENGINE` line, and the ordinary unrestricted fallback ran regardless.
+  Confirmed with `-v`: the same `pdf-engine: tex` line in the report's own
+  front matter DID restrict the chain (`lualatex -> xelatex -> pdflatex ->
+  latexmk -> tectonic`, no html/typst); the identical line in `metadata.yaml`
+  alone did nothing. Fixed by teaching `frontmatter_engine()` a second,
+  lower-priority source: after checking the document's own `pdfmd-options`
+  and bare top-level `pdf-engine`/`engine`, it now checks each of the
+  document's already-resolved `metadata_files` in turn (new
+  `metadata_file_yaml()` — a metadata file has no `---`/`...` fence to find
+  first, unlike a document's front matter; the whole file already IS the
+  mapping). `resolve_engines()` takes a new optional `metadata_files`
+  parameter to carry this through; all four call sites in `main()`
+  (single-file, batch serial, batch parallel via `ProcessPoolExecutor`, and
+  report/book mode) now compute or reorder-to-reuse each file's metadata
+  before resolving its engines, instead of after. A document's own front
+  matter still wins when both are set — this is a course-wide *default*, not
+  an override. Deliberately does **not** extend to `no-auto`: `no-auto`
+  decides whether metadata auto-discovery runs at all, so it can't also
+  depend on the metadata file that same discovery would find, without a
+  circular dependency. Verified end-to-end (not just by reading the code)
+  across all three of single-file, `-b` batch, and `-r` report mode, each
+  with `-v`, each showing the `AUTO ENGINE` restriction now firing from
+  `metadata.yaml` alone with no per-report front matter needed — and a
+  sanity check that an explicit CLI `-e` still overrides it, unchanged.
+- **`DOCUMENT_LATEX_KEYS` gained `unknown` and `unknowns`** (both map to the
+  same `\LabUnknown`) for `nulabreport`'s `titlepage` layout's new optional
+  unknown-sample field — see that package's own `docs/CHANGELOG.md` v1.14.0
+  (the field itself) and v1.14.2 (the `Unknown:`/`Unknowns:` singular/plural
+  label switch, and the `unknowns` alias added here). Verified end-to-end
+  through `pdfmd` itself, not a hand-rolled `\renewcommand`: `unknown: 3` and
+  `unknowns: "1, 2"` both build and render correctly.
+
+---
+
+## v2.0.0 — 2026-09-16
+
+Baseline entry: versioning and changelog tracking begin here (see above).
+Both fixes below were found and fixed in the same session that established
+this file, discovered while debugging an unrelated `nulabreport` LaTeX
+package issue (see that project's own `docs/CHANGELOG.md` v1.13.3 for the
+report-side half of the story) — a short, all-numeric table was rendering
+stretched across the full page width for no visible reason, and it took
+real effort to figure out the actual cause was in `pdfmd.py`, not the LaTeX
+package being built.
+
+### Fixed
+
+- **`TABLE_WIDTH_LUA_FILTER` (the auto-applied Lua filter that assigns
+  column widths to a plain pipe table pandoc parsed with no explicit
+  widths) fired on EVERY such table, not only ones that risked actually
+  overflowing the page.** Intent was always "rescue a table whose unwrapped
+  content would run past the margin" (see the filter's own long comment) —
+  a short, all-numeric table with no wrapping risk at all got exactly the
+  same treatment, forcibly rebalanced and stretched to the full page width,
+  fighting any downstream Lua filter (e.g. a house-style package's own
+  table macro) that deliberately sizes such a table to its natural content
+  width instead. Root-caused by testing the SAME generated `.tex` two ways:
+  compiling it directly with `lualatex` gave the correct, natural-width
+  table; running the full `pdfmd` pipeline on the same source gave a
+  stretched one — isolating the discrepancy to `pdfmd`'s own pandoc
+  invocation (specifically, the extra `--lua-filter` it inserts before any
+  user-supplied one) rather than the LaTeX side. Fixed by adding a real,
+  if approximate, overflow check: estimate the table's total natural width
+  from the same per-column longest-cell character count the filter already
+  computes for its proportions, and skip rewriting the table entirely
+  (leaving its `nil` widths untouched) when that estimate already fits a
+  reasonable one-line budget (`CHAR_BUDGET`, ~95 characters, sized for this
+  script's typical 12pt/1in-margin default document shape — an estimate,
+  not a real width measurement, since a Lua filter runs before Pandoc or
+  LaTeX ever measures a real font). Verified three ways: the previously
+  -broken short table now renders at its natural width; a deliberately
+  wide, genuinely-overflowing table still gets rescued (wraps within the
+  page, doesn't overflow) exactly as before; a small generic 2-column table
+  with no house-style package involved also now renders compact and
+  centred instead of stretched.
+- **`--verbose` never showed the actual Pandoc command being run** — only
+  pdfmd's own "AUTO ..." decisions (which font/metadata/preamble/lua-filter
+  it auto-discovered), never the resulting command line, which `--lua-filter`
+  order, or what a discovered file actually resolved to. This is exactly
+  the information that would have made the table-width bug above far
+  faster to find. Added `log_cmd()`, called under `--verbose` right before
+  every `subprocess.run` that invokes Pandoc (or Quarto's CLI is not yet
+  covered — see below), printing the full command line via `shlex.quote` so
+  a copy-pasted line is directly re-runnable.
+
+### Known gaps, not fixed here
+
+- `log_cmd()` is wired into every Pandoc-invoking `subprocess.run` call
+  (single-file, batch, and report/book modes) but NOT into
+  `convert_qmd`'s Quarto invocation, which doesn't currently take a
+  `verbose` parameter at all. Low priority (`.qmd` is a narrow, separately
+  -documented path) but worth doing in the same pass if `convert_qmd` is
+  next touched for something else.
+- `CHAR_BUDGET`'s ~95-character estimate is a single constant, not aware of
+  a document's own `fontsize`/`geometry` front matter. Fine for this
+  script's own typical use so far; revisit if a document with an unusual
+  page shape trips the same "wrongly rebalanced" or "wrongly left alone"
+  symptom in the other direction.
