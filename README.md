@@ -1,5 +1,7 @@
 # pdfmd
 
+[![Test](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml/badge.svg)](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml) [![PyPI](https://img.shields.io/pypi/v/pdfmd-cli)](https://pypi.org/project/pdfmd-cli/)
+
 **One command from Markdown to a good-looking PDF.** `pdfmd` wraps
 [Pandoc](https://pandoc.org) and fills in everything you would otherwise
 have to remember: sensible fonts and margins, the right Markdown dialect,
@@ -77,8 +79,10 @@ py -m pip install --user pipx; py -m pipx ensurepath          # Windows
 winget install --id JohnMacFarlane.Pandoc; winget install --id Typst.Typst
 ```
 
-Windows should work (paths, encodings and temporary files are handled
-portably), but it hasn't been tested there yet. Reports are welcome.
+Every push is tested on Windows, macOS and Linux (Pandoc + Typst: single
+files, CSV tables, a book, HTML output); see the
+[Test workflow](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml).
+LaTeX engines aren't part of that automated test on Windows yet.
 
 Optional extras: [Quarto](https://quarto.org) for `.qmd` files,
 `pandoc-crossref` for `@fig:`/`@tbl:` references, and LibreOffice for
