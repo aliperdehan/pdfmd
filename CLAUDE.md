@@ -74,8 +74,10 @@ which copy ran.
 
 ## Releasing to PyPI
 
-Published as `pdfmd-cli` by `.github/workflows/publish.yml`. After the
-version-bump commit is pushed: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-The tag must equal `PDFMD_VERSION` (the workflow checks this). Not every
-commit needs a release; `pipx install git+https://github.com/aliperdehan/pdfmd`
-always gets the latest main.
+Automatic. Every push to `main` runs `.github/workflows/publish.yml`: the
+Windows/macOS/Linux tests (`test.yml`) and then, only if they pass and
+`PDFMD_VERSION` isn't on PyPI yet, a build, an upload to PyPI as
+`pdfmd-cli`, and a `vX.Y.Z` tag. So releasing = the usual version bump +
+changelog commit, pushed. A push without a version bump publishes nothing.
+Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
+publisher is registered to exactly those names.

@@ -1,10 +1,11 @@
-# Builds the examples on Windows, macOS and Linux on every push.
+# Builds the examples on Windows, macOS and Linux. Called by publish.yml on
+# every push to main (so tests gate every release); also runnable by hand.
 name: Test
 
 on:
-  push:
-    branches: [main]
+  workflow_call:            # used by publish.yml
   workflow_dispatch:        # adds a "Run workflow" button in the Actions tab
+  pull_request:
 
 jobs:
   examples:

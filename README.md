@@ -1,6 +1,6 @@
 # pdfmd
 
-[![Test](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml/badge.svg)](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml) [![PyPI](https://img.shields.io/pypi/v/pdfmd-cli)](https://pypi.org/project/pdfmd-cli/)
+[![Test](https://github.com/aliperdehan/pdfmd/actions/workflows/publish.yml/badge.svg)](https://github.com/aliperdehan/pdfmd/actions/workflows/publish.yml) [![PyPI](https://img.shields.io/pypi/v/pdfmd-cli)](https://pypi.org/project/pdfmd-cli/)
 
 **One command from Markdown to a good-looking PDF.** `pdfmd` wraps
 [Pandoc](https://pandoc.org) and fills in everything you would otherwise
@@ -81,7 +81,7 @@ winget install --id JohnMacFarlane.Pandoc; winget install --id Typst.Typst
 
 Every push is tested on Windows, macOS and Linux (Pandoc + Typst: single
 files, CSV tables, a book, HTML output); see the
-[Test workflow](https://github.com/aliperdehan/pdfmd/actions/workflows/test.yml).
+[Test and publish workflow](https://github.com/aliperdehan/pdfmd/actions/workflows/publish.yml).
 LaTeX engines aren't part of that automated test on Windows yet.
 
 Optional extras: [Quarto](https://quarto.org) for `.qmd` files,
