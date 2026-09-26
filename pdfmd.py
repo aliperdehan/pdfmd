@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.10.0"
+PDFMD_VERSION = "3.11.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -699,7 +699,8 @@ def accessory_directories(directory: Path) -> list[Path]:
     return [directory, accessory] if accessory.is_dir() else [directory]
 
 
-def resource_path_option(document_directory: Path, pandoc_cwd: Path) -> list[str]:
+def resource_path_option(document_directory: Path, pandoc_cwd: Path,
+                         metadata_files: list[Path] | None = None) -> list[str]:
     """--resource-path to keep image/include lookups anchored to the
     document's own directory even when pandoc_cwd points elsewhere.
 
@@ -715,10 +716,24 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path) -> list[str
     A no-op whenever the two already coincide -- every pipeline that doesn't
     use a metadata/ subfolder or an out-of-tree -y keeps its exact previous
     command line.
+
+    A metadata file that is a SYMLINK also adds its target's real directory,
+    at the end of the list (v3.11.0). Pandoc resolves `bibliography:` through
+    --resource-path, so one shared metadata file symlinked into many folders
+    can say `bibliography: refs.bib` for the refs.bib beside its real copy,
+    instead of hard-coding an absolute path. Appended last, so it only
+    decides a lookup that would otherwise fail: anything that resolves
+    today still resolves to the same file.
     """
-    if document_directory == pandoc_cwd:
+    extra: list[Path] = []
+    for metadata in metadata_files or []:
+        real_directory = metadata.resolve().parent
+        if real_directory != metadata.parent.resolve() and real_directory not in extra:
+            extra.append(real_directory)
+    if document_directory == pandoc_cwd and not extra:
         return []
-    return ["--resource-path", f"{document_directory}{os.pathsep}."]
+    entries = ([str(document_directory)] if document_directory != pandoc_cwd else []) + ["."]
+    return ["--resource-path", os.pathsep.join(entries + [str(d) for d in extra])]
 
 
 def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str] | None:
@@ -3854,7 +3869,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         for metadata in metadata_files:
             cmd += ["--metadata-file", str(metadata)]
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
-        cmd += resource_path_option(md_path.parent, pandoc_cwd)
+        cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
         for variable in variables:
             cmd += ["-V", variable]
         cmd += pandoc_options
@@ -3946,7 +3961,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             for metadata in prepared_metadata:
                 cmd += ["--metadata-file", str(metadata)]
             pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
-            cmd += resource_path_option(md_path.parent, pandoc_cwd)
+            cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
             first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
@@ -4163,7 +4178,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 for metadata in prepared_metadata:
                     cmd += ["--metadata-file", str(metadata)]
                 pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
-                cmd += resource_path_option(md_path.parent, pandoc_cwd)
+                cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
                     # explicit font/document mainfont) is reproduced here --
@@ -4328,7 +4343,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     for metadata in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata)]
                     pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
-                    cmd += resource_path_option(md_path.parent, pandoc_cwd)
+                    cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
                         cmd += ["-t", "beamer"]
                         if slide_level is not None:
@@ -4887,7 +4902,7 @@ def main() -> None:
             output = Path.cwd() / f"book{output_extension}"
         output = output.resolve()
         pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
-        report_resource_path = resource_path_option(files[0].parent, pandoc_cwd)
+        report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
         with table_width_filter() as width_filter, csv_table_filter() as csv_filter:
             if target_format != "pdf":

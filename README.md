@@ -310,6 +310,10 @@ With a `metadata/` folder, a report's own folder can hold nothing but
 `bibliography: refs.bib`) resolve from `metadata/`, and image paths in the
 document still resolve from the document's own folder.
 
+One shared metadata file can also be **symlinked** into many folders. A
+relative `bibliography: refs.bib` inside it then finds the `refs.bib`
+next to the file's real copy, so you never need an absolute path.
+
 ## Build stamps and snapshots
 
 Both are off by default.

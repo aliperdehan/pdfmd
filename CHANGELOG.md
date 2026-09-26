@@ -31,6 +31,34 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.11.0 — 2026-09-26
+
+Pre-edit state: commit `bcafe7f` (v3.10.0).
+
+### Added
+
+- **A symlinked metadata file finds files beside its real copy.** When a
+  discovered or `-y` metadata file is a symlink, its target's real
+  directory is appended to `--resource-path` (`resource_path_option()`),
+  so a relative `bibliography:` in one shared metadata file resolves from
+  every folder the file is symlinked into. That used to need an absolute
+  path, because Pandoc runs in the symlink's folder. The directory is
+  appended LAST, so it only decides a lookup that would otherwise fail.
+  Without symlinked metadata the command line is byte-for-byte unchanged
+  (no `--resource-path` is added).
+
+  Motivated by nulabreport's `prelab-metadata.yaml`, which is symlinked
+  into each prelab folder and hard-coded
+  `bibliography: /Users/<name>/.../nulab.bib`. Verified on real
+  prelabs (`prelab4`, `prelab5`, `prelab5.5`, all of which cite): old
+  pdfmd with the absolute path and new pdfmd with `bibliography: nulab.bib`
+  give pixel-identical PDFs (6/6, 4/4 and 2/2 pages), and the reference
+  list renders. Also verified for typst and lualatex in single-file mode
+  and for `-r` report mode, and that a non-symlinked metadata folder
+  still gets no `--resource-path` at all.
+
+---
+
 ## v3.10.0 — 2026-09-26
 
 First change made under "commit before editing": the pre-edit state is
