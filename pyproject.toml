@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# "pdfmd" on PyPI is an unrelated PDF-to-Markdown tool; the command this
+# package installs is still `pdfmd`.
+name = "pdfmd-cli"
+dynamic = ["version"]
+description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults, project-file discovery and a multi-engine fallback chain"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ali Perdekhan" }]
+requires-python = ">=3.10"
+# Both are optional inside pdfmd.py (it degrades with a WARN without them);
+# installed by default so `pdfmd-options:` front matter and PDF metadata
+# stamping just work.
+dependencies = ["pyyaml", "pypdf"]
+keywords = ["pandoc", "markdown", "pdf", "latex", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+]
+
+[project.urls]
+Homepage = "https://github.com/aliperdehan/pdfmd"
+Changelog = "https://github.com/aliperdehan/pdfmd/blob/main/CHANGELOG.md"
+
+[project.scripts]
+pdfmd = "pdfmd:main"
+
+[tool.setuptools]
+py-modules = ["pdfmd"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pdfmd.PDFMD_VERSION" }

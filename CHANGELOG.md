@@ -31,6 +31,62 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.10.0 — 2026-09-26
+
+First change made under "commit before editing": the pre-edit state is
+commit `a4724b5` (v3.9.2).
+
+### Added
+
+- **Installable with `pipx install git+https://github.com/aliperdehan/pdfmd`**
+  (or `uv tool install`), which puts a `pdfmd` command on PATH. The new
+  `pyproject.toml` names the distribution `pdfmd-cli`, because `pdfmd` on
+  PyPI is an unrelated PDF-to-Markdown tool. The version is read from
+  `PDFMD_VERSION`. `pyyaml` and `pypdf` are regular dependencies of the
+  installed package, so `pdfmd-options:` and PDF metadata stamping work
+  out of the box. Running `pdfmd.py` directly is unchanged, and both
+  libraries stay optional there.
+- **A clear error on Python older than 3.10**, instead of a `TypeError`
+  from the first `list[str] | None` annotation. macOS's own
+  `/usr/bin/python3` is 3.9.
+- **Install instructions in the "Pandoc was not found" error.**
+
+### Fixed
+
+- **`--no-citeproc` broke the build instead of turning citeproc off.** It
+  was only ever looked for among the options passed through to Pandoc,
+  and then passed on to Pandoc, which has no such flag ("Unknown option
+  --no-citeproc"). It's now a real pdfmd flag (listed in `--help`) that
+  sets `CITEPROC_DISABLED`, and all five call sites that add `--citeproc`
+  automatically check it. Verified in single-file, batch and report mode.
+- **Missing default fonts made every LaTeX engine fail.** JetBrains Mono
+  (code), and DejaVu Serif (the missing-glyph retry) on macOS, usually
+  aren't installed on a fresh machine. `fontspec` then errored under
+  lualatex and xelatex, pdflatex failed on Unicode, and the document
+  silently fell through to typst or an HTML engine. pdfmd now checks
+  whether a default font is installed (`fc-list`, else `luaotfload-tool`;
+  with neither, it assumes the font is present, as before) and substitutes
+  an installed one with a one-line `WARN`:
+  - code: Menlo, DejaVu Sans Mono, Liberation Mono or Courier New;
+  - the glyph retry: Times New Roman, Liberation Serif or Georgia. All
+    three cover the ≥/Δ/· that STIX Two Text lacks.
+
+  Each lookup runs at most once per run, and only when a document
+  actually needs that default. Verified on a simulated fresh Mac (fonts
+  renamed to nonexistent ones), with and without `fc-list`: that used to
+  end on typst, and now builds with lualatex, Menlo and Times New Roman,
+  with every glyph present. With the fonts installed, nothing changes:
+  nulabreport's `LR_sample.md` built through v3.9.2 and v3.10.0 gives
+  pixel-identical pages (4/4) with identical fonts.
+
+### Changed
+
+- README: install section rewritten around pipx; documents automatic
+  `--citeproc` (and `--no-citeproc`) and the passing of unknown options
+  through to Pandoc.
+
+---
+
 ## v3.9.2 — 2026-09-25
 
 Backup references: `backups/pdfmd.py.bak-20260925a` and `-20260926a` (in

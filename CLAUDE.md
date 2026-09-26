@@ -64,3 +64,10 @@ project you were looking at when you found the bug.
 The real file is `~/dev/py/pdfmd/pdfmd.py`. `~/dev/python-projects/pdfmd.py`
 is a symlink to it, kept because shell aliases and other projects' docs
 invoke that path; don't remove it.
+
+`pyproject.toml` makes it pip-installable (`pipx install
+git+https://github.com/aliperdehan/pdfmd`; distribution name `pdfmd-cli`).
+A pipx-installed `pdfmd` is a separate copy: edits here don't reach it until
+`pipx install --force .` (or install with `pipx install -e .` to link it).
+When testing an edit, run `python3 pdfmd.py` from this folder so you know
+which copy ran.

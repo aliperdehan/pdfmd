@@ -45,25 +45,52 @@ turns that knowledge into defaults:
 
 ## Install
 
-`pdfmd` is a single Python file.
+```sh
+pipx install git+https://github.com/aliperdehan/pdfmd
+```
 
-**Requirements:**
-- Python 3.10+
-- [Pandoc](https://pandoc.org/installing.html)
-- For PDF output, at least one PDF engine. A TeX distribution (MacTeX,
-  TeX Live) gives you the best results; `typst`, `weasyprint`,
-  `tectonic` or LibreOffice also work.
+That puts a `pdfmd` command on your PATH, with its Python dependencies, in
+its own isolated environment. `uv tool install
+git+https://github.com/aliperdehan/pdfmd` does the same. To update later,
+run `pipx upgrade pdfmd-cli`. (The package is named `pdfmd-cli` because
+`pdfmd` on PyPI is an unrelated PDF-to-Markdown tool. The command is still
+`pdfmd`.)
 
-**Optional:**
-- `pip install pyyaml` for `pdfmd-options:` front matter.
-- `pip install pypdf` to write build info into the PDF's metadata.
-- [Quarto](https://quarto.org) for `.qmd` files.
-- `pandoc-crossref` for `@fig:`/`@tbl:` cross-references.
+`pdfmd` drives programs that pip can't install, so you also need:
+
+- **[Pandoc](https://pandoc.org/installing.html)** (required)
+- **at least one PDF engine**. [Typst](https://typst.app) is the quickest
+  start; a TeX distribution (MacTeX, TeX Live) gives the best results and
+  is what you need for LaTeX packages and math-heavy documents.
+
+```sh
+brew install pipx pandoc typst              # macOS, the quick start
+brew install --cask mactex-no-gui           # optional: full LaTeX (large)
+```
+
+```sh
+sudo apt install pipx pandoc texlive-xetex  # Debian/Ubuntu
+```
+
+Optional extras: [Quarto](https://quarto.org) for `.qmd` files,
+`pandoc-crossref` for `@fig:`/`@tbl:` references, and LibreOffice for
+Office files.
+
+<details>
+<summary>Without pipx</summary>
+
+`pdfmd.py` is a single file that needs Python 3.10+. It also runs
+directly, and `pyyaml`/`pypdf` are optional (features that need them are
+skipped with a warning):
 
 ```sh
 git clone https://github.com/aliperdehan/pdfmd.git ~/pdfmd
 echo 'alias pdfmd="python3 ~/pdfmd/pdfmd.py"' >> ~/.zshrc   # or ~/.bashrc
 ```
+
+macOS's built-in `/usr/bin/python3` is 3.9, which is too old; pdfmd says
+so and exits.
+</details>
 
 Check what `pdfmd` can find on your system:
 
@@ -189,18 +216,19 @@ pdfmd page.html          # anything else Pandoc can read (give the extension)
 
 ## What it does automatically
 
-Each of these prints one `AUTO` line and can be switched off individually.
+Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
 | `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
 | `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
-| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, retried with DejaVu Serif if any glyph is missing |
-| `MONOFONT` | the document contains code | JetBrains Mono for code |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, retried with DejaVu Serif if any glyph is missing (Times New Roman if DejaVu isn't installed) |
+| `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
-| `crossref` | `@fig:`/`@tbl:` references | adds the `pandoc-crossref` filter |
+| `citeproc` | `@key` / `[@key, p. 90]` citations | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
+| `crossref` | `@fig:`/`@tbl:` references | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 
 `-v` explains each decision and prints the exact command it runs:
@@ -230,7 +258,18 @@ pdfmd lecture --no-auto                  # everything off: close to plain pandoc
 pdfmd lecture --no-auto margin mainfont  # only these
 ```
 
-Or put it in the document itself, so nobody has to remember the flag:
+### Passing options to Pandoc
+
+Any option `pdfmd` doesn't recognise is passed straight to Pandoc:
+
+```sh
+pdfmd lecture --toc --number-sections
+pdfmd lecture -V fontsize=12pt
+```
+
+### Settings inside the document
+
+Or put settings in the document itself, so nobody has to remember the flag:
 
 ```yaml
 ---

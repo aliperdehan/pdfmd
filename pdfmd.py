@@ -449,10 +449,11 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.9.2"
+PDFMD_VERSION = "3.10.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
+from functools import lru_cache
 import logging
 import os
 import re
@@ -461,6 +462,14 @@ import shutil
 import subprocess
 import sys
 import time
+
+if sys.version_info < (3, 10):
+    # Checked before any annotation below is evaluated: on 3.9 the first
+    # `list[str] | None` would otherwise fail with a cryptic TypeError.
+    # macOS's own /usr/bin/python3 is 3.9, so this is a real first-run trap.
+    raise SystemExit(f"pdfmd needs Python 3.10 or newer (this is {sys.version.split()[0]}). "
+                     "Install it with `pipx install git+https://github.com/aliperdehan/pdfmd`, "
+                     "which picks a suitable Python, or run pdfmd.py with a newer python3.")
 import unicodedata
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -495,6 +504,91 @@ DEFAULT_FONT = "DejaVu Serif"
 # detect-then-retry-with-a-different-mainfont path is what actually works.
 PREFERRED_FONT = "STIX Two Text"
 DEFAULT_MONOFONT = "JetBrains Mono"
+# Installed-by-default stand-ins, tried in order when one of the three fonts
+# above isn't installed (a fresh machine rarely has JetBrains Mono or, on
+# macOS, DejaVu Serif). Without this, every LaTeX engine failed with a
+# fontspec error and the build silently fell through to typst/HTML engines.
+MONOFONT_STAND_INS = ("Menlo", "DejaVu Sans Mono", "Liberation Mono", "Courier New")
+# For DEFAULT_FONT's missing-glyph retry: system serifs that, like DejaVu,
+# cover the arrows/comparison/Greek that STIX Two Text lacks (it has no ≥).
+SERIF_STAND_INS = ("Times New Roman", "Liberation Serif", "Georgia")
+
+
+@lru_cache(maxsize=None)
+def installed_font_families() -> frozenset[str] | None:
+    """Lower-cased font family names from fontconfig, or None without fc-list."""
+    fc_list = shutil.which("fc-list")
+    if not fc_list:
+        return None
+    try:
+        out = subprocess.run([fc_list, ":", "family"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return frozenset(name.strip().casefold() for line in out.splitlines() for name in line.split(","))
+
+
+@lru_cache(maxsize=None)
+def font_missing(family: str) -> bool:
+    """True only when a font is known NOT to be installed.
+
+    Asks fontconfig (fc-list) first, then luaotfload-tool (ships with TeX
+    Live/MacTeX, so it's there whenever lualatex is). If neither tool is
+    available the answer is False -- "assume it's there", exactly the
+    behavior before this check existed.
+    """
+    families = installed_font_families()
+    if families is not None:
+        return family.casefold() not in families
+    tool = shutil.which("luaotfload-tool")
+    if not tool:
+        return False
+    try:
+        result = subprocess.run([tool, f"--find={family}"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "Cannot find" in result.stdout + result.stderr
+
+
+@lru_cache(maxsize=None)
+def default_monofont() -> str:
+    """DEFAULT_MONOFONT, or the first installed MONOFONT_STAND_INS entry."""
+    for family in (DEFAULT_MONOFONT, *MONOFONT_STAND_INS):
+        if not font_missing(family):
+            if family != DEFAULT_MONOFONT:
+                print(f"WARN  font: {DEFAULT_MONOFONT} is not installed; using {family} for code "
+                      "(install it, or set monofont:, to change this)", file=sys.stderr)
+            return family
+    return DEFAULT_MONOFONT
+
+
+@lru_cache(maxsize=None)
+def fallback_font() -> str:
+    """DEFAULT_FONT for the missing-glyph retry, else an installed stand-in.
+
+    Retrying with a font that isn't installed turned a render with a few
+    missing glyphs into a failed build (every LaTeX engine hits the same
+    fontspec error). With no stand-in either, PREFERRED_FONT is returned,
+    so the retry repeats the first attempt instead of failing.
+    """
+    for family in (DEFAULT_FONT, *SERIF_STAND_INS):
+        if not font_missing(family):
+            if family != DEFAULT_FONT:
+                print(f"WARN  font: {DEFAULT_FONT} is not installed; using {family} for "
+                      "missing-glyph fallback", file=sys.stderr)
+            return family
+    return PREFERRED_FONT
+
+
+@lru_cache(maxsize=None)
+def preferred_font() -> str:
+    """PREFERRED_FONT, or the fallback font when it isn't installed."""
+    if font_missing(PREFERRED_FONT):
+        replacement = fallback_font()
+        if replacement != PREFERRED_FONT:
+            print(f"WARN  font: {PREFERRED_FONT} is not installed; using {replacement} instead "
+                  "(install it, or set mainfont:/-f, to change this)", file=sys.stderr)
+            return replacement
+    return PREFERRED_FONT
 DEFAULT_MARGIN = "1in"
 DEFAULT_VARS = []
 AUTO_METADATA_DISABLED = object()
@@ -509,6 +603,11 @@ AUTO_METADATA_DISABLED = object()
 # read from a deep one (a real example that prompted this: a path under
 # .../Library/CloudStorage/OneDrive-.../Documents/Fall26/CHEM341/guides/M1).
 SHOW_FULL_PATHS = False
+# Set from --no-citeproc in main(). A real pdfmd flag rather than a string
+# looked for in the passthrough Pandoc options: Pandoc itself has no
+# --no-citeproc, so leaving it in that list made Pandoc reject the whole
+# command (fixed v3.10.0).
+CITEPROC_DISABLED = False
 
 
 def display_path(path: Path) -> str:
@@ -3761,7 +3860,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         cmd += pandoc_options
         cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
         cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
-        if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
+        if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
             cmd.append("--citeproc")
         for lua_filter in lua_filters:
             cmd += ["--lua-filter", str(lua_filter)]
@@ -3850,13 +3949,13 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += resource_path_option(md_path.parent, pandoc_cwd)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
-            first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
+            first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
             if first_font:
                 cmd += ["-V", f"mainfont={first_font}"]
             if geometry_needed:
                 cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
             if monofont_needed:
-                cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                cmd += ["-V", f"monofont={default_monofont()}"]
             for variable in variables:
                 cmd += ["-V", variable]
             if shift_heading:
@@ -4041,7 +4140,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                               f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
             if is_tex_target and monofont_needed:
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
-                                f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
+                                f"using {default_monofont()} on LaTeX-family targets")
             pagesize_typo = (None if auto_disabled(no_auto, "papersize")
                              else pagesize_typo_value(md_path, variables))
             if is_tex_target and pagesize_typo:
@@ -4080,13 +4179,13 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     # .tex is compiled by hand, override it with -f/--font
                     # (or edit \\setmainfont directly) the way the PDF path's
                     # retry would have.
-                    first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
+                    first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
                     if first_font:
                         cmd += ["-V", f"mainfont={first_font}"]
                     if geometry_needed:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     if monofont_needed:
-                        cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                        cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo:
                         cmd += ["-V", f"papersize={pagesize_typo}"]
                 for variable in variables:
@@ -4119,7 +4218,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
                 cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
-                if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
+                if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
                             and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
                         # No compile-and-rerun concern here the way the PDF path's
@@ -4154,7 +4253,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                           and not has_monofont(md_path, variables))
         if monofont_needed:
             note("MONOFONT", f"{md_path}: has code but no monofont set; "
-                            f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+                            f"using {default_monofont()} on LaTeX-family engines")
         pagesize_typo = (None if auto_disabled(no_auto, "papersize")
                          else pagesize_typo_value(md_path, variables))
         if pagesize_typo:
@@ -4237,11 +4336,11 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     if selected_font:
                         cmd += ["-V", f"mainfont={selected_font}"]
                     if fallback and not any(variable.startswith("mainfontfallback=") for variable in variables):
-                        cmd += ["-V", f"mainfontfallback={DEFAULT_FONT}"]
+                        cmd += ["-V", f"mainfontfallback={fallback_font()}"]
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     if monofont_needed and engine in LATEX_ENGINES:
-                        cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                        cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo and engine in LATEX_ENGINES:
                         cmd += ["-V", f"papersize={pagesize_typo}"]
                     for variable in variables:
@@ -4273,7 +4372,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
-                    if contains_citations(md_path) and "--citeproc" not in pandoc_options and "--no-citeproc" not in pandoc_options:
+                    if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
@@ -4289,7 +4388,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                           env=tex_search_env(md_path.parent, pandoc_cwd))
 
-                first_font = None if document_font else (font or (PREFERRED_FONT if mainfont_auto else None))
+                first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
                 # fallback=False, not fallback=document_font: Pandoc's own
                 # mainfontfallback mechanism is the one PREFERRED_FONT's
                 # comment (and the is_tex_target path's own comment above)
@@ -4308,7 +4407,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 combined_output = result.stdout + result.stderr
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and missing_glyph_warning(combined_output)):
-                    result = run(font or DEFAULT_FONT)
+                    result = run(font or fallback_font())
             if result.returncode == 0:
                 break
             failed_families.add(family)
@@ -4481,6 +4580,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "fired) so a normal run stays quiet; AUTO YAML/TEX/ENGINE/MD are "
                              "unaffected by this flag and always print in full, since they're rarer "
                              "and already name a specific file/engine rather than a generic default")
+    parser.add_argument("--no-citeproc", action="store_true",
+                        help="don't add --citeproc automatically when the document uses @citation "
+                             "syntax (by default pdfmd adds it, so citations and the bibliography "
+                             "render without any flag)")
     parser.add_argument("--full-paths", action="store_true",
                         help="print full/absolute paths in AUTO YAML/TEX/MD lines and (with -v) the "
                              "CMD line, instead of the default -- relative to the current directory, "
@@ -4658,10 +4761,14 @@ def main() -> None:
     # which implies it just above) turns this on too, not just --full-paths
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
+    global CITEPROC_DISABLED
+    CITEPROC_DISABLED = args.no_citeproc
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if not which("pandoc"):
-        raise SystemExit("Pandoc was not found on PATH. Install Pandoc, then run --check-dependencies.")
+        raise SystemExit("Pandoc was not found on PATH. Install it -- macOS: `brew install pandoc`; "
+                         "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
+                         "-- then run `pdfmd --check-dependencies`.")
     paths = args.path or [Path.cwd()]
     variables = DEFAULT_VARS + args.variable
     stamp_overrides: dict = {}
@@ -4818,7 +4925,7 @@ def main() -> None:
                                           and not has_monofont(files[0], variables))
                 if report_monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
-                                           f"using {DEFAULT_MONOFONT} on LaTeX-family targets")
+                                           f"using {default_monofont()} on LaTeX-family targets")
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or bool(report_pdf_meta_snippet_text))
                                              and is_tex_target) as report_header_file, \
@@ -4842,13 +4949,13 @@ def main() -> None:
                         # PREFERRED_FONT's own comment already documents as
                         # crashing lualatex outright in this environment.
                         report_first_font = None if report_document_font else (
-                            args.font or (PREFERRED_FONT if report_mainfont_auto else None))
+                            args.font or (preferred_font() if report_mainfont_auto else None))
                         if report_first_font:
                             cmd += ["-V", f"mainfont={report_first_font}"]
                         if report_geometry_needed:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                         if report_monofont_needed:
-                            cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                            cmd += ["-V", f"monofont={default_monofont()}"]
                     for variable in variables:
                         cmd += ["-V", variable]
                     cmd += pandoc_options
@@ -4867,7 +4974,7 @@ def main() -> None:
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
-                            and "--no-citeproc" not in pandoc_options):
+                            and not CITEPROC_DISABLED):
                         cmd.append("--citeproc")
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
@@ -4897,7 +5004,7 @@ def main() -> None:
                                   and not has_monofont(files[0], variables))
                 if monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
-                                           f"using {DEFAULT_MONOFONT} on LaTeX-family engines")
+                                           f"using {default_monofont()} on LaTeX-family engines")
                 # Reports need one Pandoc invocation, so retry each usable engine here.
                 #
                 # KNOWN GAP (2026-09-20, not yet fixed): this PDF-target branch never
@@ -4938,7 +5045,7 @@ def main() -> None:
                         if geometry_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                         if monofont_needed and engine in LATEX_ENGINES:
-                            cmd += ["-V", f"monofont={DEFAULT_MONOFONT}"]
+                            cmd += ["-V", f"monofont={default_monofont()}"]
                         for variable in variables:
                             cmd += ["-V", variable]
                         cmd += pandoc_options
@@ -4951,7 +5058,7 @@ def main() -> None:
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                         if (any(contains_citations(file) for file in files)
                                 and "--citeproc" not in pandoc_options
-                                and "--no-citeproc" not in pandoc_options):
+                                and not CITEPROC_DISABLED):
                             cmd.append("--citeproc")
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += ["--lua-filter", str(width_filter)]
