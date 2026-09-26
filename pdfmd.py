@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.11.0"
+PDFMD_VERSION = "3.11.1"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -468,7 +468,7 @@ if sys.version_info < (3, 10):
     # `list[str] | None` would otherwise fail with a cryptic TypeError.
     # macOS's own /usr/bin/python3 is 3.9, so this is a real first-run trap.
     raise SystemExit(f"pdfmd needs Python 3.10 or newer (this is {sys.version.split()[0]}). "
-                     "Install it with `pipx install git+https://github.com/aliperdehan/pdfmd`, "
+                     "Install it with `pipx install pdfmd-cli`, "
                      "which picks a suitable Python, or run pdfmd.py with a newer python3.")
 import unicodedata
 import warnings

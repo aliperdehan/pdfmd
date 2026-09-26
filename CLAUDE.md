@@ -71,3 +71,11 @@ A pipx-installed `pdfmd` is a separate copy: edits here don't reach it until
 `pipx install --force .` (or install with `pipx install -e .` to link it).
 When testing an edit, run `python3 pdfmd.py` from this folder so you know
 which copy ran.
+
+## Releasing to PyPI
+
+Published as `pdfmd-cli` by `.github/workflows/publish.yml`. After the
+version-bump commit is pushed: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+The tag must equal `PDFMD_VERSION` (the workflow checks this). Not every
+commit needs a release; `pipx install git+https://github.com/aliperdehan/pdfmd`
+always gets the latest main.

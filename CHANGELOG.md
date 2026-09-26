@@ -31,6 +31,26 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.11.1 — 2026-09-26
+
+Pre-edit state: commit `2d64619` (v3.11.0). First version published to PyPI.
+
+### Added
+
+- **Published to PyPI as `pdfmd-cli`**, so the install is `pipx install
+  pdfmd-cli`. `.github/workflows/publish.yml` builds and uploads on every
+  pushed `v*` tag, through PyPI trusted publishing (no stored token) and
+  the repo's `pypi` environment. It refuses a tag that doesn't match
+  `PDFMD_VERSION`.
+
+### Changed
+
+- The Python-too-old error and the README now show `pipx install
+  pdfmd-cli`. README links and images are now absolute URLs, so they also
+  work on the PyPI project page.
+
+---
+
 ## v3.11.0 — 2026-09-26
 
 Pre-edit state: commit `bcafe7f` (v3.10.0).

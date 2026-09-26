@@ -13,10 +13,10 @@ OK    lecture.md
 ```
 
 <p align="center">
-  <img src="docs/lecture.png" width="560" alt="lecture.md rendered to PDF">
+  <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/lecture.png" width="560" alt="lecture.md rendered to PDF">
 </p>
 
-That PDF came from [`examples/lecture.md`](examples/lecture.md), a plain
+That PDF came from [`examples/lecture.md`](https://github.com/aliperdehan/pdfmd/blob/main/examples/lecture.md), a plain
 Markdown file with no front matter and no configuration. Plain `pandoc
 lecture.md -o lecture.pdf` doesn't even get that far: its default engine,
 `pdflatex`, stops at the `Δ` on line 5 with an error. With a Unicode engine
@@ -46,15 +46,15 @@ turns that knowledge into defaults:
 ## Install
 
 ```sh
-pipx install git+https://github.com/aliperdehan/pdfmd
+pipx install pdfmd-cli
 ```
 
 That puts a `pdfmd` command on your PATH, with its Python dependencies, in
-its own isolated environment. `uv tool install
-git+https://github.com/aliperdehan/pdfmd` does the same. To update later,
-run `pipx upgrade pdfmd-cli`. (The package is named `pdfmd-cli` because
-`pdfmd` on PyPI is an unrelated PDF-to-Markdown tool. The command is still
-`pdfmd`.)
+its own isolated environment. `uv tool install pdfmd-cli` does the same.
+To update later, run `pipx upgrade pdfmd-cli`. (The package is named
+`pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.
+The command is still `pdfmd`. For the latest unreleased code, use `pipx
+install git+https://github.com/aliperdehan/pdfmd`.)
 
 `pdfmd` drives programs that pip can't install, so you also need:
 
@@ -115,7 +115,7 @@ The numbers are the fallback order, and also shortcuts: `-e 6` means
 
 ## Usage
 
-Every command below can be run from inside [`examples/`](examples/).
+Every command below can be run from inside [`examples/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/).
 
 ### One document
 
@@ -147,7 +147,7 @@ pdfmd slides -p                   # Beamer slides; each heading starts a slide
 ```
 
 <p align="center">
-  <img src="docs/slides.png" width="380" alt="A Beamer slide from examples/slides.md">
+  <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/slides.png" width="380" alt="A Beamer slide from examples/slides.md">
 </p>
 
 ### A whole folder
@@ -178,7 +178,7 @@ OK    REPORT  book.pdf
 
 `-r` (also spelled `--report` or `--book`) joins every `.md` in the folder
 into a single PDF, in the order of each file's `chapter:` front-matter
-field. See [`examples/book/`](examples/book/). `-i FILE` leaves one file
+field. See [`examples/book/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/book/). `-i FILE` leaves one file
 out, and `--exclude-unnumbered` skips files without a `chapter:`.
 
 ### Tables straight from a CSV file
@@ -191,7 +191,7 @@ Measured values:
 ```
 
 <p align="center">
-  <img src="docs/results.png" width="480" alt="A CSV file rendered as a table">
+  <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/results.png" width="480" alt="A CSV file rendered as a table">
 </p>
 
 - The delimiter is detected from the extension (`.tsv` means tab), or set
@@ -341,11 +341,11 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 ## Reference
 
 - `pdfmd --help` lists every flag.
-- The docstring at the top of [`pdfmd.py`](pdfmd.py) is the full reference
+- The docstring at the top of [`pdfmd.py`](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd.py) is the full reference
   for each behaviour and its edge cases.
-- [`CHANGELOG.md`](CHANGELOG.md) records what changed in each version and
+- [`CHANGELOG.md`](https://github.com/aliperdehan/pdfmd/blob/main/CHANGELOG.md) records what changed in each version and
   why.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/aliperdehan/pdfmd/blob/main/LICENSE)
