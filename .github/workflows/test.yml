@@ -1,0 +1,39 @@
+# Builds the examples on Windows, macOS and Linux on every push.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  examples:
+    strategy:
+      fail-fast: false      # keep testing the other systems if one fails
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash         # same commands on all three systems
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pandoc/actions/setup@v1         # installs Pandoc
+      - uses: typst-community/setup-typst@v4  # installs Typst (a PDF engine)
+      - run: pip install .                    # installs pdfmd like a user would
+      - run: pdfmd --version
+      - run: pdfmd --check-dependencies
+      - name: Build the examples
+        working-directory: examples
+        run: |
+          pdfmd lecture -e typst
+          pdfmd results -e typst
+          pdfmd book -r -o book.pdf -e typst
+          pdfmd lecture -o lecture.html
+      - uses: actions/upload-artifact@v4      # lets you download the PDFs
+        with:
+          name: pdfs-${{ matrix.os }}
+          path: examples/*.pdf
