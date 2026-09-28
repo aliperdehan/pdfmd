@@ -31,6 +31,50 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.15.0 — 2026-09-29
+
+Pre-edit state: commit `dd52035` (v3.14.0). v3.14.0's `margin:`/`geometry:`
+translation was front-matter-only, same scope `papersize:` translation
+already accepted — but for a *translation* (as opposed to a same-document
+default), that scope limit means a document with its margin set ONLY in a
+shared `--metadata-file` loses it silently on the engine that can't read
+that key natively, same failure this feature exists to fix, just moved
+one level out. Found immediately after v3.14.0, checking that exact case.
+
+### Fixed
+
+- **`frontmatter_margin_geometry_options()` and `fix_typst_margin()` now
+  also translate a `margin:`/`geometry:` set only in a linked
+  `--metadata-file`**, not just the document's own front matter. Same
+  precedence `pdf-engine`/`no-auto` resolution already uses (see
+  `frontmatter_pdfmd_options()`'s callers): the document's own front
+  matter is checked first, and only if it sets no `margin:` at all are
+  the linked metadata files checked next, in order — so a shared
+  `metadata.yaml` can set `margin:` once for every document that finds
+  it, exactly the kind of file `nulabreport`-style pipelines already use
+  for shared defaults. A real `geometry:` anywhere — front matter, any
+  metadata file, or `-V` — still always wins, untouched, checked before
+  any `margin:` in any source (same as `has_geometry()`).
+
+  On the Typst side, `prepared_latex_inputs()` now takes `doc_count`
+  (defaulting to 1, the existing behavior everywhere except report/book
+  mode, which passes `len(files)`) to correctly tell every path after the
+  main document(s) apart from the main document(s) themselves — a
+  linked `--metadata-file`, which Pandoc accepts EITHER fenced
+  (`---`/`...`-delimited, same as front matter) OR completely bare (no
+  delimiters at all). `fix_typst_margin()` takes a new `is_metadata` flag
+  for this: a bare *metadata file* is now read as pure YAML directly; a
+  bare *main document* (no front matter at all) is always left alone —
+  that's markdown body text, never YAML, and must never be parsed as
+  such regardless of `is_metadata`. Confirmed directly: a *fenced*
+  metadata file's mapping `margin:` was still silently missed even with
+  this fix half-applied, because `yaml.safe_load()` chokes on a second
+  `---` as "expected a single document in the stream" — front matter is
+  now unwrapped from a metadata file's own text the same way it already
+  is from the document's, before parsing either.
+
+---
+
 ## v3.14.0 — 2026-09-29
 
 Pre-edit state: commit `9466c31` (v3.13.0). v3.13.0 only translated a bare
