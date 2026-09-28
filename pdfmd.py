@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.12.0"
+PDFMD_VERSION = "3.13.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -1585,14 +1585,22 @@ def wrap_latex_header_includes(text: str) -> str:
 
 
 @contextmanager
-def prepared_latex_inputs(paths: list[Path], latex_engine: bool) -> Iterator[list[Path]]:
-    """Yield temporary, corrected inputs for LaTeX-family renders when needed."""
+def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
+                          typst_engine: bool = False) -> Iterator[list[Path]]:
+    """Yield temporary, corrected inputs for LaTeX-family renders when
+    needed -- or, with `typst_engine` instead, for the Typst engine's own
+    unrelated margin-scalar bug (see fix_typst_margin_scalar()). The two
+    are mutually exclusive; at most one corrector ever applies to a given
+    render, same as `latex_engine` alone before this.
+    """
+    corrector = (wrap_latex_header_includes if latex_engine
+                else fix_typst_margin_scalar if typst_engine else None)
     temporary_paths: list[Path] = []
     prepared: list[Path] = []
     try:
         for path in paths:
             text = path.read_text(encoding="utf-8-sig")
-            corrected = wrap_latex_header_includes(text) if latex_engine else text
+            corrected = corrector(text) if corrector else text
             if corrected == text:
                 prepared.append(path)
                 continue
@@ -1949,6 +1957,54 @@ def has_geometry(md_path: Path, variables: list[str], metadata_files: list[Path]
                for preamble in preamble_files)
 
 
+def frontmatter_margin_scalar(md_path: Path, variables: list[str]) -> str | None:
+    """Return a document's own bare scalar ``margin:`` value, IF
+    translating it into a working ``geometry:margin=...`` for LaTeX-family
+    engines is safe -- or None when there's nothing to translate. Same
+    scope as pagesize_typo_value() above: front matter and -V variables
+    only, not metadata files or preambles.
+
+    ``margin:`` is a real Pandoc variable for the TYPST template only (see
+    fix_typst_margin_scalar() below) -- Pandoc's LaTeX template never
+    reads it at all, only ``geometry:`` does (a list of "key=value"
+    strings that becomes \\usepackage[...]{geometry}). has_geometry()
+    already treats a bare ``margin:`` as "a margin setting exists"
+    (correctly, so DEFAULT_MARGIN isn't injected on top of it), but
+    nothing translated that value into the one variable LaTeX's own
+    template actually consumes -- so a document with ONLY
+    ``margin: 2.54cm`` and no ``geometry:`` silently kept LaTeX's own much
+    wider article-class default margins on every LaTeX-family engine,
+    the requested value never taking effect at all. Confirmed directly
+    (2026-09-28), alongside the Typst-side bug the same value triggers
+    (see fix_typst_margin_scalar()): ``--engine typst`` errored outright
+    on it ("unexpected comma"), while every LaTeX-family engine rendered
+    fine -- just silently ignoring the requested margin instead of
+    erroring, which is arguably the worse of the two failures.
+
+    Returns None when: no ``margin:`` at all; a real ``geometry:`` is set
+    anywhere (front matter or -V) -- an explicit geometry always wins,
+    untouched; or ``margin:`` is already a YAML mapping/per-side block
+    rather than a plain scalar (translating a ``top:``/``bottom:``/
+    ``left:``/``right:`` breakdown into ``geometry:`` options is a
+    reasonable follow-up, out of scope here -- only the single-value case
+    this session's bug report actually hit is handled).
+    """
+    if any(variable.startswith(("geometry=", "geometry:")) for variable in variables):
+        return None
+    text = md_path.read_text(encoding="utf-8-sig")
+    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    if not front_matter:
+        return None
+    block = front_matter.group(1)
+    if re.search(r"^geometry\s*:", block, re.MULTILINE):
+        return None
+    match = re.search(r"^margin\s*:[ \t]*(\S.*?)[ \t]*$", block, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip().strip("'\"")
+    return value or None
+
+
 def pagesize_typo_value(md_path: Path, variables: list[str]) -> str | None:
     """Return a document's own ``pagesize:`` value, IF ``papersize:`` isn't
     already set anywhere Pandoc would see it -- a -V variable or the
@@ -2029,6 +2085,55 @@ def typst_papersize_translation(value: str | None) -> str | None:
     if not value:
         return None
     return TYPST_PAPERSIZE_ALIASES.get(value.strip().casefold())
+
+
+TYPST_MARGIN_RE = re.compile(r"^(?P<indent>[ \t]*)margin(?P<colon>[ \t]*:[ \t]*)(?P<val>\S.*?)[ \t]*$",
+                             re.MULTILINE)
+
+
+def fix_typst_margin_scalar(text: str) -> str:
+    """Rewrite a document's own bare scalar ``margin:`` front-matter value
+    into the ``x``/``y`` YAML mapping Pandoc's own TYPST template requires.
+
+    Pandoc's default Typst template renders margin unconditionally as
+    ``margin: ($for(margin/pairs)$$margin.key$: $margin.value$,$endfor$)``
+    -- it always iterates key/value PAIRS, so a plain scalar (``margin:
+    2.54cm``, exactly what every other writer -- including every LaTeX-
+    family engine via the geometry:margin=... translation
+    frontmatter_margin_scalar() feeds it -- accepts fine) has nothing to
+    iterate and comes out as the literal, invalid ``margin: (: ,)``: a
+    Typst syntax error ("unexpected comma") instead of a page margin.
+    Confirmed directly (2026-09-28): a document with ``margin: 2.54cm``
+    and ``pdfmd-options: {engine: typst}`` failed outright with exactly
+    that error, while rendering fine (albeit at the WRONG margin --
+    see frontmatter_margin_scalar()) on every LaTeX-family engine.
+
+    Only a bare scalar is rewritten -- a ``margin:`` that's already a
+    YAML mapping (a ``top:``/``bottom:``/``left:``/``right:`` or
+    ``x:``/``y:`` breakdown) needs no fix; Pandoc's ``/pairs`` filter
+    already turns that straight into valid Typst key/value pairs. Only
+    the document's own front matter is handled, same as
+    typst_papersize_translation()'s callers above -- a shared
+    --metadata-file setting ``margin:`` as a scalar is a rarer case left
+    unfixed, out of scope here.
+    """
+    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    if not front_matter:
+        return text
+    block = front_matter.group(1)
+    newline = "\r\n" if "\r\n" in block else "\n"
+
+    def replace(match: re.Match) -> str:
+        value = match.group("val").strip().strip("'\"")
+        if not value or value.startswith(("{", "[")):
+            return match.group(0)
+        indent = match.group("indent")
+        return f"{indent}margin:{newline}{indent}  x: {value}{newline}{indent}  y: {value}"
+
+    fixed_block = TYPST_MARGIN_RE.sub(replace, block, count=1)
+    if fixed_block == block:
+        return text
+    return text[:front_matter.start(1)] + fixed_block + text[front_matter.end(1):]
 
 
 def has_monofont(md_path: Path, variables: list[str]) -> bool:
@@ -4219,6 +4324,12 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             if is_tex_target and geometry_needed:
                 note("MARGIN", f"{md_path}: no geometry/margin set; "
                               f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
+            margin_scalar = (None if auto_disabled(no_auto, "margin")
+                             else frontmatter_margin_scalar(md_path, variables))
+            if is_tex_target and margin_scalar:
+                note("MARGIN", f"{md_path}: margin: {margin_scalar} isn't a Pandoc variable "
+                              f"LaTeX-family targets read (geometry: is) -- using "
+                              f"geometry:margin={margin_scalar}")
             if is_tex_target and monofont_needed:
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
                                 f"using {default_monofont()} on LaTeX-family targets")
@@ -4229,7 +4340,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                   f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
                                   "targets. Set papersize: yourself, or --no-auto papersize, to silence "
                                   "this and keep the Letter default")
-            with prepared_latex_inputs([title_source, *metadata_files], is_tex_target) as prepared, \
+            with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
+                                       typst_engine=(target_format == "typst")) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
                                          and is_tex_target) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
@@ -4265,6 +4377,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd += ["-V", f"mainfont={first_font}"]
                     if geometry_needed:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                    elif margin_scalar:
+                        cmd += ["-V", f"geometry:margin={margin_scalar}"]
                     if monofont_needed:
                         cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo:
@@ -4333,6 +4447,12 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         if geometry_needed:
             note("MARGIN", f"{md_path}: no geometry/margin set; "
                           f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
+        margin_scalar = (None if auto_disabled(no_auto, "margin")
+                         else frontmatter_margin_scalar(md_path, variables))
+        if margin_scalar:
+            note("MARGIN", f"{md_path}: margin: {margin_scalar} isn't a Pandoc variable "
+                          f"LaTeX-family engines read (geometry: is) -- using "
+                          f"geometry:margin={margin_scalar}")
         monofont_needed = (not auto_disabled(no_auto, "monofont")
                           and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
                           and not has_monofont(md_path, variables))
@@ -4400,7 +4520,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                 report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
-            with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES) as prepared, \
+            with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES,
+                                       typst_engine=(engine == "typst")) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
                                          and engine in LATEX_ENGINES) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
@@ -4424,6 +4545,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd += ["-V", f"mainfontfallback={fallback_font()}"]
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                    elif margin_scalar and engine in LATEX_ENGINES:
+                        cmd += ["-V", f"geometry:margin={margin_scalar}"]
                     if monofont_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo and engine in LATEX_ENGINES:
@@ -5013,13 +5136,20 @@ def main() -> None:
                 if report_geometry_needed:
                     report_note("MARGIN", "REPORT: no geometry/margin set; "
                                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
+                report_margin_scalar = (None if auto_disabled(report_no_auto, "margin")
+                                        else frontmatter_margin_scalar(files[0], variables))
+                if is_tex_target and report_margin_scalar:
+                    report_note("MARGIN", f"REPORT: margin: {report_margin_scalar} isn't a Pandoc "
+                                         "variable LaTeX-family targets read (geometry: is) -- using "
+                                         f"geometry:margin={report_margin_scalar}")
                 report_monofont_needed = (is_tex_target and not auto_disabled(report_no_auto, "monofont")
                                           and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
                                           and not has_monofont(files[0], variables))
                 if report_monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {default_monofont()} on LaTeX-family targets")
-                with prepared_latex_inputs([*files, *metadata_files], is_tex_target) as prepared, \
+                with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
+                                           typst_engine=(target_format == "typst")) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or bool(report_pdf_meta_snippet_text))
                                              and is_tex_target) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
@@ -5047,6 +5177,8 @@ def main() -> None:
                             cmd += ["-V", f"mainfont={report_first_font}"]
                         if report_geometry_needed:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                        elif report_margin_scalar:
+                            cmd += ["-V", f"geometry:margin={report_margin_scalar}"]
                         if report_monofont_needed:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                     for variable in variables:
@@ -5094,6 +5226,12 @@ def main() -> None:
                 if geometry_needed:
                     report_note("MARGIN", "REPORT: no geometry/margin set; "
                                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
+                margin_scalar = (None if auto_disabled(report_no_auto, "margin")
+                                 else frontmatter_margin_scalar(files[0], variables))
+                if margin_scalar:
+                    report_note("MARGIN", f"REPORT: margin: {margin_scalar} isn't a Pandoc variable "
+                                         "LaTeX-family engines read (geometry: is) -- using "
+                                         f"geometry:margin={margin_scalar}")
                 monofont_needed = (not auto_disabled(report_no_auto, "monofont")
                                   and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
                                   and not has_monofont(files[0], variables))
@@ -5124,7 +5262,8 @@ def main() -> None:
                         print(f"SKIP  REPORT: {engine} shares the {family} engine with an earlier "
                               f"failure; skipping", file=sys.stderr)
                         continue
-                    with prepared_latex_inputs([*files, *metadata_files], engine in LATEX_ENGINES) as prepared, \
+                    with prepared_latex_inputs([*files, *metadata_files], engine in LATEX_ENGINES,
+                                               typst_engine=(engine == "typst")) as prepared, \
                             pdf_metadata_header_file(
                                 report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
                             ) as report_pdf_meta_file:
@@ -5139,6 +5278,8 @@ def main() -> None:
                         cmd += report_resource_path
                         if geometry_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
+                        elif margin_scalar and engine in LATEX_ENGINES:
+                            cmd += ["-V", f"geometry:margin={margin_scalar}"]
                         if monofont_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                         for variable in variables:

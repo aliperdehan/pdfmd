@@ -31,6 +31,60 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.13.0 — 2026-09-28
+
+Pre-edit state: commit `c31a35b` (v3.12.0). Found and fixed while rendering
+a bibliography document with `margin: 2.54cm` in its front matter and
+`pdfmd-options: {engine: typst}`.
+
+### Fixed
+
+- **A document's own `margin:` value was silently ignored on every
+  LaTeX-family engine, and crashed outright on the Typst engine.**
+  `margin:` is a real Pandoc variable for the Typst template only —
+  Pandoc's LaTeX template never reads it, only `geometry:` does (a list of
+  "key=value" strings that becomes `\usepackage[...]{geometry}`).
+  `has_geometry()` already treated a bare `margin:` as "a margin setting
+  exists" (correctly, so `DEFAULT_MARGIN` wasn't injected on top of it),
+  but nothing translated that value into the variable LaTeX's own template
+  actually consumes — so `margin: 2.54cm` with no `geometry:` compiled
+  fine on every LaTeX-family engine while silently keeping LaTeX's own
+  much wider article-class default margins, the requested value never
+  taking effect. New `frontmatter_margin_scalar()` detects this case
+  (front matter/`-V` only, same scope as `pagesize_typo_value()`) and
+  translates it into `-V geometry:margin=<value>` at all four call sites
+  that already handle `DEFAULT_MARGIN` injection (`_convert_one`'s
+  non-PDF-target and PDF-engine-loop branches, and both of report mode's
+  matching branches). An explicit `geometry:` anywhere, or a `margin:`
+  that's already a YAML mapping/per-side block, is left untouched.
+
+- **`--engine typst` (or `pdfmd-options: {engine: typst}`) failed with
+  `error: unexpected comma` on any document whose `margin:` was a plain
+  scalar** (`margin: 2.54cm`, `margin: 1in`, ...) — exactly the value every
+  other writer, including the LaTeX translation above, accepts. Pandoc's
+  own default Typst template renders margin unconditionally as `margin:
+  ($for(margin/pairs)$$margin.key$: $margin.value$,$endfor$)`: it always
+  iterates key/value pairs, so a scalar has nothing to iterate and comes
+  out as the literal, invalid `margin: (: ,)`. New
+  `fix_typst_margin_scalar()` rewrites a bare scalar `margin:` in the
+  document's own front matter into the `x:`/`y:` YAML mapping the template
+  actually needs, applied through a generalized `prepared_latex_inputs()`
+  (now also takes `typst_engine=`, mutually exclusive with `latex_engine=`)
+  the same way LaTeX header-includes get corrected — a temporary, sibling
+  copy of the input, cleaned up after the render. A `margin:` that's
+  already a mapping (a `top:`/`bottom:`/`left:`/`right:` or `x:`/`y:`
+  breakdown) needs no fix and is left alone.
+
+  Report mode gets both fixes at its two matching call sites too. Only the
+  document's own front matter is handled in either fix, not a shared
+  `--metadata-file` setting `margin:` as a scalar — same scope limit
+  `typst_papersize_translation()`'s callers already accept for `papersize:`
+  — and only the plain-scalar case, not translating an existing per-side
+  `margin:` breakdown into `geometry:` options for LaTeX, which is a
+  reasonable follow-up left out of scope here.
+
+---
+
 ## v3.12.0 — 2026-09-28
 
 Pre-edit state: commit `17025b7` (v3.11.2). Found and fixed while wiring a
