@@ -31,6 +31,59 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.14.0 — 2026-09-29
+
+Pre-edit state: commit `9466c31` (v3.13.0). v3.13.0 only translated a bare
+scalar `margin:` — found immediately after, while checking whether a
+document written for one engine family and later rendered through the
+other would round-trip cleanly in the two directions v3.13.0 didn't cover:
+a `margin:` that's already a per-side mapping (silently ignored on
+LaTeX-family engines, same as the scalar case before v3.13.0), and a
+`geometry:`-only document (silently ignored on Typst — no error, just the
+wrong margin, since Typst's template never reads `geometry:` at all).
+
+### Changed
+
+- **`frontmatter_margin_scalar()` → `frontmatter_margin_geometry_options()`**,
+  and **`fix_typst_margin_scalar()` → `fix_typst_margin()`**: both now
+  handle a `margin:`/`geometry:` value of any shape Pandoc itself accepts,
+  not just a bare scalar, via two new shared normalizers,
+  `parse_margin_sides()` and `parse_geometry_sides()`, each returning a
+  canonical `{top, bottom, left, right}` dict (or None when nothing safe to
+  translate). Both now use `yaml.safe_load()` on the front-matter block
+  (PyYAML — already an optional soft dependency here, see
+  `frontmatter_pdfmd_options()`) instead of `frontmatter_margin_scalar()`'s
+  old scalar-only regex, which is kept as the fallback when PyYAML isn't
+  installed.
+
+### Fixed
+
+- **A `margin:` per-side mapping (`top:`/`bottom:`/`left:`/`right:`, or
+  Typst's `x:`/`y:` shorthand) was silently ignored on every LaTeX-family
+  engine**, same failure v3.13.0 fixed for a bare scalar but explicitly
+  left this case out of scope for. `frontmatter_margin_geometry_options()`
+  now expands `x:`/`y:` into paired sides and emits one `geometry:<side>=
+  <value>` option per side actually given (or a single `margin=<value>`
+  when all four are equal) — one `-V geometry:...` per option, at the same
+  four call sites as before. A mapping using Typst's `inside:`/`outside:`/
+  `rest:` (binding-aware, no LaTeX equivalent at all) is left untouched,
+  same as v3.13.0 already left a non-scalar `margin:` untouched.
+
+- **A document with ONLY `geometry:` set (no `margin:` at all) — written
+  for and tested against a LaTeX-family engine — silently fell back to
+  Typst's own default margin (1.25in) the moment `--engine typst` ran it**,
+  no error, just the wrong margin: Typst's template never reads
+  `geometry:` at all. `fix_typst_margin()` now parses `geometry:` the same
+  way (a bare `"key=val"` scalar, a comma-joined `"key=val,key=val"`
+  scalar, or a YAML list of either) via `parse_geometry_sides()`, and adds
+  a new `margin:` mapping translated from it — `geometry:` itself is left
+  in the front matter untouched (inert for Typst, not harmful). A
+  `geometry:` option this can't safely interpret as a margin (anything
+  with no `key=`, or a key that isn't a recognized margin/side name, e.g.
+  `showframe`) leaves the document untouched rather than guessing.
+
+---
+
 ## v3.13.0 — 2026-09-28
 
 Pre-edit state: commit `c31a35b` (v3.12.0). Found and fixed while rendering

@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.13.0"
+PDFMD_VERSION = "3.14.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -1588,13 +1588,14 @@ def wrap_latex_header_includes(text: str) -> str:
 def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
                           typst_engine: bool = False) -> Iterator[list[Path]]:
     """Yield temporary, corrected inputs for LaTeX-family renders when
-    needed -- or, with `typst_engine` instead, for the Typst engine's own
-    unrelated margin-scalar bug (see fix_typst_margin_scalar()). The two
-    are mutually exclusive; at most one corrector ever applies to a given
-    render, same as `latex_engine` alone before this.
+    needed -- or, with `typst_engine` instead, to make a margin setting
+    written for the OTHER engine family reach Typst's own template (see
+    fix_typst_margin()). The two are mutually exclusive; at most one
+    corrector ever applies to a given render, same as `latex_engine` alone
+    before this.
     """
     corrector = (wrap_latex_header_includes if latex_engine
-                else fix_typst_margin_scalar if typst_engine else None)
+                else fix_typst_margin if typst_engine else None)
     temporary_paths: list[Path] = []
     prepared: list[Path] = []
     try:
@@ -1957,37 +1958,139 @@ def has_geometry(md_path: Path, variables: list[str], metadata_files: list[Path]
                for preamble in preamble_files)
 
 
-def frontmatter_margin_scalar(md_path: Path, variables: list[str]) -> str | None:
-    """Return a document's own bare scalar ``margin:`` value, IF
-    translating it into a working ``geometry:margin=...`` for LaTeX-family
-    engines is safe -- or None when there's nothing to translate. Same
-    scope as pagesize_typo_value() above: front matter and -V variables
-    only, not metadata files or preambles.
+# Shared by frontmatter_margin_geometry_options() and fix_typst_margin()
+# below to translate a margin setting written for ONE engine family into
+# the variable the OTHER one actually reads -- geometry: (LaTeX) and
+# margin: (Typst) each mean nothing at all to the other's template, so a
+# document written/tested against one engine silently loses its margin
+# the moment it's rendered through the other (has_geometry() already
+# stops pdfmd's own DEFAULT_MARGIN from stepping on either, which is
+# correct, but does nothing to make the document's OWN setting reach the
+# engine that can't read it natively). Both directions normalize through
+# one canonical shape: a {top, bottom, left, right} dict of raw dimension
+# strings, physical sides only -- Typst's binding-aware `inside`/`outside`
+# and `rest` have no LaTeX equivalent at all, so a `margin:` mapping using
+# any of those three is left completely alone rather than guessed at.
+MARGIN_SIDE_ALIASES = {
+    "x": ("left", "right"),
+    "y": ("top", "bottom"),
+    "top": ("top",),
+    "bottom": ("bottom",),
+    "left": ("left",),
+    "right": ("right",),
+}
+
+# geometry package option names -- includes the older t/b/l/r-margin
+# spellings alongside the more common ones actually seen in practice.
+GEOMETRY_SIDE_ALIASES = {
+    "margin": ("top", "bottom", "left", "right"),
+    "hmargin": ("left", "right"),
+    "vmargin": ("top", "bottom"),
+    "top": ("top",), "tmargin": ("top",),
+    "bottom": ("bottom",), "bmargin": ("bottom",),
+    "left": ("left",), "lmargin": ("left",),
+    "right": ("right",), "rmargin": ("right",),
+}
+
+
+def parse_margin_sides(value) -> dict[str, str] | None:
+    """Normalize a parsed (via PyYAML) Typst-shaped ``margin:`` value into
+    a ``{top, bottom, left, right}`` dict of raw dimension strings -- or
+    None when `value` is a scalar-shaped None/absent, or a mapping that
+    uses ``inside``/``outside``/``rest`` (Typst's own binding-aware
+    margins, with no LaTeX equivalent) or any other key this doesn't
+    recognize, or isn't a scalar or mapping at all.
+
+    A scalar (already the case fix_typst_margin() itself exists to
+    correct on the Typst side) is uniform on all four sides.
+    """
+    if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+        side_value = str(value)
+        return {"top": side_value, "bottom": side_value, "left": side_value, "right": side_value}
+    if not isinstance(value, dict):
+        return None
+    sides: dict[str, str] = {}
+    for key, side_value in value.items():
+        aliases = MARGIN_SIDE_ALIASES.get(str(key).strip().casefold())
+        if not aliases:
+            return None
+        for side in aliases:
+            sides[side] = str(side_value)
+    return sides or None
+
+
+def parse_geometry_sides(value) -> dict[str, str] | None:
+    """Normalize a parsed (via PyYAML) ``geometry:`` value -- a bare
+    "key=val" scalar, a comma-joined "key=val,key=val" scalar, or a YAML
+    list of such strings, the three shapes Pandoc's own LaTeX template
+    accepts -- into a ``{top, bottom, left, right}`` dict of raw dimension
+    strings, or None when it contains anything this can't safely
+    interpret: an option with no ``key=`` at all, or a key that isn't
+    about a margin (``includehead``, ``showframe``, ...) -- the geometry
+    package has many options that aren't page margins, and guessing wrong
+    on those would be worse than leaving Typst's own defaults in place.
+    """
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        items = value
+    else:
+        return None
+    sides: dict[str, str] = {}
+    for item in items:
+        for part in item.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "=" not in part:
+                return None
+            key, _, side_value = part.partition("=")
+            aliases = GEOMETRY_SIDE_ALIASES.get(key.strip().casefold())
+            if not aliases:
+                return None
+            for side in aliases:
+                sides[side] = side_value.strip()
+    return sides or None
+
+
+def sides_to_geometry_options(sides: dict[str, str]) -> list[str]:
+    """Format a {top,bottom,left,right} dict as the geometry: option list
+    Pandoc's LaTeX template expects -- collapsed to one ``margin=...``
+    when all four sides given are equal, one option per side otherwise
+    (only the sides actually present -- a mapping that only set ``x:``
+    leaves top/bottom to LaTeX's own default, same as it would for Typst).
+    """
+    if len(sides) == 4 and len(set(sides.values())) == 1:
+        return [f"margin={next(iter(sides.values()))}"]
+    return [f"{side}={sides[side]}" for side in ("top", "bottom", "left", "right") if side in sides]
+
+
+def frontmatter_margin_geometry_options(md_path: Path, variables: list[str]) -> list[str] | None:
+    """Return the geometry: option list a document's own ``margin:``
+    value translates to for LaTeX-family engines -- or None when there's
+    nothing to translate. Same scope as pagesize_typo_value() above: front
+    matter and -V variables only, not metadata files or preambles.
 
     ``margin:`` is a real Pandoc variable for the TYPST template only (see
-    fix_typst_margin_scalar() below) -- Pandoc's LaTeX template never
-    reads it at all, only ``geometry:`` does (a list of "key=value"
-    strings that becomes \\usepackage[...]{geometry}). has_geometry()
-    already treats a bare ``margin:`` as "a margin setting exists"
-    (correctly, so DEFAULT_MARGIN isn't injected on top of it), but
-    nothing translated that value into the one variable LaTeX's own
-    template actually consumes -- so a document with ONLY
-    ``margin: 2.54cm`` and no ``geometry:`` silently kept LaTeX's own much
-    wider article-class default margins on every LaTeX-family engine,
-    the requested value never taking effect at all. Confirmed directly
-    (2026-09-28), alongside the Typst-side bug the same value triggers
-    (see fix_typst_margin_scalar()): ``--engine typst`` errored outright
-    on it ("unexpected comma"), while every LaTeX-family engine rendered
-    fine -- just silently ignoring the requested margin instead of
-    erroring, which is arguably the worse of the two failures.
+    fix_typst_margin() below) -- Pandoc's LaTeX template never reads it at
+    all, only ``geometry:`` does. has_geometry() already treats a bare
+    ``margin:`` as "a margin setting exists" (correctly, so DEFAULT_MARGIN
+    isn't injected on top of it), but nothing translated that value into
+    the one variable LaTeX's own template actually consumes -- so a
+    document with ONLY ``margin: 2.54cm`` (or a ``top:``/``bottom:``/
+    ``left:``/``right:``/``x:``/``y:`` breakdown) and no ``geometry:``
+    silently kept LaTeX's own much wider article-class default margins on
+    every LaTeX-family engine, the requested value never taking effect at
+    all -- confirmed directly (2026-09-28) alongside the Typst-side bug
+    the scalar case triggers (see fix_typst_margin()).
 
     Returns None when: no ``margin:`` at all; a real ``geometry:`` is set
     anywhere (front matter or -V) -- an explicit geometry always wins,
-    untouched; or ``margin:`` is already a YAML mapping/per-side block
-    rather than a plain scalar (translating a ``top:``/``bottom:``/
-    ``left:``/``right:`` breakdown into ``geometry:`` options is a
-    reasonable follow-up, out of scope here -- only the single-value case
-    this session's bug report actually hit is handled).
+    untouched; PyYAML isn't installed (falls back to the scalar-only regex
+    this function used before parse_margin_sides() existed, since a real
+    parse is needed for the mapping case); or ``margin:`` uses Typst's
+    ``inside``/``outside``/``rest`` keys, which have no LaTeX equivalent
+    (see parse_margin_sides()).
     """
     if any(variable.startswith(("geometry=", "geometry:")) for variable in variables):
         return None
@@ -1998,11 +2101,20 @@ def frontmatter_margin_scalar(md_path: Path, variables: list[str]) -> str | None
     block = front_matter.group(1)
     if re.search(r"^geometry\s*:", block, re.MULTILINE):
         return None
-    match = re.search(r"^margin\s*:[ \t]*(\S.*?)[ \t]*$", block, re.MULTILINE)
-    if not match:
+    if yaml is None:
+        match = re.search(r"^margin\s*:[ \t]*(\S.*?)[ \t]*$", block, re.MULTILINE)
+        if not match:
+            return None
+        value = match.group(1).strip().strip("'\"")
+        return [f"margin={value}"] if value else None
+    try:
+        data = yaml.safe_load(block)
+    except yaml.YAMLError:
         return None
-    value = match.group(1).strip().strip("'\"")
-    return value or None
+    if not isinstance(data, dict) or "margin" not in data:
+        return None
+    sides = parse_margin_sides(data["margin"])
+    return sides_to_geometry_options(sides) if sides else None
 
 
 def pagesize_typo_value(md_path: Path, variables: list[str]) -> str | None:
@@ -2091,37 +2203,81 @@ TYPST_MARGIN_RE = re.compile(r"^(?P<indent>[ \t]*)margin(?P<colon>[ \t]*:[ \t]*)
                              re.MULTILINE)
 
 
-def fix_typst_margin_scalar(text: str) -> str:
-    """Rewrite a document's own bare scalar ``margin:`` front-matter value
-    into the ``x``/``y`` YAML mapping Pandoc's own TYPST template requires.
+def sides_to_typst_margin_yaml(sides: dict[str, str], indent: str, newline: str) -> str:
+    """Format a {top,bottom,left,right} dict as the YAML ``margin:``
+    mapping Pandoc's Typst template needs -- collapsed to ``x:``/``y:``
+    when all four sides given are equal, one line per side otherwise
+    (only the sides actually present, in a fixed top/bottom/left/right
+    order for a stable, readable rewrite)."""
+    if len(sides) == 4 and len(set(sides.values())) == 1:
+        value = next(iter(sides.values()))
+        return f"{indent}margin:{newline}{indent}  x: {value}{newline}{indent}  y: {value}"
+    lines = [f"{indent}margin:"]
+    lines += [f"{indent}  {side}: {sides[side]}" for side in ("top", "bottom", "left", "right")
+             if side in sides]
+    return newline.join(lines)
 
-    Pandoc's default Typst template renders margin unconditionally as
-    ``margin: ($for(margin/pairs)$$margin.key$: $margin.value$,$endfor$)``
-    -- it always iterates key/value PAIRS, so a plain scalar (``margin:
-    2.54cm``, exactly what every other writer -- including every LaTeX-
-    family engine via the geometry:margin=... translation
-    frontmatter_margin_scalar() feeds it -- accepts fine) has nothing to
-    iterate and comes out as the literal, invalid ``margin: (: ,)``: a
-    Typst syntax error ("unexpected comma") instead of a page margin.
-    Confirmed directly (2026-09-28): a document with ``margin: 2.54cm``
-    and ``pdfmd-options: {engine: typst}`` failed outright with exactly
-    that error, while rendering fine (albeit at the WRONG margin --
-    see frontmatter_margin_scalar()) on every LaTeX-family engine.
 
-    Only a bare scalar is rewritten -- a ``margin:`` that's already a
-    YAML mapping (a ``top:``/``bottom:``/``left:``/``right:`` or
-    ``x:``/``y:`` breakdown) needs no fix; Pandoc's ``/pairs`` filter
-    already turns that straight into valid Typst key/value pairs. Only
-    the document's own front matter is handled, same as
+def fix_typst_margin(text: str) -> str:
+    """Make a document's own page-margin setting reach Pandoc's Typst
+    template, whichever engine family it was actually written for.
+
+    Two distinct problems, both from the same root cause -- ``margin:``
+    is a real Pandoc variable for the TYPST template only, and
+    ``geometry:`` for the LATEX template only, neither reads the other's
+    key at all:
+
+    1. A bare scalar ``margin:`` (``margin: 2.54cm``) is rewritten into
+       the ``x:``/``y:`` mapping Typst's template requires -- it always
+       renders margin as ``($for(margin/pairs)$...$endfor$)``, iterating
+       key/value PAIRS a scalar has none of, so it comes out as the
+       literal, invalid ``margin: (: ,)``: a Typst syntax error
+       ("unexpected comma") instead of a page margin. Confirmed directly
+       (2026-09-28): a document with ``margin: 2.54cm`` and
+       ``pdfmd-options: {engine: typst}`` failed outright with exactly
+       that error, while rendering fine (albeit at the WRONG margin --
+       see frontmatter_margin_geometry_options()) on every LaTeX-family
+       engine.
+
+    2. A document with ONLY a ``geometry:`` (no ``margin:`` at all) --
+       written for and tested against a LaTeX-family engine -- reaches
+       Typst with no margin variable set at all: Typst's template never
+       reads ``geometry:``, so it silently falls back to its own built-in
+       default (1.25in) instead of erroring, the same "wrong margin, no
+       warning" failure frontmatter_margin_geometry_options() fixes in the
+       other direction. Parsed via parse_geometry_sides() and added as a
+       new ``margin:`` mapping -- ``geometry:`` itself is left in place;
+       it's inert for Typst, not harmful.
+
+    Neither fix touches a ``margin:`` that's already a YAML mapping --
+    Pandoc's ``/pairs`` filter already turns that straight into valid
+    Typst key/value pairs, and it may use Typst's own ``inside``/
+    ``outside``/``rest`` keys, which parse_margin_sides() can't safely
+    reinterpret but Typst's own template needs no help with anyway. Only
+    the document's own front matter is handled in either case, same as
     typst_papersize_translation()'s callers above -- a shared
-    --metadata-file setting ``margin:`` as a scalar is a rarer case left
-    unfixed, out of scope here.
+    --metadata-file setting either key is a rarer case left unfixed, out
+    of scope here.
     """
     front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
     if not front_matter:
         return text
     block = front_matter.group(1)
     newline = "\r\n" if "\r\n" in block else "\n"
+
+    if yaml is not None:
+        try:
+            data = yaml.safe_load(block)
+        except yaml.YAMLError:
+            data = None
+        if isinstance(data, dict) and "margin" not in data and "geometry" in data:
+            sides = parse_geometry_sides(data["geometry"])
+            if not sides:
+                return text
+            insertion = sides_to_typst_margin_yaml(sides, "", newline) + newline
+            return text[:front_matter.start(1)] + insertion + block + text[front_matter.end(1):]
+        if isinstance(data, dict) and isinstance(data.get("margin"), dict):
+            return text  # already a mapping -- Typst's template handles it as-is
 
     def replace(match: re.Match) -> str:
         value = match.group("val").strip().strip("'\"")
@@ -4324,12 +4480,11 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             if is_tex_target and geometry_needed:
                 note("MARGIN", f"{md_path}: no geometry/margin set; "
                               f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
-            margin_scalar = (None if auto_disabled(no_auto, "margin")
-                             else frontmatter_margin_scalar(md_path, variables))
-            if is_tex_target and margin_scalar:
-                note("MARGIN", f"{md_path}: margin: {margin_scalar} isn't a Pandoc variable "
-                              f"LaTeX-family targets read (geometry: is) -- using "
-                              f"geometry:margin={margin_scalar}")
+            margin_options = (None if auto_disabled(no_auto, "margin")
+                              else frontmatter_margin_geometry_options(md_path, variables))
+            if is_tex_target and margin_options:
+                note("MARGIN", f"{md_path}: margin: isn't a Pandoc variable LaTeX-family targets "
+                              f"read (geometry: is) -- using geometry:{','.join(margin_options)}")
             if is_tex_target and monofont_needed:
                 note("MONOFONT", f"{md_path}: has code but no monofont set; "
                                 f"using {default_monofont()} on LaTeX-family targets")
@@ -4377,8 +4532,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd += ["-V", f"mainfont={first_font}"]
                     if geometry_needed:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
-                    elif margin_scalar:
-                        cmd += ["-V", f"geometry:margin={margin_scalar}"]
+                    elif margin_options:
+                        for margin_option in margin_options:
+                            cmd += ["-V", f"geometry:{margin_option}"]
                     if monofont_needed:
                         cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo:
@@ -4447,12 +4603,11 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         if geometry_needed:
             note("MARGIN", f"{md_path}: no geometry/margin set; "
                           f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
-        margin_scalar = (None if auto_disabled(no_auto, "margin")
-                         else frontmatter_margin_scalar(md_path, variables))
-        if margin_scalar:
-            note("MARGIN", f"{md_path}: margin: {margin_scalar} isn't a Pandoc variable "
-                          f"LaTeX-family engines read (geometry: is) -- using "
-                          f"geometry:margin={margin_scalar}")
+        margin_options = (None if auto_disabled(no_auto, "margin")
+                         else frontmatter_margin_geometry_options(md_path, variables))
+        if margin_options:
+            note("MARGIN", f"{md_path}: margin: isn't a Pandoc variable LaTeX-family engines "
+                          f"read (geometry: is) -- using geometry:{','.join(margin_options)}")
         monofont_needed = (not auto_disabled(no_auto, "monofont")
                           and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
                           and not has_monofont(md_path, variables))
@@ -4545,8 +4700,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd += ["-V", f"mainfontfallback={fallback_font()}"]
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
-                    elif margin_scalar and engine in LATEX_ENGINES:
-                        cmd += ["-V", f"geometry:margin={margin_scalar}"]
+                    elif margin_options and engine in LATEX_ENGINES:
+                        for margin_option in margin_options:
+                            cmd += ["-V", f"geometry:{margin_option}"]
                     if monofont_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"monofont={default_monofont()}"]
                     if pagesize_typo and engine in LATEX_ENGINES:
@@ -5136,12 +5292,12 @@ def main() -> None:
                 if report_geometry_needed:
                     report_note("MARGIN", "REPORT: no geometry/margin set; "
                                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
-                report_margin_scalar = (None if auto_disabled(report_no_auto, "margin")
-                                        else frontmatter_margin_scalar(files[0], variables))
-                if is_tex_target and report_margin_scalar:
-                    report_note("MARGIN", f"REPORT: margin: {report_margin_scalar} isn't a Pandoc "
-                                         "variable LaTeX-family targets read (geometry: is) -- using "
-                                         f"geometry:margin={report_margin_scalar}")
+                report_margin_options = (None if auto_disabled(report_no_auto, "margin")
+                                         else frontmatter_margin_geometry_options(files[0], variables))
+                if is_tex_target and report_margin_options:
+                    report_note("MARGIN", "REPORT: margin: isn't a Pandoc variable LaTeX-family "
+                                         "targets read (geometry: is) -- using "
+                                         f"geometry:{','.join(report_margin_options)}")
                 report_monofont_needed = (is_tex_target and not auto_disabled(report_no_auto, "monofont")
                                           and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
                                           and not has_monofont(files[0], variables))
@@ -5177,8 +5333,9 @@ def main() -> None:
                             cmd += ["-V", f"mainfont={report_first_font}"]
                         if report_geometry_needed:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
-                        elif report_margin_scalar:
-                            cmd += ["-V", f"geometry:margin={report_margin_scalar}"]
+                        elif report_margin_options:
+                            for margin_option in report_margin_options:
+                                cmd += ["-V", f"geometry:{margin_option}"]
                         if report_monofont_needed:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                     for variable in variables:
@@ -5226,12 +5383,12 @@ def main() -> None:
                 if geometry_needed:
                     report_note("MARGIN", "REPORT: no geometry/margin set; "
                                          f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family engines")
-                margin_scalar = (None if auto_disabled(report_no_auto, "margin")
-                                 else frontmatter_margin_scalar(files[0], variables))
-                if margin_scalar:
-                    report_note("MARGIN", f"REPORT: margin: {margin_scalar} isn't a Pandoc variable "
-                                         "LaTeX-family engines read (geometry: is) -- using "
-                                         f"geometry:margin={margin_scalar}")
+                margin_options = (None if auto_disabled(report_no_auto, "margin")
+                                 else frontmatter_margin_geometry_options(files[0], variables))
+                if margin_options:
+                    report_note("MARGIN", "REPORT: margin: isn't a Pandoc variable LaTeX-family "
+                                         "engines read (geometry: is) -- using "
+                                         f"geometry:{','.join(margin_options)}")
                 monofont_needed = (not auto_disabled(report_no_auto, "monofont")
                                   and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
                                   and not has_monofont(files[0], variables))
@@ -5278,8 +5435,9 @@ def main() -> None:
                         cmd += report_resource_path
                         if geometry_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
-                        elif margin_scalar and engine in LATEX_ENGINES:
-                            cmd += ["-V", f"geometry:margin={margin_scalar}"]
+                        elif margin_options and engine in LATEX_ENGINES:
+                            for margin_option in margin_options:
+                                cmd += ["-V", f"geometry:{margin_option}"]
                         if monofont_needed and engine in LATEX_ENGINES:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                         for variable in variables:
