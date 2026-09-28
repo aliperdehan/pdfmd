@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.11.2"
+PDFMD_VERSION = "3.12.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -2482,6 +2482,51 @@ def frontmatter_extra_preambles(md_path: Path) -> list[Path]:
     return resolved
 
 
+def frontmatter_extra_lua_filters(md_path: Path) -> list[Path]:
+    """Read ``pdfmd-options: lua-filter: ...`` -- a document naming its own
+    Pandoc Lua filter(s) explicitly, instead of relying on
+    find_lua_filters()'s fixed auto-discovery names (``<doc-stem>.lua`` or
+    ``nulabreport.lua``).
+
+    Accepts a bare string or a YAML list of strings; each path is resolved
+    relative to `md_path`'s own directory (not cwd -- a document should be
+    runnable from any directory), same convention as
+    frontmatter_extra_preambles. A path that doesn't exist is a hard
+    SystemExit, not a silent skip: naming a filter explicitly means it's
+    required, unlike auto-discovery's own best-effort search.
+
+    Merged with (not a replacement for) whatever find_lua_filters() already
+    auto-discovered -- see this function's one call site in convert_one,
+    which appends these AFTER the auto-discovered ones and dedupes by
+    resolved path. Both land on the command line after --citeproc (see
+    run()'s own comment on that ordering) -- required for a filter, like
+    fullcite.lua, that consumes citeproc's resolved bibliography div.
+
+    Reuses the existing "lua" --no-auto KIND, same as
+    frontmatter_extra_preambles reuses "preamble": a pdfmd-options.lua-filter
+    key is written IN the document, so --no-auto lua (or a bare --no-auto)
+    suppresses it the same as auto-discovery.
+
+    Added 2026-09-28 for a real case: an annotated-bibliography.md using a
+    citeproc-dependent filter (fullcite.lua) that isn't named after the
+    document's own stem, so find_lua_filters() alone never picked it up --
+    the document had to name it explicitly instead.
+    """
+    value = frontmatter_pdfmd_options(md_path).get("lua-filter")
+    if value is None:
+        return []
+    names = [value] if isinstance(value, str) else (
+        [str(item) for item in value] if isinstance(value, list) else [])
+    resolved = []
+    for name in names:
+        path = (md_path.parent / name).resolve()
+        if not path.is_file():
+            raise SystemExit(f"{md_path}: pdfmd-options.lua-filter names {name!r}, "
+                             f"which doesn't exist at {path}")
+        resolved.append(path)
+    return resolved
+
+
 # --stamp / pdfmd-options.stamp: appends (or updates) a "BUILD NOTES" HTML
 # comment at/near the end of a document recording what compiled it and when
 # -- a lab-notebook-style provenance note, invisible in the rendered output
@@ -3885,11 +3930,15 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
         for variable in variables:
             cmd += ["-V", variable]
-        cmd += pandoc_options
         cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
         cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
         if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
             cmd.append("--citeproc")
+        # pandoc_options after --citeproc: any --lua-filter/--filter a caller
+        # passes through needs resolved citations already in the AST, same
+        # invariant as the auto-discovered lua_filters below (see run()'s
+        # matching comment in convert_one).
+        cmd += pandoc_options
         for lua_filter in lua_filters:
             cmd += ["--lua-filter", str(lua_filter)]
         log_cmd(cmd, pandoc_cwd, verbose)
@@ -4115,6 +4164,10 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
     if reader_reason:
         note("READER", reader_reason)
     lua_filters = [] if auto_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
+    if not auto_disabled(no_auto, "lua"):
+        for extra_filter in frontmatter_extra_lua_filters(md_path):
+            if extra_filter not in lua_filters:
+                lua_filters.append(extra_filter)
     for lua_filter in lua_filters:
         note("LUA", str(lua_filter))
 
@@ -4230,7 +4283,6 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd += ["-V", f"papersize={typst_size}"]
                 if shift_heading:
                     cmd += ["--shift-heading-level-by=-1"]
-                cmd += pandoc_options
                 if preamble_files and is_tex_target:
                     for preamble_file in preamble_files:
                         cmd += ["--include-in-header", str(preamble_file)]
@@ -4256,6 +4308,11 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         cmd.append(f"--{citation_engine}")
                     else:
                         cmd.append("--citeproc")
+                # pandoc_options after the citation-engine flag above: a
+                # caller-supplied --lua-filter/--filter needs resolved
+                # citations already in the AST (same invariant as the
+                # auto-discovered lua_filters below).
+                cmd += pandoc_options
                 if is_tex_target and tablewidth_auto:
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
@@ -4385,7 +4442,6 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                             cmd += ["-V", f"papersize={typst_size}"]
                     if shift_heading:
                         cmd += ["--shift-heading-level-by=-1"]
-                    cmd += pandoc_options
                     if preamble_files and engine in LATEX_ENGINES:
                         for preamble_file in preamble_files:
                             cmd += ["--include-in-header", str(preamble_file)]
@@ -4402,6 +4458,15 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
                     if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
+                    # pandoc_options after --citeproc, same reason as below: a
+                    # caller-supplied --lua-filter/--filter needs resolved
+                    # citations already in the AST. (This used to sit before
+                    # the --citeproc append above, which silently broke any
+                    # citeproc-dependent filter passed via extra CLI args --
+                    # e.g. `--lua-filter=some.lua` landed ahead of --citeproc
+                    # on the actual pandoc command line. Confirmed via
+                    # --verbose CMD output before this fix.)
+                    cmd += pandoc_options
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -4986,7 +5051,6 @@ def main() -> None:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                     for variable in variables:
                         cmd += ["-V", variable]
-                    cmd += pandoc_options
                     if report_preambles and is_tex_target:
                         for preamble in report_preambles:
                             cmd += ["--include-in-header", str(preamble)]
@@ -5004,6 +5068,9 @@ def main() -> None:
                             and "--citeproc" not in pandoc_options
                             and not CITEPROC_DISABLED):
                         cmd.append("--citeproc")
+                    # pandoc_options after --citeproc: see convert_one's
+                    # matching comment.
+                    cmd += pandoc_options
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
                     log_cmd(cmd, pandoc_cwd, args.verbose)
@@ -5076,7 +5143,6 @@ def main() -> None:
                             cmd += ["-V", f"monofont={default_monofont()}"]
                         for variable in variables:
                             cmd += ["-V", variable]
-                        cmd += pandoc_options
                         if preambles and engine in LATEX_ENGINES:
                             for preamble in preambles:
                                 cmd += ["--include-in-header", str(preamble)]
@@ -5088,6 +5154,9 @@ def main() -> None:
                                 and "--citeproc" not in pandoc_options
                                 and not CITEPROC_DISABLED):
                             cmd.append("--citeproc")
+                        # pandoc_options after --citeproc: see convert_one's
+                        # matching comment.
+                        cmd += pandoc_options
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += ["--lua-filter", str(width_filter)]
                         log_cmd(cmd, pandoc_cwd, args.verbose)

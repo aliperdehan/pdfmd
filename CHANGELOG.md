@@ -31,6 +31,51 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.12.0 — 2026-09-28
+
+Pre-edit state: commit `17025b7` (v3.11.2). Found and fixed while wiring a
+citeproc-dependent Lua filter (one that pulls a single formatted reference
+out of citeproc's resolved bibliography div) into a real document.
+
+### Added
+
+- **`pdfmd-options: lua-filter: ...`** front-matter key
+  (`frontmatter_extra_lua_filters()`), for a filter that isn't named after
+  the document's own stem and so `find_lua_filters()`'s fixed
+  auto-discovery (`<stem>.lua` / `nulabreport.lua`) never picks it up.
+  Accepts a bare string or a YAML list, resolved relative to the document's
+  own directory, merged with (not replacing) whatever auto-discovery
+  already found, and deduped by resolved path. Same conventions as
+  `pdfmd-options: preamble:` (`frontmatter_extra_preambles()`): a hard
+  `SystemExit` if a named file doesn't exist, and suppressed the same as
+  auto-discovery by `--no-auto lua` / a bare `--no-auto`.
+
+### Fixed
+
+- **Extra CLI args (`pandoc_options`, from `parse_known_args()`) landed on
+  the Pandoc command line *before* `--citeproc`**, in every PDF-rendering
+  code path (the direct `run()` closure, the standalone-tex-target branch,
+  the soffice-bridge fallback, and both report-mode branches). Harmless for
+  most passthrough flags, but silently broke any `--lua-filter`/`--filter`
+  passed this way that depends on citeproc's resolved output — e.g. one
+  reading citeproc's `id="refs"` / `id="ref-<citekey>"` bibliography div,
+  which never existed yet when the filter ran. `pdfmd`'s own
+  auto-discovered Lua filters were never affected (already correctly
+  ordered after `--citeproc`) — only filters supplied via extra CLI args or
+  (before this version existed) with no auto-discovery route at all.
+  `cmd += pandoc_options` now happens after the `--citeproc` append in each
+  of those five spots (left `convert_via_native_bibliography` — the
+  `citation-engine: natbib`/`biblatex` path — untouched: it never produces
+  citeproc's bibliography div, so this ordering doesn't apply there).
+  Verified with `--verbose` that the built command now reads `--citeproc
+  --lua-filter=...` instead of the reverse, and that a real citeproc-
+  dependent filter resolves correctly through the full `pdfmd` pipeline
+  (not just a synthetic Pandoc-only repro) — plus a regression check that
+  an ordinary citation-free document, and `--no-auto lua` suppression of
+  the new front-matter key, both still behave unchanged.
+
+---
+
 ## v3.11.2 — 2026-09-26
 
 Pre-edit state: commit `452e83d` (v3.11.1). Windows fixes found by reading
