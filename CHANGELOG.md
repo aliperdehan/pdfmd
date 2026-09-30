@@ -31,6 +31,23 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.15.1 — 2026-09-30
+
+Pre-edit state: commit `10c09f8` (v3.15.0).
+
+### Fixed
+
+- **PDFs now name pdfmd in their `/Creator` field** instead of only the
+  underlying tool (`LaTeX via pandoc`, `Typst 0.x`, ...), which made a
+  pdfmd-built PDF indistinguishable from a bare `pandoc` run. The existing
+  post-compile PDF Info stamp (`stamp_pdf_metadata_posthoc()`, so every
+  engine, gated by the same `pdf_metadata` switch) now appends it in
+  pandoc's own order: `LaTeX via pandoc via pdfmd-cli`. Uses the PyPI
+  distribution name so it is searchable; the version is already in the
+  `PdfmdVersions` key. Idempotent; an absent Creator becomes `pdfmd-cli`.
+
+---
+
 ## v3.15.0 — 2026-09-29
 
 Pre-edit state: commit `dd52035` (v3.14.0). v3.14.0's `margin:`/`geometry:`

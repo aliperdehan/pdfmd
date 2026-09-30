@@ -449,7 +449,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.15.0"
+PDFMD_VERSION = "3.15.1"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -3552,6 +3552,15 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                 warnings.simplefilter("ignore")
                 reader = pypdf.PdfReader(pdf_path)
                 existing = dict(reader.metadata) if reader.metadata else {}
+                # Credit pdfmd in /Creator, appended in pandoc's own
+                # "<tool> via <wrapper>" order ("LaTeX via pandoc" -> "LaTeX
+                # via pandoc via pdfmd-cli"; "Typst 0.15.1" -> "Typst 0.15.1
+                # via pdfmd-cli"). Named by its PyPI distribution name so it
+                # is searchable; the version is already in PdfmdVersions.
+                # Idempotent (a re-stamp doesn't append twice).
+                creator = str(existing.get("/Creator") or "").strip()
+                if not creator.endswith("pdfmd-cli"):
+                    existing["/Creator"] = f"{creator} via pdfmd-cli" if creator else "pdfmd-cli"
                 writer = pypdf.PdfWriter()
                 writer.append(reader)
                 writer.add_metadata({
