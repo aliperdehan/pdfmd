@@ -193,6 +193,46 @@ into a single PDF, in the order of each file's `chapter:` front-matter
 field. See [`examples/book/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/book/). `-i FILE` leaves one file
 out, and `--exclude-unnumbered` skips files without a `chapter:`.
 
+### One long document in several files
+
+For an article-style document that has grown too long to edit as one file
+(and unlike `-r`, one that should read as a single document, not a
+sequence of chapters), keep a *scaffold* with the front matter, and the
+text in a `parts/` folder beside it, one file per section, each starting with
+its own heading:
+
+```
+report.md                    front matter only (title, author, ...)
+parts/10-introduction.md
+parts/20-methods.md
+parts/30-discussion.md
+```
+
+Switch it on once, in a `metadata.yaml` shared by your documents, so the
+content files carry no typesetting:
+
+```yaml
+pdfmd-options:
+  parts: auto        # a document is a scaffold only if parts/ or sections/ exists
+```
+
+```console
+$ pdfmd report                  # the whole document, report.pdf
+$ pdfmd report#methods          # just that part, report.methods.pdf
+$ pdfmd report#discussion+appendix      # several: always in report order
+$ pdfmd parts/20-methods.md     # same as report#methods
+$ pdfmd report --list-parts
+$ pdfmd old-report.md --split new-folder   # cut an existing single file into parts
+$ pdfmd old-report.md --split new-folder --split-depth 2   # ...and subsections too
+```
+
+The parts are joined in filename order into one Pandoc run, so the result is
+identical to the same text in a single file: labels, citations and numbering
+work across parts, and paths are written relative to the scaffold's folder
+whichever part they are in. A part rebuilt alone is much faster to compile
+but cannot see the others, so references to them print as `??`. See
+[`examples/parts/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/parts/).
+
 ### Tables straight from a CSV file
 
 ```markdown

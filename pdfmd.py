@@ -8,6 +8,7 @@ Examples:
     pdfmd Downloads -b -f "DejaVu Serif"
     pdfmd Downloads -b --recursive
     pdfmd book -r -o book.pdf
+    pdfmd report#methods            (parts mode: build one part)
     pdfmd chapter.md -y metadata.yaml
     pdfmd book -r -y
     pdfmd notes.md -o notes.html
@@ -222,6 +223,51 @@ CSV/TSV table inclusion:
     inside a fenced code block as a literal example is never mistaken for
     the real thing -- a raw-text approach keyed on some other character
     would not have that guarantee.
+
+A long document in parts (parts mode):
+    A document too long to edit comfortably as one file can be a scaffold
+    (`report.md`: front matter only) plus a `parts/` or `sections/` folder
+    of ordinary Markdown files, each starting with its own heading:
+
+        report.md
+        parts/10-introduction.md  20-methods.md  30-discussion.md
+
+    Turn it on once, in a shared metadata.yaml (or the scaffold's front
+    matter), so the content files carry no typesetting at all:
+
+        pdfmd-options:
+          parts: auto
+
+    `auto` makes a document a scaffold only if one of those folders exists
+    beside it, so every other document is untouched; `parts: <folder>` names
+    another folder, `parts: false` opts one document out, and --no-auto
+    parts does it for one run. `pdfmd report` then joins the scaffold and the
+    parts in filename order (digit runs compare as numbers; a subfolder is a
+    part made of several files; names starting with `.` or `_` and backup
+    folders are skipped) into ONE Pandoc run, exactly as if they were one
+    file: labels, citations and numbering work across parts, and the output
+    is byte-for-byte the LaTeX the single file would have produced. Paths
+    stay relative to the scaffold's folder, whichever part they are written
+    in. A leading YAML block or `% title` block in a part is removed before
+    Pandoc sees it (Pandoc would otherwise let a later file's `title:`
+    replace the document's).
+
+    Build part of it with --section NAME (a part's file name, with or
+    without its numeric prefix, a folder, or its number; several joined with
+    `+` or `,`, or repeated), the `pdfmd report#NAME` shorthand
+    (`report#discussion+appendix`), or by naming a part file:
+    `pdfmd parts/20-methods.md`. Whatever the order typed, the parts build in
+    report order and each at most once (`purpose+intro` is just the intro
+    folder); the output is named in that order. A name that matches parts in
+    two different top-level folders is an error (`discussion/yield` names it
+    exactly, `a+b` joins two on purpose). Any depth works: cut the document
+    finer (`--split-depth 2`) and a subsection is a part of its own, built
+    without its parent heading. A partial build keeps the scaffold's title
+    page and settings, is written as `report.NAME.pdf` beside the scaffold
+    (never over `report.pdf`), writes no BUILD NOTES stamp, and sets
+    `pdfmd-partial: true` in the document metadata so a Lua filter can adapt;
+    references to parts left out print as ??. --list-parts shows the order.
+    Not supported: natbib/biblatex citation engines, the soffice fallback.
 
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
@@ -449,7 +495,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.15.1"
+PDFMD_VERSION = "3.16.0"
 import argparse
 import filecmp
 from fnmatch import fnmatchcase
@@ -644,7 +690,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize",
+    "papersize", "parts",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3159,6 +3205,13 @@ def stamp_scope_matches(options: dict, report_output: Path | None) -> bool:
     return options["scope"] in ("always", wanted_scope)
 
 
+def stamp_unless_partial(partial: bool, *args, **kwargs) -> None:
+    """stamp_after_success, except for a partial parts-mode build: that isn't
+    the report, so it shouldn't write a provenance note claiming it is."""
+    if not partial:
+        stamp_after_success(*args, **kwargs)
+
+
 def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
                         cli_overrides: dict, output: Path, verbose: bool,
                         report_output: Path | None = None) -> None:
@@ -3765,6 +3818,430 @@ def report_sources(paths: list[Path], exclusions: list[str], exclude_unnumbered:
                      if file not in excluded and not has_chapter_field(file)]
     included = [file for file in all_files if file not in excluded]
     return sorted(included, key=chapter_order), excluded
+
+
+# -- Parts (split-file) mode ------------------------------------------------
+# A long article-style document (a lab report) kept as one scaffold file --
+# front matter only, e.g. report.md -- plus a folder of parts beside it
+# (parts/ or sections/), each part a plain Markdown file that starts with its
+# own heading. The feature is OFF unless a `pdfmd-options: {parts: auto}` (or
+# `parts: <folder>`) is set, in the document's own front matter or -- the
+# intended place, so the content files carry no typesetting -- in a linked
+# metadata.yaml. With `auto`, a document is a scaffold only if one of
+# PARTS_DIR_ALIASES exists beside it, so every other document builds exactly
+# as before. A build joins the scaffold and every part in filename order
+# (numeric runs compare as numbers: 2-x before 10-y) into one Pandoc run --
+# the same single invocation -r/--report makes -- so labels, citations and
+# numbering behave as in one file. Paths inside parts stay relative to the
+# scaffold's folder (pandoc_cwd and TEXINPUTS already point there), so
+# splitting a monolith is a pure cut-and-paste.
+PARTS_DIR_ALIASES = ("parts", "sections")
+# Handed to Pandoc on a partial build, so a Lua filter that assumes the whole
+# document (nulabreport's `moved` blocks need the Appendix) can degrade
+# instead of failing: `pdfmd-partial` is true in the document's metadata.
+PARTIAL_METADATA = ["-M", "pdfmd-partial=true"]
+PARTS_SKIP_DIRS = frozenset({"backup", "backups"})
+PARTS_ON = {"true", "yes", "on", "auto"}
+PARTS_OFF = {"false", "no", "off", "none"}
+
+
+def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """The effective ``pdfmd-options.parts`` value: None (off), "auto", or a
+    folder name. The document's own front matter wins over the metadata
+    files, in find_metadata's order -- same precedence as frontmatter_engine.
+    """
+    sources = [frontmatter_pdfmd_options(md_path)]
+    for metadata_file in metadata_files:
+        options = metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(options if isinstance(options, dict) else {})
+    for options in sources:
+        if "parts" not in options:
+            continue
+        value = options["parts"]
+        text = str(value).strip().casefold()
+        if value is False or text in PARTS_OFF:
+            return None
+        if value is True or text in PARTS_ON:
+            return "auto"
+        return str(value).strip()
+    return None
+
+
+def parts_directory(scaffold: Path, setting: str) -> Path | None:
+    if setting == "auto":
+        for name in PARTS_DIR_ALIASES:
+            if (scaffold.parent / name).is_dir():
+                return (scaffold.parent / name).resolve()
+        return None
+    directory = scaffold.parent / setting
+    if not directory.is_dir():
+        raise SystemExit(f"{display_path(scaffold)}: pdfmd-options.parts names '{setting}', "
+                         f"but {display_path(directory)} is not a folder")
+    return directory.resolve()
+
+
+def natural_key(name: str) -> list:
+    """Sort key where digit runs compare as numbers (2-x < 10-y)."""
+    return [int(piece) if index % 2 else piece.casefold()
+            for index, piece in enumerate(re.split(r"(\d+)", name))]
+
+
+def collect_parts(directory: Path) -> list[Path]:
+    """Every part under ``directory`` in document order. Subfolders are
+    walked (a folder is a part made of several files); names starting with
+    ``.`` or ``_`` are skipped, so ``_scratch.md`` is a place to park notes
+    and pdfmd's own hidden temp files never count; so are backup folders.
+    """
+    found: list[Path] = []
+    for entry in sorted(directory.iterdir(), key=lambda item: natural_key(item.name)):
+        if entry.name.startswith((".", "_")):
+            continue
+        if entry.is_dir():
+            if entry.name.casefold() not in PARTS_SKIP_DIRS:
+                found.extend(collect_parts(entry))
+        elif entry.suffix.lower() == ".md":
+            found.append(entry.resolve())
+    return found
+
+
+def part_slug(component: str) -> str:
+    """'10-introduction' -> 'introduction' (a leading number and separator
+    are ordering, not naming)."""
+    return re.sub(r"^\d+[-_. ]*", "", component) or component
+
+
+def part_keys(relative: Path) -> tuple[set[str], set[str]]:
+    """(exact keys, slug keys) a --section request may use for this part:
+    the file, each folder above it, with or without the numeric prefix, and
+    a top-level component's bare number.
+    """
+    components = list(relative.parts)
+    components[-1] = Path(components[-1]).stem
+    exact: set[str] = set()
+    slugs: set[str] = set()
+    for depth in range(len(components)):
+        chain = components[:depth + 1]
+        exact.add("/".join(chain).casefold())
+        exact.add(chain[-1].casefold())
+        slug_chain = [part_slug(item) for item in chain]
+        slugs.add("/".join(slug_chain).casefold())
+        slugs.add(slug_chain[-1].casefold())
+        number = re.match(r"\d+", chain[-1])
+        if number and depth == 0:
+            exact.update({number.group(0), number.group(0).lstrip("0") or "0"})
+    return exact, slugs
+
+
+def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> list[Path]:
+    """The parts matching any request, in document order. A request matches
+    a file name, its name without the numeric prefix, a folder (all parts
+    inside), or a top-level number; failing an exact match, a unique prefix
+    of a name. Unknown or ambiguous requests are an error that lists the
+    choices -- a typo must never silently build the wrong section.
+    """
+    keyed = {part: part_keys(part.relative_to(directory)) for part in parts}
+    chosen: set[Path] = set()
+    for request in requests:
+        wanted = request.strip().casefold().removesuffix(".md")
+        if not wanted:
+            continue
+        hits = [part for part, (exact, slugs) in keyed.items() if wanted in exact or wanted in slugs]
+        if not hits:
+            hits = [part for part, (_, slugs) in keyed.items()
+                    if any(slug.startswith(wanted) for slug in slugs)]
+        # One name must not quietly mean two unrelated sections (`yield` in
+        # both Calculations and Discussion): join them yourself with a+b, or
+        # spell the folder out (`discussion/yield`).
+        groups = {part.relative_to(directory).parts[0] for part in hits}
+        if len(groups) > 1:
+            raise SystemExit(f"--section '{request}' is ambiguous: it matches parts in "
+                             + ", ".join(sorted(groups))
+                             + ". Name the folder too (e.g. 'folder/name'), or join with +")
+        if not hits:
+            tops = dict.fromkeys(part.relative_to(directory).parts[0] for part in parts)
+            available = ", ".join(
+                f"{part_slug(Path(top).stem)} ({(re.match(r'[0-9]+', top) or [''])[0] or '-'})"
+                for top in tops)
+            raise SystemExit(f"--section '{request}' matches no part. Available: {available}")
+        chosen.update(hits)
+    return [part for part in parts if part in chosen]
+
+
+class ScaffoldPlan:
+    """What a parts-mode build consists of."""
+
+    def __init__(self, scaffold: Path, directory: Path, parts: list[Path],
+                 selected: list[Path] | None, metadata_files: list[Path]):
+        self.scaffold = scaffold
+        self.directory = directory
+        self.parts = parts
+        self.selected = selected          # None = the full report
+        self.metadata_files = metadata_files
+
+    @property
+    def files(self) -> list[Path]:
+        return [self.scaffold, *(self.parts if self.selected is None else self.selected)]
+
+    @property
+    def output_stem(self) -> str:
+        if self.selected is None:
+            return self.scaffold.stem
+        # A whole top-level folder is named by the folder, not its files.
+        labels: list[str] = []
+        for part in self.selected:
+            top = part.relative_to(self.directory).parts[0]
+            siblings = [other for other in self.parts
+                        if other.relative_to(self.directory).parts[0] == top]
+            whole = len(siblings) > 1 and all(other in self.selected for other in siblings)
+            label = part_slug(Path(top).stem if whole or len(part.relative_to(self.directory).parts) == 1
+                              else part.with_suffix("").name)
+            if label not in labels:
+                labels.append(label)
+        return f"{self.scaffold.stem}.{'+'.join(labels)}"
+
+
+def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str) -> None:
+    """With `parts: auto`, EVERY Markdown file beside a parts/ folder counts as
+    its scaffold. That is right for the usual folder (one report.md), and
+    surprising when a notes.md or draft sits there too: say so once, rather
+    than silently building the same parts into both.
+    """
+    if setting != "auto":
+        return
+    others = [item.name for item in sorted(scaffold.parent.glob("*.md"))
+              if item != scaffold and not item.name.startswith(".")
+              and parts_setting(item, scaffold_metadata_files(item, None)) == "auto"]
+    if others:
+        print(f"WARN  {display_path(scaffold)}: {display_path(directory)} also sits beside "
+              f"{', '.join(others)}, which `parts: auto` builds from it too; put "
+              "`pdfmd-options: {parts: false}` in the files that are not the report",
+              file=sys.stderr)
+
+
+def split_section_requests(raw: list[str]) -> list[str]:
+    """`a,b` and `a+b` both mean "a and b" (`pdfmd report#discussion+appendix`)."""
+    return [piece.strip() for item in raw for piece in re.split(r"[,+]", item) if piece.strip()]
+
+
+def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list[Path]:
+    try:
+        found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
+    except (FileNotFoundError, ValueError):
+        return []
+    if found is None or found is AUTO_METADATA_DISABLED:
+        return []
+    return found if isinstance(found, list) else [found]
+
+
+def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | None,
+                  requested_metadata: list[str] | None) -> ScaffoldPlan | None:
+    """Decide whether ``source`` is a scaffold, or a part of one, and what to
+    build; None means an ordinary document. ``source`` may be the scaffold
+    itself, or any file inside its parts folder -- found by walking up to a
+    folder whose scaffold names this one, so a part builds with the same
+    metadata, paths and bibliography as the full report. A part given by path
+    is built alone even if parts-mode skips it (an ``_underscore`` draft).
+    """
+    if source.suffix.lower() != ".md" or auto_disabled(effective_no_auto(source, cli_no_auto), "parts"):
+        return None
+    mfiles = scaffold_metadata_files(source, requested_metadata)
+    setting = parts_setting(source, mfiles)
+    directory = parts_directory(source, setting) if setting else None
+    if directory is not None:
+        parts = collect_parts(directory)
+        if not parts:
+            raise SystemExit(f"{display_path(directory)} has no Markdown parts")
+        selected = select_parts(parts, directory, sections) if sections else None
+        warn_shared_parts_folder(source, directory, setting)
+        return ScaffoldPlan(source, directory, parts, selected, mfiles)
+    for ancestor in list(source.parents)[:4]:
+        root = ancestor.parent
+        if root == ancestor:
+            break
+        for candidate in sorted(root.glob("*.md")):
+            candidate_meta = scaffold_metadata_files(candidate, requested_metadata)
+            candidate_setting = parts_setting(candidate, candidate_meta)
+            candidate_dir = parts_directory(candidate, candidate_setting) if candidate_setting else None
+            if candidate_dir is not None and candidate_dir == ancestor.resolve():
+                parts = collect_parts(candidate_dir)
+                warn_shared_parts_folder(candidate, candidate_dir, candidate_setting)
+                chosen = {source, *(select_parts(parts, candidate_dir, sections) if sections else [])}
+                selected = sorted(chosen, key=lambda part: parts.index(part) if part in parts else len(parts))
+                return ScaffoldPlan(candidate, candidate_dir, parts, selected, candidate_meta)
+    return None
+
+
+LEADING_FRONT_MATTER_RE = re.compile(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", re.DOTALL)
+
+
+def strip_part_front_matter(text: str) -> str:
+    """Remove a leading YAML block or ``% title`` block from a part. Pandoc
+    merges every later file's YAML into the document's metadata and the LATER
+    value wins (checked: a part's `title:` replaced the scaffold's), and a
+    `% ...` title block is only recognised at the very start of the first
+    file -- elsewhere it prints as a paragraph. Parts carry no metadata.
+    """
+    stripped = LEADING_FRONT_MATTER_RE.sub("", text, count=1)
+    lines = stripped.split("\n")
+    count = 0
+    while count < len(lines) and lines[count].startswith("%"):
+        count += 1
+        while count < len(lines) and lines[count].startswith((" ", "\t")) and lines[count].strip():
+            count += 1
+    return "\n".join(lines[count:]) if count else stripped
+
+
+@contextmanager
+def scaffold_inputs(files: list[Path], active: bool) -> Iterator[list[Path]]:
+    """Yield the files to hand Pandoc: the scaffold as is, each part with its
+    front matter removed (a hidden temp copy beside it, deleted afterwards;
+    a part with nothing to remove is passed through untouched).
+    """
+    if not active:
+        yield list(files)
+        return
+    temporary: list[Path] = []
+    prepared = [files[0]]
+    try:
+        for part in files[1:]:
+            text = part.read_text(encoding="utf-8-sig")
+            cleaned = strip_part_front_matter(text)
+            if cleaned == text:
+                prepared.append(part)
+                continue
+            with NamedTemporaryFile("w", encoding="utf-8", suffix=".md",
+                                    prefix=f".{part.stem}.pdfmd-part-", dir=part.parent,
+                                    delete=False) as handle:
+                handle.write(cleaned)
+                temporary.append(Path(handle.name))
+            prepared.append(temporary[-1])
+        yield prepared
+    finally:
+        for path in temporary:
+            path.unlink(missing_ok=True)
+
+
+def print_parts(plan: ScaffoldPlan) -> None:
+    print(f"SCAFFOLD  {display_path(plan.scaffold)}")
+    for part in plan.parts:
+        text = part.read_text(encoding="utf-8-sig")
+        body = strip_part_front_matter(text)
+        heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
+        mark = "*" if plan.selected is not None and part in plan.selected else " "
+        print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
+
+def split_top_level_sections(body: str, level: int = 1) -> list[list[str]]:
+    """Cut Markdown at its ATX headings of exactly `level` (1 = `# `). Element
+    0 is whatever comes before the first one (often a comment block). A `# `
+    line inside a fenced code block (a Python comment) or an HTML comment is
+    not a heading.
+    """
+    heading = re.compile("#{%d} \\S" % level)
+    sections: list[list[str]] = [[]]
+    fence: str | None = None
+    comment = False
+    for line in body.split("\n"):
+        stripped = line.strip()
+        if not comment:
+            marker = re.match(r"(`{3,}|~{3,})", stripped)
+            if fence is None and marker:
+                fence = marker.group(1)[0] * 3
+            elif fence is not None and stripped.startswith(fence):
+                fence = None
+        if fence is None and not comment and heading.match(line):
+            sections.append([])
+        sections[-1].append(line)
+        if fence is None:
+            position = 0
+            while True:
+                if not comment:
+                    found = line.find("<!--", position)
+                    if found < 0:
+                        break
+                    comment, position = True, found + 4
+                else:
+                    found = line.find("-->", position)
+                    if found < 0:
+                        break
+                    comment, position = False, found + 3
+    return sections
+
+
+def slug_of(heading_line: str) -> str:
+    title = re.sub(r"\{#[^}]*\}", "", heading_line.lstrip("# "))
+    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_title).strip("-")
+    if len(slug) > 30:   # cut at a word boundary, not mid-word
+        slug = slug[:30].rsplit("-", 1)[0] if "-" in slug[:30] else slug[:30]
+    return slug or "part"
+
+
+def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
+    """Turn a single-file document into a scaffold plus parts in a NEW folder
+    (never in place), and link everything else the document refers to, so the
+    result builds as it stands. Returns 0 if the Pandoc AST of the parts
+    equals the original's, 1 if not (the cut is then wrong; nothing is
+    claimed). The source is not modified.
+    """
+    text = source.read_text(encoding="utf-8-sig")
+    front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if not front:
+        raise SystemExit(f"{source}: --split needs YAML front matter (it becomes the scaffold)")
+    if destination.exists() and any(destination.iterdir()):
+        raise SystemExit(f"{destination} exists and is not empty; --split writes to a new folder")
+    sections = split_top_level_sections(text[front.end():])
+    if len(sections) < 2:
+        raise SystemExit(f"{source}: no level-1 ('# ') headings to split at")
+    parts_dir = destination / "parts"
+    parts_dir.mkdir(parents=True)
+    lead = "\n".join(sections[0]).strip("\n")
+    scaffold = destination / f"{source.stem}.md"
+    scaffold.write_text(text[:front.end()] + (("\n" + lead + "\n") if lead else ""), encoding="utf-8")
+    written: list[Path] = []
+
+    def emit(section: list[str], directory: Path, number: int, level: int) -> None:
+        """One file per section; with depth left, a folder whose first file
+        holds the heading and the text before its first subheading and whose
+        other files are the subsections (selecting the folder selects all)."""
+        slug = slug_of(section[0])
+        pieces = split_top_level_sections("\n".join(section), level + 1) if level < depth else [section]
+        if len(pieces) < 2:
+            part = directory / f"{number * 10:02d}-{slug}.md"
+            part.write_text("\n".join(section).rstrip("\n") + "\n", encoding="utf-8")
+            written.append(part)
+            return
+        folder = directory / f"{number * 10:02d}-{slug}"
+        folder.mkdir()
+        lead = folder / f"00-{slug}.md"
+        lead.write_text("\n".join(pieces[0]).rstrip("\n") + "\n", encoding="utf-8")
+        written.append(lead)
+        for index, piece in enumerate(pieces[1:], 1):
+            emit(piece, folder, index, level + 1)
+
+    for number, section in enumerate(sections[1:], 1):
+        emit(section, parts_dir, number, 1)
+    skip = {source.name.casefold()}
+    for entry in sorted(source.parent.iterdir()):
+        if (entry.name.startswith(".") or entry.name.casefold() in skip or entry.name.casefold() in PARTS_SKIP_DIRS
+                or entry.suffix.lower() in {".pdf", ".md"} or (destination / entry.name).exists()
+                or entry.resolve() in (destination, *destination.parents)):
+            continue
+        (destination / entry.name).symlink_to(os.path.relpath(entry.absolute(), destination),
+                                               target_is_directory=entry.is_dir())
+    original = subprocess.run(["pandoc", str(source), "-t", "native"], capture_output=True, text=True)
+    split = subprocess.run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
+                           capture_output=True, text=True)
+    print(f"SPLIT  {display_path(source)} -> {display_path(scaffold)} + {len(written)} parts in "
+          f"{display_path(parts_dir)}")
+    if original.returncode == 0 and original.stdout == split.stdout:
+        print("OK     the parts read back as the identical document (Pandoc AST compared)")
+        if not parts_setting(scaffold, scaffold_metadata_files(scaffold, None)):
+            print("NOTE   parts mode is off for this document: add `pdfmd-options: {parts: auto}` "
+                  "to its metadata.yaml (or the scaffold's front matter) to build from the parts")
+        return 0
+    print("FAIL   the parts do NOT read back as the original; do not use this split", file=sys.stderr)
+    return 1
+
 
 
 # Conventional file extension for a Pandoc writer/target format, used to name
@@ -4412,8 +4889,14 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 verbose: bool = False,
                 debug: bool = False,
                 stamp_overrides: dict | None = None,
-                keep_aux: bool = False) -> tuple[Path, bool, str]:
+                keep_aux: bool = False,
+                extra_inputs: list[Path] | None = None,
+                partial: bool = False) -> tuple[Path, bool, str]:
+    # extra_inputs: parts-mode parts, joined to md_path (the scaffold) in one
+    # Pandoc run -- see plan_scaffold(). partial: only some of them, so this
+    # isn't the report itself and writes no BUILD NOTES stamp.
     stamp_overrides = stamp_overrides or {}
+    parts_inputs = list(extra_inputs or [])
     auto_summary: list[str] = []
 
     def note(kind: str, detail: str) -> None:
@@ -4508,7 +4991,20 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
             table_width_filter() as width_filter, \
-            csv_table_filter() as csv_filter:
+            csv_table_filter() as csv_filter, \
+            scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs)) as scaffold_files:
+        part_files = scaffold_files[1:]
+        all_inputs = [md_path, *parts_inputs] if parts_inputs else None
+        any_citations = any(contains_citations(item) for item in [md_path, *parts_inputs])
+        any_code_spans = any(has_code_spans(item.read_text(encoding="utf-8-sig"))
+                             for item in [md_path, *parts_inputs])
+        if parts_inputs:
+            note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
+                          f"joined after it" + (" (partial build)" if partial else ""))
+            if (frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex")
+                    and not auto_disabled(no_auto, "citationengine")):
+                raise SystemExit(f"{md_path}: pdfmd-options.citation-engine natbib/biblatex is not "
+                                 "supported in parts mode yet; use citeproc")
         if title_shifted:
             note("TITLE", f"{md_path}: promoted leading '# ' heading to Pandoc title metadata")
         shift_heading = title_shifted and not has_shift_heading_option(pandoc_options)
@@ -4537,7 +5033,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             geometry_needed = (not auto_disabled(no_auto, "margin")
                               and not has_geometry(md_path, variables, metadata_files, preamble_files or []))
             monofont_needed = (not auto_disabled(no_auto, "monofont")
-                              and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
+                              and any_code_spans
                               and not has_monofont(md_path, variables))
             if is_tex_target and geometry_needed:
                 note("MARGIN", f"{md_path}: no geometry/margin set; "
@@ -4563,7 +5059,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                          and is_tex_target) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
-                cmd = ["pandoc", str(source), "-o", str(output), "-t", target_format]
+                cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and standalone_auto:
                     note("STANDALONE", f"{md_path}: --to {target_format} needs a complete, "
                                        "independently compilable document; adding --standalone")
@@ -4572,6 +5068,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     cmd += ["-f", effective_from]
                 for metadata in prepared_metadata:
                     cmd += ["--metadata-file", str(metadata)]
+                if partial:
+                    cmd += PARTIAL_METADATA
                 pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
                 cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
@@ -4628,9 +5126,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 # document_header_includes()'s own docstring.
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
-                cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
-                cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
-                if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
+                cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
                             and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
                         # No compile-and-rerun concern here the way the PDF path's
@@ -4652,7 +5150,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 log_cmd(cmd, pandoc_cwd, verbose)
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             if result.returncode == 0:
-                stamp_after_success(md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+                stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
             return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -4671,7 +5169,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             note("MARGIN", f"{md_path}: margin: isn't a Pandoc variable LaTeX-family engines "
                           f"read (geometry: is) -- using geometry:{','.join(margin_options)}")
         monofont_needed = (not auto_disabled(no_auto, "monofont")
-                          and has_code_spans(md_path.read_text(encoding="utf-8-sig"))
+                          and any_code_spans
                           and not has_monofont(md_path, variables))
         if monofont_needed:
             note("MONOFONT", f"{md_path}: has code but no monofont set; "
@@ -4707,7 +5205,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 # .md BUILD NOTES stamp nor a PDF-metadata one -- every other
                 # success path in this function does call it.
                 if ok:
-                    stamp_after_success(md_path, metadata_files, preamble_files or [],
+                    stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [],
                                         stamp_overrides, output, verbose)
                 flush_summary()
                 return md_path, ok, reason[-3000:]
@@ -4719,6 +5217,10 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             if family in failed_families:
                 print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
+                continue
+            if engine == "soffice" and parts_inputs:
+                print(f"SKIP  {md_path}: the soffice last-resort fallback doesn't support parts mode",
+                      file=sys.stderr)
                 continue
             if engine == "soffice":
                 # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's
@@ -4745,11 +5247,13 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 source, *prepared_metadata = prepared
 
                 def run(selected_font: str | None, fallback: bool = False):
-                    cmd = ["pandoc", str(source), "-o", str(output), "--pdf-engine=" + engine]
+                    cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "--pdf-engine=" + engine]
                     if effective_from:
                         cmd += ["-f", effective_from]
                     for metadata in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata)]
+                    if partial:
+                        cmd += PARTIAL_METADATA
                     pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
                     cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
@@ -4796,8 +5300,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
-                    cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
-                    if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
+                    cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                    if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
                     # pandoc_options after --citeproc, same reason as below: a
                     # caller-supplied --lua-filter/--filter needs resolved
@@ -4813,7 +5317,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                     # LaTeX needs the citations already resolved. csv-table has to
                     # come before table-width so a CSV-generated table gets the same
                     # width-balancing pass a hand-written one would.
-                    cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+                    cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += ["--lua-filter", str(width_filter)]
                     for lua_filter in lua_filters:
@@ -4849,7 +5353,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         assert result is not None
         if result.returncode == 0:
-            stamp_after_success(md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+            stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -4868,7 +5372,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 stamp_overrides: dict | None = None,
                 keep_aux: bool = False,
                 backup: bool | None = None,
-                backup_format: str | None = None) -> tuple[Path, bool, str]:
+                backup_format: str | None = None,
+                extra_inputs: list[Path] | None = None,
+                partial: bool = False) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -4878,11 +5384,12 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           pandoc_options, metadata_file, output_file, preamble_files,
                           target_format=target_format, from_format=from_format, no_auto=no_auto,
                           verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
-                          keep_aux=keep_aux)
+                          keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial)
     if result[1]:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
-        backup_after_success(md_path, metadata_files, backup, verbose, backup_format)
+        for backed_up in [md_path, *(extra_inputs or [])]:
+            backup_after_success(backed_up, metadata_files, backup, verbose, backup_format)
     return result
 
 
@@ -4979,6 +5486,24 @@ def build_parser() -> argparse.ArgumentParser:
                         help="exclude a Markdown file from report/book input (extension optional)")
     parser.add_argument("--exclude-unnumbered", action="store_true",
                         help="exclude Markdown files without a chapter field in report/book mode")
+    parser.add_argument("--section", "--only", action="append", default=[], metavar="NAME",
+                        dest="section",
+                        help="parts mode only (pdfmd-options: {parts: auto}): build just these parts of a "
+                             "split document, named by file, by file without its numeric prefix, by "
+                             "folder, or by number; repeat the flag or join with + or , (a+b). "
+                             "`pdfmd report#intro` is shorthand for `pdfmd report --section intro`, and "
+                             "so is naming a part's own path. (No short flag: -s is Pandoc's --standalone.)")
+    parser.add_argument("--split", type=Path, metavar="DIR",
+                        help="cut a single-file document at its '# ' headings into a scaffold plus "
+                             "parts/ in a new folder DIR (the source is untouched; other files it "
+                             "uses are symlinked in), and check that the parts read back as the "
+                             "identical document. See 'A long document in parts' in the docs")
+    parser.add_argument("--split-depth", type=int, default=1, metavar="N",
+                        help="with --split: also cut at '## ' (N=2), '### ' (N=3) headings, each "
+                             "cut section becoming a folder of parts, so that a subsection can be "
+                             "built alone. Default 1: top-level sections only")
+    parser.add_argument("--list-parts", action="store_true",
+                        help="parts mode only: print the scaffold's parts in build order and exit")
     parser.add_argument("--no-auto", nargs="*", default=None, metavar="KIND",
                         help="disable pdfmd's own automatic per-document behavior. Bare --no-auto "
                              "disables all of it; or name one or more of: reader (the gfm switch "
@@ -5153,6 +5678,17 @@ def watch_signature(source: Path) -> float:
                     latest = max(latest, path.stat().st_mtime)
                 except OSError:
                     continue
+    # A parts-mode document's parts live one level down (and deeper): watch
+    # those too. Only the conventional folder names -- a custom
+    # `parts: <folder>` is not followed, to keep this scan cheap and bounded.
+    for name in PARTS_DIR_ALIASES:
+        directory = source.parent / name
+        if directory.is_dir():
+            for path in directory.rglob("*.md"):
+                try:
+                    latest = max(latest, path.stat().st_mtime)
+                except OSError:
+                    continue
     return latest
 
 
@@ -5204,6 +5740,13 @@ def main() -> None:
                          "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
                          "-- then run `pdfmd --check-dependencies`.")
     paths = args.path or [Path.cwd()]
+    if args.split:
+        if len(paths) != 1:
+            raise SystemExit("--split takes one Markdown file")
+        try:
+            raise SystemExit(split_into_parts(find_markdown(paths[0]), args.split.resolve(), max(1, args.split_depth)))
+        except FileNotFoundError as error:
+            raise SystemExit(str(error))
     variables = DEFAULT_VARS + args.variable
     stamp_overrides: dict = {}
     if args.stamp:
@@ -5261,15 +5804,40 @@ def main() -> None:
             )
         paths = [markdown_files[0]]
         print(f"AUTO MD    {display_path(paths[0])}")
+    # Parts mode (see plan_scaffold): `pdfmd report#intro` is shorthand for
+    # --section. A literal path with a '#' in its name wins, so nothing that
+    # already worked changes meaning.
+    section_requests = split_section_requests(args.section)
+    if len(paths) == 1 and "#" in paths[0].name and not paths[0].exists():
+        base, _, suffix = paths[0].name.partition("#")
+        paths = [paths[0].with_name(base)]
+        section_requests += split_section_requests([suffix])
+    scaffold_plan = None
+    if not args.batch and not args.report and not args.presentation and len(paths) == 1:
+        try:
+            plan_source = find_markdown(paths[0])
+        except FileNotFoundError:
+            plan_source = None
+        if plan_source is not None:
+            scaffold_plan = plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
+    if scaffold_plan is None and (section_requests or args.list_parts):
+        raise SystemExit("--section, --list-parts and 'name#section' need a document in parts mode "
+                         "(pdfmd-options: {parts: auto}, with a parts/ or sections/ folder beside it)")
+    if scaffold_plan is not None and args.list_parts:
+        print_parts(scaffold_plan)
+        return
     if args.watch:
         if args.batch or args.report:
             raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
         if len(paths) != 1:
             raise SystemExit("-w/--watch accepts one Markdown name or path")
-        try:
-            watch_source = find_markdown(paths[0])
-        except FileNotFoundError as error:
-            raise SystemExit(str(error))
+        if scaffold_plan is not None:
+            watch_source = scaffold_plan.scaffold
+        else:
+            try:
+                watch_source = find_markdown(paths[0])
+            except FileNotFoundError as error:
+                raise SystemExit(str(error))
         run_watch(watch_source, sys.argv[1:])
         return
     if args.report:
@@ -5633,6 +6201,13 @@ def main() -> None:
             source = find_markdown(paths[0])
         except FileNotFoundError as error:
             raise SystemExit(str(error))
+        # A parts-mode build is the scaffold plus its parts: it takes the
+        # scaffold's own name and folder, and a partial build carries the
+        # section names in its file name so it never replaces the full report.
+        output_stem = source.stem
+        if scaffold_plan is not None:
+            source = scaffold_plan.scaffold
+            output_stem = scaffold_plan.output_stem
         output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
         out_dir = None
         output_file = None
@@ -5645,9 +6220,9 @@ def main() -> None:
             requested_output = Path.cwd() / args.out.name if args.destination_cwd else args.out.resolve()
             output_file = default_output_path(requested_output, target_format)
         elif args.destination_cwd:
-            output_file = Path.cwd() / f"{source.stem}{output_extension}"
-        output = output_file or ((out_dir / f"{source.stem}{output_extension}") if out_dir
-                                 else source.with_suffix(output_extension))
+            output_file = Path.cwd() / f"{output_stem}{output_extension}"
+        output = output_file or ((out_dir / f"{output_stem}{output_extension}") if out_dir
+                                 else source.with_name(f"{output_stem}{output_extension}"))
         if source.suffix.lower() == ".qmd":
             if args.presentation:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
@@ -5678,6 +6253,10 @@ def main() -> None:
             # the top of main()) is used as-is.
             results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format)]
         else:
+            if scaffold_plan is not None:
+                # _convert_one derives the output name from the document's own
+                # stem; a partial build's differs, so hand over the final path.
+                output_file = output
             document_class = (frontmatter_value(source, "documentclass")
                               or frontmatter_value(source, "class"))
             try:
@@ -5691,7 +6270,12 @@ def main() -> None:
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
+                                   extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
+                                   partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
+            if scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]:
+                print("NOTE  partial build: references to parts left out print as ??, and figure/"
+                      "table numbers restart from this build's own first one")
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]

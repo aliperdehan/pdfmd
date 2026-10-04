@@ -1,0 +1,6 @@
+# Shared by every document in this folder. `parts: auto` is what turns a
+# document into a scaffold: pdfmd then builds it from the parts/ (or
+# sections/) folder beside it. Documents with no such folder are unaffected.
+pdfmd-options:
+  parts: auto
+documentclass: article

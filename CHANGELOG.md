@@ -31,6 +31,55 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.16.0 — 2026-10-04
+
+Pre-edit state: commit `63cc7a7` (v3.15.1).
+
+### Added
+
+- **Parts mode: one long document as a scaffold plus a folder of parts.**
+  With `pdfmd-options: {parts: auto}` (in a shared `metadata.yaml`, so the
+  content files stay free of typesetting; or in the document's own front
+  matter), a document with a `parts/` or `sections/` folder beside it is
+  built from the scaffold and every `.md` under that folder, in natural
+  filename order, in one Pandoc run. Off unless asked for, and with `auto`
+  only for a document that actually has the folder, so nothing existing
+  changes. Verified on a real 1,800-line lab report cut into nine parts:
+  the Pandoc AST, the generated LaTeX and the PDF text are identical to the
+  single file's. See the module docstring ("A long document in parts").
+  - `--section NAME` / `--only`, `pdfmd report#NAME`, or a part's own path
+    build just those parts (`report.NAME.pdf`, no stamp, `pdfmd-partial:
+    true` in the metadata for filters). Typos are an error listing the
+    choices, never a silent wrong build. `-s` is Pandoc's `--standalone`,
+    so there is no short flag.
+  - `--list-parts` prints the build order.
+  - `+` joins sections (`report#discussion+appendix`), as does `,`. Parts
+    always build in report order, once each, and the file is named in that
+    order. A name matching parts in two top-level folders is an error, not a
+    quiet union (`discussion/yield` names one exactly).
+  - `--split-depth N` also cuts at `## `/`### ` headings, each cut section
+    becoming a folder (its first file holds the heading), so a subsection
+    can be built alone; slugs are cut at a word boundary.
+  - `--split DIR` cuts a single-file document at its `# ` headings into a
+    scaffold plus `parts/` in a NEW folder (the source is never touched; the
+    other files it uses are symlinked in so the result builds as it
+    stands), fence- and comment-aware (a `# ---` line in a code block is
+    not a heading), then compares the Pandoc AST of the parts against the
+    original and reports whether they read back identically. Verified on
+    two real lab reports.
+  - A leading YAML or `% title` block in a part is stripped before Pandoc:
+    Pandoc merges later files' YAML and the **later value wins** (checked),
+    so a stray `title:` in a part would have replaced the document's.
+  - `--no-auto parts`, `parts: false`, `parts: <folder>`.
+  - `-w/--watch` follows the parts folder.
+  - `--backup` snapshots each part as well as the scaffold.
+  - Built through `convert_one` (new `extra_inputs`, `partial` arguments),
+    not the `-r/--report` branch, which is a separate, older code path that
+    skips much of what single-file builds do (Lua filter discovery, among
+    other things); that is why the output matches a single file exactly.
+
+---
+
 ## v3.15.1 — 2026-09-30
 
 Pre-edit state: commit `10c09f8` (v3.15.0).

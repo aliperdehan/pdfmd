@@ -33,6 +33,7 @@ jobs:
           pdfmd lecture -e typst
           pdfmd results -e typst
           pdfmd book -r -o book.pdf -e typst
+          (cd parts && pdfmd report -e typst && pdfmd 'report#methods' -e typst)
           pdfmd lecture -o lecture.html
       - uses: actions/upload-artifact@v4      # lets you download the PDFs
         with:
