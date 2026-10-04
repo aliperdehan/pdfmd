@@ -296,6 +296,31 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     or moved there since (pdfmd says so). A part's own labels are never
     overridden.
 
+    What the cache does NOT do: it never skips a build or reuses a rendered
+    page. Pandoc runs and LaTeX typesets the whole document, from the current
+    sources, package and Lua filter, every time; only LaTeX's own cross-
+    reference files carry over. A change to the package, the preamble or the
+    text therefore shows in the very next build (and LaTeX asks for the extra
+    pass itself if a number moved). Build with --no-cache, or `pdfmd DOC
+    --clear-cache` first, when verifying a change to the package itself.
+
+    Plot cache (`cache: {plots: true}`, --cache-plots; nulabreport >= 1.26.0,
+    LuaLaTeX): nulabreport's whole plot pictures are stored as PDFs under the
+    cache folder after the build that first typesets them, and the next build
+    includes them at their exact size instead of drawing them again -- the
+    expensive part of a report full of spectra. A plot not stored yet is
+    simply typeset inline, so a build never depends on this having worked.
+    Staleness is closed off three ways: the folder is keyed by a hash of
+    nulabreport.sty, the document's whole preamble and the engine version (any
+    change starts a new folder; old ones are pruned); each entry records the
+    files its standalone job really read (LaTeX's -recorder) and is dropped
+    when one changes, so editing a CSV redraws exactly the plots that use it;
+    and the entry's key covers the call, its arguments, the layout it read
+    and the colours set by the call's own keys. On a real 29-page report:
+    80 s plain, 28 s with the aux cache, 15 s with both; pages identical to
+    the uncached build to 0.05 bp in every word. `pdfmd --clear-cache` deletes
+    the folder (a document's, or everything), always safe.
+
     The cache route is also what makes `citation-engine: natbib`/`biblatex`
     work with parts (the Pandoc-run bibliography path takes one input file);
     it runs bibtex/biber between passes. Limits: it does not retry a
@@ -529,7 +554,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.17.0"
+PDFMD_VERSION = "3.18.0"
 import argparse
 import filecmp
 import hashlib
@@ -4683,6 +4708,8 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
         settings["aux"] = True
     elif cli is False:
         settings = {key: False for key in settings}
+    if CACHE_PLOTS_CLI and cli is not False:
+        settings["plots"] = True
     return settings
 
 
@@ -4753,6 +4780,186 @@ def part_key(part: Path, parts_root: Path | None) -> str:
 
 def safe_stem(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._+-]", "-", name)
+
+
+# -- Plot cache (pdfmd-options: {cache: {plots: true}}, --cache-plots) --------
+# nulabreport's plot macros (nulabreport >= 1.26.0, section 15b) look each whole
+# plot picture up by a key; on a hit they include the PDF stored here at the
+# stored size, on a miss they typeset as always and log the call to
+# <jobname>.plotreq. After the build pdfmd renders those logged calls, each in
+# a small standalone job that loads the SAME preamble the document used (cut
+# from the generated .tex) and ships the picture out as a page of exactly its
+# size, ready for the next build. The finished PDF never depends on this having
+# worked: a miss is an ordinary inline plot.
+#
+# What stops it going stale, since a stale plot would be worse than a slow one:
+#   * the directory is keyed by a hash of everything the picture can depend on
+#     apart from its own arguments -- the package (nulabreport.sty), the
+#     document's whole preamble (fonts, settings, preamble.tex, header-includes),
+#     the engine's version, and this cache's format -- so a changed package or
+#     setting simply lands in a new directory, and the old one is pruned;
+#   * every entry records the files its standalone job actually read (LaTeX's
+#     own recorder, not a guess at argument names) and is dropped before the
+#     next build if any of them changed or vanished -- a CSV edit shows up;
+#   * the key includes the picture's arguments and the layout it read (text
+#     height/width, font size), so a different call or a different page
+#     geometry is a different entry.
+PLOT_CACHE_FORMAT = "1"
+PLOT_REQUEST_SEP = "@@|@@"
+PLOT_CACHE_KEEP_DIRS = 3
+CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
+
+
+def kpsewhich_text(name: str) -> str | None:
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return None
+    found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
+    if not found:
+        return None
+    try:
+        return Path(found[0]).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+@lru_cache(maxsize=None)
+def engine_version_line(engine: str) -> str:
+    try:
+        out = subprocess.run([engine, "--version"], capture_output=True, text=True).stdout
+    except OSError:
+        return ""
+    return out.splitlines()[0] if out else ""
+
+
+def sha1_file(path: Path) -> str | None:
+    try:
+        return hashlib.sha1(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def plot_cache_directory(preamble: str, sty_text: str, engine: str) -> Path:
+    digest = hashlib.sha1("\0".join([PLOT_CACHE_FORMAT, preamble, sty_text,
+                                     engine_version_line(engine)]).encode("utf-8")).hexdigest()[:12]
+    return cache_root() / f"plots-{digest}"
+
+
+def prune_plot_directories(keep: Path) -> None:
+    """Keep the newest few plot directories; an older environment (a package or
+    preamble from before a change) is never read again."""
+    others = sorted((d for d in cache_root().glob("plots-*") if d.is_dir() and d != keep),
+                    key=lambda d: d.stat().st_mtime, reverse=True)
+    for stale in others[PLOT_CACHE_KEEP_DIRS - 1:]:
+        shutil.rmtree(stale, ignore_errors=True)
+
+
+def validate_plot_entries(plot_dir: Path, verbose: bool) -> int:
+    """Drop every entry whose recorded input files changed or vanished."""
+    import json
+    dropped = 0
+    for deps_file in plot_dir.glob("*.deps"):
+        key = deps_file.stem
+        try:
+            deps = json.loads(deps_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            deps = None
+        if deps is None or any(sha1_file(Path(name)) != digest for name, digest in deps.items()):
+            for suffix in (".deps", ".dim", ".pdf"):
+                (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
+            dropped += 1
+            if verbose:
+                print(f"AUTO CACHE  plot {key[:8]}: an input changed; dropped")
+    return dropped
+
+
+def read_plot_requests(path: Path) -> dict[str, tuple[str, str, str]]:
+    requests: dict[str, tuple[str, str, str]] = {}
+    if not path.exists():
+        return requests
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.split(PLOT_REQUEST_SEP)
+        if len(parts) == 4 and re.fullmatch(r"[0-9a-f]{32}", parts[0]):
+            requests[parts[0]] = (parts[1], parts[2], parts[3])
+    return requests
+
+
+def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
+    """The user's own files a standalone plot job read (LaTeX -recorder), with
+    their content hashes -- anything under the report's folders, nothing from
+    the TeX tree."""
+    found: dict[str, str] = {}
+    try:
+        lines = fls.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return found
+    base = roots[0]
+    for line in lines:
+        if not line.startswith("INPUT "):
+            continue
+        candidate = Path(os.path.abspath(base / line[6:].strip()))
+        if candidate.suffix in (".aux", ".fls") or not candidate.is_file():
+            continue
+        if any(str(candidate).startswith(str(root) + os.sep) for root in roots):
+            digest = sha1_file(candidate)
+            if digest:
+                found[str(candidate)] = digest
+    return found
+
+
+def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Path, preamble: str,
+                         engine: str, cwd: Path, env: dict | None, roots: list[Path],
+                         verbose: bool) -> tuple[int, int]:
+    """Render each request not already stored; returns (rendered, failed)."""
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+    todo = {key: value for key, value in requests.items()
+            if not (plot_dir / f"{key}.dim").exists()}
+    if not todo:
+        return 0, 0
+
+    def render(item) -> bool:
+        key, (macro, args, ctx) = item
+        job = plot_dir / f"r-{key}.tex"
+        dim = plot_dir / f"r-{key}.dim"      # renamed to {key}.dim LAST: the commit marker
+        job.write_text(
+            "\\def\\LabPlotRender{}\n" + preamble + "\\begin{document}\\makeatletter\n"
+            "\\pagestyle{empty}\n\\ExplSyntaxOn\n" + ctx + "\n\\ExplSyntaxOff\n"
+            "\\setbox\\z@\\hbox{" + macro + args + "}\n"
+            "\\newwrite\\dimf\\immediate\\openout\\dimf=" + dim.name + "\n"
+            "\\immediate\\write\\dimf{\\string\\gdef\\string\\Lab@pc@wd{\\the\\wd\\z@}"
+            "\\string\\gdef\\string\\Lab@pc@ht{\\the\\ht\\z@}"
+            "\\string\\gdef\\string\\Lab@pc@dp{\\the\\dp\\z@}}\n"
+            "\\immediate\\closeout\\dimf\n"
+            "\\pagewidth=\\wd\\z@ \\pageheight=\\dimexpr\\ht\\z@+\\dp\\z@\\relax\n"
+            "\\hoffset=-1in \\voffset=-1in\n"
+            "\\ClearShipoutPictureBG\\ClearShipoutPictureFG\n"
+            "\\shipout\\hbox{\\box\\z@}\n\\end{document}\n", encoding="utf-8")
+        cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
+               f"-output-directory={plot_dir}", str(job)]
+        log_cmd(cmd, cwd, verbose)
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+        produced = plot_dir / f"r-{key}.pdf"
+        ok = result.returncode == 0 and produced.exists() and dim.exists()
+        if ok:
+            produced.replace(plot_dir / f"{key}.pdf")
+            (plot_dir / f"{key}.deps").write_text(
+                json.dumps(plot_recorded_inputs(plot_dir / f"r-{key}.fls", roots)), encoding="utf-8")
+            dim.replace(plot_dir / f"{key}.dim")
+        else:
+            for suffix in (".dim", ".pdf", ".deps"):
+                (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
+            if verbose:
+                print(f"AUTO CACHE  plot {key[:8]} failed to render: "
+                      + (tex_log_failure_reason(result.stdout) or result.stdout[-300:].strip()))
+        for leftover in plot_dir.glob(f"r-{key}.*"):
+            leftover.unlink(missing_ok=True)
+        return ok
+
+    workers = max(1, min(4, os.cpu_count() or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(render, todo.items()))
+    return sum(results), len(results) - sum(results)
 
 
 AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".bcf", ".run.xml",
@@ -5203,12 +5410,12 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         native_bibliography = (not auto_disabled(no_auto, "citationengine")
                                and frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex"))
         tex_engines = [engine for engine in engines if engine in LATEX_ENGINES and engine not in ("context", "latexmk", "tectonic")]
-        if (cache["aux"] or (parts_inputs and native_bibliography)) and tex_engines:
+        if (cache["aux"] or cache["plots"] or (parts_inputs and native_bibliography)) and tex_engines:
             return convert_via_cache(md_path, out_dir, font, tex_engines, variables, slide_level,
                                      pandoc_options, metadata_file, output, preamble_files, from_format,
                                      no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
                                      partial, bool(cache["aux"]), full_scaffold, parts_root, note,
-                                     flush_summary)
+                                     flush_summary, plots=bool(cache["plots"]))
 
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
@@ -5632,7 +5839,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                       no_auto: list[str] | None, verbose: bool, debug: bool,
                       stamp_overrides: dict, keep_aux: bool, parts_inputs: list[Path],
                       partial: bool, persistent: bool, full_scaffold: Path | None,
-                      parts_root: Path | None, note, flush_summary) -> tuple[Path, bool, str]:
+                      parts_root: Path | None, note, flush_summary,
+                      plots: bool = False) -> tuple[Path, bool, str]:
     """Build a PDF the cache way: Pandoc writes the .tex, pdfmd compiles it.
     See the comment above CACHE_DEFAULTS. ``persistent`` False (the natbib +
     parts case without the cache switched on) uses a scratch folder instead
@@ -5675,9 +5883,40 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         if not built[1]:
             return built
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        tex_env = tex_search_env(md_path.parent, pandoc_cwd)
+        plot_dir = None
+        preamble_text = ""
+        if plots:
+            tex_text = tex_path.read_text(encoding="utf-8")
+            preamble_text = tex_text.split("\\begin{document}")[0]
+            sty_text = kpsewhich_text("nulabreport.sty") or ""
+            if engines[0] != "lualatex":
+                note("CACHE", "plots: only LuaLaTeX is supported; plot cache skipped")
+            elif "LabPlotCacheDir" not in sty_text:
+                note("CACHE", "plots: this nulabreport.sty has no plot cache (needs v1.26.0); skipped")
+            elif " " in str(cache_root()):
+                note("CACHE", "plots: the cache folder's path has a space; plot cache skipped")
+            else:
+                plot_dir = plot_cache_directory(preamble_text, sty_text, "lualatex")
+                plot_dir.mkdir(parents=True, exist_ok=True)
+                os.utime(plot_dir)
+                prune_plot_directories(plot_dir)
+                validate_plot_entries(plot_dir, verbose)
+                tex_path.write_text("\\def\\LabPlotCacheDir{%s/}\n" % plot_dir.as_posix() + tex_text,
+                                    encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
-                                        aux_dir=base, cwd=pandoc_cwd,
-                                        env=tex_search_env(md_path.parent, pandoc_cwd))
+                                        aux_dir=base, cwd=pandoc_cwd, env=tex_env)
+        if ok and plot_dir is not None:
+            requests = read_plot_requests(base / f"{stem}.plotreq")
+            if requests:
+                started = time.time()
+                roots = [Path(os.path.abspath(pandoc_cwd)), Path(os.path.abspath(md_path.parent))]
+                done, failed = render_plot_requests(requests, plot_dir, preamble_text, "lualatex",
+                                                    pandoc_cwd, tex_env, roots, verbose)
+                if done or failed:
+                    print(f"PLOTS  stored {done} plot{'s' if done != 1 else ''} for the next build "
+                          f"({time.time() - started:.0f} s)" + (f"; {failed} failed (typeset inline, "
+                          "nothing lost)" if failed else ""))
         if ok:
             stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides,
                                  output, verbose)
@@ -5793,6 +6032,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "unchanged document settles in one engine pass and a part of a split "
                              "document built alone can reference the last full build's numbers "
                              "(pdfmd-options: {cache: {aux: true}} does this by default)")
+    parser.add_argument("--cache-plots", action="store_true",
+                        help="also cache nulabreport's plots (needs nulabreport >= 1.26.0, LuaLaTeX): each "
+                             "plot is stored as a PDF after the build that first typesets it and reused by "
+                             "the next, until the package, the preamble, the engine or the plot's data "
+                             "file changes (pdfmd-options: {cache: {plots: true}} does this by default)")
+    parser.add_argument("--clear-cache", action="store_true",
+                        help="delete pdfmd's cache folder for the given document (or all of it, with no "
+                             "document), then exit; always safe")
     parser.add_argument("--no-cache", dest="cache", action="store_false",
                         help="turn the cache off for this build, whatever pdfmd-options says")
     parser.add_argument("--split", type=Path, metavar="DIR",
@@ -6033,8 +6280,9 @@ def main() -> None:
     # which implies it just above) turns this on too, not just --full-paths
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
-    global CITEPROC_DISABLED
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI
     CITEPROC_DISABLED = args.no_citeproc
+    CACHE_PLOTS_CLI = args.cache_plots or None
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if not which("pandoc"):
@@ -6042,6 +6290,24 @@ def main() -> None:
                          "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
                          "-- then run `pdfmd --check-dependencies`.")
     paths = args.path or [Path.cwd()]
+    if args.clear_cache:
+        targets = []
+        if args.path:
+            try:
+                document = find_markdown(paths[0])
+            except FileNotFoundError as error:
+                raise SystemExit(str(error))
+            plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
+            targets = [cache_directory(plan.scaffold if plan else document)]
+        else:
+            targets = [cache_root()]
+        for target in targets:
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+                print(f"CLEARED  {target}")
+            else:
+                print(f"NOTHING  {target} does not exist")
+        return
     if args.split:
         if len(paths) != 1:
             raise SystemExit("--split takes one Markdown file")

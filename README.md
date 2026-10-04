@@ -243,8 +243,13 @@ pdfmd-options:
 keeps LaTeX's cross-reference files between builds (in `~/.cache/pdfmd`), so
 an unchanged document is typeset once instead of two or three times, and a
 part built on its own shows the real numbers of the parts left out (taken
-from the last full build) instead of `??`. Off by default; `--no-cache` for
-one build; deleting the folder is always safe.
+from the last full build) instead of `??`. It never skips a build: Pandoc and
+LaTeX still process the whole document from the current sources and package
+every time, so a change shows in the next build. `cache: {plots: true}` (or
+`--cache-plots`, with nulabreport >= 1.26.0) additionally stores each plot as a
+PDF and reuses it until the package, the preamble, the engine or the plot's
+data file changes. Off by default; `--no-cache` for one build; `pdfmd --clear-cache`
+(or deleting the folder) is always safe.
 
 ### Tables straight from a CSV file
 

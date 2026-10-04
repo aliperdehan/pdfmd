@@ -31,6 +31,41 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.18.0 — 2026-10-04
+
+Pre-edit state: commit `50d46d4` (v3.17.0).
+
+### Added
+
+- **The plot cache: `pdfmd-options: {cache: {plots: true}}` / `--cache-plots`**
+  (needs nulabreport >= 1.26.0 and LuaLaTeX; skipped with a note otherwise).
+  Defines `\LabPlotCacheDir` in the generated `.tex`; the package then
+  includes a stored PDF for each whole plot picture it has seen and logs the
+  ones it hasn't to `<jobname>.plotreq`. After a successful build pdfmd
+  renders those in parallel, each in a standalone job that loads the same
+  preamble (cut from the generated `.tex`) and ships the picture out as a
+  page of exactly its size, for the next build. A failure to render costs
+  nothing but the speed-up. Staleness: the folder is keyed by a hash of
+  `nulabreport.sty`, the preamble and the engine version; every entry records
+  the user files its job read (`-recorder`, not a guess at argument names)
+  and is dropped before the next build if one changed; an entry is committed
+  by renaming its `.dim` last, so an interrupted render leaves nothing that
+  could be half-used. Measured on a real 29-page report: 80 s plain, 28 s
+  with `cache.aux`, 15 s with both; the cached build's words match the plain
+  build's to 0.05 bp (0 of 12,312), and CSV edits, a patched package and a
+  `trace color`/`overlay colors` that only the call's own keys set were each
+  checked to give the right picture.
+- **`--clear-cache`**: removes a document's cache folder (or all of it with
+  no document). Always safe.
+
+### Fixed
+
+- The cache's `NOTE` text and `--help` now say what is cached and what is not
+  (only LaTeX's cross-reference files; every build still typesets from the
+  current package, filter and text).
+
+---
+
 ## v3.17.0 — 2026-10-04
 
 Pre-edit state: commit `f6498b3` (v3.16.0).
