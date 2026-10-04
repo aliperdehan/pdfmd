@@ -233,6 +233,19 @@ whichever part they are in. A part rebuilt alone is much faster to compile
 but cannot see the others, so references to them print as `??`. See
 [`examples/parts/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/parts/).
 
+#### Faster rebuilds: the cache
+
+```yaml
+pdfmd-options:
+  cache: {aux: true}      # or: pdfmd report --cache
+```
+
+keeps LaTeX's cross-reference files between builds (in `~/.cache/pdfmd`), so
+an unchanged document is typeset once instead of two or three times, and a
+part built on its own shows the real numbers of the parts left out (taken
+from the last full build) instead of `??`. Off by default; `--no-cache` for
+one build; deleting the folder is always safe.
+
 ### Tables straight from a CSV file
 
 ```markdown

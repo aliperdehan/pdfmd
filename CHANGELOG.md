@@ -31,6 +31,35 @@ diffs between inconsistent backup snapshots.
 
 ---
 
+## v3.17.0 — 2026-10-04
+
+Pre-edit state: commit `f6498b3` (v3.16.0).
+
+### Added
+
+- **The cache: `pdfmd-options: {cache: {aux: true}}` / `--cache` /
+  `--no-cache`.** Pandoc writes the standalone `.tex` (the path `--to latex`
+  already takes), and pdfmd compiles it itself in a per-document folder under
+  `~/.cache/pdfmd` (`$XDG_CACHE_HOME`, `%LOCALAPPDATA%`), using the existing
+  direct-`.tex` runner (`compile_tex_direct`, now with `aux_dir`, `cwd`, `env`):
+  rerun only while the log asks, bibtex/biber between passes. LaTeX's `.aux`
+  persists, so an unchanged document settles in one pass. Measured on a real
+  29-page report: 80 s cold, 28 s warm; the PDF text is identical to the
+  Pandoc-run build's. A failed engine run wipes that document's LaTeX files
+  and retries once clean. Off by default.
+- **Parts mode + cache: a part built alone no longer prints `??`.** Labels
+  from the last full build's `.aux` are defined (only where the part does not
+  define them itself), and each selected part starts with a `\pdfmdpart{key}`
+  raw line that restores LaTeX's counters to their values at that point of
+  the full build (`pdfmd@st@key`), so `report#discussion+appendix` is
+  numbered "V." and "VIII." as in the full report, not "I." and "II.".
+  Verified on a real report and a demo; the NOTE says the numbers are the last
+  full build's.
+- **`citation-engine: natbib`/`biblatex` with parts**, via the same route
+  (it was an error): bibtex/biber run between passes.
+
+---
+
 ## v3.16.0 — 2026-10-04
 
 Pre-edit state: commit `63cc7a7` (v3.15.1).

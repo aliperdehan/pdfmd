@@ -269,6 +269,40 @@ A long document in parts (parts mode):
     references to parts left out print as ??. --list-parts shows the order.
     Not supported: natbib/biblatex citation engines, the soffice fallback.
 
+The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
+    Pandoc normally makes a .tex in a throwaway folder, runs the engine two
+    or three times, and deletes everything, so every build starts with no
+    cross-reference file and needs a second pass just to learn the numbers.
+    With the cache on, pdfmd has Pandoc write the very same standalone .tex
+    (what `--to latex` makes) into a per-document folder under the user's
+    cache directory (~/.cache/pdfmd, $XDG_CACHE_HOME, %LOCALAPPDATA%) and
+    runs the engine itself, rerunning only while the log asks for it (the
+    rule latexmk uses). LaTeX's .aux survives between builds, so a document
+    whose numbers did not move settles in ONE pass: a 29-page report went
+    from 80 s to 28 s, byte-identical text. A failed build wipes that
+    document's LaTeX files and retries once from clean, so a bad cache can
+    never trap you; deleting the folder is always safe. Off unless asked for.
+    --no-cache overrides the setting for one build.
+
+    In parts mode the cache also lets a part built alone see the rest: its
+    labels (\\ref/\\cref to a table in a part left out) are taken from the last
+    full build's .aux instead of printing ??, and at the start of every
+    selected part LaTeX's counters (section, figure, table, equation,
+    footnote, reaction) jump to what they were there in that build, so
+    `report#discussion+appendix` shows "V. DISCUSSION" and "VIII. APPENDIX"
+    as the full report does. Each part of a cache build starts with a raw
+    `\\pdfmdpart{key}` line that records or restores the counters. The numbers
+    are those of the LAST full build: stale if figures or tables were added
+    or moved there since (pdfmd says so). A part's own labels are never
+    overridden.
+
+    The cache route is also what makes `citation-engine: natbib`/`biblatex`
+    work with parts (the Pandoc-run bibliography path takes one input file);
+    it runs bibtex/biber between passes. Limits: it does not retry a
+    document that needs the DejaVu glyph fallback (name `mainfont:`), and
+    natbib/biblatex still can't express a table caption's citation through
+    a Lua filter that rebuilds captions (nulabreport.lua does).
+
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
     standalone defaults documented above, plus pdfmd's own file-discovery
@@ -495,9 +529,10 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.16.0"
+PDFMD_VERSION = "3.17.0"
 import argparse
 import filecmp
+import hashlib
 from fnmatch import fnmatchcase
 from functools import lru_cache
 import logging
@@ -4092,10 +4127,14 @@ def strip_part_front_matter(text: str) -> str:
 
 
 @contextmanager
-def scaffold_inputs(files: list[Path], active: bool) -> Iterator[list[Path]]:
+def scaffold_inputs(files: list[Path], active: bool,
+                    markers: dict[Path, str] | None = None) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
-    a part with nothing to remove is passed through untouched).
+    a part with nothing to remove is passed through untouched). ``markers``
+    maps a part to its key: that part then starts with a raw
+    ``\\pdfmdpart{key}`` line (see PARTS_MARKER_DEFS), which records LaTeX's
+    counters at that point in the .aux.
     """
     if not active:
         yield list(files)
@@ -4106,6 +4145,8 @@ def scaffold_inputs(files: list[Path], active: bool) -> Iterator[list[Path]]:
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             cleaned = strip_part_front_matter(text)
+            if markers and part in markers:
+                cleaned = "```{=latex}\n\\pdfmdpart{%s}\n```\n\n%s" % (markers[part], cleaned)
             if cleaned == text:
                 prepared.append(part)
                 continue
@@ -4508,13 +4549,18 @@ def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[
 
 
 def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
-                    verbose: bool) -> tuple[bool, str]:
+                    verbose: bool, cwd: Path | None = None,
+                    env: dict | None = None) -> tuple[bool, str]:
     """Run ``engine`` on ``tex_path`` to completion, output landing in
     ``output_dir``. Returns (success, one-line failure reason -- empty on
     success). Always run with cwd=tex_path.parent, so a raw \\input/
     \\includegraphics/\\bibliography relative path beside the source keeps
-    resolving; only *output* is redirected via -output-directory/-o.
+    resolving; only *output* is redirected via -output-directory/-o. ``cwd``
+    and ``env`` override that for a .tex generated elsewhere from Markdown
+    (the cache route): cwd is then Pandoc's own working directory and env
+    carries TEXINPUTS, exactly as the Pandoc-run engine would have had.
     """
+    work_dir = cwd or tex_path.parent
     log_path = output_dir / f"{tex_path.stem}.log"
 
     def log_text() -> str:
@@ -4524,18 +4570,19 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         log_cmd(cmd, cwd, verbose)
         return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
 
+    engine_env = env
     cmd = latex_engine_command(engine, tex_path, output_dir)
     if cmd is None:
         return False, f"{engine} is not supported for direct .tex compilation"
 
     if engine in ("latexmk", "tectonic"):
         # Both already handle reruns and bibtex/biber internally.
-        result = run(cmd, tex_path.parent)
+        result = run(cmd, work_dir, env=engine_env)
         if result.returncode != 0 or not (output_dir / f"{tex_path.stem}.pdf").exists():
             return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
         return True, ""
 
-    result = run(cmd, tex_path.parent)
+    result = run(cmd, work_dir, env=engine_env)
     if result.returncode != 0:
         return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
 
@@ -4554,22 +4601,22 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         # compile otherwise looked like it had succeeded). BIBINPUTS
         # points bibtex back at the source directory to find the .bib
         # file, since it has no --input-directory flag of its own.
-        bib_env = os.environ.copy()
-        bib_env["BIBINPUTS"] = f"{tex_path.parent}{os.pathsep}{bib_env.get('BIBINPUTS', '')}"
-        bib_cmd = (["biber", f"--input-directory={tex_path.parent}", tex_path.stem] if bib_tool == "biber"
+        bib_env = (engine_env or os.environ).copy()
+        bib_env["BIBINPUTS"] = f"{work_dir}{os.pathsep}{tex_path.parent}{os.pathsep}{bib_env.get('BIBINPUTS', '')}"
+        bib_cmd = (["biber", f"--input-directory={work_dir}", tex_path.stem] if bib_tool == "biber"
                    else ["bibtex", tex_path.stem])
         bib_result = run(bib_cmd, output_dir, env=bib_env)
         if bib_result.returncode != 0:
             print(f"WARN  {tex_path}: {bib_tool} reported errors; continuing"
                   + (f" ({bib_result.stderr.strip().splitlines()[-1]})" if bib_result.stderr.strip() else ""),
                   file=sys.stderr)
-        result = run(cmd, tex_path.parent)
+        result = run(cmd, work_dir, env=engine_env)
         if result.returncode != 0:
             return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
 
     passes = 1
     while tex_wants_rerun(log_text()) and passes < MAX_TEX_DIRECT_PASSES:
-        result = run(cmd, tex_path.parent)
+        result = run(cmd, work_dir, env=engine_env)
         passes += 1
         if result.returncode != 0:
             return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
@@ -4579,8 +4626,143 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
     return True, ""
 
 
+# -- The cache route (pdfmd-options: {cache: {aux: true}}) -------------------
+# Normally Pandoc writes a .tex into a throwaway directory, runs the engine
+# there two or three times, and deletes everything, so every build starts from
+# zero: LaTeX's cross-reference files do not exist yet, the first pass can
+# only print ?? and ask for another. With cache.aux the same .tex (the very one
+# Pandoc would have made: --to latex, standalone) is written into a per-
+# document folder under the user's cache directory and compiled there by
+# pdfmd's own engine runner (compile_tex_direct), which reruns only while the
+# log asks for it -- latexmk's rule. The folder, and LaTeX's .aux inside it,
+# survive between builds, so an unchanged document settles in ONE pass, and a
+# part of a split document built alone can read the labels the last full build
+# left (seed_labels_file), instead of printing ??. Nothing is trusted: a failed
+# build wipes that document's LaTeX files and retries from clean, and the final
+# PDF is always the product of a pass whose log asked for no further rerun.
+CACHE_DEFAULTS = {"aux": False, "plots": False}
+LAST_SEEDED = 0   # labels a partial cache build took from the last full build
+
+
+def cache_root() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return base / "pdfmd"
+
+
+def cache_directory(source: Path) -> Path:
+    """One folder per document, keyed by its absolute path (two reports both
+    called report.md must not share an .aux)."""
+    digest = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:10]
+    return cache_root() / f"{digest}-{source.stem}"
+
+
+def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) -> dict:
+    """Effective ``pdfmd-options: {cache: {aux, plots}}``: the document's own
+    front matter first, then each linked metadata file, then --cache/--no-cache
+    (--cache turns aux on, --no-cache turns everything off)."""
+    settings = dict(CACHE_DEFAULTS)
+    sources = [frontmatter_pdfmd_options(md_path)]
+    for metadata_file in metadata_files:
+        options = metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(options if isinstance(options, dict) else {})
+    for options in sources:
+        if "cache" not in options:
+            continue
+        value = options["cache"]
+        if isinstance(value, bool):
+            value = {"aux": value}
+        if isinstance(value, dict):
+            for key in settings:
+                if key in value:
+                    settings[key] = bool(value[key])
+        break
+    if cli is True:
+        settings["aux"] = True
+    elif cli is False:
+        settings = {key: False for key in settings}
+    return settings
+
+
+# LaTeX side of the counter seeding: \pdfmdpart{key}, at the start of each part
+# of a cache build, writes the counters' values into the .aux as
+# \pdfmd@part{key}{section=2,figure=1,...} (\pdfmd@part is a no-op when the
+# .aux is read back) and, if a partial build's seed file defined
+# \pdfmd@st@key, runs it: the counters jump to what they were at that point
+# of the last full build -- at EVERY selected part, so Discussion+Appendix
+# keeps the Appendix's own number. Expandable throughout (\ifcsname), so it is safe inside
+# \write, and counters a document does not have are skipped.
+PARTS_MARKER_DEFS = r"""\makeatletter
+\providecommand\pdfmd@part[2]{}
+\newcommand\pdfmd@c[1]{\ifcsname c@#1\endcsname #1=\number\csname c@#1\endcsname,\fi}
+\newcommand\pdfmdpart[1]{\immediate\write\@auxout{\string\pdfmd@part{#1}{%
+  \pdfmd@c{section}\pdfmd@c{subsection}\pdfmd@c{subsubsection}\pdfmd@c{figure}%
+  \pdfmd@c{table}\pdfmd@c{equation}\pdfmd@c{footnote}\pdfmd@c{reaction}\pdfmd@c{scheme}}}%
+  \ifcsname pdfmd@st@#1\endcsname\csname pdfmd@st@#1\endcsname\fi}
+\makeatother
+"""
+PART_COUNTER_RE = re.compile(r"^\\pdfmd@part\{([^{}]*)\}\{([^{}]*)\}\s*$")
+SEED_LABEL_RE = re.compile(r"^\\newlabel\{([^{}]*)\}(\{.*\})\s*$")
+
+
+def seed_labels_file(full_aux: Path, target: Path) -> int:
+    """Write ``target`` (a .tex fragment) that defines every label of the last
+    full build's .aux that a partial build does not define itself, and, per
+    part, the counter values at its start (\\pdfmd@st@key, run by
+    \\pdfmdpart), so a part's own numbers continue from the full report's
+    instead of restarting at 1. Returns the number of labels; 0 writes
+    nothing. Defining only the undefined is what keeps a part's own labels
+    authoritative.
+    """
+    try:
+        lines = full_aux.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0
+    seeded = []
+    counters = []
+    for line in lines:
+        match = SEED_LABEL_RE.match(line)
+        if match:
+            seeded.append(f"\\pdfmd@seed{{{match.group(1)}}}{match.group(2)}")
+            continue
+        match = PART_COUNTER_RE.match(line)
+        if match:
+            sets = []
+            for item in match.group(2).split(","):
+                name, _, value = item.partition("=")
+                if name.isalpha() and value.lstrip("-").isdigit():
+                    sets.append(f"\\ifcsname c@{name}\\endcsname\\setcounter{{{name}}}{{{value}}}\\fi")
+            counters.append(f"\\expandafter\\gdef\\csname pdfmd@st@{match.group(1)}\\endcsname{{{''.join(sets)}}}")
+    if not seeded and not counters:
+        return 0
+    target.write_text(
+        "\\makeatletter\n"
+        "\\providecommand\\pdfmd@seed[2]{\\@ifundefined{r@#1}{\\expandafter\\gdef\\csname r@#1\\endcsname{#2}}{}}\n"
+        + "\n".join(seeded + counters) + "\n\\makeatother\n", encoding="utf-8")
+    return len(seeded)
+
+
+def part_key(part: Path, parts_root: Path | None) -> str:
+    """The name a part is recorded under in the .aux: its path under the parts
+    folder, reduced to characters that are safe inside a TeX argument."""
+    relative = part.relative_to(parts_root).as_posix() if parts_root else part.name
+    return re.sub(r"[^A-Za-z0-9./_+-]", "-", relative)
+
+
+def safe_stem(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._+-]", "-", name)
+
+
+AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".bcf", ".run.xml",
+                      ".fls", ".fdb_latexmk", ".log", ".pdf")
+
+
 def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
-                       keep_aux: bool, verbose: bool, debug: bool) -> tuple[bool, str]:
+                       keep_aux: bool, verbose: bool, debug: bool,
+                       aux_dir: Path | None = None, cwd: Path | None = None,
+                       env: dict | None = None) -> tuple[bool, str]:
     """Compile a standalone .tex document directly, without Pandoc.
 
     See the module-level comment above for why, and this file's docstring
@@ -4604,10 +4786,23 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
             print(f"SKIP  {tex_path}: {engine} shares the {family} engine with an earlier "
                   f"failure; skipping", file=sys.stderr)
             continue
-        scratch = None if keep_aux else Path(mkdtemp(prefix="pdfmd-tex-"))
-        output_dir = tex_path.parent if scratch is None else scratch
+        # aux_dir: a persistent directory (the cache route) -- LaTeX's own
+        # .aux/.toc/.out survive between builds, so an unchanged document
+        # settles in one pass instead of two or three. Never discarded here.
+        scratch = None if (keep_aux or aux_dir) else Path(mkdtemp(prefix="pdfmd-tex-"))
+        output_dir = aux_dir if aux_dir else (tex_path.parent if scratch is None else scratch)
         try:
-            ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose)
+            ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
+            if not ok and aux_dir:
+                # A poisoned cache (a half-written .aux from an interrupted or
+                # failed build) must never trap the user: wipe LaTeX's own
+                # files for this document and retry once from scratch.
+                for leftover in output_dir.glob(f"{tex_path.stem}.*"):
+                    if leftover.name.endswith(AUX_CLEAN_SUFFIXES):
+                        leftover.unlink(missing_ok=True)
+                if verbose:
+                    print(f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
+                ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
             if ok:
                 produced = output_dir / f"{tex_path.stem}.pdf"
                 output.parent.mkdir(parents=True, exist_ok=True)
@@ -4618,7 +4813,8 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                 if produced.resolve() != output.resolve():
                     shutil.copy2(produced, output)
                 if verbose:
-                    where = "in place (--keep-aux)" if keep_aux else "in a scratch directory, then discarded"
+                    where = ("in place (--keep-aux)" if keep_aux else
+                             f"in the cache {output_dir}" if aux_dir else "in a scratch directory, then discarded")
                     print(f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
                 return True, ""
             last_reason = reason
@@ -4891,7 +5087,15 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 stamp_overrides: dict | None = None,
                 keep_aux: bool = False,
                 extra_inputs: list[Path] | None = None,
-                partial: bool = False) -> tuple[Path, bool, str]:
+                partial: bool = False,
+                cache_cli: bool | None = None,
+                skip_stamp: bool = False,
+                full_scaffold: Path | None = None,
+                parts_root: Path | None = None,
+                part_markers: bool = False) -> tuple[Path, bool, str]:
+    # cache_cli: --cache/--no-cache. skip_stamp: the cache route's .tex stage,
+    # whose stamp is written once, after the PDF exists. full_scaffold: the
+    # scaffold a partial build's labels may be seeded from (see below).
     # extra_inputs: parts-mode parts, joined to md_path (the scaffold) in one
     # Pandoc run -- see plan_scaffold(). partial: only some of them, so this
     # isn't the report itself and writes no BUILD NOTES stamp.
@@ -4988,11 +5192,31 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         if pdf_meta_options["pdf_metadata"] and stamp_scope_matches(pdf_meta_options, None) else None
     )
 
+    # -- the cache route (see CACHE_DEFAULTS): Markdown -> .tex by the very
+    # same code that serves `--to latex`, then pdfmd's own engine runner in
+    # a persistent per-document folder. Also taken, regardless of the cache
+    # setting, by a parts-mode build that asks for natbib/biblatex: the
+    # Pandoc-run bibliography path cannot take several input files, and the
+    # runner already knows how to drive bibtex/biber.
+    if target_format == "pdf" and not presentation and md_path.suffix.lower() == ".md":
+        cache = cache_settings(md_path, metadata_files, cache_cli)
+        native_bibliography = (not auto_disabled(no_auto, "citationengine")
+                               and frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex"))
+        tex_engines = [engine for engine in engines if engine in LATEX_ENGINES and engine not in ("context", "latexmk", "tectonic")]
+        if (cache["aux"] or (parts_inputs and native_bibliography)) and tex_engines:
+            return convert_via_cache(md_path, out_dir, font, tex_engines, variables, slide_level,
+                                     pandoc_options, metadata_file, output, preamble_files, from_format,
+                                     no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
+                                     partial, bool(cache["aux"]), full_scaffold, parts_root, note,
+                                     flush_summary)
+
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
             table_width_filter() as width_filter, \
             csv_table_filter() as csv_filter, \
-            scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs)) as scaffold_files:
+            scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs),
+                            {part: part_key(part, parts_root) for part in parts_inputs}
+                            if part_markers and parts_root else None) as scaffold_files:
         part_files = scaffold_files[1:]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
         any_citations = any(contains_citations(item) for item in [md_path, *parts_inputs])
@@ -5001,10 +5225,14 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         if parts_inputs:
             note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
                           f"joined after it" + (" (partial build)" if partial else ""))
-            if (frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex")
+            if (target_format == "pdf"
+                    and frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex")
                     and not auto_disabled(no_auto, "citationengine")):
-                raise SystemExit(f"{md_path}: pdfmd-options.citation-engine natbib/biblatex is not "
-                                 "supported in parts mode yet; use citeproc")
+                # Reached only if the cache route above declined (no usable
+                # LaTeX engine in the chain): the Pandoc-run bibliography path
+                # takes one input file.
+                raise SystemExit(f"{md_path}: natbib/biblatex with parts needs a LaTeX engine "
+                                 "(lualatex/xelatex/pdflatex); use citeproc otherwise")
         if title_shifted:
             note("TITLE", f"{md_path}: promoted leading '# ' heading to Pandoc title metadata")
         shift_heading = title_shifted and not has_shift_heading_option(pandoc_options)
@@ -5150,7 +5378,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 log_cmd(cmd, pandoc_cwd, verbose)
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             if result.returncode == 0:
-                stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+                stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
             return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -5205,7 +5433,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 # .md BUILD NOTES stamp nor a PDF-metadata one -- every other
                 # success path in this function does call it.
                 if ok:
-                    stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [],
+                    stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [],
                                         stamp_overrides, output, verbose)
                 flush_summary()
                 return md_path, ok, reason[-3000:]
@@ -5353,7 +5581,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         assert result is not None
         if result.returncode == 0:
-            stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+            stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -5374,7 +5602,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 backup: bool | None = None,
                 backup_format: str | None = None,
                 extra_inputs: list[Path] | None = None,
-                partial: bool = False) -> tuple[Path, bool, str]:
+                partial: bool = False,
+                cache_cli: bool | None = None,
+                parts_root: Path | None = None) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -5384,13 +5614,78 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           pandoc_options, metadata_file, output_file, preamble_files,
                           target_format=target_format, from_format=from_format, no_auto=no_auto,
                           verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
-                          keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial)
+                          keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
+                          cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
+                          parts_root=parts_root)
     if result[1]:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
         for backed_up in [md_path, *(extra_inputs or [])]:
             backup_after_success(backed_up, metadata_files, backup, verbose, backup_format)
     return result
+
+
+def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: list[str],
+                      variables: list[str], slide_level: int | None, pandoc_options: list[str],
+                      metadata_file: Path | list[Path] | None, output: Path,
+                      preamble_files: list[Path] | None, from_format: str | None,
+                      no_auto: list[str] | None, verbose: bool, debug: bool,
+                      stamp_overrides: dict, keep_aux: bool, parts_inputs: list[Path],
+                      partial: bool, persistent: bool, full_scaffold: Path | None,
+                      parts_root: Path | None, note, flush_summary) -> tuple[Path, bool, str]:
+    """Build a PDF the cache way: Pandoc writes the .tex, pdfmd compiles it.
+    See the comment above CACHE_DEFAULTS. ``persistent`` False (the natbib +
+    parts case without the cache switched on) uses a scratch folder instead
+    and discards it.
+    """
+    metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
+    base = cache_directory(full_scaffold or md_path) if persistent else Path(mkdtemp(prefix="pdfmd-cache-"))
+    base.mkdir(parents=True, exist_ok=True)
+    stem = safe_stem(output.stem)
+    tex_path = base / f"{stem}.tex"
+    headers = list(preamble_files or [])
+    seeded = 0
+    global LAST_SEEDED
+    LAST_SEEDED = 0
+    if persistent and parts_inputs and parts_root is not None:
+        defs = base / f"{stem}.pdfmd-defs.tex"
+        defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
+        headers.append(defs)
+    if persistent and partial and full_scaffold is not None and parts_root is not None:
+        full_aux = base / f"{safe_stem(full_scaffold.stem)}.aux"
+        seed = base / f"{stem}.seed.tex"
+        seed.unlink(missing_ok=True)
+        seeded = seed_labels_file(full_aux, seed)
+        if seeded:
+            LAST_SEEDED = seeded
+            hook = base / f"{stem}.seed-hook.tex"
+            hook.write_text("\\AtBeginDocument{\\InputIfFileExists{\"%s\"}{}{}}\n" % seed.as_posix(), encoding="utf-8")
+            headers.append(hook)
+            when = datetime.fromtimestamp(full_aux.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            note("CACHE", f"{md_path}: {seeded} labels from the last full build ({when}) fill in "
+                          "references to parts left out")
+    try:
+        built = _convert_one(md_path, out_dir, False, font, engines, variables, slide_level,
+                             pandoc_options, metadata_file, tex_path, headers, target_format="latex",
+                             from_format=from_format, no_auto=no_auto, verbose=verbose, debug=debug,
+                             stamp_overrides=stamp_overrides, keep_aux=keep_aux,
+                             extra_inputs=parts_inputs, partial=partial, cache_cli=False,
+                             skip_stamp=True, parts_root=parts_root,
+                             part_markers=bool(persistent and parts_inputs))
+        if not built[1]:
+            return built
+        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
+                                        aux_dir=base, cwd=pandoc_cwd,
+                                        env=tex_search_env(md_path.parent, pandoc_cwd))
+        if ok:
+            stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides,
+                                 output, verbose)
+        flush_summary()
+        return md_path, ok, reason[-3000:]
+    finally:
+        if not persistent:
+            shutil.rmtree(base, ignore_errors=True)
 
 
 def convert_qmd(source: Path, output: Path, target_format: str,
@@ -5493,6 +5788,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "folder, or by number; repeat the flag or join with + or , (a+b). "
                              "`pdfmd report#intro` is shorthand for `pdfmd report --section intro`, and "
                              "so is naming a part's own path. (No short flag: -s is Pandoc's --standalone.)")
+    parser.add_argument("--cache", dest="cache", action="store_true", default=None,
+                        help="keep LaTeX's .aux files between builds in pdfmd's cache folder, so an "
+                             "unchanged document settles in one engine pass and a part of a split "
+                             "document built alone can reference the last full build's numbers "
+                             "(pdfmd-options: {cache: {aux: true}} does this by default)")
+    parser.add_argument("--no-cache", dest="cache", action="store_false",
+                        help="turn the cache off for this build, whatever pdfmd-options says")
     parser.add_argument("--split", type=Path, metavar="DIR",
                         help="cut a single-file document at its '# ' headings into a scaffold plus "
                              "parts/ in a new folder DIR (the source is untouched; other files it "
@@ -6272,10 +6574,17 @@ def main() -> None:
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
+                                   cache_cli=args.cache,
+                                   parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
                                    partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
             if scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]:
-                print("NOTE  partial build: references to parts left out print as ??, and figure/"
-                      "table numbers restart from this build's own first one")
+                if LAST_SEEDED:
+                    print("NOTE  partial build: numbers of parts left out come from the last full build "
+                          "(--cache); they are stale if you have since added or moved a figure or table there")
+                else:
+                    print("NOTE  partial build: references to parts left out print as ??, and figure/"
+                          "table numbers restart from this build's own first one (pdfmd-options: "
+                          "{cache: {aux: true}} carries them over from the last full build)")
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
