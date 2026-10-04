@@ -29,6 +29,14 @@ fabricate the gap. If the full history ever matters, it would need pulling
 the actual chat transcripts from each of those tools, not guessing from
 diffs between inconsistent backup snapshots.
 
+**Update, 2026-10-05:** an approximate outline of the earlier history has
+since been reconstructed, at the very end of this file (see "Before 2.0.0 —
+reconstructed history"), from the saved Codex transcripts and the surviving
+backup snapshots. It is explicitly NOT reliable: its 1.x numbers are
+invented, snapshot-based entries cover windows of days rather than single
+changes, and anything done in unsaved sessions (other ChatGPT chats,
+claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
+
 ---
 
 ## v3.18.0 — 2026-10-04
@@ -1980,3 +1988,328 @@ package being built.
   script's own typical use so far; revisit if a document with an unusual
   page shape trips the same "wrongly rebalanced" or "wrongly left alone"
   symptom in the other direction.
+
+---
+
+# Before 2.0.0 — reconstructed history (NOT reliable)
+
+> **Read this first.** Nothing below was recorded at the time. It was
+> rebuilt on 2026-10-05, after the fact, from two incomplete sources, and
+> it should be read as an approximate outline, not a record:
+>
+> - **[chat]** — the author's saved transcripts of a few ChatGPT Codex
+>   sessions (28 Jul – 1 Sep). They give real dates and real intent, but
+>   cover only some of the edits: other sessions (other ChatGPT chats,
+>   claude.ai, Cowork) were never saved, and the author does not remember
+>   or could not find whether the script was also edited by other AIs
+>   before then. The transcripts carry day and month but no year; 2026 is
+>   assumed (it is the only reading consistent with the snapshots).
+> - **[snapshot]** — differences between the surviving
+>   `~/dev/python-projects/backups/pdfmd.py.bak-*` files (1 Sep, 7 Sep and
+>   two on 16 Sep). Their dates are file modification times, and anything
+>   that was added and removed (or changed twice) between two snapshots is
+>   invisible. Every snapshot entry therefore covers a *window* of days,
+>   and the order of its items inside that window is unknown.
+>
+> The version numbers 1.0.0–1.9.0 are invented here to give the outline a
+> shape; they never existed in the script, and `PDFMD_VERSION` has only
+> ever been 2.0.0 or later. Where an entry says "undated" or "by the
+> snapshot of ...", the feature is known to exist by then but when and how
+> it was introduced is not known. The script was also not born as
+> `pdfmd.py`: it grew out of an earlier `batchmd.py` (a Markdown batch
+> converter) whose own history is not known at all.
+>
+> Further, the transcripts mention edits made to individual Markdown
+> documents rather than to the script (fixing a `header-includes:`
+> preamble, replacing unsupported IPA macros, wiring up a bibliography);
+> those are not script changes and are left out.
+
+---
+
+## v1.9.0 — 2026-09-16 (snapshot window: 11:18 → 21:12)
+
+[snapshot] Between `pdfmd.py.bak-20260916-113000` and
+`pdfmd.py.bak-20260916-tablewidth-preedit` — the latter is the exact
+pre-edit state of v2.0.0.
+
+### Added
+
+- **`-v` / `--verbose`, and a quiet default.** Each "AUTO ..." decision
+  (reader, title, margin, mainfont, monofont, lua) used to print its own
+  line on every run; now one condensed `AUTO: KIND KIND ...` line per
+  document is printed, and `--verbose` restores the full explanations.
+  (`AUTO YAML`/`TEX`/`ENGINE`/`MD` still print in full.)
+- **`--open`**: open the finished file with `open` (macOS) or `xdg-open`
+  (Linux) after a successful single-file or report build; ignored in batch.
+- **`--no-auto` grew four kinds** beyond the document-default ones:
+  `metadata`/`yaml`, `preamble`/`tex`, `lua` and `files` (all three), so
+  pdfmd's file auto-discovery can be switched off too. An explicit
+  `-y`/`-H` still wins. The decision is made once, in a new
+  `effective_no_auto()`, because discovery runs before `convert_one()`.
+- **`pdfmd-options:` becomes the home for pdfmd-only front-matter keys.**
+  `pdf-engine:`/`engine:` can now be nested under it; the bare top-level
+  spelling keeps working.
+
+### Fixed
+
+- A document whose first line is a Pandoc `% title` block was switched to
+  the `gfm` reader, which does not parse it, leaving the `%` lines as
+  literal text; it is now treated like a document with YAML front matter.
+
+---
+
+## v1.8.0 — 2026-09-07 → 2026-09-16 (snapshot window)
+
+[snapshot] Between `pdfmd.py.bak-20260907a` (7 Sep, 22:18) and
+`pdfmd.py.bak-20260916-113000` (16 Sep, 11:18). The script roughly
+doubled in size here (877 → 1,834 lines), and the module docstring grew
+from a few usage examples into the long feature description. This is the most
+under-resolved stretch of the whole history: it is certainly several
+sessions' work squeezed into one entry.
+
+### Added
+
+- **Other output formats and input formats.** `--to FORMAT` (any Pandoc
+  writer), `--from FORMAT`, and a recognised extension on `-o`
+  (`-o notes.html`) pick a non-PDF target; the PDF engine is then neither
+  needed nor checked. Any Pandoc-readable input works when given with its
+  real extension. `.qmd` is handed to the `quarto` CLI instead of Pandoc
+  (`--check-dependencies` lists it). (Note: in 2026-08 the author had
+  decided *against* claiming `-t` for "typst" so as not to collide with
+  Pandoc's own `-t`; `-t` was claimed later, here, as Pandoc's `--to`.)
+- **Engine families and per-document engines.** `ENGINE_FAMILY` makes the
+  fallback chain skip engines that share a TeX implementation with one
+  that just failed; `ENGINE_GROUPS` (`tex`, `html`, `typst`) lets `-e` or
+  a `pdf-engine:` front-matter key restrict the chain to one paradigm. A
+  bare `-e` means the full unrestricted chain and overrides the document.
+- **A reader choice for Markdown.** A document with no YAML front matter
+  and no linked metadata file is read as `gfm` (content-sized pipe-table
+  columns, tolerant of GitHub-style spacing), with `+definition_lists`
+  re-enabled when needed and the plain `markdown` reader kept for `@cite`
+  documents. A leading bare `# Title` is promoted to real title metadata
+  and the headings shifted up a level.
+- **`TABLE_WIDTH_LUA_FILTER`**, the auto-applied filter that assigns
+  proportional widths to width-less pipe tables so a long cell wraps
+  instead of running past the margin. (Its over-eager firing is what
+  v2.0.0 fixes.)
+- **Typographic defaults on LaTeX engines:** `geometry:margin=1in` when
+  the document, a metadata file or a preamble sets no margin (with a check
+  against loading `geometry` twice); `JetBrains Mono` as the monofont when
+  the document has code and no `monofont:`.
+- **`--no-auto [KIND ...]`** and the `pdfmd-options: {no-auto: ...}`
+  front-matter block (needs PyYAML) to switch those defaults off.
+
+### Changed
+
+- **Font strategy.** The 1 Sep script already passed `mainfontfallback`
+  (and retried with DejaVu Serif on a missing-glyph warning). This stretch
+  tried Pandoc's per-glyph fallback and dropped it (it silently does
+  nothing under XeLaTeX and crashes LuaLaTeX here); the default is now
+  `STIX Two Text` first, retried once with `DejaVu Serif` if glyphs are
+  reported missing. `-f`/`mainfont:` still win outright.
+
+### Fixed
+
+- A document given by a relative path with a subdirectory (`sub/a.md`) was
+  looked up twice-nested once Pandoc's working directory was changed to
+  the document's folder; paths are now resolved to absolute ones.
+
+---
+
+## v1.7.0 — 2026-09-02 → 2026-09-07 (snapshot window)
+
+[snapshot] Between `pdfmd.py.bak-20260902` (identical to `-20260901`) and
+`pdfmd.py.bak-20260907a`.
+
+### Added
+
+- **More engines and short names.** `latexmk`, `tectonic`, `pagedjs-cli`
+  and `groff` joined the list (13 in all); `-e` accepts the number shown
+  by `--check-dependencies` or a short alias (`lua`, `xe`, `pdf`, `mk`,
+  `tect`, `weasy`, `wkhtml`, `pagedjs`, `roff`).
+- **A document's own `header-includes:` survives an auto-included
+  preamble.** Pandoc feeds `-H` files into the same variable, so a
+  preamble beside the document used to silently discard the document's own
+  block; pdfmd now re-appends it as a last `--include-in-header`, so a
+  per-document override works.
+- **Front-matter keys passed on to the preamble.** `experiment`, `group`,
+  `course`, `section`, `instructor` and `performed` become
+  `\renewcommand{\Lab...}{...}` lines after the preambles (for the
+  `nulabreport` title page).
+- **Auto-applied Lua filters** — only `<stem>.lua` and `nulabreport.lua`
+  beside the document or its metadata file, announced as `AUTO LUA`;
+  applied last, after `--citeproc`.
+- **Bare `pdfmd`** with no argument converts the single `.md` file in the
+  current directory (`AUTO MD`), and refuses with a list if there are
+  several.
+
+---
+
+## v1.6.0 — 2026-09-01
+
+[chat] Codex session, 17:08. (Present in the 1 Sep snapshot.)
+
+### Added
+
+- **Preamble discovery by the document's name.** For `review.md`:
+  `review.yaml`/`review.yml` (layered over `metadata.yaml`) and the TeX
+  preambles `preamble.tex`, `latex-preamble.tex`, `preamble-*.tex`,
+  `review.tex`, `review_preamble.tex` and `review-preamble.tex`. Several
+  safe preambles are all included, generic first and document-specific
+  last, and a warning notes that later ones may override earlier ones.
+  Complete documents and standalone TikZ files stay rejected.
+
+---
+
+## v1.5.0 — 2026-09-01
+
+[chat] Codex session, 16:38–16:43.
+
+### Added
+
+- **Auto-discovery of a LaTeX preamble** (`preamble.tex`,
+  `latex-preamble.tex`) beside the document, passed as
+  `--include-in-header`. A file containing `\documentclass`,
+  `\begin{document}`, `\end{document}` or `\begin{tikzpicture}` is never
+  taken; an explicit `-H` is never duplicated; non-LaTeX engines never
+  receive it.
+- **Transparent discovery.** Auto-found files are printed as
+  `AUTO YAML <path>` and `AUTO TEX <path>`; explicit `-y`/`-H` files are
+  not labelled as automatic.
+
+---
+
+## v1.4.0 — 2026-08-30
+
+[chat] Codex session, 15:00.
+
+### Added
+
+- **Wildcard names:** `pdfmd '*scrutiny'` matches Markdown stems with
+  `fnmatch` (the `.md` is still implied). More than one match lists the
+  candidates and stops instead of guessing. (Quote the pattern, or the
+  shell expands it first.)
+
+---
+
+## v1.3.0 — 2026-08-29
+
+[chat] Codex session, 22:10–22:18.
+
+### Added
+
+- **`--check-dependencies`** reports Pandoc and each supported PDF engine.
+  Pip packaging was advised to be a separate `pyproject.toml`, with the
+  engines checked but never installed by the script (done, much later, in
+  3.10.0).
+- **An engine fallback chain.** With no `-e`, installed engines are tried
+  in order — LuaLaTeX, XeLaTeX, pdfLaTeX, Typst, WeasyPrint, wkhtmltopdf,
+  Prince, ConTeXt, pdfroff — and the next one is tried when one fails,
+  announced as `WARN  <file>: lualatex failed; trying xelatex...`. An
+  explicit `-e` is respected; Beamer (`-p`) is limited to TeX-family
+  engines.
+- **Automatic `{=latex}` wrapping of `header-includes: |`** for LaTeX
+  engines, in Markdown and metadata YAML, in single-file and report mode.
+  A `%` comment or preamble command inside a YAML literal block was parsed
+  as Markdown (`%` → `\%`), so the preamble broke with "Missing
+  \begin{document}"; the source file itself is never modified (a
+  temporary copy is compiled).
+
+### Fixed
+
+- A bug in the exclusion options of report mode (unspecified in the
+  transcript).
+
+---
+
+## v1.2.1 — 2026-08-26
+
+[chat] Codex session, 18:06–18:09.
+
+### Fixed
+
+- **`--citeproc` was not enabled automatically for bare citations.** The
+  detector only looked for `[@key]`; it now also recognises `@key` and
+  `-@key`, while skipping e-mail addresses. (The first attempt to apply
+  the fix failed on a write-permission restriction in that session and
+  was redone on request.)
+
+---
+
+## v1.2.0 — undated, between 2026-07-28 and 2026-08-29
+
+[snapshot, inferred] Not described by any saved transcript; present in the
+1 Sep snapshot, and implied by chat remarks (an "existing `--report`
+exclusion-option bug" on 29 Aug; "the script already automatically
+searches for yaml files" on 1 Sep).
+
+### Added
+
+- **Report/book mode** (`-r`/`--report`/`--book`, `--recursive`): all
+  Markdown files in a folder combined into one PDF, ordered by a
+  `chapter:` front-matter field; `-i`/`--exclude` and
+  `--exclude-unnumbered` to leave files out.
+- **Metadata YAML:** `-y`/`--metadata-file` (a stack, `all`, or a bare `-y`
+  to disable discovery), automatic discovery of `metadata.yaml` and a
+  document-named YAML, `yamlorder:` and `autoinclude: false` inside the
+  YAML files, and `defaults.yaml` always skipped.
+- **Mainfont handling:** fall back to DejaVu Serif when a build reports a
+  missing glyph, unless the user or the document chose a font.
+
+---
+
+## v1.1.1 — 2026-08-08
+
+[chat] Codex session, 18:10.
+
+### Fixed
+
+- A regression from the previous change: adding a `-cwd` spelling of the
+  destination flag left `args.destination_cwd` undefined, so
+  `pdfmd name -p` crashed with an `AttributeError`. `-d`, `-cwd`, `--cwd`
+  and `--destination-cwd` now all set the same destination.
+
+---
+
+## v1.1.0 — 2026-07-31
+
+[chat] Codex session, 21:11.
+
+### Added
+
+- **`-d` / `--destination-cwd`**: keep the document's filename but write
+  the PDF into the current working directory instead of beside the source
+  (for previewing a file given by full path before saving it for good).
+
+---
+
+## v1.0.1 — 2026-07-28
+
+[chat] Codex session, 16:18–16:19 (outcome not confirmed in the
+transcript, but the 1 Sep snapshot normalises names to NFC).
+
+### Fixed
+
+- A Cyrillic name was not found because the file name used a decomposed
+  character (e.g. `и` + combining breve) while the generated candidate
+  used the composed `й`; matching now normalises both sides.
+
+---
+
+## v1.0.0 — 2026-07-28
+
+[chat] Codex session, 16:01–16:06. The first version called `pdfmd`:
+`batchmd.py` extended and renamed.
+
+### Added
+
+- **Name resolution** from a bare, Latin-spelled name: the exact name
+  first, then transliterated Cyrillic variants, then each with the
+  `Пробный ` prefix used for slide decks (`pdfmd Name` finds `Name.md`,
+  its Cyrillic spellings, or `Пробный <Name>.md`), and the PDF takes the
+  name of the file that was found. Zero or several matches is an error.
+- **Presentation mode** `-p` (Beamer via XeLaTeX, `--slide-level`),
+  **batch mode** `-b` over a directory with `-j` parallel jobs and `-o`
+  output directory, and passthrough of `-e` (engine; LuaLaTeX by default),
+  `-f` (font), `-V` (Pandoc variables, e.g. geometry) and any other
+  Pandoc option.

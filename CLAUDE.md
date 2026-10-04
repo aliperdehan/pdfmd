@@ -25,8 +25,8 @@ changelog's older "Backup reference" lines point there.
 **Update the changelog in the same commit**, not after: the code change,
 its `CHANGELOG.md` entry and the `PDFMD_VERSION` bump go into one commit,
 and new changelog entries cite that commit instead of a backup file. See `CHANGELOG.md` for the format
-and why its numbering starts at 2.0.0 rather than reconstructing a 1.x
-history.
+and why its numbering starts at 2.0.0 (the 1.x entries at the end of the
+changelog are an after-the-fact reconstruction and not reliable).
 
 **Verify before declaring a fix done — a synthetic test is not enough.**
 The table-width bug fixed in v2.0.0 is the concrete example: compiling the
