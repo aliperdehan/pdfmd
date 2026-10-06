@@ -165,6 +165,21 @@ pdfmd report --stop-at tex        # the standalone .tex a LaTeX engine would get
 The assembled file holds just the document text (and is marked
 `pdfmd-assembled: true`), so pdfmd never joins its parts a second time.
 
+By default it holds just the text. `--embed-metadata` also folds in what pdfmd
+finds beside the document, so the file builds the same on its own, in any
+folder:
+
+```sh
+pdfmd report --assemble-only --embed-metadata                  # metadata.yaml, preamble.tex and Lua filters
+pdfmd report --assemble-only --embed-metadata metadata preamble   # only those
+pdfmd report --assemble-only --embed-metadata --lua-mode ref   # name the filter instead of copying it
+```
+
+An embedded Lua filter sits in a `{=pdfmd}` block at the end of the file. A
+Lua filter can run any command, so one only runs if this machine's pdfmd
+embedded it (otherwise it is skipped with a warning, unless you pass
+`--trust-embedded`).
+
 ### Slides
 
 ```sh

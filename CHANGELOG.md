@@ -39,6 +39,76 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.1 — 2026-10-06
+
+Pre-edit state: commit `1086cfe` (v3.19.0). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`--embed-metadata [KIND ...]`** (with `--stop-at markdown`): the assembled
+  file also carries what pdfmd discovers beside the document, so it builds the
+  same alone, in any folder. Kinds: `metadata` (the YAML files merged as Pandoc
+  merges them -- later file over earlier, document over both, per top-level key,
+  checked against Pandoc 3.1.3 -- with the document's front matter, into ONE
+  block; `pdfmd-options` merged by pdfmd's own cascade; a file's `no-auto` and
+  `parts` are not carried), `preamble` (the preamble file(s) at the head of
+  `header-includes`, a literal block), `lua` (the Lua filters). None named =
+  all three. The kinds embedded are written into the file's own
+  `pdfmd-options: no-auto` (and `embedded`), or into the comment form of the
+  marker (`<!-- pdfmd-assembled: true; no-auto: lua -->`) where there is no
+  front matter, so the discovery that would find them again stays off.
+- **`--lua-mode embed|ref|off`** (default `embed`). `embed`: each filter whole,
+  in a fenced `{=pdfmd}` raw block at the very bottom (the fence is longer than
+  any backtick run inside; Pandoc ignores raw blocks of unknown formats); `ref`:
+  the filter's path in `pdfmd-options.lua-filter`, relative to the output, a
+  missing one a warning rather than an error; `off`: none. (`apply` comes in a
+  later step.)
+- **Embedded filters run only if trusted.** A Lua filter can run any command.
+  pdfmd records the SHA-256 of each filter it embeds in
+  `<cache>/pdfmd/embedded-trust.txt`; at build time an embedded filter runs only
+  if its own text hashes to one of those, else it is skipped with a warning (the
+  build completes) unless `--trust-embedded`. A hash stored in the file itself
+  cannot prove where it came from, so it is not what is trusted. A CLI
+  `--no-auto lua` skips embedded filters too.
+- The assembled file is always read with Pandoc's own markdown (never `gfm`,
+  which would print a `{=pdfmd}` block as code).
+
+### Changed
+
+- The BUILD NOTES stamp ignores embedded blocks when it looks for its comment
+  (a filter's text can contain the words) and, when it has to create the
+  comment, writes it above them, so they stay the last thing in the file.
+- Front-matter macros (`experiment:` and the like) are emitted after an embedded
+  preamble, as after a discovered one (a marker line in `header-includes`
+  records where the preamble ends; it never reaches the `.tex`).
+
+### Checked
+
+- Embedded file -> `--to latex` is byte-identical to the original build's
+  `.tex`, also when the file is copied alone into an empty folder (so the
+  filter can only come from its block), for: a parts report with a metadata
+  file, a preamble, a Lua filter and its own `header-includes`; a report/book
+  with metadata and preamble; unicode/quoted/nested YAML; a document without
+  front matter (with metadata, and with only a filter). Untrusted, edited and
+  `--trust-embedded` filters, `--lua-mode ref` (and a missing file), `off`,
+  selected kinds, the stamp, and `-b -j 2` behave as described. Normal builds and
+  v3.19.0's plain assembly are unchanged against the earlier baselines.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+### Known limits
+
+- YAML goes through PyYAML (YAML 1.1 rules, comments lost): an ambiguous scalar
+  such as `007` is written back as `7`.
+- A document with no front matter and a bare leading `# Title` keeps its
+  preamble out of the file (a new front-matter block would stop the title being
+  promoted); a warning says so.
+- A report/book build applies no discovered Lua filter, so none is embedded.
+- The embedded preamble sits in `header-includes`, which a non-LaTeX target
+  (HTML) would also see; that is for the HTML step.
+
+---
+
 ## v3.19.0 — 2026-10-06
 
 Pre-edit state: commit `26eb3ed` (after v3.18.0).

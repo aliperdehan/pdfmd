@@ -176,6 +176,44 @@ Stopping early (--stop-at, v3.19.0):
     (beamer with -p); the PDF stage is the default. Not with -p/-w for
     markdown, nor for .qmd/.tex/office inputs.
 
+    --embed-metadata [KIND ...] (v3.19.1) folds what pdfmd discovers beside
+    the document into the assembled file, so it builds the same alone, in
+    any folder: `metadata` (the metadata YAML files, merged the way Pandoc
+    merges them -- a later file over an earlier one, the document over both,
+    per top-level key -- with the document's front matter, into one block;
+    `pdfmd-options` merged by pdfmd's own cascade, a file's `no-auto`/
+    `parts` not carried), `preamble` (the preamble file(s), at the head of
+    `header-includes`), `lua` (the Lua filters, see --lua-mode); none named
+    means all three. `--lua-mode embed` (default) puts each filter whole in
+    a fenced raw block at the very bottom of the file --
+
+        ````{=pdfmd}
+        type: lua-filter
+        name: report.lua
+        sha256: ...
+
+        <the filter's source>
+        ````
+
+    (the fence is longer than any run of backticks inside; Pandoc ignores a
+    raw block of a format it doesn't know, and the BUILD NOTES stamp skips
+    the blocks and writes its comment above them); `ref` writes only the
+    filter's path into `pdfmd-options.lua-filter` (a missing file is a
+    warning and the build goes on); `off` carries none. The kinds embedded
+    are listed in the file's `pdfmd-options: no-auto`, so the discovery that
+    would find them again stays off. A Lua filter can run any command, so
+    an embedded one runs only if this machine's pdfmd wrote it (its SHA-256
+    is in `<cache>/pdfmd/embedded-trust.txt`); a file from elsewhere, or one
+    whose filter was edited, has the filter skipped with a warning (the
+    build still completes) unless --trust-embedded. Not carried: the
+    defaults pdfmd derives per machine (fonts, margins), re-derived on
+    build, and -V/command-line options. A document with no front matter and
+    a bare leading `# Title` keeps its preamble out of the file (a new
+    front-matter block would stop the title being promoted), with a
+    warning. YAML is re-written by PyYAML (YAML 1.1 rules, comments lost: an
+    ambiguous scalar like `007` comes back as `7`). A report/book build
+    applies no discovered Lua filter, so none is embedded there.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -582,7 +620,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.0"
+PDFMD_VERSION = "3.19.1"
 import argparse
 import filecmp
 import hashlib
@@ -948,6 +986,16 @@ def frontmatter_no_auto(md_path: Path) -> list[str] | None:
     """
     value = frontmatter_pdfmd_options(md_path).get("no-auto")
     if value is None:
+        # An assembled file with no front matter keeps its kinds in the
+        # comment form of its marker (see ASSEMBLED_COMMENT_RE).
+        if md_path.suffix.lower() in (".md", ".markdown"):
+            try:
+                found = ASSEMBLED_COMMENT_RE.search(
+                    mask_embedded_blocks(md_path.read_text(encoding="utf-8-sig")))
+            except (OSError, UnicodeDecodeError):
+                found = None
+            if found and found.group("kinds"):
+                return found.group("kinds").split(",")
         return None
     if isinstance(value, bool):
         return [] if value else None
@@ -960,6 +1008,15 @@ def frontmatter_no_auto(md_path: Path) -> list[str] | None:
     if isinstance(value, list):
         return [str(item) for item in value]
     return None
+
+
+def has_embedded_preamble(md_path: Path) -> bool:
+    """Whether an assembled file carries its preamble inside `header-includes`
+    (--embed-metadata preamble). The front-matter macros a preamble expects
+    (DOCUMENT_LATEX_KEYS) are only emitted when a preamble exists, and one
+    embedded there counts as one."""
+    kinds = frontmatter_pdfmd_options(md_path).get("embedded")
+    return isinstance(kinds, list) and "preamble" in kinds
 
 
 def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str] | None:
@@ -1879,8 +1936,14 @@ def document_header_file(md_path: Path, active: bool) -> Iterator[Path | None]:
         yield None
         return
     try:
-        parts = [document_latex_definitions(md_path)]
-        parts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+        definitions = document_latex_definitions(md_path)
+        includes = document_header_includes(md_path.read_text(encoding="utf-8-sig")) or ""
+        if PREAMBLE_END_MARK in includes:
+            # An embedded preamble (see EMBED_KINDS): definitions go after it.
+            head, _, tail = includes.partition(PREAMBLE_END_MARK)
+            parts = [head.rstrip("\n"), definitions, tail.lstrip("\n")]
+        else:
+            parts = [definitions, includes]
     except OSError:
         parts = []
     block = "\n".join(part for part in parts if part)
@@ -2599,6 +2662,7 @@ def has_definition_list(text: str) -> bool:
 
 def resolve_from_format(md_path: Path, cli_from: str | None,
                         metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
+
     """Pick the Pandoc reader for one Markdown source.
 
     An explicit --from always wins (returned as-is, with no message). A
@@ -2662,6 +2726,10 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
         return None, None
     text = md_path.read_text(encoding="utf-8-sig")
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
+        return None, None
+    if EMBED_BLOCK_RE.search(text) and is_assembled_text(text):
+        # Embedded `{=pdfmd}` blocks need Pandoc's own markdown: gfm would
+        # print them as code blocks.
         return None, None
     if metadata_files:
         names = ", ".join(metadata_file.name for metadata_file in metadata_files)
@@ -2969,6 +3037,12 @@ def frontmatter_extra_lua_filters(md_path: Path) -> list[Path]:
     for name in names:
         path = (md_path.parent / name).resolve()
         if not path.is_file():
+            if is_assembled_document(md_path):
+                # --lua-mode ref: the file names the filter, the filter may
+                # not be where it was; build without it rather than stop.
+                print(f"WARN  {display_path(md_path)}: the Lua filter it names, {name!r}, was not found "
+                      f"at {path}; building without it", file=sys.stderr)
+                continue
             raise SystemExit(f"{md_path}: pdfmd-options.lua-filter names {name!r}, "
                              f"which doesn't exist at {path}")
         resolved.append(path)
@@ -3206,10 +3280,15 @@ def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | 
     whole comment reads newest-to-oldest top to bottom. The heading is
     created there the first time a demotion has nowhere to go.
     """
-    match = BUILD_NOTES_RE.search(text)
+    match = BUILD_NOTES_RE.search(mask_embedded_blocks(text))
     if not match:
         indent = "     "
         block = f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}{new_line}\n{indent}{'=' * 60} -->\n"
+        embedded = EMBED_BLOCK_RE.search(text)
+        if embedded:
+            # Embedded filters stay the last thing in the file.
+            return (text[:embedded.start()].rstrip("\n") + "\n\n" + block + "\n"
+                    + text[embedded.start():]), None
         return text.rstrip("\n") + "\n\n" + block, None
 
     indent = match.group("indent")
@@ -4361,14 +4440,18 @@ ASSEMBLED_SUFFIX = ".assembled.md"
 ASSEMBLED_KEY = "pdfmd-assembled"
 ASSEMBLED_KEY_RE = re.compile(r"^pdfmd-assembled:[ \t]*(?:true|yes|on)[ \t]*$", re.IGNORECASE | re.MULTILINE)
 ASSEMBLED_COMMENT = "<!-- pdfmd-assembled: true -->"
-ASSEMBLED_COMMENT_RE = re.compile(r"^" + re.escape(ASSEMBLED_COMMENT) + r"[ \t]*$", re.MULTILINE)
+# `<!-- pdfmd-assembled: true; no-auto: lua,preamble -->`: the comment form of
+# the marker can carry the no-auto kinds that the front-matter form keeps in
+# `pdfmd-options` (see embed_into_text).
+ASSEMBLED_COMMENT_RE = re.compile(
+    r"^<!-- pdfmd-assembled: true(?:; no-auto: (?P<kinds>[a-z,]+))? -->[ \t]*$", re.MULTILINE)
 
 
 def is_assembled_text(text: str) -> bool:
     front_matter = re.match(r"^---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
     if front_matter and ASSEMBLED_KEY_RE.search(front_matter.group(1)):
         return True
-    return bool(ASSEMBLED_COMMENT_RE.search(text))
+    return bool(ASSEMBLED_COMMENT_RE.search(mask_embedded_blocks(text)))
 
 
 def is_assembled_document(path: Path) -> bool:
@@ -4381,7 +4464,7 @@ def is_assembled_document(path: Path) -> bool:
         return False
 
 
-def mark_assembled(text: str) -> str:
+def mark_assembled(text: str, no_auto: list[str] | None = None) -> str:
     """Mark ``text`` as assembled: ASSEMBLED_KEY in its front matter if it
     has a block, else an HTML comment at the end. Never a NEW front-matter
     block: that would change how the document reads -- Pandoc's own `% title`
@@ -4391,10 +4474,13 @@ def mark_assembled(text: str) -> str:
     """
     if re.match(r"^---[ \t]*\n", text):
         return re.sub(r"^---[ \t]*\n", f"---\n{ASSEMBLED_KEY}: true\n", text, count=1)
-    return text.rstrip("\n") + f"\n\n{ASSEMBLED_COMMENT}\n"
+    comment = (ASSEMBLED_COMMENT if not no_auto else
+               f"<!-- pdfmd-assembled: true; no-auto: {','.join(no_auto)} -->")
+    return text.rstrip("\n") + f"\n\n{comment}\n"
 
 
-def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool) -> str:
+def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
+                           plan: "EmbedPlan | None" = None) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
@@ -4407,11 +4493,15 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool) -
         if index and drop_later_front_matter:
             text = strip_part_front_matter(text)
         chunks.append(text.rstrip("\n") + "\n")
-    return mark_assembled("\n".join(chunks))
+    joined = "\n".join(chunks)
+    if plan is not None:
+        return embed_into_text(joined, sources[0], plan)
+    return mark_assembled(joined)
 
 
 def write_assembled_markdown(sources: list[Path], output: Path,
-                             drop_later_front_matter: bool) -> tuple[bool, str]:
+                             drop_later_front_matter: bool,
+                             plan: "EmbedPlan | None" = None) -> tuple[bool, str]:
     """Write the --stop-at markdown stage. Never over one of its own sources:
     `-o report.md` would otherwise replace the very file it was built from.
     """
@@ -4420,11 +4510,333 @@ def write_assembled_markdown(sources: list[Path], output: Path,
         return False, (f"{display_path(output)} is one of the files being assembled; "
                        f"pick another name (the default is NAME{ASSEMBLED_SUFFIX})")
     output.parent.mkdir(parents=True, exist_ok=True)
-    text = assemble_markdown_text(sources, drop_later_front_matter)
+    if plan is not None:
+        plan.output = output
+    text = assemble_markdown_text(sources, drop_later_front_matter, plan)
     output.write_text(text, encoding="utf-8", newline="\n")
     print(f"ASSEMBLED  {display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
           f"{len(text.splitlines())} lines)")
     return True, ""
+
+
+# -- Embedding (--embed-metadata, v3.19.1) -----------------------------------
+# An assembled file normally holds just the text; the metadata YAML, LaTeX
+# preamble and Lua filters pdfmd discovers beside the original stay there.
+# --embed-metadata folds them into the file, so it builds the same without
+# them:
+#   * metadata: the discovered YAML files, merged the way Pandoc merges them
+#     (a later file replaces an earlier one, the document replaces both, per
+#     top-level key), with the document's own front matter, into ONE block;
+#     `pdfmd-options` is merged by pdfmd's own rule instead (the document,
+#     then the files in order; the first to name a key wins, mappings
+#     field by field), and a file's `no-auto`/`parts` are not carried;
+#   * preamble: the preamble file(s) as raw LaTeX at the head of the
+#     document's `header-includes` (a literal block, the one shape
+#     wrap_latex_header_includes and document_header_includes both read);
+#   * lua: each filter as a fenced `{=pdfmd}` raw block at the very bottom
+#     (Pandoc ignores raw blocks of formats it does not know, so even a
+#     reader that never extracts them prints nothing), or, with --lua-mode
+#     ref, as a path in `pdfmd-options.lua-filter`.
+# The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
+# the discovery that would find them a second time stays off.
+EMBED_KINDS = ("metadata", "preamble", "lua")
+# A LaTeX comment line closing the embedded preamble inside `header-includes`:
+# document_header_file puts the front-matter macro definitions there, after
+# the preamble that defines them and before the document's own additions,
+# the order a normal build gives them.
+PREAMBLE_END_MARK = "% pdfmd: end of embedded preamble"
+LUA_MODES = ("embed", "ref", "off")
+EMBED_BLOCK_RE = re.compile(
+    r"^(?P<fence>`{3,})\{=pdfmd\}[ \t]*\n(?P<body>.*?)\n(?P=fence)[ \t]*$",
+    re.MULTILINE | re.DOTALL)
+# Never carried from a metadata file into the document: they are read from the
+# document's own front matter only (effective_no_auto, parts_setting).
+FILE_ONLY_OPTION_KEYS = frozenset({"no-auto", "parts"})
+
+
+class EmbedPlan:
+    """What --embed-metadata folds into one assembled file."""
+
+    def __init__(self, kinds: frozenset[str], lua_mode: str, metadata_files: list[Path],
+                 preamble_files: list[Path], lua_filters: list[Path]):
+        self.kinds = kinds
+        self.lua_mode = lua_mode
+        self.metadata_files = metadata_files
+        self.preamble_files = preamble_files
+        self.lua_filters = lua_filters
+        self.output: Path | None = None
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def normalized_source(text: str) -> str:
+    return text.replace("\r\n", "\n").rstrip("\n") + "\n"
+
+
+def mask_embedded_blocks(text: str) -> str:
+    """``text`` with every embedded block's characters blanked (newlines and
+    length kept, so positions still line up): what the BUILD NOTES and
+    marker searches look at, so a Lua filter's own text never matches them.
+    """
+    return EMBED_BLOCK_RE.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), text)
+
+
+def render_embedded_block(kind: str, name: str, source: str) -> str:
+    source = normalized_source(source)
+    longest = max((len(run) for run in re.findall(r"`+", source)), default=0)
+    fence = "`" * max(3, longest + 1)
+    name = re.sub(r"[\r\n]", " ", name)
+    return (f"{fence}{{=pdfmd}}\ntype: {kind}\nname: {name}\nsha256: {sha256_text(source)}\n\n"
+            f"{source.rstrip(chr(10))}\n{fence}\n")
+
+
+def parse_embedded_blocks(text: str) -> list[dict]:
+    blocks = []
+    for match in EMBED_BLOCK_RE.finditer(text):
+        head, separator, rest = match.group("body").partition("\n\n")
+        if not separator:
+            continue
+        fields = {}
+        for line in head.splitlines():
+            key, _, value = line.partition(":")
+            fields[key.strip()] = value.strip()
+        source = rest + "\n"
+        blocks.append({"type": fields.get("type", ""), "name": fields.get("name") or "filter.lua",
+                       "declared": fields.get("sha256"), "source": source,
+                       "sha256": sha256_text(source)})
+    return blocks
+
+
+# What this machine's pdfmd has itself written: the SHA-256 of each embedded
+# filter, one per line. A block whose own text hashes to one of these is the
+# text pdfmd wrote here (not edited since, not from another machine), so it is
+# run; any other embedded filter is code from elsewhere -- a Lua filter can
+# run any command -- and is skipped, with a warning, unless --trust-embedded.
+def trust_store_path() -> Path:
+    return cache_root() / "embedded-trust.txt"
+
+
+def trusted_hashes() -> set[str]:
+    try:
+        return {line.split()[0] for line in
+                trust_store_path().read_text(encoding="utf-8").splitlines() if line.strip()}
+    except OSError:
+        return set()
+
+
+def remember_trusted(entries: list[tuple[str, str]]) -> None:
+    known = trusted_hashes()
+    fresh = [(digest, name) for digest, name in entries if digest not in known]
+    if not fresh:
+        return
+    try:
+        trust_store_path().parent.mkdir(parents=True, exist_ok=True)
+        with trust_store_path().open("a", encoding="utf-8") as handle:
+            for digest, name in fresh:
+                handle.write(f"{digest} {name}\n")
+    except OSError:
+        pass
+
+
+@contextmanager
+def embedded_lua_filters(md_path: Path, allowed: bool, trust_all: bool) -> Iterator[list[Path]]:
+    """Yield temp files for the Lua filters embedded in ``md_path`` (see the
+    comment above EMBED_KINDS) that may run; the files are removed afterwards.
+    ``allowed`` False (a CLI --no-auto lua) yields none.
+    """
+    if not allowed or md_path.suffix.lower() not in (".md", ".markdown"):
+        yield []
+        return
+    try:
+        blocks = [block for block in parse_embedded_blocks(md_path.read_text(encoding="utf-8-sig"))
+                  if block["type"] == "lua-filter"]
+    except (OSError, UnicodeDecodeError):
+        blocks = []
+    if not blocks:
+        yield []
+        return
+    known = trusted_hashes()
+    folder = Path(mkdtemp(prefix="pdfmd-embedded-"))
+    try:
+        paths: list[Path] = []
+        for index, block in enumerate(blocks, 1):
+            label = Path(block["name"]).name or "filter.lua"
+            if not (trust_all or block["sha256"] in known):
+                print(f"WARN  {display_path(md_path)}: the embedded Lua filter '{label}' was not run: "
+                      "it was not written by this pdfmd (or was edited since), and a Lua filter can "
+                      "run any command. Read it, then use --trust-embedded to run it", file=sys.stderr)
+                continue
+            target = folder / f"{index:02d}-{label}"
+            target.write_text(block["source"], encoding="utf-8", newline="\n")
+            paths.append(target)
+            print(f"AUTO LUA  {display_path(md_path)}: embedded filter {label}")
+        yield paths
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def merge_option_dicts(sources: list[dict]) -> dict:
+    """Merge ``pdfmd-options`` mappings; an earlier one wins, mappings are
+    merged field by field (the cascade pdfmd's own readers apply)."""
+    merged: dict = {}
+    for source in sources:
+        for key, value in source.items():
+            if key not in merged:
+                merged[key] = value
+            elif isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = merge_option_dicts([merged[key], value])
+    return merged
+
+
+class _EmbedDumper(yaml.SafeDumper if yaml is not None else object):
+    pass
+
+
+if yaml is not None:
+    _EmbedDumper.add_representer(
+        str, lambda dumper, value: dumper.represent_scalar(
+            "tag:yaml.org,2002:str", value, style="|" if "\n" in value else None))
+
+
+def literal_block(key: str, text: str) -> str:
+    """``key: |`` and the text indented under it, written by hand: PyYAML will
+    not emit a literal block for text with trailing spaces, and pdfmd's
+    header-includes readers want exactly this shape."""
+    lines = text.replace("\r\n", "\n").strip("\n").split("\n")
+    return f"{key}: |\n" + "".join(f"  {line}\n" if line.strip() else "\n" for line in lines)
+
+
+def header_includes_text(value) -> str:
+    if isinstance(value, list):
+        return "\n".join(str(item) for item in value if item is not None)
+    return "" if value is None else str(value)
+
+
+def relative_filter_path(target: Path, output: Path | None) -> str:
+    if output is None:
+        return str(target)
+    try:
+        return Path(os.path.relpath(target, output.resolve().parent)).as_posix()
+    except ValueError:
+        return target.as_posix()
+
+
+def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
+    """Fold what ``plan`` names into the joined assembled ``text`` (see the
+    comment above EMBED_KINDS); ``first`` is the document whose own front
+    matter is merged (the scaffold, or a report's first chapter)."""
+    if yaml is None:
+        raise SystemExit("--embed-metadata needs PyYAML (pip install pyyaml)")
+    kinds = plan.kinds
+    front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    body = text[front.end():] if front else text
+    document: dict = {}
+    if front:
+        try:
+            loaded = yaml.safe_load(front.group("yaml"))
+        except yaml.YAMLError as error:
+            raise SystemExit(f"{display_path(first)}: its front matter does not parse as YAML "
+                             f"({str(error).splitlines()[0]}); --embed-metadata cannot merge into it")
+        document = loaded if isinstance(loaded, dict) else {}
+    left_out = []
+    if ("preamble" in kinds and plan.preamble_files and not front and not plan.metadata_files
+            and promote_bare_title(text, False)[1]):
+        # A new front-matter block would stop the leading `# Title` being
+        # promoted to the document's title (see promote_bare_title).
+        print(f"WARN  {display_path(first)}: has no front matter and starts with a bare '# Title'; "
+              "embedding a preamble would change how that reads, so it was left out. Give the "
+              "document front matter (a `title:`) to embed it", file=sys.stderr)
+        kinds = kinds - {"preamble"}
+        left_out.append("preamble " + ", ".join(item.name for item in plan.preamble_files) + " (left out)")
+    no_auto = [kind for kind in EMBED_KINDS
+               if kind in kinds and not (kind == "lua" and plan.lua_mode != "embed")]
+    if plan.lua_mode == "off":
+        no_auto = [kind for kind in no_auto if kind != "lua"]
+    blocks = ""
+    lua_refs: list[str] = []
+    entries: list[tuple[str, str]] = []
+    if "lua" in kinds and plan.lua_filters:
+        if plan.lua_mode == "embed":
+            for lua_filter in plan.lua_filters:
+                source = lua_filter.read_text(encoding="utf-8-sig")
+                blocks += "\n" + render_embedded_block("lua-filter", lua_filter.name, source)
+                entries.append((sha256_text(normalized_source(source)), lua_filter.name))
+        elif plan.lua_mode == "ref":
+            lua_refs = [relative_filter_path(item, plan.output) for item in plan.lua_filters]
+    # ---- metadata: files lowest, the document over them
+    merged: dict = {}
+    file_options: list[dict] = []
+    if "metadata" in kinds:
+        for metadata_file in plan.metadata_files:
+            data = metadata_file_yaml(metadata_file)
+            options = data.pop("pdfmd-options", None)
+            if isinstance(options, dict):
+                file_options.append({key: value for key, value in options.items()
+                                     if key not in FILE_ONLY_OPTION_KEYS})
+            merged.update(data)
+    document = dict(document)
+    document_options = document.pop("pdfmd-options", None)
+    merged.update(document)
+    options = merge_option_dicts([document_options if isinstance(document_options, dict) else {},
+                                  *file_options])
+    if "preamble" in kinds:
+        options.pop("preamble", None)
+    if "lua" in kinds and plan.lua_mode != "off":
+        options.pop("lua-filter", None)
+    if lua_refs:
+        options["lua-filter"] = lua_refs
+    embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
+        (kind == "lua" and plan.lua_mode != "embed") or (kind == "preamble" and not plan.preamble_files))]
+    if embedded_now:
+        options["embedded"] = embedded_now
+    if no_auto:
+        existing = options.get("no-auto")
+        if existing is True or (isinstance(existing, str) and existing.casefold() in {"true", "yes", "on", "all"}):
+            pass  # everything is already off
+        else:
+            current = ([] if existing is None or existing is False else
+                       [existing] if isinstance(existing, str) else [str(item) for item in existing])
+            options["no-auto"] = [*current, *(kind for kind in no_auto if kind not in current)]
+    # ---- preamble: raw LaTeX at the head of header-includes
+    header_parts = []
+    if "preamble" in kinds:
+        header_parts += [item.read_text(encoding="utf-8-sig") for item in plan.preamble_files]
+    own_header = header_includes_text(merged.pop("header-includes", None))
+    if own_header:
+        header_parts.append(own_header)
+    if "preamble" in kinds and plan.preamble_files:
+        header_parts.insert(len(plan.preamble_files), PREAMBLE_END_MARK)
+    header_text = "\n".join(part.strip("\n") for part in header_parts if part.strip())
+    # Nothing but the two bookkeeping keys to say, and no front matter to put
+    # them in: the comment form of the marker carries it instead, so the
+    # document does not gain a front-matter block (see mark_assembled).
+    if front or merged or header_text or (set(options) - {"embedded", "no-auto"}):
+        out: dict = {ASSEMBLED_KEY: True}
+        out.update(merged)
+        if options:
+            out["pdfmd-options"] = options
+        dumped = yaml.dump(out, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
+                           default_flow_style=False, width=10**6)
+        head = "---\n" + dumped + (literal_block("header-includes", header_text) if header_text else "") + "---\n\n"
+        result = head + body.lstrip("\n").rstrip("\n") + "\n"
+    else:
+        result = mark_assembled(text, no_auto)
+    if entries:
+        remember_trusted(entries)
+    if blocks:
+        result = result.rstrip("\n") + "\n" + blocks
+    summary = []
+    if "metadata" in kinds and plan.metadata_files:
+        summary.append("metadata " + ", ".join(item.name for item in plan.metadata_files))
+    if "preamble" in kinds and plan.preamble_files:
+        summary.append("preamble " + ", ".join(item.name for item in plan.preamble_files))
+    if "lua" in kinds and plan.lua_filters and plan.lua_mode != "off":
+        summary.append(f"lua ({plan.lua_mode}) " + ", ".join(item.name for item in plan.lua_filters))
+    summary += left_out
+    print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
+    return result
 
 
 # Conventional file extension for a Pandoc writer/target format, used to name
@@ -5336,7 +5748,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     tex_path = Path(tex_path_str)
     try:
         with prepared_latex_inputs([title_source, *metadata_files], True) as prepared, \
-                document_header_file(md_path, bool(preamble_files) or bool(pdf_meta_snippet_text)) as header_file, \
+                document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text)) as header_file, \
                 pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), "-o", str(tex_path), "-t", "beamer" if presentation else "latex",
@@ -5419,7 +5831,11 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 skip_stamp: bool = False,
                 full_scaffold: Path | None = None,
                 parts_root: Path | None = None,
-                part_markers: bool = False) -> tuple[Path, bool, str]:
+                part_markers: bool = False,
+                embed: tuple[frozenset[str], str] | None = None,
+                trust_embedded: bool = False) -> tuple[Path, bool, str]:
+    # embed: (kinds, lua mode) of --embed-metadata, for the assembled stage.
+    # trust_embedded: --trust-embedded (see embedded_lua_filters).
     # cache_cli: --cache/--no-cache. skip_stamp: the cache route's .tex stage,
     # whose stamp is written once, after the PDF exists. full_scaffold: the
     # scaffold a partial build's labels may be seeded from (see below).
@@ -5442,6 +5858,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             print(f"AUTO: {kinds}. Use --verbose to see in full")
 
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
+    cli_no_auto = no_auto
     no_auto = effective_no_auto(md_path, no_auto)
     output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
     output = output_file or (
@@ -5456,7 +5873,17 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
         if parts_inputs:
             note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
                           f"joined after it" + (" (partial build)" if partial else ""))
-        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs))
+        plan = None
+        if embed is not None:
+            kinds, lua_mode = embed
+            discovered_lua = [] if (auto_disabled(no_auto, "lua") or "lua" not in kinds) else find_lua_filters(md_path, metadata_files)
+            if not auto_disabled(no_auto, "lua") and "lua" in kinds:
+                for extra_filter in frontmatter_extra_lua_filters(md_path):
+                    if extra_filter not in discovered_lua:
+                        discovered_lua.append(extra_filter)
+            plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []),
+                             discovered_lua)
+        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan)
         flush_summary()
         return md_path, ok, reason
 
@@ -5546,16 +5973,20 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                      pandoc_options, metadata_file, output, preamble_files, from_format,
                                      no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
                                      partial, bool(cache["aux"]), full_scaffold, parts_root, note,
-                                     flush_summary, plots=bool(cache["plots"]))
+                                     flush_summary, plots=bool(cache["plots"]),
+                                     trust_embedded=trust_embedded)
 
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
             as (title_source, title_shifted), \
+            embedded_lua_filters(md_path, not auto_disabled(cli_no_auto, "lua"), trust_embedded) \
+            as embedded_filters, \
             table_width_filter() as width_filter, \
             csv_table_filter() as csv_filter, \
             scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs),
                             {part: part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None) as scaffold_files:
         part_files = scaffold_files[1:]
+        lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
         any_citations = any(contains_citations(item) for item in [md_path, *parts_inputs])
         any_code_spans = any(has_code_spans(item.read_text(encoding="utf-8-sig"))
@@ -5621,7 +6052,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                   "this and keep the Letter default")
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
                                        typst_engine=(target_format == "typst")) as prepared, \
-                    document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
+                    document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and is_tex_target) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
@@ -5807,7 +6238,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 continue
             with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES,
                                        typst_engine=(engine == "typst")) as prepared, \
-                    document_header_file(md_path, (bool(preamble_files) or bool(pdf_meta_snippet_text))
+                    document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and engine in LATEX_ENGINES) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
@@ -5942,7 +6373,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 extra_inputs: list[Path] | None = None,
                 partial: bool = False,
                 cache_cli: bool | None = None,
-                parts_root: Path | None = None) -> tuple[Path, bool, str]:
+                parts_root: Path | None = None,
+                embed: tuple[frozenset[str], str] | None = None,
+                trust_embedded: bool = False) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -5954,7 +6387,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
                           keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
                           cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
-                          parts_root=parts_root)
+                          parts_root=parts_root, embed=embed, trust_embedded=trust_embedded)
     if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
@@ -5971,7 +6404,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                       stamp_overrides: dict, keep_aux: bool, parts_inputs: list[Path],
                       partial: bool, persistent: bool, full_scaffold: Path | None,
                       parts_root: Path | None, note, flush_summary,
-                      plots: bool = False) -> tuple[Path, bool, str]:
+                      plots: bool = False,
+                      trust_embedded: bool = False) -> tuple[Path, bool, str]:
     """Build a PDF the cache way: Pandoc writes the .tex, pdfmd compiles it.
     See the comment above CACHE_DEFAULTS. ``persistent`` False (the natbib +
     parts case without the cache switched on) uses a scratch folder instead
@@ -6010,7 +6444,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                              stamp_overrides=stamp_overrides, keep_aux=keep_aux,
                              extra_inputs=parts_inputs, partial=partial, cache_cli=False,
                              skip_stamp=True, parts_root=parts_root,
-                             part_markers=bool(persistent and parts_inputs))
+                             part_markers=bool(persistent and parts_inputs),
+                             trust_embedded=trust_embedded)
         if not built[1]:
             return built
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
@@ -6121,6 +6556,21 @@ def build_parser() -> argparse.ArgumentParser:
                              f"{ASSEMBLED_SUFFIX} also means 'markdown'")
     parser.add_argument("--assemble-only", action="store_true",
                         help="shorthand for --stop-at markdown")
+    parser.add_argument("--embed-metadata", nargs="*", default=None, metavar="KIND",
+                        help="with --stop-at markdown: fold what pdfmd discovers beside the document "
+                             "into the assembled file, so it builds the same without them. KIND is "
+                             "metadata (the YAML files, merged with the front matter), preamble (the "
+                             "LaTeX preamble, into header-includes) or lua (the Lua filters, see "
+                             "--lua-mode); none given means all three")
+    parser.add_argument("--lua-mode", choices=LUA_MODES, default="embed",
+                        help="how --embed-metadata carries Lua filters: 'embed' (default) -- the whole "
+                             "filter in a {=pdfmd} block at the end of the file; 'ref' -- only its "
+                             "path (a missing one is a warning, and the build goes on); 'off' -- not "
+                             "carried")
+    parser.add_argument("--trust-embedded", action="store_true",
+                        help="run Lua filters embedded in a document even if this pdfmd did not "
+                             "write them (a filter can run any command; by default only ones this "
+                             "machine's pdfmd embedded itself run)")
     parser.add_argument("-d", "-cwd", "--cwd", "--destination-cwd", action="store_true",
                         dest="destination_cwd",
                         help="save PDFs in the current working directory")
@@ -6496,6 +6946,17 @@ def main() -> None:
     if (stop_at is None and args.out and not args.batch
             and args.out.name.casefold().endswith(ASSEMBLED_SUFFIX)):
         stop_at = "markdown"
+    embed_spec = None
+    if args.embed_metadata is not None:
+        unknown_kinds = sorted(set(args.embed_metadata) - {*EMBED_KINDS, "all"})
+        if unknown_kinds:
+            raise SystemExit(f"Unknown --embed-metadata kind(s): {', '.join(unknown_kinds)}. "
+                             f"Valid: {', '.join(EMBED_KINDS)}")
+        if stop_at != "markdown":
+            raise SystemExit("--embed-metadata applies to --stop-at markdown (--assemble-only) only")
+        wanted = (set(EMBED_KINDS) if not args.embed_metadata or "all" in args.embed_metadata
+                  else set(args.embed_metadata))
+        embed_spec = (frozenset(wanted), args.lua_mode)
     if stop_at in ("markdown", "tex"):
         if args.to:
             raise SystemExit(f"--stop-at {stop_at} fixes the output format; drop --to {args.to}")
@@ -6631,7 +7092,18 @@ def main() -> None:
         if target_format == ASSEMBLED_FORMAT:
             # --stop-at markdown: the chapters, as one Markdown text, in the
             # order Pandoc would read them. Nothing else of the build runs.
-            ok, reason = write_assembled_markdown(files, output, False)
+            report_plan = None
+            if embed_spec is not None:
+                kinds, lua_mode = embed_spec
+                report_plan = EmbedPlan(
+                    kinds, lua_mode, list(metadata_files),
+                    ([] if "preamble" not in kinds or auto_disabled(report_no_auto, "preamble")
+                     else find_preambles(files[0].parent, files[0].stem, pandoc_options)
+                     + frontmatter_extra_preambles(files[0])),
+                    [])  # a report build applies no discovered Lua filter
+                if "lua" in kinds:
+                    print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
+            ok, reason = write_assembled_markdown(files, output, False, report_plan)
             if not ok:
                 raise SystemExit(reason)
             for file in files:
@@ -6694,7 +7166,7 @@ def main() -> None:
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
                                            typst_engine=(target_format == "typst"),
                                            doc_count=len(files)) as prepared, \
-                        document_header_file(files[0], (bool(report_preambles) or bool(report_pdf_meta_snippet_text))
+                        document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
                                              and is_tex_target) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
                     prepared_files = prepared[:len(files)]
@@ -6882,6 +7354,9 @@ def main() -> None:
         if args.open:
             open_file(output)
         return
+    preambles_wanted_formats = {"pdf", *TEX_STANDALONE_FORMATS}
+    if embed_spec is not None and "preamble" in embed_spec[0]:
+        preambles_wanted_formats.add(ASSEMBLED_FORMAT)
     metadata_by_dir = {}
     def metadata_for(file, document_class=None):
         directory = file.parent.resolve()
@@ -6923,7 +7398,7 @@ def main() -> None:
             output.mkdir(parents=True, exist_ok=True)
         jobs = max(1, args.jobs)
         def preamble_for(file):
-            if (target_format not in {"pdf", *TEX_STANDALONE_FORMATS}
+            if (target_format not in preambles_wanted_formats
                     or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
                 return []
             preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
@@ -6942,14 +7417,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_spec, trust_embedded=args.trust_embedded)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_spec, trust_embedded=args.trust_embedded))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -7030,7 +7505,7 @@ def main() -> None:
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             preambles = []
-            if (target_format in {"pdf", *TEX_STANDALONE_FORMATS}
+            if (target_format in preambles_wanted_formats
                     and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble")):
                 preambles = find_preambles(source.parent, source.stem, pandoc_options) + frontmatter_extra_preambles(source)
                 announce_preambles(preambles)
@@ -7038,7 +7513,7 @@ def main() -> None:
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
-                                   cache_cli=args.cache,
+                                   cache_cli=args.cache, embed=embed_spec, trust_embedded=args.trust_embedded,
                                    parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
                                    partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
