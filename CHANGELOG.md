@@ -39,6 +39,57 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.4 — 2026-10-06
+
+Pre-edit state: commit `437596c` (v3.19.3). Patch bump by the one-time
+numbering override above; this closes the assemble/embed series.
+
+### Added
+
+- **`pdfmd-options: {default-output: FORMAT}`**: the format a document builds
+  to when the command line names none (no `--to`, no `-o` extension, no
+  `--stop-at`, no `-p`). Any Pandoc writer name or `pdf` (`tex`, `md`, `txt`,
+  `typ`, `htm` as shortcuts). Document first, then its metadata files (so a
+  shared `metadata.yaml` can set it for every document that finds it); per
+  document in `-b`, the first file in `-r`. A missing PDF engine is now an
+  error only for a document that actually builds a PDF (a machine with no
+  engine can build `default-output: html` documents); an explicit `-e` that is
+  not installed still fails as before.
+- **HTML options, `pdfmd-options: {html: {...}}`**, Quarto-style:
+  `self-contained: true` (`--standalone --embed-resources`; `--self-contained`
+  before Pandoc 2.19; MathML for math by default since it needs no network; a
+  page with no title gets the file name as `<title>`), `standalone: true` (a
+  full page, resources linked), `math:` (mathml, mathjax, katex, webtex,
+  plain), `css:` (a name or a list, relative to the document).
+  `--self-contained` / `--no-self-contained` on the command line win over the
+  document (a Pandoc `--self-contained` passed through before now means this,
+  which is what Pandoc meant by it). Nothing changes for HTML output unless one
+  of these is set: it is still the fragment it was.
+- An assembled file's **embedded LaTeX preamble stays out of every non-LaTeX
+  build** (HTML, docx, typst, ...), where Pandoc would have printed it into the
+  output; the HTML of an embedded copy equals the original's.
+
+### Checked
+
+- Self-contained from the document's option and from the flag: one file, image
+  inlined as a data URI, CSS inlined, `<math>` for the maths, `<title>` set; a
+  plain `-o x.html` and the fragment are unchanged. `default-output` from a
+  document, from a shared metadata file (report mode), mixed in `-b -j 2`
+  (html, typst and pdf side by side); beaten by `-o x.pdf`, `--to latex`;
+  needs no PDF engine for an HTML document. The PDF path was exercised only
+  through the Pandoc -> ODT -> LibreOffice fallback in the session that wrote
+  this (LibreOffice was installed, no LaTeX engine); CI builds with Typst. All
+  earlier comparisons and the normal-build baselines are unchanged.
+
+### Known limits
+
+- No PDF metadata stamping or engine chain for HTML (they are LaTeX/PDF only),
+  and a BUILD NOTES comment stays in the HTML source as a comment, as it did.
+- `math: mathjax|katex|webtex` fetch their scripts when the file is built, so
+  they need network access with `self-contained`.
+
+---
+
 ## v3.19.3 — 2026-10-06
 
 Pre-edit state: commit `11f1c97` (v3.19.2). Patch bump by the one-time

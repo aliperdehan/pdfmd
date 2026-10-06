@@ -148,6 +148,36 @@ Output formats:
     by editing the emitted `\\setmainfont` line if that turns out to be the
     wrong one for a particular document's glyphs.
 
+HTML output and a default format (v3.19.4):
+    `pdfmd-options: {default-output: FORMAT}` is the format a document builds
+    to when the command line names none (no --to, no -o with a recognized
+    extension, no --stop-at, no -p): any Pandoc writer name (or pdf; tex, md,
+    txt, typ, htm are accepted shortcuts). It is read from the document, else
+    its metadata files (a shared metadata.yaml sets it for every document that
+    finds it, any one can still override it), per document in -b batch mode and
+    from the first file in -r report mode. A missing PDF engine is an error
+    only for a document that really builds a PDF.
+
+    `pdfmd-options: {html: {...}}` shapes an HTML build, and does nothing
+    unless set -- pdfmd's HTML output stays the fragment it was:
+
+        pdfmd-options:
+          html:
+            self-contained: true   # one file, everything inlined
+            standalone: true       # a full page, resources left linked
+            math: mathml           # mathml | mathjax | katex | webtex | plain
+            css: style.css         # a name or a list, relative to the document
+
+    `self-contained` is `--standalone --embed-resources` (`--self-contained`
+    on a Pandoc older than 2.19), and then math defaults to MathML, the one
+    kind that needs no network (mathjax/katex/webtex fetch their scripts when
+    the file is built); a page with no title gets the file name as its
+    <title>. --self-contained / --no-self-contained on the command line win
+    over the document. An assembled file's embedded LaTeX preamble is left out
+    of every non-LaTeX build. Not done for HTML: PDF metadata stamping and the
+    engine fallback chain (they are PDF/LaTeX only), and a BUILD NOTES comment
+    in the source stays in the HTML as a comment, as before.
+
 Stopping early (--stop-at, v3.19.0):
     A build is a pipeline -- the document's parts are joined into ONE
     Markdown text, Pandoc turns that into a standalone .tex, a LaTeX engine
@@ -675,7 +705,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.3"
+PDFMD_VERSION = "3.19.4"
 import argparse
 import filecmp
 import hashlib
@@ -1849,7 +1879,8 @@ def wrap_latex_header_includes(text: str) -> str:
 
 @contextmanager
 def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
-                          typst_engine: bool = False, doc_count: int = 1) -> Iterator[list[Path]]:
+                          typst_engine: bool = False, doc_count: int = 1,
+                          drop_embedded_preamble: bool = False) -> Iterator[list[Path]]:
     """Yield temporary, corrected inputs for LaTeX-family renders when
     needed -- or, with `typst_engine` instead, to make a margin setting
     written for the OTHER engine family reach Typst's own template (see
@@ -1874,14 +1905,17 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
     prepared: list[Path] = []
     try:
         for index, path in enumerate(paths):
-            text = path.read_text(encoding="utf-8-sig")
+            original = text = path.read_text(encoding="utf-8-sig")
+            if drop_embedded_preamble and index < doc_count:
+                # A target that is not LaTeX-family gets no embedded LaTeX preamble.
+                text = strip_embedded_preamble(text)
             if latex_engine:
                 corrected = wrap_latex_header_includes(text)
             elif typst_engine:
                 corrected = fix_typst_margin(text, is_metadata=(index >= doc_count))
             else:
                 corrected = text
-            if corrected == text:
+            if corrected == original:
                 prepared.append(path)
                 continue
             with NamedTemporaryFile("w", encoding="utf-8", suffix=path.suffix,
@@ -4539,6 +4573,130 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 
 
 
+# -- HTML output and default-output (v3.19.4) --------------------------------
+# `pdfmd-options: {default-output: html}`: the format a document builds to when
+# the command line names none (no --to, no -o with a recognized extension, no
+# --stop-at, no -p). `pdfmd-options: {html: {...}}` shapes an HTML build:
+#   self-contained: true   one file with everything inlined (--embed-resources
+#                          --standalone; pdfmd's HTML output is otherwise a
+#                          fragment, unchanged); math defaults to MathML then,
+#                          the one kind that needs no network
+#   standalone: true       a full page, resources left linked
+#   math: mathml|mathjax|katex|webtex|plain
+#   css: file.css | [..]   --css, relative to the document
+HTML_TARGETS = frozenset({"html", "html4", "html5"})
+DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "plain", "md": "markdown", "htm": "html",
+                          "typ": "typst", "markdown": "markdown"}
+HTML_MATH_FLAGS = {"mathml": "--mathml", "mathjax": "--mathjax", "katex": "--katex",
+                   "webtex": "--webtex"}
+
+
+def cascaded_option(md_path: Path, metadata_files: list[Path], key: str):
+    """The first ``pdfmd-options.<key>`` found: the document's own, else its
+    metadata files' in order (None if none sets it)."""
+    sources = [frontmatter_pdfmd_options(md_path)]
+    for metadata_file in metadata_files:
+        found = metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(found if isinstance(found, dict) else {})
+    for options in sources:
+        if key in options:
+            return options[key]
+    return None
+
+
+def default_output_format(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """``pdfmd-options.default-output`` (a Pandoc writer name, or pdf), None
+    if unset. Only Markdown documents have one."""
+    if md_path.suffix.lower() not in (".md", ".markdown"):
+        return None
+    value = cascaded_option(md_path, metadata_files, "default-output")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    name = value.strip().casefold().lstrip(".")
+    name = DEFAULT_OUTPUT_ALIASES.get(name, name)
+    if name == ASSEMBLED_FORMAT:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.default-output cannot be "
+                         f"'{ASSEMBLED_FORMAT}'; use --stop-at markdown")
+    return name
+
+
+_PANDOC_VERSION: tuple[int, ...] | None = None
+
+
+def pandoc_version() -> tuple[int, ...]:
+    global _PANDOC_VERSION
+    if _PANDOC_VERSION is None:
+        try:
+            first = subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
+            _PANDOC_VERSION = tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", first).group(1).split("."))
+        except (OSError, IndexError, AttributeError, ValueError):
+            _PANDOC_VERSION = (0,)
+    return _PANDOC_VERSION
+
+
+def html_settings(md_path: Path, metadata_files: list[Path]) -> dict:
+    value = cascaded_option(md_path, metadata_files, "html")
+    return value if isinstance(value, dict) else {}
+
+
+def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: list[str],
+                     cli_self_contained: bool | None, note) -> list[str]:
+    """The Pandoc arguments an HTML target adds (see the comment above
+    HTML_TARGETS); nothing at all unless something asks for it, so a plain
+    `pdfmd x -o x.html` is exactly what it was."""
+    settings = html_settings(md_path, metadata_files)
+    truthy = lambda value: value is True or str(value).casefold() in {"true", "yes", "on"}
+    self_contained = (cli_self_contained if cli_self_contained is not None
+                      else truthy(settings.get("self-contained", False)))
+    standalone = self_contained or truthy(settings.get("standalone", False))
+    out: list[str] = []
+    if standalone and not has_standalone_option(pandoc_options):
+        out.append("--standalone")
+    if self_contained and "--embed-resources" not in pandoc_options and "--self-contained" not in pandoc_options:
+        out.append("--embed-resources" if pandoc_version() >= (2, 19) else "--self-contained")
+        note("HTML", f"{md_path}: self-contained: one file, resources inlined")
+    elif standalone:
+        note("HTML", f"{md_path}: a full page (--standalone)")
+    math = str(settings.get("math", "")).casefold()
+    has_math_option = any(item in pandoc_options for item in
+                          (*HTML_MATH_FLAGS.values(), "--gladtex", "--latexmathml", "--mathjax=", "--katex="))
+    if not has_math_option and math in HTML_MATH_FLAGS:
+        out.append(HTML_MATH_FLAGS[math])
+    elif not has_math_option and math in ("", "auto") and self_contained:
+        out.append("--mathml")  # the one kind of math that needs no network
+    css = settings.get("css")
+    for name in ([css] if isinstance(css, str) else css if isinstance(css, list) else []):
+        out += ["--css", str((md_path.parent / str(name)).resolve())]
+    if standalone and not any(item.startswith(("--metadata=pagetitle", "-Mpagetitle")) for item in pandoc_options):
+        if not (frontmatter_value(md_path, "title") or frontmatter_value(md_path, "pagetitle")
+                or any(metadata_file_yaml(item).get("title") or metadata_file_yaml(item).get("pagetitle")
+                       for item in metadata_files)):
+            out += ["--metadata", f"pagetitle={md_path.stem}"]
+    return out
+
+
+def strip_embedded_preamble(text: str) -> str:
+    """``text`` without the LaTeX preamble an assembled file embeds at the
+    head of its `header-includes` (everything up to PREAMBLE_END_MARK): for a
+    target that is not LaTeX-family, where Pandoc would put it in the output
+    as text (an HTML <head>). The document's own header-includes stay."""
+    front = re.match(r"^(---[ \t]*\n)(.*?)(\n(?:---|\.\.\.)[ \t]*(?:\n|$))", text, re.DOTALL)
+    if not front or PREAMBLE_END_MARK not in front.group(2):
+        return text
+    block = re.search(r"(?m)^header-includes: \|\n((?:  .*\n|[ \t]*\n)*)", front.group(2) + "\n")
+    if not block:
+        return text
+    lines = block.group(1).split("\n")
+    mark = f"  {PREAMBLE_END_MARK}"
+    if mark not in lines:
+        return text
+    rest = "\n".join(lines[lines.index(mark) + 1:]).strip("\n")
+    replacement = f"header-includes: |\n{rest}\n" if rest.strip() else ""
+    yaml_text = front.group(2) + "\n"
+    yaml_text = yaml_text[:block.start()] + replacement + yaml_text[block.end():]
+    return front.group(1) + yaml_text.rstrip("\n") + front.group(3) + text[front.end():]
+
+
 # -- Stop-at stages (--stop-at markdown|tex|pdf) -----------------------------
 # The build is a pipeline: the document's parts are joined into ONE Markdown
 # text, Pandoc turns that into a standalone .tex, a LaTeX engine turns the
@@ -6347,7 +6505,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 parts_root: Path | None = None,
                 part_markers: bool = False,
                 embed: "EmbedRequest | None" = None,
-                trust_embedded: bool = False) -> tuple[Path, bool, str]:
+                trust_embedded: bool = False,
+                self_contained: bool | None = None) -> tuple[Path, bool, str]:
+    # self_contained: --self-contained/--no-self-contained (None = the document's).
     # embed: the EmbedRequest of --embed-metadata, for the assembled stage.
     # trust_embedded: --trust-embedded (see embedded_lua_filters).
     # cache_cli: --cache/--no-cache. skip_stamp: the cache route's .tex stage,
@@ -6566,7 +6726,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                   "targets. Set papersize: yourself, or --no-auto papersize, to silence "
                                   "this and keep the Letter default")
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
-                                       typst_engine=(target_format == "typst")) as prepared, \
+                                       typst_engine=(target_format == "typst"),
+                                       drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and is_tex_target) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
@@ -6654,6 +6815,8 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 # caller-supplied --lua-filter/--filter needs resolved
                 # citations already in the AST (same invariant as the
                 # auto-discovered lua_filters below).
+                if target_format in HTML_TARGETS:
+                    cmd += html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += pandoc_options
                 if is_tex_target and tablewidth_auto:
                     cmd += ["--lua-filter", str(width_filter)]
@@ -6890,7 +7053,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 cache_cli: bool | None = None,
                 parts_root: Path | None = None,
                 embed: "EmbedRequest | None" = None,
-                trust_embedded: bool = False) -> tuple[Path, bool, str]:
+                trust_embedded: bool = False,
+                self_contained: bool | None = None) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -6902,7 +7066,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
                           keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
                           cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
-                          parts_root=parts_root, embed=embed, trust_embedded=trust_embedded)
+                          parts_root=parts_root, embed=embed, trust_embedded=trust_embedded,
+                          self_contained=self_contained)
     if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
@@ -7087,6 +7252,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "path (a missing one is a warning, and the build goes on); 'apply' -- run "
                              "now, Markdown to Markdown, so the text already has their effect (a "
                              "filter that checks FORMAT is embedded instead); 'off' -- not carried")
+    parser.add_argument("--self-contained", dest="self_contained", action="store_true", default=None,
+                        help="for an HTML target: one file with everything inlined (images, CSS; "
+                             "--standalone --embed-resources, MathML for math). A document sets it "
+                             "with `pdfmd-options: {html: {self-contained: true}}`")
+    parser.add_argument("--no-self-contained", dest="self_contained", action="store_false",
+                        help="for an HTML target: not self-contained, even where the document says so")
     parser.add_argument("--unpack", action="store_true",
                         help="write what an assembled file embeds (Lua filters, preamble, merged "
                              "metadata) back out as files into NAME.unpacked/ (or -o DIR), checking "
@@ -7535,7 +7706,34 @@ def main() -> None:
         print(f"WARN  --engine is ignored for "
               f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
               "no PDF engine is involved", file=sys.stderr)
-    engines = select_engines(args.engine, args.presentation) if target_format == "pdf" else []
+    # Explicit: the command line named a format (or a stage), so a document's
+    # pdfmd-options.default-output does not apply.
+    target_explicit = (stop_at is not None or bool(args.to) or args.presentation
+                       or bool(format_from_output(args.out) if args.out and not args.batch else None))
+    engines: list[str] = []
+    engines_error: SystemExit | None = None
+    if target_format == "pdf":
+        try:
+            engines = select_engines(args.engine, args.presentation)
+        except SystemExit as error:
+            if target_explicit:
+                raise
+            # A document's default-output may not be PDF: only fail if one is.
+            engines_error = error
+
+    def need_engines(format_name: str) -> None:
+        if format_name == "pdf" and engines_error is not None:
+            raise engines_error
+
+    def default_target(document: Path, metadata_files: list[Path]) -> str:
+        """target_format, or the document's own default-output (never over an explicit one)."""
+        if target_explicit:
+            return target_format
+        chosen = default_output_format(document, metadata_files)
+        if chosen and chosen != target_format:
+            print(f"AUTO OUTPUT  {display_path(document)}: default-output {chosen} (pdfmd-options)")
+        return chosen or target_format
+
     if not args.path and not args.batch and not args.report:
         markdown_files = sorted(Path.cwd().glob("*.md"), key=lambda path: path.name.casefold())
         if not markdown_files:
@@ -7620,6 +7818,8 @@ def main() -> None:
             raise SystemExit(str(error))
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                           (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+        target_format = default_target(files[0], metadata_files)
+        need_engines(target_format)
         engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         report_from, report_reader_reason = (
             (args.from_format, None) if auto_disabled(report_no_auto, "reader")
@@ -7713,7 +7913,8 @@ def main() -> None:
                                            f"using {default_monofont()} on LaTeX-family targets")
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
                                            typst_engine=(target_format == "typst"),
-                                           doc_count=len(files)) as prepared, \
+                                           doc_count=len(files),
+                                           drop_embedded_preamble=not is_tex_target) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
                                              and is_tex_target) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
@@ -7759,6 +7960,9 @@ def main() -> None:
                     # this guards against).
                     if report_header_file is not None:
                         cmd += ["--include-in-header", str(report_header_file)]
+                    if target_format in HTML_TARGETS:
+                        cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
+                                                args.self_contained, report_note)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                     if (any(contains_citations(file) for file in files)
@@ -7958,8 +8162,18 @@ def main() -> None:
         if output:
             output.mkdir(parents=True, exist_ok=True)
         jobs = max(1, args.jobs)
+        batch_target = target_format
+
+        def file_target(file):
+            """This file's target: the command line's, else its own default-output."""
+            if target_explicit or file.suffix.lower() not in (".md", ".markdown"):
+                return batch_target
+            found = metadata_for(file)
+            chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
+            return chosen or batch_target
+
         def preamble_for(file):
-            if (not (target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file))
+            if (not (file_target(file) in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file))
                     or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
                 return []
             preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
@@ -7975,17 +8189,19 @@ def main() -> None:
             # and the actual conversion, rather than calling it twice.
             metadata = metadata_for(file)
             metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-            return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
+            return metadata, resolve_engines(file, args.engine, engines, args.presentation, file_target(file), metadata_files, args.verbose)
         def work(file):
+            need_engines(file_target(file))
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
+                    need_engines(file_target(file))
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -8010,6 +8226,8 @@ def main() -> None:
         if scaffold_plan is not None:
             source = scaffold_plan.scaffold
             output_stem = scaffold_plan.output_stem
+        target_format = default_target(source, scaffold_metadata_files(source, args.metadata_file))
+        need_engines(target_format)
         output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
         out_dir = None
         output_file = None
@@ -8075,6 +8293,7 @@ def main() -> None:
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
                                    cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
+                                   self_contained=args.self_contained,
                                    parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
                                    partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]

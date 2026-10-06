@@ -204,6 +204,20 @@ pdfmd-options:
   embed: {lua: ref}        # what --assemble-only embeds without the flag
 ```
 
+Plain HTML output is a fragment. For a finished page, or one file with
+everything (images, CSS) inlined, ask for it, on the command line or in the
+document:
+
+```sh
+pdfmd lecture -o lecture.html --self-contained
+```
+
+```yaml
+pdfmd-options:
+  default-output: html     # build to HTML when no format is given
+  html: {self-contained: true, css: style.css}
+```
+
 ### Slides
 
 ```sh
