@@ -188,6 +188,22 @@ that looks at `FORMAT` is embedded instead). `--unpack` goes the other way:
 pdfmd report.assembled.md --unpack     # filters, preamble and metadata back into report.assembled.unpacked/
 ```
 
+`pdfmd` finds `report.assembled.unpacked/` beside `report.assembled.md` by
+itself (its metadata, preambles and Lua filters), and `--unpack --slim` strips
+the unpacked parts out of the assembled file, leaving the lean document plus
+that folder.
+
+A document can name its own files and set what to embed, in `pdfmd-options`:
+
+```yaml
+pdfmd-options:
+  yaml: [base.yaml]        # metadata files (like -y); also `metadata:`, or grouped:
+  metadata:
+    preamble: my-preamble.tex
+    lua-filter: my.lua
+  embed: {lua: ref}        # what --assemble-only embeds without the flag
+```
+
 ### Slides
 
 ```sh

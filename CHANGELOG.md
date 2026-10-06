@@ -39,6 +39,70 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.3 — 2026-10-06
+
+Pre-edit state: commit `11f1c97` (v3.19.2). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`NAME.unpacked/` is discovered.** The folder `--unpack` writes is an
+  accessory folder for the document NAME.md, searched like `metadata/`: all of
+  its metadata YAML files (in name order, as the only metadata for that
+  document), every `.tex` in it as a preamble, every `.lua` in it as a filter
+  (the folder is made by pdfmd for that document alone, so the usual "only
+  fixed names" rule is not needed). `--watch` follows it.
+- **Origin of the merged keys, recorded.** An embedded file writes
+  `pdfmd-options.origin`: which keys came from the document and from each
+  metadata file, and the line count and hash of each preamble file. `--unpack`
+  uses it to write the metadata back as the files it came from
+  (`01-metadata.yaml`, `02-report.yaml`, ...) and the preamble as its original
+  files; a file without the record, or a preamble edited since, still unpacks
+  as one merged `metadata.yaml` / one `preamble.tex`, as before.
+- **`--unpack --slim`**: after writing the files, rewrites the assembled file
+  without them (embedded filters, preamble, and the metadata files' keys where
+  the origin is recorded), leaving the document's own front matter and its
+  `NAME.unpacked/` -- the original layout, which the discovery then builds
+  exactly like the embedded file (checked: byte-identical `.tex`).
+- **`pdfmd-options` file names**: `yaml:` (or `metadata:` with a name/list)
+  names metadata files, like `-y` but written in the document; the existing
+  `preamble:` and `lua-filter:` still work, and all three can be grouped under
+  `metadata:` (`metadata: {yaml: .., preamble: .., lua-filter: ..}`; `lua:` is
+  accepted for `lua-filter:` there). Flat and grouped add up. Paths are
+  relative to the document. `--no-auto metadata`/`preamble`/`lua` suppress them
+  as they do the other document-written options; an explicit `-y` wins.
+- **`pdfmd-options.embed`**: what `--assemble-only` embeds without the flag --
+  `true` (all three), `false`, a list of kinds, or a mapping (`metadata`,
+  `preamble` true/false, each on unless said otherwise; `lua`: embed|ref|apply
+  |off, true = embed, false = off). The document's own value wins over its
+  metadata files' (so a shared `metadata.yaml` can turn it on for every
+  report), the command line over both: `--embed-metadata KIND ..`,
+  `--lua-mode` (its default is now "the option, else embed"), and the new
+  `--no-embed-metadata`. Resolved per document in batch mode.
+- An embedded file drops the names it embedded (and `embed:`) from its own
+  `pdfmd-options`, which would point into the original folder.
+
+### Fixed
+
+- A metadata file given with a path relative to the current folder in a
+  subfolder (`-y cfg/x.yaml`, or the new `yaml:` key) made Pandoc, which runs
+  inside that file's own folder, look for `cfg/cfg/x.yaml`. `resolve_yaml` now
+  returns an absolute path (symlinks not resolved).
+
+### Checked
+
+- Slim + unpacked folder, embedded copy alone, and the original build give the
+  same `.tex` for the fixture with two metadata files, a preamble, a filter and
+  the document's own `header-includes`; editing an unpacked preamble changes the
+  next build. Flat and grouped file names build the same; a document naming its
+  files in a subfolder builds, and its embedded copy alone is identical.
+  `embed:` as `true`, a mapping, a list, `false`, from a shared metadata file,
+  and the CLI overrides behave as described. All earlier comparisons and the
+  normal-build baselines are unchanged.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+---
+
 ## v3.19.2 — 2026-10-06
 
 Pre-edit state: commit `0434c8c` (v3.19.1). Patch bump by the one-time

@@ -221,6 +221,43 @@ Stopping early (--stop-at, v3.19.0):
     ambiguous scalar like `007` comes back as `7`). A report/book build
     applies no discovered Lua filter, so none is embedded there.
 
+    Naming files and choosing what to embed from the document itself (v3.19.3),
+    in `pdfmd-options` -- the same names work flat or grouped under `metadata:`
+    (a name or a list; paths are relative to the document):
+
+        pdfmd-options:
+          yaml: [base.yaml, extra.yaml]   # metadata files, like -y; `metadata: base.yaml` too
+          preamble: my-preamble.tex       # (already existed)
+          lua-filter: my.lua              # (already existed)
+          metadata:                       # the same three, grouped
+            yaml: [base.yaml]
+            preamble: my-preamble.tex
+            lua-filter: my.lua
+          embed:                          # what --assemble-only embeds, without the flag
+            metadata: true                # true | false   (each kind is on unless said otherwise)
+            preamble: true
+            lua: embed                    # embed | ref | apply | off  (true = embed, false = off)
+
+    `embed: true` means all three kinds; `embed: [metadata, lua]` names kinds;
+    `embed: false` none. The document's own `embed` wins over its metadata
+    files' (first to name it), and the command line over both: --embed-metadata
+    KIND.. names the kinds, --lua-mode the filter mode, --no-embed-metadata
+    turns it off for the run. An assembled file also records which source each
+    front-matter key came from (`pdfmd-options.origin`: the document's own, and
+    per metadata file), and the line count and hash of each preamble file, so
+    --unpack can split them again. The names that were embedded (and `embed:`)
+    are dropped from the assembled file's own `pdfmd-options`.
+
+    `NAME.unpacked/`, the folder --unpack writes, is an accessory folder for
+    NAME.md, searched like `metadata/`: its metadata YAML files (all of them,
+    in name order -- unpacking numbers them when there are several, and nothing
+    else is guessed at), its preambles (every .tex in it) and every .lua in it
+    are used for that document. `--unpack --slim` rewrites the assembled file
+    without what it unpacked (embedded filters, the preamble, and -- where the
+    origin is recorded -- the keys that came from metadata files), leaving the
+    document's own and its `NAME.unpacked/`: the original layout, rebuilt by the
+    discovery.
+
     --unpack FILE [-o DIR] (v3.19.2) writes what an assembled file embeds back
     out as files, into FILE.unpacked/ (or DIR): each embedded Lua filter (its
     hash checked against the one recorded when it was written, and whether
@@ -228,8 +265,9 @@ Stopping early (--stop-at, v3.19.0):
     `header-includes` before the preamble marker) and `metadata.yaml` (the
     merged front matter -- it can no longer tell the discovered files from
     the document's own). Never overwrites (it stops, writing nothing, if a
-    file is already there) and never edits FILE; exit status 1 if a hash does
-    not match.
+    file is already there) and never edits FILE (except with --slim); exit
+    status 1 if a hash does not match. With the recorded origin, the metadata
+    comes back as the files it was made from (`01-metadata.yaml`, ...).
 
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
@@ -637,10 +675,11 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.2"
+PDFMD_VERSION = "3.19.3"
 import argparse
 import filecmp
 import hashlib
+from collections import namedtuple
 from fnmatch import fnmatchcase
 from functools import lru_cache
 import logging
@@ -826,6 +865,12 @@ def display_path(path: Path) -> str:
 # LaTeX \input pulls in relative to pandoc's cwd -- see resource_path_option's
 # docstring) can sit out of sight together. See accessory_directories().
 ACCESSORY_DIRNAME = "metadata"
+# `NAME.unpacked/`, the folder --unpack writes beside NAME.md: an accessory
+# folder for that one document, searched like `metadata/` is (see
+# accessory_directories). Every .lua in it applies -- the folder is made by
+# pdfmd for this document alone, unlike a shared folder where only fixed
+# names are trusted (find_lua_filters).
+UNPACKED_SUFFIX = ".unpacked"
 
 # --no-auto KIND values, and its "font" shorthand for both font kinds at
 # once. See build_parser()'s --no-auto help text for what each kind does.
@@ -872,8 +917,10 @@ def merge_no_auto(cli: list[str] | None, doc: list[str] | None) -> list[str] | N
     return sorted({*(cli or []), *(doc or [])})
 
 
-def accessory_directories(directory: Path) -> list[Path]:
-    """Return `directory`, plus its ACCESSORY_DIRNAME subdirectory if present.
+def accessory_directories(directory: Path, stem: str | None = None) -> list[Path]:
+    """Return `directory`, plus its ACCESSORY_DIRNAME subdirectory if present,
+    plus (given the document's ``stem``) the ``STEM.unpacked`` folder
+    --unpack writes (see unpacked_directory()).
 
     Every filename-based auto-discovery (metadata YAML, preambles, Lua
     filters) searches both: a document's own directory (files placed
@@ -885,7 +932,12 @@ def accessory_directories(directory: Path) -> list[Path]:
     is picked up.
     """
     accessory = directory / ACCESSORY_DIRNAME
-    return [directory, accessory] if accessory.is_dir() else [directory]
+    found = [directory, accessory] if accessory.is_dir() else [directory]
+    if stem:
+        unpacked = directory / f"{stem}{UNPACKED_SUFFIX}"
+        if unpacked.is_dir():
+            found.append(unpacked)
+    return found
 
 
 def resource_path_option(document_directory: Path, pandoc_cwd: Path,
@@ -1703,9 +1755,12 @@ def preamble_candidates(directory: Path, document_stem: str) -> list[Path]:
     """Return intentionally named generic and document-specific preambles."""
     stem = document_stem.casefold()
     candidates: list[Path] = []
-    for folder in accessory_directories(directory):
+    for folder in accessory_directories(directory, document_stem):
         for path in folder.glob("*.tex"):
             name = path.name.casefold()
+            if folder.name.endswith(UNPACKED_SUFFIX):
+                candidates.append(path)  # a folder --unpack made: every preamble in it is this document's
+                continue
             if name in PREAMBLE_FILENAMES:
                 candidates.append(path)
                 continue
@@ -1987,7 +2042,7 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
     metadata. Anything else has to be passed explicitly, so an unrelated .lua
     file sitting in a folder can never silently change a render.
     """
-    directories: list[Path] = accessory_directories(md_path.parent)
+    directories: list[Path] = accessory_directories(md_path.parent, md_path.stem)
     directories += [metadata.parent for metadata in metadata_files]
     wanted = (f"{md_path.stem}.lua", "nulabreport.lua")
     found: list[Path] = []
@@ -1998,6 +2053,12 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
             if candidate.is_file() and candidate not in seen:
                 seen.add(candidate)
                 found.append(candidate)
+    unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
+    if unpacked.is_dir():
+        for candidate in sorted(unpacked.glob("*.lua"), key=lambda item: natural_key(item.name)):
+            if candidate.resolve() not in seen:
+                seen.add(candidate.resolve())
+                found.append(candidate.resolve())
     return found
 
 
@@ -2965,6 +3026,40 @@ def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) 
     return None
 
 
+def option_names(options: dict, kind: str) -> list[str]:
+    """File names a ``pdfmd-options`` block gives for ``kind`` -- ``yaml``
+    (metadata files), ``preamble`` or ``lua-filter`` -- written flat or
+    grouped under ``metadata:``::
+
+        pdfmd-options:
+          yaml: [a.yaml]          # also `metadata: a.yaml` (a name or a list)
+          preamble: p.tex
+          lua-filter: f.lua
+          metadata:               # the same, grouped
+            yaml: [a.yaml]
+            preamble: p.tex
+            lua-filter: f.lua     # (`lua:` is accepted too)
+
+    Both spellings add up; a name given twice counts once."""
+    names: list[str] = []
+
+    def add(value) -> None:
+        for item in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
+            if str(item) not in names:
+                names.append(str(item))
+
+    add(options.get(kind))
+    grouped = options.get("metadata")
+    if isinstance(grouped, dict):
+        keys = {"yaml": ("yaml", "metadata"), "preamble": ("preamble",),
+                "lua-filter": ("lua-filter", "lua")}[kind]
+        for key in keys:
+            add(grouped.get(key))
+    elif kind == "yaml":
+        add(grouped)
+    return names
+
+
 def frontmatter_extra_preambles(md_path: Path) -> list[Path]:
     """Read ``pdfmd-options: preamble: ...`` -- a document naming its own
     LaTeX preamble file(s) explicitly, instead of relying on the fixed
@@ -3001,11 +3096,7 @@ def frontmatter_extra_preambles(md_path: Path) -> list[Path]:
     with no such ordering dependency, and for naming one under any filename
     rather than only the two PREAMBLE_FILENAMES.
     """
-    value = frontmatter_pdfmd_options(md_path).get("preamble")
-    if value is None:
-        return []
-    names = [value] if isinstance(value, str) else (
-        [str(item) for item in value] if isinstance(value, list) else [])
+    names = option_names(frontmatter_pdfmd_options(md_path), "preamble")
     resolved = []
     for name in names:
         path = (md_path.parent / name).resolve()
@@ -3046,11 +3137,7 @@ def frontmatter_extra_lua_filters(md_path: Path) -> list[Path]:
     document's own stem, so find_lua_filters() alone never picked it up --
     the document had to name it explicitly instead.
     """
-    value = frontmatter_pdfmd_options(md_path).get("lua-filter")
-    if value is None:
-        return []
-    names = [value] if isinstance(value, str) else (
-        [str(item) for item in value] if isinstance(value, list) else [])
+    names = option_names(frontmatter_pdfmd_options(md_path), "lua-filter")
     resolved = []
     for name in names:
         path = (md_path.parent / name).resolve()
@@ -3875,7 +3962,10 @@ def resolve_yaml(directory: Path, value: str) -> Path:
                                accessory / path.with_suffix(".yaml")))
     for candidate in candidates:
         if candidate.is_file():
-            return candidate
+            # Absolute: Pandoc runs inside the first metadata file's own
+            # folder (pandoc_cwd), where a path relative to ours (`-y
+            # cfg/x.yaml`) would no longer lead anywhere.
+            return Path(os.path.abspath(candidate))
     raise FileNotFoundError(f"Metadata file not found: {value}")
 
 
@@ -3885,7 +3975,15 @@ def find_metadata(directory: Path, requested: list[str] | None, report: bool = F
     """Choose metadata files, supporting explicit stacks and automatic discovery."""
     if requested == []:
         return AUTO_METADATA_DISABLED
-    search_dirs = accessory_directories(directory)
+    search_dirs = accessory_directories(directory, document_stem)
+    if requested is None and document_stem:
+        unpacked = directory / f"{document_stem}{UNPACKED_SUFFIX}"
+        unpacked_yaml = (sorted([*unpacked.glob("*.yaml"), *unpacked.glob("*.yml")],
+                                key=lambda item: natural_key(item.name)) if unpacked.is_dir() else [])
+        if unpacked_yaml:
+            # The folder --unpack made for this document holds ITS metadata,
+            # in the order it was merged in: nothing else is guessed at.
+            return order_metadata(unpacked_yaml)
     if requested is not None:
         if requested == ["all"]:
             candidates = [item for folder in search_dirs
@@ -4213,6 +4311,8 @@ def split_section_requests(raw: list[str]) -> list[str]:
 
 
 def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list[Path]:
+    if requested is None:
+        requested = option_names(frontmatter_pdfmd_options(document), "yaml") or None
     try:
         found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
     except (FileNotFoundError, ValueError):
@@ -4572,6 +4672,69 @@ EMBED_BLOCK_RE = re.compile(
 FILE_ONLY_OPTION_KEYS = frozenset({"no-auto", "parts"})
 
 
+# What the command line asks of --embed-metadata: `kinds` None = not named
+# (the document's own `pdfmd-options.embed` decides), `lua_mode` None likewise,
+# `off` = --no-embed-metadata.
+EmbedRequest = namedtuple("EmbedRequest", "kinds lua_mode off")
+
+
+def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
+    """``pdfmd-options.embed``: ``true`` (all three kinds), ``false``, a list
+    of kinds, or a mapping -- ``metadata``/``preamble`` as true/false (each on
+    unless said otherwise), ``lua`` as a --lua-mode (or true = embed, false =
+    off). Returns (kinds, lua mode or None), or None when it asks for nothing."""
+    if value is None or value is False:
+        return None
+    text = str(value).strip().casefold()
+    if value is True or text in {"true", "yes", "on", "all"}:
+        return frozenset(EMBED_KINDS), None
+    if text in {"false", "no", "off", "none"}:
+        return None
+    if isinstance(value, list):
+        return frozenset(str(item) for item in value if str(item) in EMBED_KINDS), None
+    if isinstance(value, dict):
+        kinds = {kind for kind in ("metadata", "preamble") if value.get(kind, True) not in (False, "false", "no", "off")}
+        lua = value.get("lua", True)
+        mode = None
+        if lua is False or str(lua).casefold() in {"false", "no", "off"}:
+            mode = "off"
+        elif isinstance(lua, str) and lua in LUA_MODES:
+            mode = lua
+        kinds.add("lua")
+        return frozenset(kinds), mode
+    return None
+
+
+def resolve_embed(md_path: Path, metadata_files: list[Path],
+                  request: "EmbedRequest | None") -> tuple[frozenset[str], str] | None:
+    """What to embed for ``md_path`` (kinds, lua mode), or None: the command
+    line first (--embed-metadata KIND.., --lua-mode, --no-embed-metadata),
+    else the document's `pdfmd-options.embed` (then its metadata files',
+    in order -- the first to name it wins), else the defaults (all three
+    kinds, lua embedded) when --embed-metadata was given bare."""
+    if request is None or request.off:
+        return None
+    wanted = None
+    option_mode = None
+    sources = [frontmatter_pdfmd_options(md_path)]
+    for metadata_file in metadata_files:
+        found = metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(found if isinstance(found, dict) else {})
+    for options in sources:
+        if "embed" in options:
+            wanted = parse_embed_option(options["embed"])
+            if wanted is not None:
+                option_mode = wanted[1]
+            break
+    if request.kinds is not None:
+        kinds = request.kinds
+    elif wanted is not None:
+        kinds = wanted[0]
+    else:
+        return None
+    return kinds, request.lua_mode or option_mode or "embed"
+
+
 class EmbedPlan:
     """What --embed-metadata folds into one assembled file."""
 
@@ -4695,30 +4858,55 @@ def embedded_lua_filters(md_path: Path, allowed: bool, trust_all: bool) -> Itera
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def unpack_assembled(path: Path, out_dir: Path | None) -> int:
+def split_preamble_parts(preamble_text: str, record: list) -> list[tuple[str, str]] | None:
+    """Cut the embedded preamble back into the files it was made from, by the
+    line counts recorded in `origin.preamble`; None if the text no longer
+    matches their hashes (it was edited), so the caller keeps it whole."""
+    lines = preamble_text.strip("\n").split("\n")
+    pieces = []
+    for item in record:
+        count = item.get("lines") if isinstance(item, dict) else None
+        if not isinstance(count, int) or count > len(lines):
+            return None
+        part = "\n".join(lines[:count])
+        lines = lines[count:]
+        if sha256_text(part) != item.get("sha256"):
+            return None
+        pieces.append((str(item.get("name") or "preamble.tex"), part + "\n"))
+    return pieces if not any(line.strip() for line in lines) else None
+
+
+def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> int:
     """--unpack: write what an assembled file embeds back out as files, and
-    check each embedded filter's hash. Never overwrites, never edits the file.
-    Returns the exit status: 1 if a filter does not match its recorded hash
-    (edited since pdfmd wrote it) or nothing could be unpacked."""
+    check each embedded filter's hash. Never overwrites. With ``slim`` it
+    then rewrites the file itself without what was unpacked -- the original
+    layout, a lean document plus its ``NAME.unpacked/`` folder, which pdfmd
+    discovers again (see accessory_directories). Returns the exit status: 1
+    if a filter does not match its recorded hash (edited since pdfmd wrote
+    it) or nothing could be unpacked."""
     text = path.read_text(encoding="utf-8-sig")
     if not is_assembled_text(text):
         raise SystemExit(f"{display_path(path)} is not an assembled file (no {ASSEMBLED_KEY} marker)")
-    target = out_dir or path.with_name(f"{path.stem}.unpacked")
+    default_target = path.with_name(f"{path.stem}{UNPACKED_SUFFIX}")
+    target = out_dir or default_target
     files: dict[str, str] = {}
     notes: list[str] = []
     mismatch = False
     known = trusted_hashes()
     taken: set[str] = set()
-    for block in parse_embedded_blocks(text):
-        if block["type"] != "lua-filter":
-            continue
-        name = Path(block["name"]).name or "filter.lua"
-        unique, number = name, 1
-        while unique in taken:
+
+    def unique(name: str) -> str:
+        candidate, number = name, 1
+        while candidate in taken:
             number += 1
-            unique = f"{Path(name).stem}-{number}{Path(name).suffix}"
-        taken.add(unique)
-        files[unique] = block["source"]
+            candidate = f"{Path(name).stem}-{number}{Path(name).suffix}"
+        taken.add(candidate)
+        return candidate
+
+    blocks = [block for block in parse_embedded_blocks(text) if block["type"] == "lua-filter"]
+    for block in blocks:
+        name = unique(Path(block["name"]).name or "filter.lua")
+        files[name] = block["source"]
         if block["declared"] == block["sha256"]:
             state = "hash matches what was written"
         else:
@@ -4727,36 +4915,71 @@ def unpack_assembled(path: Path, out_dir: Path | None) -> int:
                      else "no hash recorded")
         trust = ("known to this machine's pdfmd" if block["sha256"] in known
                  else "NOT known to this machine's pdfmd (needs --trust-embedded to run)")
-        notes.append(f"LUA       {unique}  ({state}; {trust})")
+        notes.append(f"LUA       {name}  ({state}; {trust})")
     front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    data: dict | None = None
+    options: dict = {}
+    embedded: list = []
+    origin = None
+    kept_header = ""
+    preamble_unpacked = metadata_unpacked = False
     if front and yaml is not None:
         try:
-            data = yaml.safe_load(front.group("yaml"))
+            loaded = yaml.safe_load(front.group("yaml"))
         except yaml.YAMLError:
-            data = None
-        if isinstance(data, dict):
-            data.pop(ASSEMBLED_KEY, None)
-            header = header_includes_text(data.pop("header-includes", None))
-            options = data.get("pdfmd-options")
-            embedded = []
-            if isinstance(options, dict):
-                embedded = options.pop("embedded", None) or []
-                options.pop("applied-lua", None)
-                if isinstance(options.get("no-auto"), list):
-                    options["no-auto"] = [kind for kind in options["no-auto"] if kind not in embedded]
-                    if not options["no-auto"]:
-                        del options["no-auto"]
-                if not options:
-                    del data["pdfmd-options"]
-            if PREAMBLE_END_MARK in header:
-                files["preamble.tex"] = header.partition(PREAMBLE_END_MARK)[0].strip("\n") + "\n"
-                notes.append("PREAMBLE  preamble.tex  (the part of header-includes before the marker)")
-            if "metadata" in embedded:
-                files["metadata.yaml"] = yaml.dump(data, Dumper=_EmbedDumper, sort_keys=False,
-                                                   allow_unicode=True, default_flow_style=False,
-                                                   width=10**6)
-                notes.append("METADATA  metadata.yaml  (the merged front matter: it no longer "
-                             "tells the discovered files from the document's own)")
+            loaded = None
+        if isinstance(loaded, dict):
+            data = loaded
+    if data is not None:
+        data.pop(ASSEMBLED_KEY, None)
+        header = header_includes_text(data.get("header-includes"))
+        raw_options = data.get("pdfmd-options")
+        options = raw_options if isinstance(raw_options, dict) else {}
+        embedded = options.get("embedded") or []
+        origin = options.get("origin") if isinstance(options.get("origin"), dict) else None
+        preamble_text, marker, own_header = header.partition(PREAMBLE_END_MARK)
+        kept_header = own_header.strip("\n") if marker else header
+        if marker and preamble_text.strip():
+            pieces = split_preamble_parts(preamble_text, (origin or {}).get("preamble") or [])
+            if pieces is None:
+                pieces = [("preamble.tex", preamble_text.strip("\n") + "\n")]
+                detail = "kept whole: no usable record of the files it was made from"
+            else:
+                detail = "the part of header-includes before the preamble marker"
+            for name, part in pieces:
+                files[unique(name)] = part
+                notes.append(f"PREAMBLE  {name}  ({detail})")
+            preamble_unpacked = True
+        if "metadata" in embedded:
+            if origin and isinstance(origin.get("files"), dict) and origin["files"]:
+                labels = list(origin["files"])
+                for index, label in enumerate(labels, 1):
+                    piece: dict = {}
+                    sub_options: dict = {}
+                    for key in origin["files"][label]:
+                        if key.startswith("pdfmd-options."):
+                            sub = key.split(".", 1)[1]
+                            if sub in options:
+                                sub_options[sub] = options[sub]
+                        elif key == "header-includes":
+                            if kept_header:
+                                piece[key] = kept_header
+                        elif key in data:
+                            piece[key] = data[key]
+                    if sub_options:
+                        piece["pdfmd-options"] = sub_options
+                    name = unique(f"{index:02d}-{label}" if len(labels) > 1 else label)
+                    files[name] = yaml.dump(piece, Dumper=_EmbedDumper, sort_keys=False,
+                                            allow_unicode=True, default_flow_style=False, width=10**6)
+                    notes.append(f"METADATA  {name}  (the keys that came from {label})")
+            else:
+                rest = {key: value for key, value in data.items() if key not in ("header-includes", "pdfmd-options")}
+                files[unique("metadata.yaml")] = yaml.dump(
+                    rest, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
+                    default_flow_style=False, width=10**6)
+                notes.append("METADATA  metadata.yaml  (the merged front matter: this file records no "
+                             "origin of its keys, so it can't be told from the document's own)")
+            metadata_unpacked = bool(origin and origin.get("files"))
     if not files:
         print(f"NOTHING   {display_path(path)} embeds nothing to unpack")
         return 1
@@ -4770,7 +4993,73 @@ def unpack_assembled(path: Path, out_dir: Path | None) -> int:
     for note in notes:
         print(note)
     print(f"UNPACKED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+    if slim:
+        if target.resolve() != default_target.resolve():
+            print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
+                  f"{display_path(target)} it will not, unless you move it there", file=sys.stderr)
+        slim_assembled(path, text, front, data, options, kept_header, blocks,
+                       preamble_unpacked, metadata_unpacked, origin)
     return 1 if mismatch else 0
+
+
+def slim_assembled(path: Path, text: str, front, data: dict | None, options: dict, kept_header: str,
+                   blocks: list, preamble_unpacked: bool, metadata_unpacked: bool, origin) -> None:
+    """Rewrite ``path`` without what --unpack just wrote out (the embedded
+    filter blocks, the preamble in header-includes, the keys that came from
+    metadata files -- the last only where the file records their origin).
+    What is left is the document's own: with its `NAME.unpacked/` folder, the
+    original layout."""
+    body = text[front.end():] if front else text
+    body = EMBED_BLOCK_RE.sub("", body).rstrip("\n") + "\n"
+    removed = []
+    if data is None:
+        # No front matter: only the comment-form marker carries the kinds.
+        body = ASSEMBLED_COMMENT_RE.sub(ASSEMBLED_COMMENT, body)
+        path.write_text(body, encoding="utf-8", newline="\n")
+        print(f"SLIMMED   {display_path(path)}  (embedded filters removed)")
+        return
+    data = dict(data)
+    options = dict(options)
+    if metadata_unpacked and origin:
+        for keys in origin["files"].values():
+            for key in keys:
+                if key.startswith("pdfmd-options."):
+                    options.pop(key.split(".", 1)[1], None)
+                else:
+                    data.pop(key, None)
+        removed.append("metadata")
+    if preamble_unpacked:
+        removed.append("preamble")
+    # What stays in header-includes: the document's own part (all of it when
+    # no preamble was embedded), unless a metadata file owned the key.
+    if metadata_unpacked and origin and "header-includes" in sum(origin["files"].values(), []):
+        kept_header = ""
+    if blocks:
+        removed.append("lua")
+    gone = [kind for kind in removed if kind in (options.get("embedded") or [])]
+    if isinstance(options.get("no-auto"), list):
+        options["no-auto"] = [kind for kind in options["no-auto"] if kind not in gone]
+        if not options["no-auto"]:
+            del options["no-auto"]
+    if "embedded" in options:
+        options["embedded"] = [kind for kind in options["embedded"] if kind not in gone]
+        if not options["embedded"]:
+            del options["embedded"]
+    if metadata_unpacked:
+        options.pop("origin", None)
+    elif isinstance(options.get("origin"), dict):
+        options["origin"].pop("preamble", None)
+        if not options["origin"].get("files") and not options["origin"].get("document"):
+            del options["origin"]
+    data.pop("pdfmd-options", None)
+    out = {ASSEMBLED_KEY: True, **{k: v for k, v in data.items() if k != "header-includes"}}
+    if options:
+        out["pdfmd-options"] = options
+    dumped = yaml.dump(out, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
+                       default_flow_style=False, width=10**6)
+    head = "---\n" + dumped + (literal_block("header-includes", kept_header) if kept_header else "") + "---\n\n"
+    path.write_text(head + body.lstrip("\n"), encoding="utf-8", newline="\n")
+    print(f"SLIMMED   {display_path(path)}  (removed: {', '.join(removed) or 'nothing'})")
 
 
 def merge_option_dicts(sources: list[dict]) -> dict:
@@ -4808,6 +5097,32 @@ def header_includes_text(value) -> str:
     if isinstance(value, list):
         return "\n".join(str(item) for item in value if item is not None)
     return "" if value is None else str(value)
+
+
+def strip_embedded_option_names(options: dict, kinds: frozenset[str], lua_mode: str) -> None:
+    """Drop from ``options`` the file names (see option_names) of the kinds
+    now embedded: they point into the original folder, and the content is
+    in the file. Also `embed`, the instruction that asked for this."""
+    options.pop("embed", None)
+    grouped = options.get("metadata")
+    if "metadata" in kinds:
+        options.pop("yaml", None)
+        if isinstance(grouped, dict):
+            grouped.pop("yaml", None)
+            grouped.pop("metadata", None)
+        else:
+            options.pop("metadata", None)
+    if "preamble" in kinds:
+        options.pop("preamble", None)
+        if isinstance(grouped, dict):
+            grouped.pop("preamble", None)
+    if "lua" in kinds and lua_mode != "off":
+        options.pop("lua-filter", None)
+        if isinstance(grouped, dict):
+            grouped.pop("lua-filter", None)
+            grouped.pop("lua", None)
+    if isinstance(grouped, dict) and not grouped:
+        del options["metadata"]
 
 
 def relative_filter_path(target: Path, output: Path | None) -> str:
@@ -4921,25 +5236,56 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
     # ---- metadata: files lowest, the document over them
     merged: dict = {}
     file_options: list[dict] = []
+    # Which source each key finally came from ("document", or a metadata
+    # file's name): written to `pdfmd-options.origin`, so --unpack can split
+    # the merged front matter back into the files it was made from.
+    owner: dict[str, str] = {}
+    labels: list[str] = []
+    option_labels: list[str] = []
     if "metadata" in kinds:
         for metadata_file in plan.metadata_files:
+            label = metadata_file.name
+            while label in labels:
+                label = f"{metadata_file.parent.name}-{label}"
+            labels.append(label)
             data = metadata_file_yaml(metadata_file)
             options = data.pop("pdfmd-options", None)
             if isinstance(options, dict):
                 file_options.append({key: value for key, value in options.items()
                                      if key not in FILE_ONLY_OPTION_KEYS})
+                option_labels.append(label)
+            for key in data:
+                owner[key] = label
             merged.update(data)
     document = dict(document)
     document_options = document.pop("pdfmd-options", None)
+    for key in document:
+        owner[key] = "document"
     merged.update(document)
+    option_owner: dict[str, str] = {}
+    for label, source in [("document", document_options if isinstance(document_options, dict) else {}),
+                          *zip(option_labels, file_options)]:
+        for key in source:
+            option_owner.setdefault(key, label)
     options = merge_option_dicts([document_options if isinstance(document_options, dict) else {},
                                   *file_options])
-    if "preamble" in kinds:
-        options.pop("preamble", None)
-    if "lua" in kinds and plan.lua_mode != "off":
-        options.pop("lua-filter", None)
+    strip_embedded_option_names(options, kinds, plan.lua_mode)
     if lua_refs:
         options["lua-filter"] = lua_refs
+    if labels and "metadata" in kinds:
+        origin: dict = {"document": [], "files": {label: [] for label in labels}}
+        for key, label in owner.items():
+            (origin["document"] if label == "document" else origin["files"][label]).append(key)
+        for key, label in option_owner.items():
+            # Bookkeeping keys, and the ones this file replaces with its own
+            # embedded copy, are not part of any source.
+            if (key in ("embedded", "origin", "applied-lua", "embed")
+                    or (key in ("yaml", "metadata") and "metadata" in kinds)
+                    or (key == "preamble" and "preamble" in kinds)
+                    or (key == "lua-filter" and "lua" in kinds)):
+                continue
+            (origin["document"] if label == "document" else origin["files"][label]).append(f"pdfmd-options.{key}")
+        options["origin"] = origin
     embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
         (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files))]
     if embedded_now:
@@ -4958,6 +5304,12 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
     header_parts = []
     if "preamble" in kinds:
         header_parts += [item.read_text(encoding="utf-8-sig") for item in plan.preamble_files]
+        if plan.preamble_files:
+            preamble_record = [{"name": item.name, "lines": len(part.strip("\n").split("\n")),
+                                "sha256": sha256_text(part.strip("\n"))}
+                               for item, part in zip(plan.preamble_files, header_parts)
+                               if part.strip()]
+            options.setdefault("origin", {})["preamble"] = preamble_record
     own_header = header_includes_text(merged.pop("header-includes", None))
     if own_header:
         header_parts.append(own_header)
@@ -4967,7 +5319,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
     # Nothing but the two bookkeeping keys to say, and no front matter to put
     # them in: the comment form of the marker carries it instead, so the
     # document does not gain a front-matter block (see mark_assembled).
-    if front or merged or header_text or (set(options) - {"embedded", "no-auto"}):
+    if front or merged or header_text or (set(options) - {"embedded", "no-auto", "applied-lua"}):
         out: dict = {ASSEMBLED_KEY: True}
         out.update(merged)
         if options:
@@ -5994,9 +6346,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                 full_scaffold: Path | None = None,
                 parts_root: Path | None = None,
                 part_markers: bool = False,
-                embed: tuple[frozenset[str], str] | None = None,
+                embed: "EmbedRequest | None" = None,
                 trust_embedded: bool = False) -> tuple[Path, bool, str]:
-    # embed: (kinds, lua mode) of --embed-metadata, for the assembled stage.
+    # embed: the EmbedRequest of --embed-metadata, for the assembled stage.
     # trust_embedded: --trust-embedded (see embedded_lua_filters).
     # cache_cli: --cache/--no-cache. skip_stamp: the cache route's .tex stage,
     # whose stamp is written once, after the PDF exists. full_scaffold: the
@@ -6036,8 +6388,9 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
             note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
                           f"joined after it" + (" (partial build)" if partial else ""))
         plan = None
-        if embed is not None:
-            kinds, lua_mode = embed
+        resolved_embed = resolve_embed(md_path, metadata_files, embed)
+        if resolved_embed is not None:
+            kinds, lua_mode = resolved_embed
             discovered_lua = [] if (auto_disabled(no_auto, "lua") or "lua" not in kinds) else find_lua_filters(md_path, metadata_files)
             if not auto_disabled(no_auto, "lua") and "lua" in kinds:
                 for extra_filter in frontmatter_extra_lua_filters(md_path):
@@ -6536,7 +6889,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 partial: bool = False,
                 cache_cli: bool | None = None,
                 parts_root: Path | None = None,
-                embed: tuple[frozenset[str], str] | None = None,
+                embed: "EmbedRequest | None" = None,
                 trust_embedded: bool = False) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
@@ -6724,8 +7077,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "metadata (the YAML files, merged with the front matter), preamble (the "
                              "LaTeX preamble, into header-includes) or lua (the Lua filters, see "
                              "--lua-mode); none given means all three")
-    parser.add_argument("--lua-mode", choices=LUA_MODES, default="embed",
-                        help="how --embed-metadata carries Lua filters: 'embed' (default) -- the whole "
+    parser.add_argument("--no-embed-metadata", action="store_true",
+                        help="turn off embedding for this run, even where a document's "
+                             "pdfmd-options.embed asks for it")
+    parser.add_argument("--lua-mode", choices=LUA_MODES, default=None,
+                        help="how --embed-metadata carries Lua filters (default: the document's "
+                             "pdfmd-options.embed.lua, else embed): 'embed' -- the whole "
                              "filter in a {=pdfmd} block at the end of the file; 'ref' -- only its "
                              "path (a missing one is a warning, and the build goes on); 'apply' -- run "
                              "now, Markdown to Markdown, so the text already has their effect (a "
@@ -6734,6 +7091,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="write what an assembled file embeds (Lua filters, preamble, merged "
                              "metadata) back out as files into NAME.unpacked/ (or -o DIR), checking "
                              "each filter's hash; never overwrites, never edits the file")
+    parser.add_argument("--slim", action="store_true",
+                        help="with --unpack: after writing the files, rewrite the assembled file "
+                             "without what was unpacked, leaving the document plus its NAME.unpacked/ "
+                             "folder, which pdfmd discovers by itself")
     parser.add_argument("--trust-embedded", action="store_true",
                         help="run Lua filters embedded in a document even if this pdfmd did not "
                              "write them (a filter can run any command; by default only ones this "
@@ -6976,7 +7337,7 @@ def watch_signature(source: Path) -> float:
     discovery never looks any deeper than these two directories either.
     """
     latest = 0.0
-    for directory in accessory_directories(source.parent):
+    for directory in accessory_directories(source.parent, source.stem):
         for path in directory.glob("*"):
             if path.is_file():
                 try:
@@ -7064,11 +7425,14 @@ def main() -> None:
             else:
                 print(f"NOTHING  {target} does not exist")
         return
+    if args.slim and not args.unpack:
+        raise SystemExit("--slim goes with --unpack")
     if args.unpack:
         if len(paths) != 1 or not args.path:
             raise SystemExit("--unpack takes one assembled Markdown file")
         try:
-            raise SystemExit(unpack_assembled(find_markdown(paths[0]), args.out.resolve() if args.out else None))
+            raise SystemExit(unpack_assembled(find_markdown(paths[0]), args.out.resolve() if args.out else None,
+                                              slim=args.slim))
         except FileNotFoundError as error:
             raise SystemExit(str(error))
     if args.split:
@@ -7120,7 +7484,11 @@ def main() -> None:
     if (stop_at is None and args.out and not args.batch
             and args.out.name.casefold().endswith(ASSEMBLED_SUFFIX)):
         stop_at = "markdown"
-    embed_spec = None
+    embed_request = None
+    if args.no_embed_metadata and args.embed_metadata is not None:
+        raise SystemExit("--embed-metadata and --no-embed-metadata contradict each other")
+    if args.lua_mode is not None and args.embed_metadata is None and stop_at != "markdown":
+        raise SystemExit("--lua-mode applies to --stop-at markdown (--assemble-only) only")
     if args.embed_metadata is not None:
         unknown_kinds = sorted(set(args.embed_metadata) - {*EMBED_KINDS, "all"})
         if unknown_kinds:
@@ -7130,7 +7498,10 @@ def main() -> None:
             raise SystemExit("--embed-metadata applies to --stop-at markdown (--assemble-only) only")
         wanted = (set(EMBED_KINDS) if not args.embed_metadata or "all" in args.embed_metadata
                   else set(args.embed_metadata))
-        embed_spec = (frozenset(wanted), args.lua_mode)
+        embed_request = EmbedRequest(frozenset(wanted), args.lua_mode, False)
+    elif stop_at == "markdown":
+        # No kinds named: each document's own pdfmd-options.embed decides.
+        embed_request = EmbedRequest(None, args.lua_mode, args.no_embed_metadata)
     if stop_at in ("markdown", "tex"):
         if args.to:
             raise SystemExit(f"--stop-at {stop_at} fixes the output format; drop --to {args.to}")
@@ -7241,6 +7612,8 @@ def main() -> None:
             # what --no-auto metadata/yaml suppresses.
             metadata_request = ([] if args.metadata_file is None and auto_disabled(report_no_auto, "metadata")
                                 else args.metadata_file)
+            if metadata_request is None:
+                metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or None
             metadata = find_metadata(metadata_directory.resolve(), metadata_request, report=True,
                                      document_class=document_class, document_stem=files[0].stem)
         except (FileNotFoundError, ValueError) as error:
@@ -7267,8 +7640,9 @@ def main() -> None:
             # --stop-at markdown: the chapters, as one Markdown text, in the
             # order Pandoc would read them. Nothing else of the build runs.
             report_plan = None
-            if embed_spec is not None:
-                kinds, lua_mode = embed_spec
+            report_embed = resolve_embed(files[0], metadata_files, embed_request)
+            if report_embed is not None:
+                kinds, lua_mode = report_embed
                 report_plan = EmbedPlan(
                     kinds, lua_mode, list(metadata_files),
                     ([] if "preamble" not in kinds or auto_disabled(report_no_auto, "preamble")
@@ -7528,10 +7902,19 @@ def main() -> None:
         if args.open:
             open_file(output)
         return
-    preambles_wanted_formats = {"pdf", *TEX_STANDALONE_FORMATS}
-    if embed_spec is not None and "preamble" in embed_spec[0]:
-        preambles_wanted_formats.add(ASSEMBLED_FORMAT)
     metadata_by_dir = {}
+    def embeds_preamble(file) -> bool:
+        """Whether the assembled stage folds `file`'s preamble in (so it has to be found)."""
+        if target_format != ASSEMBLED_FORMAT or embed_request is None:
+            return False
+        try:
+            found = metadata_for(file)
+        except (FileNotFoundError, ValueError):
+            return False
+        chosen = resolve_embed(file, found if isinstance(found, list) else ([found] if found else []),
+                               embed_request)
+        return chosen is not None and "preamble" in chosen[0]
+
     def metadata_for(file, document_class=None):
         directory = file.parent.resolve()
         cache_key = (directory, file.stem.casefold())
@@ -7543,6 +7926,10 @@ def main() -> None:
             requested = ([] if args.metadata_file is None
                         and auto_disabled(effective_no_auto(file, args.no_auto), "metadata")
                         else args.metadata_file)
+            if requested is None:
+                # pdfmd-options.yaml / .metadata: the document names its own
+                # metadata files (like -y, but written in the document).
+                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or None
             metadata_by_dir[cache_key] = find_metadata(directory, requested,
                                                         document_class=document_class,
                                                         document_stem=file.stem)
@@ -7572,7 +7959,7 @@ def main() -> None:
             output.mkdir(parents=True, exist_ok=True)
         jobs = max(1, args.jobs)
         def preamble_for(file):
-            if (target_format not in preambles_wanted_formats
+            if (not (target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file))
                     or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
                 return []
             preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
@@ -7591,14 +7978,14 @@ def main() -> None:
             return metadata, resolve_engines(file, args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         def work(file):
             metadata, file_engines = file_metadata_and_engines(file)
-            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_spec, trust_embedded=args.trust_embedded)
+            return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded)
         results = []
         if jobs > 1:
             with ProcessPoolExecutor(max_workers=jobs) as executor:
                 futures = []
                 for file in files:
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_spec, trust_embedded=args.trust_embedded))
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), target_format, args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:
@@ -7679,7 +8066,7 @@ def main() -> None:
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             preambles = []
-            if (target_format in preambles_wanted_formats
+            if ((target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(source))
                     and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble")):
                 preambles = find_preambles(source.parent, source.stem, pandoc_options) + frontmatter_extra_preambles(source)
                 announce_preambles(preambles)
@@ -7687,7 +8074,7 @@ def main() -> None:
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
-                                   cache_cli=args.cache, embed=embed_spec, trust_embedded=args.trust_embedded,
+                                   cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
                                    parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
                                    partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
