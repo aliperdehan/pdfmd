@@ -39,6 +39,49 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.2 — 2026-10-06
+
+Pre-edit state: commit `0434c8c` (v3.19.1). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`--lua-mode apply`**: the filters run during assembly, Markdown to Markdown
+  through Pandoc (`--wrap=preserve`, the reader pdfmd would pick), so the text
+  already has their effect; they are listed under `pdfmd-options.applied-lua`
+  and discovery of them stays off. Approximate by nature: Pandoc re-writes the
+  text (explicit heading ids, table and footnote layout), a filter's change to
+  the metadata and a filter that needs citeproc first are not reproduced. A
+  filter that mentions `FORMAT` (it would see `markdown` here) is embedded
+  instead, with a note; so is any filter when Pandoc fails on them.
+- **`--unpack FILE [-o DIR]`**: writes an assembled file's embedded Lua filters,
+  `preamble.tex` (the part of `header-includes` before the preamble marker) and
+  `metadata.yaml` (the merged front matter) back out, into `FILE.unpacked/` by
+  default. Checks each filter against the SHA-256 recorded when it was written
+  and says whether this machine's pdfmd knows it; exit status 1 on a mismatch.
+  Never overwrites (stops without writing anything) and never edits the file.
+
+### Fixed
+
+- An embedded `{=pdfmd}` block's backtick fence counted as "this document has
+  code" (and its text could trip the citation, cross-reference, CSV-table and
+  definition-list checks), so an embedded copy could gain a monofont line the
+  original did not have. These checks now ignore embedded blocks. (Found by the
+  round-trip comparison on a document with no code.)
+
+### Checked
+
+- `apply`, `embed` and `ref` copies of a fixture with a Header filter give a
+  `.tex` byte-identical to the original build's (`off` differs by design); a
+  filter that checks `FORMAT` is embedded instead and its copy is identical;
+  a filter with a Lua syntax error falls back to embedding with a warning.
+  `--unpack` round trip (filter byte-identical to the original, preamble and
+  metadata written, a second run refused, an edited filter flagged). The v3.19.0
+  and v3.19.1 comparisons and the normal-build baselines are unchanged.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+---
+
 ## v3.19.1 — 2026-10-06
 
 Pre-edit state: commit `1086cfe` (v3.19.0). Patch bump by the one-time

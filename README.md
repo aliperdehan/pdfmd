@@ -180,6 +180,14 @@ Lua filter can run any command, so one only runs if this machine's pdfmd
 embedded it (otherwise it is skipped with a warning, unless you pass
 `--trust-embedded`).
 
+`--lua-mode apply` runs the filters at assembly time instead, so the text
+already has their effect (approximate: Pandoc re-writes the text, and a filter
+that looks at `FORMAT` is embedded instead). `--unpack` goes the other way:
+
+```sh
+pdfmd report.assembled.md --unpack     # filters, preamble and metadata back into report.assembled.unpacked/
+```
+
 ### Slides
 
 ```sh
