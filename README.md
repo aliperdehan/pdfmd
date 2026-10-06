@@ -152,6 +152,19 @@ pdfmd lecture --to typst -o lecture.typ
 pdfmd lecture -o lecture.tex      # a complete, compilable .tex, not a fragment
 ```
 
+### Stopping part-way
+
+`--stop-at` ends the build after a stage; everything before it runs as normal:
+
+```sh
+pdfmd report --stop-at markdown   # report.assembled.md: the parts joined into one file
+pdfmd report --assemble-only      # the same, shorter
+pdfmd report --stop-at tex        # the standalone .tex a LaTeX engine would get (= --to latex)
+```
+
+The assembled file holds just the document text (and is marked
+`pdfmd-assembled: true`), so pdfmd never joins its parts a second time.
+
 ### Slides
 
 ```sh

@@ -148,6 +148,34 @@ Output formats:
     by editing the emitted `\\setmainfont` line if that turns out to be the
     wrong one for a particular document's glyphs.
 
+Stopping early (--stop-at, v3.19.0):
+    A build is a pipeline -- the document's parts are joined into ONE
+    Markdown text, Pandoc turns that into a standalone .tex, a LaTeX engine
+    turns the .tex into the PDF -- and `--stop-at STAGE` ends it after a
+    stage, everything else running as normal (discovery, parts mode,
+    sections, report/book, batch):
+
+        pdfmd report --stop-at markdown     -> report.assembled.md
+        pdfmd report --assemble-only        (same thing)
+        pdfmd report -o out.assembled.md    (the suffix means it too)
+        pdfmd report --stop-at tex          -> report.tex  (== --to latex)
+
+    `markdown` writes the text Pandoc would have been given: the scaffold
+    followed by its parts (each part's own leading front matter dropped, as
+    in a normal build), or, for -r/--report, the chapters in report order.
+    Nothing else of the build is applied -- no discovered metadata, preamble
+    or filter (they stay beside the original), no engine, no BUILD NOTES
+    stamp, no backup. The file is marked `pdfmd-assembled: true` (a key in
+    its front matter, or a trailing `<!-- pdfmd-assembled: true -->` where
+    there is no front matter to put it in, so how the text reads never
+    changes): in parts mode such a file is never taken for a scaffold, and
+    -b/-r with --stop-at markdown skip it instead of assembling it again.
+    Fed back to pdfmd it builds the same `.tex` the original did (checked
+    byte for byte on a parts report, a report/book and a single file). It
+    never overwrites one of the files it is made from. `tex` is --to latex
+    (beamer with -p); the PDF stage is the default. Not with -p/-w for
+    markdown, nor for .qmd/.tex/office inputs.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -554,7 +582,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.18.0"
+PDFMD_VERSION = "3.19.0"
 import argparse
 import filecmp
 import hashlib
@@ -3909,7 +3937,11 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
     """The effective ``pdfmd-options.parts`` value: None (off), "auto", or a
     folder name. The document's own front matter wins over the metadata
     files, in find_metadata's order -- same precedence as frontmatter_engine.
+    An assembled file (--stop-at markdown) is never a scaffold: it already
+    holds the parts.
     """
+    if is_assembled_document(md_path):
+        return None
     sources = [frontmatter_pdfmd_options(md_path)]
     for metadata_file in metadata_files:
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
@@ -4310,6 +4342,91 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 
 
 
+# -- Stop-at stages (--stop-at markdown|tex|pdf) -----------------------------
+# The build is a pipeline: the document's parts are joined into ONE Markdown
+# text, Pandoc turns that into a standalone .tex, a LaTeX engine turns the
+# .tex into a PDF. --stop-at ends it early, after the named stage. `tex` is
+# simply `--to latex` (`beamer` with -p); `markdown` is pdfmd's own stage,
+# handled here: the text Pandoc would be given, written out as one file.
+# ASSEMBLED_FORMAT is the internal pseudo target-format that carries it
+# through the same code paths as a real one (output naming, batch, report).
+STOP_STAGES = ("markdown", "tex", "pdf")
+ASSEMBLED_FORMAT = "assembled"
+ASSEMBLED_SUFFIX = ".assembled.md"
+# A top-level front-matter key (an HTML comment where there is no front matter
+# to put it in) written into every assembled file. A file that carries it is
+# already the finished text of a build: parts mode never treats
+# it as a scaffold (it would join the parts a second time), and batch/report
+# assembly skips it instead of assembling an assembly.
+ASSEMBLED_KEY = "pdfmd-assembled"
+ASSEMBLED_KEY_RE = re.compile(r"^pdfmd-assembled:[ \t]*(?:true|yes|on)[ \t]*$", re.IGNORECASE | re.MULTILINE)
+ASSEMBLED_COMMENT = "<!-- pdfmd-assembled: true -->"
+ASSEMBLED_COMMENT_RE = re.compile(r"^" + re.escape(ASSEMBLED_COMMENT) + r"[ \t]*$", re.MULTILINE)
+
+
+def is_assembled_text(text: str) -> bool:
+    front_matter = re.match(r"^---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if front_matter and ASSEMBLED_KEY_RE.search(front_matter.group(1)):
+        return True
+    return bool(ASSEMBLED_COMMENT_RE.search(text))
+
+
+def is_assembled_document(path: Path) -> bool:
+    """Whether ``path`` is an assembled file written by --stop-at markdown."""
+    if path.suffix.lower() not in (".md", ".markdown"):
+        return False
+    try:
+        return is_assembled_text(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def mark_assembled(text: str) -> str:
+    """Mark ``text`` as assembled: ASSEMBLED_KEY in its front matter if it
+    has a block, else an HTML comment at the end. Never a NEW front-matter
+    block: that would change how the document reads -- Pandoc's own `% title`
+    block stops being one behind it, and a leading `# Title` heading is only
+    promoted to the title (promote_bare_title) in a document with no front
+    matter at all.
+    """
+    if re.match(r"^---[ \t]*\n", text):
+        return re.sub(r"^---[ \t]*\n", f"---\n{ASSEMBLED_KEY}: true\n", text, count=1)
+    return text.rstrip("\n") + f"\n\n{ASSEMBLED_COMMENT}\n"
+
+
+def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool) -> str:
+    """The Markdown Pandoc is given for ``sources``, as ONE text: the first
+    file as it is, every later one after it. In parts mode a part's own
+    leading front matter is dropped first, exactly as scaffold_inputs() does
+    before Pandoc sees it; a report/book chapter keeps its own, since there
+    Pandoc reads it too.
+    """
+    chunks = []
+    for index, source in enumerate(sources):
+        text = source.read_text(encoding="utf-8-sig")
+        if index and drop_later_front_matter:
+            text = strip_part_front_matter(text)
+        chunks.append(text.rstrip("\n") + "\n")
+    return mark_assembled("\n".join(chunks))
+
+
+def write_assembled_markdown(sources: list[Path], output: Path,
+                             drop_later_front_matter: bool) -> tuple[bool, str]:
+    """Write the --stop-at markdown stage. Never over one of its own sources:
+    `-o report.md` would otherwise replace the very file it was built from.
+    """
+    resolved = {source.resolve() for source in sources}
+    if output.resolve() in resolved:
+        return False, (f"{display_path(output)} is one of the files being assembled; "
+                       f"pick another name (the default is NAME{ASSEMBLED_SUFFIX})")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    text = assemble_markdown_text(sources, drop_later_front_matter)
+    output.write_text(text, encoding="utf-8", newline="\n")
+    print(f"ASSEMBLED  {display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
+          f"{len(text.splitlines())} lines)")
+    return True, ""
+
+
 # Conventional file extension for a Pandoc writer/target format, used to name
 # an output file when the caller didn't give one an explicit suffix. Formats
 # missing here fall back to ".<format>" -- a reasonable guess, since Pandoc's
@@ -4328,6 +4445,9 @@ FORMAT_EXTENSION = {
     "json": ".json", "man": ".man", "ipynb": ".ipynb",
     "asciidoc": ".adoc", "asciidoctor": ".adoc",
     "textile": ".textile", "mediawiki": ".wiki", "opml": ".opml",
+    # Not a Pandoc writer: pdfmd's own "stop after assembling" stage (--stop-at
+    # markdown / --assemble-only). See write_assembled_markdown().
+    ASSEMBLED_FORMAT: ASSEMBLED_SUFFIX,
 }
 
 # The reverse mapping, used to recognize that an explicit -o/--out filename
@@ -5329,6 +5449,17 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
     )
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    if target_format == ASSEMBLED_FORMAT:
+        # --stop-at markdown: write the text Pandoc would have been given and
+        # stop. Before every other branch -- no engine, reader, filter, font
+        # or stamp decision below applies to it.
+        if parts_inputs:
+            note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
+                          f"joined after it" + (" (partial build)" if partial else ""))
+        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs))
+        flush_summary()
+        return md_path, ok, reason
+
     if (target_format == "pdf" and md_path.suffix.lower() == ".tex"
             and (from_format is None or from_format.casefold() in ("latex", "tex"))
             and not auto_disabled(no_auto, "texdirect")):
@@ -5824,7 +5955,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
                           cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
                           parts_root=parts_root)
-    if result[1]:
+    if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
         for backed_up in [md_path, *(extra_inputs or [])]:
@@ -5982,6 +6113,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="output directory (batch) or filename (single-file/report/book); "
                              "a recognized extension (e.g. .html, .tex, .typ) also selects the "
                              "target format, same as --to")
+    parser.add_argument("--stop-at", choices=STOP_STAGES, default=None, metavar="STAGE",
+                        help="stop the build early, after STAGE: 'markdown' -- the assembled Markdown "
+                             "(the parts joined into one file, NAME.assembled.md); 'tex' -- the "
+                             "standalone .tex a LaTeX engine would get (same as --to latex, or "
+                             "beamer with -p); 'pdf' -- the whole build (default). An -o ending "
+                             f"{ASSEMBLED_SUFFIX} also means 'markdown'")
+    parser.add_argument("--assemble-only", action="store_true",
+                        help="shorthand for --stop-at markdown")
     parser.add_argument("-d", "-cwd", "--cwd", "--destination-cwd", action="store_true",
                         dest="destination_cwd",
                         help="save PDFs in the current working directory")
@@ -6345,6 +6484,32 @@ def main() -> None:
     if args.presentation and args.report:
         raise SystemExit("--presentation cannot be combined with --report/--book")
 
+    # Stop-at stage (see STOP_STAGES). --assemble-only is --stop-at markdown;
+    # so is an -o ending .assembled.md (single-file/report only, like every
+    # -o extension below). The stage then fixes the target format: `tex` is
+    # --to latex (beamer with -p), `markdown` is the internal assembled one.
+    stop_at = args.stop_at
+    if args.assemble_only:
+        if stop_at not in (None, "markdown"):
+            raise SystemExit(f"--assemble-only means --stop-at markdown; it conflicts with --stop-at {stop_at}")
+        stop_at = "markdown"
+    if (stop_at is None and args.out and not args.batch
+            and args.out.name.casefold().endswith(ASSEMBLED_SUFFIX)):
+        stop_at = "markdown"
+    if stop_at in ("markdown", "tex"):
+        if args.to:
+            raise SystemExit(f"--stop-at {stop_at} fixes the output format; drop --to {args.to}")
+        out_format = format_from_output(args.out) if args.out and not args.batch else None
+        if stop_at == "tex" and out_format not in (None, "latex"):
+            raise SystemExit(f"--stop-at tex writes a .tex file; -o {args.out} names another format")
+        if stop_at == "markdown" and out_format not in (None, "markdown"):
+            raise SystemExit(f"--stop-at markdown writes Markdown; -o {args.out} names another format")
+        if stop_at == "markdown" and (args.presentation or args.watch):
+            raise SystemExit("--stop-at markdown can't be combined with -p/--presentation or -w/--watch")
+        if stop_at == "markdown" and args.engine is not None:
+            print("WARN  --engine is ignored for --stop-at markdown: no engine is involved",
+                  file=sys.stderr)
+
     # Target format: explicit --to wins; otherwise a recognized -o/--out
     # extension implies it (single-file/report only -- batch's -o is a
     # directory, so it only responds to --to); default is pdf.
@@ -6353,12 +6518,17 @@ def main() -> None:
         or (format_from_output(args.out) if args.out and not args.batch else None)
         or "pdf"
     )
-    if args.presentation and target_format != "pdf":
+    if stop_at == "markdown":
+        target_format = ASSEMBLED_FORMAT
+    elif stop_at == "tex":
+        target_format = "beamer" if args.presentation else "latex"
+    if args.presentation and target_format != "pdf" and stop_at != "tex":
         raise SystemExit("-p/--presentation always produces a PDF (via Beamer); "
                          "it can't be combined with --to/-o for another format")
-    if args.engine is not None and target_format != "pdf":
-        print(f"WARN  --engine is ignored for --to {target_format}: no PDF engine is involved",
-              file=sys.stderr)
+    if args.engine is not None and target_format != "pdf" and stop_at != "markdown":
+        print(f"WARN  --engine is ignored for "
+              f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
+              "no PDF engine is involved", file=sys.stderr)
     engines = select_engines(args.engine, args.presentation) if target_format == "pdf" else []
     if not args.path and not args.batch and not args.report:
         markdown_files = sorted(Path.cwd().glob("*.md"), key=lambda path: path.name.casefold())
@@ -6410,6 +6580,8 @@ def main() -> None:
         return
     if args.report:
         files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive)
+        if target_format == ASSEMBLED_FORMAT:
+            files = [file for file in files if not is_assembled_document(file)]
         if not files:
             raise SystemExit("No Markdown files found for the report")
         # --no-auto and its pdfmd-options counterpart are decided from
@@ -6456,6 +6628,22 @@ def main() -> None:
         else:
             output = Path.cwd() / f"book{output_extension}"
         output = output.resolve()
+        if target_format == ASSEMBLED_FORMAT:
+            # --stop-at markdown: the chapters, as one Markdown text, in the
+            # order Pandoc would read them. Nothing else of the build runs.
+            ok, reason = write_assembled_markdown(files, output, False)
+            if not ok:
+                raise SystemExit(reason)
+            for file in files:
+                if not has_chapter_field(file):
+                    print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")
+                print(f"OK    {display_path(file)}")
+            for file in excluded:
+                print(f"SKIP  {display_path(file)}")
+            print(f"OK    REPORT  {display_path(output)}")
+            if args.open:
+                open_file(output)
+            return
         pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
         report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
@@ -6726,6 +6914,10 @@ def main() -> None:
             file.resolve() for file in
             (paths[0].rglob("*.md") if args.recursive else paths[0].glob("*.md"))
         )
+        if target_format == ASSEMBLED_FORMAT:
+            # Not an assembly of an assembly: a file written by an earlier run
+            # (NAME.assembled.md) would otherwise come out as NAME.assembled.assembled.md.
+            files = [file for file in files if not is_assembled_document(file)]
         output = Path.cwd() if args.destination_cwd else (args.out.resolve() if args.out else None)
         if output:
             output.mkdir(parents=True, exist_ok=True)
@@ -6769,6 +6961,12 @@ def main() -> None:
             source = find_markdown(paths[0])
         except FileNotFoundError as error:
             raise SystemExit(str(error))
+        if target_format == ASSEMBLED_FORMAT:
+            if source.suffix.lower() not in (".md", ".markdown"):
+                raise SystemExit(f"{source}: --stop-at markdown assembles Markdown files only")
+            if is_assembled_document(source):
+                raise SystemExit(f"{display_path(source)} is already an assembled file "
+                                 f"({ASSEMBLED_KEY}: true); there is nothing left to assemble")
         # A parts-mode build is the scaffold plus its parts: it takes the
         # scaffold's own name and folder, and a partial build carries the
         # section names in its file name so it never replaces the full report.
@@ -6843,7 +7041,8 @@ def main() -> None:
                                    cache_cli=args.cache,
                                    parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
                                    partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
-            if scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]:
+            if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
+                    and target_format != ASSEMBLED_FORMAT):
                 if LAST_SEEDED:
                     print("NOTE  partial build: numbers of parts left out come from the last full build "
                           "(--cache); they are stale if you have since added or moved a figure or table there")

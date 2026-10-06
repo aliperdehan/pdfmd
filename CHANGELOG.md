@@ -39,6 +39,48 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.0 — 2026-10-06
+
+Pre-edit state: commit `26eb3ed` (after v3.18.0).
+
+**Version numbering, a one-time override (the author, 2026-10-06):** the
+"assemble / embed" feature series bumps the minor version once (this
+release) and then only the patch number per step (v3.19.1, v3.19.2, ...),
+instead of a minor bump each, to keep the version count down. The usual
+rule above resumes afterwards.
+
+### Added
+
+- **`--stop-at markdown|tex|pdf`, and `--assemble-only`** (= `--stop-at
+  markdown`). The build runs as normal and ends after the named stage.
+  `markdown` writes the assembled Markdown, `NAME.assembled.md`: the scaffold
+  and its parts joined into one text (a part's leading front matter dropped,
+  as the real build does), or the chapters of a `-r` report/book; `-o` may
+  name it, and an `-o` ending `.assembled.md` implies the stage. It carries
+  no discovered metadata, preamble or filter yet, runs no engine, writes no
+  stamp and makes no backup, and refuses to overwrite one of its own sources.
+  `tex` is `--to latex` (`beamer` with `-p`). Combinations that contradict
+  each other (`--to`, `-p`/`-w` with `markdown`, `--assemble-only --stop-at
+  tex`, a non-Markdown input) are an error.
+- **The `pdfmd-assembled: true` marker.** Written into the file's front
+  matter, or, for a document with none, as a trailing `<!-- pdfmd-assembled:
+  true -->` (a new front-matter block would stop a leading `# Title` being
+  promoted to the title, so it is never created). Parts mode ignores a marked
+  file (it would join the parts a second time, and `parts: auto` would
+  otherwise take it for another scaffold beside `parts/`), and `-b`/`-r` with
+  `--stop-at markdown` skip such files.
+
+### Checked
+
+- Assembled file fed back to pdfmd, `--to latex`: byte-identical `.tex` to
+  the original build for a parts report, a report/book (`-r`), a single
+  document with a bare `# Title`, and a `% title` block document. Normal
+  `--to latex` output of the examples is unchanged.
+- Not checked here: PDF compilation (no LaTeX engine in the cloud session
+  that wrote this); nothing in this release touches that path.
+
+---
+
 ## v3.18.0 — 2026-10-04
 
 Pre-edit state: commit `50d46d4` (v3.17.0).
