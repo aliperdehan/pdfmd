@@ -41,6 +41,36 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.0 — 2026-10-07
+
+Pre-edit state: commit `58d1202` (v3.21.5 plus a README credit for inkmd). The
+first step of attaching a document's source to its PDF (the rest follows as
+patch releases of 3.22): the comment stripper that source needs.
+
+### Added
+
+- **`--strip-comments` / `--keep-comments` and `pdfmd-options.strip-comments`**:
+  drop every `<!-- -->` comment from the assembled file (`--stop-at markdown`,
+  also for a report). Meant for notes to oneself that must not travel (reviewer
+  remarks, drafts, the BUILD NOTES block). It reads the Markdown, it does not
+  pattern-match it: a comment inside a fenced (backtick or tilde) or indented
+  code block or inside an inline code span is text and stays, YAML front matter
+  is left alone, a fence-looking line inside a comment does not open a fence, and
+  pdfmd's own markers (`<!-- pdfmd-... -->`, `<!-- pagebreak -->`) stay. A
+  comment alone on its line takes the line with it, and a blank line that
+  leaves doubled goes too; one inside a sentence takes one of the spaces around
+  it; a multi-line one is removed whole; an unterminated one is kept as written.
+  Off by default for the assembled file. The command line wins over the
+  document, then its metadata files (`first_pdfmd_option`).
+- `tests/test_attach.py`: the stripper's cases, and the option through the CLI.
+
+### Not changed
+
+- The comment handling the native renderers already have (`strip_html_comments`
+  for their own text) is a separate function and untouched.
+
+---
+
 ## v3.21.5 — 2026-10-07
 
 Pre-edit state: commit `6fd97b8` (v3.21.4). The labels half of the cache for

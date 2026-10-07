@@ -357,6 +357,17 @@ Stopping early (--stop-at, v3.19.0):
     status 1 if a hash does not match. With the recorded origin, the metadata
     comes back as the files it was made from (`01-metadata.yaml`, ...).
 
+    --strip-comments / --keep-comments, `pdfmd-options: {strip-comments: true}`
+    (v3.22.0) drop every `<!-- -->` comment from the assembled file (and, from
+    the next releases, from the source attached to a PDF), for notes to oneself
+    that should not travel: reviewer remarks, drafts, the BUILD NOTES block. A
+    comment inside a fenced or indented code block or an inline code span is
+    text and stays, YAML front matter is not touched, and pdfmd's own markers
+    stay (`<!-- pdfmd-... -->`, `<!-- pagebreak -->`). A comment alone on its
+    line takes the line (and a blank line it leaves doubled) with it; one in a
+    sentence takes one of the spaces around it. The command line wins over the
+    document, then its metadata files.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -816,7 +827,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.5"
+PDFMD_VERSION = "3.22.0"
 import argparse
 import csv
 import filecmp
@@ -1096,6 +1107,8 @@ def accessory_directories(directory: Path, stem: str | None = None) -> list[Path
 # otherwise fail. Set by embedded_resources(); read by resource_path_option()
 # (Pandoc's citeproc) and tex_search_env() (BibTeX/Biber, via BIBINPUTS).
 EMBEDDED_RESOURCE_DIRS: list[Path] = []
+# --strip-comments / --keep-comments (None: the document's pdfmd-options decide).
+STRIP_COMMENTS_CLI: bool | None = None
 
 
 def resource_path_option(document_directory: Path, pandoc_cwd: Path,
@@ -7119,8 +7132,165 @@ def mark_assembled(text: str, no_auto: list[str] | None = None, partial: bool = 
     return text.rstrip("\n") + f"\n\n{comment}\n"
 
 
+# -- Stripping HTML comments (v3.22.0) -----------------------------------------
+# `pdfmd-options.strip-comments` / --strip-comments: drop every `<!-- -->` from
+# the Markdown that leaves the author's hands (the assembled file, and the source
+# attached to a PDF, see ATTACH below), where notes to oneself -- reviewer
+# remarks, drafts, the BUILD NOTES block -- should not travel. Context-aware: a
+# comment inside a fenced or indented code block or an inline code span is text,
+# not a comment; YAML front matter is left alone; a few comments carry meaning
+# for pdfmd itself and stay (KEEP_COMMENT_RE). A comment alone on its line takes
+# the line with it, and a blank line left doubled by that goes too, so the text
+# does not look gapped; one inside a sentence takes one of the spaces around it.
+KEEP_COMMENT_RE = re.compile(r"\s*(?:pdfmd\b|page-?break\b|new-?page\b)", re.IGNORECASE)
+FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])[ \t]")
+
+
+def scan_comment_line(line: str, carried: str = "") -> tuple[str, bool, str | None]:
+    """One prose line with its single-line comments removed: (text, whether one
+    was removed, the raw start of a comment that does not close on this line).
+    ``carried`` is text already kept before ``line`` (not scanned again)."""
+    kept = [carried]
+    position = 0
+    removed = False
+    while position < len(line):
+        if line[position] == "`":
+            run = re.match(r"`+", line[position:]).group(0)
+            close = line.find(run, position + len(run))
+            while close != -1 and line[close + len(run):close + len(run) + 1] == "`":
+                close = line.find(run, close + 1)       # a longer run does not close a span
+            end = position + len(run) if close == -1 else close + len(run)
+            kept.append(line[position:end])
+            position = end
+        elif line.startswith("<!--", position):
+            end = line.find("-->", position + 4)
+            if end == -1:
+                return "".join(kept), removed, line[position:]
+            if KEEP_COMMENT_RE.match(line[position + 4:end]):
+                kept.append(line[position:end + 3])
+                position = end + 3
+                continue
+            removed = True
+            position = end + 3
+            before = "".join(kept)
+            if not before or before.endswith((" ", "\t")):
+                while position < len(line) and line[position] in " \t":
+                    position += 1                        # one space, not two, where it was
+        else:
+            kept.append(line[position])
+            position += 1
+    return "".join(kept), removed, None
+
+
+def strip_markdown_comments(text: str) -> str:
+    """``text`` without its HTML comments (see the comment above)."""
+    out: list[str] = []
+    lines = text.splitlines(keepends=True)
+    start = 0
+    front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if front:
+        start = len(front.group(0).splitlines(keepends=True))
+        out.extend(lines[:start])
+    fence: tuple[str, int] | None = None     # (character, length) of the open code fence
+    open_comment: tuple[str, list[str]] | None = None   # (kept prefix, raw lines) of a comment still open
+    in_list = indented_code = False
+    source_blank = True                      # the previous SOURCE line was blank
+    emitted_blank = True                     # the last line written was blank (or none yet)
+    skip_blank = False                       # a dropped line left a blank one doubled
+
+    def drop_line() -> None:
+        nonlocal skip_blank
+        if emitted_blank:
+            skip_blank = True
+
+    for line in lines[start:]:
+        if open_comment is not None:
+            prefix, raw = open_comment
+            raw.append(line)
+            end = line.find("-->")
+            if end == -1:
+                continue
+            open_comment = None
+            whole = "".join(raw)
+            tail = line[end + 3:]
+            if KEEP_COMMENT_RE.match(whole[4:len(whole) - len(tail) - 3]):
+                out.append(prefix + whole)
+                emitted_blank = source_blank = False
+                continue
+            carried = prefix.rstrip(" \t") + (" " if prefix.strip() and tail.strip() else "")
+            text_after, _, opened = scan_comment_line(tail.lstrip(" \t") if not carried.strip() else tail.lstrip(" \t"), carried)
+            if opened is not None:
+                open_comment = (text_after, [opened])
+                continue
+            ending = "\n" if tail.endswith("\n") else ""
+            body = text_after.rstrip("\r\n")
+            if body.strip():
+                out.append(body.rstrip(" \t") + ending)
+                emitted_blank = source_blank = False
+            else:
+                drop_line()
+            continue
+        if fence is not None:
+            out.append(line)
+            match = FENCE_RE.match(line.rstrip("\r\n"))
+            if (match and match.group("fence")[0] == fence[0] and len(match.group("fence")) >= fence[1]
+                    and not match.group("rest").strip()):
+                fence = None
+            emitted_blank = source_blank = False
+            continue
+        if not line.strip():
+            if skip_blank:
+                skip_blank = False
+            else:
+                out.append(line)
+                emitted_blank = True
+            source_blank = True
+            indented_code = False
+            continue
+        skip_blank = False
+        match = FENCE_RE.match(line.rstrip("\r\n"))
+        if match and not (match.group("fence")[0] == "`" and "`" in match.group("rest")):
+            fence = (match.group("fence")[0], len(match.group("fence")))
+            out.append(line)
+            emitted_blank = source_blank = False
+            continue
+        deep = line.startswith(("    ", "\t"))
+        if LIST_ITEM_RE.match(line):
+            in_list = True
+        elif not deep:
+            in_list = False
+        if deep and not in_list and (source_blank or indented_code):
+            indented_code = True
+            out.append(line)
+            emitted_blank = source_blank = False
+            continue
+        indented_code = False
+        source_blank = False
+        text_after, removed, opened = scan_comment_line(line)
+        if opened is not None:
+            open_comment = (text_after, [opened])
+            continue
+        if not removed:
+            out.append(line)
+            emitted_blank = False
+            continue
+        ending = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+        body = text_after.rstrip("\r\n")
+        if body.strip():
+            out.append(body.rstrip(" \t") + ending)
+            emitted_blank = False
+        else:
+            drop_line()
+    if open_comment is not None:                     # unterminated: not a comment, keep it as written
+        prefix, raw = open_comment
+        out.append(prefix + "".join(raw))
+    return "".join(out)
+
+
 def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
-                           plan: "EmbedPlan | None" = None, partial: bool = False) -> str:
+                           plan: "EmbedPlan | None" = None, partial: bool = False,
+                           strip_comments: bool = False) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
@@ -7132,6 +7302,8 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
         text = source.read_text(encoding="utf-8-sig")
         if index and drop_later_front_matter:
             text = strip_part_front_matter(text)
+        if strip_comments:
+            text = strip_markdown_comments(text)
         chunks.append(text.rstrip("\n") + "\n")
     joined = "\n".join(chunks)
     if plan is not None:
@@ -7142,7 +7314,8 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
 def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
                              plan: "EmbedPlan | None" = None,
-                             partial: bool = False) -> tuple[bool, str]:
+                             partial: bool = False,
+                             strip_comments: bool = False) -> tuple[bool, str]:
     """Write the --stop-at markdown stage. Never over one of its own sources:
     `-o report.md` would otherwise replace the very file it was built from.
     """
@@ -7153,7 +7326,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
     output.parent.mkdir(parents=True, exist_ok=True)
     if plan is not None:
         plan.output = output
-    text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial)
+    text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments)
     output.write_text(text, encoding="utf-8", newline="\n")
     print(f"ASSEMBLED  {display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
           f"{len(text.splitlines())} lines)")
@@ -7199,6 +7372,41 @@ FILE_ONLY_OPTION_KEYS = frozenset({"no-auto", "parts"})
 # (the document's own `pdfmd-options.embed` decides), `lua_mode` None likewise,
 # `off` = --no-embed-metadata.
 EmbedRequest = namedtuple("EmbedRequest", "kinds lua_mode off")
+
+
+def option_flag(value) -> bool | None:
+    """A pdfmd-options value read as on/off; None when it says neither."""
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().casefold()
+    if text in {"true", "yes", "on"}:
+        return True
+    if text in {"false", "no", "off"}:
+        return False
+    return None
+
+
+def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
+    """The value of the first of ``names`` that the document's own
+    pdfmd-options, then its metadata files' (in order), set; None if none does."""
+    sources = [frontmatter_pdfmd_options(md_path)]
+    for metadata_file in metadata_files:
+        found = metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(found if isinstance(found, dict) else {})
+    for options in sources:
+        for name in names:
+            if name in options:
+                return options[name]
+    return None
+
+
+def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False) -> bool:
+    """Whether comments are stripped: the command line, else
+    `pdfmd-options.strip-comments`, else ``default``."""
+    if STRIP_COMMENTS_CLI is not None:
+        return STRIP_COMMENTS_CLI
+    chosen = option_flag(first_pdfmd_option(md_path, metadata_files, "strip-comments"))
+    return default if chosen is None else chosen
 
 
 def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
@@ -9102,7 +9310,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         discovered_lua.append(extra_filter)
             plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []),
                              discovered_lua)
-        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan, partial)
+        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan, partial,
+                                              resolve_strip_comments(md_path, metadata_files))
         flush_summary()
         return md_path, ok, reason
 
@@ -9834,6 +10043,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "path (a missing one is a warning, and the build goes on); 'apply' -- run "
                              "now, Markdown to Markdown, so the text already has their effect (a "
                              "filter that checks FORMAT is embedded instead); 'off' -- not carried")
+    parser.add_argument("--strip-comments", dest="strip_comments", action="store_true", default=None,
+                        help="remove every <!-- --> comment from the Markdown that leaves your hands: "
+                             "the assembled file (--stop-at markdown) and the source attached to a PDF. "
+                             "Comments inside code blocks and code spans are text and stay, and so do "
+                             "pdfmd's own markers (<!-- pdfmd-... -->, <!-- pagebreak -->). A document "
+                             "sets it with pdfmd-options.strip-comments")
+    parser.add_argument("--keep-comments", dest="strip_comments", action="store_false",
+                        help="keep comments, even where a document's pdfmd-options.strip-comments says to "
+                             "strip them")
     parser.add_argument("--self-contained", dest="self_contained", action="store_true", default=None,
                         help="for an HTML target: one file with everything inlined (images, CSS; "
                              "--standalone --embed-resources, MathML for math). A document sets it "
@@ -10158,7 +10376,8 @@ def main() -> None:
     use_managed_tools()
     if args.debug:
         args.verbose = True
-    global SHOW_FULL_PATHS
+    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI
+    STRIP_COMMENTS_CLI = args.strip_comments
     # -v/--verbose already means "more detail than the quiet default," and a
     # full path is exactly that kind of detail -- so --verbose (or --debug,
     # which implies it just above) turns this on too, not just --full-paths
@@ -10481,7 +10700,8 @@ def main() -> None:
                     [])  # a report build applies no discovered Lua filter
                 if "lua" in kinds:
                     print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
-            ok, reason = write_assembled_markdown(files, output, False, report_plan)
+            ok, reason = write_assembled_markdown(files, output, False, report_plan,
+                                                  strip_comments=resolve_strip_comments(files[0], metadata_files))
             if not ok:
                 raise SystemExit(reason)
             for file in files:
