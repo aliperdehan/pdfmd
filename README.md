@@ -52,7 +52,20 @@ pipx install pdfmd-cli
 ```
 
 That puts a `pdfmd` command on your PATH, with its Python dependencies, in
-its own isolated environment. `uv tool install pdfmd-cli` does the same.
+its own isolated environment. The same with uv:
+
+```sh
+uv tool install pdfmd-cli        # install; update with: uv tool upgrade pdfmd-cli
+uvx --from pdfmd-cli pdfmd file.md   # or run once without installing
+```
+
+On macOS, Homebrew installs it together with Pandoc and Typst, so nothing else
+is needed for a first PDF:
+
+```sh
+brew install aliperdehan/tap/pdfmd
+```
+
 To update later, run `pipx upgrade pdfmd-cli`. (The package is named
 `pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.
 The command is still `pdfmd`. For the latest unreleased code, use `pipx
