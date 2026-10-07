@@ -157,8 +157,9 @@ WARN  native (inkmd): notes.md: 2 math expression(s) set as plain text (Unicode,
 OK    notes.md
 ```
 
-- **inkmd** is built in (vendored in `pdfmd_inkmd/`, about 2 MB, standard
-  library only, works offline, same input gives the same bytes). It reads
+- **[inkmd](https://github.com/eagredev/inkmd)**, written by Dylan Moir (MIT
+  licence), is built in (a copy is vendored in `pdfmd_inkmd/`, about 2 MB,
+  standard library only, works offline, same input gives the same bytes). It reads
   GitHub-flavoured Markdown: headings, emphasis, lists, task lists, tables,
   code blocks, quotes, links, images, and PNG/JPEG. It cannot typeset math,
   so formulas are set as readable text instead: Greek letters and operators
