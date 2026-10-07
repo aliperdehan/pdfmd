@@ -207,8 +207,11 @@ Stopping early (--stop-at, v3.19.0):
     markdown, nor for .qmd/.tex/office inputs.
 
     --embed-metadata [KIND ...] (v3.19.1) folds what pdfmd discovers beside
-    the document into the assembled file, so it builds the same alone, in
-    any folder: `metadata` (the metadata YAML files, merged the way Pandoc
+    the document into the assembled file, so it no longer needs them beside it
+    (what the text points at -- a bibliography and CSL file, images, files a
+    preamble `\\input`s, data -- is not embedded, and a NOTE names those it
+    sees; keep them where the document finds them, relative to the assembled
+    file's folder): `metadata` (the metadata YAML files, merged the way Pandoc
     merges them -- a later file over an earlier one, the document over both,
     per top-level key -- with the document's front matter, into one block;
     `pdfmd-options` merged by pdfmd's own cascade, a file's `no-auto`/
@@ -705,7 +708,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.5"
+PDFMD_VERSION = "3.19.6"
 import argparse
 import filecmp
 import hashlib
@@ -5150,16 +5153,27 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     if not files:
         print(f"NOTHING   {display_path(path)} embeds nothing to unpack")
         return 1
-    clashes = [name for name in files if (target / name).exists()]
+    def same_on_disk(name: str) -> bool:
+        try:
+            return (target / name).read_text(encoding="utf-8") == files[name]
+        except (OSError, UnicodeDecodeError):
+            return False
+
+    # A file that is already there with exactly this content is not in the way
+    # (so `--unpack` followed by `--unpack --slim` works); a different one is.
+    clashes = [name for name in files if (target / name).exists() and not same_on_disk(name)]
     if clashes:
-        raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; "
-                         "nothing was written (remove them, or give another -o folder)")
+        raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}, different from "
+                         "what the file embeds; nothing was written (remove them, or give another -o folder)")
     target.mkdir(parents=True, exist_ok=True)
-    for name, content in files.items():
-        (target / name).write_text(content, encoding="utf-8", newline="\n")
+    fresh = [name for name in files if not (target / name).exists()]
+    for name in fresh:
+        (target / name).write_text(files[name], encoding="utf-8", newline="\n")
     for note in notes:
         print(note)
-    print(f"UNPACKED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+    kept = len(files) - len(fresh)
+    print(f"UNPACKED  {len(fresh)} file{'s' if len(fresh) != 1 else ''} into {display_path(target)}"
+          + (f" ({kept} already there, identical)" if kept else ""))
     if slim:
         if target.resolve() != default_target.resolve():
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
@@ -5519,6 +5533,20 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             summary.append(f"lua ({plan.lua_mode}) " + ", ".join(item.name for item in plan.lua_filters))
     summary += left_out
     print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
+    # What the text points at is not embedded: say which of it the file still needs.
+    outside: list[str] = []
+    for key in ("bibliography", "csl"):
+        value = merged.get(key)
+        names = [value] if isinstance(value, str) else [str(item) for item in value] if isinstance(value, list) else []
+        if names:
+            outside.append(f"{key} {', '.join(names)}")
+    if re.search(r"\\(?:input|include|includegraphics)\b", header_text):
+        outside.append("files the preamble reads (\\input, \\includegraphics)")
+    if re.search(r"!\[[^\]\n]*\]\(", body):
+        outside.append("the images in the text")
+    if outside:
+        print("NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
+              "finds them (relative to the assembled file's folder)")
     return result
 
 
@@ -6655,9 +6683,14 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                                and frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex"))
         tex_engines = [engine for engine in engines if engine in LATEX_ENGINES and engine not in ("context", "latexmk", "tectonic")]
         if (cache["aux"] or cache["plots"] or (parts_inputs and native_bibliography)) and tex_engines:
+            # cli_no_auto, not the merged no_auto: the Markdown-to-.tex pass inside
+            # re-reads the document's own `pdfmd-options.no-auto` itself, and an
+            # assembled file lists `lua` there, which would hide its embedded
+            # filters from that pass (they are not subject to it: see
+            # embedded_lua_filters).
             return convert_via_cache(md_path, out_dir, font, tex_engines, variables, slide_level,
                                      pandoc_options, metadata_file, output, preamble_files, from_format,
-                                     no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
+                                     cli_no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
                                      partial, bool(cache["aux"]), full_scaffold, parts_root, note,
                                      flush_summary, plots=bool(cache["plots"]),
                                      trust_embedded=trust_embedded)

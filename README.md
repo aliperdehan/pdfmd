@@ -166,8 +166,10 @@ The assembled file holds just the document text (and is marked
 `pdfmd-assembled: true`), so pdfmd never joins its parts a second time.
 
 By default it holds just the text. `--embed-metadata` also folds in what pdfmd
-finds beside the document, so the file builds the same on its own, in any
-folder:
+finds beside the document (metadata, preamble, Lua filters), so the file no
+longer needs them beside it. What the text points at (a bibliography, images,
+files a preamble `\input`s) is not embedded: keep it where the document finds
+it, relative to the assembled file.
 
 ```sh
 pdfmd report --assemble-only --embed-metadata                  # metadata.yaml, preamble.tex and Lua filters

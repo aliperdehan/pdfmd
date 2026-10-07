@@ -39,6 +39,51 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.6 — 2026-10-07
+
+Pre-edit state: commit `38008e1` (v3.19.5). Patch bump by the one-time
+numbering override above. Everything here comes from a test of the branch on the
+author's machine with real nulabreport reports and LaTeX engines (every
+normal-build `.tex` and PDF text identical to main's; embedding round trips
+identical).
+
+### Fixed
+
+- **The cache route dropped an embedded Lua filter** (`pdfmd-options: {cache:
+  {aux: true}}` or `plots`, on an assembled file). `_convert_one` handed the
+  cache route the document's already-merged `no-auto`, which for an assembled file
+  lists `lua`; the Markdown-to-`.tex` pass inside re-reads the document's own
+  `no-auto` itself and then hid the embedded filter, silently (a real 29-page
+  report came out 28 pages). It now passes the command line's `--no-auto` only,
+  as that inner pass expects. Found on the real report; reproduced here with a
+  stand-in LaTeX engine: the `.tex` handed to the engine had no filter output
+  before the fix, and has it after. A normal document with the same cache option
+  is unaffected.
+- **`--unpack` then `--unpack --slim` on the same file** stopped on "already
+  holds". Files already there with exactly the content that would be written
+  are now left as they are (and counted); a file that differs still stops the
+  run, writing nothing.
+
+### Changed
+
+- **Corrected a too broad claim.** An embedded file does not "build the same
+  alone, in any folder": metadata, preamble and filters travel, but what the
+  text points at -- `bibliography:`/`csl:` files, images, files a preamble
+  `\input`s or `\includegraphics`, data -- does not. The docs now say so, and
+  assembling with `--embed-metadata` prints a `NOTE  not embedded: ...` naming
+  those it can see (a bibliography or CSL key, `\input`/`\includegraphics` in
+  the preamble, images in the text). `--lua-mode ref` paths are relative to the
+  output file's folder, so the layout must be kept.
+
+### Reported by the test, left as is
+
+- `pdfmd src.md -o src.md --to markdown` overwrites its own source; true on main
+  as well (not a regression). Only `--assemble-only` guards against it.
+- `--cache` / `--cache-plots` on the command line do not travel to an assembled
+  file (the `cache:` settings in `pdfmd-options` do); noted in v3.19.5.
+
+---
+
 ## v3.19.5 — 2026-10-07
 
 Pre-edit state: commit `952d6d8` (v3.19.4). Patch bump by the one-time
