@@ -113,7 +113,7 @@ class FuzzyLookup(LookupCase):
         path, out, err = self.find("animp")
         self.assertEqual(path, document)
         self.assertIn("WARN", err)
-        self.assertIn("the start of its file name", err)
+        self.assertIn("the start of its alias or file name", err)
         self.assertIn("--no-auto lookup", err)
 
     def test_a_start_shorter_than_three_characters_is_not_a_guess_worth_making(self):

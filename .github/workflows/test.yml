@@ -36,6 +36,7 @@ jobs:
           (cd parts && pdfmd report -e typst && pdfmd 'report#methods' -e typst)
           pdfmd lecture -o lecture.html
           pdfmd lectur -o lecture.html      # the start of a name (WARN), lookup tiers
+          pdfmd 'lecture#keyideas' -e typst  # one section of an ordinary document
       - uses: actions/upload-artifact@v4      # lets you download the PDFs
         with:
           name: pdfs-${{ matrix.os }}

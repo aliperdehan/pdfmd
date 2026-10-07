@@ -212,6 +212,18 @@ saying what it matched (`pdfmd animp`, `pdfmd glucose`). A name that fits two
 documents is an error, never a guess; `--no-auto lookup` switches the guessing
 off. An exact file name always wins.
 
+### One section
+
+`pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"
+(down to the next heading of the same or a higher level), written as
+`doc.only-a-part.pdf` beside the document. Headings are named the way files
+are: case, spaces and spelling don't matter, a unique start works (with a
+warning), and so does a `{#label}`. `doc##yield` asks for a level-2 heading,
+`doc#results/yield` for one under another, `doc#a+b` for several, and
+`pdfmd '#yield'` uses the folder's only Markdown file. `pdfmd doc --list-parts`
+shows what can be named. In a document split into parts the same names work
+for headings inside the parts.
+
 ### Other output formats
 
 The format is taken from `-o`'s extension, or given explicitly with `--to`:

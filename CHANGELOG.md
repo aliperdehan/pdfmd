@@ -41,6 +41,57 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.1 — 2026-10-07
+
+Pre-edit state: commit `c3df55a` (v3.21.0 and a changelog tidy). The second of
+the three steps; it uses the lookup engine of 3.21.0 for headings.
+
+### Added
+
+- **`pdfmd doc#NAME` builds one section of an ordinary document.** The section
+  runs from the heading to the next heading of the same or a higher level
+  (subsections included). The build is a partial one, like parts mode's: the
+  document's own front matter, settings and the text before its first heading
+  are kept, the output is `doc.NAME.pdf` (a Cyrillic or Turkish heading gets a
+  Latin file name), nothing is stamped, `pdfmd-partial: true` is set. Checked on
+  real builds: every block of a section's LaTeX appears verbatim in the full
+  document's LaTeX, also with a bare `# Title` promoted to the title.
+- **Headings are named like files are found**: case, spaces, `_`, accents and
+  script ignored, then looser spelling, then the start of the text or of a word
+  (a WARN says which), and an explicit `{#id}` counts too (`doc#sec:methods`).
+  `doc##name` means a level-2 heading (the number of `#` is the level),
+  `doc#parent/name` one under another, `doc#a+b` several, and `#name` with no
+  document the folder's only Markdown file. Two headings fitting equally well
+  is an error that lists both and says how to tell them apart.
+- **Setext headings** (a line underlined with `===` or `---`) count as headings
+  of level 1 and 2. A `---` under a paragraph's last line, a table rule, `#`
+  lines in code blocks or HTML comments and indented code are not headings.
+- **`--list-parts` works for any document**: every heading and `{#id}` with its
+  lines. In parts mode it also lists the headings inside each part.
+- **Parts mode finds headings inside parts**: a name that is no part's builds
+  the matching section of whichever part has it (`report#sampling`); a name
+  starting with `#` is a heading from the start (`report##sampling`). A part
+  named whole beats a section of it. A section of a part is numbered from the
+  part's start, not its own (no counter marker is written for it).
+- `--no-auto lookup` leaves headings only their exact name (case and spaces
+  aside).
+- `tests/test_sections.py`: the scanner, the resolver, and the CLI to LaTeX
+  checking each section against the full build, ordinary and parts mode.
+
+### Fixed
+
+- With only the soffice fallback available, a parts or section build crashed
+  with an `AssertionError`; it now fails with a message that names the cause.
+
+### Not changed
+
+- `--split` still cuts only at `# ` headings. Heading, figure and table numbers
+  of a section restart, and references to other sections print as `??`
+  (parts mode's own limitation without the cache); the cache does not carry
+  numbers over for a non-parts document yet.
+
+---
+
 ## v3.21.0 — 2026-10-07
 
 Pre-edit state: commit `9af6dfd` (v3.20.5). First of three steps (3.21.0 to

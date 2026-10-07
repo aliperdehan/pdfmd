@@ -10,6 +10,7 @@ Examples:
     pdfmd book -r -o book.pdf
     pdfmd report#methods            (parts mode: build one part)
     pdfmd animp                     (a unique start of a name or title works, with a WARN)
+    pdfmd doc#onlyapart             (just the section "Only a Part"; also in parts mode)
     pdfmd chapter.md -y metadata.yaml
     pdfmd book -r -y
     pdfmd notes.md -o notes.html
@@ -477,6 +478,37 @@ A long document in parts (parts mode):
     references to parts left out print as ??. --list-parts shows the order.
     Not supported: natbib/biblatex citation engines, the soffice fallback.
 
+    A name that is no part's is looked up as a heading inside the parts
+    (below), so `report#sampling` builds the Sampling section of whichever
+    part has one, and a name starting with `#` (`report##sampling`) means a
+    heading from the start. Naming a part whole beats naming a section of it.
+
+One section of any document (`pdfmd doc#NAME`):
+    Without parts mode, `pdfmd doc#onlyapart` builds just the section whose
+    heading is "Only a Part": from that heading to the next heading of the same
+    or a higher level (its subsections come with it). Headings are written
+    either way -- `## Title` or a line underlined with `===`/`---` -- and are
+    named like files are found (see "Finding a document by name"): case,
+    spaces, `_`, accents and script do not matter (`onlyapart`, `only_a_part`,
+    `Only a Part`), a unique start works with a WARN (`doc#only`), and so does
+    the heading's own `{#id}` (`doc#sec:methods`). Beyond that:
+        doc##name        a level-2 heading (the number of # is the level)
+        doc#parent/name  a heading under another (`doc#results/yield`)
+        doc#a+b, a,b     several, built in document order, each once
+        #name            no document name: the folder's only Markdown file
+    A name that fits two headings equally well is an error that lists both.
+    `--list-parts` prints every heading and `{#id}` a document can be cut at,
+    and `--section NAME` is the same as `#NAME`. The build is a partial one, as
+    in parts mode: the document's front matter, settings and the text before
+    its first heading are kept, the output is `doc.NAME.pdf` (never over
+    `doc.pdf`), no BUILD NOTES stamp is written and `pdfmd-partial: true` is set.
+    A leading `# Title` that pdfmd promotes to the document title is not a
+    section. Heading, figure and table numbers restart and references to other
+    sections print as ??. Needs Pandoc (not the built-in renderers or the
+    soffice fallback); `--no-auto lookup` leaves only the exact name, ignoring
+    case and spaces. Setext headings are recognised here but `--split` still
+    cuts at `# ` lines only.
+
 The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     Pandoc normally makes a .tex in a throwaway folder, runs the engine two
     or three times, and deletes everything, so every build starts with no
@@ -764,7 +796,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.0"
+PDFMD_VERSION = "3.21.1"
 import argparse
 import csv
 import filecmp
@@ -3883,24 +3915,39 @@ class LookupAmbiguous(FileNotFoundError):
     that would swallow it as "no document" catch this one first."""
 
 
-# (strength, fields compared, how, WARN wording) in order of preference: the
-# first tier with a hit decides, two hits in it are an error. A file name or an
-# alias is preferred to a title at every step, and exact to a start to a word.
+# (strength, fields compared, how) in order of preference: the first tier with
+# a hit decides, two hits in it are an error. A file name or an alias is
+# preferred to a title at every step, and exact to a start to a word. The same
+# tiers rank headings (an explicit {#id} counts as an alias, the heading text as
+# the name), so `doc#onlyapart` and `pdfmd onlyapart` agree about spelling.
 LOOKUP_TIERS = (
-    ("strict", ("alias",), "exact", None),
-    ("strict", ("stem",), "exact", None),
-    ("strict", ("title",), "exact", None),
-    ("loose", ("alias",), "exact", "spelt differently from its alias"),
-    ("loose", ("stem",), "exact", "spelt differently from its file name"),
-    ("loose", ("title",), "exact", "spelt differently from its title"),
-    ("strict", ("alias", "stem"), "start", "the start of its file name or alias"),
-    ("strict", ("title",), "start", "the start of its title"),
-    ("loose", ("alias", "stem"), "start", "the start of its file name or alias, spelt differently"),
-    ("loose", ("title",), "start", "the start of its title, spelt differently"),
-    ("strict", ("alias", "stem", "title"), "word", "the start of a word in its file name, alias or title"),
-    ("loose", ("alias", "stem", "title"), "word", "the start of a word in its file name, alias or title, spelt differently"),
+    ("strict", ("alias",), "exact"),
+    ("strict", ("stem",), "exact"),
+    ("strict", ("title",), "exact"),
+    ("loose", ("alias",), "exact"),
+    ("loose", ("stem",), "exact"),
+    ("loose", ("title",), "exact"),
+    ("strict", ("alias", "stem"), "start"),
+    ("strict", ("title",), "start"),
+    ("loose", ("alias", "stem"), "start"),
+    ("loose", ("title",), "start"),
+    ("strict", ("alias", "stem", "title"), "word"),
+    ("loose", ("alias", "stem", "title"), "word"),
 )
 LOOKUP_FIELD_WORDS = {"alias": "alias", "stem": "file name", "title": "title"}
+HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text", "title": "title"}
+
+
+def lookup_wording(tier: tuple, words: dict) -> str | None:
+    """What to say a guessed match matched on; None for an exact one that only
+    differs in case, separators and script (strict exact tiers)."""
+    strength, fields, how = tier
+    if strength == "strict" and how == "exact":
+        return None
+    names = " or ".join(words[field] for field in fields)
+    phrase = {"exact": f"spelt differently from its {names}", "start": f"the start of its {names}",
+              "word": f"the start of a word in its {names}"}[how]
+    return phrase + (", spelt differently" if strength == "loose" and how != "exact" else "")
 
 
 def lookup_field_matches(strength: str, how: str, queries: tuple[str, set[str]], text: str) -> bool:
@@ -3918,27 +3965,30 @@ def lookup_field_matches(strength: str, how: str, queries: tuple[str, set[str]],
                for index in range(1, len(words)))
 
 
-def rank_lookup(query: str, entries: list[tuple[Path, list[tuple[str, str]]]]):
-    """Choose among ``entries`` -- (path, [(field, text)]) with field one of
-    alias/stem/title -- by LOOKUP_TIERS. Returns (path, tier, field, text), or
-    None; raises LookupAmbiguous when the best tier holds several documents."""
+def rank_lookup(query: str, entries: list[tuple], describe=None, words: dict = LOOKUP_FIELD_WORDS,
+                tiers: tuple = LOOKUP_TIERS):
+    """Choose among ``entries`` -- (key, [(field, text)]) with field one of
+    alias/stem/title -- by LOOKUP_TIERS. Returns (key, tier, field, text), or
+    None; raises LookupAmbiguous when the best tier holds several entries.
+    ``describe`` names an entry's key in that error (default: a file path)."""
+    describe = describe or display_path
     queries = lookup_query_keys(query)
     if not queries[0]:
         return None
-    for tier in LOOKUP_TIERS:
-        strength, fields, how, _ = tier
-        hits: dict[Path, tuple[str, str]] = {}
-        for path, texts in entries:
+    for tier in tiers:
+        strength, fields, how = tier
+        hits: dict = {}
+        for key, texts in entries:
             for field, text in texts:
-                if field in fields and path not in hits and lookup_field_matches(strength, how, queries, text):
-                    hits[path] = (field, text)
+                if field in fields and key not in hits and lookup_field_matches(strength, how, queries, text):
+                    hits[key] = (field, text)
         if len(hits) == 1:
-            path, (field, text) = next(iter(hits.items()))
-            return path, tier, field, text
+            key, (field, text) = next(iter(hits.items()))
+            return key, tier, field, text
         if hits:
-            names = ", ".join(f"{display_path(path)} ({LOOKUP_FIELD_WORDS[field]} '{text}')"
-                              for path, (field, text) in sorted(hits.items()))
-            raise LookupAmbiguous(f"'{query}' fits several Markdown files equally well: {names}. "
+            names = ", ".join(f"{describe(key)} ({words[field]} '{text}')"
+                              for key, (field, text) in sorted(hits.items()))
+            raise LookupAmbiguous(f"'{query}' fits several equally well: {names}. "
                                   "Name one of them more exactly.")
     return None
 
@@ -3994,22 +4044,26 @@ def lookup_entries(directory: Path, recursive: bool) -> list[tuple[Path, list[tu
     return [(file, lookup_fields(file)) for file in files[:LOOKUP_SCAN_LIMIT]]
 
 
-_LOOKUP_ANNOUNCED: set[tuple[str, Path]] = set()
+_LOOKUP_ANNOUNCED: set[tuple[str, str]] = set()
 
 
-def announce_lookup(query: str, path: Path, tier: tuple, field: str, text: str) -> None:
-    """Say, once per run, that a document was found by something other than its
-    exact name: a plain AUTO line when only case, separators and script differ,
-    a WARN for anything that guessed (a start, a word, a looser spelling)."""
-    if (query, path) in _LOOKUP_ANNOUNCED:
+def announce_lookup(query: str, shown: str, tier: tuple, field: str, text: str,
+                    words: dict = LOOKUP_FIELD_WORDS, subject: str = "file name") -> None:
+    """Say, once per run, that something was found by other than its exact
+    name: a plain AUTO line when only case, separators and script differ, a
+    WARN for anything that guessed (a start, a word, a looser spelling)."""
+    if (query, shown) in _LOOKUP_ANNOUNCED:
         return
-    _LOOKUP_ANNOUNCED.add((query, path))
-    strength, _, how, wording = tier
-    what = f"{LOOKUP_FIELD_WORDS[field]} '{text}'" if field != "stem" else "file name"
+    _LOOKUP_ANNOUNCED.add((query, shown))
+    what = "file name" if field == "stem" and subject == "file name" else f"{words[field]} '{text}'"
+    wording = lookup_wording(tier, words)
     if wording is None:
-        print(f"AUTO MD    {display_path(path)}  ('{query}' = its {what}, ignoring case, spaces and punctuation)")
+        # Naming a heading without its exact case or spaces is the normal way to
+        # ask for one; only a file name found that way is worth a line.
+        if subject == "file name":
+            print(f"AUTO MD    {shown}  ('{query}' = its {what}, ignoring case, spaces and punctuation)")
         return
-    print(f"WARN  '{query}' is not a file name; using {display_path(path)} ({wording}: {what}). "
+    print(f"WARN  '{query}' is not a {subject}; using {shown} ({wording}: {what}). "
           "Name it exactly, or pass --no-auto lookup, to stop pdfmd guessing.", file=sys.stderr)
 
 
@@ -4042,7 +4096,7 @@ def find_markdown(value: Path, recursive: bool = False) -> Path:
         fuzzy_directory = value.parent if value.parent.is_dir() and str(value.parent) != "." else Path.cwd()
         found = rank_lookup(requested, lookup_entries(fuzzy_directory, recursive))
         if found:
-            announce_lookup(requested, found[0], *found[1:])
+            announce_lookup(requested, display_path(found[0]), *found[1:])
             return found[0].resolve()
     available = ", ".join(sorted(files))
     raise FileNotFoundError(f"Could not find Markdown file for '{value}'. Available: {available or 'none'}")
@@ -4743,12 +4797,32 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
 
 @contextmanager
 def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
-                          disabled: bool = False) -> Iterator[tuple[Path, bool]]:
+                          disabled: bool = False,
+                          override: tuple[str, bool] | None = None) -> Iterator[tuple[Path, bool]]:
     """Yield a temporary copy of ``md_path`` with promote_bare_title() applied,
     and whether that happened (the caller needs to know to also shift
     heading levels). Yields ``md_path`` itself, unchanged, when nothing to
     promote was found, or when ``disabled`` (--no-auto title/bare) skips it.
+
+    ``override`` is (text, shifted) of a document already cut down to some of
+    its sections (SectionPlan, which promoted the title itself): that text is
+    what the temporary copy holds, whatever the file says. Everything else
+    pdfmd reads about the document (front matter, preamble, citations) still
+    comes from the whole file, so a section is built with the document's own
+    settings.
     """
+    if override is not None:
+        text, shifted = override
+        with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
+                                prefix=f".{md_path.stem}.pdfmd-section-", dir=md_path.parent,
+                                delete=False) as temporary:
+            temporary.write(text)
+            temporary_path = Path(temporary.name)
+        try:
+            yield temporary_path, shifted
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        return
     if disabled:
         yield md_path, False
         return
@@ -6079,6 +6153,19 @@ def part_keys(relative: Path) -> tuple[set[str], set[str]]:
     return exact, slugs
 
 
+# A heading of a Markdown body (scan_headings): `line` is 0-based and of its text,
+# `end` the line its section ends before.
+Heading = namedtuple("Heading", "line level text ids end")   # line: 0-based, of the heading's text
+
+
+class NoPartMatches(SystemExit):
+    """A --section name that is no part's name (it may still be a heading inside one)."""
+
+
+class NoHeadingMatches(SystemExit):
+    """A --section name that is no heading's name."""
+
+
 def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> list[Path]:
     """The parts matching any request, in document order. A request matches
     a file name, its name without the numeric prefix, a folder (all parts
@@ -6109,21 +6196,80 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
             available = ", ".join(
                 f"{part_slug(Path(top).stem)} ({(re.match(r'[0-9]+', top) or [''])[0] or '-'})"
                 for top in tops)
-            raise SystemExit(f"--section '{request}' matches no part. Available: {available}")
+            raise NoPartMatches(f"--section '{request}' matches no part. Available: {available}")
         chosen.update(hits)
     return [part for part in parts if part in chosen]
+
+
+def select_parts_and_sections(parts: list[Path], directory: Path,
+                              requests: list[str]) -> tuple[list[Path], dict[Path, list[Heading]]]:
+    """select_parts, and then a heading inside a part for every name that is no
+    part's: `report#sampling` builds the Sampling section of whichever part has
+    it. A name starting with `#` (`report##sampling`) means a heading from the
+    start, never a part. Returns the parts to build, in order, and for those
+    that only a section of is wanted, the sections (lines of the part's text
+    without its front matter). Naming a part whole beats naming a section."""
+    chosen: set[Path] = set()
+    heading_requests: list[tuple[str, NoPartMatches | None]] = []
+    for request in requests:
+        if request.strip().startswith("#"):
+            heading_requests.append((request, None))
+            continue
+        try:
+            chosen.update(select_parts(parts, directory, [request]))
+        except NoPartMatches as error:
+            heading_requests.append((request, error))
+    cuts: dict[Path, list[Heading]] = {}
+    if heading_requests:
+        headings: list[Heading] = []
+        spans: list[tuple[int, Path, int]] = []      # (offset, part, lines): where each part sits in `headings`' numbering
+        offset = 0
+        for part in parts:
+            lines = strip_part_front_matter(part.read_text(encoding="utf-8-sig")).split("\n")
+            headings += [heading._replace(line=heading.line + offset, end=heading.end + offset)
+                         for heading in scan_headings(lines)]
+            spans.append((offset, part, len(lines)))
+            offset += len(lines) + 1
+
+        def home(heading: Heading) -> tuple[int, Path]:
+            return next((start, part) for start, part, count in reversed(spans) if heading.line >= start)
+
+        def describe(heading: Heading) -> str:
+            start, part = home(heading)
+            return (f"{part.relative_to(directory)}, line {heading.line - start + 1}: "
+                    f"{'#' * heading.level} {heading.text}")
+
+        for request, part_error in heading_requests:
+            try:
+                heading = find_heading(headings, request, describe)
+            except NoHeadingMatches as error:
+                raise SystemExit(f"{part_error}\n(and no heading named like that: {error})"
+                                 if part_error else str(error))
+            start, part = home(heading)
+            cuts.setdefault(part, []).append(heading._replace(line=heading.line - start, end=heading.end - start))
+        cuts = {part: outermost_headings(found) for part, found in cuts.items() if part not in chosen}
+    chosen.update(cuts)
+    return [part for part in parts if part in chosen], cuts
+
+
+# The sections of parts that a parts-mode build takes only a piece of (see
+# ScaffoldPlan.cuts), consulted by scaffold_inputs() wherever it runs -- the cache
+# route calls the build again, and this is what lets both see the same cuts.
+PART_CUTS: dict[Path, list[Heading]] = {}
 
 
 class ScaffoldPlan:
     """What a parts-mode build consists of."""
 
     def __init__(self, scaffold: Path, directory: Path, parts: list[Path],
-                 selected: list[Path] | None, metadata_files: list[Path]):
+                 selected: list[Path] | None, metadata_files: list[Path],
+                 cuts: dict[Path, list[Heading]] | None = None):
         self.scaffold = scaffold
         self.directory = directory
         self.parts = parts
         self.selected = selected          # None = the full report
         self.metadata_files = metadata_files
+        self.cuts = cuts or {}            # selected parts built only in these sections (see PART_CUTS)
 
     @property
     def files(self) -> list[Path]:
@@ -6136,6 +6282,12 @@ class ScaffoldPlan:
         # A whole top-level folder is named by the folder, not its files.
         labels: list[str] = []
         for part in self.selected:
+            if part in self.cuts:
+                for heading in self.cuts[part]:
+                    label = section_label(heading.text)
+                    if label not in labels:
+                        labels.append(label)
+                continue
             top = part.relative_to(self.directory).parts[0]
             siblings = [other for other in self.parts
                         if other.relative_to(self.directory).parts[0] == top]
@@ -6200,9 +6352,9 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
         parts = collect_parts(directory)
         if not parts:
             raise SystemExit(f"{display_path(directory)} has no Markdown parts")
-        selected = select_parts(parts, directory, sections) if sections else None
+        selected, cuts = select_parts_and_sections(parts, directory, sections) if sections else (None, {})
         warn_shared_parts_folder(source, directory, setting)
-        return ScaffoldPlan(source, directory, parts, selected, mfiles)
+        return ScaffoldPlan(source, directory, parts, selected, mfiles, cuts)
     for ancestor in list(source.parents)[:4]:
         root = ancestor.parent
         if root == ancestor:
@@ -6214,9 +6366,11 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
             if candidate_dir is not None and candidate_dir == ancestor.resolve():
                 parts = collect_parts(candidate_dir)
                 warn_shared_parts_folder(candidate, candidate_dir, candidate_setting)
-                chosen = {source, *(select_parts(parts, candidate_dir, sections) if sections else [])}
+                more, cuts = select_parts_and_sections(parts, candidate_dir, sections) if sections else ([], {})
+                chosen = {source, *more}
                 selected = sorted(chosen, key=lambda part: parts.index(part) if part in parts else len(parts))
-                return ScaffoldPlan(candidate, candidate_dir, parts, selected, candidate_meta)
+                return ScaffoldPlan(candidate, candidate_dir, parts, selected, candidate_meta,
+                                    {part: found for part, found in cuts.items() if part != source})
     return None
 
 
@@ -6259,7 +6413,14 @@ def scaffold_inputs(files: list[Path], active: bool,
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             cleaned = strip_part_front_matter(text)
-            if markers and part in markers:
+            if part in PART_CUTS:
+                # Only some sections of this part (a `#name` that is no part's
+                # name): no counter marker -- it would restore the counters of
+                # the part's start, not of the section's.
+                lines = cleaned.split("\n")
+                cleaned = "\n\n".join("\n".join(lines[heading.line:heading.end]).rstrip("\n")
+                                       for heading in PART_CUTS[part]) + "\n"
+            elif markers and part in markers:
                 cleaned = "```{=latex}\n\\pdfmdpart{%s}\n```\n\n%s" % (markers[part], cleaned)
             if cleaned == text:
                 prepared.append(part)
@@ -6284,6 +6445,9 @@ def print_parts(plan: ScaffoldPlan) -> None:
         heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
         mark = "*" if plan.selected is not None and part in plan.selected else " "
         print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
+        for inner in scan_headings(body.split("\n"))[1:]:
+            ids = "  " + " ".join(f"{{#{identifier}}}" for identifier in inner.ids) if inner.ids else ""
+            print(f"      {'  ' * (inner.level - 1)}{'#' * inner.level} {inner.text}{ids}")
 
 def split_top_level_sections(body: str, level: int = 1) -> list[list[str]]:
     """Cut Markdown at its ATX headings of exactly `level` (1 = `# `). Element
@@ -6329,6 +6493,205 @@ def slug_of(heading_line: str) -> str:
     if len(slug) > 30:   # cut at a word boundary, not mid-word
         slug = slug[:30].rsplit("-", 1)[0] if "-" in slug[:30] else slug[:30]
     return slug or "part"
+
+
+
+# --- Rendering one section of an ordinary document: `pdfmd doc#methods` -------
+#
+# A document that is not in parts mode has no parts to name, so a section is cut
+# out of the text: a heading, and everything up to the next heading of the same
+# or a higher level (its subsections included). The cut document is the
+# document's own front matter, the text before its first heading, and the
+# chosen sections, built as a partial build (see ScaffoldPlan): title page and
+# settings kept, written as `doc.NAME.pdf`, no BUILD NOTES stamp,
+# `pdfmd-partial: true`. A section is named the way a file is (lookup_key and
+# LOOKUP_TIERS: `onlyapart`, `only_a_part` and `Only a Part` are one name), by
+# its `{#id}` too, one level down with `/` (`results/yield`), and a leading run
+# of `#` restricts it to that heading level (`doc##yield`).
+
+ATX_HEADING_RE = re.compile(r" {0,3}(#{1,6})[ \t]+(.*?)[ \t]*$")
+SETEXT_UNDERLINE_RE = re.compile(r" {0,3}(=+|-+)[ \t]*$")
+HEADING_ATTRIBUTES_RE = re.compile(
+    r"^(?:\s*(?:#[^\s{}]+|\.[^\s{}]+|[\w:-]+=(?:\"[^\"]*\"|'[^']*'|[^\s{}]+)|-))+\s*$")
+
+
+def heading_parts(raw: str) -> tuple[str, list[str]]:
+    """(plain text, explicit ids) of a heading's text as written: the closing
+    ``#``s and a trailing ``{#id .class}`` block removed, links and spans
+    reduced to their text."""
+    text = re.sub(r"[ \t]+#+$", "", raw.strip())
+    ids: list[str] = []
+    match = re.search(r"\s+\{([^{}]*)\}\s*$", text)     # `[span]{.c}` is not the heading's own
+    if match and HEADING_ATTRIBUTES_RE.match(match.group(1)):
+        ids = re.findall(r"(?:^|\s)#([^\s{}]+)", match.group(1))
+        text = re.sub(r"[ \t]+#+$", "", text[:match.start()].strip())
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"\[([^\]]*)\]\{[^}]*\}", r"\1", text)
+    return text.strip(), ids
+
+
+def scan_headings(lines: list[str]) -> list[Heading]:
+    """Every heading of a Markdown body, ATX (``## Title``) and setext (a line
+    underlined with ``===`` or ``---``) alike, in order, each with the line it
+    ends before: the next heading of the same or a higher level, or the end.
+    A ``#`` line inside a fenced code block or an HTML comment is not one, and
+    a setext heading needs a blank line (or the start) before its text, so a
+    paragraph's last line, a table rule and a ``---`` rule are left alone."""
+    found: list[tuple[int, int, str]] = []
+    fence: str | None = None
+    comment = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        was_comment = comment
+        if not comment:
+            marker = re.match(r"(`{3,}|~{3,})", stripped)
+            if fence is None and marker:
+                fence = marker.group(1)[0] * 3
+            elif fence is not None and stripped.startswith(fence):
+                fence = None
+        if fence is None and not was_comment:
+            atx = ATX_HEADING_RE.match(line)
+            if atx:
+                found.append((index, len(atx.group(1)), atx.group(2)))
+            elif (stripped and index + 1 < len(lines) and (index == 0 or not lines[index - 1].strip())
+                  and SETEXT_UNDERLINE_RE.match(lines[index + 1])
+                  and not SETEXT_UNDERLINE_RE.match(line) and "<!--" not in line
+                  and not line.startswith(("    ", "\t", ">", "- ", "* ", "+ ", "|"))):
+                found.append((index, 1 if lines[index + 1].lstrip().startswith("=") else 2, line))
+        if fence is None:
+            position = 0
+            while True:
+                if not comment:
+                    at = line.find("<!--", position)
+                    if at < 0:
+                        break
+                    comment, position = True, at + 4
+                else:
+                    at = line.find("-->", position)
+                    if at < 0:
+                        break
+                    comment, position = False, at + 3
+    headings = []
+    for number, (index, level, raw) in enumerate(found):
+        text, ids = heading_parts(raw)
+        end = next((later for later, later_level, _ in found[number + 1:] if later_level <= level), len(lines))
+        headings.append(Heading(index, level, text, tuple(ids), end))
+    return headings
+
+
+def parse_section_request(request: str) -> tuple[int | None, list[str]]:
+    """``##yield`` -> (2, ["yield"]); ``results/yield`` -> (None, ["results", "yield"])."""
+    match = re.match(r"\s*(#*)(.*)$", request)
+    return (len(match.group(1)) or None), [name.strip() for name in match.group(2).split("/") if name.strip()]
+
+
+def describe_heading(heading: Heading) -> str:
+    return f"line {heading.line + 1}: {'#' * heading.level} {heading.text}"
+
+
+def find_heading(headings: list[Heading], request: str, describe=None) -> Heading:
+    """The one heading ``request`` names. Unknown or ambiguous names are an
+    error that lists the choices: a typo must never silently build the wrong
+    section."""
+    describe = describe or describe_heading
+    level, names = parse_section_request(request)
+    if not names:
+        raise SystemExit(f"--section '{request}' names no heading")
+    by_line = {heading.line: heading for heading in headings}
+    tiers = LOOKUP_TIERS if FUZZY_LOOKUP else LOOKUP_TIERS[:3]
+    pool = headings
+    for position, name in enumerate(names):
+        last = position == len(names) - 1
+        candidates = [heading for heading in pool if not last or level is None or heading.level == level]
+        entries = [(heading.line, [("alias", identifier) for identifier in heading.ids]
+                    + [("stem", heading.text)]) for heading in candidates]
+        try:
+            found = rank_lookup(name, entries, lambda line: describe(by_line[line]),
+                                HEADING_FIELD_WORDS, tiers)
+        except LookupAmbiguous as error:
+            raise SystemExit(f"--section '{request}': {error} Add `#`s for its level, or `parent/name`.")
+        if not found:
+            choices = "; ".join(f"{'#' * heading.level} {heading.text}" for heading in candidates[:12])
+            raise NoHeadingMatches(f"--section '{request}' matches no heading"
+                             + (f" at level {level}" if last and level else "")
+                             + (f" under '{pool_owner.text}'" if position else "")
+                             + f". Headings: {choices or 'none'}" + (" ..." if len(candidates) > 12 else ""))
+        heading = by_line[found[0]]
+        announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading")
+        pool_owner = heading
+        pool = [other for other in headings if heading.line < other.line < heading.end]
+    return heading
+
+
+def outermost_headings(chosen: list[Heading]) -> list[Heading]:
+    """In document order, without any heading already inside another one chosen."""
+    ordered = sorted(set(chosen), key=lambda heading: heading.line)
+    kept: list[Heading] = []
+    for heading in ordered:
+        if not kept or heading.line >= kept[-1].end:
+            kept.append(heading)
+    return kept
+
+
+def section_label(text: str) -> str:
+    """A file-name label for a heading, Cyrillic and Turkish letters written in Latin."""
+    return slug_of("".join(CYRILLIC_STRICT.get(letter, LATIN_EXTRA.get(letter, letter))
+                           for letter in text.casefold()))
+
+
+class SectionPlan:
+    """A plain document cut down to some of its sections (see above)."""
+
+    def __init__(self, source: Path, text: str, shifted: bool, selected: list[Heading]):
+        self.source = source
+        self.text = text            # the document pdfmd hands Pandoc instead of the file
+        self.shifted = shifted      # the document's leading `# Title` became its title
+        self.selected = selected
+
+    @property
+    def output_stem(self) -> str:
+        labels = list(dict.fromkeys(section_label(heading.text) for heading in self.selected))
+        return f"{self.source.stem}.{'+'.join(labels)}"
+
+
+def section_source(source: Path, cli_no_auto: list[str] | None,
+                   requested_metadata: list[str] | None) -> tuple[str, list[str], bool]:
+    """(front matter, body lines, shifted) of ``source`` as pdfmd would give it
+    to Pandoc: the same bare-`# Title` promotion first, so headings are cut
+    from the text that is actually built."""
+    raw = source.read_text(encoding="utf-8-sig")
+    if auto_disabled(effective_no_auto(source, cli_no_auto), "title"):
+        promoted, shifted = raw, False
+    else:
+        promoted, shifted = promote_bare_title(
+            raw, has_external_metadata=bool(scaffold_metadata_files(source, requested_metadata)))
+    front = LEADING_FRONT_MATTER_RE.match(promoted)
+    end = front.end() if front else 0
+    return promoted[:end], promoted[end:].split("\n"), shifted
+
+
+def plan_sections(source: Path, requests: list[str], cli_no_auto: list[str] | None,
+                  requested_metadata: list[str] | None) -> SectionPlan:
+    head, lines, shifted = section_source(source, cli_no_auto, requested_metadata)
+    headings = scan_headings(lines)
+    if not headings:
+        raise SystemExit(f"{display_path(source)} has no headings to take a section of"
+                         + (" (its first `# Title` became the document's title)" if shifted else ""))
+    selected = outermost_headings([find_heading(headings, request) for request in requests])
+    lead = "\n".join(lines[:headings[0].line]).strip("\n")
+    blocks = ([lead] if lead else []) + ["\n".join(lines[heading.line:heading.end]).rstrip("\n")
+                                         for heading in selected]
+    return SectionPlan(source, head + "\n\n".join(blocks) + "\n", shifted, selected)
+
+
+def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metadata: list[str] | None) -> None:
+    """--list-parts for a document that is not in parts mode: what `#` can name."""
+    _, lines, _ = section_source(source, cli_no_auto, requested_metadata)
+    print(f"DOCUMENT  {display_path(source)}")
+    for heading in scan_headings(lines):
+        ids = "  " + " ".join(f"{{#{identifier}}}" for identifier in heading.ids) if heading.ids else ""
+        print(f"  {'  ' * (heading.level - 1)}{'#' * heading.level} {heading.text}{ids}"
+              f"  (lines {heading.line + 1}-{heading.end})")
 
 
 def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
@@ -8560,7 +8923,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 part_markers: bool = False,
                 embed: "EmbedRequest | None" = None,
                 trust_embedded: bool = False,
-                self_contained: bool | None = None) -> tuple[Path, bool, str]:
+                self_contained: bool | None = None,
+                source_override: tuple[str, bool] | None = None) -> tuple[Path, bool, str]:
+    # source_override: (text, shifted) of the document cut down to some of its
+    # sections -- see SectionPlan. Always a partial build.
     # self_contained: --self-contained/--no-self-contained (None = the document's).
     # embed: the EmbedRequest of --embed-metadata, for the assembled stage.
     # trust_embedded: --trust-embedded (see embedded_lua_filters).
@@ -8594,6 +8960,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     )
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    if source_override is not None and target_format == ASSEMBLED_FORMAT:
+        raise SystemExit(f"{md_path}: --stop-at markdown writes the whole document; it cannot be "
+                         "combined with name#section")
     if target_format == ASSEMBLED_FORMAT:
         # --stop-at markdown: write the text Pandoc would have been given and
         # stop. Before every other branch -- no engine, reader, filter, font
@@ -8622,6 +8991,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         # Pandoc, no engine, none of the discovery below applies to it.
         if parts_inputs:
             raise SystemExit(f"{md_path}: parts mode needs Pandoc; the native renderers build one document")
+        if source_override is not None:
+            raise SystemExit(f"{md_path}: building one section needs Pandoc; the native renderers "
+                             "build the whole document (pdfmd --install pandoc)")
         ok, reason = convert_native(md_path, output, native_engines, metadata_files, from_format, verbose, debug)
         if ok:
             stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [],
@@ -8724,9 +9096,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                      cli_no_auto, verbose, debug, stamp_overrides, keep_aux, parts_inputs,
                                      partial, bool(cache["aux"]), full_scaffold, parts_root, note,
                                      flush_summary, plots=bool(cache["plots"]),
-                                     trust_embedded=trust_embedded)
+                                     trust_embedded=trust_embedded, source_override=source_override)
 
-    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title")) \
+    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title"),
+                               override=source_override) \
             as (title_source, title_shifted), \
             embedded_lua_filters(md_path, not auto_disabled(cli_no_auto, "lua"), trust_embedded) \
             as embedded_filters, \
@@ -8968,8 +9341,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
                 continue
-            if engine == "soffice" and parts_inputs:
-                print(f"SKIP  {md_path}: the soffice last-resort fallback doesn't support parts mode",
+            if engine == "soffice" and (parts_inputs or source_override is not None):
+                print(f"SKIP  {md_path}: the soffice last-resort fallback doesn't support parts mode or sections",
                       file=sys.stderr)
                 continue
             if engine == "soffice":
@@ -9101,7 +9474,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             failed_families.add(family)
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
             report_engine_failure(str(md_path), engine, result, remaining, debug)
-        assert result is not None
+        if result is None:
+            # Every engine was skipped (the soffice fallback cannot build parts or sections).
+            return md_path, False, ("no PDF engine could build this: the soffice fallback cannot build "
+                                    "parts or sections. Install a LaTeX or Typst engine "
+                                    "(pdfmd --install typst) or use --to html")
         if result.returncode == 0:
             stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
@@ -9129,7 +9506,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 parts_root: Path | None = None,
                 embed: "EmbedRequest | None" = None,
                 trust_embedded: bool = False,
-                self_contained: bool | None = None) -> tuple[Path, bool, str]:
+                self_contained: bool | None = None,
+                source_override: tuple[str, bool] | None = None) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -9142,7 +9520,7 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
                           cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
                           parts_root=parts_root, embed=embed, trust_embedded=trust_embedded,
-                          self_contained=self_contained)
+                          self_contained=self_contained, source_override=source_override)
     if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
@@ -9160,7 +9538,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                       partial: bool, persistent: bool, full_scaffold: Path | None,
                       parts_root: Path | None, note, flush_summary,
                       plots: bool = False,
-                      trust_embedded: bool = False) -> tuple[Path, bool, str]:
+                      trust_embedded: bool = False,
+                      source_override: tuple[str, bool] | None = None) -> tuple[Path, bool, str]:
     """Build a PDF the cache way: Pandoc writes the .tex, pdfmd compiles it.
     See the comment above CACHE_DEFAULTS. ``persistent`` False (the natbib +
     parts case without the cache switched on) uses a scratch folder instead
@@ -9200,7 +9579,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                              extra_inputs=parts_inputs, partial=partial, cache_cli=False,
                              skip_stamp=True, parts_root=parts_root,
                              part_markers=bool(persistent and parts_inputs),
-                             trust_embedded=trust_embedded)
+                             trust_embedded=trust_embedded, source_override=source_override)
         if not built[1]:
             return built
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
@@ -9394,9 +9773,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="exclude Markdown files without a chapter field in report/book mode")
     parser.add_argument("--section", "--only", action="append", default=[], metavar="NAME",
                         dest="section",
-                        help="parts mode only (pdfmd-options: {parts: auto}): build just these parts of a "
-                             "split document, named by file, by file without its numeric prefix, by "
-                             "folder, or by number; repeat the flag or join with + or , (a+b). "
+                        help="build just these sections: in a parts-mode document (pdfmd-options: "
+                             "{parts: auto}) parts named by file, by file without its numeric prefix, by "
+                             "folder, or by number; in any Markdown document headings, named by their text "
+                             "(case, spaces and spelling are forgiving) or {#id}: `name`, `##name` for a "
+                             "level-2 heading, `parent/name`; repeat the flag or join with + or , (a+b). "
                              "`pdfmd report#intro` is shorthand for `pdfmd report --section intro`, and "
                              "so is naming a part's own path. (No short flag: -s is Pandoc's --standalone.)")
     parser.add_argument("--cache", dest="cache", action="store_true", default=None,
@@ -9424,7 +9805,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "cut section becoming a folder of parts, so that a subsection can be "
                              "built alone. Default 1: top-level sections only")
     parser.add_argument("--list-parts", action="store_true",
-                        help="parts mode only: print the scaffold's parts in build order and exit")
+                        help="print what `--section`/`name#section` can name and exit: a parts-mode "
+                             "document's parts in build order, or any other Markdown document's "
+                             "headings and {#ids} with their lines")
     parser.add_argument("--no-auto", nargs="*", default=None, metavar="KIND",
                         help="disable pdfmd's own automatic per-document behavior. Bare --no-auto "
                              "disables all of it; or name one or more of: reader (the gfm switch "
@@ -9827,8 +10210,9 @@ def main() -> None:
             print(f"AUTO OUTPUT  {display_path(document)}: default-output {chosen} (pdfmd-options)")
         return chosen or target_format
 
-    if not args.path and not args.batch and not args.report:
-        markdown_files = sorted(Path.cwd().glob("*.md"), key=lambda path: path.name.casefold())
+    def only_markdown_in(directory: Path) -> Path:
+        """The one Markdown file of a folder (what `pdfmd` and `pdfmd '#section'` mean)."""
+        markdown_files = sorted(directory.glob("*.md"), key=lambda path: path.name.casefold())
         if not markdown_files:
             raise SystemExit("No Markdown files found in the current directory.")
         if len(markdown_files) > 1:
@@ -9837,32 +10221,56 @@ def main() -> None:
                 f"Multiple Markdown files found: {names}\n"
                 "Specify one file, use -b to convert all separately, or use -r to combine them."
             )
-        paths = [markdown_files[0]]
-        print(f"AUTO MD    {display_path(paths[0])}")
-    # Parts mode (see plan_scaffold): `pdfmd report#intro` is shorthand for
-    # --section. A literal path with a '#' in its name wins, so nothing that
-    # already worked changes meaning.
+        print(f"AUTO MD    {display_path(markdown_files[0])}")
+        return markdown_files[0]
+
+    if not args.path and not args.batch and not args.report:
+        paths = [only_markdown_in(Path.cwd())]
+    # `pdfmd report#intro` is shorthand for --section: a part in parts mode,
+    # any heading (or {#id}) otherwise. A literal path with a '#' in its name
+    # wins, so nothing that already worked changes meaning. `doc##name` asks
+    # for a level-2 heading (see find_heading); `#name` alone, with no
+    # document, means the folder's only Markdown file.
     section_requests = split_section_requests(args.section)
-    if len(paths) == 1 and "#" in paths[0].name and not paths[0].exists():
-        base, _, suffix = paths[0].name.partition("#")
-        paths = [paths[0].with_name(base)]
-        section_requests += split_section_requests([suffix])
+    if len(paths) == 1 and "#" in str(paths[0]) and not paths[0].exists():
+        # The whole string, not .name: a section path (`doc#results/yield`) has a slash.
+        base, _, suffix = str(paths[0]).partition("#")
+        if base and not base.endswith(("/", os.sep)):
+            paths = [Path(base)]
+        else:
+            paths = [only_markdown_in(Path(base) if base else Path.cwd())]
+        # `doc#name` asks for `name`; `doc##name` for `##name`, a level-2 heading.
+        section_requests += split_section_requests(["#" + suffix if suffix.startswith("#") else suffix])
     scaffold_plan = None
-    if not args.batch and not args.report and not args.presentation and len(paths) == 1:
+    section_plan = None
+    plan_source = None
+    single_document = not args.batch and not args.report and not args.presentation and len(paths) == 1
+    if single_document:
         try:
             plan_source = find_markdown(paths[0])
         except LookupAmbiguous as error:
             raise SystemExit(str(error))
-        except FileNotFoundError:
+        except FileNotFoundError as error:
+            if section_requests or args.list_parts:
+                raise SystemExit(str(error))
             plan_source = None
         if plan_source is not None:
             scaffold_plan = plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
     if scaffold_plan is None and (section_requests or args.list_parts):
-        raise SystemExit("--section, --list-parts and 'name#section' need a document in parts mode "
-                         "(pdfmd-options: {parts: auto}, with a parts/ or sections/ folder beside it)")
+        if not single_document:
+            raise SystemExit("--section, --list-parts and 'name#section' take one document, "
+                             "not -b/--batch, -r/--report or -p/--presentation")
+        if plan_source.suffix.lower() != ".md":
+            raise SystemExit(f"{plan_source}: sections can only be taken from a Markdown (.md) document")
+        if args.list_parts:
+            print_headings(plan_source, args.no_auto, args.metadata_file)
+            return
+        section_plan = plan_sections(plan_source, section_requests, args.no_auto, args.metadata_file)
     if scaffold_plan is not None and args.list_parts:
         print_parts(scaffold_plan)
         return
+    if scaffold_plan is not None:
+        PART_CUTS.update(scaffold_plan.cuts)
     if args.watch:
         if args.batch or args.report:
             raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
@@ -10321,6 +10729,8 @@ def main() -> None:
         if scaffold_plan is not None:
             source = scaffold_plan.scaffold
             output_stem = scaffold_plan.output_stem
+        elif section_plan is not None:
+            output_stem = section_plan.output_stem
         target_format = default_target(source, scaffold_metadata_files(source, args.metadata_file))
         need_engines(target_format)
         output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
@@ -10368,7 +10778,7 @@ def main() -> None:
             # the top of main()) is used as-is.
             results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format)]
         else:
-            if scaffold_plan is not None:
+            if scaffold_plan is not None or section_plan is not None:
                 # _convert_one derives the output name from the document's own
                 # stem; a partial build's differs, so hand over the final path.
                 output_file = output
@@ -10390,7 +10800,13 @@ def main() -> None:
                                    cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
                                    self_contained=args.self_contained,
                                    parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
-                                   partial=(scaffold_plan is not None and scaffold_plan.selected is not None))]
+                                   partial=((scaffold_plan is not None and scaffold_plan.selected is not None)
+                                            or section_plan is not None),
+                                   source_override=((section_plan.text, section_plan.shifted)
+                                                    if section_plan is not None else None))]
+            if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
+                print("NOTE  section build: references to other sections print as ??, and heading, "
+                      "figure and table numbers restart from this section's own first one")
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
                     and target_format != ASSEMBLED_FORMAT):
                 if LAST_SEEDED:
