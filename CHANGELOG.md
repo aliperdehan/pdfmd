@@ -15,6 +15,7 @@ PDFMD_VERSION = "2.0.0"
 `pdfmd --version` prints it. Bump it there and add an entry here in the
 same edit.
 
+<!--
 ## Why this starts at 2.0.0, not 1.0.0
 
 `pdfmd.py` began as a one-line `pandoc file.md -o file.pdf` wrapper and was
@@ -36,6 +37,7 @@ backup snapshots. It is explicitly NOT reliable: its 1.x numbers are
 invented, snapshot-based entries cover windows of days rather than single
 changes, and anything done in unsaved sessions (other ChatGPT chats,
 claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
+-->
 
 ---
 
