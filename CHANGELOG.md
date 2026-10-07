@@ -39,6 +39,44 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.8 — 2026-10-07
+
+Pre-edit state: commit `fb357d6` (v3.19.7). Patch bump by the one-time
+numbering override above. From the author's re-test of v3.19.7 on real reports
+with Pandoc 3.11.
+
+### Fixed
+
+- **The math-method flag, third time right.** v3.19.7's check for
+  `--html-math-method` was wrong for Pandoc 3.11, which renamed the option to
+  `--math-method` (and warns `Deprecated: --mathml. Use --math-method=mathml
+  instead.`): the check failed and pdfmd fell back to the short flag, so the
+  warning stayed. pdfmd now tries `--math-method`, then `--html-math-method`,
+  then the short flags, taking the first the installed Pandoc lists in `--help`,
+  matched as a whole option name (`--math-method` is a substring of
+  `--html-math-method`, which a plain substring test would have taken for it).
+  Checked against stand-in help texts for each of the four cases (3.11, the
+  middle range, both listed, short flags only) and the real Pandoc 3.1.3; the
+  3.11 spelling itself is from the author's report, not seen here.
+- **A CSL style kept in Pandoc's user data folder was not embedded** (and, for
+  any file not found, nothing said why). A `csl:` is now also looked up in
+  Pandoc's `csl/` data folder (from the `User data directory:` line of
+  `pandoc --version`), and a bibliography or CSL file found nowhere prints a
+  `WARN  not embedded: ... (not found ...)` instead of only appearing in the
+  NOTE. Checked with a style that existed only in that folder: embedded, then
+  deleted from the machine, and the embedded file still built with a `.tex`
+  identical to the original build's.
+
+### Changed
+
+- Assembling with anything embedded now also prints, once, that data a macro in
+  the text reads (the CSV tables a report's plots take, images in raw LaTeX) is
+  never embedded and cannot be detected; it stays beside the document. (The
+  author's report: the real report's plots read CSV files from four folders,
+  without which its PDF would not build.)
+
+---
+
 ## v3.19.7 — 2026-10-07
 
 Pre-edit state: commit `477e2bc` (v3.19.6). Patch bump by the one-time

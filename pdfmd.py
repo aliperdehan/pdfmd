@@ -171,7 +171,10 @@ HTML output and a default format (v3.19.4):
     `self-contained` is `--standalone --embed-resources` (`--self-contained`
     on a Pandoc older than 2.19), and then math defaults to MathML, the one
     kind that needs no network (mathjax/katex/webtex fetch their scripts when
-    the file is built); a page with no title gets the file name as its
+    the file is built; pdfmd passes the method as `--math-method=` on Pandoc
+    3.11 and later, `--html-math-method=` on the range before, and the short
+    `--mathml`/`--katex`/... flags before that, whichever `pandoc --help`
+    lists); a page with no title gets the file name as its
     <title>. --self-contained / --no-self-contained on the command line win
     over the document. An assembled file's embedded LaTeX preamble is left out
     of every non-LaTeX build. Not done for HTML: PDF metadata stamping and the
@@ -217,7 +220,9 @@ Stopping early (--stop-at, v3.19.0):
     `pdfmd-options` merged by pdfmd's own cascade, a file's `no-auto`/
     `parts` not carried), `preamble` (the preamble file(s), at the head of
     `header-includes`), `lua` (the Lua filters, see --lua-mode), `bibliography`
-    (the bibliography and CSL files the metadata names, v3.19.7: each in a
+    (the bibliography and CSL files the metadata names, v3.19.7 -- a CSL style
+    is also looked for in Pandoc's own user data folder, csl/, and a file not
+    found anywhere is a warning saying so: each in a
     `{=pdfmd}` block too, with the path the metadata gives it -- a `../x.bib`
     or absolute name is rewritten to the embedded file's own; at build time
     they are written to a temporary folder searched after everything else, by
@@ -715,7 +720,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.7"
+PDFMD_VERSION = "3.19.8"
 import argparse
 import filecmp
 import hashlib
@@ -4613,10 +4618,12 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 HTML_TARGETS = frozenset({"html", "html4", "html5"})
 DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "plain", "md": "markdown", "htm": "html",
                           "typ": "typst", "markdown": "markdown"}
-# The math method: `--html-math-method=X` where this Pandoc has it (Pandoc 3.11
-# deprecates the short spellings and warns), else the short flag every older
-# one has (3.1 does not know --html-math-method at all). Found out from
-# `pandoc --help`, not from a guessed version number.
+# The math method, in whichever spelling the installed Pandoc has -- three
+# generations: `--math-method=X` (3.11, which deprecates the others and warns),
+# `--html-math-method=X` (a middle range of 3.x), and the short flags
+# `--mathml`/`--mathjax`/... (older, 3.1 among them, which does not know the
+# long forms at all). Found out from `pandoc --help`, never from a guessed
+# version number.
 HTML_MATH_METHODS = ("mathml", "mathjax", "katex", "webtex", "plain", "gladtex")
 HTML_MATH_SHORT_FLAGS = {"mathml": "--mathml", "mathjax": "--mathjax", "katex": "--katex",
                          "webtex": "--webtex", "gladtex": "--gladtex"}   # "plain" is the default: no flag
@@ -4624,19 +4631,21 @@ _PANDOC_HELP: str | None = None
 
 
 def pandoc_has_option(option: str) -> bool:
-    """Whether the installed Pandoc lists ``option`` in its --help."""
+    """Whether the installed Pandoc lists ``option`` in its --help, as a whole
+    option name (`--math-method` is not found inside `--html-math-method`)."""
     global _PANDOC_HELP
     if _PANDOC_HELP is None:
         try:
             _PANDOC_HELP = subprocess.run(["pandoc", "--help"], capture_output=True, text=True).stdout
         except OSError:
             _PANDOC_HELP = ""
-    return option in _PANDOC_HELP
+    return bool(re.search(r"(?<![\w-])" + re.escape(option) + r"(?![\w-])", _PANDOC_HELP))
 
 
 def html_math_args(method: str) -> list[str]:
-    if pandoc_has_option("--html-math-method"):
-        return [f"--html-math-method={method}"]
+    for option in ("--math-method", "--html-math-method"):
+        if pandoc_has_option(option):
+            return [f"{option}={method}"]
     flag = HTML_MATH_SHORT_FLAGS.get(method)
     return [flag] if flag else []
 
@@ -4668,6 +4677,25 @@ def default_output_format(md_path: Path, metadata_files: list[Path]) -> str | No
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.default-output cannot be "
                          f"'{ASSEMBLED_FORMAT}'; use --stop-at markdown")
     return name
+
+
+_PANDOC_DATA_DIR: Path | None | bool = False
+
+
+def pandoc_user_data_dir() -> Path | None:
+    """Pandoc's user data directory (where it also looks for a `csl:` style, in
+    its `csl/` subfolder), from the "User data directory:" line of
+    `pandoc --version`; None if there is none."""
+    global _PANDOC_DATA_DIR
+    if _PANDOC_DATA_DIR is False:
+        _PANDOC_DATA_DIR = None
+        try:
+            for line in subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines():
+                if line.lower().startswith("user data directory:"):
+                    _PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
+        except OSError:
+            pass
+    return _PANDOC_DATA_DIR or None
 
 
 _PANDOC_VERSION: tuple[int, ...] | None = None
@@ -4708,8 +4736,8 @@ def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: 
     elif standalone:
         note("HTML", f"{md_path}: a full page (--standalone)")
     math = str(settings.get("math", "")).casefold()
-    has_math_option = any(item.startswith(("--html-math-method", "--mathml", "--mathjax", "--katex",
-                                           "--webtex", "--gladtex", "--latexmathml"))
+    has_math_option = any(item.startswith(("--math-method", "--html-math-method", "--mathml", "--mathjax",
+                                           "--katex", "--webtex", "--gladtex", "--latexmathml"))
                           for item in pandoc_options)
     if not has_math_option and math in HTML_MATH_METHODS:
         out += html_math_args(math)
@@ -5597,12 +5625,16 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
                 first.parent / ACCESSORY_DIRNAME, first.parent / f"{first.stem}{UNPACKED_SUFFIX}", Path.cwd()]:
             if directory not in search:
                 search.append(directory)
+        data_dir = pandoc_user_data_dir()
         for key, name in references:
             reference = Path(name)
+            # A CSL style is also looked up in Pandoc's own user data folder (csl/).
+            where = search + ([data_dir / "csl", data_dir] if key == "csl" and data_dir else [])
             found = reference if reference.is_absolute() and reference.is_file() else next(
-                ((directory / reference) for directory in search if (directory / reference).is_file()), None)
+                ((directory / reference) for directory in where if (directory / reference).is_file()), None)
             if found is None:
-                bib_problems.append(f"{name} (not found)")
+                bib_problems.append(f"{name} (not found in the document's folders"
+                                    + (" or Pandoc's csl/ folder" if key == "csl" else "") + ")")
                 continue
             try:
                 source = found.read_text(encoding="utf-8-sig")
@@ -5707,6 +5739,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             summary.append(f"lua ({plan.lua_mode}) " + ", ".join(item.name for item in plan.lua_filters))
     if bib_embedded:
         summary.append("bibliography " + ", ".join(bib_embedded))
+    for problem in bib_problems:
+        print(f"WARN  not embedded: {problem}", file=sys.stderr)
     summary += left_out
     print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
     # What the text points at is not embedded: say which of it the file still needs.
@@ -5722,6 +5756,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     if outside:
         print("NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
               "finds them (relative to the assembled file's folder)")
+    if summary:
+        print("NOTE  never embedded, and not detected: data a macro in the text reads (CSV tables "
+              "for plots, images in raw LaTeX) -- they stay beside the document")
     return result
 
 
