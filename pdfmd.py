@@ -368,6 +368,30 @@ Stopping early (--stop-at, v3.19.0):
     sentence takes one of the spaces around it. The command line wins over the
     document, then its metadata files.
 
+    --attach-source / --no-attach-source, `pdfmd-options: {attach-source: true}`
+    (alias `embed-source`) (v3.22.1): after a PDF build, attach the document's
+    whole source to the PDF -- the assembled Markdown with every kind embedded
+    (so it builds the same anywhere), comments stripped unless strip-comments
+    says otherwise, as `pdfmd-source.md`, beside `pdfmd-manifest.json`, which
+    records the original layout: the file names and where each sat, where each
+    part of a parts document began and the front matter its part had, the
+    images the text points at (recorded with their hashes, not stored), the
+    document's own no-auto. Any viewer lists them as the PDF's attachments.
+    Off by default: the source holds everything its author wrote. Not for a
+    section build (name#section), -r/--report, or a non-PDF target.
+    --restore FILE.pdf [-o DIR] (v3.22.1) writes the layout back into
+    FILE.restored/ (or DIR): name.md, metadata/, a preamble, filters, the
+    bibliography, parts/ ... -- --unpack --slim does the splitting of what was
+    embedded, the manifest the placing. Never overwrites (stops, writing nothing,
+    if a file is there), never writes outside the folder (a path with `..`, an
+    absolute or a drive path is refused), and a restored Lua filter runs only
+    if this machine's pdfmd trusts it, as always. Exit status 1 if the attached
+    text no longer matches its recorded hash. The YAML is the re-written one
+    (comments lost, as --unpack says), the text is the original's less its
+    comments, and the restored folder builds the same `.tex` the original did;
+    what the text points at (images, data) is not in the PDF and has to be
+    put back beside it. --list shows what the PDF carries and writes nothing.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -827,16 +851,19 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.0"
+PDFMD_VERSION = "3.22.1"
 import argparse
 import csv
 import filecmp
+import contextlib
 import hashlib
 import importlib.metadata
+import io
 import importlib.util
 import json
 import platform
 import tarfile
+import urllib.parse
 import urllib.request
 import zipfile
 from collections import namedtuple
@@ -7177,6 +7204,8 @@ def scan_comment_line(line: str, carried: str = "") -> tuple[str, bool, str | No
             if not before or before.endswith((" ", "\t")):
                 while position < len(line) and line[position] in " \t":
                     position += 1                        # one space, not two, where it was
+                if before and line[position:position + 1] in (".", ",", ";", ":", "!", "?", ")", "]"):
+                    kept[:] = [before.rstrip(" \t")]      # `word <!-- c -->.` is `word.`
         else:
             kept.append(line[position])
             position += 1
@@ -9299,17 +9328,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         if parts_inputs:
             note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
                           f"joined after it" + (" (partial build)" if partial else ""))
-        plan = None
-        resolved_embed = resolve_embed(md_path, metadata_files, embed)
-        if resolved_embed is not None:
-            kinds, lua_mode = resolved_embed
-            discovered_lua = [] if (auto_disabled(no_auto, "lua") or "lua" not in kinds) else find_lua_filters(md_path, metadata_files)
-            if not auto_disabled(no_auto, "lua") and "lua" in kinds:
-                for extra_filter in frontmatter_extra_lua_filters(md_path):
-                    if extra_filter not in discovered_lua:
-                        discovered_lua.append(extra_filter)
-            plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []),
-                             discovered_lua)
+        plan = make_embed_plan(md_path, metadata_files, preamble_files, no_auto, embed)
         ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan, partial,
                                               resolve_strip_comments(md_path, metadata_files))
         flush_summary()
@@ -9815,6 +9834,365 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
 
+def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: list[Path] | None,
+                    no_auto: list[str] | None, request: "EmbedRequest | None") -> "EmbedPlan | None":
+    """What --embed-metadata folds into ``md_path``'s assembled text, or None."""
+    resolved = resolve_embed(md_path, metadata_files, request)
+    if resolved is None:
+        return None
+    kinds, lua_mode = resolved
+    discovered_lua = ([] if (auto_disabled(no_auto, "lua") or "lua" not in kinds)
+                      else find_lua_filters(md_path, metadata_files))
+    if not auto_disabled(no_auto, "lua") and "lua" in kinds:
+        for extra_filter in frontmatter_extra_lua_filters(md_path):
+            if extra_filter not in discovered_lua:
+                discovered_lua.append(extra_filter)
+    return EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []), discovered_lua)
+
+
+# -- Source attached to the PDF (v3.22.1) ---------------------------------------
+# `pdfmd-options: {attach-source: true}` (alias `embed-source`), --attach-source:
+# after a successful PDF build, the document's whole source -- the assembled
+# Markdown of --assemble-only with every kind embedded, the same file that
+# builds the same PDF anywhere -- is attached to the PDF as a file attachment
+# (PDF's own /EmbeddedFiles, listed by any viewer), beside a small manifest that
+# records the original layout (file names and where they sat, a part's
+# boundaries and its dropped front matter, the images the text points at).
+# `pdfmd --restore FILE.pdf` writes the layout back. Comments are stripped from
+# the attached copy unless strip-comments says otherwise (they are notes to
+# oneself; a PDF travels). Engine-independent (pypdf, after the build), and
+# nothing is attached unless asked for: the source holds everything the author
+# wrote, comments and drafts included.
+ATTACH_FORMAT = 1
+ATTACH_MANIFEST = "pdfmd-manifest.json"
+ATTACH_SOURCE = "pdfmd-source.md"
+ATTACH_KEYS = ("attach-source", "embed-source")
+ATTACH_CLI: bool | None = None
+RESTORED_SUFFIX = ".restored"
+IMAGE_REF_RE = re.compile(
+    r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)|<img\b[^>]*?\bsrc=[\"']([^\"']+)[\"']",
+    re.IGNORECASE)
+
+
+def resolve_attach(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the PDF built from ``md_path`` carries its source: the command
+    line, else `pdfmd-options.attach-source` (or `embed-source`)."""
+    if ATTACH_CLI is not None:
+        return ATTACH_CLI
+    return bool(option_flag(first_pdfmd_option(md_path, metadata_files, *ATTACH_KEYS)))
+
+
+def relative_posix(base: Path, path: Path) -> str:
+    # not resolve(): a symlinked metadata file is recorded where it sits, not where it points
+    return Path(os.path.relpath(os.path.abspath(path), os.path.abspath(base))).as_posix()
+
+
+def layout_path(base: Path, item: Path) -> str:
+    """Where ``item`` (a metadata file, preamble or filter pdfmd found) sits
+    relative to the document's folder ``base``. Discovery may hand back the file
+    a symlink points to, outside the folder; then the name it has in the folder
+    itself (beside the document or in `metadata/`) is the layout."""
+    inside = relative_posix(base, item)
+    if not inside.startswith(".."):
+        return inside
+    for folder in (base, base / ACCESSORY_DIRNAME):
+        candidate = folder / item.name
+        try:
+            if candidate.exists() and candidate.resolve() == item.resolve():
+                return relative_posix(base, candidate)
+        except OSError:
+            pass
+    return inside
+
+
+def referenced_images(text: str, base: Path) -> list[Path]:
+    """Files the Markdown text points at as images (local, existing), in order."""
+    found: list[Path] = []
+    for match in IMAGE_REF_RE.finditer(strip_markdown_comments(text)):
+        target = (match.group(1) or match.group(2) or "").split("#")[0].split("?")[0]
+        if not target or "://" in target or target.startswith(("data:", "mailto:")):
+            continue
+        path = Path(os.path.abspath(base / urllib.parse.unquote(target)))
+        if path.is_file() and path not in found:
+            found.append(path)
+    return found
+
+
+def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | None",
+                        merged: str, stripped: bool, chunks: list[dict]) -> dict:
+    base = md_path.parent
+    layout: list[dict] = []
+    if plan is not None:
+        for kind, paths in (("metadata", plan.metadata_files), ("preamble", plan.preamble_files),
+                            ("lua", plan.lua_filters)):
+            if kind in plan.kinds:
+                layout.extend({"kind": kind, "path": layout_path(base, item)} for item in paths)
+    images = []
+    for source in (md_path, *parts):
+        for image in referenced_images(source.read_text(encoding="utf-8-sig"), source.parent):
+            entry = {"path": relative_posix(base, image), "sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                     "size": image.stat().st_size}
+            if entry not in images:
+                images.append(entry)
+    return {"format": ATTACH_FORMAT, "pdfmd": PDFMD_VERSION, "kind": "source",
+            "parts": (parts_setting(md_path, list(plan.metadata_files) if plan else []) if parts else None),
+            "name": md_path.name, "source": ATTACH_SOURCE, "sha256": sha256_text(merged),
+            "comments_stripped": stripped, "no_auto": frontmatter_no_auto(md_path), "chunks": chunks,
+            "layout": layout, "data_files": [block["path"] or block["name"] for block in parse_embedded_blocks(merged)
+                                             if block["type"] in ("bibliography", "csl")],
+            "images": images}
+
+
+def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
+                    preamble_files: list[Path] | None, no_auto: list[str] | None,
+                    strip: bool) -> tuple[str, dict]:
+    """The text to attach (the assembled file with everything embedded) and its manifest."""
+    plan = make_embed_plan(md_path, metadata_files, preamble_files, no_auto,
+                           EmbedRequest(frozenset(EMBED_KINDS), None, False))
+    chunks: list[dict] = []
+    for index, source in enumerate([md_path, *parts]):
+        raw = source.read_text(encoding="utf-8-sig")
+        text = strip_part_front_matter(raw) if index else raw
+        head = raw[:len(raw) - len(text)] if index and raw.endswith(text) else ""
+        if strip:
+            text = strip_markdown_comments(text)
+        chunk = text.rstrip("\n") + "\n"
+        front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", chunk, re.DOTALL) if not index else None
+        body = chunk[front.end():] if front else chunk
+        # The assembled text normalises the blank lines at a boundary, so a chunk
+        # is found again by its content: how many blank lines led it, then its lines.
+        content = body.lstrip("\n")
+        chunks.append({"path": relative_posix(md_path.parent, source), "head": head,
+                       "lead": len(body) - len(content), "lines": len(content.splitlines()),
+                       "sha256": sha256_text(content), "front_matter": bool(front)})
+    merged = assemble_markdown_text([md_path, *parts], bool(parts), plan, False, strip)
+    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks)
+
+
+def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
+    """Add ``files`` to ``pdf_path`` as attachments, in place (written beside it,
+    then moved over it, so a failure leaves the PDF as it was)."""
+    pypdf_logger = logging.getLogger("pypdf")
+    previous_level = pypdf_logger.level
+    pypdf_logger.setLevel(logging.ERROR)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            reader = pypdf.PdfReader(pdf_path)
+            writer = pypdf.PdfWriter()
+            writer.append(reader)
+            for name, data in files.items():
+                writer.add_attachment(name, data)
+            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
+                writer.write(temporary)
+                temporary_path = Path(temporary.name)
+    finally:
+        pypdf_logger.setLevel(previous_level)
+    temporary_path.replace(pdf_path)
+
+
+def read_pdf_attachments(pdf_path: Path) -> dict[str, bytes]:
+    pypdf_logger = logging.getLogger("pypdf")
+    previous_level = pypdf_logger.level
+    pypdf_logger.setLevel(logging.ERROR)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            reader = pypdf.PdfReader(pdf_path)
+            return {name: b"".join(items) if len(items) > 1 else items[0]
+                    for name, items in reader.attachments.items() if items}
+    finally:
+        pypdf_logger.setLevel(previous_level)
+
+
+def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
+                                metadata_files: list[Path], preamble_files: list[Path] | None,
+                                no_auto: list[str] | None, verbose: bool) -> None:
+    """--attach-source: put the document's source into the PDF just built."""
+    if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
+        return
+    if pypdf is None:
+        print("WARN  attach-source: pypdf is not installed (pip install pypdf); nothing was attached",
+              file=sys.stderr)
+        return
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
+            merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
+                                               resolve_strip_comments(md_path, metadata_files, default=True))
+        write_pdf_attachments(pdf_path, {
+            ATTACH_SOURCE: merged.encode("utf-8"),
+            ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8")})
+    except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
+        print(f"WARN  attach-source: could not attach the source to {display_path(pdf_path)} ({error}); "
+              "the PDF itself was built", file=sys.stderr)
+        return
+    note = "comments stripped" if manifest["comments_stripped"] else "comments kept"
+    print(f"ATTACHED  {display_path(pdf_path)}: source of {display_path(md_path)} "
+          f"({len(merged.splitlines())} lines, {note}); `pdfmd --restore` writes it back")
+    unstored = [image["path"] for image in manifest["images"]]
+    if unstored and verbose:
+        print(f"NOTE  images the text points at are recorded, not stored: {', '.join(unstored)}")
+
+
+def restore_target_name(name: str) -> PurePosixPath | None:
+    """A path read from a PDF's manifest, safe to write under the target folder, or None."""
+    path = PurePosixPath(name.replace("\\", "/"))
+    if not path.parts or path.is_absolute() or ".." in path.parts or re.match(r"^[A-Za-z]:", path.parts[0]):
+        return None
+    return path
+
+
+def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = False) -> int:
+    """--restore: write back the layout a PDF's attached source records. Never
+    overwrites (it stops, writing nothing, if a file is already there). Exit
+    status 1 if the attached text no longer matches its recorded hash."""
+    if pypdf is None:
+        raise SystemExit("--restore needs pypdf (pip install pypdf)")
+    if not pdf_path.is_file():
+        raise SystemExit(f"{pdf_path}: no such file")
+    try:
+        attachments = read_pdf_attachments(pdf_path)
+    except Exception as error:  # noqa: BLE001
+        raise SystemExit(f"{display_path(pdf_path)}: not readable as a PDF ({error})")
+    if ATTACH_MANIFEST not in attachments:
+        names = ", ".join(sorted(attachments)) or "no attachments at all"
+        raise SystemExit(f"{display_path(pdf_path)} carries no pdfmd source ({names}); "
+                         "build it with --attach-source or pdfmd-options.attach-source")
+    manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
+    if manifest.get("format", 0) > ATTACH_FORMAT:
+        raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (attachment format "
+                         f"{manifest.get('format')}); upgrade pdfmd to restore it")
+    merged = attachments.get(manifest.get("source", ATTACH_SOURCE), b"").decode("utf-8")
+    status = 0
+    if sha256_text(merged) != manifest.get("sha256"):
+        print("WARN  the attached source does not match its recorded hash (edited since it was attached)",
+              file=sys.stderr)
+        status = 1
+    chunks = manifest.get("chunks") or []
+    print(f"SOURCE    {manifest.get('name', '?')}  (pdfmd {manifest.get('pdfmd', '?')}, "
+          f"{len(chunks)} file{'s' if len(chunks) != 1 else ''}, "
+          f"{'comments stripped' if manifest.get('comments_stripped') else 'comments kept'})")
+    for image in manifest.get("images") or []:
+        print(f"IMAGE     {image['path']}  (recorded, not stored in the PDF)")
+    if list_only:
+        return status
+    name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
+    target = (out_dir or pdf_path.with_name(f"{pdf_path.stem}{RESTORED_SUFFIX}")).resolve()
+    files = layout_from_source(merged, manifest, name)
+    clashes = [item for item in files if (target / item).exists()]
+    if clashes:
+        raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; nothing was written "
+                         "(remove them, or give another -o folder)")
+    for item, text in files.items():
+        destination = target / item
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text, encoding="utf-8", newline="\n")
+        print(f"RESTORED  {item}")
+    print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+    return status
+
+
+def restore_front_matter(text: str, manifest: dict) -> str:
+    """The restored document's front matter without the bookkeeping embedding
+    added to `pdfmd-options` (what was embedded, and the no-auto kinds that kept
+    discovery from finding it again): the document's own no-auto, if it had one."""
+    front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if not front or yaml is None:
+        return text
+    try:
+        data = yaml.safe_load(front.group("yaml"))
+    except yaml.YAMLError:
+        return text
+    if not isinstance(data, dict):
+        return text
+    options = data.get("pdfmd-options")
+    if not isinstance(options, dict):
+        options = data["pdfmd-options"] = {}
+    options.pop("embedded", None)
+    if manifest.get("parts") and "parts" not in options:
+        options["parts"] = manifest["parts"]    # it came from a metadata file, which is not carried
+    if "no-auto" in options:
+        original = manifest.get("no_auto")
+        if original is None:
+            options.pop("no-auto")
+        else:
+            options["no-auto"] = original
+    if not options:
+        data.pop("pdfmd-options")
+    if not data:
+        return text[front.end():].lstrip("\n")
+    dumped = yaml.dump(data, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
+                       default_flow_style=False, width=10**6)
+    return f"---\n{dumped}---\n" + text[front.end():]
+
+
+def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) -> dict[str, str]:
+    """The files of the original layout, as {relative path: text}, from the
+    attached assembled text: --unpack --slim does the splitting of the embedded
+    metadata, preamble, filters and bibliography; the manifest says where each
+    sat, where a part began, and what a part's own front matter was."""
+    work = Path(mkdtemp(prefix="pdfmd-restore-"))
+    try:
+        assembled = work / "x.md"
+        assembled.write_text(merged, encoding="utf-8", newline="\n")
+        unpacked = work / "x.unpacked"
+        with contextlib.redirect_stdout(io.StringIO()):
+            unpack_assembled(assembled, unpacked, slim=True)
+        text = assembled.read_text(encoding="utf-8")
+        found = {}
+        if unpacked.is_dir():
+            for item in sorted(unpacked.rglob("*")):
+                if item.is_file():
+                    found[item.relative_to(unpacked).as_posix()] = item.read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    # The document itself: the assembled marker is how a build knew the text was
+    # finished, so it goes (a restored file is a source again).
+    text = ASSEMBLED_COMMENT_RE.sub("", text)
+    text = re.sub(r"^pdfmd-assembled:[ \t]*(?:true|yes|on)[ \t]*\n", "", text, count=1, flags=re.MULTILINE)
+    text = restore_front_matter(text.rstrip("\n") + "\n", manifest)
+    files: dict[str, str] = {}
+    chunks = manifest.get("chunks") or []
+    if len(chunks) > 1:
+        front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+        header = front.group(0) if front else ""
+        lines = text[len(header):].splitlines()
+        position = 0
+        for index, chunk in enumerate(chunks):
+            while position < len(lines) and not lines[position].strip():
+                position += 1
+            piece = "\n".join(lines[position:position + chunk["lines"]]) + "\n"
+            position += chunk["lines"]
+            if chunk["lines"] == 0:
+                piece = ""
+            piece = "\n" * chunk.get("lead", 0) + piece
+            where = restore_target_name(chunk["path"]) or PurePosixPath(f"part-{index}.md")
+            files[str(where)] = (header + piece) if index == 0 else (chunk.get("head", "") + piece)
+    else:
+        files[str(main_name)] = text
+    layout = [dict(entry) for entry in manifest.get("layout") or []]
+    if not any(entry["kind"] == "metadata" for entry in layout):
+        found.pop("metadata.yaml", None)       # no metadata file existed: the keys stay in the document
+    for name, content in found.items():
+        base = PurePosixPath(re.sub(r"^\d\d-", "", PurePosixPath(name).name))
+        match = next((entry for entry in layout
+                      if PurePosixPath(entry["path"]).name == base.name and not entry.get("used")), None)
+        if match is not None:
+            match["used"] = True
+            where = restore_target_name(match["path"])
+        elif name in (manifest.get("data_files") or []):
+            # A bibliography or CSL file: the metadata names it, and pdfmd looks for it beside
+            # the first metadata file (then the document), so it goes there.
+            metadata_entry = next((entry for entry in layout if entry["kind"] == "metadata"), None)
+            folder = PurePosixPath(metadata_entry["path"]).parent if metadata_entry else PurePosixPath(".")
+            where = restore_target_name(str(folder / name))
+        else:
+            where = None
+        files[str(where) if where else f"{main_name.stem}.unpacked/{name}"] = content
+    return files
+
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -9856,6 +10234,13 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           else ([metadata_file] if metadata_file else []))
         for backed_up in [md_path, *(extra_inputs or [])]:
             backup_after_success(backed_up, metadata_files, backup, verbose, backup_format)
+        if (target_format == "pdf" and source_override is None and not partial
+                and md_path.suffix.lower() in (".md", ".markdown")
+                and resolve_attach(md_path, metadata_files)):
+            produced = output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir
+                                       else md_path.with_suffix(".pdf"))
+            attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
+                                        preamble_files, effective_no_auto(md_path, no_auto), verbose)
     return result
 
 
@@ -10052,6 +10437,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-comments", dest="strip_comments", action="store_false",
                         help="keep comments, even where a document's pdfmd-options.strip-comments says to "
                              "strip them")
+    parser.add_argument("--attach-source", "--embed-source", dest="attach_source", action="store_true",
+                        default=None,
+                        help="attach the document's whole source (the assembled Markdown, comments "
+                             "stripped, plus a manifest of the original layout) to the PDF it builds, so "
+                             "`pdfmd --restore FILE.pdf` can write the folder back. A document sets it with "
+                             "pdfmd-options.attach-source (alias embed-source)")
+    parser.add_argument("--no-attach-source", dest="attach_source", action="store_false",
+                        help="attach nothing, even where a document's pdfmd-options.attach-source asks for it")
+    parser.add_argument("--restore", type=Path, default=None, metavar="PDF",
+                        help="write back the folder layout a PDF's attached source records (name.md, "
+                             "metadata/, parts/, ...) into PDF's NAME.restored/ folder (or -o DIR); never "
+                             "overwrites. With --list, only show what the PDF carries")
+    parser.add_argument("--list", dest="list_only", action="store_true",
+                        help="with --restore: show what the PDF carries, write nothing")
     parser.add_argument("--self-contained", dest="self_contained", action="store_true", default=None,
                         help="for an HTML target: one file with everything inlined (images, CSS; "
                              "--standalone --embed-resources, MathML for math). A document sets it "
@@ -10376,8 +10775,12 @@ def main() -> None:
     use_managed_tools()
     if args.debug:
         args.verbose = True
-    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI
+    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI
     STRIP_COMMENTS_CLI = args.strip_comments
+    ATTACH_CLI = args.attach_source
+    if args.restore is not None:
+        raise SystemExit(restore_from_pdf(args.restore, args.out.resolve() if args.out else None,
+                                          args.list_only))
     # -v/--verbose already means "more detail than the quiet default," and a
     # full path is exactly that kind of detail -- so --verbose (or --debug,
     # which implies it just above) turns this on too, not just --full-paths
@@ -10931,6 +11334,8 @@ def main() -> None:
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
         if result.returncode == 0:
+            if ATTACH_CLI:
+                print("NOTE  --attach-source does not cover -r/--report builds yet; nothing was attached")
             for file in files:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                     output, args.verbose, report_output=output)

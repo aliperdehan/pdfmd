@@ -41,6 +41,68 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.1 — 2026-10-07
+
+Pre-edit state: commit `3abf9c1` (v3.22.0). The PDF carries its own source:
+`--attach-source` and `--restore`. (Per-file bundles of the whole folder, images
+included, come as the next patch release.)
+
+### Added
+
+- **`--attach-source` (alias `--embed-source`), `--no-attach-source`,
+  `pdfmd-options.attach-source` (alias `embed-source`)**: after a successful PDF
+  build the document's source is attached to the PDF (PDF attachments, listed by
+  any viewer): `pdfmd-source.md`, the assembled Markdown with every kind
+  embedded (metadata, preamble, Lua filters, bibliography and CSL), comments
+  stripped (`strip-comments` defaults to on here; `strip-comments: false` keeps
+  them), and `pdfmd-manifest.json`: the document's name, a hash of the source,
+  where each embedded file sat relative to the document, each file of a parts
+  document (its path, its dropped front matter, where it began), the document's
+  own `no-auto`, the `parts` setting, and the images the text points at with
+  their hashes (recorded, not stored). Added with `pypdf` after the build, so
+  every engine, and the native tier, gets it; a failure leaves the PDF as built
+  and says so. Off by default. Not for `name#section` builds, `-r/--report`
+  or a non-PDF target (a note says reports are not covered yet).
+- **`pdfmd --restore FILE.pdf [-o DIR]`** writes the layout back into
+  `FILE.restored/`: `name.md`, `metadata/...`, the preamble, filters,
+  bibliography and CSL where they sat, and `parts/...` split by the recorded
+  boundaries. It reuses `--unpack --slim` for the embedded kinds. It never
+  overwrites (stops, writing nothing, if a file is there), never writes outside
+  its folder (a manifest path with `..`, absolute, or a drive letter is
+  refused and the file goes to `NAME.unpacked/` or the document's own name),
+  exits 1 if the attached text no longer matches its hash, and a restored Lua
+  filter is as untrusted as any other (it runs only if this machine's pdfmd
+  wrote it, or with `--trust-embedded`). `--list` shows what a PDF carries.
+- `make_embed_plan()` (the assembled branch's embed-plan construction, now
+  shared), `first_pdfmd_option()`, `option_flag()`.
+- Tests: `AttachAndRestore` (single file with metadata and preamble, comments
+  kept on request, parts with boundaries and front matter, images recorded, no
+  overwrite, a PDF with no source, an edited source, hostile paths, the CLI) on
+  blank PDFs, so they need no engine.
+
+### Checked on real documents (copies of two lab reports)
+
+- A parts report (a scaffold, 9 parts, an external metadata/Lua/bibliography set
+  behind symlinks): attached, restored to `report.md`, `parts/*.md` (all nine
+  byte-identical to the originals less their comments), `metadata/` with the
+  metadata, CSL, bibliography and preamble; with the images put back and
+  built, the PDF's text is identical to the original build's (0 differing
+  lines, 15 pages). A single-file report with a local metadata/preamble/Lua
+  set: restored layout builds the same `.tex`.
+- The comment stripper took out the long private dictation comments of every
+  part, and nothing else.
+
+### Not changed / not covered
+
+- Images and other data the text points at are recorded, not stored. Storing
+  them (`--bundle`) is the next release.
+- The Lua filter a project shares from outside its folder (not reachable
+  through a name in the folder) is restored into `NAME.unpacked/`, which pdfmd
+  searches; a symlink to it in `metadata/` is restored as the file itself.
+- Restored YAML is re-written (comments lost), like `--unpack`.
+
+---
+
 ## v3.22.0 — 2026-10-07
 
 Pre-edit state: commit `58d1202` (v3.21.5 plus a README credit for inkmd). The
