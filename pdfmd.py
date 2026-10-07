@@ -182,10 +182,15 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     sets each run of them in the first installed font of its script's list
     (Arabic and Hebrew right-to-left, Han in the Chinese, Japanese or Korean
     flavour the text or its `lang:` points to, symbols and punctuation in the
-    font of the text beside them). A document written mostly in one script the
-    automatic main font lacks letters of (STIX Two Text has no Kazakh Cyrillic)
-    gets the first serif that has them all as its main font, so no word is half
-    one font and half another. Characters no installed font has are listed in
+    font of the text beside them). How much changes is `pdfmd-options: {fallback: MODE}`
+    (--fallback, the config file): char (default: just those characters; the
+    main font stays, whatever the document names), word (the whole word in one
+    fallback font), document (the installed font that draws most of the
+    document becomes the main font), off (nothing: Pandoc's own behaviour),
+    box (no fallback, a black box per missing character) or error (no
+    fallback, the build stops). `missing: warn | box | error` is what happens
+    to characters no installed font draws.
+    Characters no installed font has are listed in
     a WARN, never silently dropped or replaced. A document that sets up its
     own scripts (ucharclasses, \\newfontfamily, xeCJK, \\babelfont,
     CJKmainfont, mainfontfallback) is left to itself unless
@@ -1005,7 +1010,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.6"
+PDFMD_VERSION = "3.23.7"
 import argparse
 import csv
 import filecmp
@@ -4382,23 +4387,75 @@ def unicode_forced(md_path: Path) -> bool:
     return str(frontmatter_pdfmd_options(md_path).get("unicode", "")).casefold() in ("true", "yes", "on", "force")
 
 
-def default_mainfont(md_paths: list[Path], metadata_files: list[Path], no_auto: list[str] | None,
-                     note=None) -> str:
-    """The main font a document gets when it names none: STIX Two Text, or the serif that draws
-    the script the document is mostly in better when STIX Two Text lacks letters of it."""
-    preferred = preferred_font()
-    module = unicode_module()
-    index = font_index()
-    if module is None or index is None or auto_disabled(no_auto, "unicode"):
-        return preferred
-    try:
-        chosen = module.choose_main_font(unicode_source_text(md_paths, metadata_files), preferred, index)
-    except (OSError, ValueError, KeyError):
-        return preferred
-    if chosen != preferred and note:
-        note("MAINFONT", f"{md_paths[0]}: {preferred} lacks letters of the document's own script; "
-                         f"using {chosen}, which has them")
-    return chosen
+# What to do about characters the main font cannot draw (`pdfmd-options: {fallback: ..., missing: ...}`,
+# --fallback / --missing, the config file's `options:`). See CONFIG_TEMPLATE for the meaning of each.
+FALLBACK_MODES = ("char", "word", "document", "off", "box", "error")
+MISSING_MODES = ("warn", "box", "error")
+FALLBACK_NAMES = {"character": "char", "per-character": "char", "run": "char", "words": "word",
+                  "per-word": "word", "whole": "document", "whole-document": "document", "doc": "document",
+                  "none": "off", "no": "off", "false": "off", "true": "char", "on": "char", "yes": "char",
+                  "black-box": "box", "err": "error", "fail": "error"}
+FALLBACK_CLI: str | None = None
+MISSING_CLI: str | None = None
+
+
+def normalise_mode(value, allowed: tuple[str, ...], aliases: dict[str, str], label: str, source: str) -> str | None:
+    if value is None:
+        return None
+    if value is False:      # YAML reads a bare `off` or `no` as false
+        text = "off"
+    elif value is True:
+        text = "on"
+    else:
+        text = str(value).strip().casefold()
+    text = aliases.get(text, text)
+    if text not in allowed:
+        raise SystemExit(f"{source}: {label} {value!r} is not one of {', '.join(allowed)}")
+    return text
+
+
+def fallback_settings(md_path: Path, metadata_files: list[Path]) -> tuple[str, str]:
+    """(fallback mode, missing mode): the command line, else the document, its metadata files, the
+    config file, else char / warn. `box` and `error` as a fallback mode mean no fallback and that
+    treatment of every missing character."""
+    where = f"{md_path}: pdfmd-options"
+    mode = normalise_mode(FALLBACK_CLI, FALLBACK_MODES, FALLBACK_NAMES, "--fallback", "pdfmd") or normalise_mode(
+        first_pdfmd_option(md_path, metadata_files, "fallback"), FALLBACK_MODES, FALLBACK_NAMES,
+        "fallback", where) or "char"
+    missing = normalise_mode(MISSING_CLI, MISSING_MODES, FALLBACK_NAMES, "--missing", "pdfmd") or normalise_mode(
+        first_pdfmd_option(md_path, metadata_files, "missing"), MISSING_MODES, FALLBACK_NAMES,
+        "missing", where) or "warn"
+    if mode in ("box", "error"):
+        missing = mode
+    return mode, missing
+
+
+def mainfont_choice(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
+                    cli_font: str | None, document_font: bool, mainfont_auto: bool,
+                    no_auto: list[str] | None, note=None) -> str | None:
+    """The main font to pass to Pandoc (None: leave the document's own). The font is never changed
+    for a few missing characters -- that is the fallback's job -- except in `fallback: document` mode,
+    where the installed font that draws most of the document replaces it."""
+    explicit = cli_font or (document_font_setting("mainfont", md_paths, metadata_files, variables)
+                            if document_font else None)
+    if explicit:
+        base = explicit
+    elif mainfont_auto:
+        base = preferred_font()
+    else:
+        return None
+    module, index = unicode_module(), font_index()
+    if (module is not None and index is not None and not auto_disabled(no_auto, "unicode")
+            and fallback_settings(md_paths[0], metadata_files)[0] == "document"
+            and not own_script_setup(md_paths, [], variables, metadata_files)):
+        chosen = module.choose_document_font(unicode_source_text(md_paths, metadata_files), base, index)
+        if chosen != base:
+            if note:
+                note("MAINFONT", f"{md_paths[0]}: fallback: document -- {chosen} draws more of it than {base}")
+            return chosen
+    if cli_font:
+        return cli_font
+    return None if document_font else base
 
 
 @contextmanager
@@ -4437,6 +4494,8 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
     index = font_index()
     skip = (module is None or index is None or auto_disabled(no_auto, "unicode")
             or (engine is not None and engine not in UNICODE_ENGINES))
+    mode, missing_mode = fallback_settings(md_paths[0], metadata_files) if not skip else ("char", "warn")
+    skip = skip or mode == "off"
     if not skip and not unicode_forced(md_paths[0]) and own_script_setup(md_paths, preamble_files, variables,
                                                                        metadata_files):
         note("UNICODE", f"{md_paths[0]}: sets up its own fonts for other scripts; leaving them to it "
@@ -4449,20 +4508,14 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
         return
     text = unicode_source_text(md_paths, metadata_files)
     language = document_font_setting("lang", md_paths, metadata_files, variables)
-    plan = module.plan_text(text, main, index, language)
+    plan = module.plan_text(text, main, index, language, fonts=mode in ("char", "word", "document"),
+                            words=mode == "word")
     UNICODE_UNCOVERED.clear()
     if plan is None:
         note("UNICODE", f"{md_paths[0]}: {main} is not among the installed fonts, so what it lacks "
                         "cannot be told")
         yield None, None
         return
-    if plan.uncovered:
-        UNICODE_UNCOVERED.update(plan.uncovered)
-        from pdfmd_unicode import install as installer
-        wanted = installer.packages_for(plan.uncovered, language)
-        hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
-        print(f"WARN  {md_paths[0]}: no installed font draws {plan.describe_uncovered()} "
-              f"({hint}, or name a font that does)", file=sys.stderr)
     if plan.emoji:
         # WeasyPrint draws Noto Color Emoji (bitmaps) badly, so it only counts the others for it.
         usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:4]
@@ -4485,11 +4538,26 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
             if plan.pictures:
                 note("UNICODE", f"{md_paths[0]}: {len(plan.pictures)} emoji set as pictures from {face.family}")
             if left:
-                UNICODE_UNCOVERED.update(left)
-                print(f"WARN  {md_paths[0]}: {engine or 'LaTeX'} cannot draw emoji ("
-                      + ("the colour emoji font has no picture for some of them" if face is not None
-                         else "no colour emoji font: pdfmd --install emoji")
-                      + "); they print as empty boxes. -e typst draws them in colour", file=sys.stderr)
+                plan.uncovered.update({code_point: 1 for code_point in left})
+    if plan.uncovered:
+        # Nothing installed draws these: warn, draw a black box, or stop, as `missing:` says.
+        UNICODE_UNCOVERED.update(plan.uncovered)
+        if missing_mode == "error":
+            raise SystemExit(f"{md_paths[0]}: the main font {main} and the installed fonts do not draw "
+                             f"{plan.describe_uncovered()} (pdfmd-options: {{missing: warn}} or {{fallback: char}} "
+                             "to build anyway)" if mode in ("char", "word", "document") else
+                             f"{md_paths[0]}: the main font {main} does not draw {plan.describe_uncovered()} "
+                             "(fallback: error)")
+        elif missing_mode == "box":
+            plan.boxes = set(plan.uncovered)
+            note("UNICODE", f"{md_paths[0]}: {len(plan.boxes)} character(s) no font draws are set as black boxes")
+        else:
+            from pdfmd_unicode import install as installer
+            wanted = installer.packages_for(plan.uncovered, language)
+            hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
+            print(f"WARN  {md_paths[0]}: no installed font draws {plan.describe_uncovered()} "
+                  f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them)",
+                  file=sys.stderr)
     if not plan:
         yield None, None
         return
@@ -10545,9 +10613,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                   f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
                                   "targets. Set papersize: yourself, or --no-auto papersize, to silence "
                                   "this and keep the Letter default")
-            tex_first_font = (None if (not is_tex_target or document_font) else
-                              (font or (default_mainfont([md_path, *parts_inputs], metadata_files, no_auto, note)
-                                        if mainfont_auto else None)))
+            tex_first_font = (None if not is_tex_target else
+                              mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
+                                              document_font, mainfont_auto, no_auto, note))
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
                                        typst_engine=(target_format == "typst"),
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
@@ -10850,9 +10918,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                           env=tex_search_env(md_path.parent, pandoc_cwd))
 
-                first_font = None if document_font else (
-                    font or (default_mainfont([md_path, *parts_inputs], metadata_files, no_auto, note)
-                             if mainfont_auto else None))
+                first_font = mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
+                                             document_font, mainfont_auto, no_auto, note)
                 # fallback=False, not fallback=document_font: Pandoc's own
                 # mainfontfallback mechanism is the one PREFERRED_FONT's
                 # comment (and the is_tex_target path's own comment above)
@@ -13007,6 +13074,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "(built in), han (pinyin, needs pypinyin or anyascii), other (every other script, "
                              "needs anyascii); `all`, `none` (Cyrillic too), `list` shows what is available. "
                              "Cyrillic (Russian, Kazakh, Ukrainian, Belarusian) is always on. Also PDFMD_TRANSLIT")
+    parser.add_argument("--fallback", metavar="MODE",
+                        help="what to do about characters the main font cannot draw: char (just those "
+                             "characters in another installed font; the default), word (the whole word), "
+                             "document (the one installed font that draws most of the document is the main "
+                             "font), off (nothing), box (black boxes) or error (stop). `pdfmd-options: "
+                             "{fallback: MODE}` or the config file's `options:` set it per document or "
+                             "for all")
+    parser.add_argument("--missing", metavar="MODE",
+                        help="what to do about characters no installed font draws: warn (default), box "
+                             "(a black box each) or error")
     parser.add_argument("--show-config", action="store_true",
                         help="print where pdfmd's global config file is, and what it sets")
     parser.add_argument("--init-config", action="store_true",
@@ -13329,6 +13406,8 @@ def main() -> None:
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
+    global FALLBACK_CLI, MISSING_CLI
+    FALLBACK_CLI, MISSING_CLI = args.fallback, args.missing
     configured = load_config().get("translit")
     if isinstance(configured, list):
         configured = ",".join(str(item) for item in configured)
@@ -13724,9 +13803,10 @@ def main() -> None:
                 if report_monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {default_monofont()} on LaTeX-family targets")
-                report_tex_font = (None if (not is_tex_target or report_document_font) else
-                                   (args.font or (default_mainfont(list(files), metadata_files, report_no_auto,
-                                                                   report_note) if report_mainfont_auto else None)))
+                report_tex_font = (None if not is_tex_target else
+                                   mainfont_choice(list(files), metadata_files, variables, args.font,
+                                                   report_document_font, report_mainfont_auto, report_no_auto,
+                                                   report_note))
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
                                            typst_engine=(target_format == "typst"),
                                            doc_count=len(files),

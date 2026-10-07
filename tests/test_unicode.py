@@ -472,6 +472,113 @@ class ColourEmoji(unittest.TestCase):
         self.assertNotIn("\U0001F680", result.stdout)
 
 
+class FallbackModes(unittest.TestCase):
+    """`fallback: char | word | document | off | box | error` and `missing: warn | box | error`."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E), (0x410, 0x44F)])
+        make_font(self.root / "noto.ttf", "Noto Serif", [(0x20, 0x7E), (0x400, 0x4FF)])
+        self.index = pu.FontIndex(self.root, use_system=False)
+        self.text = "plain \u049b\u0430\u0437\u0430\u049b end \u547d"      # a Kazakh word with one letter Main lacks
+
+    def convert(self, plan, target="latex"):
+        if not shutil.which("pandoc"):
+            self.skipTest("Pandoc not installed")
+        filter_file = self.root / "f.lua"
+        filter_file.write_text(plan.lua_filter(), encoding="utf-8")
+        return subprocess.run(["pandoc", "-f", "markdown", "-t", target, "--lua-filter", str(filter_file)],
+                              input=self.text + "\n", capture_output=True, text=True, encoding="utf-8").stdout
+
+    def test_char_sets_only_the_missing_letter(self):
+        plan = pu.plan_text(self.text, "Main Test", self.index)
+        out = self.convert(plan)
+        self.assertIn("\\pdfmdrun{A}{\u049b}\u0430\u0437\u0430\\pdfmdrun{A}{\u049b}", out)
+
+    def test_word_sets_the_whole_word_in_one_font(self):
+        plan = pu.plan_text(self.text, "Main Test", self.index, words=True)
+        self.assertEqual(plan.words, True)
+        out = self.convert(plan)
+        self.assertIn("\\pdfmdrun{A}{\u049b\u0430\u0437\u0430\u049b}", out)
+        self.assertIn("plain", out)
+        self.assertNotIn("\\pdfmdrun{A}{plain", out)  # words with nothing missing stay in the main font
+
+    def test_document_picks_the_font_that_draws_most(self):
+        self.assertEqual(pu.choose_document_font(self.text, "Main Test", self.index), "Noto Serif")
+        self.assertEqual(pu.choose_document_font("plain text", "Main Test", self.index), "Main Test")
+
+    def test_without_fonts_everything_missing_is_uncovered(self):
+        plan = pu.plan_text(self.text, "Main Test", self.index, fonts=False)
+        self.assertEqual(set(plan.uncovered), {0x49B, 0x547D})
+        self.assertFalse(plan)
+        plan.boxes = set(plan.uncovered)
+        self.assertTrue(plan)
+        self.assertIn("\\pdfmdbox", self.convert(plan))
+        self.assertIn("background:#000", self.convert(plan, "html"))
+        self.assertIn("fill: black", self.convert(plan, "typst"))
+        self.assertIn("\\pdfmdbox", plan.latex_header())
+
+    def test_settings_come_from_the_command_line_then_the_document_then_the_config(self):
+        import os
+
+        saved = {key: os.environ.get(key) for key in ("PDFMD_CONFIG",)}
+        config = self.root / "config.yaml"
+        config.write_text("options:\n  fallback: word\n  missing: box\n", encoding="utf-8")
+        os.environ["PDFMD_CONFIG"] = str(config)
+        pdfmd.load_config.cache_clear()
+        try:
+            plain = self.root / "plain.md"
+            plain.write_text("text\n", encoding="utf-8")
+            own = self.root / "own.md"
+            own.write_text("---\npdfmd-options:\n  fallback: off\n---\ntext\n", encoding="utf-8")
+            boxed = self.root / "boxed.md"
+            boxed.write_text("---\npdfmd-options:\n  fallback: box\n---\ntext\n", encoding="utf-8")
+            self.assertEqual(pdfmd.fallback_settings(plain, []), ("word", "box"))     # the config's
+            self.assertEqual(pdfmd.fallback_settings(own, []), ("off", "box"))        # YAML `off` is false, still off
+            self.assertEqual(pdfmd.fallback_settings(boxed, []), ("box", "box"))
+            pdfmd.FALLBACK_CLI, pdfmd.MISSING_CLI = "error", None
+            self.assertEqual(pdfmd.fallback_settings(plain, []), ("error", "error"))   # the command line wins
+            pdfmd.FALLBACK_CLI = "sideways"
+            with self.assertRaises(SystemExit):
+                pdfmd.fallback_settings(plain, [])
+        finally:
+            pdfmd.FALLBACK_CLI = pdfmd.MISSING_CLI = None
+            if saved["PDFMD_CONFIG"] is None:
+                os.environ.pop("PDFMD_CONFIG", None)
+            else:
+                os.environ["PDFMD_CONFIG"] = saved["PDFMD_CONFIG"]
+            pdfmd.load_config.cache_clear()
+
+    def test_the_main_font_is_not_changed_for_a_few_characters(self):
+        doc = self.root / "d.md"
+        doc.write_text("---\nmainfont: Main Test\n---\n" + self.text + "\n", encoding="utf-8")
+        pdfmd.FALLBACK_CLI = None
+        # the document's own font is left to the document (None): the fallback handles the rest
+        self.assertIsNone(pdfmd.mainfont_choice([doc], [], [], None, True, True, None))
+        self.assertEqual(pdfmd.mainfont_choice([doc], [], [], "Cli Font", True, True, None), "Cli Font")
+
+
+class FallbackErrors(unittest.TestCase):
+    def test_missing_error_stops_the_build_naming_the_characters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            doc = root / "d.md"
+            doc.write_text("---\npdfmd-options:\n  fallback: error\n---\nhello \u547d\n", encoding="utf-8")
+            real = pdfmd.font_index
+            pdfmd._FONT_INDEX = pu.FontIndex(root, use_system=False)
+            try:
+                with self.assertRaises(SystemExit) as caught:
+                    with pdfmd.script_fallback([doc], [], [], [], "Main Test", "lualatex", None, lambda *a: None):
+                        pass
+                self.assertIn("U+547D", str(caught.exception))
+            finally:
+                pdfmd._FONT_INDEX = None
+                pdfmd.reset_font_caches()
+
+
 class Integration(unittest.TestCase):
     def test_a_document_with_its_own_script_setup_is_left_alone(self):
         with tempfile.TemporaryDirectory() as directory:

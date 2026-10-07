@@ -620,7 +620,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
 | `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
-| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, or the first serif with every letter of the document's own script when STIX Two Text lacks some (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing (Times New Roman if DejaVu isn't installed) |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed); retried with DejaVu Serif if a glyph is missing. The main font is never changed for a few missing characters: see *Other scripts* |
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
@@ -656,11 +656,26 @@ xelatex, `pdfmd` reads the character tables of your installed fonts, finds
 the characters the main font cannot draw and sets each run of them in a font
 that can: Arabic and Hebrew right to left, Chinese/Japanese/Korean in the
 flavour the text (kana, hangul) or `lang:` points to, punctuation and marks in
-the font of the text beside them. If the document is mostly written in a script
-the default main font lacks letters of, the main font changes instead, so no
-word is set half in one font and half in another. Characters that no
-installed font has are named in a warning, never dropped or swapped for
-something else. `-v` shows which font each script got.
+the font of the text beside them. Characters that no installed font has are
+named in a warning, never dropped or swapped for something else. `-v` shows
+which font each script got.
+
+**How much changes is up to you** (`pdfmd-options: {fallback: MODE}`, `--fallback MODE`,
+or the config file's `options:`):
+
+| `fallback:` | What happens to a character the main font lacks |
+|---|---|
+| `char` (default) | just that character is set in another installed font; your main font stays for everything else, even if the document names `DejaVu Serif` |
+| `word` | the whole word goes in one fallback font that draws all of it, so no word mixes two fonts |
+| `document` | the installed font that draws most of the document replaces the main font (the old retry-with-DejaVu idea, chosen by coverage) |
+| `off` | nothing: what Pandoc and TeX do without pdfmd (a missing glyph vanishes or prints a box, and they warn) |
+| `box` | no fallback; each missing character is drawn as a black box, so it cannot be overlooked |
+| `error` | no fallback; the build stops, naming the missing characters |
+
+`missing: warn | box | error` says what happens to a character that *no* installed
+font draws, after the fallback (`box` and `error` as a fallback mode imply it). `char`,
+`word` and `document` also turn emoji into pictures under LaTeX; `off`, `box` and
+`error` leave them alone.
 
 Emoji are set as pictures with lualatex and xelatex (which cannot draw colour
 fonts): each emoji, flag, skin tone, family or keycap is looked up in the colour

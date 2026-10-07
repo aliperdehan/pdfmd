@@ -10,7 +10,7 @@ Independent of pdfmd.py (which imports it lazily and does without it).
 
 from . import translit
 from .fonts import Face, FontIndex, coverage
-from .plan import Plan, choose_main_font, plan_text
+from .plan import Plan, choose_document_font, choose_main_font, plan_text
 from .scripts import SCRIPT_NAMES, han_language, script_of
 
-__all__ = ["translit", "Face", "FontIndex", "Plan", "SCRIPT_NAMES", "choose_main_font", "coverage", "han_language", "plan_text", "script_of"]
+__all__ = ["translit", "Face", "FontIndex", "Plan", "SCRIPT_NAMES", "choose_document_font", "choose_main_font", "coverage", "han_language", "plan_text", "script_of"]

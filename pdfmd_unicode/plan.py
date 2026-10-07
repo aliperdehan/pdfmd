@@ -53,9 +53,12 @@ class Plan:
     common: set[int]                                # code points of Common/Inherited script
     emoji: set[int] = field(default_factory=set)    # emoji the main font lacks (drawn in colour, not by these fonts)
     pictures: dict[str, str] = field(default_factory=dict)  # emoji sequence -> PNG file, for LaTeX
+    boxes: set[int] = field(default_factory=set)    # characters drawn as a black box (missing: box)
+    words: bool = False                             # fallback fonts take whole words (fallback: word)
+    cover: dict[str, set[int]] = field(default_factory=dict)  # key -> the document's characters it draws
 
     def __bool__(self) -> bool:
-        return bool(self.choices) or bool(self.pictures)
+        return bool(self.choices) or bool(self.pictures) or bool(self.boxes)
 
     def describe(self) -> list[str]:
         """One line per font: what it was chosen for."""
@@ -94,6 +97,8 @@ class Plan:
         ]
         for choice in self.choices.values():
             lines.append(_font_line(choice))
+        if self.boxes:
+            lines.append(r"\providecommand{\pdfmdbox}{\rule[-0.1ex]{0.55em}{0.75em}}")
         if self.pictures:
             lines += [r"\usepackage{graphicx}",
                       r"\providecommand{\pdfmdemoji}[1]{\raisebox{-0.2em}{\includegraphics[height=1.1em]{#1}}}"]
@@ -118,7 +123,11 @@ class Plan:
         longest = max((len(sequence) for sequence in self.pictures), default=1)
         families = ", ".join(f'{choice.key}="{choice.family}"' for choice in self.choices.values())
         langs = ", ".join(f'{choice.key}="{choice.lang}"' for choice in self.choices.values() if choice.lang)
-        return (LUA_FILTER.replace("@CANDIDATES@", entries).replace("@COMMON@", common).replace("@RTL@", rtl)
+        boxes = ", ".join(f"[{code}]=true" for code in sorted(self.boxes))
+        covers = ", ".join("%s={%s}" % (key, ", ".join(f"[{code}]=true" for code in sorted(codes)))
+                           for key, codes in self.cover.items())
+        return (LUA_FILTER.replace("@BOXES@", boxes).replace("@WORDS@", "true" if self.words else "false")
+                .replace("@COVER@", covers).replace("@CANDIDATES@", entries).replace("@COMMON@", common).replace("@RTL@", rtl)
                 .replace("@FAMILIES@", families).replace("@LANGS@", langs).replace("@SEQUENCES@", sequences)
                 .replace("@EMOJIFIRST@", first).replace("@LONGEST@", str(longest)))
 
@@ -165,6 +174,22 @@ def choose_main_font(text: str, preferred: str, index: FontIndex) -> str:
             best, best_score = family, score(family)
             if best_score == len(letters):
                 break
+    return best
+
+
+def choose_document_font(text: str, base: str, index: FontIndex) -> str:
+    """The installed font that draws the most of ``text``: ``base`` unless another does better
+    (fallback: document -- one font for everything, the old retry-with-DejaVu behaviour)."""
+    wanted = {ord(c) for c in set(text) if ord(c) > 0x20 and not is_neutral(ord(c))}
+
+    def score(family: str) -> int:
+        face = index.regular(family)
+        return len(wanted & coverage(face.path, face.index)) if face is not None else -1
+
+    best, best_score = base, score(base)
+    for family in dict.fromkeys((*MAIN_CANDIDATES, "DejaVu Serif", "DejaVu Sans", "Noto Sans", "Arial Unicode MS")):
+        if family != base and index.static(family) and score(family) > best_score:
+            best, best_score = family, score(family)
     return best
 
 
@@ -215,9 +240,10 @@ def _key(number: int) -> str:
 
 
 def plan_text(text: str, main_family: str, index: FontIndex, document_language: str | None = None,
-              skip: frozenset[int] = frozenset()) -> Plan | None:
+              skip: frozenset[int] = frozenset(), fonts: bool = True, words: bool = False) -> Plan | None:
     """The fonts ``text`` needs besides ``main_family``, or None when the main font
-    cannot be found (so nothing can be said about what it lacks)."""
+    cannot be found (so nothing can be said about what it lacks). With ``fonts`` false nothing is
+    looked for: every character the main font lacks is reported as one no font draws."""
     main = index.regular(main_family)
     if main is None:
         return None
@@ -233,6 +259,9 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
     # A text symbol that is only sometimes asked for as a picture (the heart with U+FE0F)
     # still goes through the fonts for the occurrences that are not.
     missing = [code_point for code_point in missing if not is_emoji_code_point(code_point)]
+    if not fonts:
+        return Plan(main_family, {}, {}, {code_point: text.count(chr(code_point))
+                                        for code_point in sorted({*missing, *emoji})}, set())
     if not missing:
         return Plan(main_family, {}, {}, {}, set(), emoji)
     cjk = han_language(text, document_language)
@@ -290,7 +319,12 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
     for choice in choices.values():
         if any(code in CJK_SCRIPTS for code in choice.scripts):
             choice.lang = {"sc": "zh", "tc": "zh", "ja": "ja", "ko": "ko"}[cjk]
-    return Plan(main_family, choices, candidates, uncovered, common, emoji)
+    plan = Plan(main_family, choices, candidates, uncovered, common, emoji, words=words)
+    if words:
+        for key, choice in choices.items():
+            plan.cover[key] = {code_point for code_point in wanted
+                               if code_point in coverage(choice.face.path, choice.face.index)}
+    return plan
 
 
 LUA_FILTER = r'''-- generated by pdfmd (pdfmd_unicode): sets text the main font cannot draw in a font of its own.
@@ -302,6 +336,9 @@ local LANGS = { @LANGS@ }
 local SEQUENCES = { @SEQUENCES@ }   -- emoji sequence -> picture (LaTeX only)
 local EMOJI_FIRST = { @EMOJIFIRST@ }
 local LONGEST = @LONGEST@
+local BOXES = { @BOXES@ }        -- characters drawn as a black box
+local WORDS = @WORDS@            -- fallback fonts take whole words
+local COVER = { @COVER@ }        -- key -> the characters of the document its font draws
 
 -- "latex" (a font switch), "typst" (#text) or "html" (a styled span); nil leaves other formats alone
 local function mode()
@@ -320,6 +357,15 @@ local function has(list, key)
     if candidate == key then return true end
   end
   return false
+end
+
+local function black_box(kind)
+  if kind == "latex" then return pandoc.RawInline("latex", "\\pdfmdbox{}") end
+  if kind == "typst" then
+    return pandoc.RawInline("typst", "#box(width: 0.55em, height: 0.75em, fill: black)")
+  end
+  return pandoc.RawInline("html",
+    '<span style="display:inline-block;width:.55em;height:.75em;background:#000"></span>')
 end
 
 local function wrap(kind, key, items)
@@ -363,6 +409,10 @@ function Inlines(inlines)
               break
             end
           end
+        end
+        if not matched and BOXES[code] then
+          atoms[#atoms + 1] = { element = black_box(kind) }
+          seen, matched, position = true, true, position + 1
         end
         if not matched then
           local candidates = CANDIDATES[code]
@@ -408,6 +458,35 @@ function Inlines(inlines)
         end
       end
       atom.key = chosen or atom.candidates[1]
+    end
+  end
+
+  if WORDS then
+    -- a word that has any character in a fallback font goes wholly into one font that draws all of it
+    local first = 1
+    while first <= #atoms do
+      if atoms[first].char then
+        local last = first
+        while atoms[last + 1] and atoms[last + 1].char do last = last + 1 end
+        local keys, present = {}, {}
+        for step = first, last do
+          local key = atoms[step].key
+          if key and not present[key] then present[key] = true; keys[#keys + 1] = key end
+        end
+        for _, key in ipairs(keys) do
+          local whole = true
+          for step = first, last do
+            if not (COVER[key] and COVER[key][atoms[step].code]) then whole = false; break end
+          end
+          if whole then
+            for step = first, last do atoms[step].key = key end
+            break
+          end
+        end
+        first = last + 1
+      else
+        first = first + 1
+      end
     end
   end
 

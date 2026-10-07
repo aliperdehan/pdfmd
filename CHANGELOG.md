@@ -41,6 +41,35 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.7 — 2026-10-08
+
+Pre-edit state: commit `a61741e` (v3.23.6). The fallback is a choice, and by default it
+touches only the missing characters.
+
+### Added
+
+- **`fallback: char | word | document | off | box | error`** (`pdfmd-options`, `--fallback`, the
+  config file's `options:`; YAML's bare `off`/`no` read as false are understood): `char` is the
+  default and sets just the missing characters in another font; `word` sets a whole word in one
+  fallback font that draws all of it (a word with nothing missing stays in the main font);
+  `document` makes the installed font that draws most of the document the main font, replacing even
+  one the document names (`AUTO MAINFONT` says so); `off` is Pandoc's own behaviour (no fonts, no
+  emoji pictures, no main-font choice); `box` draws every missing character as a black box (LaTeX
+  `\rule`, Typst `#box`, an HTML span); `error` stops the build and lists them.
+- **`missing: warn | box | error`** (`--missing`): the same choice for characters no installed font
+  draws after the fallback. `box` and `error` as a fallback mode imply it.
+
+### Changed
+
+- **The main font is no longer chosen by script.** 3.23.0 replaced the automatic main font (STIX
+  Two Text) by a serif that has all the letters of the document's own script, whatever the mode; a
+  document that names its font was never touched, but the default one changed behind the user's back.
+  Now only `fallback: document` changes the main font; `char` (default) leaves it and sets the
+  missing letters (the Kazakh ә ғ қ ң ө ұ ү һ і in STIX Two Text) in another font.
+  `choose_main_font` stays in the package for callers that want it.
+
+---
+
 ## v3.23.6 — 2026-10-08
 
 Pre-edit state: commit `0573687` (v3.23.5). A global config file, and the state pdfmd keeps
