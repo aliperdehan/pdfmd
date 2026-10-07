@@ -515,8 +515,7 @@ One section of any document (`pdfmd doc#NAME`):
     section. Heading, figure and table numbers restart and references to other
     sections print as ??. Needs Pandoc (not the built-in renderers or the
     soffice fallback); `--no-auto lookup` leaves only the exact name, ignoring
-    case and spaces. Setext headings are recognised here but `--split` still
-    cuts at `# ` lines only.
+    case and spaces. `--split` cuts at the same headings, setext ones included.
 
 The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     Pandoc normally makes a .tex in a throwaway folder, runs the engine two
@@ -805,7 +804,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.2"
+PDFMD_VERSION = "3.21.3"
 import argparse
 import csv
 import filecmp
@@ -6464,40 +6463,15 @@ def print_parts(plan: ScaffoldPlan) -> None:
                 print(f"      {'  ' * depth}{ids}  [{inner.text}]")
 
 def split_top_level_sections(body: str, level: int = 1) -> list[list[str]]:
-    """Cut Markdown at its ATX headings of exactly `level` (1 = `# `). Element
-    0 is whatever comes before the first one (often a comment block). A `# `
-    line inside a fenced code block (a Python comment) or an HTML comment is
-    not a heading.
-    """
-    heading = re.compile("#{%d} \\S" % level)
-    sections: list[list[str]] = [[]]
-    fence: str | None = None
-    comment = False
-    for line in body.split("\n"):
-        stripped = line.strip()
-        if not comment:
-            marker = re.match(r"(`{3,}|~{3,})", stripped)
-            if fence is None and marker:
-                fence = marker.group(1)[0] * 3
-            elif fence is not None and stripped.startswith(fence):
-                fence = None
-        if fence is None and not comment and heading.match(line):
-            sections.append([])
-        sections[-1].append(line)
-        if fence is None:
-            position = 0
-            while True:
-                if not comment:
-                    found = line.find("<!--", position)
-                    if found < 0:
-                        break
-                    comment, position = True, found + 4
-                else:
-                    found = line.find("-->", position)
-                    if found < 0:
-                        break
-                    comment, position = False, found + 3
-    return sections
+    """Cut Markdown at its headings of exactly `level` (1 = `# ` or a line
+    underlined with `===`; 2 = `## ` or `---`; see scan_headings, which also
+    leaves alone a `#` line inside a fenced code block or an HTML comment).
+    Element 0 is whatever comes before the first one (often a comment block);
+    each later element starts with a heading's own first line."""
+    lines = body.split("\n")
+    cuts = [heading.line for heading in scan_headings(lines) if heading.level == level]
+    bounds = [0, *cuts, len(lines)]
+    return [lines[start:end] for start, end in zip(bounds, bounds[1:])]
 
 
 def slug_of(heading_line: str) -> str:
@@ -6837,7 +6811,7 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
         raise SystemExit(f"{destination} exists and is not empty; --split writes to a new folder")
     sections = split_top_level_sections(text[front.end():])
     if len(sections) < 2:
-        raise SystemExit(f"{source}: no level-1 ('# ') headings to split at")
+        raise SystemExit(f"{source}: no level-1 headings ('# Title', or a line underlined with ===) to split at")
     parts_dir = destination / "parts"
     parts_dir.mkdir(parents=True)
     lead = "\n".join(sections[0]).strip("\n")
@@ -9924,12 +9898,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-cache", dest="cache", action="store_false",
                         help="turn the cache off for this build, whatever pdfmd-options says")
     parser.add_argument("--split", type=Path, metavar="DIR",
-                        help="cut a single-file document at its '# ' headings into a scaffold plus "
+                        help="cut a single-file document at its level-1 headings ('# ' or a line underlined with ===) into a scaffold plus "
                              "parts/ in a new folder DIR (the source is untouched; other files it "
                              "uses are symlinked in), and check that the parts read back as the "
                              "identical document. See 'A long document in parts' in the docs")
     parser.add_argument("--split-depth", type=int, default=1, metavar="N",
-                        help="with --split: also cut at '## ' (N=2), '### ' (N=3) headings, each "
+                        help="with --split: also cut at level-2 (N=2; '## ' or a line underlined with ---), level-3 (N=3) headings, each "
                              "cut section becoming a folder of parts, so that a subsection can be "
                              "built alone. Default 1: top-level sections only")
     parser.add_argument("--list-parts", action="store_true",

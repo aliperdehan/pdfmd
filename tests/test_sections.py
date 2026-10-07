@@ -140,6 +140,40 @@ End.
 """
 
 
+class SplitAtHeadings(unittest.TestCase):
+    """--split cuts where sections are cut: ATX and setext headings alike."""
+
+    def test_setext_headings_start_a_part(self):
+        body = "lead\n\nTitle One\n=========\n\ntext\n\nSub\n---\n\nmore\n\n# ATX\n\nlast\n"
+        self.assertEqual([part[0] for part in pdfmd.split_top_level_sections(body, 1)],
+                         ["lead", "Title One", "# ATX"])
+        self.assertEqual([part[0] for part in pdfmd.split_top_level_sections(body, 2)], ["lead", "Sub"])
+
+    def test_what_is_not_a_heading_is_not_cut_at(self):
+        body = "# A\n\n```\n# code\n```\n\n<!--\n# hidden\n-->\n\npara\nend\n---\n\n| a |\n|---|\n"
+        self.assertEqual(len(pdfmd.split_top_level_sections(body, 1)), 2)   # the lead, and one part
+
+    def test_a_document_without_headings_is_one_piece(self):
+        self.assertEqual(pdfmd.split_top_level_sections("just text", 1), [["just text"]])
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_cli_splits_a_mixed_document_and_the_parts_read_back_identically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "book.md").write_text(
+                "---\ntitle: Mixed\n---\n\nLead.\n\nIntroduction\n============\n\nIntro.\n\n"
+                "Background\n----------\n\nBack.\n\n# Methods\n\nM.\n\nResults {#sec:res}\n=======\n\nR.\n",
+                encoding="utf-8")
+            for depth, expected in (("1", ["10-introduction.md", "20-methods.md", "30-results.md"]),
+                                    ("2", ["00-introduction.md", "10-background.md", "20-methods.md", "30-results.md"])):
+                result = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "book", "--split", f"out{depth}",
+                                         "--split-depth", depth], cwd=root, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("identical document", result.stdout)
+                self.assertEqual(sorted(path.name for path in (root / f"out{depth}").rglob("*.md")
+                                        if path.name != "book.md"), expected)
+
+
 class LabelledElements(unittest.TestCase):
     def setUp(self):
         self.lines = ELEMENTS.split("---\n", 2)[2].split("\n")

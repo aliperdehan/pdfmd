@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.3 — 2026-10-07
+
+Pre-edit state: commit `b52e436` (v3.21.2).
+
+### Fixed
+
+- **`--split` cuts at setext headings too.** A level-1 heading written as a line
+  underlined with `===` (and, with `--split-depth 2`, a level-2 one underlined
+  with `---`) starts a part like `# Title` does, instead of staying inside the
+  part before it. The cut uses the heading scanner of 3.21.1, so a `---` that
+  ends a paragraph, a table rule and `#` lines in code or comments are still not
+  headings. On documents written with `#` headings only, the cut is identical
+  to before (checked against the previous splitter at levels 1 to 3), and
+  `--split` still verifies that the parts read back as the identical document
+  (Pandoc AST compared).
+
+---
+
 ## v3.21.2 — 2026-10-07
 
 Pre-edit state: commit `2e04eee` (v3.21.1). The third step: anything with a
