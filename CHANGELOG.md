@@ -39,6 +39,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.4 — 2026-10-07
+
+Pre-edit state: commit `a8bfbbf` (v3.20.3). Patch bump: a test, no behaviour change.
+
+### Added
+
+- **`tests/test_packaging.py`**: reads `pyproject.toml` itself and fails if
+  `pyyaml`/`pypdf` stop being declared (v3.20.0 lost them, and every test still
+  passed on a machine that had both installed -- only CI, which installs what is
+  declared, noticed); if a `pdfmd --install KIND` has no `pdfmd-cli[KIND]` extra
+  naming the same packages; if the vendored `pdfmd_inkmd` package, its fonts or its
+  licences would not be shipped; or if the changelog's newest entry is not
+  `PDFMD_VERSION`. On Python 3.10, which has no `tomllib`, a small fallback reader
+  does the job, and a test checks that it agrees with `tomllib` wherever both exist.
+  Shown to fail when the dependency line is deleted.
+
+---
+
 ## v3.20.3 — 2026-10-07
 
 Pre-edit state: commit `b152b40` (v3.20.2). Found by the branch's first CI run.
