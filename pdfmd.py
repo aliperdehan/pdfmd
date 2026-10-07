@@ -447,6 +447,27 @@ Stopping early (--stop-at, v3.19.0):
     made the PDF (pdfmd, pandoc, the engine). Data a macro builds the name of
     (`data\\i.csv` in a loop) cannot be found: `--bundle all` is the fallback.
 
+PDF in, Markdown out (v3.22.7): a PDF given to pdfmd is read, not built. The
+direction follows the files: a `.pdf` input, `-o x.md`, `--to md`. `pdfmd
+paper.pdf` writes paper.md beside it (`--to txt` / `-o x.txt` for plain text;
+`-o DIR` puts DIR/paper.md). A PDF that carries its own pdfmd source (see
+--attach-source) is restored instead -- the exact thing that was written; ask
+for its pages with --extract, or by naming an output file (`-o x.md`) or --to.
+All of the reading is batchocr's (text layer or OCR, reading order, headings,
+tables): pdfmd finds it (`$PDFMD_BATCHOCR`, `batchocr` on PATH, or the module in
+this Python), checks it is 1.2.4 or newer, and passes it the PDF with every flag
+pdfmd does not know itself, unchanged -- `--ocr`, `--lang`, `--export-images`,
+`--page-breaks`, `--preview-only`, `--keep-headers`, `--stats`, `-q`, `-c`, ...
+(the names of M1ck4's pdfmd, whose PDF-to-Markdown batchocr vendors, MIT). Flags
+pdfmd owns are mapped: `-o/--output`, `-t/--to`, `-j`, `-v` (a switch here, counted
+for batchocr: `-vv` is two), `--engine` (only a `FORMAT=ENGINE` value goes on).
+Abbreviations are off on this route, so no flag is swallowed by a longer pdfmd
+one. Mixed PDF and Markdown inputs, `-o x.pdf` and a target pdfmd cannot read a
+PDF as (html, docx, ...) are refused. The exit status is batchocr's.
+`pdfmd --install batchocr` pip-installs `batchocr[md]` (PyMuPDF, AGPL-3.0, as its own
+package, never bundled) from the tagged GitHub release into the Python pdfmd runs
+from; `--check-dependencies` reports batchocr, Tesseract and Poppler.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -906,7 +927,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.6"
+PDFMD_VERSION = "3.22.7"
 import argparse
 import csv
 import filecmp
@@ -1996,6 +2017,14 @@ def dependency_report() -> bool:
     font = inkmd_emoji_font()
     print(f"{'OK  ' if font else 'MISS'}  colour emoji font for inkmd"
           + (f"  ({font})" if font else "  (pdfmd --install emoji)"))
+    print("Reading PDFs (PDF to Markdown, through batchocr):")
+    reader = find_batchocr()
+    reader_version = batchocr_version(reader) if reader else None
+    print(f"{'OK  ' if reader_version and reader_version >= BATCHOCR_MIN else 'MISS'}  batchocr"
+          + (f"  ({'.'.join(map(str, reader_version))})" if reader_version else "  (pdfmd --install batchocr)"))
+    for tool in ("tesseract", "pdftotext"):
+        path = which(tool)
+        print(f"{'OK  ' if path else 'MISS'}  {tool}" + (f"  ({path})" if path else f"  ({tesseract_install_hint()})"))
     pandoc_route = bool(pandoc and installed_engines())
     managed = managed_tool_directories()
     if managed:
@@ -2046,9 +2075,10 @@ INSTALL_SPECS = {
     "pandoc": ["pypandoc_binary"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji")
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr")
 INSTALL_SIZES = {"emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
-                 "typst": "about 15 MB download", "full": "about 50 MB download"}
+                 "typst": "about 15 MB download", "full": "about 50 MB download",
+                 "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
                               "papersize", "fontsize"})
@@ -3447,7 +3477,12 @@ def install_extra(kind: str) -> bool:
               f"{sys.version.split()[0]}. Install pdfmd with a newer Python (pipx install pdfmd-cli).",
               file=sys.stderr)
         return False
-    command = [sys.executable, "-m", "pip", "install", *INSTALL_SPECS[kind]]
+    if kind == "batchocr":
+        print("NOTE  PyMuPDF (AGPL-3.0) is installed by batchocr as its own package; pdfmd does not bundle it")
+        specs = [batchocr_spec()]
+    else:
+        specs = INSTALL_SPECS[kind]
+    command = [sys.executable, "-m", "pip", "install", *specs]
     print(f"INSTALL  {kind} ({INSTALL_SIZES[kind]}): " + " ".join(shlex.quote(part) for part in command))
     try:
         completed = subprocess.run(command)
@@ -3457,6 +3492,14 @@ def install_extra(kind: str) -> bool:
     if completed.returncode != 0:
         print(f'pip failed. Install by hand: pip install "pdfmd-cli[{kind}]"', file=sys.stderr)
         return False
+    if kind == "batchocr":
+        importlib.invalidate_caches()
+        found = find_batchocr()
+        version = batchocr_version(found) if found else None
+        print(f"Installed batchocr {'.'.join(map(str, version)) if version else '(not found yet)'}.")
+        missing = [tool for tool in ("tesseract", "pdftotext") if not which(tool)]
+        if missing:
+            print(f"NOTE  {', '.join(missing)} not found; scanned pages need them: {tesseract_install_hint()}")
     if kind == "pandoc":
         importlib.invalidate_caches()
         use_managed_tools()
@@ -10669,8 +10712,17 @@ def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf
         value = front.get(key)
         if isinstance(value, str) and value not in fonts:
             fonts.append(value)
+    texlive = None
+    if which("kpsewhich"):
+        try:
+            texlive = subprocess.run(["kpsewhich", "--version"], capture_output=True, text=True,
+                                     timeout=30).stdout.splitlines()[0].strip() or None
+        except (OSError, subprocess.SubprocessError, IndexError):
+            pass
     return {"pdfmd": PDFMD_VERSION, "pandoc": ".".join(map(str, pandoc_version())) or None,
-            "producer": producer, "fonts": fonts,
+            "producer": producer, "texlive": texlive,
+            "created": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "platform": f"{platform.system()} {platform.machine()}", "fonts": fonts,
             "tex": [{"name": dep["name"], "kind": dep["kind"], "version": dep["version"],
                      "sha256": dep["sha256"], "stored": dep["name"] in stored} for dep in deps]}
 
@@ -10686,7 +10738,8 @@ def requirement_lines(manifest: dict) -> list[str]:
     if needs.get("fonts"):
         lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
     made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
-            needs.get("producer") or ""]
+            needs.get("producer") or "", needs.get("texlive") or "", needs.get("platform") or "",
+            needs.get("created") or ""]
     if any(made):
         lines.append(f"MADE WITH {', '.join(item for item in made if item)}")
     return lines
@@ -11044,6 +11097,166 @@ def rewrite_image_paths(text: str, renamed: dict[str, str]) -> str:
         return match.group(0)[:start] + urllib.parse.quote(new, safe="/") + match.group(0)[start + len(target):]
 
     return IMAGE_REF_RE.sub(swap, text)
+
+
+# -- PDF in, Markdown out (v3.22.7) ---------------------------------------------
+# A PDF given to pdfmd is read, not built: the direction follows the files (a .pdf input,
+# `-o x.md`, `--to md`). If the PDF carries a pdfmd source it is restored (see --restore),
+# the exact thing that was written; otherwise the pages are read by batchocr, which owns
+# all of the PDF-to-Markdown work (text layer or OCR, reading order, headings, tables)
+# and which pdfmd only finds, checks the version of, and hands the PDF and every flag
+# pdfmd does not know itself -- as unknown flags go to Pandoc when a PDF is built.
+BATCHOCR_REPOSITORY = "https://github.com/aliperdehan/batchocr.git"
+BATCHOCR_TAG = "v1.2.4"
+BATCHOCR_MIN = (1, 2, 4)
+PDF_READ_FORMATS = {"md": "md", "markdown": "md", "gfm": "md", "commonmark": "md", "commonmark_x": "md",
+                    "txt": "txt", "text": "txt", "plain": "txt"}
+
+
+def batchocr_spec() -> str:
+    return os.environ.get("PDFMD_BATCHOCR_SPEC") or f"batchocr[md] @ git+{BATCHOCR_REPOSITORY}@{BATCHOCR_TAG}"
+
+
+def find_batchocr() -> list[str] | None:
+    """The command that runs batchocr: $PDFMD_BATCHOCR (a command line, for a checkout or
+    an alias that is not on PATH), `batchocr` on PATH, or the module in this Python."""
+    override = os.environ.get("PDFMD_BATCHOCR")
+    if override:
+        return shlex.split(override)
+    found = which("batchocr")
+    if found:
+        return [found]
+    try:
+        if importlib.util.find_spec("batchocr") is not None:
+            return [sys.executable, "-m", "batchocr"]
+    except (ImportError, ValueError):
+        pass
+    return None
+
+
+def batchocr_version(command: list[str]) -> tuple[int, ...] | None:
+    try:
+        text = subprocess.run([*command, "--version"], capture_output=True, text=True, timeout=60).stdout
+        return tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", text).group(1).split("."))
+    except (OSError, subprocess.SubprocessError, AttributeError, ValueError):
+        return None
+
+
+def tesseract_install_hint() -> str:
+    if sys.platform == "darwin":
+        return "brew install tesseract poppler"
+    if sys.platform == "win32":
+        return "choco install tesseract poppler (or scoop install tesseract poppler)"
+    return "sudo apt install tesseract-ocr poppler-utils (or your package manager)"
+
+
+def batchocr_missing_message(found: tuple[int, ...] | None = None) -> str:
+    what = (f"batchocr {'.'.join(map(str, found))} is too old (pdfmd needs {'.'.join(map(str, BATCHOCR_MIN))} or newer)"
+            if found else "Reading a PDF needs batchocr, which was not found")
+    return (f"{what}.\n  install it:  pdfmd --install batchocr\n"
+            f"  or by hand:  pip install \"{batchocr_spec()}\"\n"
+            f"  it also uses Tesseract and Poppler for scanned pages: {tesseract_install_hint()}\n"
+            "  (a checkout that is not on PATH: set PDFMD_BATCHOCR to the command that runs it)")
+
+
+def pdf_read_target(args) -> tuple[str, Path | None]:
+    """The format a PDF input is read as ('md' | 'txt'), and -o, from the extension of -o and --to."""
+    out = args.out
+    by_out = by_to = None
+    for label, value in (("--to", args.to), ("-o", out.suffix.lstrip(".") if out is not None else None)):
+        if not value:
+            continue
+        name = value.lower()
+        if name == "pdf":
+            raise SystemExit(f"{label}: the input is a PDF and so is the output. A PDF is read as Markdown: "
+                             "name the output x.md (or --to md)")
+        if name in PDF_READ_FORMATS:
+            if label == "--to":
+                by_to = PDF_READ_FORMATS[name]
+            else:
+                by_out = PDF_READ_FORMATS[name]
+        elif label == "--to" or "." + name in EXTENSION_FORMAT:
+            raise SystemExit(f"{label} {value}: pdfmd reads a PDF as Markdown or plain text. For {value}, read it "
+                             "first (pdfmd FILE.pdf), then convert the Markdown (pdfmd FILE.md -o ...)")
+    if by_out and by_to and by_out != by_to:
+        raise SystemExit(f"-o {out.name} says {by_out} but --to says {by_to}; choose one")
+    return by_to or by_out or "md", out
+
+
+def route_pdf_input(args, extra: list[str]) -> int | None:
+    """Handle a run whose inputs are PDFs; None when they are not."""
+    paths = list(args.path or [])
+    pdfs = [path for path in paths if path.suffix.lower() == ".pdf"]
+    if not pdfs:
+        return None
+    if len(pdfs) != len(paths):
+        raise SystemExit("PDF files and Markdown files cannot be given together; run them separately")
+    if args.batch or args.report:
+        raise SystemExit("-b and -r build PDFs from Markdown; to read PDFs, give them by name: pdfmd a.pdf b.pdf")
+    for pdf in pdfs:
+        if not pdf.is_file():
+            raise SystemExit(f"{pdf}: no such file")
+    fmt, out = pdf_read_target(args)
+    out_is_file = out is not None and out.suffix.lower() in (".md", ".markdown", ".txt")
+    read_pages = bool(args.extract or args.to or out_is_file)
+    restorable: list[Path] = []
+    for pdf in pdfs:
+        if pypdf is None:
+            break
+        try:
+            has_source = ATTACH_MANIFEST in read_pdf_attachments(pdf)
+        except Exception:  # noqa: BLE001 -- unreadable here; batchocr will say what is wrong with it
+            has_source = False
+        if has_source and not read_pages:
+            restorable.append(pdf)
+        elif has_source:
+            print(f"NOTE  {pdf.name} carries its own source; `pdfmd --restore {pdf.name}` writes it back "
+                  "(reading its pages, as asked)", file=sys.stderr)
+    status = 0
+    for pdf in restorable:
+        print(f"NOTE  {pdf.name} carries its own source; restoring it (--extract reads the pages instead)",
+              file=sys.stderr)
+        folder = None if out is None else (out if len(pdfs) == 1 else out / pdf.stem)
+        status = max(status, restore_from_pdf(pdf, folder.resolve() if folder else None))
+    rest = [pdf for pdf in pdfs if pdf not in restorable]
+    if not rest:
+        return status
+    command = find_batchocr()
+    if command is None:
+        raise SystemExit(batchocr_missing_message())
+    version = batchocr_version(command)
+    if version is not None and version < BATCHOCR_MIN:
+        raise SystemExit(batchocr_missing_message(version))
+    suffix = ".md" if fmt == "md" else ".txt"
+    call = [*command, *map(str, rest), "--to", fmt]
+    to_stdout = any(item in ("-s", "--stdout") for item in extra)
+    produced: list[Path] = []
+    if out is not None and not to_stdout:
+        if len(rest) == 1 and (out_is_file or not out.is_dir() and not out.suffix):
+            target = out if out_is_file else out / (rest[0].stem + suffix)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            call += ["-o", str(target)]
+            produced = [target]
+        else:
+            out.mkdir(parents=True, exist_ok=True)
+            call += ["-o", str(out)]
+            produced = [out / (pdf.stem + suffix) for pdf in rest]
+    else:
+        produced = [pdf.with_suffix(suffix) for pdf in rest]
+    levels = (sum(len(token) - 1 for token in sys.argv[1:] if re.fullmatch(r"-v+", token))
+              + sys.argv[1:].count("--verbose"))
+    call += ["-v"] * (levels or (1 if args.verbose else 0))     # pdfmd's -v is a switch, batchocr's a counter
+    if args.jobs and args.jobs > 1:
+        call += ["-j", str(args.jobs)]
+    if args.engine and "=" in args.engine:
+        call += ["--engine", args.engine]          # batchocr's FORMAT=ENGINE; pdfmd's own --engine is a PDF engine
+    call += extra
+    print(f"ROUTE  {', '.join(pdf.name for pdf in rest)} -> batchocr"
+          + (f" {'.'.join(map(str, version))}" if version else "") + f" ({fmt})", file=sys.stderr)
+    code = subprocess.run(call).returncode
+    if code == 0 and args.open and produced and produced[0].is_file():
+        open_file(produced[0])
+    return max(status, code)
 
 
 def restore_target_name(name: str) -> PurePosixPath | None:
@@ -11457,7 +11670,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--recursive", action="store_true",
                         help="include Markdown files in subdirectories (batch and report/book modes; "
                              "off by default, both search the given directory only)")
-    parser.add_argument("-o", "--out", type=Path,
+    parser.add_argument("-o", "--out", "--output", type=Path,
                         help="output directory (batch) or filename (single-file/report/book); "
                              "a recognized extension (e.g. .html, .tex, .typ) also selects the "
                              "target format, same as --to")
@@ -11530,6 +11743,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.bundle-packages")
     parser.add_argument("--no-bundle", dest="bundle", action="store_const", const="off",
                         help="attach no files beside the source, even where a document's pdfmd-options.bundle asks")
+    parser.add_argument("--extract", action="store_true",
+                        help="a PDF input that carries its own pdfmd source is restored by default; "
+                             "--extract reads its pages instead (through batchocr), as any other PDF is")
     parser.add_argument("--restore", type=Path, default=None, metavar="PDF",
                         help="write back the folder layout a PDF's attached source records (name.md, "
                              "metadata/, parts/, ...) into PDF's NAME.restored/ folder (or -o DIR); never "
@@ -11857,6 +12073,12 @@ def run_watch(source: Path, argv: list[str]) -> None:
 
 def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
+    if args.path and all(path.suffix.lower() == ".pdf" for path in args.path):
+        # Reading a PDF: the unknown flags are batchocr's, and an abbreviation must not
+        # swallow one (`-c` is batchocr's --concat and an abbreviation of pdfmd's -cwd).
+        reader_parser = build_parser()
+        reader_parser.allow_abbrev = False
+        args, pandoc_options = reader_parser.parse_known_args()
     use_managed_tools()
     if args.debug:
         args.verbose = True
@@ -11887,6 +12109,9 @@ def main() -> None:
         raise SystemExit(0 if dependency_report() else 1)
     if args.install:
         raise SystemExit(0 if install_extra(args.install) else 1)
+    routed = route_pdf_input(args, pandoc_options)
+    if routed is not None:
+        raise SystemExit(routed)
     if not which("pandoc") and not native_possible(args):
         raise SystemExit(PANDOC_MISSING)
     paths = args.path or [Path.cwd()]

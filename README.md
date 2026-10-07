@@ -329,7 +329,7 @@ file you can edit again. Ask for it, on the command line or in the document:
 
 ```sh
 pdfmd report --attach-source     # the source goes into report.pdf as an attachment
-pdfmd report --bundle            # ... and the images and data it needs
+pdfmd report --bundle            # ... and the data and files its LaTeX reads
 pdfmd --restore report.pdf       # write the folder back into report.restored/
 ```
 
@@ -337,28 +337,89 @@ pdfmd --restore report.pdf       # write the folder back into report.restored/
 pdfmd-options:
   attach-source: true            # alias: embed-source
   bundle: true                   # or `all`: the whole folder, not just what the text points at
-  strip-comments: true           # the default for the attached copy; `false` keeps <!-- --> notes
+  bundle-packages: true          # also your own LaTeX packages (see below)
+  strip-comments: true           # the default for the attached copy; see "Comments"
+  attach-bibliography: used      # or `all`
 ```
 
-The attachment is the assembled Markdown with the metadata, preamble, Lua filters
-and bibliography folded in (the same file `--assemble-only --embed-metadata`
-writes), plus a small manifest of the original layout, so `--restore` gives back
-`report.md`, `metadata/`, `parts/` and the rest where they were. Any PDF viewer
-lists the attachments, and `pdfmd --restore report.pdf --list` shows them. A
-restored folder builds the same document: checked on a report of nine parts.
+Put these in the shared metadata file and every document that finds it carries
+its source. The attachment is the assembled Markdown with the metadata,
+preamble, Lua filters, bibliography and CSL style folded in (the file
+`--assemble-only --embed-metadata` writes), plus a manifest of the original
+layout, so `--restore` gives back `report.md`, `metadata/`, `parts/` and the rest
+where they were, each as a standalone file (a symlinked metadata file or
+bibliography comes back as a copy). Any PDF viewer lists the attachments, and
+`pdfmd --restore report.pdf --list` shows them and what a rebuild needs. A
+restored folder builds the same document: checked on lab reports with a house
+style, a compound library, a shared bibliography and parts.
 
-- **Comments do not travel.** The attached source loses every `<!-- -->` comment
-  (notes to yourself, drafts, the BUILD NOTES block), except inside code and
-  pdfmd's own markers. `--strip-comments` does the same for `--assemble-only`.
-- **Images and data are not in the source.** `--bundle` stores them as separate
-  attachments (`files/...`), found from the text, the preamble and any word that
-  names an existing file; `--bundle all` takes the whole folder except output
-  and housekeeping. Over 100 MB (`bundle-max-mb`) only the source is attached.
+- **Images come out of the PDF itself.** The PDF holds every picture it drew, so
+  a plain attach needs no bundle for them: a JPEG comes back byte for byte, a PNG
+  as the same pixels (alpha kept), and an SVG or PDF figure as a vector PDF
+  (`fig.svg` becomes `fig.pdf`, and the restored Markdown follows).
+- **`--bundle` is for what the PDF does not draw:** CSV data, LaTeX included
+  with `\input`, listings. They are stored as separate attachments (`files/...`),
+  found from the text, the preamble and, in turn, from the files found; also
+  those only your own TeX tree resolves (`\input{library}` from `texmf-home`).
+  `--bundle all` takes the whole folder except output and housekeeping. Over
+  100 MB (`bundle-max-mb`) only the source is attached. Data whose file name a
+  macro builds cannot be found: use `all`.
+- **Your own LaTeX packages** (a house style in `texmf-home`) are recorded with
+  their version, and `--restore` tells you what is missing; `--bundle-packages`
+  stores them too (with what they `\input` and the graphics they name).
+  The TeX distribution's own packages, fonts and Pandoc are not carried.
+- **Comments.** Notes to yourself do not travel: the attached source loses its
+  `<!-- -->` comments, the LaTeX preamble's `%` comments, the text between a
+  `.bib`'s entries and a CSL file's XML comments. Choose per kind:
+  `strip-comments: [preamble, bibliography]` or `{markdown: false}`
+  (`--strip-comments-in`, `--keep-comments-in`). Code blocks, `\verb`, `\url` and
+  verbatim environments are never touched, and a `%` that closes a line keeps a
+  bare `%`, because it swallows the line break. YAML metadata is merged and
+  written again, so its `#` comments are always gone.
+- **Only the bibliography entries you cite** are attached (and what they
+  cross-reference), not a shared file of hundreds; `attach-bibliography: all`
+  keeps it whole, and `nocite: '@*'` keeps every entry.
 - **It is opt-in, and it is everything you wrote.** An attached source includes
   what the author would not send in an email; check `--list` before sharing.
-- `--restore` never overwrites a file and never writes outside its folder, and a
-  restored Lua filter does not run until you trust it (`--trust-embedded`).
-- Not yet: `-r/--report` builds, and a section build (`doc#section`).
+- `--restore` never overwrites a file and never writes outside its folder. A
+  restored Lua filter is code that pdfmd runs beside the document, so restore
+  names it: read it first if the PDF is not from you.
+- `-r/--report` builds attach their chapters too. A section build (`doc#section`)
+  attaches nothing.
+
+### PDF to Markdown
+
+The direction follows the files you give it:
+
+```sh
+pdfmd paper.pdf                  # -> paper.md, beside it
+pdfmd paper.pdf -o notes/p.md    # an exact file; -o notes/ puts notes/paper.md
+pdfmd paper.pdf --to txt         # plain text
+pdfmd scan.pdf --lang eng+rus --ocr tesseract --export-images
+```
+
+A PDF that carries its own pdfmd source (above) is restored instead; `--extract`
+(or naming an output file) reads its pages. Everything else is read by
+[batchocr](https://github.com/aliperdehan/batchocr): the text layer in reading
+order, OCR for scanned pages, headings, lists, tables, running headers removed,
+`<!-- Page N -->` markers (`--no-page-markers`, `--page-breaks`, `--keep-headers`).
+pdfmd only routes: any flag it does not know goes to batchocr unchanged, so the
+options of [M1ck4's pdfmd](https://github.com/M1ck4/pdfmd) (`--ocr`, `--lang`,
+`--export-images`, `--page-breaks`, `--preview-only`, `--stats`, `-q`, `--output`)
+work as they did. Install the reader once:
+
+```sh
+pdfmd --install batchocr         # pip install batchocr[md] from its GitHub release
+brew install tesseract poppler   # for scanned pages (apt: tesseract-ocr poppler-utils)
+```
+
+Credits and licences: batchocr's Markdown structure stages are M1ck4's
+(MIT; that project is archived) and are vendored inside batchocr with their
+licence. PyMuPDF, which they use, is AGPL-3.0: it is installed as its own
+package by batchocr's `md` extra and is never part of pdfmd. The command name
+`pdfmd` is also used by that project and by an unrelated PyPI package of the same
+name; this one installs as `pdfmd-cli` (and `pdfmd`), so if two are installed use
+`pdfmd-cli` to be sure which one runs.
 
 ### Slides
 

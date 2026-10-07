@@ -41,6 +41,44 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.7 — 2026-10-07
+
+Pre-edit state: commit `d584d35` (v3.22.6). A PDF given to pdfmd is read, not
+built: PDF to Markdown, with all of the reading in batchocr.
+
+### Added
+
+- **PDF input**: `pdfmd paper.pdf` writes `paper.md`; the direction follows the
+  files (a `.pdf` input, `-o x.md`, `-o x.txt`, `--to md|txt`). A PDF that carries
+  a pdfmd source is restored (`--restore`) instead; `--extract`, `-o FILE` or `--to`
+  read its pages. `-o x.pdf`, a target such as `--to html`, contradictory
+  `-o`/`--to`, and PDF mixed with Markdown inputs are refused before anything runs.
+- **Everything pdfmd does not know goes to batchocr unchanged** (M1ck4's flag
+  names: `--ocr`, `--lang`, `--export-images`, `--page-breaks`, `--preview-only`,
+  `--stats`, `--no-progress`, `-q`, `--no-color`; and batchocr's own). The flags
+  that exist in both are mapped: `-o/--output` (`--output` is new, an alias of
+  `--out`), `-t/--to`, `-j`, `-v` (pdfmd's is a switch, batchocr's a counter, so
+  `-vv` is passed as two), `--engine` (batchocr's takes `FORMAT=ENGINE`; only such
+  a value goes on). Abbreviations are switched off on this route: `-c`
+  (batchocr's `--concat`) used to be taken as an abbreviation of pdfmd's `-cwd`.
+  Checked for every one of batchocr's 47 options and M1ck4's.
+- **`pdfmd --install batchocr`**: `pip install "batchocr[md] @ git+https://github.com/aliperdehan/batchocr.git@v1.2.4"`
+  into the Python pdfmd runs from (`PDFMD_BATCHOCR_SPEC` overrides the spec, for a
+  checkout), with a note that PyMuPDF is AGPL-3.0 and installed as its own
+  package, and the brew/apt command for Tesseract and Poppler if they are missing.
+  `PDFMD_BATCHOCR` names a command for a checkout that is not on PATH.
+  `--check-dependencies` reports batchocr, Tesseract and Poppler.
+- The manifest of an attached source also records when and on what it was made
+  (timestamp, platform, TeX Live) beside the pdfmd, pandoc and engine versions.
+- README: "PDF to Markdown", with the credit to M1ck4 and the licence note.
+
+### Notes
+
+- batchocr 1.2.4's tags exist only locally until it is pushed; `--install batchocr`
+  needs `v1.2.4` on GitHub.
+
+---
+
 ## v3.22.6 — 2026-10-07
 
 Pre-edit state: commit `1311d83` (v3.22.5). A PDF that was attached without
