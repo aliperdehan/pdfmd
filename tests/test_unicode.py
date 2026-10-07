@@ -109,6 +109,16 @@ class FontFiles(unittest.TestCase):
         self.assertIn(0x1F600, covered)
         self.assertNotIn(0x61, covered)
 
+    def test_the_regular_face_stands_for_a_family(self):
+        make_font(self.root / "a-medium.ttf", "Family", [(0x41, 0x5A)], style="Medium")
+        make_font(self.root / "b-regular.ttf", "Family", [(0x41, 0x5A)], style="Regular")
+        make_font(self.root / "c-bold.ttf", "Family", [(0x41, 0x5A)], style="Bold")
+        index = pu.FontIndex(self.root, use_system=False)
+        self.assertEqual(index.regular("Family").style, "Regular")
+        self.assertEqual(index.regular("family").path.endswith("b-regular.ttf"), True)
+        self.assertEqual(set(index.styles(index.regular("Family"))), {"bold"})
+        self.assertIsNone(index.regular("No Such Family"))
+
     def test_unreadable_files_cover_nothing(self):
         junk = self.root / "junk.ttf"
         junk.write_bytes(b"not a font")

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 FONT_SUFFIXES = (".ttf", ".otf", ".ttc", ".otc")
-REGULAR_STYLES = ("regular", "roman", "book", "normal", "medium", "text")
+REGULAR_STYLES = ("regular", "roman", "book", "normal", "text", "medium")
 UNSUPPORTED_FORMATS = ("type 1", "pcf", "bdf", "bitmap", "cff bitmap")
 
 
@@ -257,11 +257,11 @@ class FontIndex:
         candidates = self._by_name.get(family.casefold())
         if not candidates:
             return None
-        plain = [face for face in candidates if face.style.casefold() in REGULAR_STYLES]
-        # A managed copy wins over a system one of the same name: it is the one pdfmd chose.
-        pool = plain or candidates
-        pool = sorted(pool, key=lambda face: (not face.managed, len(face.style), face.index))
-        return pool[0]
+        # A managed copy wins over a system one of the same name: it is the one pdfmd chose. Then the
+        # plainest style ("Regular" before "Medium"), then a static font before a variable one.
+        rank = {name: number for number, name in enumerate(REGULAR_STYLES)}
+        return min(candidates, key=lambda face: (not face.managed, rank.get(face.style.casefold(), 50),
+                                                 is_variable(face.path), len(face.style), face.index))
 
     def styles(self, face: Face) -> dict[str, Face]:
         """The bold/italic/bold-italic faces beside ``face`` (same family, same folder)."""

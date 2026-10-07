@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.5 — 2026-10-08
+
+Pre-edit state: commit `2468b07` (v3.23.4).
+
+### Fixed
+
+- Finding a family's regular face without fontconfig (the scan of the font folders used on
+  machines without `fc-list`): "Regular" now ranks before "Medium" (a family whose Medium file
+  sorted first used to stand for the whole family), and a static font before a variable one.
+  Checked on Python 3.9 as well as 3.14.
+
+---
+
 ## v3.23.4 — 2026-10-08
 
 Pre-edit state: commit `5a38677` (v3.23.3). Fonts in more places.
