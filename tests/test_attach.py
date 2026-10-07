@@ -553,3 +553,150 @@ class BundleReach(unittest.TestCase):
                 pdfmd.os.environ["TEXMFHOME"] = old
             pdfmd.find_in_tex_tree.cache_clear()
             pdfmd.tex_distribution_roots.cache_clear()
+
+
+def png_rows(data: bytes) -> tuple[tuple[int, int, int, int], bytes]:
+    """(width, height, depth, colour type) and the unfiltered scanlines of a PNG made by encode_png."""
+    import struct
+    import zlib
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    position, header, idat = 8, None, b""
+    while position < len(data):
+        length = struct.unpack(">I", data[position:position + 4])[0]
+        kind = data[position + 4:position + 8]
+        body = data[position + 8:position + 8 + length]
+        assert zlib.crc32(kind + body) & 0xFFFFFFFF == struct.unpack(">I", data[position + 8 + length:position + 12 + length])[0]
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBB", body[:10])
+        elif kind == b"IDAT":
+            idat += body
+        position += 12 + length
+    raw = zlib.decompress(idat)
+    stride = len(raw) // header[1]
+    return header, b"".join(raw[line * stride + 1:(line + 1) * stride] for line in range(header[1]))
+
+
+MINI_JPEG = b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x02\x00\x03\x01\x01\x11\x00\xff\xd9"      # a 3x2 SOF0 header, enough to size
+
+
+@unittest.skipIf(pypdf is None, "pypdf not installed")
+class PicturesFromThePdf(unittest.TestCase):
+    """The pictures a plain attach does not store come out of the PDF itself (v3.22.6)."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = Path(self.folder.name)
+        self.addCleanup(self.folder.cleanup)
+
+    def pdf_with(self, name: str, pictures: list) -> Path:
+        from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject, FloatObject, NameObject,
+                                   NumberObject)
+        writer = pypdf.PdfWriter()
+        page = writer.add_blank_page(width=200, height=200)
+        xobjects = DictionaryObject()
+        for index, picture in enumerate(pictures):
+            stream = DecodedStreamObject()
+            stream.set_data(picture["data"])
+            stream[NameObject("/Type")] = NameObject("/XObject")
+            if picture["kind"] == "form":
+                stream[NameObject("/Subtype")] = NameObject("/Form")
+                stream[NameObject("/BBox")] = ArrayObject(FloatObject(value) for value in picture["bbox"])
+            else:
+                stream[NameObject("/Subtype")] = NameObject("/Image")
+                stream[NameObject("/Width")] = NumberObject(picture["width"])
+                stream[NameObject("/Height")] = NumberObject(picture["height"])
+                stream[NameObject("/BitsPerComponent")] = NumberObject(8)
+                stream[NameObject("/ColorSpace")] = NameObject(picture.get("space", "/DeviceRGB"))
+                if picture.get("filter"):
+                    stream[NameObject("/Filter")] = NameObject(picture["filter"])
+            xobjects[NameObject(f"/Im{index}")] = writer._add_object(stream)
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): xobjects})
+        path = self.root / name
+        with path.open("wb") as handle:
+            writer.write(handle)
+        return path
+
+    def test_png_encoder_writes_what_it_was_given(self):
+        rows = bytes(range(12))                           # 2x2 RGB
+        header, back = png_rows(pdfmd.encode_png(2, 2, 8, 2, rows))
+        self.assertEqual(header, (2, 2, 8, 2))
+        self.assertEqual(back, rows)
+
+    def test_picture_sizes(self):
+        (self.root / "a.png").write_bytes(pdfmd.encode_png(3, 2, 8, 2, bytes(18)))
+        (self.root / "b.jpg").write_bytes(MINI_JPEG)
+        (self.root / "c.svg").write_text('<svg width="100mm" height="2in" viewBox="0 0 1 1"></svg>', encoding="utf-8")
+        (self.root / "d.svg").write_text('<svg viewBox="0 0 40 20"></svg>', encoding="utf-8")
+        size = pdfmd.file_picture_size
+        self.assertEqual(size(self.root / "a.png"), ("raster", 3, 2))
+        self.assertEqual(size(self.root / "b.jpg"), ("raster", 3, 2))
+        kind, width, height = size(self.root / "c.svg")
+        self.assertEqual(kind, "vector")
+        self.assertAlmostEqual(width, 283.46, places=1)
+        self.assertAlmostEqual(height, 144.0, places=1)
+        self.assertEqual(size(self.root / "d.svg"), ("vector", 30.0, 15.0))
+        self.assertIsNone(size(self.root / "missing.png"))
+
+    def test_attach_then_restore_gives_pictures_back_without_a_bundle(self):
+        import zlib
+        (self.root / "fig").mkdir()
+        pixels = bytes((7 * index) % 256 for index in range(4 * 3 * 3))        # 4x3 RGB
+        (self.root / "fig" / "p.png").write_bytes(pdfmd.encode_png(4, 3, 8, 2, pixels))
+        (self.root / "fig" / "j.jpg").write_bytes(MINI_JPEG)
+        (self.root / "fig" / "v.svg").write_text('<svg width="100" height="60"></svg>', encoding="utf-8")
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n![a](fig/p.png) ![b](fig/j.jpg) ![c](fig/v.svg)\n", encoding="utf-8")
+        pdf = self.pdf_with("r.pdf", [
+            {"kind": "image", "width": 4, "height": 3, "data": zlib.compress(pixels), "filter": "/FlateDecode"},
+            {"kind": "image", "width": 3, "height": 2, "data": MINI_JPEG, "filter": "/DCTDecode"},
+            {"kind": "form", "bbox": [0, 0, 75, 45], "data": b"0 0 1 rg 0 0 75 45 re f"}])
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(document, pdf, [], [], [], None, False)
+        manifest = json.loads(pypdf.PdfReader(pdf).attachments["pdfmd-manifest.json"][0])
+        self.assertTrue(all(image.get("pdf") for image in manifest["images"]), manifest["images"])
+        out = self.root / "out"
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(pdfmd.restore_from_pdf(pdf, out), 0)
+        self.assertEqual(png_rows((out / "fig" / "p.png").read_bytes()), ((4, 3, 8, 2), pixels))
+        self.assertEqual((out / "fig" / "j.jpg").read_bytes(), MINI_JPEG)                  # byte for byte
+        figure = pypdf.PdfReader(out / "fig" / "v.pdf")
+        self.assertEqual((float(figure.pages[0].mediabox.width), float(figure.pages[0].mediabox.height)), (75.0, 45.0))
+        self.assertFalse((out / "fig" / "v.svg").exists())
+        self.assertIn("![c](fig/v.pdf)", (out / "r.md").read_text(encoding="utf-8"))      # the Markdown follows
+
+    def test_a_bundle_stores_the_files_and_extracts_nothing(self):
+        (self.root / "p.png").write_bytes(pdfmd.encode_png(1, 1, 8, 2, b"\x01\x02\x03"))
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n![a](p.png)\n", encoding="utf-8")
+        import zlib
+        pdf = self.pdf_with("r.pdf", [{"kind": "image", "width": 1, "height": 1, "data": zlib.compress(b"\x01\x02\x03"),
+                                        "filter": "/FlateDecode"}])
+        saved = pdfmd.BUNDLE_CLI
+        pdfmd.BUNDLE_CLI = "referenced"
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                pdfmd.attach_source_after_success(document, pdf, [], [], [], None, False)
+        finally:
+            pdfmd.BUNDLE_CLI = saved
+        manifest = json.loads(pypdf.PdfReader(pdf).attachments["pdfmd-manifest.json"][0])
+        self.assertNotIn("pdf", manifest["images"][0])
+        self.assertIn("files/p.png", pypdf.PdfReader(pdf).attachments)
+
+    def test_a_picture_that_is_not_in_the_pdf_is_only_recorded(self):
+        (self.root / "gone.png").write_bytes(pdfmd.encode_png(5, 5, 8, 2, bytes(75)))
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n![a](gone.png)\n", encoding="utf-8")
+        pdf = blank_pdf(self.root / "r.pdf")
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(document, pdf, [], [], [], None, False)
+        out = self.root / "out"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            pdfmd.restore_from_pdf(pdf, out)
+        self.assertIn("recorded, not in the PDF", buffer.getvalue())
+        self.assertFalse((out / "gone.png").exists())
+
+    def test_rewrite_image_paths(self):
+        text = "![a](x/v.svg) ![b](<x/v.svg> \"t\") <img src=\"x/v.svg\"> [link](x/v.svg) ![c](x/other.svg)\n"
+        self.assertEqual(pdfmd.rewrite_image_paths(text, {"x/v.svg": "x/v.pdf"}),
+                         "![a](x/v.pdf) ![b](<x/v.pdf> \"t\") <img src=\"x/v.pdf\"> [link](x/v.svg) ![c](x/other.svg)\n")

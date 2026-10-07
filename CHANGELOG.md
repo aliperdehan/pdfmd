@@ -41,6 +41,32 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.6 — 2026-10-07
+
+Pre-edit state: commit `1311d83` (v3.22.5). A PDF that was attached without
+`--bundle` still gets its images back: the PDF holds every picture it drew.
+
+### Added
+
+- **`--restore` takes the Markdown's images out of the PDF itself** when they
+  were not bundled. The manifest records, for each image, which picture of the
+  PDF it is (found by its size and its order among the pictures; a JPEG by its
+  bytes, since every engine copies the file's own stream) and restore writes it
+  back: a JPEG **byte for byte**; a PNG, GIF or other raster as a PNG of the
+  PDF's pixels (grey, palette, RGB at 1-16 bits, and an alpha channel from the
+  soft mask), not the original file but the same picture; an **SVG or PDF
+  figure as a one-page vector PDF** (`fig.svg` comes back as `fig.pdf`, and the
+  restored Markdown now points at `fig.pdf`: restore says so). A picture the PDF
+  does not hold is only recorded, as before. Checked by restoring a document
+  with RGB, RGBA, grey, palette, JPEG, SVG and PDF figures and building it
+  again: every page renders pixel-identical, and the restored PNGs equal the
+  originals pixel for pixel. No new dependency (zlib and pypdf).
+- **`--bundle` is not needed for images any more**; it stays for data and
+  anything the PDF does not draw. A bundle stores the original files and
+  extracts nothing.
+
+---
+
 ## v3.22.5 — 2026-10-07
 
 Pre-edit state: commit `fb3fd74` (v3.22.4). A bundle that rebuilds on a machine

@@ -408,9 +408,17 @@ Stopping early (--stop-at, v3.19.0):
     text no longer matches its recorded hash. The YAML is the re-written one
     (comments lost, as --unpack says), the text is the original's less its
     comments, and the restored folder builds the same `.tex` the original did;
-    what the text points at (images, data) is not in the PDF and has to be
-    put back beside it (or stored, see --bundle). --list shows what the PDF
-    carries and writes nothing.
+    data the text points at is not in the PDF and has to be put back beside it
+    (or stored, see --bundle). --list shows what the PDF carries and writes
+    nothing.
+    (v3.22.6) The images the Markdown points at need no bundle: the PDF holds
+    every picture it drew, and the manifest records which is which (by size and
+    order; a JPEG by its bytes). Restore takes them out: a JPEG byte for byte, a
+    PNG or other raster as a PNG of the PDF's pixels (alpha kept, the file is
+    not the original's), an SVG or PDF figure as a one-page vector PDF -- a
+    restored `fig.svg` is `fig.pdf`, and the restored Markdown points at it
+    (restore says so). A picture the PDF does not hold (TikZ, pgfplots, a
+    figure that is raw LaTeX) is only recorded.
 
     --bundle [all] / --no-bundle, `pdfmd-options: {bundle: true | all}` (v3.22.2)
     store, beside the source, the files it cannot carry, each as its own
@@ -898,7 +906,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.5"
+PDFMD_VERSION = "3.22.6"
 import argparse
 import csv
 import filecmp
@@ -912,6 +920,7 @@ import platform
 import tarfile
 import urllib.parse
 import urllib.request
+import struct
 import zipfile
 import zlib
 from collections import namedtuple
@@ -10741,6 +10750,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                                        **({"from": origins[name]} if name in origins else {})}
                                       for name, data in extras.items()]
                 manifest["outside"] = sorted({Path(name).name for name in outside})
+        match_images_to_pdf(pdf_path, [image for image in manifest["images"] if image["path"] not in extras], base)
         manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, pdf_path)
         write_pdf_attachments(pdf_path, {
             ATTACH_SOURCE: merged.encode("utf-8"),
@@ -10770,6 +10780,270 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
             print("NOTE  " + line[10:])
         elif verbose:
             print(line)
+
+
+# -- The images the PDF itself carries (v3.22.6) --------------------------------
+# A plain attach (no --bundle) does not store the images the text points at, but the PDF
+# holds every one it drew. The manifest records, for each, which picture of the PDF is
+# it, and --restore takes it out again: a JPEG is the very same bytes (every engine
+# embeds the file's own stream), a PNG or other raster comes back as a PNG of the
+# pixels the PDF holds (the picture is the same; the file is not byte-identical, and an
+# alpha channel is kept), an SVG or PDF figure as a one-page PDF of the vector drawing
+# (a restored `fig.svg` is `fig.pdf`, and the restored Markdown points at it). A picture
+# is found by its size and its order in the PDF, a JPEG by its bytes; a figure drawn by
+# something other than an image or a form (TikZ, pgfplots) was never a file.
+SVG_UNITS = {"": 0.75, "px": 0.75, "pt": 1.0, "pc": 12.0, "mm": 72 / 25.4, "cm": 72 / 2.54, "in": 72.0}
+DECODE_LIMIT = 64 * 1024 * 1024
+
+
+def png_chunk(kind: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+
+def encode_png(width: int, height: int, depth: int, colour: int, rows: bytes,
+               palette: bytes | None = None) -> bytes:
+    """A PNG of ``rows`` (the samples of every scanline, each padded to a byte, no filter byte)."""
+    stride = len(rows) // height
+    raw = b"".join(b"\x00" + rows[line * stride:(line + 1) * stride] for line in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, colour, 0, 0, 0))
+            + (png_chunk(b"PLTE", palette) if palette else b"") + png_chunk(b"IDAT", zlib.compress(raw, 9))
+            + png_chunk(b"IEND", b""))
+
+
+def file_picture_size(path: Path) -> tuple[str, float, float] | None:
+    """('raster', width, height) in pixels for a PNG, JPEG or GIF; ('vector', width, height)
+    in points for an SVG or a PDF; None for anything else or anything unreadable."""
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".png":
+            with path.open("rb") as handle:
+                head = handle.read(24)
+            return ("raster", *struct.unpack(">II", head[16:24])) if head[:8] == b"\x89PNG\r\n\x1a\n" else None
+        if suffix in (".jpg", ".jpeg"):
+            data = path.read_bytes()
+            position = 2
+            while position + 9 < len(data):
+                if data[position] != 0xFF:
+                    position += 1
+                    continue
+                marker = data[position + 1]
+                if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7 or marker == 0xFF:
+                    position += 1 if marker == 0xFF else 2
+                    continue
+                if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                    height, width = struct.unpack(">HH", data[position + 5:position + 9])
+                    return "raster", width, height
+                position += 2 + struct.unpack(">H", data[position + 2:position + 4])[0]
+            return None
+        if suffix == ".gif":
+            with path.open("rb") as handle:
+                width, height = struct.unpack("<HH", handle.read(10)[6:10])
+            return "raster", width, height
+        if suffix == ".svg":
+            root = re.search(r"<svg\b[^>]*>", path.read_text(encoding="utf-8", errors="replace"), re.DOTALL)
+            if root is None:
+                return None
+            dimension: dict[str, float] = {}
+            for name in ("width", "height"):
+                found = re.search(r"\b" + name + r"\s*=\s*[\"']\s*([0-9.]+)\s*([a-z%]*)\s*[\"']", root.group(0))
+                if found and found.group(2) in SVG_UNITS:
+                    dimension[name] = float(found.group(1)) * SVG_UNITS[found.group(2)]
+            if len(dimension) < 2:
+                box = re.search(r"viewBox\s*=\s*[\"']\s*[-0-9.]+[ ,]+[-0-9.]+[ ,]+([0-9.]+)[ ,]+([0-9.]+)", root.group(0))
+                if box is None:
+                    return None
+                dimension = {"width": float(box.group(1)) * 0.75, "height": float(box.group(2)) * 0.75}
+            return "vector", dimension["width"], dimension["height"]
+        if suffix == ".pdf" and pypdf is not None:
+            box = pypdf.PdfReader(path).pages[0].cropbox
+            return "vector", float(box.width), float(box.height)
+    except Exception:  # noqa: BLE001 -- a hint, never a failure
+        return None
+    return None
+
+
+def pdf_pictures(reader) -> list[dict]:
+    """The images and forms drawn on the pages of ``reader`` (top level), in page order:
+    {id, kind 'image'|'form', stream sha256, width, height, object}. An image that is
+    some other image's soft mask is left out."""
+    masks: set[int] = set()
+    found: list[dict] = []
+    seen: set[int] = set()
+    for page in reader.pages:
+        resources = page.get("/Resources")
+        resources = resources.get_object() if resources is not None else {}
+        xobjects = resources.get("/XObject")
+        if xobjects is None:
+            continue
+        for _, reference in xobjects.get_object().items():
+            if reference.idnum in seen:
+                continue
+            seen.add(reference.idnum)
+            obj = reference.get_object()
+            subtype = obj.get("/Subtype")
+            try:
+                raw = obj._data if hasattr(obj, "_data") else b""
+                if subtype == "/Image":
+                    mask = obj.get("/SMask")
+                    if mask is not None and hasattr(mask, "idnum"):
+                        masks.add(mask.idnum)
+                    found.append({"id": reference.idnum, "kind": "image", "sha256": hashlib.sha256(raw).hexdigest(),
+                                  "width": int(obj["/Width"]), "height": int(obj["/Height"]), "object": obj})
+                elif subtype == "/Form":
+                    box = [float(item) for item in obj["/BBox"]]
+                    found.append({"id": reference.idnum, "kind": "form", "sha256": hashlib.sha256(raw).hexdigest(),
+                                  "width": abs(box[2] - box[0]), "height": abs(box[3] - box[1]), "object": obj})
+            except (KeyError, TypeError, ValueError):
+                continue
+    return [item for item in found if item["id"] not in masks]
+
+
+def match_images_to_pdf(pdf_path: Path, images: list[dict], base: Path) -> None:
+    """Add a ``pdf`` record to each of ``images`` ({path, ...}) that can be found in the PDF."""
+    if not images or pypdf is None:
+        return
+    pictures = pdf_pictures(pypdf.PdfReader(pdf_path))
+    taken: set[int] = set()
+    for image in images:
+        path = base / image["path"]
+        size = file_picture_size(path)
+        if size is None:
+            continue
+        kind, width, height = size
+        match = None
+        if kind == "raster":
+            if path.suffix.lower() in (".jpg", ".jpeg"):
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                match = next((item for item in pictures if item["kind"] == "image" and item["sha256"] == digest
+                              and item["id"] not in taken), None)
+            if match is None:
+                match = next((item for item in pictures if item["kind"] == "image" and item["id"] not in taken
+                              and (item["width"], item["height"]) == (int(width), int(height))), None)
+        else:
+            match = next((item for item in pictures if item["kind"] == "form" and item["id"] not in taken
+                          and abs(item["width"] - width) < 0.6 and abs(item["height"] - height) < 0.6), None)
+        if match is not None:
+            taken.add(match["id"])
+            image["pdf"] = {"kind": match["kind"], "sha256": match["sha256"],
+                            "width": round(match["width"], 3), "height": round(match["height"], 3)}
+
+
+def samples_to_png(obj) -> bytes | None:
+    """A PNG of an image XObject's pixels, or None if it is a kind this cannot write."""
+    if obj.get("/Decode") is not None or obj.get("/Mask") is not None or obj.get("/ImageMask"):
+        return None
+    width, height = int(obj["/Width"]), int(obj["/Height"])
+    depth = int(obj.get("/BitsPerComponent", 8))
+    space = obj.get("/ColorSpace")
+    space = space.get_object() if space is not None else None
+    palette = None
+    if isinstance(space, list) and space and str(space[0]) == "/Indexed":
+        lookup = space[3].get_object()
+        palette = lookup.get_data() if hasattr(lookup, "get_data") else bytes(lookup)
+        palette = palette[:3 * (int(space[2]) + 1)]
+        colour, channels = 3, 1
+    else:
+        name = str(space[0] if isinstance(space, list) and space else space)
+        if name == "/ICCBased":
+            channels = int(space[1].get_object().get("/N", 3))
+            name = {1: "/DeviceGray", 3: "/DeviceRGB"}.get(channels, "")
+        if name in ("/DeviceGray", "/CalGray"):
+            colour, channels = 0, 1
+        elif name in ("/DeviceRGB", "/CalRGB"):
+            colour, channels = 2, 3
+        else:
+            return None
+    rows = obj.get_data()
+    stride = (width * channels * depth + 7) // 8
+    if len(rows) < stride * height or width * height * channels * max(depth, 8) // 8 > DECODE_LIMIT:
+        return None
+    rows = rows[:stride * height]
+    mask = obj.get("/SMask")
+    if mask is not None and depth == 8 and colour in (0, 2):
+        mask = mask.get_object()
+        alpha = mask.get_data()
+        if (int(mask["/Width"]), int(mask["/Height"]), int(mask.get("/BitsPerComponent", 8))) == (width, height, 8) \
+                and len(alpha) >= width * height:
+            pixels = bytearray()
+            for index in range(width * height):
+                row, column = divmod(index, width)
+                start = row * stride + column * channels
+                pixels += rows[start:start + channels] + alpha[index:index + 1]
+            return encode_png(width, height, 8, colour + 4, bytes(pixels))
+    return encode_png(width, height, depth, colour, rows, palette)
+
+
+def form_to_pdf(reader, picture: dict) -> bytes:
+    """A one-page PDF drawing the form ``picture`` (an SVG or PDF figure as the PDF holds it)."""
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    form = picture["object"]
+    box = [float(item) for item in form["/BBox"]]
+    writer = pypdf.PdfWriter()
+    page = writer.add_blank_page(width=abs(box[2] - box[0]), height=abs(box[3] - box[1]))
+    cloned = writer._add_object(form.clone(writer))
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): DictionaryObject({NameObject("/Fm0"): cloned})})
+    drawing = DecodedStreamObject()
+    drawing.set_data(f"q 1 0 0 1 {-min(box[0], box[2]):.4f} {-min(box[1], box[3]):.4f} cm /Fm0 Do Q".encode())
+    page[NameObject("/Contents")] = writer._add_object(drawing)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+def extract_pdf_images(pdf_path: Path, images: list[dict], skip: set[str]) -> tuple[dict[str, bytes], dict[str, str], list[str]]:
+    """The pictures of ``images`` ({path, pdf: {...}}) taken out of the PDF: ({path: bytes},
+    {path: the name it is restored under, where that is not its own}, paths that could not be)."""
+    out: dict[str, bytes] = {}
+    renamed: dict[str, str] = {}
+    failed: list[str] = []
+    wanted = [image for image in images if image.get("pdf") and image["path"] not in skip]
+    if not wanted:
+        return out, renamed, failed
+    reader = pypdf.PdfReader(pdf_path)
+    pictures = pdf_pictures(reader)
+    for image in wanted:
+        record = image["pdf"]
+        same = [item for item in pictures if item["sha256"] == record["sha256"] and item["kind"] == record["kind"]]
+        picture = next((item for item in same if (item["width"], item["height"]) == (record["width"], record["height"])),
+                       same[0] if same else None)
+        name = image["path"]
+        try:
+            if picture is None:
+                raise ValueError("not in the PDF")
+            if picture["kind"] == "form":
+                data, target = form_to_pdf(reader, picture), str(PurePosixPath(name).with_suffix(".pdf"))
+            elif str(picture["object"].get("/Filter")) == "/DCTDecode":
+                data, target = picture["object"]._data, (name if PurePosixPath(name).suffix.lower() in (".jpg", ".jpeg")
+                                                          else str(PurePosixPath(name).with_suffix(".jpg")))
+            else:
+                data = samples_to_png(picture["object"])
+                if data is None:
+                    raise ValueError("a kind of image this does not write")
+                target = name if PurePosixPath(name).suffix.lower() == ".png" else str(PurePosixPath(name).with_suffix(".png"))
+        except Exception:  # noqa: BLE001 -- one picture not coming out is not the restore failing
+            failed.append(name)
+            continue
+        out[target] = data
+        if target != name:
+            renamed[name] = target
+    return out, renamed, failed
+
+
+def rewrite_image_paths(text: str, renamed: dict[str, str]) -> str:
+    """``text`` (Markdown) with the image paths in ``renamed`` pointing at their new names."""
+    if not renamed:
+        return text
+
+    def swap(match: "re.Match[str]") -> str:
+        group = 1 if match.group(1) else 2
+        target = match.group(group)
+        new = renamed.get(urllib.parse.unquote(target.split("#")[0].split("?")[0]))
+        if new is None:
+            return match.group(0)
+        start = match.start(group) - match.start()
+        return match.group(0)[:start] + urllib.parse.quote(new, safe="/") + match.group(0)[start + len(target):]
+
+    return IMAGE_REF_RE.sub(swap, text)
 
 
 def restore_target_name(name: str) -> PurePosixPath | None:
@@ -10818,7 +11092,8 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
     stored = {item["path"] for item in extras}
     for image in manifest.get("images") or []:
         if image["path"] not in stored:
-            print(f"IMAGE     {image['path']}  (recorded, not stored in the PDF)")
+            print(f"IMAGE     {image['path']}  ("
+                  + ("taken out of the PDF's own picture" if image.get("pdf") else "recorded, not in the PDF") + ")")
     for item in extras:
         print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
     if list_only:
@@ -10839,6 +11114,20 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
                   file=sys.stderr)
             status = 1
         files[str(where)] = data
+    pictures, renamed, failed = extract_pdf_images(pdf_path, manifest.get("images") or [], stored)
+    for name in failed:
+        print(f"WARN  {name}: the PDF's picture could not be taken out; put the file back beside the document",
+              file=sys.stderr)
+    for name, data in pictures.items():
+        where = restore_target_name(name)
+        if where is not None and str(where) not in files:
+            files[str(where)] = data
+    for name, new in renamed.items():
+        print(f"IMAGE     {name} comes back as {new} (the PDF holds the drawing, not the original file)")
+    if renamed:
+        files = {name: (rewrite_image_paths(content, renamed) if isinstance(content, str)
+                        and name.lower().endswith((".md", ".markdown")) else content)
+                 for name, content in files.items()}
     clashes = [item for item in files if (target / item).exists()]
     if clashes:
         raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; nothing was written "
