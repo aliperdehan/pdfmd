@@ -699,7 +699,8 @@ something can't be drawn.
 
 Code is held to the same standard: a character the monofont lacks (an arrow, a CJK
 comment) in inline code or a code block is set in a fallback font under LaTeX (a code
-block that needs one is typeset as plain verbatim, without syntax highlighting). Math is
+block that needs one is typeset as plain verbatim, without syntax highlighting), and
+through Typst's `codefont` list or a CSS font stack on Typst and WeasyPrint. Math is
 left to its own font.
 
 `missing: warn | box | error` (`--missing`) says what happens to a character that *no* installed

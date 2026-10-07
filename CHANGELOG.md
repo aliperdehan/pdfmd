@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.13 — 2026-10-08
+
+Pre-edit state: commit `44091c8` (v3.23.12). Code on Typst and WeasyPrint.
+
+### Added
+
+- **Fallback fonts for code on Typst and WeasyPrint**: the characters the code's font lacks (DejaVu
+  Sans Mono, Typst's default, or the document's `monofont`; Menlo and friends on WeasyPrint) are set in
+  the fallback fonts through Typst's `codefont` list (`-V codefont=...`, which Typst reads glyph by
+  glyph) and a CSS `font-family` rule for `code`/`pre`. The main-font choice by script and
+  `fallback: document` already applied to every engine (pdfmd's default font, with the `AUTO MAINFONT` note).
+
+---
+
 ## v3.23.12 — 2026-10-08
 
 Pre-edit state: commit `4a835b4` (v3.23.11). The cache can live beside the document, and a moved

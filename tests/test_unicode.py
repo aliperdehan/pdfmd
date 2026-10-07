@@ -688,6 +688,49 @@ class CheckFonts(unittest.TestCase):
         self.assertIn("pdfmd --install fonts:cjk-sc", text)
 
 
+class CodeFontsForOtherEngines(unittest.TestCase):
+    """Typst takes a `codefont` list, WeasyPrint a CSS font-family for code."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+        make_font(self.root / "mono.ttf", "DejaVu Sans Mono", [(0x20, 0x7E)])
+        make_font(self.root / "songti.ttf", "Songti SC", [(0x4E00, 0x9FFF)])
+        make_font(self.root / "menlo.ttf", "Menlo", [(0x20, 0x7E)])
+        self.doc = self.root / "d.md"
+        self.doc.write_text("hello\n\n```\nx = '\u547d'\n```\n", encoding="utf-8")
+        pdfmd._FONT_INDEX = pu.FontIndex(self.root, use_system=False)
+        self.addCleanup(self._reset)
+
+    def _reset(self):
+        pdfmd._FONT_INDEX = None
+        pdfmd.UNICODE_CODE_FONTS.clear()
+        pdfmd.reset_font_caches()
+
+    def run_fallback(self, engine):
+        notes = []
+        with pdfmd.script_fallback([self.doc], [], [], [], "Main Test", engine, None, lambda *a: notes.append(a)) as made:
+            return made, list(pdfmd.UNICODE_CODE_FONTS)
+
+    def test_typst_gets_a_codefont_list(self):
+        (header, filter_file), fonts = self.run_fallback("typst")
+        self.assertEqual(fonts, ["DejaVu Sans Mono", "Songti SC"])
+
+    def test_weasyprint_gets_a_css_rule(self):
+        _, fonts = self.run_fallback("weasyprint")
+        self.assertEqual(fonts, ["Menlo", "Songti SC"])
+        pdfmd.UNICODE_CODE_FONTS[:] = fonts
+        with pdfmd.managed_fonts_css("weasyprint") as header:
+            text = header.read_text(encoding="utf-8")
+        self.assertIn('font-family: "Menlo", "Songti SC", monospace', text)
+
+    def test_latex_keeps_its_own_way(self):
+        (header, filter_file), fonts = self.run_fallback("lualatex")
+        self.assertEqual(fonts, [])
+
+
 class FallbackErrors(unittest.TestCase):
     def test_missing_error_stops_the_build_naming_the_characters(self):
         with tempfile.TemporaryDirectory() as directory:

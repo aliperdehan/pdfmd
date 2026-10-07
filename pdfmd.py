@@ -199,7 +199,9 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     CJKmainfont, mainfontfallback) is left to itself unless
     `pdfmd-options: {unicode: true}`; `--no-auto unicode` turns it all off.
     Fonts a build cannot load are dropped and the build retried without them.
-    Code is checked against the monofont the same way (LaTeX): inline code and
+    Code is checked against the monofont the same way: Typst gets the missing
+    characters' fonts as its `codefont` list, WeasyPrint as a CSS font stack; under
+    LaTeX inline code and
     code blocks get their own missing characters set in a fallback font (a code
     block that needs one becomes a fancyvrb Verbatim, losing its syntax
     highlighting); math is left to unicode-math.
@@ -1027,7 +1029,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.12"
+PDFMD_VERSION = "3.23.13"
 import argparse
 import csv
 import filecmp
@@ -4253,6 +4255,9 @@ def table_width_filter() -> Iterator[Path]:
 # A document that has set up its own scripts (ucharclasses, \newfontfamily, xeCJK,
 # \babelfont, a font fallback variable) keeps its own way: --no-auto unicode
 # switches this off, and `pdfmd-options: {unicode: true}` forces it on regardless.
+# What Typst and Pandoc's HTML put code in by default (the first of these that is installed).
+CODE_FONTS_TYPST = ("DejaVu Sans Mono",)
+CODE_FONTS_HTML = ("Menlo", "Monaco", "Consolas", "Lucida Console", "DejaVu Sans Mono")
 EMOJI_FAMILIES = ("Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twemoji Mozilla", "Noto Emoji")
 UNICODE_ENGINES = ("lualatex", "xelatex", "typst", "weasyprint")
 OWN_SCRIPT_SETUP_RE = re.compile(r"ucharclasses|\\newfontfamily|\\babelfont|xeCJK|luatexja|CJKutf8|\\setCJK"
@@ -4507,11 +4512,15 @@ def managed_fonts_css(engine: str | None) -> Iterator[Path | None]:
     """For WeasyPrint, which finds fonts through fontconfig: an @font-face rule for every font in
     pdfmd's own folder, so a document can name them like installed ones."""
     index = managed_index() if engine == "weasyprint" else None
-    if index is None or not index.faces:
+    rules = []
+    if engine == "weasyprint" and UNICODE_CODE_FONTS:
+        # code: the fonts it already used, then the ones for its other characters, then any monospace
+        stack = ", ".join(f'"{family}"' for family in UNICODE_CODE_FONTS)
+        rules.append(f"code, pre, pre code, code span {{ font-family: {stack}, monospace; }}")
+    if not rules and (index is None or not index.faces):
         yield None
         return
-    rules = []
-    for face in index.faces:
+    for face in (index.faces if index is not None else []):
         if "emoji" in face.family.casefold():
             continue  # WeasyPrint draws bitmap colour fonts (Noto Color Emoji) badly
         style = face.style.casefold()
@@ -4631,15 +4640,24 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
     fonts_on = mode in ("char", "word", "document")
     plan = module.plan_text(text, main, index, language, fonts=fonts_on, words=mode == "word")
     UNICODE_UNCOVERED.clear()
+    UNICODE_CODE_FONTS.clear()
     code_uncovered: set[int] = set()
-    if plan is not None and (engine is None or engine in LATEX_ENGINES):
+    if plan is not None:
         # Code is set in the monofont, which lacks other characters than the main font does.
         code_text = unicode_code_text(md_paths)
-        mono = document_font_setting("monofont", md_paths, metadata_files, variables) or default_monofont()
+        latex = engine is None or engine in LATEX_ENGINES
+        mono = (document_font_setting("monofont", md_paths, metadata_files, variables)
+                or (default_monofont() if latex else next(
+                    (family for family in (CODE_FONTS_TYPST if engine == "typst" else CODE_FONTS_HTML)
+                     if index.has(family)), "DejaVu Sans Mono")))
         code_plan = module.plan_text(code_text, mono, index, language, fonts=fonts_on) if code_text.strip() else None
         if code_plan is not None:
             code_uncovered = set(code_plan.uncovered) | set(code_plan.emoji)
-            plan.add_code(code_plan)
+            if latex:
+                plan.add_code(code_plan)
+            elif code_plan.choices:
+                UNICODE_CODE_FONTS.extend(dict.fromkeys(choice.family for choice in code_plan.choices.values()))
+                UNICODE_CODE_FONTS.insert(0, mono)
             if code_plan.choices:
                 for line in code_plan.describe():
                     note("UNICODE", f"{md_paths[0]}: code in {mono} lacks {line}")
@@ -5549,6 +5567,9 @@ def has_code_spans(text: str) -> bool:
 # Characters no installed font draws (script_fallback has already warned about them): a
 # missing-glyph warning that is only about those is not a reason to retry with another font.
 UNICODE_UNCOVERED: set[int] = set()
+# The families code needs for the characters its monofont lacks, for Typst's `codefont` list and
+# WeasyPrint's CSS (script_fallback sets it; LaTeX gets them through its Lua filter instead).
+UNICODE_CODE_FONTS: list[str] = []
 
 
 def missing_glyph_warning(output: str) -> bool:
@@ -11118,6 +11139,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["-t", "beamer"]
                         if slide_level is not None:
                             cmd += ["--slide-level=" + str(slide_level)]
+                    if engine == "typst" and UNICODE_CODE_FONTS and not any(
+                            variable.startswith("codefont=") for variable in variables):
+                        for family in UNICODE_CODE_FONTS:
+                            cmd += ["-V", f"codefont={family}"]
                     if selected_font:
                         cmd += font_args("mainfont", selected_font, engine in LATEX_ENGINES)
                     elif engine in LATEX_ENGINES:
