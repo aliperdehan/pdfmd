@@ -10,7 +10,7 @@ dynamic = ["version"]
 description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults, project-file discovery and a multi-engine fallback chain"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "pdfmd_inkmd/LICENSE", "pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt"]
 authors = [{ name = "Ali Perdekhan" }]
 requires-python = ">=3.10"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
@@ -25,6 +25,19 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: LaTeX",
 ]
 
+[project.optional-dependencies]
+# Without Pandoc or a PDF engine, pdfmd falls back to a built-in renderer
+# (a vendored inkmd, in pdfmd_inkmd/). These two make it better:
+#   math  - md2pdf (pymd2pdf, Python 3.11+) with offline LaTeX math
+#   emoji - the colour emoji font, which the vendored inkmd leaves out
+#   pandoc - the real Pandoc (pypandoc_binary bundles the executable)
+# `pdfmd --install math|emoji|pandoc` installs the same things; `--install
+# typst` (a release binary from GitHub, not on PyPI) and `full` (pandoc + typst)
+# go beyond what pip can do.
+math = ["pymd2pdf>=0.6,<0.7; python_version >= '3.11'", "matplotlib"]
+emoji = ["inkmd>=0.5,<0.6"]
+pandoc = ["pypandoc_binary"]
+
 [project.urls]
 Homepage = "https://github.com/aliperdehan/pdfmd"
 Changelog = "https://github.com/aliperdehan/pdfmd/blob/main/CHANGELOG.md"
@@ -34,6 +47,10 @@ pdfmd = "pdfmd:main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
+packages = ["pdfmd_inkmd"]
+
+[tool.setuptools.package-data]
+pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pdfmd.PDFMD_VERSION" }

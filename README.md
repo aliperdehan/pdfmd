@@ -58,9 +58,13 @@ To update later, run `pipx upgrade pdfmd-cli`. (The package is named
 The command is still `pdfmd`. For the latest unreleased code, use `pipx
 install git+https://github.com/aliperdehan/pdfmd`.)
 
-`pdfmd` drives programs that pip can't install, so you also need:
+For the full pipeline, `pdfmd` drives programs that pip can't install, so you
+also need (without them it still makes a plain PDF; see
+[No Pandoc?](#no-pandoc-the-built-in-fallback) below). The quickest way, with no
+admin rights, is `pdfmd --install full`, which puts Pandoc and Typst in pdfmd's own
+folders; the system installers below do the same job:
 
-- **[Pandoc](https://pandoc.org/installing.html)** (required)
+- **[Pandoc](https://pandoc.org/installing.html)**
 - **at least one PDF engine**. [Typst](https://typst.app) is the quickest
   start; a TeX distribution (MacTeX, TeX Live) gives the best results and
   is what you need for LaTeX packages and math-heavy documents.
@@ -91,7 +95,8 @@ Office files.
 <details>
 <summary>Without pipx</summary>
 
-`pdfmd.py` is a single file that needs Python 3.10+. It also runs
+`pdfmd.py` is a single file that needs Python 3.10+ (with `pdfmd_inkmd/`
+beside it for the no-Pandoc fallback). It also runs
 directly, and `pyyaml`/`pypdf` are optional (features that need them are
 skipped with a warning):
 
@@ -124,6 +129,63 @@ OK    quarto (only needed for .qmd files)  (/usr/local/bin/quarto)
 
 The numbers are the fallback order, and also shortcuts: `-e 6` means
 `-e typst`.
+
+### No Pandoc? The built-in fallback
+
+On a machine with no Pandoc, or Pandoc but no PDF engine, `pdfmd` does not
+stop: it builds a plain PDF with a pure-Python renderer that `pip` installed
+with it, and says so.
+
+```console
+$ pdfmd notes.md
+NOTE  Pandoc was not found: building with the built-in renderer (inkmd). The output is plain ...
+NATIVE  notes.md via inkmd
+WARN  native (inkmd): notes.md: 2 math expression(s) set as plain text (Unicode, sub/superscripts, display math centred); ...
+OK    notes.md
+```
+
+- **inkmd** is built in (vendored in `pdfmd_inkmd/`, about 2 MB, standard
+  library only, works offline, same input gives the same bytes). It reads
+  GitHub-flavoured Markdown: headings, emphasis, lists, task lists, tables,
+  code blocks, quotes, links, images, and PNG/JPEG. It cannot typeset math,
+  so formulas are set as readable text instead: Greek letters and operators
+  as Unicode, `x^2` and `x_i` as super/subscripts, `\frac{a}{b}` as `a/b`,
+  and display math (`$$...$$`, `\begin{equation}`, `aligned`) as its own
+  centred lines. No bookmarks, no page numbers.
+- **md2pdf** ([pymd2pdf](https://pypi.org/project/pymd2pdf/), ReportLab based) is
+  used when installed, for documents with footnotes, math or a title:
+  `pdfmd --install math` (same as `pip install "pdfmd-cli[math]"`; about
+  150 MB, Python 3.11+, installs matplotlib so formulas render offline, centred,
+  as real math; the few matplotlib cannot read are set as text like inkmd's).
+  Footnotes, bookmarks and syntax-highlighted code come with it.
+- `pdfmd --install emoji` (`pdfmd-cli[emoji]`, about 11 MB) adds the colour
+  emoji font; without it emoji print as `[rocket]`-style labels.
+- `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
+  real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
+  / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about
+  15 MB, also `--install typst`, checked against the SHA-256 GitHub lists) into
+  pdfmd's own folders (`~/.local/share/pdfmd/bin`, `%LOCALAPPDATA%\pdfmd\bin`),
+  with no admin rights. A Pandoc or Typst already on your PATH always wins; to
+  remove them, `pip uninstall pypandoc_binary` and delete the `typst` file.
+
+Every input is treated as GitHub-flavoured Markdown. Pandoc-only syntax is
+converted where possible (`\newpage` and `<!-- pagebreak -->` become a page
+break, footnotes become endnotes for inkmd, `$` prices are not mistaken for math)
+and removed otherwise (heading and image attributes, `:::` divs, raw LaTeX,
+`<!-- comments -->`), with one warning per kind. CSV tables
+(`::: {.csv file="data.csv"}`) work as they do with Pandoc. The title, author and date in the
+front matter become a title block and the PDF's own title and author; other
+front-matter keys (`documentclass`, `header-includes`, `pdfmd-options`) are
+listed as not used. There are no filters, preambles, citations, slides, parts or
+report mode, and only Markdown input: for any of those, `pdfmd --install full`
+(or `brew install pandoc typst`, `winget install JohnMacFarlane.Pandoc Typst.Typst`).
+
+The built-in renderer is chosen automatically only when there is no Pandoc
+route; a Pandoc build that fails never falls back to it. Ask for it with
+`-e inkmd`, `-e md2pdf` or `-e native`, or `pdf-engine: inkmd` in `pdfmd-options`.
+When it runs on a terminal and had to leave something out, `pdfmd` offers the
+upgrades above (set `PDFMD_NO_PROMPT=1` to silence that; choosing "don't ask
+again" remembers it).
 
 ## Usage
 
