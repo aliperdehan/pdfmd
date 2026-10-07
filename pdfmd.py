@@ -705,7 +705,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.4"
+PDFMD_VERSION = "3.19.5"
 import argparse
 import filecmp
 import hashlib
@@ -4157,6 +4157,7 @@ PARTS_DIR_ALIASES = ("parts", "sections")
 # document (nulabreport's `moved` blocks need the Appendix) can degrade
 # instead of failing: `pdfmd-partial` is true in the document's metadata.
 PARTIAL_METADATA = ["-M", "pdfmd-partial=true"]
+PARTIAL_KEY = "pdfmd-partial"
 PARTS_SKIP_DIRS = frozenset({"backup", "backups"})
 PARTS_ON = {"true", "yes", "on", "auto"}
 PARTS_OFF = {"false", "no", "off", "none"}
@@ -4740,7 +4741,7 @@ def is_assembled_document(path: Path) -> bool:
         return False
 
 
-def mark_assembled(text: str, no_auto: list[str] | None = None) -> str:
+def mark_assembled(text: str, no_auto: list[str] | None = None, partial: bool = False) -> str:
     """Mark ``text`` as assembled: ASSEMBLED_KEY in its front matter if it
     has a block, else an HTML comment at the end. Never a NEW front-matter
     block: that would change how the document reads -- Pandoc's own `% title`
@@ -4749,14 +4750,20 @@ def mark_assembled(text: str, no_auto: list[str] | None = None) -> str:
     matter at all.
     """
     if re.match(r"^---[ \t]*\n", text):
-        return re.sub(r"^---[ \t]*\n", f"---\n{ASSEMBLED_KEY}: true\n", text, count=1)
+        # A partial build (`report#methods`) tells Pandoc `-M pdfmd-partial=true`
+        # on the command line; the assembled file has to carry it itself.
+        marks = f"{ASSEMBLED_KEY}: true\n" + (f"{PARTIAL_KEY}: true\n" if partial else "")
+        return re.sub(r"^---[ \t]*\n", f"---\n{marks}", text, count=1)
+    if partial:
+        print(f"WARN  a partial build with no front matter cannot record {PARTIAL_KEY}; a filter "
+              "that reads it will not see it when the assembled file is built", file=sys.stderr)
     comment = (ASSEMBLED_COMMENT if not no_auto else
                f"<!-- pdfmd-assembled: true; no-auto: {','.join(no_auto)} -->")
     return text.rstrip("\n") + f"\n\n{comment}\n"
 
 
 def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
-                           plan: "EmbedPlan | None" = None) -> str:
+                           plan: "EmbedPlan | None" = None, partial: bool = False) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
@@ -4771,13 +4778,14 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
         chunks.append(text.rstrip("\n") + "\n")
     joined = "\n".join(chunks)
     if plan is not None:
-        return embed_into_text(joined, sources[0], plan)
-    return mark_assembled(joined)
+        return embed_into_text(joined, sources[0], plan, partial)
+    return mark_assembled(joined, partial=partial)
 
 
 def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
-                             plan: "EmbedPlan | None" = None) -> tuple[bool, str]:
+                             plan: "EmbedPlan | None" = None,
+                             partial: bool = False) -> tuple[bool, str]:
     """Write the --stop-at markdown stage. Never over one of its own sources:
     `-o report.md` would otherwise replace the very file it was built from.
     """
@@ -4788,7 +4796,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
     output.parent.mkdir(parents=True, exist_ok=True)
     if plan is not None:
         plan.output = output
-    text = assemble_markdown_text(sources, drop_later_front_matter, plan)
+    text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial)
     output.write_text(text, encoding="utf-8", newline="\n")
     print(f"ASSEMBLED  {display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
           f"{len(text.splitlines())} lines)")
@@ -5131,7 +5139,8 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
                                             allow_unicode=True, default_flow_style=False, width=10**6)
                     notes.append(f"METADATA  {name}  (the keys that came from {label})")
             else:
-                rest = {key: value for key, value in data.items() if key not in ("header-includes", "pdfmd-options")}
+                rest = {key: value for key, value in data.items()
+                        if key not in ("header-includes", "pdfmd-options", PARTIAL_KEY)}
                 files[unique("metadata.yaml")] = yaml.dump(
                     rest, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
                     default_flow_style=False, width=10**6)
@@ -5333,7 +5342,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
+def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = False) -> str:
     """Fold what ``plan`` names into the joined assembled ``text`` (see the
     comment above EMBED_KINDS); ``first`` is the document whose own front
     matter is merged (the scaffold, or a report's first chapter)."""
@@ -5479,6 +5488,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
     # document does not gain a front-matter block (see mark_assembled).
     if front or merged or header_text or (set(options) - {"embedded", "no-auto", "applied-lua"}):
         out: dict = {ASSEMBLED_KEY: True}
+        if partial:
+            out[PARTIAL_KEY] = True
         out.update(merged)
         if options:
             out["pdfmd-options"] = options
@@ -5487,7 +5498,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan) -> str:
         head = "---\n" + dumped + (literal_block("header-includes", header_text) if header_text else "") + "---\n\n"
         result = head + body.lstrip("\n").rstrip("\n") + "\n"
     else:
-        result = mark_assembled(text, no_auto)
+        result = mark_assembled(text, no_auto, partial)
     if entries:
         remember_trusted(entries)
     if blocks:
@@ -6558,7 +6569,7 @@ def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: 
                         discovered_lua.append(extra_filter)
             plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []),
                              discovered_lua)
-        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan)
+        ok, reason = write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan, partial)
         flush_summary()
         return md_path, ok, reason
 

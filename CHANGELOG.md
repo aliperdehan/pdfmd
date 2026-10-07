@@ -39,6 +39,42 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.5 — 2026-10-07
+
+Pre-edit state: commit `952d6d8` (v3.19.4). Patch bump by the one-time
+numbering override above.
+
+### Fixed
+
+- **An assembled partial build carries `pdfmd-partial`.** A partial parts-mode
+  build (`report#methods`, `--section`) tells Pandoc `-M pdfmd-partial=true` on
+  the command line, which a Lua filter such as nulabreport's reads to degrade
+  gracefully when the Appendix is not there. The assembled file of such a build
+  (`--assemble-only`, with or without `--embed-metadata`) did not carry it, so
+  building the file later ran the filter as if for the whole report. It is now
+  written into the front matter (`pdfmd-partial: true`, next to the assembled
+  marker); a partial scaffold with no front matter at all cannot hold it, and
+  says so. Found by tracing what a normal build passes to Pandoc outside the
+  text.
+
+### Checked
+
+- A probe filter that reports whether it sees `pdfmd-partial`: normal partial
+  build "partial", normal full build "full", the embedded copy of the partial
+  build built alone "partial", with a `.tex` byte-identical to the normal
+  partial build's. Earlier comparisons unchanged.
+
+### Known limits, for the record (what an assembled file does not carry)
+
+- Command-line options of the original run: `-V`, `--from`, passthrough Pandoc
+  options, `--cache`/`--cache-plots` (the cache settings in `pdfmd-options` do
+  travel), `-e`. Re-give them when building the assembled file.
+- The label seeding and part counters of a partial build with the cache on
+  (they come from the last full build of the scaffold, which the assembled file
+  is no longer).
+
+---
+
 ## v3.19.4 — 2026-10-06
 
 Pre-edit state: commit `437596c` (v3.19.3). Patch bump by the one-time
