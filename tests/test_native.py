@@ -475,8 +475,23 @@ class InstallToolsTests(unittest.TestCase):
         self.assertFalse(self.install("typst-x86_64-unknown-linux-musl.tar.xz", "0" * 64))
         self.assertFalse(pdfmd.tools_directory().exists() and list(pdfmd.tools_directory().iterdir()))
 
-    def test_works_without_a_checksum(self):
-        self.assertTrue(self.install("typst-x86_64-unknown-linux-musl.tar.xz", None))
+    def test_works_without_a_checksum_and_says_so(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertTrue(self.install("typst-x86_64-unknown-linux-musl.tar.xz", None))
+        self.assertIn("no checksum was available", output.getvalue())
+        self.assertNotIn("SHA-256 verified", output.getvalue())
+
+    def test_a_verified_download_says_so(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertTrue(self.install("typst-x86_64-unknown-linux-musl.tar.xz", "good"))
+        self.assertIn("SHA-256 verified", output.getvalue())
+        self.assertNotIn("no checksum", output.getvalue())
+
+    def test_the_missing_pandoc_message_offers_the_installer(self):
+        self.assertIn("pdfmd --install pandoc", pdfmd.PANDOC_MISSING)
+        self.assertIn("Pandoc was not found", pdfmd.PANDOC_MISSING)
 
     def test_release_lookup_falls_back_to_the_latest_download_link(self):
         def offline(*args, **kwargs):

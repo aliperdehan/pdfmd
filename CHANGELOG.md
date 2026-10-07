@@ -15,6 +15,7 @@ PDFMD_VERSION = "2.0.0"
 `pdfmd --version` prints it. Bump it there and add an entry here in the
 same edit.
 
+<!--
 ## Why this starts at 2.0.0, not 1.0.0
 
 `pdfmd.py` began as a one-line `pandoc file.md -o file.pdf` wrapper and was
@@ -36,6 +37,250 @@ backup snapshots. It is explicitly NOT reliable: its 1.x numbers are
 invented, snapshot-based entries cover windows of days rather than single
 changes, and anything done in unsaved sessions (other ChatGPT chats,
 claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
+-->
+
+---
+
+## v3.21.5 — 2026-10-07
+
+Pre-edit state: commit `6fd97b8` (v3.21.4). The labels half of the cache for
+sections, as decided after testing 3.21.3 with pandoc-crossref.
+
+### Added
+
+- **A section or element of an ordinary document takes the labels it lacks from
+  the last full build, when the cache is on.** `pdfmd doc#results --cache` after
+  a cached `pdfmd doc --cache` prints the numbers of the other sections where
+  it printed `??`; the build says how many labels it took and from when. It
+  reuses parts mode's seed file (a label the section defines itself stays its
+  own) and the cache folder the full build already writes its `.aux` to; the
+  full build's output is unchanged. pandoc-crossref leaves `\ref{...}` in LaTeX
+  output, so its references are seeded the same way.
+- The note after a section build says which of the two happened: references
+  come from the last full build, or print as `??` (and that a full build with
+  the cache on first would fill them in).
+- `SectionLabelSeeding` tests (they need Pandoc and LuaLaTeX): after a full
+  build no reference in the section's LaTeX log is undefined; without one they
+  still are; a section's own label is numbered from its own start.
+
+### Not changed
+
+- Heading, figure, table and equation numbers of a section still restart at
+  its first. Carrying them over needs a marker at every heading and element in
+  the full build, which changes that build's output; it is left out.
+- A section written to the full document's own output name (`-o doc.pdf`) is
+  not seeded, since it would overwrite the `.aux` it reads (it already did).
+
+---
+
+## v3.21.4 — 2026-10-07
+
+Pre-edit state: commit `5da17cb` (v3.21.3). Found by running 3.21.3 on a machine
+with pandoc-crossref (Pandoc 3.11, crossref 0.3.25).
+
+### Fixed
+
+- **A labelled element directly under a heading no longer swallows the heading.**
+  With no blank line between `# Results {#sec:results}` and
+  `![Second](b.png){#fig:b}`, the figure's paragraph started on the heading's own
+  line, and heading lookup (keyed by line number) let the figure replace the
+  heading: `doc#results` built only the heading and the figure, losing its
+  subsections, and wrote `doc.fig-b.pdf`. A heading line (and a setext
+  underline) now ends a paragraph and never begins one, and lookup is keyed by
+  position, so two items that begin on one line stay two items.
+- **The note after a partial parts build told the truth about whole parts only.**
+  A section or element cut out of a part is not given the full build's numbers
+  by the cache (it has no counter marker; only a whole part has one), yet the
+  note said it was. A second note now says such a cut is numbered from its own
+  start, cache or not.
+- `test_exact_stem_and_extension` compared a path with the file name as typed,
+  which a case-insensitive filesystem (macOS, Windows) returns unchanged; it
+  now compares the files themselves.
+
+### Checked with pandoc-crossref (nothing changed)
+
+- Every section and element build exits 0; crossref never leaves a literal
+  `@fig:a` in LaTeX output. Only LaTeX reports `Reference 'fig:a' undefined`
+  (printed `??`). In HTML and DOCX crossref itself reports `Undefined
+  cross-reference` and prints `¿fig:a?`.
+- In LaTeX output crossref writes references as `\ref{fig:a}`, so the last full
+  build's `.aux` can fill them in (verified by hand with one LaTeX run); heading,
+  figure, table and equation numbers of a cut still restart.
+- pdfmd's own note, "references to other sections print as ??", is accurate for
+  LaTeX and PDF output.
+
+---
+
+## v3.21.3 — 2026-10-07
+
+Pre-edit state: commit `b52e436` (v3.21.2).
+
+### Fixed
+
+- **`--split` cuts at setext headings too.** A level-1 heading written as a line
+  underlined with `===` (and, with `--split-depth 2`, a level-2 one underlined
+  with `---`) starts a part like `# Title` does, instead of staying inside the
+  part before it. The cut uses the heading scanner of 3.21.1, so a `---` that
+  ends a paragraph, a table rule and `#` lines in code or comments are still not
+  headings. On documents written with `#` headings only, the cut is identical
+  to before (checked against the previous splitter at levels 1 to 3), and
+  `--split` still verifies that the parts read back as the identical document
+  (Pandoc AST compared).
+
+---
+
+## v3.21.2 — 2026-10-07
+
+Pre-edit state: commit `2e04eee` (v3.21.1). The third step: anything with a
+`{#label}`, not only a heading.
+
+### Added
+
+- **`pdfmd doc#fig:setup` builds one labelled element.** Named by its id, with
+  the same spelling tolerance as headings: a figure (`![..](..){#fig:x}`), an
+  equation (`$$..$$ {#eq:x}`), a table (its `: caption {#tbl:x}` line and the
+  table it belongs to, the caption written below or above), a fenced
+  `::: {#id}` div (to its closing fence, with whatever is inside), a fenced code
+  block with `{#lst:x}`, a `[span]{#id}`, or the paragraph or list holding any
+  other id. `doc#section/fig:x` finds one inside a section; a short name
+  (`doc#setup`) finds `fig:setup` by its word, with a WARN.
+- Built like a section, but a lone element does not bring the text before the
+  first heading (a section does, as before), and comes out as
+  `doc.fig-setup.pdf`. The document's title page stays: a title may come from a
+  shared metadata file, so it cannot be dropped reliably.
+- `--list-parts` lists the labelled elements as well, under the heading they
+  sit in, with their kind (figure, equation, table, div, code block, paragraph).
+- In parts mode the same names work for elements inside the parts.
+- Tests build each kind of element to LaTeX and check every block against the
+  full document's LaTeX.
+
+### Not changed
+
+- An element's number restarts at 1 and its references to other elements print
+  as `??` (as for a section). External links and bare citations have nothing to
+  cut out and are not addressable; an internal link names an id, which is.
+
+---
+
+## v3.21.1 — 2026-10-07
+
+Pre-edit state: commit `c3df55a` (v3.21.0 and a changelog tidy). The second of
+the three steps; it uses the lookup engine of 3.21.0 for headings.
+
+### Added
+
+- **`pdfmd doc#NAME` builds one section of an ordinary document.** The section
+  runs from the heading to the next heading of the same or a higher level
+  (subsections included). The build is a partial one, like parts mode's: the
+  document's own front matter, settings and the text before its first heading
+  are kept, the output is `doc.NAME.pdf` (a Cyrillic or Turkish heading gets a
+  Latin file name), nothing is stamped, `pdfmd-partial: true` is set. Checked on
+  real builds: every block of a section's LaTeX appears verbatim in the full
+  document's LaTeX, also with a bare `# Title` promoted to the title.
+- **Headings are named like files are found**: case, spaces, `_`, accents and
+  script ignored, then looser spelling, then the start of the text or of a word
+  (a WARN says which), and an explicit `{#id}` counts too (`doc#sec:methods`).
+  `doc##name` means a level-2 heading (the number of `#` is the level),
+  `doc#parent/name` one under another, `doc#a+b` several, and `#name` with no
+  document the folder's only Markdown file. Two headings fitting equally well
+  is an error that lists both and says how to tell them apart.
+- **Setext headings** (a line underlined with `===` or `---`) count as headings
+  of level 1 and 2. A `---` under a paragraph's last line, a table rule, `#`
+  lines in code blocks or HTML comments and indented code are not headings.
+- **`--list-parts` works for any document**: every heading and `{#id}` with its
+  lines. In parts mode it also lists the headings inside each part.
+- **Parts mode finds headings inside parts**: a name that is no part's builds
+  the matching section of whichever part has it (`report#sampling`); a name
+  starting with `#` is a heading from the start (`report##sampling`). A part
+  named whole beats a section of it. A section of a part is numbered from the
+  part's start, not its own (no counter marker is written for it).
+- `--no-auto lookup` leaves headings only their exact name (case and spaces
+  aside).
+- `tests/test_sections.py`: the scanner, the resolver, and the CLI to LaTeX
+  checking each section against the full build, ordinary and parts mode.
+
+### Fixed
+
+- With only the soffice fallback available, a parts or section build crashed
+  with an `AssertionError`; it now fails with a message that names the cause.
+
+### Not changed
+
+- `--split` still cuts only at `# ` headings. Heading, figure and table numbers
+  of a section restart, and references to other sections print as `??`
+  (parts mode's own limitation without the cache); the cache does not carry
+  numbers over for a non-parts document yet.
+
+---
+
+## v3.21.0 — 2026-10-07
+
+Pre-edit state: commit `9af6dfd` (v3.20.5). First of three steps (3.21.0 to
+3.21.2) that let `pdfmd NAME#section` render one section of an ordinary
+document and find documents by what they are called inside. This one is the
+lookup engine every later step reuses.
+
+### Added
+
+- **A document can be found by its alias, its title, the start of either, or a
+  looser spelling**, after every rule that already worked has failed (so
+  nothing that resolved before resolves differently; checked against the
+  previous release on a folder of awkward names). In order, the first tier
+  with a hit decides: `pdfmd-options: {alias: ...}` (a name or a list; a bare
+  `pdfmd-title:` also counts), the file name, the title (`title:` or a
+  `% title` line), all ignoring case, spaces, `_ - . :` and accents
+  (`pdfmd animportantdocument`); then the same with merged letters
+  (c/k/q, i/y/j, v/w, sh/ş/ш, ё/е, Kazakh қ=q=k, ү/ұ/у=u, ы/і=i; a `y`/`w` in
+  what you type may be either vowel); then the start of an alias, file name or
+  title (`pdfmd animp`, at least 3 characters), then the start of a word in
+  one. A file name or alias beats a title at each step.
+- **Every guess is announced.** An exact match that only differs in case,
+  separators or script prints an `AUTO MD` line; everything after it is a
+  `WARN` saying what matched. Two documents fitting equally well is an error
+  naming both (`LookupAmbiguous`, a `FileNotFoundError`).
+- **`--no-auto lookup`** restores the previous lookup exactly. CLI only: a
+  document's own `pdfmd-options: no-auto` cannot apply to the lookup that is
+  still finding it.
+- `tests/test_lookup.py`: the old forms (exact, wildcard, Latin for Cyrillic,
+  `Пробный`, dots in names) as a regression guard, plus the new tiers.
+
+### Fixed
+
+- `latin_candidates` had `("oi", "oй")` with a Latin `o` inside the Cyrillic
+  replacement, a spelling that could never match a real name.
+
+### Not changed
+
+- `-b/--batch` and `-r/--report` still take names and folders exactly as
+  before; nothing there is guessed.
+- `pdfmd sub/name` still looks for `name.md` in the current folder first (an
+  old quirk, kept); only the new tiers look inside `sub/`.
+
+---
+
+## v3.20.5 — 2026-10-07
+
+Pre-edit state: commit `21ca3fa` (v3.20.4). Three small things from the local
+verification of v3.20.3.
+
+### Changed
+
+- **`pdfmd --install typst` now says whether the download was checked.** On
+  success it prints `SHA-256 verified (...)`, or a NOTE that no checksum was
+  available when GitHub's API could not be reached; before, only the absence was
+  ever mentioned, so a verified install looked the same as an unverifiable one.
+- **"Pandoc was not found" names `pdfmd --install pandoc`** (and `full`, which adds
+  Typst), so `-o file.html`, `-p`, `-e xelatex` and the rest of what still needs
+  Pandoc point at the one command that fixes it, as the other hints already did.
+
+### Not changed
+
+- The "pdf_metadata is on but pypdf is not installed" warning on built-in builds
+  was the missing `pypdf` dependency of v3.20.0 to v3.20.2, restored in v3.20.3;
+  with `pip install pdfmd-cli` it no longer appears.
+- Display math printed by the built-in inkmd renderer is centred with
+  zero-width spaces between no-break spaces (inkmd has no text alignment), so
+  text copied out of such a PDF carries runs of invisible characters.
 
 ---
 

@@ -203,6 +203,31 @@ pdfmd lecture -w              # watch: rebuild on every save, until Ctrl+C
 A bare name is looked up as `<name>.md`. The name can contain dots:
 `pdfmd notes-v1.2` builds `notes-v1.2.md`.
 
+If no file has exactly that name, pdfmd also looks at what each document is
+called inside: its title, and any `pdfmd-options: {alias: ...}`. Case, spaces,
+`_`, `-`, accents and script don't matter (`pdfmd animportantdocument` finds
+`An Important Document.md`; `pdfmd glyukoza` finds a document titled
+`Глюкоза`), and a unique *start* of a name or title works too, with a warning
+saying what it matched (`pdfmd animp`, `pdfmd glucose`). A name that fits two
+documents is an error, never a guess; `--no-auto lookup` switches the guessing
+off. An exact file name always wins.
+
+### One section
+
+`pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"
+(down to the next heading of the same or a higher level), written as
+`doc.only-a-part.pdf` beside the document. Headings are named the way files
+are: case, spaces and spelling don't matter, a unique start works (with a
+warning), and so does a `{#label}`. `doc##yield` asks for a level-2 heading,
+`doc#results/yield` for one under another, `doc#a+b` for several, and
+`pdfmd '#yield'` uses the folder's only Markdown file. `pdfmd doc --list-parts`
+shows what can be named. In a document split into parts the same names work
+for headings inside the parts.
+
+Anything with a `{#label}` can be named too: `pdfmd doc#fig:setup` builds just
+that figure, `doc#eq:energy` that equation, and likewise a table, a fenced div,
+a code block or a span (the figure's number restarts at 1).
+
 ### Other output formats
 
 The format is taken from `-o`'s extension, or given explicitly with `--to`:
