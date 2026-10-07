@@ -41,6 +41,52 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.0 — 2026-10-07
+
+Pre-edit state: commit `b329fc0` (v3.22.9). Script-aware font fallback: the
+one-off `header-includes` of a multilingual paper (polyglossia, `ucharclasses`,
+a `\newfontfamily` per script, `newunicodechar` rules that swap characters for
+look-alikes) done once, properly, for every document.
+
+### Added
+
+- **`pdfmd_unicode/`**, a package beside `pdfmd.py` with no dependencies: the Unicode
+  Script property as a generated range table (`scripts/gen_unicode_scripts.py`, from
+  fontTools at development time only; `--check` reports drift), a reader of fonts'
+  own `name` and `cmap` tables (TrueType/OpenType and collections), the installed
+  fonts from fontconfig or a scan of the system font folders plus pdfmd's own folder
+  (`~/.local/share/pdfmd/fonts`), and a per-script list of families to try.
+- **Fonts for other scripts** (lualatex, xelatex; `AUTO UNICODE`): the characters of
+  the document's Markdown, metadata and bibliography files (code excluded) that the
+  main font cannot draw are set, run by run, in the first installed font of their
+  script's list, by a generated preamble and a Pandoc Lua filter that runs before the
+  table-width filter (which renders table cells to LaTeX). Arabic and Hebrew runs get
+  a direction, Han characters the Chinese/Japanese/Korean flavour the text or `lang:`
+  points to, punctuation and combining marks the font of the text beside them,
+  variable fonts (set at their thinnest weight by TeX) are used only when nothing
+  else has the glyph. Characters no installed font has are listed in a WARN. The
+  fonts that cannot be loaded are dropped and the build retried without them.
+  A document with its own script setup (`ucharclasses`, `\newfontfamily`, `xeCJK`,
+  `\babelfont`, `CJKmainfont`, `mainfontfallback`) is left alone;
+  `pdfmd-options: {unicode: true}` forces it, `--no-auto unicode` disables it.
+- **Main font by script** (`AUTO MAINFONT`): when the document is mostly in one
+  script and STIX Two Text lacks letters of it (the Kazakh Cyrillic ә ғ қ ң ө ұ ү
+  һ і), the first installed serif that has them all (Noto Serif, PT Serif,
+  Source Serif 4, DejaVu Serif) becomes the main font, so no word is half one font
+  and half another. This replaces most uses of the compile-then-retry with DejaVu Serif,
+  which stays as the last resort.
+- `tests/test_unicode.py`: synthetic fonts written by the tests themselves, so nothing
+  depends on what is installed.
+
+### Verified
+
+- The author's Kazakh/Arabic/Chinese/Greek paper, with its `header-includes` removed:
+  47 pages, no missing glyph (it had hundreds), one pass instead of a retry;
+  Arabic right-to-left in Amiri, Han in Songti SC, the rest in Noto Serif; with
+  its own header-includes it is built as before.
+
+---
+
 ## v3.22.9 — 2026-10-07
 
 Pre-edit state: commit `3de8508` (v3.22.8). What mdpdf does, without PyMuPDF; and

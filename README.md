@@ -600,7 +600,8 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
 | `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
-| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, retried with DejaVu Serif if any glyph is missing (Times New Roman if DejaVu isn't installed) |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text, or the first serif with every letter of the document's own script when STIX Two Text lacks some (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing (Times New Roman if DejaVu isn't installed) |
+| `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
@@ -627,6 +628,24 @@ file paths are shortened here.)
 
 **When a PDF doesn't look the way the Markdown suggests, run `-v` first.**
 The cause is usually one of these automatic decisions, and `-v` names it.
+
+### Other scripts
+
+A document that mixes scripts needs more than one font. With lualatex or
+xelatex, `pdfmd` reads the character tables of your installed fonts, finds
+the characters the main font cannot draw and sets each run of them in a font
+that can: Arabic and Hebrew right to left, Chinese/Japanese/Korean in the
+flavour the text (kana, hangul) or `lang:` points to, punctuation and marks in
+the font of the text beside them. If the document is mostly written in a script
+the default main font lacks letters of, the main font changes instead, so no
+word is set half in one font and half in another. Characters that no
+installed font has are named in a warning, never dropped or swapped for
+something else. `-v` shows which font each script got.
+
+It stays out of the way of a document that has set up its own fonts per
+script (`ucharclasses`, `\newfontfamily`, `xeCJK`, `\babelfont`,
+`CJKmainfont`, `mainfontfallback`): `pdfmd-options: {unicode: true}` adds
+pdfmd's anyway, and `--no-auto unicode` turns it off.
 
 ### Switching defaults off
 

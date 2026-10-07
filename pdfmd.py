@@ -169,6 +169,24 @@ Output formats:
     Unicode notes tend to use in running text. -f/--font, or the
     document's own `mainfont:`, always wins outright over both.
 
+Text in other scripts (v3.23.0, lualatex/xelatex):
+    No main font draws everything a multilingual document says. pdfmd reads
+    the character tables of the installed fonts (pdfmd_unicode/, no
+    dependency), finds the characters of the text -- Markdown, metadata and
+    bibliography files, code excluded -- that the main font cannot draw, and
+    sets each run of them in the first installed font of its script's list
+    (Arabic and Hebrew right-to-left, Han in the Chinese, Japanese or Korean
+    flavour the text or its `lang:` points to, symbols and punctuation in the
+    font of the text beside them). A document written mostly in one script the
+    automatic main font lacks letters of (STIX Two Text has no Kazakh Cyrillic)
+    gets the first serif that has them all as its main font, so no word is half
+    one font and half another. Characters no installed font has are listed in
+    a WARN, never silently dropped or replaced. A document that sets up its
+    own scripts (ucharclasses, \\newfontfamily, xeCJK, \\babelfont,
+    CJKmainfont, mainfontfallback) is left to itself unless
+    `pdfmd-options: {unicode: true}`; `--no-auto unicode` turns it all off.
+    Fonts a build cannot load are dropped and the build retried without them.
+
     Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
     ending `.tex`) produces a complete, standalone document -- the same
     `\\documentclass`...`\\begin{document}`...`\\end{document}` a direct PDF
@@ -958,7 +976,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.22.9"
+PDFMD_VERSION = "3.23.0"
 import argparse
 import csv
 import filecmp
@@ -1174,7 +1192,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize", "parts", "lookup",
+    "papersize", "parts", "lookup", "unicode",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3952,6 +3970,192 @@ def table_width_filter() -> Iterator[Path]:
         yield temporary_path
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+# -- Script-aware font fallback (v3.23.0) ----------------------------------------
+# The main font cannot draw everything a multilingual document says (STIX Two Text
+# has no Kazakh Cyrillic, no Arabic, no Han). pdfmd_unicode finds what is missing
+# by reading the fonts' own character tables, picks an installed font per script,
+# and this turns the result into a preamble plus a Lua filter that sets each run
+# of such text in its font. LaTeX engines that load fonts by name (lualatex,
+# xelatex) only; HTML and Typst do their own per-character fallback, and
+# pdfmd_unicode is optional (the module simply is not there in a lone pdfmd.py).
+# A document that has set up its own scripts (ucharclasses, \newfontfamily, xeCJK,
+# \babelfont, a font fallback variable) keeps its own way: --no-auto unicode
+# switches this off, and `pdfmd-options: {unicode: true}` forces it on regardless.
+UNICODE_ENGINES = ("lualatex", "xelatex")
+OWN_SCRIPT_SETUP_RE = re.compile(r"ucharclasses|\\newfontfamily|\\babelfont|xeCJK|luatexja|CJKutf8|\\setCJK"
+                                 r"|add_fallback|\\setTransition|\\setmainfontfallback")
+OWN_SCRIPT_VARIABLES = ("CJKmainfont", "CJKsansfont", "CJKmonofont", "mainfontfallback")
+BIBLIOGRAPHY_TEXT_SUFFIXES = (".bib", ".bibtex", ".json", ".yaml", ".yml", ".ris", ".csl")
+_FONT_INDEX = None
+
+
+def unicode_module():
+    """pdfmd_unicode, or None where it is not installed beside this file."""
+    try:
+        import pdfmd_unicode
+    except ImportError:
+        return None
+    return pdfmd_unicode
+
+
+def fonts_directory() -> Path:
+    """Where pdfmd keeps the fonts `pdfmd --install fonts` fetches."""
+    return data_root() / "fonts"
+
+
+def font_index():
+    """The installed fonts (and pdfmd's own), read once per run."""
+    global _FONT_INDEX
+    if _FONT_INDEX is None:
+        module = unicode_module()
+        _FONT_INDEX = module.FontIndex(fonts_directory()) if module else False
+    return _FONT_INDEX or None
+
+
+def strip_code_text(text: str) -> str:
+    """Markdown without its fenced and inline code (set in the monofont, not a fallback's)."""
+    text = re.sub(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", "", text)
+    return re.sub(r"`[^`\n]*`", "", text)
+
+
+def unicode_source_text(md_paths: list[Path], metadata_files: list[Path]) -> str:
+    """All the text a document will print: its Markdown, metadata and bibliography files."""
+    pieces: list[str] = []
+    seen: set[Path] = set()
+
+    def read(path: Path, code: bool = False) -> str:
+        try:
+            if path.resolve() in seen or not path.is_file():
+                return ""
+            seen.add(path.resolve())
+            data = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            return ""
+        return data if code else strip_code_text(data)
+
+    for path in [*md_paths, *metadata_files]:
+        text = read(path)
+        pieces.append(text)
+        front = front_matter_dict(text) if path.suffix.lower() in (".md", ".markdown", ".txt", "") \
+            else metadata_file_yaml(path)
+        wanted = front.get("bibliography") if isinstance(front, dict) else None
+        for name in (wanted if isinstance(wanted, list) else [wanted] if wanted else []):
+            candidate = Path(str(name))
+            for folder in (path.parent, Path.cwd()):
+                found = candidate if candidate.is_absolute() else folder / candidate
+                if found.suffix.lower() in BIBLIOGRAPHY_TEXT_SUFFIXES and found.is_file():
+                    pieces.append(read(found, code=True))
+                    break
+    return "\n".join(pieces)
+
+
+def document_font_setting(key: str, md_paths: list[Path], metadata_files: list[Path],
+                          variables: list[str]) -> str | None:
+    """A Pandoc variable as the document sets it: -V, then its front matter, then metadata files."""
+    for variable in variables:
+        if variable.startswith(f"{key}="):
+            return variable.split("=", 1)[1] or None
+    for path in [*md_paths[:1], *metadata_files]:
+        try:
+            data = (front_matter_dict(path.read_text(encoding="utf-8-sig"))
+                    if path.suffix.lower() in (".md", ".markdown", ".txt", "") else metadata_file_yaml(path))
+        except (OSError, UnicodeDecodeError):
+            continue
+        value = data.get(key) if isinstance(data, dict) else None
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def own_script_setup(md_paths: list[Path], preamble_files: list[Path], variables: list[str],
+                     metadata_files: list[Path]) -> bool:
+    """Whether the document already sets up its own fonts per script."""
+    if any(variable.split("=", 1)[0] in OWN_SCRIPT_VARIABLES for variable in variables):
+        return True
+    if any(document_font_setting(key, md_paths, metadata_files, []) for key in OWN_SCRIPT_VARIABLES):
+        return True
+    texts = [item.read_text(encoding="utf-8-sig", errors="replace") for item in preamble_files if item.is_file()]
+    texts += [document_header_includes(item.read_text(encoding="utf-8-sig", errors="replace")) or ""
+              for item in md_paths if item.suffix.lower() in (".md", ".markdown", ".txt")]
+    return any(OWN_SCRIPT_SETUP_RE.search(text) for text in texts)
+
+
+def unicode_forced(md_path: Path) -> bool:
+    return str(frontmatter_pdfmd_options(md_path).get("unicode", "")).casefold() in ("true", "yes", "on", "force")
+
+
+def default_mainfont(md_paths: list[Path], metadata_files: list[Path], no_auto: list[str] | None,
+                     note=None) -> str:
+    """The main font a document gets when it names none: STIX Two Text, or the serif that draws
+    the script the document is mostly in better when STIX Two Text lacks letters of it."""
+    preferred = preferred_font()
+    module = unicode_module()
+    index = font_index()
+    if module is None or index is None or auto_disabled(no_auto, "unicode"):
+        return preferred
+    try:
+        chosen = module.choose_main_font(unicode_source_text(md_paths, metadata_files), preferred, index)
+    except (OSError, ValueError, KeyError):
+        return preferred
+    if chosen != preferred and note:
+        note("MAINFONT", f"{md_paths[0]}: {preferred} lacks letters of the document's own script; "
+                         f"using {chosen}, which has them")
+    return chosen
+
+
+@contextmanager
+def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
+                    preamble_files: list[Path], main_font: str | None, engine: str | None,
+                    no_auto: list[str] | None, note) -> Iterator[tuple[Path | None, Path | None]]:
+    """(header, filter) temp files that set the text ``main_font`` cannot draw in other fonts,
+    or (None, None) when there is nothing to do, or no way to know what is missing."""
+    module = unicode_module()
+    index = font_index()
+    skip = (module is None or index is None or auto_disabled(no_auto, "unicode")
+            or (engine is not None and engine not in UNICODE_ENGINES))
+    if not skip and not unicode_forced(md_paths[0]) and own_script_setup(md_paths, preamble_files, variables,
+                                                                       metadata_files):
+        note("UNICODE", f"{md_paths[0]}: sets up its own fonts for other scripts; leaving them to it "
+                        "(pdfmd-options: {unicode: true} adds pdfmd's)")
+        skip = True
+    main = main_font or (document_font_setting("mainfont", md_paths, metadata_files, variables)
+                         if not skip else None)
+    if skip or not main:
+        yield None, None
+        return
+    text = unicode_source_text(md_paths, metadata_files)
+    language = document_font_setting("lang", md_paths, metadata_files, variables)
+    plan = module.plan_text(text, main, index, language)
+    if plan is None:
+        note("UNICODE", f"{md_paths[0]}: {main} is not among the installed fonts, so what it lacks "
+                        "cannot be told")
+        yield None, None
+        return
+    if plan.uncovered:
+        print(f"WARN  {md_paths[0]}: no installed font draws {plan.describe_uncovered()} "
+              "(pdfmd --install fonts, or name a font that does)", file=sys.stderr)
+    if not plan:
+        yield None, None
+        return
+    for line in plan.describe():
+        note("UNICODE", f"{md_paths[0]}: {main} lacks {line}")
+    header = filter_file = None
+    try:
+        with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex", prefix="pdfmd-fonts-",
+                                delete=False) as temporary:
+            temporary.write(plan.latex_header())
+            header = Path(temporary.name)
+        with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua", prefix="pdfmd-fonts-",
+                                delete=False) as temporary:
+            temporary.write(plan.lua_filter())
+            filter_file = Path(temporary.name)
+        yield header, filter_file
+    finally:
+        for temporary_path in (header, filter_file):
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
 
 def latin_candidates(value: str) -> list[str]:
@@ -9924,12 +10128,19 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                   f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
                                   "targets. Set papersize: yourself, or --no-auto papersize, to silence "
                                   "this and keep the Letter default")
+            tex_first_font = (None if (not is_tex_target or document_font) else
+                              (font or (default_mainfont([md_path, *parts_inputs], metadata_files, no_auto, note)
+                                        if mainfont_auto else None)))
             with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
                                        typst_engine=(target_format == "typst"),
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and is_tex_target) as header_file, \
-                    pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file:
+                    pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file, \
+                    (script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
+                                     tex_first_font, None, no_auto, note)
+                     if target_format in ("latex", "beamer") else contextlib.nullcontext((None, None))) \
+                    as (fonts_header, fonts_filter):
                 source, *prepared_metadata = prepared
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and standalone_auto:
@@ -9959,7 +10170,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # .tex is compiled by hand, override it with -f/--font
                     # (or edit \\setmainfont directly) the way the PDF path's
                     # retry would have.
-                    first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
+                    first_font = tex_first_font
                     if first_font:
                         cmd += ["-V", f"mainfont={first_font}"]
                     if geometry_needed:
@@ -9990,6 +10201,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--include-in-header", str(preamble_file)]
                 if pdf_meta_file is not None:
                     cmd += ["--include-in-header", str(pdf_meta_file)]
+                if fonts_header is not None:
+                    cmd += ["--include-in-header", str(fonts_header)]
                 # Last, so a document's own header-includes can override
                 # anything the shared preamble/pdf-meta files above defined
                 # (Pandoc would otherwise drop it entirely; see
@@ -10017,6 +10230,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if target_format in HTML_TARGETS:
                     cmd += html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += pandoc_options
+                if fonts_filter is not None:
+                    cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
@@ -10120,7 +10335,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
 
-                def run(selected_font: str | None, fallback: bool = False):
+                def run(selected_font: str | None, fallback: bool = False, plain: bool = False):
+                    with script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
+                                         selected_font, engine,
+                                         no_auto if not plain or no_auto == [] else [*(no_auto or []), "unicode"],
+                                         note) as (fonts_header, fonts_filter):
+                        return run_command(selected_font, fallback, fonts_header, fonts_filter)
+
+                def run_command(selected_font: str | None, fallback: bool, fonts_header, fonts_filter):
                     cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "--pdf-engine=" + engine]
                     if effective_from:
                         cmd += ["-f", effective_from]
@@ -10166,6 +10388,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             cmd += ["--include-in-header", str(preamble_file)]
                     if pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(pdf_meta_file)]
+                    if fonts_header is not None:
+                        cmd += ["--include-in-header", str(fonts_header)]
                     # Last, so a document's own header-includes can override
                     # anything the shared preamble/pdf-meta files above
                     # defined (Pandoc would otherwise drop it entirely; see
@@ -10192,6 +10416,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # come before table-width so a CSV-generated table gets the same
                     # width-balancing pass a hand-written one would.
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                    if fonts_filter is not None:
+                        cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += ["--lua-filter", str(width_filter)]
                     for lua_filter in lua_filters:
@@ -10200,7 +10426,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                           env=tex_search_env(md_path.parent, pandoc_cwd))
 
-                first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
+                first_font = None if document_font else (
+                    font or (default_mainfont([md_path, *parts_inputs], metadata_files, no_auto, note)
+                             if mainfont_auto else None))
                 # fallback=False, not fallback=document_font: Pandoc's own
                 # mainfontfallback mechanism is the one PREFERRED_FONT's
                 # comment (and the is_tex_target path's own comment above)
@@ -10216,6 +10444,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # lualatex on this line's old `fallback=document_font` even
                 # though nothing was actually missing a glyph yet.
                 result = run(first_font, fallback=False)
+                if result.returncode != 0 and "pdfmdf" in result.stdout + result.stderr:
+                    # a font pdfmd picked for another script would not load: build without them
+                    print(f"WARN  {md_path}: the fonts pdfmd chose for other scripts failed under {engine}; "
+                          "building without them (--verbose shows which)", file=sys.stderr)
+                    result = run(first_font, fallback=False, plain=True)
                 combined_output = result.stdout + result.stderr
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and missing_glyph_warning(combined_output)):
@@ -12397,6 +12630,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "standalone (the --to latex/beamer/context --standalone default), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
+                             "unicode (fonts for text in other scripts, and the main font chosen for the "
+                             "document's own script), "
                              "files (metadata+preamble+lua together), lookup (finding a document by "
                              "its title, alias, the start of its name or a looser spelling), texdirect (the direct-.tex-"
                              "compile path -- see 'Input formats' in the module docstring; disabling "
