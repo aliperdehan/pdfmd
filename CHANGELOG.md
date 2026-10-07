@@ -41,6 +41,44 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.4 — 2026-10-07
+
+Pre-edit state: commit `5da17cb` (v3.21.3). Found by running 3.21.3 on a machine
+with pandoc-crossref (Pandoc 3.11, crossref 0.3.25).
+
+### Fixed
+
+- **A labelled element directly under a heading no longer swallows the heading.**
+  With no blank line between `# Results {#sec:results}` and
+  `![Second](b.png){#fig:b}`, the figure's paragraph started on the heading's own
+  line, and heading lookup (keyed by line number) let the figure replace the
+  heading: `doc#results` built only the heading and the figure, losing its
+  subsections, and wrote `doc.fig-b.pdf`. A heading line (and a setext
+  underline) now ends a paragraph and never begins one, and lookup is keyed by
+  position, so two items that begin on one line stay two items.
+- **The note after a partial parts build told the truth about whole parts only.**
+  A section or element cut out of a part is not given the full build's numbers
+  by the cache (it has no counter marker; only a whole part has one), yet the
+  note said it was. A second note now says such a cut is numbered from its own
+  start, cache or not.
+- `test_exact_stem_and_extension` compared a path with the file name as typed,
+  which a case-insensitive filesystem (macOS, Windows) returns unchanged; it
+  now compares the files themselves.
+
+### Checked with pandoc-crossref (nothing changed)
+
+- Every section and element build exits 0; crossref never leaves a literal
+  `@fig:a` in LaTeX output. Only LaTeX reports `Reference 'fig:a' undefined`
+  (printed `??`). In HTML and DOCX crossref itself reports `Undefined
+  cross-reference` and prints `¿fig:a?`.
+- In LaTeX output crossref writes references as `\ref{fig:a}`, so the last full
+  build's `.aux` can fill them in (verified by hand with one LaTeX run); heading,
+  figure, table and equation numbers of a cut still restart.
+- pdfmd's own note, "references to other sections print as ??", is accurate for
+  LaTeX and PDF output.
+
+---
+
 ## v3.21.3 — 2026-10-07
 
 Pre-edit state: commit `b52e436` (v3.21.2).

@@ -804,7 +804,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.3"
+PDFMD_VERSION = "3.21.4"
 import argparse
 import csv
 import filecmp
@@ -6606,6 +6606,12 @@ def scan_labelled_blocks(lines: list[str], headings: list[Heading]) -> list[Head
     while index < len(lines):
         line = lines[index]
         stripped = line.strip()
+        if index in taken:
+            # A heading line (and a setext underline): it ends the paragraph before it and
+            # never starts one, even with no blank line between it and the text below.
+            close_run(index)
+            index += 1
+            continue
         fence = re.match(r"(`{3,}|~{3,})", stripped)
         if fence:
             close_run(index)
@@ -6688,16 +6694,17 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
     level, names = parse_section_request(request)
     if not names:
         raise SystemExit(f"--section '{request}' names no heading")
-    by_line = {heading.line: heading for heading in headings}
     tiers = LOOKUP_TIERS if FUZZY_LOOKUP else LOOKUP_TIERS[:3]
-    pool = headings
+    pool = list(headings)
     for position, name in enumerate(names):
         last = position == len(names) - 1
         candidates = [heading for heading in pool if not last or level is None or heading.level == level]
-        entries = [(heading.line, [("alias", identifier) for identifier in heading.ids]
-                    + ([("stem", heading.text)] if heading.level else [])) for heading in candidates]
+        # Keyed by position: two items may begin on one line, and a line number would merge them.
+        entries = [(number, [("alias", identifier) for identifier in heading.ids]
+                    + ([("stem", heading.text)] if heading.level else []))
+                   for number, heading in enumerate(candidates)]
         try:
-            found = rank_lookup(name, entries, lambda line: describe(by_line[line]),
+            found = rank_lookup(name, entries, lambda number: describe(candidates[number]),
                                 HEADING_FIELD_WORDS, tiers)
         except LookupAmbiguous as error:
             raise SystemExit(f"--section '{request}': {error} Add `#`s for its level, or `parent/name`.")
@@ -6708,7 +6715,7 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
                              + (f" at level {level}" if last and level else "")
                              + (f" under '{pool_owner.text}'" if position else "")
                              + f". Headings: {choices or 'none'}" + (" ..." if len(candidates) > 12 else ""))
-        heading = by_line[found[0]]
+        heading = candidates[found[0]]
         announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading or element")
         pool_owner = heading
         pool = [other for other in headings if heading.line < other.line < heading.end]
@@ -10918,6 +10925,10 @@ def main() -> None:
                     print("NOTE  partial build: references to parts left out print as ??, and figure/"
                           "table numbers restart from this build's own first one (pdfmd-options: "
                           "{cache: {aux: true}} carries them over from the last full build)")
+                if scaffold_plan.cuts:
+                    print("NOTE  a section or element cut out of a part is numbered from its own start, "
+                          "cache or not: its heading, figure, table and equation numbers restart there "
+                          "(only whole parts get their numbers from the last full build)")
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]

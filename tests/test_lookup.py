@@ -55,7 +55,8 @@ class ExistingLookupUnchanged(LookupCase):
     def test_exact_stem_and_extension(self):
         report = self.write("report.md")
         for name in ("report", "report.md", "REPORT", "Report.MD"):
-            self.assertEqual(self.find(name)[0], report)
+            # On a case-insensitive filesystem (macOS, Windows) the path comes back as typed.
+            self.assertTrue(os.path.samefile(self.find(name)[0], report), name)
 
     def test_dots_in_the_name(self):
         notes = self.write("prelab5.5.md")

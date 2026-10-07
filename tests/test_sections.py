@@ -203,6 +203,29 @@ class LabelledElements(unittest.TestCase):
     def test_a_heading_with_an_id_is_a_heading_not_an_element(self):
         self.assertNotIn("sec:details", self.items)
 
+    def test_an_element_right_under_a_heading_does_not_swallow_it(self):
+        # No blank line between the heading and the figure: the figure's paragraph
+        # must start below the heading, and the heading's section must stay whole.
+        lines = ("# Setup {#sec:setup}\nText.\n![First](a.png){#fig:a}\n\n"
+                 "# Results {#sec:results}\n![Second](b.png){#fig:b}\n\n## Details {#sec:details}\n\nMore.\n\n# End\n").split("\n")
+        items = pdfmd.scan_items(lines)
+        figure = next(item for item in items if item.ids == ("fig:b",))
+        self.assertEqual((figure.line, figure.text), (5, "figure"))
+        with contextlib.redirect_stderr(io.StringIO()):
+            results = pdfmd.find_heading(items, "sec:results")
+            self.assertEqual((results.text, results.end), ("Results", 11))
+            self.assertEqual(pdfmd.find_heading(items, "details").text, "Details")
+            self.assertEqual(pdfmd.find_heading(items, "fig:b").text, "figure")
+
+    def test_two_items_that_begin_on_one_line_stay_two_items(self):
+        # A table that holds an id of its own and its caption's id begin on the same line.
+        lines = "| a [x]{#span:x} | b |\n|---|---|\n| 1 | 2 |\n\n: Caption {#tbl:t}\n".split("\n")
+        items = [item for item in pdfmd.scan_items(lines) if item.level == 0]
+        self.assertEqual(sorted(identifier for item in items for identifier in item.ids), ["span:x", "tbl:t"])
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(pdfmd.find_heading(items, "span:x").ids, ("span:x",))
+            self.assertEqual(pdfmd.find_heading(items, "tbl:t").ids, ("tbl:t",))
+
     def test_a_hash_line_in_code_is_not_a_heading(self):
         self.assertEqual([h.text for h in pdfmd.scan_headings(self.lines)], ["Results", "Details", "Next"])
 
