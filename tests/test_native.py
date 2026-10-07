@@ -115,6 +115,16 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(counts["math"], 1)
         self.assertEqual(counts["math_text"], 1)
 
+    def test_csv_div_is_still_detected_on_the_pandoc_route(self):
+        # The native tier once redefined CSV_DIV_RE, silently disabling the
+        # Pandoc route's CSV filter for any file with the div past its first line.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "t.md"
+            path.write_text('# T\n\nText.\n\n::: {.csv file="data.csv"}\n:::\n', encoding="utf-8")
+            self.assertTrue(pdfmd.contains_csv_table(path))
+            path.write_text("# T\n\nNo table.\n", encoding="utf-8")
+            self.assertFalse(pdfmd.contains_csv_table(path))
+
     def test_csv_div_becomes_a_table_like_the_pandoc_filter(self):
         with tempfile.TemporaryDirectory() as directory:
             rows = "\n".join(f"{n},{n * n},x|y" for n in range(1, 13))
@@ -265,7 +275,10 @@ class EngineSelectionTests(unittest.TestCase):
         def which(name):
             return "/bin/" + name if (name == "pandoc" and pandoc) or name in engines else None
 
+        # engine_executable() resolves soffice beyond PATH (e.g. the macOS app
+        # bundle), so it must be mocked too or a real LibreOffice leaks in.
         with mock.patch.object(pdfmd, "which", which), \
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: which("soffice")), \
                 mock.patch.object(pdfmd, "md2pdf_available", lambda: md2pdf):
             return pdfmd.select_engines(requested, presentation)
 

@@ -39,6 +39,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.2 — 2026-10-07
+
+Pre-edit state: commit `9a03bfa` (v3.20.1). Found while checking that the
+Pandoc route is unchanged by the native tier.
+
+### Fixed
+
+- **The native tier's `CSV_DIV_RE` shadowed the Pandoc route's of the same name**
+  (both module-level, the later one wins). `contains_csv_table()` then used a
+  line-anchored regex without `MULTILINE`, so a `::: {.csv file=...}` div anywhere
+  but the very start of the file was not detected, the CSV filter was not added,
+  and the div printed as literal text. The native one is now `CSV_DIV_LINE_RE`;
+  a regression test covers the Pandoc-side detection.
+- `tests/test_native.py` `EngineSelectionTests` no longer sees a real LibreOffice
+  (`resolve_soffice()` finds the macOS app bundle off PATH), which made two tests
+  fail on a Mac with LibreOffice installed.
+
+---
+
 ## v3.20.1 — 2026-10-07
 
 Pre-edit state: commit `e15ed13` (v3.20.0). Patch bump by the one-time

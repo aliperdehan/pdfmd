@@ -735,7 +735,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.20.1"
+PDFMD_VERSION = "3.20.2"
 import argparse
 import csv
 import filecmp
@@ -2460,7 +2460,7 @@ def split_front_matter(text: str) -> tuple[dict, str]:
     return (data if isinstance(data, dict) else {}), body
 
 
-CSV_DIV_RE = re.compile(r"^\s*:{3,}\s*\{([^}]*\.csv\b[^}]*)\}\s*$")
+CSV_DIV_LINE_RE = re.compile(r"^\s*:{3,}\s*\{([^}]*\.csv\b[^}]*)\}\s*$")
 DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
 DIV_ATTRIBUTE_RE = re.compile(r"""([\w-]+)=(?:"([^"]*)"|'([^']*)'|(\S+))""")
 
@@ -2757,7 +2757,7 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
         if skip_csv_div:
             skip_csv_div = not DIV_CLOSE_RE.match(line)
             continue
-        csv_div = CSV_DIV_RE.match(line)
+        csv_div = CSV_DIV_LINE_RE.match(line)
         if csv_div:
             table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path)
             items.extend([("", False), *[(row, False) for row in table], ("", False)])
