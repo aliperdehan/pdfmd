@@ -229,6 +229,23 @@ saying what it matched (`pdfmd animp`, `pdfmd glucose`). A name that fits two
 documents is an error, never a guess; `--no-auto lookup` switches the guessing
 off. An exact file name always wins.
 
+**Names in other scripts.** Russian, Ukrainian, Belarusian and Kazakh Cyrillic are
+always understood. Other scripts are off until you ask, one pack per script, so
+nobody carries tables they don't use: `--translit greek,hangul` (or
+`PDFMD_TRANSLIT=greek,hangul`) makes `pdfmd tyche` find `Τύχη.md` and
+`pdfmd unmyeong` find `운명.md`. Built in: `greek`, `armenian`, `georgian`,
+`hebrew`, `arabic` (consonants only, as the scripts write them), `hangul`
+(Revised Romanization) and `kana` (Hepburn). `han` gives pinyin without tones
+(`pdfmd mingyun` finds `命運.md`) and `other` covers every remaining script;
+they use [pypinyin](https://pypi.org/project/pypinyin/) (MIT) and
+[anyascii](https://pypi.org/project/anyascii/) (ISC), installed with
+`pdfmd --install translit` (`pip install "pdfmd-cli[translit]"`; about 3 MB).
+`--translit all` turns every pack on, `--translit none` even Cyrillic off,
+`--translit list` shows what is ready. These are for *finding* a name: plain
+letters, no tones, vowels left out where the script leaves them out. Names that
+romanize alike (homophones) are listed as ambiguous, never picked between. The
+same spelling rules find a section by its heading (`doc#tyche`).
+
 ### One section
 
 `pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"

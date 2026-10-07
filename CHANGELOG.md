@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.3 — 2026-10-08
+
+Pre-edit state: commit `bc30b40` (v3.23.2). Finding documents by names in other scripts.
+
+### Added
+
+- **Romanization packs** (`pdfmd_unicode/translit.py`): `--translit PACKS` /
+  `PDFMD_TRANSLIT` turns on, per script, the spelling of a name in Latin letters that the
+  lookup compares (`pdfmd tyche` finds `Τύχη.md`, `pdfmd unmyeong` `운명.md`,
+  `pdfmd mingyun` `命運.md`; headings in `doc#section` too). Own tables, no dependency:
+  `greek` (scholarly Latinization: η = e, φ = ph, γκ = nk, ου = ou), `armenian`,
+  `georgian`, `hebrew` and `arabic` (consonant skeletons, Persian and Urdu letters),
+  `hangul` (Revised Romanization with the usual liaison), `kana` (Hepburn: yoon, small
+  vowels, doubled consonants). `han` is pinyin without tones through `pypinyin` (MIT) or
+  `anyascii` (ISC), `other` every remaining script through `anyascii`; both are optional
+  (`pdfmd --install translit`, `pdfmd-cli[translit]`). `all`, `none`, and `--translit list`.
+  Off by default except Cyrillic (Russian, Ukrainian, Belarusian, Kazakh), which stays
+  built into `pdfmd.py` exactly as it was; `--translit none` turns that off as well,
+  including the exact-name Cyrillic/Latin spellings. Homophones (命運, 銘運) stay ambiguous:
+  the existing "fits two documents" error lists them.
+- A loose lookup key treats `ph` as `f` (Greek φ is written either way).
+- `tests/test_translit.py`.
+
+---
+
 ## v3.23.2 — 2026-10-08
 
 Pre-edit state: commit `1505ed8` (v3.23.1). Emoji in lualatex and xelatex.

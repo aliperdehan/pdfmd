@@ -559,7 +559,7 @@ class InstallToolsTests(unittest.TestCase):
     def test_every_install_kind_is_known(self):
         for kind in pdfmd.INSTALL_KINDS:
             self.assertIn(kind, pdfmd.INSTALL_SIZES)
-        self.assertEqual(set(pdfmd.INSTALL_SPECS), {"emoji", "math", "pandoc"})
+        self.assertEqual(set(pdfmd.INSTALL_SPECS), {"emoji", "math", "pandoc", "translit"})
 
 
 @unittest.skipUnless(pdfmd.md2pdf_available(), "pymd2pdf is not installed (pdfmd --install math)")

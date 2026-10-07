@@ -113,7 +113,12 @@ Finding a document by name:
            `pdfmd glucose`), at least 3 characters, then the start of a word
            inside one (`pdfmd body` for "Glucose in our body").
     Steps 1-3 print an `AUTO MD` line; every guess after them is a `WARN` that
-    says what it matched. A name that fits two documents equally well is an
+    says what it matched. Cyrillic (Russian, Ukrainian, Belarusian, Kazakh)
+    is always understood; other scripts are romanized only by the packs
+    --translit / PDFMD_TRANSLIT turns on (greek armenian georgian hebrew arabic
+    hangul kana built in; han and other through pypinyin/anyascii, `pdfmd
+    --install translit`): `pdfmd --translit greek tyche` finds "Τύχη.md".
+    A name that fits two documents equally well is an
     error listing both, never a pick. `--no-auto lookup` turns all of this
     off (a command line switch only -- the document is not found yet when its
     own `pdfmd-options` could say so). Single-file lookup only: -b and -r are
@@ -990,7 +995,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.2"
+PDFMD_VERSION = "3.23.3"
 import argparse
 import csv
 import filecmp
@@ -2137,13 +2142,14 @@ NATIVE_READERS = frozenset({"markdown", "md", "gfm", "commonmark", "commonmark_x
 # `pdfmd --install KIND` / `pdfmd-cli[KIND]`; the version ranges match the
 # vendored inkmd and the md2pdf this code was written against.
 INSTALL_SPECS = {
+    "translit": ["pypinyin", "anyascii"],
     "emoji": ["inkmd>=0.5,<0.6"],
     "math": ["pymd2pdf>=0.6,<0.7", "matplotlib"],
     "pandoc": ["pypandoc_binary"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts")
-INSTALL_SIZES = {"fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit")
+INSTALL_SIZES = {"translit": "about 3 MB", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
@@ -3537,6 +3543,24 @@ def install_typst() -> bool:
     return True
 
 
+def translit_report() -> bool:
+    """`--translit list`: the packs, which are on, which could work."""
+    module = unicode_module()
+    print("Romanization packs (names in other scripts, found by typing them in Latin letters):")
+    print("  cyrillic   always on: Russian, Ukrainian, Belarusian, Kazakh (built in)")
+    if module is None:
+        print("  the other packs are part of the pdfmd_unicode package, which is not installed here")
+        return False
+    for pack in module.translit.PACKS:
+        state = ("on" if pack in TRANSLIT_PACKS else "ready" if module.translit.available(pack)
+                 else "needs " + module.translit.needs(pack))
+        scripts = ", ".join(sorted(module.SCRIPT_NAMES.get(code, code)
+                                   for code in module.translit.PACK_SCRIPTS.get(pack, ()))) or "all the rest"
+        print(f"  {pack:<10} {state:<44} {scripts}")
+    print("Turn them on with --translit greek,hangul (or all), or PDFMD_TRANSLIT=greek,hangul.")
+    return True
+
+
 def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]`."""
     kind = value.partition(":")[0]
@@ -4395,6 +4419,8 @@ def strip_lookup_suffix(name: str) -> str:
 def name_candidates(value: str) -> list[str]:
     value = strip_lookup_suffix(value)
     candidates = [value]
+    if not TRANSLIT_CYRILLIC:  # --translit none
+        return candidates
     if re.search("[А-Яа-яЁё]", value):
         candidates += cyrillic_candidates(value)
     else:
@@ -4465,6 +4491,46 @@ LATIN_EXTRA = {"ş": "sh", "š": "sh", "ç": "ch", "č": "ch", "ž": "zh", "ğ":
                "ß": "ss", "æ": "ae", "œ": "oe", "ø": "o", "đ": "d", "ł": "l"}
 
 
+# Romanization packs beyond Cyrillic (see pdfmd_unicode/translit.py): none unless asked for with
+# --translit / PDFMD_TRANSLIT. Cyrillic is built in and on, unless `--translit none` says otherwise.
+TRANSLIT_PACKS: frozenset[str] = frozenset()
+TRANSLIT_CYRILLIC = True
+
+
+def set_translit(spec: str | None) -> list[str]:
+    """Choose the romanization packs from a --translit / PDFMD_TRANSLIT value: names separated by
+    commas or spaces, `all`, or `none` (Cyrillic off too). Returns problems to report."""
+    global TRANSLIT_PACKS, TRANSLIT_CYRILLIC
+    problems: list[str] = []
+    packs: set[str] = set()
+    TRANSLIT_CYRILLIC = True
+    module = unicode_module()
+    known = module.translit.PACKS if module else ()
+    for word in re.split(r"[,\s]+", (spec or "").strip().casefold()):
+        if not word:
+            continue
+        if word == "none":
+            packs.clear()
+            TRANSLIT_CYRILLIC = False
+        elif word == "all":
+            packs.update(known)
+        elif word == "cyrillic":
+            TRANSLIT_CYRILLIC = True
+        elif word in known:
+            packs.add(word)
+        else:
+            problems.append(f"unknown romanization pack {word!r}; choose from cyrillic (always on), "
+                            f"{', '.join(known) or 'none installed'}, all, none")
+    for pack in sorted(packs):
+        if not module.translit.available(pack):
+            problems.append(f"the {pack} pack needs a library: {module.translit.needs(pack)} "
+                            "(pdfmd --install translit)")
+            packs.discard(pack)
+    TRANSLIT_PACKS = frozenset(packs)
+    lookup_key.cache_clear()
+    return problems
+
+
 @lru_cache(maxsize=None)
 def lookup_key(text: str, loose: bool = False, y: str = "i", w: str = "v") -> str:
     """The comparison key of a name, title or heading (see the block comment
@@ -4475,12 +4541,15 @@ def lookup_key(text: str, loose: bool = False, y: str = "i", w: str = "v") -> st
     for: у is written y in some Kazakh Latin spellings and w in others, so a
     query tries both (lookup_query_keys) where a stored name has no choice."""
     text = unicodedata.normalize("NFKC", text).casefold()
-    table = CYRILLIC_LOOSE if loose else CYRILLIC_STRICT
+    if TRANSLIT_PACKS:
+        text = unicode_module().translit.romanize(text, TRANSLIT_PACKS).casefold()
+    table = (CYRILLIC_LOOSE if loose else CYRILLIC_STRICT) if TRANSLIT_CYRILLIC else {}
     text = "".join(table.get(letter, LATIN_EXTRA.get(letter, letter)) for letter in text)
     letters = "".join(letter for letter in unicodedata.normalize("NFKD", text) if letter.isalnum())
     if not loose:
         return letters
-    for digraph, merged in (("shch", "s"), ("sch", "s"), ("sh", "s"), ("zh", "z"), ("ch", "k"), ("kh", "h")):
+    for digraph, merged in (("shch", "s"), ("sch", "s"), ("sh", "s"), ("zh", "z"), ("ch", "k"), ("kh", "h"),
+                            ("ph", "f")):
         letters = letters.replace(digraph, merged)
     letters = re.sub(r"[yj](?=[aeiou])", "", letters)   # ю/я/ё/є: yu, ya, yo, ye ~ u, a, o, e
     letters = letters.translate(str.maketrans({"c": "k", "q": "k", "j": "i", "x": "ks", "y": y, "w": w}))
@@ -12778,6 +12847,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "into pdfmd's own folder with no admin rights). "
                              "pandoc/math equal `pip install \"pdfmd-cli[KIND]\"`. "
                              "A Pandoc or Typst already on PATH always wins over the installed ones")
+    parser.add_argument("--translit", metavar="PACKS",
+                        help="romanization packs for finding a document by a name typed in Latin letters "
+                             "(`mingyun` finds 命運.md): greek, armenian, georgian, hebrew, arabic, hangul, kana "
+                             "(built in), han (pinyin, needs pypinyin or anyascii), other (every other script, "
+                             "needs anyascii); `all`, `none` (Cyrillic too), `list` shows what is available. "
+                             "Cyrillic (Russian, Kazakh, Ukrainian, Belarusian) is always on. Also PDFMD_TRANSLIT")
     parser.add_argument("--uninstall", metavar="fonts:NAME", type=uninstall_kind,
                         help="remove fonts installed by --install fonts, e.g. --uninstall fonts:arabic,cjk")
     parser.add_argument("--check-dependencies", action="store_true",
@@ -13096,6 +13171,11 @@ def main() -> None:
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
+    translit = args.translit if args.translit is not None else os.environ.get("PDFMD_TRANSLIT")
+    if translit and translit.strip().casefold() == "list":
+        raise SystemExit(0 if translit_report() else 1)
+    for problem in set_translit(translit):
+        print(f"WARN  --translit: {problem}", file=sys.stderr)
     CACHE_PLOTS_CLI = args.cache_plots or None
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
