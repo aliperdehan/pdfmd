@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.9 — 2026-10-08
+
+Pre-edit state: commit `84deaa5` (v3.23.8). Characters in code.
+
+### Added
+
+- **Fallback in code (LaTeX)**: the document's inline code and code blocks are checked against the
+  monofont (its own, or JetBrains Mono), and the characters it lacks are set in a fallback font
+  (right-to-left runs get their direction), drawn as black boxes (`missing: box`), or counted by
+  `missing: error`. A code block that needs one is written as a `fancyvrb` `Verbatim` with
+  `commandchars`, so it loses syntax highlighting (blocks with nothing missing are untouched).
+  Typst and HTML code are left to their own fallback; math is left to unicode-math.
+
+---
+
 ## v3.23.8 — 2026-10-08
 
 Pre-edit state: commit `5ba014b` (v3.23.7).

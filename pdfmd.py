@@ -199,6 +199,10 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     CJKmainfont, mainfontfallback) is left to itself unless
     `pdfmd-options: {unicode: true}`; `--no-auto unicode` turns it all off.
     Fonts a build cannot load are dropped and the build retried without them.
+    Code is checked against the monofont the same way (LaTeX): inline code and
+    code blocks get their own missing characters set in a fallback font (a code
+    block that needs one becomes a fancyvrb Verbatim, losing its syntax
+    highlighting); math is left to unicode-math.
     Emoji under lualatex/xelatex, which cannot draw colour fonts, become
     pictures: the PNG of each emoji sequence (flags, skin tones, ZWJ families,
     keycaps, found through the font's own ligatures) is read out of the colour
@@ -1013,7 +1017,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.8"
+PDFMD_VERSION = "3.23.9"
 import argparse
 import csv
 import filecmp
@@ -4373,6 +4377,21 @@ def document_font_setting(key: str, md_paths: list[Path], metadata_files: list[P
     return None
 
 
+def unicode_code_text(md_paths: list[Path]) -> str:
+    """The code of the Markdown files: the content of fenced blocks and inline code spans."""
+    pieces: list[str] = []
+    for path in md_paths:
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            continue
+        text = EMBED_BLOCK_RE.sub("", text)
+        pieces += [match.group(2) for match in re.finditer(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)^[ \t]*\1[ \t]*$", text)]
+        text = re.sub(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", "", text)
+        pieces += re.findall(r"`([^`\n]+)`", text)
+    return "\n".join(pieces)
+
+
 def own_script_setup(md_paths: list[Path], preamble_files: list[Path], variables: list[str],
                      metadata_files: list[Path]) -> bool:
     """Whether the document already sets up its own fonts per script."""
@@ -4499,6 +4518,18 @@ def managed_fonts_css(engine: str | None) -> Iterator[Path | None]:
         temporary_path.unlink(missing_ok=True)
 
 
+def describe_code_points(code_points, limit: int = 12) -> str:
+    shown = []
+    for code_point in sorted(code_points)[:limit]:
+        try:
+            name = unicodedata.name(chr(code_point))
+        except ValueError:
+            name = "unnamed"
+        shown.append(f"U+{code_point:04X} {chr(code_point)} {name}")
+    more = len(code_points) - len(shown)
+    return "; ".join(shown) + (f"; and {more} more" if more > 0 else "")
+
+
 @contextmanager
 def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
                     preamble_files: list[Path], main_font: str | None, engine: str | None,
@@ -4523,9 +4554,21 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
         return
     text = unicode_source_text(md_paths, metadata_files)
     language = document_font_setting("lang", md_paths, metadata_files, variables)
-    plan = module.plan_text(text, main, index, language, fonts=mode in ("char", "word", "document"),
-                            words=mode == "word")
+    fonts_on = mode in ("char", "word", "document")
+    plan = module.plan_text(text, main, index, language, fonts=fonts_on, words=mode == "word")
     UNICODE_UNCOVERED.clear()
+    code_uncovered: set[int] = set()
+    if plan is not None and (engine is None or engine in LATEX_ENGINES):
+        # Code is set in the monofont, which lacks other characters than the main font does.
+        code_text = unicode_code_text(md_paths)
+        mono = document_font_setting("monofont", md_paths, metadata_files, variables) or default_monofont()
+        code_plan = module.plan_text(code_text, mono, index, language, fonts=fonts_on) if code_text.strip() else None
+        if code_plan is not None:
+            code_uncovered = set(code_plan.uncovered) | set(code_plan.emoji)
+            plan.add_code(code_plan)
+            if code_plan.choices:
+                for line in code_plan.describe():
+                    note("UNICODE", f"{md_paths[0]}: code in {mono} lacks {line}")
     if plan is None:
         note("UNICODE", f"{md_paths[0]}: {main} is not among the installed fonts, so what it lacks "
                         "cannot be told")
@@ -4554,23 +4597,23 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
                 note("UNICODE", f"{md_paths[0]}: {len(plan.pictures)} emoji set as pictures from {face.family}")
             if left:
                 plan.uncovered.update({code_point: 1 for code_point in left})
-    if plan.uncovered:
+    undrawn = {**plan.uncovered, **{code_point: 1 for code_point in code_uncovered}}
+    if undrawn:
         # Nothing installed draws these: warn, draw a black box, or stop, as `missing:` says.
-        UNICODE_UNCOVERED.update(plan.uncovered)
+        UNICODE_UNCOVERED.update(undrawn)
         if missing_mode == "error":
-            raise SystemExit(f"{md_paths[0]}: the main font {main} and the installed fonts do not draw "
-                             f"{plan.describe_uncovered()} (pdfmd-options: {{missing: warn}} or {{fallback: char}} "
-                             "to build anyway)" if mode in ("char", "word", "document") else
-                             f"{md_paths[0]}: the main font {main} does not draw {plan.describe_uncovered()} "
-                             "(fallback: error)")
+            raise SystemExit(f"{md_paths[0]}: the fonts do not draw "
+                             f"{describe_code_points(undrawn)} (pdfmd-options: {{missing: warn}} "
+                             "to build anyway)")
         elif missing_mode == "box":
             plan.boxes = set(plan.uncovered)
-            note("UNICODE", f"{md_paths[0]}: {len(plan.boxes)} character(s) no font draws are set as black boxes")
+            plan.code_boxes = code_uncovered
+            note("UNICODE", f"{md_paths[0]}: {len(undrawn)} character(s) no font draws are set as black boxes")
         else:
             from pdfmd_unicode import install as installer
-            wanted = installer.packages_for(plan.uncovered, language)
+            wanted = installer.packages_for(undrawn, language)
             hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
-            print(f"WARN  {md_paths[0]}: no installed font draws {plan.describe_uncovered()} "
+            print(f"WARN  {md_paths[0]}: no installed font draws {describe_code_points(undrawn)} "
                   f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them)",
                   file=sys.stderr)
     if not plan:

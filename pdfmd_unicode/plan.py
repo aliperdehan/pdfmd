@@ -56,9 +56,29 @@ class Plan:
     boxes: set[int] = field(default_factory=set)    # characters drawn as a black box (missing: box)
     words: bool = False                             # fallback fonts take whole words (fallback: word)
     cover: dict[str, set[int]] = field(default_factory=dict)  # key -> the document's characters it draws
+    code_candidates: dict[int, list[str]] = field(default_factory=dict)  # the same, for code (lacking in the monofont)
+    code_common: set[int] = field(default_factory=set)
+    code_boxes: set[int] = field(default_factory=set)
 
     def __bool__(self) -> bool:
-        return bool(self.choices) or bool(self.pictures) or bool(self.boxes)
+        return bool(self.choices) or bool(self.pictures) or bool(self.boxes) or bool(self.code_boxes)
+
+    def add_code(self, code: "Plan") -> None:
+        """Take in the plan of the document's code, made against its monofont: the fonts it needs join
+        this plan's, and the Lua filter sets them in inline code and code blocks (LaTeX only)."""
+        remap: dict[str, str] = {}
+        for key, choice in code.choices.items():
+            for existing_key, existing in self.choices.items():
+                if existing.family == choice.family:
+                    remap[key] = existing_key
+                    break
+            else:
+                new_key = _key(len(self.choices))
+                remap[key] = new_key
+                choice.key = new_key
+                self.choices[new_key] = choice
+        self.code_candidates = {code_point: [remap[key] for key in keys] for code_point, keys in code.candidates.items()}
+        self.code_common = set(code.common)
 
     def describe(self) -> list[str]:
         """One line per font: what it was chosen for."""
@@ -67,6 +87,8 @@ class Plan:
             names = sorted({SCRIPT_NAMES.get(code, code) for code in choice.scripts if code not in COMMON}
                            or {SCRIPT_NAMES.get(code, code) for code in choice.scripts})
             count = sum(1 for keys in self.candidates.values() if keys and keys[0] == choice.key)
+            if not count:
+                continue  # a font only the code needs (code in ... lacks ...)
             lines.append(f"{', '.join(names)} -> {choice.family} ({count} character{'s' if count != 1 else ''})")
         return lines
 
@@ -97,8 +119,10 @@ class Plan:
         ]
         for choice in self.choices.values():
             lines.append(_font_line(choice))
-        if self.boxes:
+        if self.boxes or self.code_boxes:
             lines.append(r"\providecommand{\pdfmdbox}{\rule[-0.1ex]{0.55em}{0.75em}}")
+        if self.code_candidates or self.code_boxes:
+            lines.append(r"\usepackage{fancyvrb}")
         if self.pictures:
             lines += [r"\usepackage{graphicx}",
                       r"\providecommand{\pdfmdemoji}[1]{\raisebox{-0.2em}{\includegraphics[height=1.1em]{#1}}}"]
@@ -123,10 +147,15 @@ class Plan:
         longest = max((len(sequence) for sequence in self.pictures), default=1)
         families = ", ".join(f'{choice.key}="{choice.family}"' for choice in self.choices.values())
         langs = ", ".join(f'{choice.key}="{choice.lang}"' for choice in self.choices.values() if choice.lang)
+        code_entries = ", ".join(f'[{code}]={{{", ".join(chr(34) + key + chr(34) for key in keys)}}}'
+                                 for code, keys in sorted(self.code_candidates.items()) if keys)
+        code_common = ", ".join(f"[{code}]=true" for code in sorted(self.code_common) if self.code_candidates.get(code))
+        code_boxes = ", ".join(f"[{code}]=true" for code in sorted(self.code_boxes))
         boxes = ", ".join(f"[{code}]=true" for code in sorted(self.boxes))
         covers = ", ".join("%s={%s}" % (key, ", ".join(f"[{code}]=true" for code in sorted(codes)))
                            for key, codes in self.cover.items())
-        return (LUA_FILTER.replace("@BOXES@", boxes).replace("@WORDS@", "true" if self.words else "false")
+        return (LUA_FILTER.replace("@CODECANDIDATES@", code_entries).replace("@CODECOMMON@", code_common)
+                .replace("@CODEBOXES@", code_boxes).replace("@BOXES@", boxes).replace("@WORDS@", "true" if self.words else "false")
                 .replace("@COVER@", covers).replace("@CANDIDATES@", entries).replace("@COMMON@", common).replace("@RTL@", rtl)
                 .replace("@FAMILIES@", families).replace("@LANGS@", langs).replace("@SEQUENCES@", sequences)
                 .replace("@EMOJIFIRST@", first).replace("@LONGEST@", str(longest)))
@@ -337,6 +366,9 @@ local SEQUENCES = { @SEQUENCES@ }   -- emoji sequence -> picture (LaTeX only)
 local EMOJI_FIRST = { @EMOJIFIRST@ }
 local LONGEST = @LONGEST@
 local BOXES = { @BOXES@ }        -- characters drawn as a black box
+local CODE_CANDIDATES = { @CODECANDIDATES@ }   -- the same for code, against the monofont
+local CODE_COMMON = { @CODECOMMON@ }
+local CODE_BOXES = { @CODEBOXES@ }
 local WORDS = @WORDS@            -- fallback fonts take whole words
 local COVER = { @COVER@ }        -- key -> the characters of the document its font draws
 
@@ -386,6 +418,86 @@ local function wrap(kind, key, items)
     if LANGS[key] then attributes.lang = LANGS[key] end
     return { pandoc.Span(items, pandoc.Attr("", {}, attributes)) }
   end
+end
+
+-- Code (LaTeX only): split `text` into runs of one font, black boxes and plain text
+local function code_segments(text)
+  local segments, current, previous = {}, nil, nil
+  for _, code in utf8.codes(text) do
+    local char, key, box = utf8.char(code), nil, false
+    if CODE_BOXES[code] then
+      box = true
+    elseif CODE_CANDIDATES[code] then
+      local candidates = CODE_CANDIDATES[code]
+      key = candidates[1]
+      if CODE_COMMON[code] and previous and has(candidates, previous) then key = previous end
+    end
+    if box then
+      segments[#segments + 1] = { box = true }
+      current = nil
+    elseif current and current.key == key then
+      current.text = current.text .. char
+    else
+      current = { key = key, text = char }
+      segments[#segments + 1] = current
+    end
+    previous = key
+  end
+  return segments
+end
+
+local function has_code_trouble(text)
+  for _, code in utf8.codes(text) do
+    if CODE_CANDIDATES[code] or CODE_BOXES[code] then return true end
+  end
+  return false
+end
+
+local function verbatim_escape(text)
+  local out = {}
+  for _, code in utf8.codes(text) do
+    local char = utf8.char(code)
+    if char == "\\" then out[#out + 1] = "\\textbackslash{}"
+    elseif char == "{" then out[#out + 1] = "\\{"
+    elseif char == "}" then out[#out + 1] = "\\}"
+    else out[#out + 1] = char end
+  end
+  return table.concat(out)
+end
+
+function Code(element)
+  if mode() ~= "latex" or not has_code_trouble(element.text) then return nil end
+  local out = {}
+  for _, segment in ipairs(code_segments(element.text)) do
+    if segment.box then
+      out[#out + 1] = pandoc.RawInline("latex", "\\pdfmdbox{}")
+    elseif segment.key then
+      out[#out + 1] = pandoc.RawInline("latex", (RTL[segment.key] and "\\pdfmdrunrtl{" or "\\pdfmdrun{")
+                                       .. segment.key .. "}{")
+      out[#out + 1] = pandoc.Str(segment.text)
+      out[#out + 1] = pandoc.RawInline("latex", "}")
+    else
+      out[#out + 1] = pandoc.Code(segment.text, element.attr)
+    end
+  end
+  return out
+end
+
+function CodeBlock(element)
+  if mode() ~= "latex" or not has_code_trouble(element.text) then return nil end
+  local body = {}
+  for _, segment in ipairs(code_segments(element.text)) do
+    if segment.box then
+      body[#body + 1] = "\\pdfmdbox{}"
+    elseif segment.key then
+      body[#body + 1] = (RTL[segment.key] and "\\pdfmdrunrtl{" or "\\pdfmdrun{") .. segment.key .. "}{"
+                        .. verbatim_escape(segment.text) .. "}"
+    else
+      body[#body + 1] = verbatim_escape(segment.text)
+    end
+  end
+  return pandoc.RawBlock("latex", "\\begin{Verbatim}[commandchars=\\\\\\{\\}]\n" .. table.concat(body)
+                                  .. "\n\\end{Verbatim}")
 end
 
 function Inlines(inlines)

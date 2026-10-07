@@ -592,6 +592,58 @@ class FallbackModes(unittest.TestCase):
         self.assertEqual(pdfmd.mainfont_choice([doc], [], [], "Cli Font", True, True, None), "Cli Font")
 
 
+class CodeFallback(unittest.TestCase):
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E), (0x2190, 0x21FF)])
+        make_font(self.root / "mono.ttf", "Mono Test", [(0x20, 0x7E)])
+        make_font(self.root / "dejavu.ttf", "DejaVu Sans", [(0x20, 0x7E), (0x2190, 0x21FF)])
+        make_font(self.root / "amiri.ttf", "Amiri", [(0x600, 0x6FF)])
+        self.index = pu.FontIndex(self.root, use_system=False)
+
+    def plan(self, code_text):
+        plan = pu.plan_text("body \u2192 text", "Main Test", self.index)   # the main font draws the arrow
+        code = pu.plan_text(code_text, "Mono Test", self.index)           # the monofont does not
+        plan.add_code(code)
+        return plan
+
+    def convert(self, plan, markdown):
+        if not shutil.which("pandoc"):
+            self.skipTest("Pandoc not installed")
+        filter_file = self.root / "f.lua"
+        filter_file.write_text(plan.lua_filter(), encoding="utf-8")
+        return subprocess.run(["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(filter_file)],
+                              input=markdown, capture_output=True, text=True, encoding="utf-8").stdout
+
+    def test_code_has_its_own_missing_characters(self):
+        plan = self.plan("a \u2192 b")
+        self.assertEqual(plan.describe(), [])            # the body needs nothing
+        self.assertIn("\\usepackage{fancyvrb}", plan.latex_header())
+        out = self.convert(plan, "see `a \u2192 b` and \u2192 here\n")
+        self.assertIn("\\pdfmdrun{A}{\u2192}", out)
+        self.assertEqual(out.count("pdfmdrun"), 1)         # the arrow in the text is the main font's
+
+    def test_code_blocks_become_verbatim_with_the_fallback_inside(self):
+        plan = self.plan("x \u2192 {y} \\ z")
+        out = self.convert(plan, "```\nx \u2192 {y} \\ z\nplain\n```\n\n```\nnothing special\n```\n")
+        self.assertIn("\\begin{Verbatim}[commandchars=\\\\\\{\\}]", out)
+        self.assertIn("x \\pdfmdrun{A}{\u2192} \\{y\\} \\textbackslash{} z\nplain", out)
+        self.assertEqual(out.count("Verbatim}[") , 1)       # the block without trouble stays a normal one
+        self.assertIn("nothing special", out)
+
+    def test_right_to_left_code_gets_its_direction(self):
+        plan = self.plan("a \u0627\u0644")
+        self.assertIn("\\pdfmdrunrtl{", self.convert(plan, "`a \u0627\u0644`\n"))
+
+    def test_boxes_in_code(self):
+        plan = pu.plan_text("body", "Main Test", self.index)
+        plan.code_boxes = {0x2192}
+        self.assertTrue(plan)
+        self.assertIn("\\pdfmdbox", self.convert(plan, "`a \u2192 b`\n"))
+
+
 class FallbackErrors(unittest.TestCase):
     def test_missing_error_stops_the_build_naming_the_characters(self):
         with tempfile.TemporaryDirectory() as directory:
