@@ -578,6 +578,26 @@ PDF and reuses it until the package, the preamble, the engine or the plot's
 data file changes. Off by default; `--no-cache` for one build; `pdfmd --clear-cache`
 (or deleting the folder) is always safe.
 
+**Where the cache lives.** By default in `~/.cache/pdfmd`, one folder per document.
+Folders get moved (a lab report from Downloads into OneDrive), and a cache keyed by
+the old path would be lost: so each cache folder records which document it is, and a
+document with no cache under its new path takes over the one of the same document
+that has lost its original: the same content (SHA-256), or, if you edited it before
+moving it, the same name in a folder of the same name, when only one fits. A copy
+(the original still there) never takes the original's cache, and plot entries find
+their data files again under the new folders. Or keep the cache with the document:
+
+```yaml
+pdfmd-options:
+  cache: {aux: true, location: document}   # or: --cache-location document
+```
+
+puts it in a `.cache/pdfmd` folder beside the document (with a `CACHEDIR.TAG`, so
+backup tools skip it, and a `.gitignore`), which travels with the folder. It is
+yours to choose per document, in the config file for everything, or with
+`--cache-location`. `--clear-cache` clears both places. (The colour-emoji pictures
+LaTeX uses are in the same cache.)
+
 ### Tables straight from a CSV file
 
 ```markdown
@@ -682,7 +702,7 @@ comment) in inline code or a code block is set in a fallback font under LaTeX (a
 block that needs one is typeset as plain verbatim, without syntax highlighting). Math is
 left to its own font.
 
-`missing: warn | box | error` says what happens to a character that *no* installed
+`missing: warn | box | error` (`--missing`) says what happens to a character that *no* installed
 font draws, after the fallback (`box` and `error` as a fallback mode imply it). `char`,
 `word` and `document` also turn emoji into pictures under LaTeX; `off`, `box` and
 `error` leave them alone.
@@ -725,7 +745,8 @@ pdfmd's anyway, and `--no-auto unicode` turns it off.
 
 ```sh
 pdfmd lecture --no-auto                  # everything off: close to plain pandoc
-pdfmd lecture --no-auto margin mainfont  # only these
+pdfmd lecture --no-auto margin mainfont  # only these (kinds: reader title margin mainfont monofont tablewidth
+                                           #  unicode lookup yaml tex lua ...; `pdfmd --help` lists them)
 ```
 
 ### Passing options to Pandoc

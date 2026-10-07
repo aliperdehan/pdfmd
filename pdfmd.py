@@ -726,6 +726,16 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     never trap you; deleting the folder is always safe. Off unless asked for.
     --no-cache overrides the setting for one build.
 
+    Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
+    the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
+    records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
+    and a document with no cache under its path takes over a cache whose recorded
+    original is gone (a move): same stem and same content, else same stem and the
+    same folder name when only one fits; a copy never takes the original's. document
+    is a `.cache/pdfmd` folder beside the document (CACHEDIR.TAG, .gitignore) that
+    travels with it. Plot-cache entries record the folders they were made in and
+    are re-pointed at the new ones after a move. --clear-cache clears both.
+
     In parts mode the cache also lets a part built alone see the rest: its
     labels (\\ref/\\cref to a table in a part left out) are taken from the last
     full build's .aux instead of printing ??, and at the start of every
@@ -1017,7 +1027,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.11"
+PDFMD_VERSION = "3.23.12"
 import argparse
 import csv
 import filecmp
@@ -3453,7 +3463,7 @@ options:
   # What to do about characters no installed font draws (after the fallback): warn, box or error.
   # missing: warn
   # pdf-engine: lualatex
-  # cache: {aux: true}
+  # cache: {aux: true, location: global}   # location: global (~/.cache/pdfmd) or document (.cache/pdfmd beside it)
 """
 
 
@@ -4653,8 +4663,9 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
                 from pdfmd_unicode import colorfont
                 stat = Path(face.path).stat()
                 digest = hashlib.sha1(f"{face.path}{stat.st_size}{stat.st_mtime_ns}".encode()).hexdigest()[:8]
-                plan.pictures = colorfont.write_pictures(text, plan.emoji, face.path,
-                                                         cache_root() / "emoji" / digest, face.index)
+                plan.pictures = colorfont.write_pictures(
+                    text, plan.emoji, face.path, document_cache_root(md_paths[0], metadata_files) / "emoji" / digest,
+                    face.index)
             drawn = {ord(character) for sequence in plan.pictures for character in sequence}
             left = plan.emoji - drawn
             if plan.pictures:
@@ -9860,11 +9871,129 @@ def cache_root() -> Path:
     return base / "pdfmd"
 
 
-def cache_directory(source: Path) -> Path:
-    """One folder per document, keyed by its absolute path (two reports both
-    called report.md must not share an .aux)."""
+CACHE_LOCATIONS = ("global", "document")
+CACHE_LOCATION_NAMES = {"root": "global", "user": "global", "home": "global", "central": "global",
+                        "local": "document", "folder": "document", "here": "document", "doc": "document",
+                        "self-contained": "document"}
+CACHE_LOCATION_CLI: str | None = None     # --cache-location (set in main)
+CACHE_MANIFEST = ".pdfmd-source.json"
+LOCAL_CACHE_DIRNAME = Path(".cache") / "pdfmd"
+
+
+def cache_location(md_path: Path, metadata_files: list[Path]) -> str:
+    """Where this document's cache lives: `global` (cache_root(): ~/.cache/pdfmd) or `document` (a
+    `.cache/pdfmd` folder beside it, so the folder carries its cache wherever it is moved). The command
+    line, else `pdfmd-options: {cache: {location: ...}}` (or `cache-location:`) of the document, its
+    metadata files and the config file, else global."""
+    value = CACHE_LOCATION_CLI
+    if value is None:
+        sources = [frontmatter_pdfmd_options(md_path)]
+        for metadata_file in metadata_files:
+            found = metadata_file_yaml(metadata_file).get("pdfmd-options")
+            sources.append(found if isinstance(found, dict) else {})
+        sources.append(config_options())
+        for options in sources:
+            nested = options.get("cache")
+            value = (nested.get("location") if isinstance(nested, dict) else None) or options.get("cache-location")
+            if value is not None:
+                break
+    if value is None:
+        return "global"
+    text = str(value).strip().casefold()
+    text = CACHE_LOCATION_NAMES.get(text, text)
+    if text not in CACHE_LOCATIONS:
+        raise SystemExit(f"{md_path}: cache location {value!r} is not one of {', '.join(CACHE_LOCATIONS)}")
+    return text
+
+
+def document_cache_root(md_path: Path, metadata_files: list[Path]) -> Path:
+    """The folder this document's cache entries go in (made, with its CACHEDIR.TAG, when first used)."""
+    if cache_location(md_path, metadata_files) == "global":
+        return cache_root()
+    return md_path.resolve().parent / LOCAL_CACHE_DIRNAME
+
+
+def prepare_cache_root(root: Path) -> None:
+    """Mark a cache folder as one: CACHEDIR.TAG (backup tools skip it) and, for a `.cache/pdfmd`
+    beside a document, a .gitignore so the cache is not committed."""
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        tag = root / "CACHEDIR.TAG"
+        if not tag.exists():
+            tag.write_text("Signature: 8a477f597d28d172789f06886806bc55\n"
+                           "# This is a cache directory made by pdfmd (safe to delete).\n", encoding="utf-8")
+        if root.parent.name == ".cache" and not (root.parent / ".gitignore").exists():
+            (root.parent / ".gitignore").write_text("*\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def source_fingerprint(source: Path) -> str | None:
+    try:
+        return hashlib.sha256(source.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def write_cache_manifest(folder: Path, source: Path) -> None:
+    """Record whose cache a folder is, so a moved document can find it again (see adopt_moved_cache)."""
+    import json
+    try:
+        (folder / CACHE_MANIFEST).write_text(json.dumps({
+            "path": str(source.resolve()), "stem": source.stem, "folder": source.resolve().parent.name,
+            "sha256": source_fingerprint(source)}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def adopt_moved_cache(source: Path, target: Path, root: Path, note=None) -> bool:
+    """A document moved to another folder (a lab report from Downloads into OneDrive) has no cache
+    under its new path. Find the folder of the same document by what it recorded: a cache whose
+    original no longer exists, with the same stem and the same content (SHA-256), or else the same
+    stem and the same folder name when only one such cache is left. The folder is renamed to this
+    document's, so the cross-reference files carry on. A copy (the original still there) never
+    takes the original's cache."""
+    import json
+    here = str(source.resolve())
+    fingerprint = source_fingerprint(source)
+    exact, by_name = [], []
+    for candidate in root.glob(f"*-{source.stem}"):
+        try:
+            manifest = json.loads((candidate / CACHE_MANIFEST).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if (candidate == target or manifest.get("stem") != source.stem or manifest.get("path") == here
+                or Path(str(manifest.get("path", ""))).exists()):
+            continue
+        if fingerprint and manifest.get("sha256") == fingerprint:
+            exact.append(candidate)
+        elif manifest.get("folder") == source.resolve().parent.name:
+            by_name.append(candidate)
+    chosen = exact[0] if len(exact) >= 1 else (by_name[0] if len(by_name) == 1 else None)
+    if chosen is None:
+        return False
+    try:
+        chosen.rename(target)
+    except OSError:
+        return False
+    write_cache_manifest(target, source)
+    if note:
+        note("CACHE", f"{source}: the cache of the document it was moved from is reused")
+    return True
+
+
+def cache_directory(source: Path, root: Path | None = None, note=None) -> Path:
+    """One folder per document. In the global cache it is keyed by the document's absolute path (two
+    reports both called report.md must not share an .aux), and a moved document finds its folder again
+    by what the folder recorded; in a document's own `.cache/pdfmd` the stem is enough."""
+    root = root or cache_root()
+    if root != cache_root():
+        return root / source.stem
     digest = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:10]
-    return cache_root() / f"{digest}-{source.stem}"
+    target = root / f"{digest}-{source.stem}"
+    if not target.exists() and root.is_dir():
+        adopt_moved_cache(source, target, root, note)
+    return target
 
 
 def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) -> dict:
@@ -10023,37 +10152,57 @@ def sha1_file(path: Path) -> str | None:
         return None
 
 
-def plot_cache_directory(preamble: str, sty_text: str, engine: str) -> Path:
+def plot_cache_directory(preamble: str, sty_text: str, engine: str, root: Path | None = None) -> Path:
     digest = hashlib.sha1("\0".join([PLOT_CACHE_FORMAT, preamble, sty_text,
                                      engine_version_line(engine)]).encode("utf-8")).hexdigest()[:12]
-    return cache_root() / f"plots-{digest}"
+    return (root or cache_root()) / f"plots-{digest}"
 
 
 def prune_plot_directories(keep: Path) -> None:
     """Keep the newest few plot directories; an older environment (a package or
     preamble from before a change) is never read again."""
-    others = sorted((d for d in cache_root().glob("plots-*") if d.is_dir() and d != keep),
+    others = sorted((d for d in keep.parent.glob("plots-*") if d.is_dir() and d != keep),
                     key=lambda d: d.stat().st_mtime, reverse=True)
     for stale in others[PLOT_CACHE_KEEP_DIRS - 1:]:
         shutil.rmtree(stale, ignore_errors=True)
 
 
-def validate_plot_entries(plot_dir: Path, verbose: bool) -> int:
-    """Drop every entry whose recorded input files changed or vanished."""
+def validate_plot_entries(plot_dir: Path, verbose: bool, roots: list[Path] | None = None) -> int:
+    """Drop every entry whose recorded input files changed or vanished. Entries record the folders
+    they were made in: when the document has moved, the inputs are looked for in the same places
+    under the new folders (and the entry keeps working)."""
     import json
     dropped = 0
+    current = [str(root) for root in roots] if roots else None
     for deps_file in plot_dir.glob("*.deps"):
         key = deps_file.stem
         try:
             deps = json.loads(deps_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             deps = None
+        moved = False
+        if isinstance(deps, dict):
+            recorded = deps.pop("__roots__", None)
+            if current and recorded and recorded != current:
+                remapped = {}
+                for name, digest in deps.items():
+                    for old, new in zip(recorded, current):
+                        if name.startswith(old + os.sep):
+                            name = new + name[len(old):]
+                            break
+                    remapped[name] = digest
+                deps, moved = remapped, True
         if deps is None or any(sha1_file(Path(name)) != digest for name, digest in deps.items()):
             for suffix in (".deps", ".dim", ".pdf"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
             dropped += 1
             if verbose:
                 print(f"AUTO CACHE  plot {key[:8]}: an input changed; dropped")
+        elif moved:
+            try:
+                deps_file.write_text(json.dumps({**deps, "__roots__": current}), encoding="utf-8")
+            except OSError:
+                pass
     return dropped
 
 
@@ -10128,7 +10277,8 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         if ok:
             produced.replace(plot_dir / f"{key}.pdf")
             (plot_dir / f"{key}.deps").write_text(
-                json.dumps(plot_recorded_inputs(plot_dir / f"r-{key}.fls", roots)), encoding="utf-8")
+                json.dumps({**plot_recorded_inputs(plot_dir / f"r-{key}.fls", roots),
+                            "__roots__": [str(root) for root in roots]}), encoding="utf-8")
             dim.replace(plot_dir / f"{key}.dim")
         else:
             for suffix in (".dim", ".pdf", ".deps"):
@@ -12884,8 +13034,15 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
     and discards it.
     """
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-    base = cache_directory(full_scaffold or md_path) if persistent else Path(mkdtemp(prefix="pdfmd-cache-"))
+    cache_base = document_cache_root(full_scaffold or md_path, metadata_files)
+    if persistent:
+        prepare_cache_root(cache_base)
+        base = cache_directory(full_scaffold or md_path, cache_base, note)
+    else:
+        base = Path(mkdtemp(prefix="pdfmd-cache-"))
     base.mkdir(parents=True, exist_ok=True)
+    if persistent:
+        write_cache_manifest(base, full_scaffold or md_path)
     stem = safe_stem(output.stem)
     tex_path = base / f"{stem}.tex"
     headers = list(preamble_files or [])
@@ -12938,14 +13095,15 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                 note("CACHE", "plots: only LuaLaTeX is supported; plot cache skipped")
             elif "LabPlotCacheDir" not in sty_text:
                 note("CACHE", "plots: this nulabreport.sty has no plot cache (needs v1.26.0); skipped")
-            elif " " in str(cache_root()):
+            elif " " in str(cache_base):
                 note("CACHE", "plots: the cache folder's path has a space; plot cache skipped")
             else:
-                plot_dir = plot_cache_directory(preamble_text, sty_text, "lualatex")
+                plot_dir = plot_cache_directory(preamble_text, sty_text, "lualatex", cache_base)
                 plot_dir.mkdir(parents=True, exist_ok=True)
                 os.utime(plot_dir)
                 prune_plot_directories(plot_dir)
-                validate_plot_entries(plot_dir, verbose)
+                validate_plot_entries(plot_dir, verbose, [Path(os.path.abspath(pandoc_cwd)),
+                                                           Path(os.path.abspath(md_path.parent))])
                 tex_path.write_text("\\def\\LabPlotCacheDir{%s/}\n" % plot_dir.as_posix() + tex_text,
                                     encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
@@ -13239,6 +13397,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "unchanged document settles in one engine pass and a part of a split "
                              "document built alone can reference the last full build's numbers "
                              "(pdfmd-options: {cache: {aux: true}} does this by default)")
+    parser.add_argument("--cache-location", metavar="WHERE", choices=CACHE_LOCATIONS,
+                        help="where the cache lives: global (~/.cache/pdfmd; default; a moved document still "
+                             "finds its folder by what it recorded) or document (a .cache/pdfmd folder beside "
+                             "the document, so it travels with it). Also `pdfmd-options: {cache: {location: "
+                             "document}}` or the config file")
     parser.add_argument("--cache-plots", action="store_true",
                         help="also cache nulabreport's plots (needs nulabreport >= 1.26.0, LuaLaTeX): each "
                              "plot is stored as a PDF after the build that first typesets it and reused by "
@@ -13547,6 +13710,8 @@ def main() -> None:
     for problem in set_translit(translit):
         print(f"WARN  --translit: {problem}", file=sys.stderr)
     CACHE_PLOTS_CLI = args.cache_plots or None
+    global CACHE_LOCATION_CLI
+    CACHE_LOCATION_CLI = args.cache_location
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if args.check_fonts:
@@ -13578,9 +13743,10 @@ def main() -> None:
             except FileNotFoundError as error:
                 raise SystemExit(str(error))
             plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
-            targets = [cache_directory(plan.scaffold if plan else document)]
+            source = plan.scaffold if plan else document
+            targets = [cache_directory(source), cache_directory(source, source.resolve().parent / LOCAL_CACHE_DIRNAME)]
         else:
-            targets = [cache_root()]
+            targets = [cache_root(), Path.cwd() / LOCAL_CACHE_DIRNAME]
         for target in targets:
             if target.exists():
                 shutil.rmtree(target, ignore_errors=True)

@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.12 — 2026-10-08
+
+Pre-edit state: commit `4a835b4` (v3.23.11). The cache can live beside the document, and a moved
+document finds its cache.
+
+### Added
+
+- **`cache: {location: global | document}`** (`pdfmd-options`, `--cache-location`, the config
+  file): `global` (default, unchanged) is `~/.cache/pdfmd`; `document` is `.cache/pdfmd` beside the
+  document (self-contained, with `CACHEDIR.TAG` and a `.gitignore`), holding its LaTeX cross-reference
+  folder, the plot cache and the emoji pictures. `--clear-cache` clears both places.
+- **A moved document finds its cache.** Each cache folder records its document
+  (`.pdfmd-source.json`: path, stem, folder name, SHA-256 of the source). A document with no cache
+  under its path adopts that of a document whose recorded original no longer exists: same stem and
+  same content, or, after an edit, same stem and same folder name when only one such cache is left
+  (an `AUTO CACHE` note says so). A copy never takes its original's cache.
+- **Plot-cache entries survive a move**: they record the folders they were made in and, when the
+  report has moved, their input files are looked for under the new ones (and the entry is re-pointed);
+  a changed data file still drops the entry.
+- `tests/test_cache_location.py`.
+
+---
+
 ## v3.23.11 — 2026-10-08
 
 Pre-edit state: commit `b4bbc31` (v3.23.10). More fonts in the catalog.
