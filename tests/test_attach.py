@@ -330,3 +330,134 @@ class AttachAndRestore(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CommentKinds(unittest.TestCase):
+    """Comments in a LaTeX preamble, a BibTeX file and a CSL style (v3.22.4)."""
+
+    def test_tex_full_line_comments_go_with_their_line(self):
+        text = "% a\n\\usepackage{x}\n% b\n\n% c\n\n\\input{y}\n"
+        self.assertEqual(pdfmd.strip_tex_comments(text), "\\usepackage{x}\n\n\\input{y}\n")
+
+    def test_tex_trailing_comment_keeps_a_bare_percent(self):
+        # the % swallows the line break: removing it would put a space into the output
+        self.assertEqual(pdfmd.strip_tex_comments("\\newcommand{\\a}{%\n  b} % why\n"),
+                         "\\newcommand{\\a}{%\n  b} %\n")
+
+    def test_tex_escaped_percent_verb_url_and_verbatim_are_text(self):
+        text = ("50\\% of it\n\\verb|a % b| then % c\n\\url{http://x/%20y} % z\n"
+                "\\begin{verbatim}\n% keep\n\\end{verbatim}\n% gone\n")
+        self.assertEqual(pdfmd.strip_tex_comments(text),
+                         "50\\% of it\n\\verb|a % b| then %\n\\url{http://x/%20y} %\n"
+                         "\\begin{verbatim}\n% keep\n\\end{verbatim}\n")
+
+    def test_tex_magic_comments_stay(self):
+        text = "% !TEX program = lualatex\n% note\nx\n"
+        self.assertEqual(pdfmd.strip_tex_comments(text), "% !TEX program = lualatex\nx\n")
+
+    def test_tex_is_idempotent(self):
+        once = pdfmd.strip_tex_comments("a % b\n% c\n\\x{%\n}\n")
+        self.assertEqual(pdfmd.strip_tex_comments(once), once)
+
+    def test_csl_comments(self):
+        self.assertEqual(pdfmd.strip_xml_comments("<a>\n  <!-- x\n y -->\n <b/> <!-- z --></a>"), "<a>\n <b/> </a>")
+
+    BIB = ("% header\n@string{j = \"J. Chem.\"}\n\n% section\n@article{a1,\n  title = {Foo @ bar % not a comment},\n"
+           "  journal = j,\n  crossref = {c1},\n}\n@book{c1, title={Whole}}\n@book{dead, title={Dead}}\n"
+           "@comment{ignore}\n% tail\n")
+
+    def test_bibliography_keeps_the_cited_entries_and_what_they_cross_reference(self):
+        text, kept, total = pdfmd.filter_bibliography(self.BIB, {"a1"}, True)
+        self.assertEqual((kept, total), (2, 3))
+        self.assertIn("@string{j", text)
+        self.assertIn("@book{c1", text)
+        self.assertNotIn("dead", text)
+        self.assertIn("% not a comment", text)             # inside an entry it is text
+        self.assertNotIn("header", text)
+        self.assertNotIn("@comment", text)
+
+    def test_bibliography_unpruned_unstripped_is_byte_identical(self):
+        self.assertEqual(pdfmd.filter_bibliography(self.BIB, None, False)[0], self.BIB)
+
+    def test_bibliography_can_keep_its_comments_and_still_prune(self):
+        text = pdfmd.filter_bibliography(self.BIB, {"a1"}, False)[0]
+        self.assertIn("% section", text)
+        self.assertNotIn("dead", text)
+
+    def test_cited_keys(self):
+        self.assertEqual(pdfmd.used_citation_keys(["see [@Harris2010, p. 5; -@b_2:x], a@b.com, \\parencite[x]{k3,k4}"]),
+                         {"harris2010", "b_2:x", "k3", "k4"})
+        self.assertIsNone(pdfmd.used_citation_keys(["nocite: '@*'"]))
+
+    def test_policy(self):
+        policy = pdfmd.parse_comment_policy
+        self.assertEqual(policy(None, True).kinds(), frozenset(pdfmd.COMMENT_KINDS))
+        self.assertEqual(policy("tex, bib", True).kinds(), {"preamble", "bibliography"})
+        self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(), {"csl", "preamble"})
+        self.assertEqual(policy({"preamble": True}, False).kinds(), {"preamble"})
+        self.assertEqual(policy(False, True).kinds(), frozenset())
+
+
+@unittest.skipIf(pypdf is None, "pypdf not installed")
+class AttachedKinds(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = Path(self.folder.name)
+        self.addCleanup(self.folder.cleanup)
+        (self.root / "refs.bib").write_text(
+            "% notes\n@article{used1, title={One}}\n@article{dead1, title={Two}}\n", encoding="utf-8")
+        (self.root / "preamble.tex").write_text("% style\n\\usepackage{x} % why\n", encoding="utf-8")
+        self.document = self.root / "r.md"
+
+    def attach(self, front: str, **flags) -> dict:
+        self.document.write_text(f"---\ntitle: T\nbibliography: refs.bib\n{front}---\n\nSee [@used1]. <!-- n -->\n",
+                                 encoding="utf-8")
+        pdf = blank_pdf(self.root / "r.pdf")
+        saved = {name: getattr(pdfmd, name) for name in flags}
+        try:
+            for name, value in flags.items():
+                setattr(pdfmd, name, value)
+            with contextlib.redirect_stdout(io.StringIO()):
+                pdfmd.attach_source_after_success(self.document, pdf, [], [], [self.root / "preamble.tex"], None, False)
+        finally:
+            for name, value in saved.items():
+                setattr(pdfmd, name, value)
+        return {name: b"".join(items) if len(items) > 1 else items[0]
+                for name, items in pypdf.PdfReader(pdf).attachments.items()}
+
+    def test_default_prunes_the_bibliography_and_strips_every_kind(self):
+        attached = self.attach("")
+        source = attached["pdfmd-source.md"].decode()
+        self.assertIn("used1", source)
+        self.assertNotIn("dead1", source)
+        self.assertNotIn("notes", source)
+        self.assertNotIn("why", source)
+        self.assertNotIn("<!-- n -->", source)
+        manifest = json.loads(attached["pdfmd-manifest.json"])
+        self.assertEqual(manifest["bibliography"], ["refs.bib: 1 of 2 entries"])
+        self.assertIn("preamble", manifest["comments_stripped"])
+
+    def test_the_whole_bibliography_and_chosen_comments_on_request(self):
+        attached = self.attach("pdfmd-options:\n  attach-bibliography: all\n  strip-comments:\n"
+                               "    bibliography: false\n    markdown: false\n")
+        source = attached["pdfmd-source.md"].decode()
+        self.assertIn("dead1", source)
+        self.assertIn("% notes", source)
+        self.assertIn("<!-- n -->", source)
+        self.assertNotIn("why", source)                    # the preamble still loses its comments
+
+    def test_command_line_kinds(self):
+        attached = self.attach("", KEEP_KINDS_CLI=frozenset({"preamble"}), BIB_ATTACH_CLI="all")
+        source = attached["pdfmd-source.md"].decode()
+        self.assertIn("why", source)
+        self.assertIn("dead1", source)
+
+    def test_attachments_are_deflated(self):
+        (self.root / "big.bib").write_text("@article{used1, title={%s}}\n" % ("word " * 4000), encoding="utf-8")
+        self.document.write_text("---\nbibliography: big.bib\n---\n\n[@used1]\n", encoding="utf-8")
+        pdf = blank_pdf(self.root / "r.pdf")
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(self.document, pdf, [], [], [], None, False)
+        self.assertLess(pdf.stat().st_size, 8000)
+        attached = pypdf.PdfReader(pdf).attachments
+        self.assertGreater(len(attached["pdfmd-source.md"][0]), 20000)

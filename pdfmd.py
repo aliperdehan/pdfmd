@@ -367,6 +367,16 @@ Stopping early (--stop-at, v3.19.0):
     line takes the line (and a blank line it leaves doubled) with it; one in a
     sentence takes one of the spaces around it. The command line wins over the
     document, then its metadata files.
+    (v3.22.4) The option names the kinds of source: `true`, `false`, a list
+    (`[preamble, bibliography]`: just those), or a mapping per kind
+    (`{markdown: false}`: the rest follow the default, which is all of them for
+    an attached source and none for --assemble-only). Kinds: markdown, preamble
+    (LaTeX `%`: a `%` closing a line stays bare, since it swallows the break;
+    `\\verb`, `\\url`, verbatim environments and `% !TEX` lines are text),
+    bibliography (the text between a .bib's entries), csl (XML comments).
+    --strip-comments-in KINDS / --keep-comments-in KINDS do the same per run.
+    YAML metadata always loses its `#` comments when embedded (it is merged and
+    written again); Lua filters are never touched.
 
     --attach-source / --no-attach-source, `pdfmd-options: {attach-source: true}`
     (alias `embed-source`) (v3.22.1): after a PDF build, attach the document's
@@ -377,6 +387,11 @@ Stopping early (--stop-at, v3.19.0):
     part of a parts document began and the front matter its part had, the
     images the text points at (recorded with their hashes, not stored), the
     document's own no-auto. Any viewer lists them as the PDF's attachments.
+    The attached bibliography holds only the entries the text cites (and those
+    they cross-reference; every entry if the document has `nocite: '@*'`), so a
+    shared .bib of hundreds of entries does not travel whole: `pdfmd-options.
+    attach-bibliography: all` / --attach-bibliography all keeps the file as it is.
+    Attachments are deflated. (v3.22.4)
     Off by default: the source holds everything its author wrote. Not for a
     section build (name#section), -r/--report, or a non-PDF target.
     --restore FILE.pdf [-o DIR] (v3.22.1) writes the layout back into
@@ -384,8 +399,10 @@ Stopping early (--stop-at, v3.19.0):
     bibliography, parts/ ... -- --unpack --slim does the splitting of what was
     embedded, the manifest the placing. Never overwrites (stops, writing nothing,
     if a file is there), never writes outside the folder (a path with `..`, an
-    absolute or a drive path is refused), and a restored Lua filter runs only
-    if this machine's pdfmd trusts it, as always. Exit status 1 if the attached
+    absolute or a drive path is refused). A restored Lua filter is a file beside the
+    document like any other, so a build runs it: restore says so and names it
+    (building from the attached file itself, `pdfmd-source.md`, still runs an
+    embedded filter only if this machine's pdfmd wrote it, as always). Exit status 1 if the attached
     text no longer matches its recorded hash. The YAML is the re-written one
     (comments lost, as --unpack says), the text is the original's less its
     comments, and the restored folder builds the same `.tex` the original did;
@@ -868,7 +885,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.3"
+PDFMD_VERSION = "3.22.4"
 import argparse
 import csv
 import filecmp
@@ -883,6 +900,7 @@ import tarfile
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 from collections import namedtuple
 from pathlib import PurePosixPath
 from fnmatch import fnmatchcase
@@ -7334,21 +7352,273 @@ def strip_markdown_comments(text: str) -> str:
     return "".join(out)
 
 
+# -- Comments in the other kinds of source (v3.22.4) ---------------------------
+# `strip-comments` names which kinds of source lose their comments, not only the
+# Markdown's: `true` (all), `false`, a list (just those), or a mapping with true
+# and false per kind (the rest follow the default: all where a PDF is being
+# attached, none for --assemble-only). Kinds: markdown (<!-- -->), preamble
+# (LaTeX `%`), bibliography (what a .bib holds outside its entries), csl (XML
+# comments). The YAML metadata is merged and written again whenever it is
+# embedded, so its `#` comments are always gone; a Lua filter is code and is never
+# touched. A LaTeX comment is cut with care: a `%` after a command that ends a
+# line keeps its bare `%` (it swallows the line break, which is meaning), a `%`
+# in `\verb`, `\url` or a verbatim environment is text, and `% !TEX` magic
+# comments stay.
+COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl")
+COMMENT_KIND_NAMES = {
+    "markdown": "markdown", "md": "markdown", "text": "markdown", "document": "markdown",
+    "preamble": "preamble", "tex": "preamble", "latex": "preamble",
+    "bibliography": "bibliography", "bib": "bibliography", "bibtex": "bibliography",
+    "references": "bibliography", "csl": "csl", "style": "csl",
+    "metadata": "metadata", "yaml": "metadata", "yml": "metadata", "lua": "lua",
+}
+# --strip-comments-in / --keep-comments-in (kind sets); --strip-comments / --keep-comments is STRIP_COMMENTS_CLI.
+STRIP_KINDS_CLI: frozenset[str] = frozenset()
+KEEP_KINDS_CLI: frozenset[str] = frozenset()
+TEX_VERBATIM_BEGIN_RE = re.compile(r"\\begin\{(verbatim\*?|Verbatim\*?|lstlisting|minted|alltt|filecontents\*?|comment)\}")
+TEX_KEEP_COMMENT_RE = re.compile(r"%+[ \t]*(?:!\s*TEX|pdfmd\b)", re.IGNORECASE)
+
+
+class CommentPolicy:
+    """Which kinds of source lose their comments: ``default`` for every kind not
+    named, ``strip`` and ``keep`` for the ones that are."""
+
+    def __init__(self, default: bool, strip: frozenset[str] = frozenset(), keep: frozenset[str] = frozenset()):
+        self.default = default
+        self.strip = frozenset(strip) - frozenset(keep)
+        self.keep = frozenset(keep)
+
+    def strips(self, kind: str) -> bool:
+        if kind in self.keep:
+            return False
+        return kind in self.strip or self.default
+
+    def kinds(self) -> frozenset[str]:
+        return frozenset(kind for kind in COMMENT_KINDS if self.strips(kind))
+
+    def adjusted(self, strip: frozenset[str], keep: frozenset[str]) -> "CommentPolicy":
+        return CommentPolicy(self.default, (self.strip | strip) - keep, (self.keep | keep) - strip)
+
+
+def comment_kind_set(value) -> frozenset[str]:
+    names = ([str(item) for item in value] if isinstance(value, (list, tuple, set, frozenset))
+             else re.split(r"[\s,]+", str(value or "")))
+    return frozenset(COMMENT_KIND_NAMES[name.casefold()] for name in names if name.casefold() in COMMENT_KIND_NAMES)
+
+
+def parse_comment_policy(value, default: bool) -> CommentPolicy:
+    """``pdfmd-options.strip-comments`` as a policy (see the comment above)."""
+    if isinstance(value, dict):
+        wanted = {comment_kind_set(name): option_flag(flag) for name, flag in value.items()}
+        return CommentPolicy(default,
+                             frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is not False)),
+                             frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is False)))
+    text = str(value).strip().casefold()
+    if value is None:
+        return CommentPolicy(default)
+    if value is True or text in {"true", "yes", "on", "all"}:
+        return CommentPolicy(True)
+    if value is False or text in {"false", "no", "off", "none"}:
+        return CommentPolicy(False)
+    named = comment_kind_set(value)
+    return CommentPolicy(False, named) if named else CommentPolicy(default)
+
+
+def tex_comment_start(line: str) -> int | None:
+    """Where the `%` comment on a LaTeX line begins, or None."""
+    position = 0
+    while position < len(line):
+        char = line[position]
+        if char == "\\":
+            verb = re.match(r"\\verb\*?([^\sA-Za-z*])", line[position:])
+            argument = re.match(r"\\(?:url|path|nolinkurl|href)\{", line[position:])
+            if verb:
+                close = line.find(verb.group(1), position + verb.end())
+                position = len(line) if close == -1 else close + 1
+            elif argument:
+                close = line.find("}", position + argument.end())
+                position = len(line) if close == -1 else close + 1
+            else:
+                position += 2                      # `\%`, `\\`, `\{`: the next character is not special
+        elif char == "%":
+            return position
+        else:
+            position += 1
+    return None
+
+
+def strip_tex_comments(text: str) -> str:
+    """``text`` (LaTeX) without its `%` comments: see the comment above."""
+    out: list[str] = []
+    environment: str | None = None
+    emitted_blank = True
+    skip_blank = False
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        if environment is not None:
+            out.append(line)
+            emitted_blank = False
+            if re.search(r"\\end\{%s\}" % re.escape(environment), body):
+                environment = None
+            continue
+        start = tex_comment_start(body)
+        begin = TEX_VERBATIM_BEGIN_RE.search(body)
+        if begin and (start is None or begin.start() < start):
+            if not re.search(r"\\end\{%s\}" % re.escape(begin.group(1)), body[begin.end():]):
+                environment = begin.group(1)
+            out.append(line)
+            emitted_blank = skip_blank = False
+            continue
+        if start is None or TEX_KEEP_COMMENT_RE.match(body[start:]):
+            if body.strip():
+                emitted_blank = skip_blank = False
+            elif skip_blank:
+                skip_blank = False
+                continue
+            else:
+                emitted_blank = True
+            out.append(line)
+            continue
+        code = body[:start]
+        if not code.strip():                       # a comment alone on its line takes the line
+            if emitted_blank:
+                skip_blank = True
+            continue
+        emitted_blank = skip_blank = False
+        # the bare % keeps the line break swallowed; the blanks before it are one space to TeX
+        out.append(code.rstrip(" \t") + (" " if code.endswith((" ", "\t")) else "") + "%" + line[len(body):])
+    return "".join(out)
+
+
+def strip_xml_comments(text: str) -> str:
+    """``text`` (a CSL style) without its `<!-- -->` comments, the lines holding only one included."""
+    text = re.sub(r"^[ \t]*<!--.*?-->[ \t]*\r?\n", "", text, flags=re.DOTALL | re.MULTILINE)
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
+BIB_ENTRY_START_RE = re.compile(r"^[ \t]*@[ \t]*([A-Za-z]+)[ \t]*([{(])", re.MULTILINE)
+BIB_LINK_RE = re.compile(r"\b(?:crossref|xref|xdata|related)\s*=\s*[{\"]?([^}\",]*(?:,[^}\",]*)*)", re.IGNORECASE)
+BIB_SUFFIXES = (".bib", ".bibtex", ".biblatex")
+PANDOC_CITE_RE = re.compile(r"(?<![\w@])@(?:\{([^}]+)\}|([A-Za-z0-9_](?:[\w:.#$%&+?<>~/-]*[\w])?))")
+LATEX_CITE_RE = re.compile(r"\\[A-Za-z]*cite[A-Za-z]*\*?(?:\[[^\]]*\]){0,2}\{([^}]*)\}")
+
+
+def bib_entry_end(text: str, opener_index: int) -> int | None:
+    """The index just past the entry whose opening `{` or `(` is at ``opener_index``, or None."""
+    opener = text[opener_index]
+    closer = "}" if opener == "{" else ")"
+    depth = 0
+    position = opener_index
+    while position < len(text):
+        char = text[position]
+        if char == "\\":
+            position += 2
+            continue
+        if char == opener:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                return position + 1
+        position += 1
+    return None
+
+
+def parse_bibliography(text: str) -> tuple[list[dict], str]:
+    """The entries of a BibTeX/BibLaTeX file -- {kind, key, text, gap} with ``gap`` the
+    text between the previous entry and this one -- and the text after the last."""
+    items: list[dict] = []
+    position = previous = 0
+    while True:
+        match = BIB_ENTRY_START_RE.search(text, position)
+        if match is None:
+            break
+        end = bib_entry_end(text, match.end() - 1)
+        if end is None:
+            position = match.end()
+            continue
+        kind = match.group(1).lower()
+        key = (text[match.end():end - 1].split(",", 1)[0].strip() if kind not in ("string", "preamble", "comment")
+               else None)
+        start = text.index("@", match.start())
+        items.append({"kind": kind, "key": key, "text": text[start:end], "gap": text[previous:start]})
+        previous = position = end
+    return items, text[previous:]
+
+
+def used_citation_keys(texts: list[str]) -> set[str] | None:
+    """The citation keys the texts (the document, its metadata, the preamble) use, lower-cased,
+    or None when everything is wanted (`nocite: '@*'`, `\\nocite{*}`)."""
+    keys: set[str] = set()
+    for text in texts:
+        if "@*" in text or re.search(r"\\nocite\{\s*\*\s*\}", text):
+            return None
+        for match in PANDOC_CITE_RE.finditer(text):
+            keys.add((match.group(1) or match.group(2)).strip().lower())
+        for match in LATEX_CITE_RE.finditer(text):
+            keys.update(item.strip().lower() for item in match.group(1).split(",") if item.strip())
+    return keys
+
+
+def filter_bibliography(text: str, used: set[str] | None, strip_comments: bool) -> tuple[str, int, int]:
+    """A BibTeX file reduced to the entries ``used`` names (and what they cross-reference;
+    None keeps every entry), without the text between entries if ``strip_comments``.
+    Returns (text, entries kept, entries in the file). `@string` and `@preamble` always stay."""
+    items, tail = parse_bibliography(text)
+    entries = [item for item in items if item["key"]]
+    keep: set[str] | None = None
+    if used is not None:
+        by_key: dict[str, list[dict]] = {}
+        for item in entries:
+            by_key.setdefault(item["key"].lower(), []).append(item)
+        keep = set()
+        queue = [key for key in used if key in by_key]
+        while queue:
+            key = queue.pop()
+            if key in keep:
+                continue
+            keep.add(key)
+            for item in by_key[key]:
+                for match in BIB_LINK_RE.finditer(item["text"]):
+                    queue.extend(name.strip().lower() for name in match.group(1).split(",")
+                                 if name.strip().lower() in by_key)
+    pieces: list[str] = []
+    kept = 0
+    for item in items:
+        if item["key"]:
+            if keep is not None and item["key"].lower() not in keep:
+                continue
+            kept += 1
+        elif item["kind"] == "comment" and strip_comments:
+            continue
+        pieces.append(item["text"] if strip_comments else item["gap"] + item["text"])
+    if strip_comments:
+        result = "\n\n".join(pieces) + "\n" if pieces else ""
+    else:
+        result = "".join(pieces) + tail
+    return result, kept, len(entries)
+
+
 def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
                            plan: "EmbedPlan | None" = None, partial: bool = False,
-                           strip_comments: bool = False) -> str:
+                           strip_comments: "bool | frozenset[str]" = False) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
     before Pandoc sees it; a report/book chapter keeps its own, since there
-    Pandoc reads it too.
+    Pandoc reads it too. ``strip_comments`` is True (the Markdown's comments
+    go), or the set of comment kinds that do (see COMMENT_KINDS).
     """
+    kinds = (frozenset(COMMENT_KINDS) if strip_comments is True else
+             frozenset() if not strip_comments else frozenset(strip_comments))
+    if plan is not None:
+        plan.strip_kinds = kinds
     chunks = []
     for index, source in enumerate(sources):
         text = source.read_text(encoding="utf-8-sig")
         if index and drop_later_front_matter:
             text = strip_part_front_matter(text)
-        if strip_comments:
+        if "markdown" in kinds:
             text = strip_markdown_comments(text)
         chunks.append(text.rstrip("\n") + "\n")
     joined = "\n".join(chunks)
@@ -7361,7 +7631,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
                              plan: "EmbedPlan | None" = None,
                              partial: bool = False,
-                             strip_comments: bool = False) -> tuple[bool, str]:
+                             strip_comments: "bool | frozenset[str]" = False) -> tuple[bool, str]:
     """Write the --stop-at markdown stage. Never over one of its own sources:
     `-o report.md` would otherwise replace the very file it was built from.
     """
@@ -7446,13 +7716,15 @@ def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
     return None
 
 
-def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False) -> bool:
-    """Whether comments are stripped: the command line, else
-    `pdfmd-options.strip-comments`, else ``default``."""
+def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False) -> frozenset[str]:
+    """The kinds of source whose comments are stripped (see COMMENT_KINDS): the command
+    line (--strip-comments / --keep-comments, then --strip-comments-in / --keep-comments-in),
+    else `pdfmd-options.strip-comments`, else ``default`` for every kind."""
     if STRIP_COMMENTS_CLI is not None:
-        return STRIP_COMMENTS_CLI
-    chosen = option_flag(first_pdfmd_option(md_path, metadata_files, "strip-comments"))
-    return default if chosen is None else chosen
+        policy = CommentPolicy(STRIP_COMMENTS_CLI)
+    else:
+        policy = parse_comment_policy(first_pdfmd_option(md_path, metadata_files, "strip-comments"), default)
+    return policy.adjusted(STRIP_KINDS_CLI, KEEP_KINDS_CLI).kinds()
 
 
 def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
@@ -7524,6 +7796,9 @@ class EmbedPlan:
         self.preamble_files = preamble_files
         self.lua_filters = lua_filters
         self.output: Path | None = None
+        self.strip_kinds: frozenset[str] = frozenset()    # comment kinds cut from what is embedded
+        self.bib_prune = False                            # keep only the bibliography entries the text cites
+        self.bib_report: list[str] = []                   # "name (kept of total)" for the summary
 
 
 def sha256_text(text: str) -> str:
@@ -8152,6 +8427,11 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     bib_problems: list[str] = []
     renamed: dict[str, str] = {}
     if "bibliography" in kinds and references:
+        cited: set[str] | None = None
+        if plan.bib_prune:
+            cited = used_citation_keys([body, json.dumps(merged, default=str, ensure_ascii=False),
+                                        *(item.read_text(encoding="utf-8-sig", errors="replace")
+                                          for item in plan.preamble_files)])
         search: list[Path] = []
         for directory in ([plan.metadata_files[0].parent] if plan.metadata_files else []) + [
                 first.parent, *(item.parent for item in plan.metadata_files),
@@ -8174,6 +8454,13 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             except (OSError, UnicodeDecodeError):
                 bib_problems.append(f"{name} (not UTF-8 text)")
                 continue
+            if key == "csl":
+                if "csl" in plan.strip_kinds:
+                    source = strip_xml_comments(source)
+            elif found.suffix.lower() in BIB_SUFFIXES and (cited is not None or "bibliography" in plan.strip_kinds):
+                source, kept, total = filter_bibliography(source, cited, "bibliography" in plan.strip_kinds)
+                if cited is not None:
+                    plan.bib_report.append(f"{found.name}: {kept} of {total} entries")
             safe = safe_relative_path(name)
             blocks += "\n" + render_embedded_block("csl" if key == "csl" else "bibliography",
                                                    found.name, source, path=safe)
@@ -8223,7 +8510,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     # ---- preamble: raw LaTeX at the head of header-includes
     header_parts = []
     if "preamble" in kinds:
-        header_parts += [item.read_text(encoding="utf-8-sig") for item in plan.preamble_files]
+        header_parts += [strip_tex_comments(text) if "preamble" in plan.strip_kinds else text
+                         for text in (item.read_text(encoding="utf-8-sig") for item in plan.preamble_files)]
         if plan.preamble_files:
             preamble_record = [{"name": item.name, "lines": len(part.strip("\n").split("\n")),
                                 "sha256": sha256_text(part.strip("\n"))}
@@ -8271,7 +8559,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         else:
             summary.append(f"lua ({plan.lua_mode}) " + ", ".join(item.name for item in plan.lua_filters))
     if bib_embedded:
-        summary.append("bibliography " + ", ".join(bib_embedded))
+        summary.append("bibliography " + ", ".join(bib_embedded)
+                       + (f" ({'; '.join(plan.bib_report)})" if plan.bib_report else ""))
     for problem in bib_problems:
         print(f"WARN  not embedded: {problem}", file=sys.stderr)
     summary += left_out
@@ -9888,6 +10177,8 @@ ATTACH_CLI: bool | None = None
 # --bundle [all] / --no-bundle: None (the document decides), "off", "referenced", "all".
 BUNDLE_CLI: str | None = None
 BUNDLE_MAX_MB = 100
+# --attach-bibliography used|all (None: the document's pdfmd-options decide).
+BIB_ATTACH_CLI: str | None = None
 EXTRA_PREFIX = "files/"
 RESTORED_SUFFIX = ".restored"
 RAW_REFERENCE_RES = (
@@ -10045,8 +10336,9 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
 
 
 def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | None",
-                        merged: str, stripped: bool, chunks: list[dict]) -> dict:
-    base = md_path.parent
+                        merged: str, stripped: frozenset[str], chunks: list[dict],
+                        base: Path | None = None, report: bool = False) -> dict:
+    base = base or md_path.parent
     layout: list[dict] = []
     if plan is not None:
         for kind, paths in (("metadata", plan.metadata_files), ("preamble", plan.preamble_files),
@@ -10061,9 +10353,11 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
             if entry not in images:
                 images.append(entry)
     return {"format": ATTACH_FORMAT, "pdfmd": PDFMD_VERSION, "kind": "source",
-            "parts": (parts_setting(md_path, list(plan.metadata_files) if plan else []) if parts else None),
-            "name": md_path.name, "source": ATTACH_SOURCE, "sha256": sha256_text(merged),
-            "comments_stripped": stripped, "no_auto": frontmatter_no_auto(md_path), "chunks": chunks,
+            "mode": "report" if report else "document",
+            "parts": (parts_setting(md_path, list(plan.metadata_files) if plan else []) if parts and not report else None),
+            "name": relative_posix(base, md_path), "source": ATTACH_SOURCE, "sha256": sha256_text(merged),
+            "comments_stripped": sorted(stripped), "no_auto": frontmatter_no_auto(md_path), "chunks": chunks,
+            "bibliography": list(plan.bib_report) if plan else [],
             "layout": layout, "data_files": [block["path"] or block["name"] for block in parse_embedded_blocks(merged)
                                              if block["type"] in ("bibliography", "csl")],
             "images": images}
@@ -10071,16 +10365,20 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
 
 def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
                     preamble_files: list[Path] | None, no_auto: list[str] | None,
-                    strip: bool) -> tuple[str, dict]:
-    """The text to attach (the assembled file with everything embedded) and its manifest."""
+                    strip: frozenset[str], prune_bibliography: bool = True,
+                    report: bool = False, base: Path | None = None) -> tuple[str, dict]:
+    """The text to attach (the assembled file with everything embedded) and its manifest.
+    ``report``: the files are the chapters of a -r/--report build, each keeping its own front matter."""
     plan = make_embed_plan(md_path, metadata_files, preamble_files, no_auto,
                            EmbedRequest(frozenset(EMBED_KINDS), None, False))
+    plan.bib_prune = prune_bibliography
+    base = base or md_path.parent
     chunks: list[dict] = []
     for index, source in enumerate([md_path, *parts]):
         raw = source.read_text(encoding="utf-8-sig")
-        text = strip_part_front_matter(raw) if index else raw
+        text = strip_part_front_matter(raw) if index and not report else raw
         head = raw[:len(raw) - len(text)] if index and raw.endswith(text) else ""
-        if strip:
+        if "markdown" in strip:
             text = strip_markdown_comments(text)
         chunk = text.rstrip("\n") + "\n"
         front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", chunk, re.DOTALL) if not index else None
@@ -10088,16 +10386,33 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
         # The assembled text normalises the blank lines at a boundary, so a chunk
         # is found again by its content: how many blank lines led it, then its lines.
         content = body.lstrip("\n")
-        chunks.append({"path": relative_posix(md_path.parent, source), "head": head,
+        chunks.append({"path": relative_posix(base, source), "head": head,
                        "lead": len(body) - len(content), "lines": len(content.splitlines()),
                        "sha256": sha256_text(content), "front_matter": bool(front)})
-    merged = assemble_markdown_text([md_path, *parts], bool(parts), plan, False, strip)
-    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks)
+    merged = assemble_markdown_text([md_path, *parts], bool(parts) and not report, plan, False, strip)
+    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks, base, report)
+
+
+def comments_note(manifest: dict) -> str:
+    """'comments stripped (markdown, preamble)' / 'comments kept' from a manifest
+    (format 1 once held a plain true/false: all of the Markdown's)."""
+    stripped = manifest.get("comments_stripped")
+    if isinstance(stripped, list):
+        return f"comments stripped from {', '.join(stripped)}" if stripped else "comments kept"
+    return "comments stripped" if stripped else "comments kept"
+
+
+def resolve_bibliography_pruning(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the attached bibliography keeps only the entries the text cites: the command line
+    (--attach-bibliography used|all), else `pdfmd-options.attach-bibliography`, else yes."""
+    value = BIB_ATTACH_CLI or first_pdfmd_option(md_path, metadata_files, "attach-bibliography", "attach-bib")
+    return str(value).strip().casefold() not in {"all", "false", "no", "off", "whole", "full"}
 
 
 def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
     """Add ``files`` to ``pdf_path`` as attachments, in place (written beside it,
     then moved over it, so a failure leaves the PDF as it was)."""
+    from pypdf.generic import DictionaryObject, NameObject, NumberObject
     pypdf_logger = logging.getLogger("pypdf")
     previous_level = pypdf_logger.level
     pypdf_logger.setLevel(logging.ERROR)
@@ -10108,7 +10423,11 @@ def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
             writer = pypdf.PdfWriter()
             writer.append(reader)
             for name, data in files.items():
-                writer.add_attachment(name, data)
+                embedded = writer.add_attachment(name, data)._embedded_file
+                if len(data) > 256:                  # deflated, as any other stream in the PDF
+                    embedded.set_data(zlib.compress(data, 9))
+                    embedded[NameObject("/Filter")] = NameObject("/FlateDecode")
+                    embedded[NameObject("/Params")] = DictionaryObject({NameObject("/Size"): NumberObject(len(data))})
             with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
                 writer.write(temporary)
                 temporary_path = Path(temporary.name)
@@ -10144,7 +10463,8 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     try:
         with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
             merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
-                                               resolve_strip_comments(md_path, metadata_files, default=True))
+                                               resolve_strip_comments(md_path, metadata_files, default=True),
+                                               resolve_bibliography_pruning(md_path, metadata_files))
         extras: dict[str, bytes] = {}
         mode = resolve_bundle(md_path, metadata_files)
         if mode:
@@ -10161,7 +10481,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                       f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
                       file=sys.stderr)
             else:
-                stripping = manifest["comments_stripped"]
+                stripping = "markdown" in manifest["comments_stripped"]
                 for item in found:
                     data = item.read_bytes()
                     if stripping and item.suffix.lower() in (".md", ".markdown"):
@@ -10182,7 +10502,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         print(f"WARN  attach-source: could not attach the source to {display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
-    note = "comments stripped" if manifest["comments_stripped"] else "comments kept"
+    note = comments_note(manifest)
     kept = manifest.get("extras") or []
     print(f"ATTACHED  {display_path(pdf_path)}: source of {display_path(md_path)} "
           f"({len(merged.splitlines())} lines, {note}"
@@ -10235,7 +10555,9 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
     chunks = manifest.get("chunks") or []
     print(f"SOURCE    {manifest.get('name', '?')}  (pdfmd {manifest.get('pdfmd', '?')}, "
           f"{len(chunks)} file{'s' if len(chunks) != 1 else ''}, "
-          f"{'comments stripped' if manifest.get('comments_stripped') else 'comments kept'})")
+          f"{comments_note(manifest)})")
+    for line in manifest.get("bibliography") or []:
+        print(f"          bibliography {line}")
     extras = manifest.get("extras") or []
     stored = {item["path"] for item in extras}
     for image in manifest.get("images") or []:
@@ -10274,6 +10596,10 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
             destination.write_text(content, encoding="utf-8", newline="\n")
         print(f"RESTORED  {item}")
     print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+    filters = [item for item in files if item.lower().endswith(".lua")]
+    if filters:
+        print(f"NOTE  {', '.join(filters)}: a Lua filter is code, and pdfmd runs one that sits beside a "
+              "document when it builds -- read it first if the PDF is not from you")
     return status
 
 
@@ -10622,6 +10948,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-comments", dest="strip_comments", action="store_false",
                         help="keep comments, even where a document's pdfmd-options.strip-comments says to "
                              "strip them")
+    parser.add_argument("--strip-comments-in", default="", metavar="KINDS",
+                        help="strip comments from just these kinds of source (comma-separated: markdown, "
+                             "preamble, bibliography, csl), whatever the rest do. The YAML metadata always "
+                             "loses its comments when embedded; Lua filters are never touched")
+    parser.add_argument("--keep-comments-in", default="", metavar="KINDS",
+                        help="keep the comments of these kinds of source (comma-separated, as "
+                             "--strip-comments-in), where the rest are stripped")
+    parser.add_argument("--attach-bibliography", choices=("used", "all"), default=None,
+                        help="what the attached bibliography holds: 'used' (default) only the entries the "
+                             "text cites (and what they cross-reference; all of them if it has "
+                             "`nocite: '@*'`), 'all' the file as it is. A document sets it with "
+                             "pdfmd-options.attach-bibliography")
     parser.add_argument("--attach-source", "--embed-source", dest="attach_source", action="store_true",
                         default=None,
                         help="attach the document's whole source (the assembled Markdown, comments "
@@ -10969,8 +11307,12 @@ def main() -> None:
     use_managed_tools()
     if args.debug:
         args.verbose = True
-    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI
+    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI
+    global BIB_ATTACH_CLI
     STRIP_COMMENTS_CLI = args.strip_comments
+    STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
+    KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
+    BIB_ATTACH_CLI = args.attach_bibliography
     ATTACH_CLI = args.attach_source
     BUNDLE_CLI = args.bundle
     if args.restore is not None:

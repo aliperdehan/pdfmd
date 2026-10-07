@@ -41,6 +41,44 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.4 — 2026-10-07
+
+Pre-edit state: commit `b244bf7` (v3.22.3). What the attached source keeps and
+cuts: comments per kind of file, only the bibliography entries that are cited,
+deflated attachments.
+
+### Added
+
+- **`pdfmd-options.strip-comments` names kinds** (and `--strip-comments-in KINDS`,
+  `--keep-comments-in KINDS`): `true`, `false`, a list of kinds, or a per-kind
+  mapping. Kinds: `markdown`, `preamble` (LaTeX `%`), `bibliography` (the text
+  between a .bib's entries), `csl` (XML comments). A PDF's attached source now
+  loses the comments of all of them by default. The LaTeX stripper is careful: a
+  `%` that closes a line stays as a bare `%` (it swallows the line break, which
+  is meaning), `\%`, `\verb`, `\url`, verbatim/listings/minted environments are
+  text, `% !TEX` magic comments stay. YAML metadata loses its `#` comments
+  whenever it is embedded (merged and written again) and Lua filters are never
+  touched; both are said in the help.
+- **The attached bibliography holds only the entries the text cites**, with
+  what they `crossref`/`xref`/`xdata`/`related`, `@string` and `@preamble`; the
+  keys come from the Markdown (`@key`, `[@a; @b]`), raw `\cite`-family commands,
+  the metadata and the preamble, and `nocite: '@*'` / `\nocite{*}` keeps every
+  entry. `pdfmd-options.attach-bibliography: all` / `--attach-bibliography all`
+  keeps the file whole. `--list` and `--restore` say "2 of 120 entries".
+- Restore names every Lua filter it writes (it is code, and pdfmd runs one beside
+  a document) and the docs now say so; the earlier sentence that a restored
+  filter "runs only if trusted" was true of an embedded filter, not of a file.
+
+### Changed
+
+- Attachments are deflated (a real report's PDF went from 413 KB to 215 KB with
+  the same content, mostly the pruned bibliography).
+- The manifest's `comments_stripped` is the list of kinds (older PDFs hold a
+  plain true/false, which `--restore` still reads), and it records
+  `bibliography` and `mode`.
+
+---
+
 ## v3.22.3 — 2026-10-07
 
 Pre-edit state: commit `28408c7` (v3.22.2). Packaging and documentation for the
