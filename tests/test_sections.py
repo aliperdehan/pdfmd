@@ -472,5 +472,62 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("## Sampling  {#sec:sampling}", result.stdout)
 
 
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("lualatex"), "needs Pandoc and LuaLaTeX")
+class SectionLabelSeeding(unittest.TestCase):
+    """With the cache on, a section of an ordinary document takes the labels it
+    does not define itself from the last full build (v3.21.5)."""
+
+    DOCUMENT = ("---\ntitle: Seeding\nnumbersections: true\n---\n\n"
+                "# Setup {#sec:setup}\n\nSee Section \\ref{sec:results} and \\ref{sec:details}.\n\n"
+                "# Results {#sec:results}\n\nBack to Section \\ref{sec:setup}. Own label: \\ref{sec:results}.\n\n"
+                "## Details {#sec:details}\n\nDetails refer to \\ref{sec:setup}.\n\n# End\n\nBye.\n")
+    UNDEFINED = re.compile(r"Reference `[^']*' on page \d+ undefined")
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name).resolve()
+        self.cache = self.root / "cache"
+        self.environment = {**os.environ, "XDG_CACHE_HOME": str(self.cache), "LOCALAPPDATA": str(self.cache)}
+        (self.root / "doc.md").write_text(self.DOCUMENT, encoding="utf-8")
+
+    def build(self, request):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), request, "-e", "lualatex", "--cache"],
+                              cwd=self.root, env=self.environment, capture_output=True, text=True)
+
+    def log(self, stem):
+        old = {key: os.environ.get(key) for key in ("XDG_CACHE_HOME", "LOCALAPPDATA")}
+        os.environ.update(XDG_CACHE_HOME=str(self.cache), LOCALAPPDATA=str(self.cache))
+        try:
+            folder = pdfmd.cache_directory(self.root / "doc.md")
+        finally:
+            for key, value in old.items():
+                os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+        return (folder / f"{stem}.log").read_text(encoding="utf-8", errors="replace")
+
+    def test_references_to_other_sections_resolve_after_a_full_build(self):
+        self.assertEqual(self.build("doc").returncode, 0)
+        for request, stem in (("doc#results", "doc.results"), ("doc#sec:details", "doc.details")):
+            with self.subTest(request=request):
+                result = self.build(request)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIsNone(self.UNDEFINED.search(self.log(stem)))
+                self.assertIn("come from the last full build", result.stdout)
+
+    def test_without_a_full_build_they_still_print_as_question_marks(self):
+        result = self.build("doc#results")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIsNotNone(self.UNDEFINED.search(self.log("doc.results")))
+        self.assertIn("a full build", result.stdout)
+        self.assertNotIn("come from the last full build", result.stdout)
+
+    def test_a_sections_own_labels_stay_its_own(self):
+        self.build("doc")
+        self.build("doc#results")
+        aux = (self.cache / "pdfmd").rglob("doc.results.aux")
+        text = next(aux).read_text(encoding="utf-8")
+        self.assertIn("\\newlabel{sec:results}{{1}", text)     # numbered from its own start, as documented
+
+
 if __name__ == "__main__":
     unittest.main()

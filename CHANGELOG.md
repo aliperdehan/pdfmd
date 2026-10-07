@@ -41,6 +41,38 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.5 — 2026-10-07
+
+Pre-edit state: commit `6fd97b8` (v3.21.4). The labels half of the cache for
+sections, as decided after testing 3.21.3 with pandoc-crossref.
+
+### Added
+
+- **A section or element of an ordinary document takes the labels it lacks from
+  the last full build, when the cache is on.** `pdfmd doc#results --cache` after
+  a cached `pdfmd doc --cache` prints the numbers of the other sections where
+  it printed `??`; the build says how many labels it took and from when. It
+  reuses parts mode's seed file (a label the section defines itself stays its
+  own) and the cache folder the full build already writes its `.aux` to; the
+  full build's output is unchanged. pandoc-crossref leaves `\ref{...}` in LaTeX
+  output, so its references are seeded the same way.
+- The note after a section build says which of the two happened: references
+  come from the last full build, or print as `??` (and that a full build with
+  the cache on first would fill them in).
+- `SectionLabelSeeding` tests (they need Pandoc and LuaLaTeX): after a full
+  build no reference in the section's LaTeX log is undefined; without one they
+  still are; a section's own label is numbered from its own start.
+
+### Not changed
+
+- Heading, figure, table and equation numbers of a section still restart at
+  its first. Carrying them over needs a marker at every heading and element in
+  the full build, which changes that build's output; it is left out.
+- A section written to the full document's own output name (`-o doc.pdf`) is
+  not seeded, since it would overwrite the `.aux` it reads (it already did).
+
+---
+
 ## v3.21.4 — 2026-10-07
 
 Pre-edit state: commit `5da17cb` (v3.21.3). Found by running 3.21.3 on a machine

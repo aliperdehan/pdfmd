@@ -513,7 +513,8 @@ One section of any document (`pdfmd doc#NAME`):
     `doc.pdf`), no BUILD NOTES stamp is written and `pdfmd-partial: true` is set.
     A leading `# Title` that pdfmd promotes to the document title is not a
     section. Heading, figure and table numbers restart and references to other
-    sections print as ??. Needs Pandoc (not the built-in renderers or the
+    sections print as ??, unless the cache is on (below) and the document was
+    built whole before: then they are filled in from that build. Needs Pandoc (not the built-in renderers or the
     soffice fallback); `--no-auto lookup` leaves only the exact name, ignoring
     case and spaces. `--split` cuts at the same headings, setext ones included.
 
@@ -543,6 +544,17 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     are those of the LAST full build: stale if figures or tables were added
     or moved there since (pdfmd says so). A part's own labels are never
     overridden.
+
+    A section or element of an ordinary document (`pdfmd doc#NAME`) gets the
+    labels half of this: with the cache on and the whole document built before,
+    its `\\ref`s to the rest of the document read the last full build's numbers
+    instead of printing ??. Its own headings, figures, tables and equations
+    are still numbered from its first (there is no counter marker in a document
+    that is not in parts mode), and a label the section defines itself is its
+    own. pandoc-crossref leaves `\\ref{..}` in LaTeX output, which is what makes
+    this work; for HTML or DOCX it reports undefined cross-references itself.
+    Nothing is read when the section is written over the full document's own
+    output name (`-o doc.pdf`).
 
     What the cache does NOT do: it never skips a build or reuses a rendered
     page. Pandoc runs and LaTeX typesets the whole document, from the current
@@ -804,7 +816,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.4"
+PDFMD_VERSION = "3.21.5"
 import argparse
 import csv
 import filecmp
@@ -9667,8 +9679,13 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         defs = base / f"{stem}.pdfmd-defs.tex"
         defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
         headers.append(defs)
-    if persistent and partial and full_scaffold is not None and parts_root is not None:
-        full_aux = base / f"{safe_stem(full_scaffold.stem)}.aux"
+    # A partial build takes its missing labels from the last full build's .aux: the
+    # report's, in parts mode, or the document's own for one section or element of an
+    # ordinary document (source_override), which has no parts and so no counter markers.
+    seed_from = full_scaffold if parts_root is not None else (md_path if source_override is not None else None)
+    if persistent and partial and seed_from is not None and stem != safe_stem(seed_from.stem):
+        # (Not when the build is named like the full one: it would overwrite the .aux it reads.)
+        full_aux = base / f"{safe_stem(seed_from.stem)}.aux"
         seed = base / f"{stem}.seed.tex"
         seed.unlink(missing_ok=True)
         seeded = seed_labels_file(full_aux, seed)
@@ -9679,7 +9696,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
             headers.append(hook)
             when = datetime.fromtimestamp(full_aux.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
             note("CACHE", f"{md_path}: {seeded} labels from the last full build ({when}) fill in "
-                          "references to parts left out")
+                          + ("references to the rest of the document" if source_override is not None
+                             else "references to parts left out"))
     try:
         built = _convert_one(md_path, out_dir, False, font, engines, variables, slide_level,
                              pandoc_options, metadata_file, tex_path, headers, target_format="latex",
@@ -10914,8 +10932,15 @@ def main() -> None:
                                    source_override=((section_plan.text, section_plan.shifted)
                                                     if section_plan is not None else None))]
             if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
-                print("NOTE  section build: references to other sections print as ??, and heading, "
-                      "figure and table numbers restart from this section's own first one")
+                if LAST_SEEDED:
+                    print("NOTE  section build: references to other sections come from the last full build "
+                          "(cache); they are stale if you have since changed the document. This section's "
+                          "own heading, figure, table and equation numbers restart at its first one")
+                else:
+                    print("NOTE  section build: references to other sections print as ??, and heading, "
+                          "figure and table numbers restart from this section's own first one (with the "
+                          "cache on -- pdfmd-options: {cache: {aux: true}}, or --cache -- a full build "
+                          "first lets later section builds fill the references in)")
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
                     and target_format != ASSEMBLED_FORMAT):
                 if LAST_SEEDED:
