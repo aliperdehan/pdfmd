@@ -208,16 +208,22 @@ Stopping early (--stop-at, v3.19.0):
 
     --embed-metadata [KIND ...] (v3.19.1) folds what pdfmd discovers beside
     the document into the assembled file, so it no longer needs them beside it
-    (what the text points at -- a bibliography and CSL file, images, files a
-    preamble `\\input`s, data -- is not embedded, and a NOTE names those it
-    sees; keep them where the document finds them, relative to the assembled
-    file's folder): `metadata` (the metadata YAML files, merged the way Pandoc
+    (what the text points at -- images, files a preamble `\\input`s, data --
+    is not embedded, and a NOTE names those it sees, bibliography and CSL files
+    included when that kind is off; keep them where the document finds them,
+    relative to the assembled file's folder): `metadata` (the metadata YAML files, merged the way Pandoc
     merges them -- a later file over an earlier one, the document over both,
     per top-level key -- with the document's front matter, into one block;
     `pdfmd-options` merged by pdfmd's own cascade, a file's `no-auto`/
     `parts` not carried), `preamble` (the preamble file(s), at the head of
-    `header-includes`), `lua` (the Lua filters, see --lua-mode); none named
-    means all three. `--lua-mode embed` (default) puts each filter whole in
+    `header-includes`), `lua` (the Lua filters, see --lua-mode), `bibliography`
+    (the bibliography and CSL files the metadata names, v3.19.7: each in a
+    `{=pdfmd}` block too, with the path the metadata gives it -- a `../x.bib`
+    or absolute name is rewritten to the embedded file's own; at build time
+    they are written to a temporary folder searched after everything else, by
+    Pandoc's citeproc (--resource-path) and by BibTeX/Biber (BIBINPUTS), so a
+    file beside the document still wins; data, so no trust is asked); none
+    named means all four. `--lua-mode embed` (default) puts each filter whole in
     a fenced raw block at the very bottom of the file --
 
         ````{=pdfmd}
@@ -269,9 +275,10 @@ Stopping early (--stop-at, v3.19.0):
           embed:                          # what --assemble-only embeds, without the flag
             metadata: true                # true | false   (each kind is on unless said otherwise)
             preamble: true
+            bibliography: true
             lua: embed                    # embed | ref | apply | off  (true = embed, false = off)
 
-    `embed: true` means all three kinds; `embed: [metadata, lua]` names kinds;
+    `embed: true` means all four kinds; `embed: [metadata, lua]` names kinds;
     `embed: false` none. The document's own `embed` wins over its metadata
     files' (first to name it), and the command line over both: --embed-metadata
     KIND.. names the kinds, --lua-mode the filter mode, --no-embed-metadata
@@ -708,11 +715,12 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.19.6"
+PDFMD_VERSION = "3.19.7"
 import argparse
 import filecmp
 import hashlib
 from collections import namedtuple
+from pathlib import PurePosixPath
 from fnmatch import fnmatchcase
 from functools import lru_cache
 import logging
@@ -973,6 +981,14 @@ def accessory_directories(directory: Path, stem: str | None = None) -> list[Path
     return found
 
 
+# Folders holding files an assembled document embeds (its bibliography and CSL
+# blocks, extracted for the length of one build) or that --unpack wrote for it:
+# searched after everything else, so they only decide a lookup that would
+# otherwise fail. Set by embedded_resources(); read by resource_path_option()
+# (Pandoc's citeproc) and tex_search_env() (BibTeX/Biber, via BIBINPUTS).
+EMBEDDED_RESOURCE_DIRS: list[Path] = []
+
+
 def resource_path_option(document_directory: Path, pandoc_cwd: Path,
                          metadata_files: list[Path] | None = None) -> list[str]:
     """--resource-path to keep image/include lookups anchored to the
@@ -1004,6 +1020,7 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
         real_directory = metadata.resolve().parent
         if real_directory != metadata.parent.resolve() and real_directory not in extra:
             extra.append(real_directory)
+    extra += [directory for directory in EMBEDDED_RESOURCE_DIRS if directory not in extra]
     if document_directory == pandoc_cwd and not extra:
         return []
     entries = ([str(document_directory)] if document_directory != pandoc_cwd else []) + ["."]
@@ -1039,10 +1056,15 @@ def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str]
     common case with no metadata/ subfolder or out-of-tree -y in play,
     where nothing is broken and nothing needs fixing.
     """
-    if document_directory == pandoc_cwd:
+    if document_directory == pandoc_cwd and not EMBEDDED_RESOURCE_DIRS:
         return None
     env = os.environ.copy()
-    env["TEXINPUTS"] = f"{document_directory}{os.pathsep}{env.get('TEXINPUTS', '')}"
+    if document_directory != pandoc_cwd:
+        env["TEXINPUTS"] = f"{document_directory}{os.pathsep}{env.get('TEXINPUTS', '')}"
+    if EMBEDDED_RESOURCE_DIRS:
+        # (a trailing separator keeps the default search path after these)
+        env["BIBINPUTS"] = (os.pathsep.join(str(item) for item in EMBEDDED_RESOURCE_DIRS)
+                            + os.pathsep + env.get("BIBINPUTS", ""))
     return env
 
 
@@ -4591,8 +4613,32 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 HTML_TARGETS = frozenset({"html", "html4", "html5"})
 DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "plain", "md": "markdown", "htm": "html",
                           "typ": "typst", "markdown": "markdown"}
-HTML_MATH_FLAGS = {"mathml": "--mathml", "mathjax": "--mathjax", "katex": "--katex",
-                   "webtex": "--webtex"}
+# The math method: `--html-math-method=X` where this Pandoc has it (Pandoc 3.11
+# deprecates the short spellings and warns), else the short flag every older
+# one has (3.1 does not know --html-math-method at all). Found out from
+# `pandoc --help`, not from a guessed version number.
+HTML_MATH_METHODS = ("mathml", "mathjax", "katex", "webtex", "plain", "gladtex")
+HTML_MATH_SHORT_FLAGS = {"mathml": "--mathml", "mathjax": "--mathjax", "katex": "--katex",
+                         "webtex": "--webtex", "gladtex": "--gladtex"}   # "plain" is the default: no flag
+_PANDOC_HELP: str | None = None
+
+
+def pandoc_has_option(option: str) -> bool:
+    """Whether the installed Pandoc lists ``option`` in its --help."""
+    global _PANDOC_HELP
+    if _PANDOC_HELP is None:
+        try:
+            _PANDOC_HELP = subprocess.run(["pandoc", "--help"], capture_output=True, text=True).stdout
+        except OSError:
+            _PANDOC_HELP = ""
+    return option in _PANDOC_HELP
+
+
+def html_math_args(method: str) -> list[str]:
+    if pandoc_has_option("--html-math-method"):
+        return [f"--html-math-method={method}"]
+    flag = HTML_MATH_SHORT_FLAGS.get(method)
+    return [flag] if flag else []
 
 
 def cascaded_option(md_path: Path, metadata_files: list[Path], key: str):
@@ -4662,12 +4708,13 @@ def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: 
     elif standalone:
         note("HTML", f"{md_path}: a full page (--standalone)")
     math = str(settings.get("math", "")).casefold()
-    has_math_option = any(item in pandoc_options for item in
-                          (*HTML_MATH_FLAGS.values(), "--gladtex", "--latexmathml", "--mathjax=", "--katex="))
-    if not has_math_option and math in HTML_MATH_FLAGS:
-        out.append(HTML_MATH_FLAGS[math])
+    has_math_option = any(item.startswith(("--html-math-method", "--mathml", "--mathjax", "--katex",
+                                           "--webtex", "--gladtex", "--latexmathml"))
+                          for item in pandoc_options)
+    if not has_math_option and math in HTML_MATH_METHODS:
+        out += html_math_args(math)
     elif not has_math_option and math in ("", "auto") and self_contained:
-        out.append("--mathml")  # the one kind of math that needs no network
+        out += html_math_args("mathml")  # the one kind of math that needs no network
     css = settings.get("css")
     for name in ([css] if isinstance(css, str) else css if isinstance(css, list) else []):
         out += ["--css", str((md_path.parent / str(name)).resolve())]
@@ -4826,7 +4873,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
 #     ref, as a path in `pdfmd-options.lua-filter`.
 # The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
 # the discovery that would find them a second time stays off.
-EMBED_KINDS = ("metadata", "preamble", "lua")
+EMBED_KINDS = ("metadata", "preamble", "lua", "bibliography")
 # A LaTeX comment line closing the embedded preamble inside `header-includes`:
 # document_header_file puts the front-matter macro definitions there, after
 # the preamble that defines them and before the document's own additions,
@@ -4848,7 +4895,7 @@ EmbedRequest = namedtuple("EmbedRequest", "kinds lua_mode off")
 
 
 def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
-    """``pdfmd-options.embed``: ``true`` (all three kinds), ``false``, a list
+    """``pdfmd-options.embed``: ``true`` (all four kinds), ``false``, a list
     of kinds, or a mapping -- ``metadata``/``preamble`` as true/false (each on
     unless said otherwise), ``lua`` as a --lua-mode (or true = embed, false =
     off). Returns (kinds, lua mode or None), or None when it asks for nothing."""
@@ -4862,7 +4909,8 @@ def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
     if isinstance(value, list):
         return frozenset(str(item) for item in value if str(item) in EMBED_KINDS), None
     if isinstance(value, dict):
-        kinds = {kind for kind in ("metadata", "preamble") if value.get(kind, True) not in (False, "false", "no", "off")}
+        kinds = {kind for kind in ("metadata", "preamble", "bibliography")
+                 if value.get(kind, True) not in (False, "false", "no", "off")}
         lua = value.get("lua", True)
         mode = None
         if lua is False or str(lua).casefold() in {"false", "no", "off"}:
@@ -4879,7 +4927,7 @@ def resolve_embed(md_path: Path, metadata_files: list[Path],
     """What to embed for ``md_path`` (kinds, lua mode), or None: the command
     line first (--embed-metadata KIND.., --lua-mode, --no-embed-metadata),
     else the document's `pdfmd-options.embed` (then its metadata files',
-    in order -- the first to name it wins), else the defaults (all three
+    in order -- the first to name it wins), else the defaults (all four
     kinds, lua embedded) when --embed-metadata was given bare."""
     if request is None or request.off:
         return None
@@ -4933,13 +4981,27 @@ def mask_embedded_blocks(text: str) -> str:
     return EMBED_BLOCK_RE.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), text)
 
 
-def render_embedded_block(kind: str, name: str, source: str) -> str:
+def render_embedded_block(kind: str, name: str, source: str, path: str | None = None) -> str:
+    """One embedded file as a fenced `{=pdfmd}` block. ``path`` (bibliography
+    and CSL files) is the name the document's metadata gives the file, which
+    is where it is written back to when the block is extracted."""
     source = normalized_source(source)
     longest = max((len(run) for run in re.findall(r"`+", source)), default=0)
     fence = "`" * max(3, longest + 1)
     name = re.sub(r"[\r\n]", " ", name)
-    return (f"{fence}{{=pdfmd}}\ntype: {kind}\nname: {name}\nsha256: {sha256_text(source)}\n\n"
+    clean_path = re.sub(r"[\r\n]", " ", path) if path else ""
+    where = f"path: {clean_path}\n" if path else ""
+    return (f"{fence}{{=pdfmd}}\ntype: {kind}\nname: {name}\n{where}sha256: {sha256_text(source)}\n\n"
             f"{source.rstrip(chr(10))}\n{fence}\n")
+
+
+def safe_relative_path(name: str) -> str:
+    """A relative path for writing an embedded file back: as the metadata
+    names it, unless that is absolute or climbs out (then just the file name)."""
+    path = PurePosixPath(name.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        return path.name or "file"
+    return str(path)
 
 
 def parse_embedded_blocks(text: str) -> list[dict]:
@@ -4954,6 +5016,7 @@ def parse_embedded_blocks(text: str) -> list[dict]:
             fields[key.strip()] = value.strip()
         source = rest + "\n"
         blocks.append({"type": fields.get("type", ""), "name": fields.get("name") or "filter.lua",
+                       "path": fields.get("path"),
                        "declared": fields.get("sha256"), "source": source,
                        "sha256": sha256_text(source)})
     return blocks
@@ -5068,11 +5131,24 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
         candidate, number = name, 1
         while candidate in taken:
             number += 1
-            candidate = f"{Path(name).stem}-{number}{Path(name).suffix}"
+            original = PurePosixPath(name)
+            candidate = str(original.with_name(f"{original.stem}-{number}{original.suffix}"))
         taken.add(candidate)
         return candidate
 
-    blocks = [block for block in parse_embedded_blocks(text) if block["type"] == "lua-filter"]
+    all_blocks = parse_embedded_blocks(text)
+    blocks = [block for block in all_blocks if block["type"] == "lua-filter"]
+    data_blocks = [block for block in all_blocks if block["type"] in ("bibliography", "csl")]
+    for block in data_blocks:
+        name = unique(safe_relative_path(block["path"] or block["name"]))
+        files[name] = block["source"]
+        if block["declared"] == block["sha256"]:
+            state = "hash matches what was written"
+        else:
+            mismatch = True
+            state = "HASH MISMATCH: edited since it was written" if block["declared"] else "no hash recorded"
+        label = "CSL" if block["type"] == "csl" else "BIBLIO"
+        notes.append(f"{label:<10}{name}  ({state})")
     for block in blocks:
         name = unique(Path(block["name"]).name or "filter.lua")
         files[name] = block["source"]
@@ -5168,6 +5244,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     target.mkdir(parents=True, exist_ok=True)
     fresh = [name for name in files if not (target / name).exists()]
     for name in fresh:
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
         (target / name).write_text(files[name], encoding="utf-8", newline="\n")
     for note in notes:
         print(note)
@@ -5179,12 +5256,13 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
                   f"{display_path(target)} it will not, unless you move it there", file=sys.stderr)
         slim_assembled(path, text, front, data, options, kept_header, blocks,
-                       preamble_unpacked, metadata_unpacked, origin)
+                       preamble_unpacked, metadata_unpacked, origin, bool(data_blocks))
     return 1 if mismatch else 0
 
 
 def slim_assembled(path: Path, text: str, front, data: dict | None, options: dict, kept_header: str,
-                   blocks: list, preamble_unpacked: bool, metadata_unpacked: bool, origin) -> None:
+                   blocks: list, preamble_unpacked: bool, metadata_unpacked: bool, origin,
+                   bibliography_unpacked: bool = False) -> None:
     """Rewrite ``path`` without what --unpack just wrote out (the embedded
     filter blocks, the preamble in header-includes, the keys that came from
     metadata files -- the last only where the file records their origin).
@@ -5197,7 +5275,7 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
         # No front matter: only the comment-form marker carries the kinds.
         body = ASSEMBLED_COMMENT_RE.sub(ASSEMBLED_COMMENT, body)
         path.write_text(body, encoding="utf-8", newline="\n")
-        print(f"SLIMMED   {display_path(path)}  (embedded filters removed)")
+        print(f"SLIMMED   {display_path(path)}  (embedded files removed)")
         return
     data = dict(data)
     options = dict(options)
@@ -5217,6 +5295,8 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
         kept_header = ""
     if blocks:
         removed.append("lua")
+    if bibliography_unpacked:
+        removed.append("bibliography")
     gone = [kind for kind in removed if kind in (options.get("embedded") or [])]
     if isinstance(options.get("no-auto"), list):
         options["no-auto"] = [kind for kind in options["no-auto"] if kind not in gone]
@@ -5241,6 +5321,54 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
     head = "---\n" + dumped + (literal_block("header-includes", kept_header) if kept_header else "") + "---\n\n"
     path.write_text(head + body.lstrip("\n"), encoding="utf-8", newline="\n")
     print(f"SLIMMED   {display_path(path)}  (removed: {', '.join(removed) or 'nothing'})")
+
+
+_RESOURCE_OWNER: Path | None = None
+
+
+@contextmanager
+def embedded_resources(md_path: Path) -> Iterator[None]:
+    """For the length of a build of ``md_path``: write the document's embedded
+    bibliography/CSL blocks into a temporary folder at the path its metadata
+    names them by, and register that folder (and the document's
+    ``NAME.unpacked/``, if there is one) in EMBEDDED_RESOURCE_DIRS. A nested
+    call for the same document (the cache route re-enters the converter) is a
+    no-op. These are data, not code, so -- unlike filters -- no trust is asked."""
+    global _RESOURCE_OWNER
+    if _RESOURCE_OWNER == md_path or md_path.suffix.lower() not in (".md", ".markdown"):
+        yield
+        return
+    folder: Path | None = None
+    added: list[Path] = []
+    try:
+        blocks = [block for block in parse_embedded_blocks(md_path.read_text(encoding="utf-8-sig"))
+                  if block["type"] in ("bibliography", "csl")]
+    except (OSError, UnicodeDecodeError):
+        blocks = []
+    if blocks:
+        folder = Path(mkdtemp(prefix="pdfmd-resources-"))
+        for block in blocks:
+            target = folder / safe_relative_path(block["path"] or block["name"])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(block["source"], encoding="utf-8", newline="\n")
+        added.append(folder)
+    unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
+    if unpacked.is_dir():
+        added.append(unpacked.resolve())
+    if not added:
+        yield
+        return
+    _RESOURCE_OWNER = md_path
+    EMBEDDED_RESOURCE_DIRS.extend(added)
+    try:
+        yield
+    finally:
+        for item in added:
+            if item in EMBEDDED_RESOURCE_DIRS:
+                EMBEDDED_RESOURCE_DIRS.remove(item)
+        _RESOURCE_OWNER = None
+        if folder is not None:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def merge_option_dicts(sources: list[dict]) -> dict:
@@ -5401,7 +5529,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         kinds = kinds - {"preamble"}
         left_out.append("preamble " + ", ".join(item.name for item in plan.preamble_files) + " (left out)")
     no_auto = [kind for kind in EMBED_KINDS
-               if kind in kinds and not (kind == "lua" and plan.lua_mode in ("ref", "off"))]
+               if kind in kinds and kind != "bibliography"  # nothing discovers a bibliography: it is named
+               and not (kind == "lua" and plan.lua_mode in ("ref", "off"))]
     if plan.lua_mode == "off":
         no_auto = [kind for kind in no_auto if kind != "lua"]
     blocks = ""
@@ -5450,6 +5579,50 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             option_owner.setdefault(key, label)
     options = merge_option_dicts([document_options if isinstance(document_options, dict) else {},
                                   *file_options])
+    # ---- bibliography and CSL files the metadata names: data, embedded as blocks
+    references: list[tuple[str, str]] = []
+    for key in ("bibliography", "csl"):
+        value = merged.get(key)
+        for name in ([value] if isinstance(value, str) else
+                     [str(item) for item in value] if isinstance(value, list) else []):
+            if "://" not in name and (key, name) not in references:
+                references.append((key, name))
+    bib_embedded: list[str] = []
+    bib_problems: list[str] = []
+    renamed: dict[str, str] = {}
+    if "bibliography" in kinds and references:
+        search: list[Path] = []
+        for directory in ([plan.metadata_files[0].parent] if plan.metadata_files else []) + [
+                first.parent, *(item.parent for item in plan.metadata_files),
+                first.parent / ACCESSORY_DIRNAME, first.parent / f"{first.stem}{UNPACKED_SUFFIX}", Path.cwd()]:
+            if directory not in search:
+                search.append(directory)
+        for key, name in references:
+            reference = Path(name)
+            found = reference if reference.is_absolute() and reference.is_file() else next(
+                ((directory / reference) for directory in search if (directory / reference).is_file()), None)
+            if found is None:
+                bib_problems.append(f"{name} (not found)")
+                continue
+            try:
+                source = found.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError):
+                bib_problems.append(f"{name} (not UTF-8 text)")
+                continue
+            safe = safe_relative_path(name)
+            blocks += "\n" + render_embedded_block("csl" if key == "csl" else "bibliography",
+                                                   found.name, source, path=safe)
+            bib_embedded.append(name)
+            if safe != name:
+                # An absolute or `../` name cannot be written back as it is: the
+                # metadata then names the embedded file by its safe path.
+                renamed[name] = safe
+    for key in ("bibliography", "csl"):
+        value = merged.get(key)
+        if renamed and isinstance(value, str):
+            merged[key] = renamed.get(value, value)
+        elif renamed and isinstance(value, list):
+            merged[key] = [renamed.get(str(item), item) for item in value]
     strip_embedded_option_names(options, kinds, plan.lua_mode)
     if lua_refs:
         options["lua-filter"] = lua_refs
@@ -5468,7 +5641,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             (origin["document"] if label == "document" else origin["files"][label]).append(f"pdfmd-options.{key}")
         options["origin"] = origin
     embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
-        (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files))]
+        (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files)
+        or (kind == "bibliography" and not bib_embedded))]
     if embedded_now:
         options["embedded"] = embedded_now
     if applied:
@@ -5531,13 +5705,14 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
                 summary.append(f"lua (embedded instead: {reason}) " + ", ".join(item.name for item in to_embed))
         else:
             summary.append(f"lua ({plan.lua_mode}) " + ", ".join(item.name for item in plan.lua_filters))
+    if bib_embedded:
+        summary.append("bibliography " + ", ".join(bib_embedded))
     summary += left_out
     print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
     # What the text points at is not embedded: say which of it the file still needs.
     outside: list[str] = []
     for key in ("bibliography", "csl"):
-        value = merged.get(key)
-        names = [value] if isinstance(value, str) else [str(item) for item in value] if isinstance(value, list) else []
+        names = [name for kind, name in references if kind == key and name not in bib_embedded]
         if names:
             outside.append(f"{key} {', '.join(names)}")
     if re.search(r"\\(?:input|include|includegraphics)\b", header_text):
@@ -6523,7 +6698,15 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             tex_path.unlink(missing_ok=True)
 
 
-def _convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
+def _convert_one(md_path: Path, *args, **kwargs):
+    """_convert_one_core, with the document's embedded bibliography files
+    (and its NAME.unpacked/ folder) findable for the whole build -- the cache
+    route's compile step included, which runs after the Markdown-to-.tex pass."""
+    with embedded_resources(md_path):
+        return _convert_one_core(md_path, *args, **kwargs)
+
+
+def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
                 metadata_file: Path | list[Path] | None = None,
@@ -7284,8 +7467,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --stop-at markdown: fold what pdfmd discovers beside the document "
                              "into the assembled file, so it builds the same without them. KIND is "
                              "metadata (the YAML files, merged with the front matter), preamble (the "
-                             "LaTeX preamble, into header-includes) or lua (the Lua filters, see "
-                             "--lua-mode); none given means all three")
+                             "LaTeX preamble, into header-includes), lua (the Lua filters, see "
+                             "--lua-mode) or bibliography (the bibliography and CSL files the metadata "
+                             "names); none given means all four")
     parser.add_argument("--no-embed-metadata", action="store_true",
                         help="turn off embedding for this run, even where a document's "
                              "pdfmd-options.embed asks for it")

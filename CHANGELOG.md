@@ -39,6 +39,62 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.7 — 2026-10-07
+
+Pre-edit state: commit `477e2bc` (v3.19.6). Patch bump by the one-time
+numbering override above. From the author's test of v3.19.6 on real reports.
+
+### Added
+
+- **`--embed-metadata bibliography`: bibliography and CSL files embedded**, the
+  way Lua filters are. The `bibliography:` and `csl:` files the merged metadata
+  names go into `{=pdfmd}` blocks (`type: bibliography` / `type: csl`, with the
+  `path:` the metadata gives them and a hash). A name that is absolute or climbs
+  out with `..` cannot be written back as it is, so the embedded file's
+  metadata then names it by its own safe path. At build time the blocks are
+  written to a temporary folder at that path, for the length of the build, and
+  the folder is searched after everything else -- by Pandoc's citeproc
+  (`--resource-path`) and by BibTeX/Biber (`BIBINPUTS`; the cache route's
+  compile step included) -- so a file beside the document still wins, and
+  nothing embedded changes a lookup that already worked. They are data, so no
+  trust is asked, unlike filters. It is a fourth kind: on in a bare
+  `--embed-metadata`, switchable as `--embed-metadata metadata preamble` or
+  `pdfmd-options: {embed: {bibliography: false}}`. With it off (or a file
+  missing, or not UTF-8 text) the `NOTE  not embedded:` line still names them.
+  An embedded file with its bibliography now builds alone in an empty folder
+  (checked: byte-identical `.tex`, with citations resolved).
+- `--unpack` writes the bibliography/CSL files back (at their paths, hash
+  checked) and `--unpack --slim` removes the blocks; the slimmed file finds them
+  in its `NAME.unpacked/` folder, which is now also searched for them.
+
+### Fixed
+
+- **`--self-contained` warned on Pandoc 3.11** (`[WARNING] Deprecated: ...`):
+  pdfmd passed `--mathml`, which Pandoc 3.11 deprecates in favour of
+  `--html-math-method=mathml`. pdfmd now uses the long form where the installed
+  Pandoc lists it in `--help`, and the short flag (`--mathml`, `--mathjax`,
+  `--katex`, `--webtex`, `--gladtex`) otherwise -- Pandoc 3.1 does not know
+  `--html-math-method` at all, which a first version of this fix got wrong and
+  a test on Pandoc 3.1.3 caught. (The `html: {math: ...}` option uses the same.)
+
+### Checked
+
+- Fixture with a metadata-owned `bibliography: refs/test.bib` and `csl:` in a
+  subfolder and citations: embedded copy alone in an empty folder, `.tex`
+  identical to the original build's (citations resolved); the same through
+  `--unpack --slim` and the unpacked folder; absolute and `../` names rewritten
+  and identical; `embed: {bibliography: false}` and `--embed-metadata metadata`
+  leave them out, say so, and fail to build alone as expected; the math method
+  against Pandoc 3.1.3 (short flag) and, by stubbing the capability, the long
+  form; BIBINPUTS and the
+  resource path carry the extracted folder. All earlier comparisons pass, also
+  under Python 3.11 (the project's minimum), which now runs the stand-in-engine
+  cache test as well.
+- Not checked: BibTeX/Biber itself finding an embedded `.bib` for
+  `citation-engine: natbib|biblatex` (no LaTeX here); only the search path is.
+
+---
+
 ## v3.19.6 — 2026-10-07
 
 Pre-edit state: commit `38008e1` (v3.19.5). Patch bump by the one-time
