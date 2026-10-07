@@ -184,9 +184,174 @@ class Planning(unittest.TestCase):
         self.assertIn("\\emph{\\pdfmdrunrtl{A}{القدر والقضاء}}", result.stdout)
         self.assertIn("(plain)", result.stdout)
         self.assertEqual(result.stdout.count("\\pdfmdrunrtl"), 2)
-        other = subprocess.run(["pandoc", "-f", "markdown", "-t", "html", "--lua-filter", str(filter_file)],
-                               input="القدر\n", capture_output=True, text=True, encoding="utf-8")
-        self.assertNotIn("pdfmdrun", other.stdout)  # only LaTeX is rewritten
+        for target, expected in (("typst", '#text(font: ("Amiri",))[القدر]'),
+                                 ("html", "font-family: &#39;Amiri&#39;")):
+            other = subprocess.run(["pandoc", "-f", "markdown", "-t", target, "--lua-filter", str(filter_file)],
+                                   input="القدر\n", capture_output=True, text=True, encoding="utf-8")
+            self.assertIn(expected, other.stdout, target)
+        docx = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--lua-filter", str(filter_file)],
+                              input="القدر\n", capture_output=True, text=True, encoding="utf-8")
+        self.assertNotIn("Amiri", docx.stdout)  # formats with their own font fallback are left alone
+
+
+class Emoji(unittest.TestCase):
+    def test_emoji_are_not_script_fallback_material(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)] + [(0x2764, 0x2764)])
+            index = pu.FontIndex(root, use_system=False)
+            plan = pu.plan_text("rocket \U0001F680 flag \U0001F1F0\U0001F1FF heart \u2764\uFE0F", "Main Test", index)
+            self.assertIn(0x1F680, plan.emoji)
+            self.assertIn(0x1F1F0, plan.emoji)
+            self.assertNotIn(0x2764, plan.emoji)  # the main font has it
+            self.assertEqual(plan.uncovered, {})
+            self.assertFalse(plan)
+
+    def test_text_symbols_without_a_variation_selector_are_not_emoji(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            plan = pu.plan_text("a \u2764 b \u2764\uFE0F c", "Main Test", pu.FontIndex(root, use_system=False))
+            self.assertIn(0x2764, plan.emoji)  # one of them asked for the picture
+
+
+class Installer(unittest.TestCase):
+    def setUp(self):
+        from pdfmd_unicode import install
+
+        self.install = install
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+        self.blob = b"font bytes"
+        self.archive = self._zip({"pkg/ttf/Alpha-Regular.ttf": b"zip font bytes"})
+        import hashlib
+
+        sha1 = hashlib.sha1(b"blob %d\0" % len(self.blob) + self.blob).hexdigest()
+        self.packages = {
+            "alpha": {"title": "Alpha", "scripts": ("Latn",), "license": "OFL-1.1", "homepage": "https://x", "size": 10,
+                      "files": ({"url": "https://example.invalid/A.ttf", "name": "A.ttf", "size": 10, "git_sha1": sha1},)},
+            "beta": {"title": "Beta", "scripts": ("Arab",), "license": "OFL-1.1", "homepage": "https://x", "size": 14,
+                     "files": ({"zip": "https://example.invalid/b.zip", "zip_sha256": hashlib.sha256(self.archive).hexdigest(),
+                                "member": "pkg/ttf/Alpha-Regular.ttf", "name": "B.ttf", "size": 14},)},
+        }
+        self._real = install.PACKAGES
+        install.PACKAGES = self.packages
+        self.addCleanup(lambda: setattr(install, "PACKAGES", self._real))
+        self.served = {"https://example.invalid/A.ttf": self.blob, "https://example.invalid/b.zip": self.archive}
+
+    @staticmethod
+    def _zip(members: dict) -> bytes:
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as bundle:
+            for name, data in members.items():
+                bundle.writestr(name, data)
+        return buffer.getvalue()
+
+    def opener(self, request, timeout=None):
+        import io
+
+        return io.BytesIO(self.served[request.full_url])
+
+    def test_names_groups_and_aliases(self):
+        self.assertEqual(self._real is not None and self.install.resolve(["alpha", "alpha"]), ["alpha"])
+        with self.assertRaises(self.install.UnknownPackage):
+            self.install.resolve(["nonsense"])
+
+    def test_install_checks_pins_and_lists_the_result(self):
+        failed = self.install.install(["alpha", "beta"], self.root, log=lambda line: None, opener=self.opener)
+        self.assertEqual(failed, [])
+        self.assertEqual((self.root / "alpha" / "A.ttf").read_bytes(), self.blob)
+        self.assertEqual((self.root / "beta" / "B.ttf").read_bytes(), b"zip font bytes")
+        self.assertIn("Licence: OFL-1.1", (self.root / "alpha" / "LICENSE-pdfmd.txt").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(self.install.installed(self.root)), ["alpha", "beta"])
+        self.install.uninstall(["alpha"], self.root, log=lambda line: None)
+        self.assertEqual(sorted(self.install.installed(self.root)), ["beta"])
+        self.assertFalse((self.root / "alpha").exists())
+
+    def test_a_download_that_does_not_match_its_pin_is_refused(self):
+        self.served["https://example.invalid/A.ttf"] = b"tampered"
+        messages: list[str] = []
+        failed = self.install.install(["alpha"], self.root, log=messages.append, opener=self.opener)
+        self.assertEqual(failed, ["alpha"])
+        self.assertFalse((self.root / "alpha").exists())
+        self.assertFalse((self.root / ".alpha.part").exists())
+        self.assertTrue(any("mismatch" in message for message in messages))
+
+    def test_hints_name_the_package_that_has_the_script(self):
+        real = self.install.PACKAGES
+        self.install.PACKAGES = self._real
+        try:
+            self.assertEqual(self.install.packages_for([ord("ا")]), ["arabic"])
+            self.assertEqual(self.install.packages_for([ord("命")]), ["cjk-sc"])
+            self.assertEqual(self.install.packages_for([ord("命")], "ja"), ["cjk-jp"])
+            self.assertEqual(self.install.packages_for([0x1F680]), ["emoji"])
+        finally:
+            self.install.PACKAGES = real
+
+    def test_the_real_catalog_is_well_formed(self):
+        for key, package in self._real.items():
+            self.assertTrue(package["files"], key)
+            for item in package["files"]:
+                self.assertTrue(("url" in item and "git_sha1" in item) or ("zip" in item and "zip_sha256" in item), key)
+                self.assertTrue(item["url" if "url" in item else "zip"].startswith("https://"), key)
+
+
+class ManagedFonts(unittest.TestCase):
+    def setUp(self):
+        import os
+
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self._previous = os.environ.get("XDG_DATA_HOME")
+        os.environ["XDG_DATA_HOME"] = self._directory.name
+        pdfmd.reset_font_caches()
+        self.addCleanup(self._restore)
+        folder = Path(self._directory.name) / "pdfmd" / "fonts" / "pack"
+        folder.mkdir(parents=True)
+        make_font(folder / "Only-Regular.ttf", "Only In Pdfmd", [(0x20, 0x7E)])
+        make_font(folder / "Only-Bold.ttf", "Only In Pdfmd", [(0x20, 0x7E)], style="Bold")
+
+    def _restore(self):
+        import os
+
+        if self._previous is None:
+            os.environ.pop("XDG_DATA_HOME", None)
+        else:
+            os.environ["XDG_DATA_HOME"] = self._previous
+        pdfmd.reset_font_caches()
+
+    def test_a_font_only_in_pdfmds_folder_is_named_by_file_for_latex(self):
+        args = pdfmd.font_args("mainfont", "Only In Pdfmd")
+        self.assertIn("mainfont=Only-Regular.ttf", args)
+        self.assertTrue(any(arg.startswith("mainfontoptions=Path={") for arg in args))
+        self.assertIn("mainfontoptions=BoldFont={Only-Bold.ttf}", args)
+        self.assertFalse(pdfmd.font_missing("Only In Pdfmd"))
+
+    def test_other_engines_and_installed_fonts_are_named_plainly(self):
+        self.assertEqual(pdfmd.font_args("mainfont", "Only In Pdfmd", latex=False), ["-V", "mainfont=Only In Pdfmd"])
+        self.assertEqual(pdfmd.font_args("mainfont", "No Such Font Anywhere"), ["-V", "mainfont=No Such Font Anywhere"])
+
+    def test_the_fonts_folder_is_given_to_typst_and_listed_for_weasyprint(self):
+        with pdfmd.managed_fonts_css("weasyprint") as header:
+            self.assertIn('font-family: "Only In Pdfmd"', header.read_text(encoding="utf-8"))
+            self.assertIn("font-weight: bold", header.read_text(encoding="utf-8"))
+        with pdfmd.managed_fonts_css("lualatex") as header:
+            self.assertIsNone(header)
+
+    def test_a_missing_glyph_warning_about_unavoidable_characters_is_no_reason_to_retry(self):
+        line = "[WARNING] Missing character: There is no X (U+1F680) (U+1F680) in font Y"
+        try:
+            pdfmd.UNICODE_UNCOVERED.clear()
+            self.assertTrue(pdfmd.missing_glyph_warning(line))
+            pdfmd.UNICODE_UNCOVERED.add(0x1F680)
+            self.assertFalse(pdfmd.missing_glyph_warning(line))
+            self.assertTrue(pdfmd.missing_glyph_warning(line + "\nMissing character: There is no (U+0627) in font Y"))
+        finally:
+            pdfmd.UNICODE_UNCOVERED.clear()
 
 
 class Integration(unittest.TestCase):

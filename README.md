@@ -172,8 +172,11 @@ OK    notes.md
   150 MB, Python 3.11+, installs matplotlib so formulas render offline, centred,
   as real math; the few matplotlib cannot read are set as text like inkmd's).
   Footnotes, bookmarks and syntax-highlighted code come with it.
-- `pdfmd --install emoji` (`pdfmd-cli[emoji]`, about 11 MB) adds the colour
-  emoji font; without it emoji print as `[rocket]`-style labels.
+- `pdfmd --install emoji` (about 11 MB; `pdfmd-cli[emoji]` is the pip way for the
+  built-in renderer only) puts the colour emoji font in pdfmd's own fonts folder,
+  where the built-in renderer and every engine that can draw colour emoji
+  (Typst) find it; without it emoji print as `[rocket]`-style labels in the
+  built-in renderer.
 - `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
   real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
   / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about
@@ -641,6 +644,26 @@ the default main font lacks letters of, the main font changes instead, so no
 word is set half in one font and half in another. Characters that no
 installed font has are named in a warning, never dropped or swapped for
 something else. `-v` shows which font each script got.
+
+The same fallback works with Typst (`-e typst`: `#text(font: ...)` runs, and
+the fonts folder handed to Typst) and WeasyPrint (styled spans). WeasyPrint draws
+Noto Color Emoji's bitmaps badly, so emoji are left to the system's own emoji font
+there; Typst draws them well.
+
+**Getting fonts.** Anything installed on the machine is used. For the rest,
+`pdfmd --install fonts` lists what pdfmd can fetch and
+`pdfmd --install fonts:arabic,cjk-sc` (or `fonts:core`, `fonts:scripts`,
+`fonts:all`; also `fonts:ja`, `fonts:kazakh`...) fetches it into pdfmd's own
+folder (`~/.local/share/pdfmd/fonts`, `%LOCALAPPDATA%\pdfmd\fonts`; no admin
+rights, nothing system-wide). Every file is checked against a checksum pinned in
+pdfmd before it is kept, and each package keeps its licence beside it (all SIL OFL,
+except DejaVu's own free licence). The list: STIX Two (pdfmd's default main font),
+JetBrains Mono (its default code font), Noto Serif, Amiri and Noto Naskh Arabic,
+Hebrew, Armenian, Georgian, the Indic and Southeast Asian scripts, Syriac,
+Thaana, Cherokee, symbols, Noto Serif for Chinese (simplified/traditional),
+Japanese and Korean (one weight each, bold is synthesised), DejaVu, and colour
+emoji. When a document needs a script no installed font has, the warning names
+the package to install. `pdfmd --uninstall fonts:NAME` removes some.
 
 It stays out of the way of a document that has set up its own fonts per
 script (`ucharclasses`, `\newfontfamily`, `xeCJK`, `\babelfont`,

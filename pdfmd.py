@@ -83,7 +83,7 @@ No Pandoc, or no PDF engine (v3.20.0):
     renderer: inkmd, vendored in pdfmd_inkmd/ (stdlib only, offline,
     deterministic), or md2pdf (PyPI `pymd2pdf`, ReportLab; footnotes,
     bookmarks, math) when installed -- `pdfmd --install math` / `pip install
-    "pdfmd-cli[math]"`, and `--install emoji` for inkmd's colour emoji font.
+    "pdfmd-cli[math]"`, and `--install emoji` for the colour emoji font.
     It is picked automatically only when no Pandoc route exists (a failing
     Pandoc build never falls back to it); -e inkmd / -e md2pdf / -e native or a
     `pdf-engine:` setting asks for it. Every input is read as GitHub-flavoured
@@ -186,6 +186,15 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     CJKmainfont, mainfontfallback) is left to itself unless
     `pdfmd-options: {unicode: true}`; `--no-auto unicode` turns it all off.
     Fonts a build cannot load are dropped and the build retried without them.
+    Typst gets the same runs as `#text(font: ...)` (it does no per-script
+    fallback of its own that finds CJK) and WeasyPrint styled spans. The
+    fonts: `pdfmd --install fonts` lists what pdfmd can fetch (STIX Two,
+    JetBrains Mono, Noto and Amiri for most scripts, CJK, DejaVu, colour emoji),
+    `--install fonts:arabic,cjk-sc` (groups core, scripts, cjk, all; aliases
+    such as ja, kazakh) fetches into ~/.local/share/pdfmd/fonts, every file
+    checked against a checksum pinned in pdfmd; `--uninstall fonts:NAME`
+    removes. Those fonts are found by every engine: LaTeX gets them by file and
+    Path, Typst by --font-path, WeasyPrint by @font-face.
 
     Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
     ending `.tex`) produces a complete, standalone document -- the same
@@ -976,7 +985,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.0"
+PDFMD_VERSION = "3.23.1"
 import argparse
 import csv
 import filecmp
@@ -1069,8 +1078,14 @@ def installed_font_families() -> frozenset[str] | None:
     return frozenset(name.strip().casefold() for line in out.splitlines() for name in line.split(","))
 
 
-@lru_cache(maxsize=None)
 def font_missing(family: str) -> bool:
+    """True only when a font is known NOT to be installed -- anywhere, pdfmd's own fonts
+    folder (`pdfmd --install fonts`) included."""
+    return system_font_missing(family) and managed_face(family) is None
+
+
+@lru_cache(maxsize=None)
+def system_font_missing(family: str) -> bool:
     """True only when a font is known NOT to be installed.
 
     Asks fontconfig (fc-list) first, then luaotfload-tool (ships with TeX
@@ -2122,8 +2137,8 @@ INSTALL_SPECS = {
     "pandoc": ["pypandoc_binary"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr")
-INSTALL_SIZES = {"emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts")
+INSTALL_SIZES = {"fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
@@ -2163,7 +2178,11 @@ def matplotlib_available() -> bool:
 
 
 def inkmd_emoji_font() -> Path | None:
-    """The colour-emoji font of a separately installed `inkmd` (the [emoji] extra)."""
+    """The colour-emoji font: pdfmd's own (`pdfmd --install emoji`), else that of a
+    separately installed `inkmd` (the [emoji] extra)."""
+    own = fonts_directory() / "emoji" / "NotoColorEmoji.ttf"
+    if own.is_file():
+        return own
     try:
         spec = importlib.util.find_spec("inkmd")
     except (ImportError, ValueError):
@@ -3513,6 +3532,75 @@ def install_typst() -> bool:
     return True
 
 
+def install_kind(value: str) -> str:
+    """argparse type of --install: a kind, or `fonts:NAME[,NAME...]`."""
+    kind = value.partition(":")[0]
+    if kind not in INSTALL_KINDS or (":" in value and kind != "fonts"):
+        raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
+                                         "fonts takes names: fonts:arabic,cjk-sc)")
+    return value
+
+
+def uninstall_kind(value: str) -> str:
+    if value.partition(":")[0] != "fonts":
+        raise argparse.ArgumentTypeError("only fonts can be uninstalled: --uninstall fonts:NAME[,NAME...]")
+    return value
+
+
+def install_fonts(names: str) -> bool:
+    """`pdfmd --install fonts[:NAME,NAME...]`: list the catalog, or fetch fonts into
+    pdfmd's own folder (see pdfmd_unicode/install.py)."""
+    module = unicode_module()
+    if module is None:
+        print("The fonts installer is part of the pdfmd_unicode package, which is not installed beside "
+              "this file (pip install pdfmd-cli).", file=sys.stderr)
+        return False
+    from pdfmd_unicode import install as installer
+    if not names.strip():
+        print(installer.table(fonts_directory()))
+        return True
+    try:
+        keys = installer.resolve(names.split(","))
+    except installer.UnknownPackage as error:
+        print(f"No font package or group called {error.args[0]!r}. `pdfmd --install fonts` lists them.",
+              file=sys.stderr)
+        return False
+    failed = installer.install(keys, fonts_directory())
+    reset_font_caches()
+    done = [key for key in keys if key not in failed]
+    if done:
+        print(f"Installed {', '.join(done)} in {fonts_directory()}; pdfmd uses them from now on "
+              "(delete the folder, or `pdfmd --uninstall fonts:NAME`, to remove).")
+    return not failed
+
+
+def uninstall_fonts(names: str) -> bool:
+    module = unicode_module()
+    if module is None:
+        return False
+    from pdfmd_unicode import install as installer
+    try:
+        keys = installer.resolve(names.split(",")) if names.strip() else []
+    except installer.UnknownPackage as error:
+        print(f"No font package or group called {error.args[0]!r}.", file=sys.stderr)
+        return False
+    if not keys:
+        print("Name what to remove: pdfmd --uninstall fonts:arabic,cjk-sc", file=sys.stderr)
+        return False
+    installer.uninstall(keys, fonts_directory())
+    reset_font_caches()
+    return True
+
+
+def reset_font_caches() -> None:
+    global _FONT_INDEX, _MANAGED_INDEX
+    _FONT_INDEX = _MANAGED_INDEX = None
+    for cached in (font_missing, system_font_missing, default_monofont, fallback_font, preferred_font):
+        clear = getattr(cached, "cache_clear", None)
+        if clear:
+            clear()
+
+
 def install_extra(kind: str) -> bool:
     """Install an optional piece: pip packages into the Python environment pdfmd runs
     from (math, emoji, pandoc), or Typst's own binary into pdfmd's tools folder."""
@@ -3520,6 +3608,8 @@ def install_extra(kind: str) -> bool:
         return install_extra("pandoc") and install_extra("typst")
     if kind == "typst":
         return install_typst()
+    if kind == "emoji" or kind == "fonts" or kind.startswith("fonts:"):
+        return install_fonts("emoji" if kind == "emoji" else kind.partition(":")[2])
     if kind == "math" and sys.version_info < (3, 11):
         print("pymd2pdf needs Python 3.11 or newer; this is "
               f"{sys.version.split()[0]}. Install pdfmd with a newer Python (pipx install pdfmd-cli).",
@@ -3983,7 +4073,8 @@ def table_width_filter() -> Iterator[Path]:
 # A document that has set up its own scripts (ucharclasses, \newfontfamily, xeCJK,
 # \babelfont, a font fallback variable) keeps its own way: --no-auto unicode
 # switches this off, and `pdfmd-options: {unicode: true}` forces it on regardless.
-UNICODE_ENGINES = ("lualatex", "xelatex")
+EMOJI_FAMILIES = ("Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twemoji Mozilla", "Noto Emoji")
+UNICODE_ENGINES = ("lualatex", "xelatex", "typst", "weasyprint")
 OWN_SCRIPT_SETUP_RE = re.compile(r"ucharclasses|\\newfontfamily|\\babelfont|xeCJK|luatexja|CJKutf8|\\setCJK"
                                  r"|add_fallback|\\setTransition|\\setmainfontfallback")
 OWN_SCRIPT_VARIABLES = ("CJKmainfont", "CJKsansfont", "CJKmonofont", "mainfontfallback")
@@ -4003,6 +4094,40 @@ def unicode_module():
 def fonts_directory() -> Path:
     """Where pdfmd keeps the fonts `pdfmd --install fonts` fetches."""
     return data_root() / "fonts"
+
+
+_MANAGED_INDEX = None
+
+
+def managed_index():
+    """Only the fonts in pdfmd's own folder (cheap: no system scan)."""
+    global _MANAGED_INDEX
+    if _MANAGED_INDEX is None:
+        module = unicode_module()
+        _MANAGED_INDEX = module.FontIndex(fonts_directory(), use_system=False) if module else False
+    return _MANAGED_INDEX or None
+
+
+def managed_face(family: str):
+    index = managed_index()
+    face = index.regular(family) if index is not None else None
+    return face if face is not None and face.managed else None
+
+
+def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
+    """`-V` arguments that select ``family`` as mainfont/monofont. One only found in pdfmd's own
+    folder (not installed system-wide) is named by file, with the folder as its Path, which
+    is how fontspec loads a font it cannot find by name."""
+    face = managed_face(family) if latex else None
+    if face is None or not system_font_missing(family):
+        return ["-V", f"{kind}={family}"]
+    directory = str(Path(face.path).parent).replace("\\", "/") + "/"
+    args = ["-V", f"{kind}={Path(face.path).name}", "-V", f"{kind}options=Path={{{directory}}}"]
+    for style, option in (("bold", "BoldFont"), ("italic", "ItalicFont"), ("bolditalic", "BoldItalicFont")):
+        other = managed_index().styles(face).get(style)
+        if other is not None:
+            args += ["-V", f"{kind}options={option}={{{Path(other.path).name}}}"]
+    return args
 
 
 def font_index():
@@ -4106,6 +4231,32 @@ def default_mainfont(md_paths: list[Path], metadata_files: list[Path], no_auto: 
 
 
 @contextmanager
+def managed_fonts_css(engine: str | None) -> Iterator[Path | None]:
+    """For WeasyPrint, which finds fonts through fontconfig: an @font-face rule for every font in
+    pdfmd's own folder, so a document can name them like installed ones."""
+    index = managed_index() if engine == "weasyprint" else None
+    if index is None or not index.faces:
+        yield None
+        return
+    rules = []
+    for face in index.faces:
+        if "emoji" in face.family.casefold():
+            continue  # WeasyPrint draws bitmap colour fonts (Noto Color Emoji) badly
+        style = face.style.casefold()
+        rules.append('@font-face { font-family: "%s"; src: url("%s"); font-weight: %s; font-style: %s; }' % (
+            face.family, Path(face.path).as_uri(), "bold" if "bold" in style else "normal",
+            "italic" if "italic" in style or "oblique" in style else "normal"))
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".html", prefix="pdfmd-fontface-",
+                            delete=False) as temporary:
+        temporary.write("<style>\n" + "\n".join(rules) + "\n</style>\n")
+        temporary_path = Path(temporary.name)
+    try:
+        yield temporary_path
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+@contextmanager
 def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
                     preamble_files: list[Path], main_font: str | None, engine: str | None,
                     no_auto: list[str] | None, note) -> Iterator[tuple[Path | None, Path | None]]:
@@ -4128,14 +4279,31 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
     text = unicode_source_text(md_paths, metadata_files)
     language = document_font_setting("lang", md_paths, metadata_files, variables)
     plan = module.plan_text(text, main, index, language)
+    UNICODE_UNCOVERED.clear()
     if plan is None:
         note("UNICODE", f"{md_paths[0]}: {main} is not among the installed fonts, so what it lacks "
                         "cannot be told")
         yield None, None
         return
     if plan.uncovered:
+        UNICODE_UNCOVERED.update(plan.uncovered)
+        from pdfmd_unicode import install as installer
+        wanted = installer.packages_for(plan.uncovered, language)
+        hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
         print(f"WARN  {md_paths[0]}: no installed font draws {plan.describe_uncovered()} "
-              "(pdfmd --install fonts, or name a font that does)", file=sys.stderr)
+              f"({hint}, or name a font that does)", file=sys.stderr)
+    if plan.emoji:
+        # WeasyPrint draws Noto Color Emoji (bitmaps) badly, so it only counts the others for it.
+        usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:3] + EMOJI_FAMILIES[3:4]
+        emoji_font = next((family for family in usable if index.has(family)), None)
+        if engine in ("typst", "weasyprint") and emoji_font is None:
+            print(f"WARN  {md_paths[0]}: the document has emoji and no colour emoji font {engine} can use is "
+                  "installed (" + ("-e typst, with pdfmd --install emoji" if engine == "weasyprint"
+                                   else "pdfmd --install emoji") + ")", file=sys.stderr)
+        elif engine in LATEX_ENGINES or engine is None:
+            UNICODE_UNCOVERED.update(plan.emoji)
+            print(f"WARN  {md_paths[0]}: {engine or 'LaTeX'} cannot draw emoji (they print as empty boxes); "
+                  "-e typst or -e weasyprint draws them in colour", file=sys.stderr)
     if not plan:
         yield None, None
         return
@@ -4143,10 +4311,11 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
         note("UNICODE", f"{md_paths[0]}: {main} lacks {line}")
     header = filter_file = None
     try:
-        with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex", prefix="pdfmd-fonts-",
-                                delete=False) as temporary:
-            temporary.write(plan.latex_header())
-            header = Path(temporary.name)
+        if engine is None or engine in LATEX_ENGINES:
+            with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex", prefix="pdfmd-fonts-",
+                                    delete=False) as temporary:
+                temporary.write(plan.latex_header())
+                header = Path(temporary.name)
         with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua", prefix="pdfmd-fonts-",
                                 delete=False) as temporary:
             temporary.write(plan.lua_filter())
@@ -4945,11 +5114,20 @@ def has_code_spans(text: str) -> bool:
     return "`" in text or bool(re.search(r"(?m)^\s{0,3}~~~", text))
 
 
+# Characters no installed font draws (script_fallback has already warned about them): a
+# missing-glyph warning that is only about those is not a reason to retry with another font.
+UNICODE_UNCOVERED: set[int] = set()
+
+
 def missing_glyph_warning(output: str) -> bool:
-    return bool(re.search(
-        r"missing character|Missing character|Unicode character .* not set|font .* not found",
-        output,
-    ))
+    for line in output.splitlines():
+        if not re.search(r"missing character|Missing character|Unicode character .* not set|font .* not found",
+                         line):
+            continue
+        codes = {int(code, 16) for code in re.findall(r"U\+([0-9A-Fa-f]{4,6})", line)}
+        if not codes or not codes <= UNICODE_UNCOVERED:
+            return True
+    return False
 
 
 def contains_citations(md_path: Path) -> bool:
@@ -9808,11 +9986,11 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--slide-level=" + str(slide_level)]
             first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
             if first_font:
-                cmd += ["-V", f"mainfont={first_font}"]
+                cmd += font_args("mainfont", first_font)
             if geometry_needed:
                 cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
             if monofont_needed:
-                cmd += ["-V", f"monofont={default_monofont()}"]
+                cmd += font_args("monofont", default_monofont())
             for variable in variables:
                 cmd += ["-V", variable]
             if shift_heading:
@@ -10172,14 +10350,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # retry would have.
                     first_font = tex_first_font
                     if first_font:
-                        cmd += ["-V", f"mainfont={first_font}"]
+                        cmd += font_args("mainfont", first_font)
                     if geometry_needed:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     elif margin_options:
                         for margin_option in margin_options:
                             cmd += ["-V", f"geometry:{margin_option}"]
                     if monofont_needed:
-                        cmd += ["-V", f"monofont={default_monofont()}"]
+                        cmd += font_args("monofont", default_monofont())
                     if pagesize_typo:
                         cmd += ["-V", f"papersize={pagesize_typo}"]
                 for variable in variables:
@@ -10339,11 +10517,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     with script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
                                          selected_font, engine,
                                          no_auto if not plain or no_auto == [] else [*(no_auto or []), "unicode"],
-                                         note) as (fonts_header, fonts_filter):
-                        return run_command(selected_font, fallback, fonts_header, fonts_filter)
+                                         note) as (fonts_header, fonts_filter), \
+                            managed_fonts_css(engine) as fonts_css:
+                        return run_command(selected_font, fallback, fonts_header or fonts_css, fonts_filter)
 
                 def run_command(selected_font: str | None, fallback: bool, fonts_header, fonts_filter):
                     cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "--pdf-engine=" + engine]
+                    if engine == "typst" and managed_index() is not None and managed_index().faces:
+                        cmd.append(f"--pdf-engine-opt=--font-path={fonts_directory()}")
                     if effective_from:
                         cmd += ["-f", effective_from]
                     for metadata in prepared_metadata:
@@ -10357,7 +10538,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         if slide_level is not None:
                             cmd += ["--slide-level=" + str(slide_level)]
                     if selected_font:
-                        cmd += ["-V", f"mainfont={selected_font}"]
+                        cmd += font_args("mainfont", selected_font, engine in LATEX_ENGINES)
                     if fallback and not any(variable.startswith("mainfontfallback=") for variable in variables):
                         cmd += ["-V", f"mainfontfallback={fallback_font()}"]
                     if geometry_needed and engine in LATEX_ENGINES:
@@ -10366,7 +10547,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         for margin_option in margin_options:
                             cmd += ["-V", f"geometry:{margin_option}"]
                     if monofont_needed and engine in LATEX_ENGINES:
-                        cmd += ["-V", f"monofont={default_monofont()}"]
+                        cmd += font_args("monofont", default_monofont())
                     if pagesize_typo and engine in LATEX_ENGINES:
                         cmd += ["-V", f"papersize={pagesize_typo}"]
                     for variable in variables:
@@ -12565,14 +12746,20 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
                              "is actually reStructuredText: --from rst")
-    parser.add_argument("--install", choices=INSTALL_KINDS, metavar="KIND",
+    parser.add_argument("--install", type=install_kind, metavar="KIND",
                         help="install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
                              "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
                              "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
-                             "Python 3.11+) or 'emoji' (colour emoji font for the built-in inkmd renderer, "
-                             "about 11 MB). pandoc/math/emoji equal `pip install \"pdfmd-cli[KIND]\"`. "
+                             "Python 3.11+), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
+                             "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
+                             "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
+                             "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "
+                             "into pdfmd's own folder with no admin rights). "
+                             "pandoc/math equal `pip install \"pdfmd-cli[KIND]\"`. "
                              "A Pandoc or Typst already on PATH always wins over the installed ones")
+    parser.add_argument("--uninstall", metavar="fonts:NAME", type=uninstall_kind,
+                        help="remove fonts installed by --install fonts, e.g. --uninstall fonts:arabic,cjk")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -12894,6 +13081,8 @@ def main() -> None:
         raise SystemExit(0 if dependency_report() else 1)
     if args.install:
         raise SystemExit(0 if install_extra(args.install) else 1)
+    if args.uninstall:
+        raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)
     routed = route_pdf_input(args, pandoc_options)
     if routed is not None:
         raise SystemExit(routed)
@@ -13295,14 +13484,14 @@ def main() -> None:
                         report_first_font = None if report_document_font else (
                             args.font or (preferred_font() if report_mainfont_auto else None))
                         if report_first_font:
-                            cmd += ["-V", f"mainfont={report_first_font}"]
+                            cmd += font_args("mainfont", report_first_font)
                         if report_geometry_needed:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                         elif report_margin_options:
                             for margin_option in report_margin_options:
                                 cmd += ["-V", f"geometry:{margin_option}"]
                         if report_monofont_needed:
-                            cmd += ["-V", f"monofont={default_monofont()}"]
+                            cmd += font_args("monofont", default_monofont())
                     for variable in variables:
                         cmd += ["-V", variable]
                     if report_preambles and is_tex_target:
@@ -13408,7 +13597,7 @@ def main() -> None:
                             for margin_option in margin_options:
                                 cmd += ["-V", f"geometry:{margin_option}"]
                         if monofont_needed and engine in LATEX_ENGINES:
-                            cmd += ["-V", f"monofont={default_monofont()}"]
+                            cmd += font_args("monofont", default_monofont())
                         for variable in variables:
                             cmd += ["-V", variable]
                         if preambles and engine in LATEX_ENGINES:

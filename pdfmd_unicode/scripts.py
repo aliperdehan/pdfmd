@@ -141,4 +141,5 @@ def chain_for(code_point: int, script: str, cjk: str) -> tuple[str, ...]:
 def is_neutral(code_point: int) -> bool:
     """Characters that need no font of their own: spaces, controls, format characters."""
     category = unicodedata.category(chr(code_point))
-    return category in ("Zs", "Zl", "Zp", "Cc", "Cf", "Cn", "Co", "Cs") or code_point in (0xFE0E, 0xFE0F)
+    return (category in ("Zs", "Zl", "Zp", "Cc", "Cf", "Cn", "Co", "Cs")
+            or 0xFE00 <= code_point <= 0xFE0F or 0xE0100 <= code_point <= 0xE01EF)  # variation selectors
