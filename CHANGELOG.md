@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.3 — 2026-10-07
+
+Pre-edit state: commit `28408c7` (v3.22.2). Packaging and documentation for the
+attached source.
+
+### Added
+
+- **The command is also installed as `pdfmd-cli`** (`[project.scripts]`), the
+  package's own name: `pdfmd` is also the command of an unrelated, popular
+  PDF-to-Markdown tool, and when both are installed the second install silently
+  replaces the first one's `pdfmd`. `pdfmd-cli` is never ambiguous. (`mdpdf` was
+  considered and left out: it is itself the name of an existing PyPI project and
+  would recreate the clash.) A packaging test pins both names.
+- README: "The PDF carries its own source" (`--attach-source`, `--bundle`,
+  `--restore`, `--strip-comments`).
+
+---
+
 ## v3.22.2 — 2026-10-07
 
 Pre-edit state: commit `abab176` (v3.22.1). `--bundle`: the PDF carries the

@@ -44,6 +44,9 @@ Changelog = "https://github.com/aliperdehan/pdfmd/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pdfmd = "pdfmd:main"
+# The same command under the package's own name: `pdfmd` is also the name of an unrelated
+# PDF-to-Markdown tool, and `pdfmd-cli` is never ambiguous when both are installed.
+pdfmd-cli = "pdfmd:main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]

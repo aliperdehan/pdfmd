@@ -322,6 +322,44 @@ pdfmd-options:
   html: {self-contained: true, css: style.css}
 ```
 
+### The PDF carries its own source
+
+A PDF can hold the document it was built from, so the file you send is also the
+file you can edit again. Ask for it, on the command line or in the document:
+
+```sh
+pdfmd report --attach-source     # the source goes into report.pdf as an attachment
+pdfmd report --bundle            # ... and the images and data it needs
+pdfmd --restore report.pdf       # write the folder back into report.restored/
+```
+
+```yaml
+pdfmd-options:
+  attach-source: true            # alias: embed-source
+  bundle: true                   # or `all`: the whole folder, not just what the text points at
+  strip-comments: true           # the default for the attached copy; `false` keeps <!-- --> notes
+```
+
+The attachment is the assembled Markdown with the metadata, preamble, Lua filters
+and bibliography folded in (the same file `--assemble-only --embed-metadata`
+writes), plus a small manifest of the original layout, so `--restore` gives back
+`report.md`, `metadata/`, `parts/` and the rest where they were. Any PDF viewer
+lists the attachments, and `pdfmd --restore report.pdf --list` shows them. A
+restored folder builds the same document: checked on a report of nine parts.
+
+- **Comments do not travel.** The attached source loses every `<!-- -->` comment
+  (notes to yourself, drafts, the BUILD NOTES block), except inside code and
+  pdfmd's own markers. `--strip-comments` does the same for `--assemble-only`.
+- **Images and data are not in the source.** `--bundle` stores them as separate
+  attachments (`files/...`), found from the text, the preamble and any word that
+  names an existing file; `--bundle all` takes the whole folder except output
+  and housekeeping. Over 100 MB (`bundle-max-mb`) only the source is attached.
+- **It is opt-in, and it is everything you wrote.** An attached source includes
+  what the author would not send in an email; check `--list` before sharing.
+- `--restore` never overwrites a file and never writes outside its folder, and a
+  restored Lua filter does not run until you trust it (`--trust-embedded`).
+- Not yet: `-r/--report` builds, and a section build (`doc#section`).
+
 ### Slides
 
 ```sh

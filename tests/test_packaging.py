@@ -70,6 +70,13 @@ class PyprojectTests(unittest.TestCase):
         declared = {requirement_name(item) for item in self.project.get("dependencies", [])}
         self.assertTrue({"pyyaml", "pypdf"} <= declared, f"declared: {sorted(declared)}")
 
+    @unittest.skipIf(tomllib is None, "needs tomllib (3.11+)")
+    def test_the_command_is_installed_under_both_names(self):
+        # `pdfmd` is also an unrelated PDF-to-Markdown tool's command; `pdfmd-cli` is never ambiguous
+        scripts = self.project.get("scripts", {})
+        self.assertEqual(scripts.get("pdfmd"), "pdfmd:main")
+        self.assertEqual(scripts.get("pdfmd-cli"), "pdfmd:main")
+
     def test_every_install_kind_with_a_package_has_a_matching_extra(self):
         extras = self.project["optional-dependencies"]
         for kind, specs in pdfmd.INSTALL_SPECS.items():
