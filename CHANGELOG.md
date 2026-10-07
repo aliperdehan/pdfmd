@@ -41,6 +41,57 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.2 — 2026-10-07
+
+Pre-edit state: commit `abab176` (v3.22.1). `--bundle`: the PDF carries the
+files its source cannot.
+
+### Added
+
+- **`--bundle [all]`, `--no-bundle`, `pdfmd-options.bundle` (`true` | `all`),
+  `pdfmd-options.bundle-max-mb` (default 100)**: besides the source, store the
+  images and data the document needs, each as its own PDF attachment named
+  `files/PATH` (no archive: any tool lists or extracts a file, and nothing is
+  compressed twice). `--bundle` stores what the text and preamble point at; it
+  finds them from Markdown images and `<img>`, `file="..."` CSV tables,
+  `\includegraphics`, `\input`/`\include`, pgfplots `table` and
+  `\pgfplotstableread`, listings, verbatim and included-PDF macros, and, as a
+  catch-all, any word that is a relative file name naming a file that exists
+  (how data reached through a project's own macro, `\irpanel{ir/x.csv}`, is
+  found; a name only in a comment does not count). `--bundle all` stores every
+  file in the folder except the output, hidden files and folders, `.aux`/`.log`
+  and the like, and backups. It implies `--attach-source`; the Markdown files it
+  stores lose their comments like the source does; a file outside the folder is
+  named in a note and not stored; the manifest lists every stored file with its
+  hash and size.
+- **`--restore` puts the files back**, never over an existing one, checking each
+  hash (exit 1 on a mismatch), and refusing a path that climbs out of the
+  folder. `--list` shows them (`FILE path (size)`).
+- Tests (28 in all): referenced and `all` bundles, a comment-only mention not
+  counting, off and the size limit, an edited stored file.
+
+### Checked on real documents (copies)
+
+- The parts report of 3.22.1 with `--bundle`: 12 more files (0.4 MB: the IR
+  spectra's CSVs, the figures, the TeX the preamble `\input`s) found, none of
+  them by a pattern written for this project; the restored folder (27 files) built
+  with the PDF's text identical to the original's (0 differing lines of 1231, 15
+  pages), where without the bundle it stopped at the first missing CSV. The
+  PDF grew from about 0.6 MB to 1.0 MB.
+- A single-file report in a 39 MB folder: `--bundle` 14 files, 0.7 MB;
+  `--bundle all` 83 files, 38.6 MB (under the limit).
+
+### Not changed / not covered
+
+- Images are stored as the original files, in addition to the copy the PDF
+  engine embedded; sharing the two is not attempted. (`--bundle` stores them
+  only when asked for.)
+- Files the text reaches only through a computed name (a macro building a path
+  from pieces) are not found; use `--bundle all`.
+- Still not covered: `-r/--report`.
+
+---
+
 ## v3.22.1 — 2026-10-07
 
 Pre-edit state: commit `3abf9c1` (v3.22.0). The PDF carries its own source:

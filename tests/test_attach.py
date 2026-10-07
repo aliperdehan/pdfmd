@@ -196,6 +196,73 @@ class AttachAndRestore(unittest.TestCase):
         self.assertEqual([image["path"] for image in manifest["images"]], ["images/f.png"])
         self.assertEqual(set(pdfmd.read_pdf_attachments(pdf)), {pdfmd.ATTACH_MANIFEST, pdfmd.ATTACH_SOURCE})
 
+    def bundle(self, document: Path, mode: str, **kwargs) -> Path:
+        previous = pdfmd.BUNDLE_CLI
+        pdfmd.BUNDLE_CLI = mode
+        try:
+            return self.attach(document, **kwargs)
+        finally:
+            pdfmd.BUNDLE_CLI = previous
+
+    def test_bundle_stores_what_the_text_points_at_and_restore_puts_it_back(self):
+        for name, content in (("images/f.png", b"\x89PNG fake"), ("data/t.csv", b"a,b\n1,2\n"),
+                              ("ir/x.csv", b"x\n"), ("unrelated.bin", b"nope")):
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_bytes(content)
+        document = self.root / "d.md"
+        document.write_text(
+            "---\ntitle: T\n---\n\n![fig](images/f.png)\n\n::: {.csv file=\"data/t.csv\"}\n:::\n\n"
+            "\\irpanel{ir/x.csv}\n\nA missing one: nothing/there.csv, a URL https://x.org/a.png\n"
+            "<!-- ir/unrelated.bin is only in a comment: unrelated.bin -->\n", encoding="utf-8")
+        pdf = self.bundle(document, "referenced")
+        attachments = pdfmd.read_pdf_attachments(pdf)
+        self.assertEqual(sorted(name for name in attachments if name.startswith(pdfmd.EXTRA_PREFIX)),
+                         ["files/data/t.csv", "files/images/f.png", "files/ir/x.csv"])
+        out = self.restore(pdf)
+        self.assertEqual((out / "images" / "f.png").read_bytes(), b"\x89PNG fake")
+        self.assertEqual((out / "data" / "t.csv").read_bytes(), b"a,b\n1,2\n")
+        self.assertFalse((out / "unrelated.bin").exists())
+        self.assertTrue((out / "d.md").exists())
+
+    def test_bundle_all_takes_the_folder_but_not_output_or_housekeeping(self):
+        for name in ("notes/a.txt", "photos/p.jpg", ".hidden/x", ".backups/old.md", "build.aux", "d.pdf.bak"):
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_bytes(b"x")
+        (self.root / "notes" / "n.md").write_text("Note <!-- private -->.\n", encoding="utf-8")
+        document = self.root / "d.md"
+        document.write_text("Text.\n", encoding="utf-8")
+        pdf = self.bundle(document, "all")
+        stored = sorted(name[len(pdfmd.EXTRA_PREFIX):] for name in pdfmd.read_pdf_attachments(pdf)
+                        if name.startswith(pdfmd.EXTRA_PREFIX))
+        self.assertEqual(stored, ["d.pdf.bak", "notes/a.txt", "notes/n.md", "photos/p.jpg"])
+        out = self.restore(pdf)
+        self.assertEqual((out / "notes" / "n.md").read_text(encoding="utf-8"), "Note.\n")   # stripped like the source
+
+    def test_bundle_off_and_the_size_limit(self):
+        (self.root / "f.png").write_bytes(b"x" * 2048)
+        document = self.root / "d.md"
+        document.write_text("![f](f.png)\n", encoding="utf-8")
+        self.assertNotIn("files/f.png", pdfmd.read_pdf_attachments(self.bundle(document, "off")))
+        document.write_text("---\npdfmd-options:\n  bundle: true\n  bundle-max-mb: 0.001\n---\n\n![f](f.png)\n",
+                            encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()) as warned:
+            pdf = self.attach(document)
+        self.assertIn("over the", warned.getvalue())
+        self.assertNotIn("files/f.png", pdfmd.read_pdf_attachments(pdf))
+
+    def test_an_edited_extra_is_reported(self):
+        (self.root / "f.png").write_bytes(b"original")
+        document = self.root / "d.md"
+        document.write_text("![f](f.png)\n", encoding="utf-8")
+        pdf = self.bundle(document, "referenced")
+        attachments = pdfmd.read_pdf_attachments(pdf)
+        attachments["files/f.png"] = b"edited"
+        tampered = blank_pdf(self.root / "t.pdf")
+        pdfmd.write_pdf_attachments(tampered, attachments)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            status = pdfmd.restore_from_pdf(tampered, self.root / "t-out")
+        self.assertEqual(status, 1)
+
     def test_never_overwrites(self):
         document = self.root / "d.md"
         document.write_text("Text.\n", encoding="utf-8")

@@ -390,7 +390,24 @@ Stopping early (--stop-at, v3.19.0):
     (comments lost, as --unpack says), the text is the original's less its
     comments, and the restored folder builds the same `.tex` the original did;
     what the text points at (images, data) is not in the PDF and has to be
-    put back beside it. --list shows what the PDF carries and writes nothing.
+    put back beside it (or stored, see --bundle). --list shows what the PDF
+    carries and writes nothing.
+
+    --bundle [all] / --no-bundle, `pdfmd-options: {bundle: true | all}` (v3.22.2)
+    store, beside the source, the files it cannot carry, each as its own
+    attachment (`files/PATH`; no archive, so any tool lists or extracts one):
+    `--bundle` the images and data the text and the preamble point at -- found
+    from Markdown images, `<img>`, `file="..."` CSV tables, \\includegraphics,
+    \\input, pgfplots tables, listings, and any word that is a relative file name
+    naming a file that exists (so data reached by a project's own macros is found
+    too); `--bundle all` every file in the document's folder except the output,
+    hidden files and folders, .aux/.log and the like, and backups. It implies
+    --attach-source; the Markdown files stored this way lose their comments like
+    the source does. A file outside the document's folder is named in a note and
+    not stored. `pdfmd-options.bundle-max-mb` (default 100) caps the total: over
+    it only the source is attached, with a warning. --restore writes the files
+    back, never over an existing one, checking each hash. With it a restored
+    folder builds the same PDF text as the original (checked on a parts report).
 
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
@@ -851,7 +868,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.1"
+PDFMD_VERSION = "3.22.2"
 import argparse
 import csv
 import filecmp
@@ -9868,7 +9885,27 @@ ATTACH_MANIFEST = "pdfmd-manifest.json"
 ATTACH_SOURCE = "pdfmd-source.md"
 ATTACH_KEYS = ("attach-source", "embed-source")
 ATTACH_CLI: bool | None = None
+# --bundle [all] / --no-bundle: None (the document decides), "off", "referenced", "all".
+BUNDLE_CLI: str | None = None
+BUNDLE_MAX_MB = 100
+EXTRA_PREFIX = "files/"
 RESTORED_SUFFIX = ".restored"
+RAW_REFERENCE_RES = (
+    re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}"),
+    re.compile(r"\\(?:input|include)\{([^}]+)\}"),
+    re.compile(r"""\bfile=["']([^"']+)["']"""),
+    # data a LaTeX macro reads: pgfplots tables, listings, verbatim files, included PDFs
+    re.compile(r"\\addplot\+?(?:\[[^\]]*\])?\s*table\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}"),
+    re.compile(r"\\(?:pgfplotstableread|pgfplotstabletypeset|lstinputlisting|verbatiminput|includepdf|csvreader)"
+               r"(?:\[[^\]]*\])?\s*\{([^}]+)\}"),
+)
+BUNDLE_SKIP_DIRS = frozenset({".git", "node_modules", "__pycache__", "venv", "env"})
+BUNDLE_SKIP_SUFFIXES = (".aux", ".log", ".out", ".toc", ".bbl", ".blg", ".fls", ".fdb_latexmk",
+                        ".synctex.gz", ".assembled.md")
+# Any word that looks like a relative file name and names a file that exists: how data
+# reached through a project's own macros (`\\irpanel{ir/plain/x.csv}`) is found.
+PATH_TOKEN_RE = re.compile(r"(?<![\w/.\\:-])((?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]{1,5})(?![\w/-])")
+REFERENCE_EXTENSIONS = ("", ".pdf", ".png", ".jpg", ".jpeg", ".svg", ".tex", ".csv")
 IMAGE_REF_RE = re.compile(
     r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)|<img\b[^>]*?\bsrc=[\"']([^\"']+)[\"']",
     re.IGNORECASE)
@@ -9877,9 +9914,30 @@ IMAGE_REF_RE = re.compile(
 def resolve_attach(md_path: Path, metadata_files: list[Path]) -> bool:
     """Whether the PDF built from ``md_path`` carries its source: the command
     line, else `pdfmd-options.attach-source` (or `embed-source`)."""
+    if resolve_bundle(md_path, metadata_files):
+        return ATTACH_CLI is not False           # a bundle is a source plus files; --no-attach-source still wins
     if ATTACH_CLI is not None:
         return ATTACH_CLI
     return bool(option_flag(first_pdfmd_option(md_path, metadata_files, *ATTACH_KEYS)))
+
+
+def option_flag_number(value) -> float | None:
+    try:
+        return float(value) if value is not None and not isinstance(value, bool) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def resolve_bundle(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """``None`` (no bundle), "referenced" (the images and data the text points at)
+    or "all" (everything in the document's folder worth keeping): the command
+    line, else `pdfmd-options.bundle` (true / "all" / false)."""
+    if BUNDLE_CLI is not None:
+        return None if BUNDLE_CLI == "off" else BUNDLE_CLI
+    value = first_pdfmd_option(md_path, metadata_files, "bundle")
+    if str(value).strip().casefold() == "all":
+        return "all"
+    return "referenced" if option_flag(value) else None
 
 
 def relative_posix(base: Path, path: Path) -> str:
@@ -9916,6 +9974,74 @@ def referenced_images(text: str, base: Path) -> list[Path]:
         if path.is_file() and path not in found:
             found.append(path)
     return found
+
+
+def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
+                 represented: set[Path], output: Path, data_names: list[str]) -> tuple[list[Path], list[str]]:
+    """The files to store beside the source (the source carries the Markdown,
+    metadata, preamble, filters, bibliography and CSL itself): the images and data
+    the text and the preamble point at ("referenced"), or every file in the
+    document's folder that is not output or housekeeping ("all"). Returns
+    (files inside the folder, names of referenced files outside it)."""
+    base = Path(os.path.abspath(md_path.parent))
+    found: list[Path] = []
+    outside: list[str] = []
+
+    def add(path: Path) -> None:
+        path = Path(os.path.abspath(path))
+        if path in represented or path == Path(os.path.abspath(output)) or path in found:
+            return
+        if path.name in data_names and path.suffix.lower() in (".bib", ".csl", ".bibtex"):
+            return                                       # already embedded in the source
+        try:
+            path.relative_to(base)
+        except ValueError:
+            outside.append(str(path))
+            return
+        found.append(path)
+
+    if mode == "all":
+        for folder, directories, names in os.walk(base):
+            directories[:] = sorted(item for item in directories
+                                    if not item.startswith(".") and item not in BUNDLE_SKIP_DIRS
+                                    and not item.endswith((RESTORED_SUFFIX, UNPACKED_SUFFIX)))
+            for name in sorted(names):
+                full = Path(folder) / name
+                if (name.startswith(".") or name.lower().endswith(BUNDLE_SKIP_SUFFIXES)
+                        or full.is_symlink() and not full.exists()):
+                    continue
+                add(full)
+        return found, outside
+    for source in [md_path, *parts, *(preamble_files or [])]:
+        try:
+            text = source.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for image in referenced_images(text, source.parent):
+            add(image)
+        visible = strip_markdown_comments(text) if source.suffix == ".md" else text
+        for token in dict.fromkeys(PATH_TOKEN_RE.findall(visible)):
+            for folder in (source.parent, base):
+                try:
+                    candidate = folder / token
+                    if candidate.is_file():
+                        add(candidate)
+                        break
+                except OSError:
+                    break
+        for pattern in RAW_REFERENCE_RES:
+            for match in pattern.finditer(visible):
+                target = urllib.parse.unquote(match.group(1).strip())
+                if not target or "://" in target:
+                    continue
+                for folder in (source.parent, base):
+                    hit = next((Path(os.path.abspath(folder / (target + extension)))
+                                for extension in REFERENCE_EXTENSIONS
+                                if (folder / (target + extension)).is_file()), None)
+                    if hit is not None:
+                        add(hit)
+                        break
+    return found, outside
 
 
 def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | None",
@@ -10019,19 +10145,57 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
             merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
                                                resolve_strip_comments(md_path, metadata_files, default=True))
+        extras: dict[str, bytes] = {}
+        mode = resolve_bundle(md_path, metadata_files)
+        if mode:
+            base = md_path.parent
+            represented = {Path(os.path.abspath(base / item["path"]))
+                           for item in [*manifest["chunks"], *manifest["layout"]]}
+            found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, pdf_path,
+                                          manifest["data_files"])
+            limit = float(option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
+                          or BUNDLE_MAX_MB) * 1024 * 1024
+            total = sum(item.stat().st_size for item in found)
+            if total > limit:
+                print(f"WARN  bundle: {len(found)} files, {total / 1048576:.0f} MB, is over the "
+                      f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
+                      file=sys.stderr)
+            else:
+                stripping = manifest["comments_stripped"]
+                for item in found:
+                    data = item.read_bytes()
+                    if stripping and item.suffix.lower() in (".md", ".markdown"):
+                        try:
+                            data = strip_markdown_comments(data.decode("utf-8-sig")).encode("utf-8")
+                        except UnicodeDecodeError:
+                            pass
+                    extras[relative_posix(base, item)] = data
+                manifest["bundle"] = mode
+                manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                                      for name, data in extras.items()]
+                manifest["outside"] = sorted({Path(name).name for name in outside})
         write_pdf_attachments(pdf_path, {
             ATTACH_SOURCE: merged.encode("utf-8"),
-            ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8")})
+            ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
+            **{EXTRA_PREFIX + name: data for name, data in extras.items()}})
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         print(f"WARN  attach-source: could not attach the source to {display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
     note = "comments stripped" if manifest["comments_stripped"] else "comments kept"
+    kept = manifest.get("extras") or []
     print(f"ATTACHED  {display_path(pdf_path)}: source of {display_path(md_path)} "
-          f"({len(merged.splitlines())} lines, {note}); `pdfmd --restore` writes it back")
-    unstored = [image["path"] for image in manifest["images"]]
+          f"({len(merged.splitlines())} lines, {note}"
+          + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}, "
+             f"{sum(item['size'] for item in kept) / 1048576:.1f} MB" if kept else "")
+          + "); `pdfmd --restore` writes it back")
+    stored = {item["path"] for item in kept}
+    unstored = [image["path"] for image in manifest["images"] if image["path"] not in stored]
     if unstored and verbose:
-        print(f"NOTE  images the text points at are recorded, not stored: {', '.join(unstored)}")
+        print(f"NOTE  images the text points at are recorded, not stored (--bundle stores them): "
+              f"{', '.join(unstored)}")
+    if manifest.get("outside"):
+        print(f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
 
 
 def restore_target_name(name: str) -> PurePosixPath | None:
@@ -10072,21 +10236,42 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
     print(f"SOURCE    {manifest.get('name', '?')}  (pdfmd {manifest.get('pdfmd', '?')}, "
           f"{len(chunks)} file{'s' if len(chunks) != 1 else ''}, "
           f"{'comments stripped' if manifest.get('comments_stripped') else 'comments kept'})")
+    extras = manifest.get("extras") or []
+    stored = {item["path"] for item in extras}
     for image in manifest.get("images") or []:
-        print(f"IMAGE     {image['path']}  (recorded, not stored in the PDF)")
+        if image["path"] not in stored:
+            print(f"IMAGE     {image['path']}  (recorded, not stored in the PDF)")
+    for item in extras:
+        print(f"FILE      {item['path']}  ({item['size']} bytes)")
     if list_only:
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
     target = (out_dir or pdf_path.with_name(f"{pdf_path.stem}{RESTORED_SUFFIX}")).resolve()
-    files = layout_from_source(merged, manifest, name)
+    files: dict[str, str | bytes] = dict(layout_from_source(merged, manifest, name))
+    for item in extras:
+        where = restore_target_name(item["path"])
+        data = attachments.get(EXTRA_PREFIX + item["path"])
+        if where is None or data is None:
+            print(f"WARN  {item['path']}: {'not a path that can be restored' if where is None else 'missing from the PDF'}; skipped",
+                  file=sys.stderr)
+            status = 1
+            continue
+        if hashlib.sha256(data).hexdigest() != item.get("sha256"):
+            print(f"WARN  {item['path']} does not match its recorded hash (edited since it was attached)",
+                  file=sys.stderr)
+            status = 1
+        files[str(where)] = data
     clashes = [item for item in files if (target / item).exists()]
     if clashes:
         raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; nothing was written "
                          "(remove them, or give another -o folder)")
-    for item, text in files.items():
+    for item, content in files.items():
         destination = target / item
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(text, encoding="utf-8", newline="\n")
+        if isinstance(content, bytes):
+            destination.write_bytes(content)
+        else:
+            destination.write_text(content, encoding="utf-8", newline="\n")
         print(f"RESTORED  {item}")
     print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
     return status
@@ -10445,6 +10630,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.attach-source (alias embed-source)")
     parser.add_argument("--no-attach-source", dest="attach_source", action="store_false",
                         help="attach nothing, even where a document's pdfmd-options.attach-source asks for it")
+    parser.add_argument("--bundle", nargs="?", const="referenced", choices=("referenced", "all"), default=None,
+                        help="with the source, attach the files it cannot carry: 'referenced' (default) the "
+                             "images and data the text and preamble point at, 'all' every file in the "
+                             "document's folder except output and housekeeping (hidden files, .aux/.log, "
+                             "backups). Implies --attach-source; --restore puts them back. A document sets it "
+                             "with pdfmd-options.bundle (true | all); pdfmd-options.bundle-max-mb (default "
+                             f"{BUNDLE_MAX_MB}) caps the size")
+    parser.add_argument("--no-bundle", dest="bundle", action="store_const", const="off",
+                        help="attach no files beside the source, even where a document's pdfmd-options.bundle asks")
     parser.add_argument("--restore", type=Path, default=None, metavar="PDF",
                         help="write back the folder layout a PDF's attached source records (name.md, "
                              "metadata/, parts/, ...) into PDF's NAME.restored/ folder (or -o DIR); never "
@@ -10775,9 +10969,10 @@ def main() -> None:
     use_managed_tools()
     if args.debug:
         args.verbose = True
-    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI
+    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI
     STRIP_COMMENTS_CLI = args.strip_comments
     ATTACH_CLI = args.attach_source
+    BUNDLE_CLI = args.bundle
     if args.restore is not None:
         raise SystemExit(restore_from_pdf(args.restore, args.out.resolve() if args.out else None,
                                           args.list_only))
@@ -11334,8 +11529,8 @@ def main() -> None:
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
         if result.returncode == 0:
-            if ATTACH_CLI:
-                print("NOTE  --attach-source does not cover -r/--report builds yet; nothing was attached")
+            if ATTACH_CLI or BUNDLE_CLI not in (None, "off"):
+                print("NOTE  --attach-source/--bundle do not cover -r/--report builds yet; nothing was attached")
             for file in files:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                     output, args.verbose, report_output=output)
