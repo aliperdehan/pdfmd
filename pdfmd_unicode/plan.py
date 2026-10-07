@@ -52,9 +52,10 @@ class Plan:
     uncovered: dict[int, int]                       # code point -> occurrences no font can draw
     common: set[int]                                # code points of Common/Inherited script
     emoji: set[int] = field(default_factory=set)    # emoji the main font lacks (drawn in colour, not by these fonts)
+    pictures: dict[str, str] = field(default_factory=dict)  # emoji sequence -> PNG file, for LaTeX
 
     def __bool__(self) -> bool:
-        return bool(self.choices)
+        return bool(self.choices) or bool(self.pictures)
 
     def describe(self) -> list[str]:
         """One line per font: what it was chosen for."""
@@ -93,6 +94,9 @@ class Plan:
         ]
         for choice in self.choices.values():
             lines.append(_font_line(choice))
+        if self.pictures:
+            lines += [r"\usepackage{graphicx}",
+                      r"\providecommand{\pdfmdemoji}[1]{\raisebox{-0.2em}{\includegraphics[height=1.1em]{#1}}}"]
         lines += [
             r"\DeclareRobustCommand{\pdfmdrun}[2]{\texorpdfstring{{\csname pdfmdf#1\endcsname #2}}{#2}}",
             r"\DeclareRobustCommand{\pdfmdrunrtl}[2]{\texorpdfstring"
@@ -108,10 +112,15 @@ class Plan:
                             for code, keys in sorted(self.candidates.items()) if keys)
         common = ", ".join(f"[{code}]=true" for code in sorted(self.common) if self.candidates.get(code))
         rtl = ", ".join(f'{choice.key}=true' for choice in self.choices.values() if choice.rtl)
+        sequences = ", ".join("[%s]=%s" % (_lua_string(sequence), _lua_string(_tex_option_path(path)))
+                              for sequence, path in sorted(self.pictures.items()))
+        first = ", ".join(f"[{code}]=true" for code in sorted({ord(sequence[0]) for sequence in self.pictures}))
+        longest = max((len(sequence) for sequence in self.pictures), default=1)
         families = ", ".join(f'{choice.key}="{choice.family}"' for choice in self.choices.values())
         langs = ", ".join(f'{choice.key}="{choice.lang}"' for choice in self.choices.values() if choice.lang)
         return (LUA_FILTER.replace("@CANDIDATES@", entries).replace("@COMMON@", common).replace("@RTL@", rtl)
-                .replace("@FAMILIES@", families).replace("@LANGS@", langs))
+                .replace("@FAMILIES@", families).replace("@LANGS@", langs).replace("@SEQUENCES@", sequences)
+                .replace("@EMOJIFIRST@", first).replace("@LONGEST@", str(longest)))
 
 
 # Serifs tried, after the preferred one, as the main font of a document whose own script the
@@ -159,6 +168,19 @@ def choose_main_font(text: str, preferred: str, index: FontIndex) -> str:
     return best
 
 
+def _lua_string(text: str) -> str:
+    """A Lua string literal for ``text``, every non-ASCII character as a \\u{...} escape."""
+    out = []
+    for character in text:
+        if character in '"\\':
+            out.append("\\" + character)
+        elif 0x20 <= ord(character) < 0x7F:
+            out.append(character)
+        else:
+            out.append("\\u{%X}" % ord(character))
+    return '"' + "".join(out) + '"'
+
+
 def _tex_option_path(path: str) -> str:
     return path.replace("\\", "/")
 
@@ -168,7 +190,7 @@ def _font_line(choice: Choice) -> str:
     script = FONTSPEC_SCRIPTS.get(choice.script or "")
     if script:
         options.append(f"Script={script}")
-    options.append("Scale=MatchLowercase")
+    options.append("Scale=MatchLowercase")  # the fallback's x-height follows the main font's
     face = choice.face
     if face.managed:
         directory = _tex_option_path(str(Path(face.path).parent)) + "/"
@@ -208,7 +230,9 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
              if ord(character) == VARIATION_EMOJI and number}
     emoji = {code_point for code_point in missing if is_emoji_code_point(code_point)
              or (can_be_emoji(code_point) and code_point in asked)}
-    missing = [code_point for code_point in missing if code_point not in emoji]
+    # A text symbol that is only sometimes asked for as a picture (the heart with U+FE0F)
+    # still goes through the fonts for the occurrences that are not.
+    missing = [code_point for code_point in missing if not is_emoji_code_point(code_point)]
     if not missing:
         return Plan(main_family, {}, {}, {}, set(), emoji)
     cjk = han_language(text, document_language)
@@ -275,6 +299,9 @@ local COMMON = { @COMMON@ }
 local RTL = { @RTL@ }
 local FAMILIES = { @FAMILIES@ }
 local LANGS = { @LANGS@ }
+local SEQUENCES = { @SEQUENCES@ }   -- emoji sequence -> picture (LaTeX only)
+local EMOJI_FIRST = { @EMOJIFIRST@ }
+local LONGEST = @LONGEST@
 
 -- "latex" (a font switch), "typst" (#text) or "html" (a styled span); nil leaves other formats alone
 local function mode()
@@ -321,10 +348,28 @@ function Inlines(inlines)
   local atoms, seen = {}, false
   for _, element in ipairs(inlines) do
     if element.t == "Str" then
-      for _, code in utf8.codes(element.text) do
-        local candidates = CANDIDATES[code]
-        if candidates then seen = true end
-        atoms[#atoms + 1] = { char = utf8.char(code), code = code, candidates = candidates }
+      local codes = {}
+      for _, code in utf8.codes(element.text) do codes[#codes + 1] = code end
+      local position = 1
+      while position <= #codes do
+        local code = codes[position]
+        local matched = false
+        if kind == "latex" and EMOJI_FIRST[code] then
+          for length = math.min(LONGEST, #codes - position + 1), 1, -1 do
+            local file = SEQUENCES[utf8.char(table.unpack(codes, position, position + length - 1))]
+            if file then
+              atoms[#atoms + 1] = { element = pandoc.RawInline("latex", "\\pdfmdemoji{" .. file .. "}") }
+              seen, matched, position = true, true, position + length
+              break
+            end
+          end
+        end
+        if not matched then
+          local candidates = CANDIDATES[code]
+          if candidates then seen = true end
+          atoms[#atoms + 1] = { char = utf8.char(code), code = code, candidates = candidates }
+          position = position + 1
+        end
       end
     elseif element.t == "Space" or element.t == "SoftBreak" then
       atoms[#atoms + 1] = { element = element, neutral = true }

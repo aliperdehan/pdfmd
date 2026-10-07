@@ -186,6 +186,11 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     CJKmainfont, mainfontfallback) is left to itself unless
     `pdfmd-options: {unicode: true}`; `--no-auto unicode` turns it all off.
     Fonts a build cannot load are dropped and the build retried without them.
+    Emoji under lualatex/xelatex, which cannot draw colour fonts, become
+    pictures: the PNG of each emoji sequence (flags, skin tones, ZWJ families,
+    keycaps, found through the font's own ligatures) is read out of the colour
+    emoji font (`--install emoji`, or a system Noto Color Emoji) into pdfmd's
+    cache and included at text height.
     Typst gets the same runs as `#text(font: ...)` (it does no per-script
     fallback of its own that finds CJK) and WeasyPrint styled spans. The
     fonts: `pdfmd --install fonts` lists what pdfmd can fetch (STIX Two,
@@ -985,7 +990,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.1"
+PDFMD_VERSION = "3.23.2"
 import argparse
 import csv
 import filecmp
@@ -4294,16 +4299,31 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
               f"({hint}, or name a font that does)", file=sys.stderr)
     if plan.emoji:
         # WeasyPrint draws Noto Color Emoji (bitmaps) badly, so it only counts the others for it.
-        usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:3] + EMOJI_FAMILIES[3:4]
+        usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:4]
         emoji_font = next((family for family in usable if index.has(family)), None)
         if engine in ("typst", "weasyprint") and emoji_font is None:
             print(f"WARN  {md_paths[0]}: the document has emoji and no colour emoji font {engine} can use is "
                   "installed (" + ("-e typst, with pdfmd --install emoji" if engine == "weasyprint"
                                    else "pdfmd --install emoji") + ")", file=sys.stderr)
         elif engine in LATEX_ENGINES or engine is None:
-            UNICODE_UNCOVERED.update(plan.emoji)
-            print(f"WARN  {md_paths[0]}: {engine or 'LaTeX'} cannot draw emoji (they print as empty boxes); "
-                  "-e typst or -e weasyprint draws them in colour", file=sys.stderr)
+            # LaTeX cannot draw a colour font: each emoji becomes the picture the font holds for it.
+            face = managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+            if face is not None:
+                from pdfmd_unicode import colorfont
+                stat = Path(face.path).stat()
+                digest = hashlib.sha1(f"{face.path}{stat.st_size}{stat.st_mtime_ns}".encode()).hexdigest()[:8]
+                plan.pictures = colorfont.write_pictures(text, plan.emoji, face.path,
+                                                         cache_root() / "emoji" / digest, face.index)
+            drawn = {ord(character) for sequence in plan.pictures for character in sequence}
+            left = plan.emoji - drawn
+            if plan.pictures:
+                note("UNICODE", f"{md_paths[0]}: {len(plan.pictures)} emoji set as pictures from {face.family}")
+            if left:
+                UNICODE_UNCOVERED.update(left)
+                print(f"WARN  {md_paths[0]}: {engine or 'LaTeX'} cannot draw emoji ("
+                      + ("the colour emoji font has no picture for some of them" if face is not None
+                         else "no colour emoji font: pdfmd --install emoji")
+                      + "); they print as empty boxes. -e typst draws them in colour", file=sys.stderr)
     if not plan:
         yield None, None
         return

@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.2 — 2026-10-08
+
+Pre-edit state: commit `1505ed8` (v3.23.1). Emoji in lualatex and xelatex.
+
+### Added
+
+- **Emoji as pictures under LaTeX**: the PNG of each emoji is read straight out of a
+  colour bitmap font (Noto Color Emoji: the CBDT/CBLC tables, no dependency; the glyph of
+  a sequence, a flag, a skin tone, a ZWJ family, a keycap, a tag flag, through the
+  font's own GSUB ligatures), kept in `~/.cache/pdfmd/emoji/`, and set by the Lua filter
+  as `\pdfmdemoji{...}` (`\includegraphics`, 1.1 em high, raised 0.2 em). Needs the font:
+  `pdfmd --install emoji`, or a system Noto Color Emoji; without it the WARN says so.
+  A `--to latex` file points at the cached pictures.
+- Tests with a synthetic CBDT font written by the test itself.
+
+### Changed
+
+- Cyrillic letters the main font lacks are tried in Noto Serif before PT Serif.
+- The ASCII range counts too when a main font lacks it (an explicit `-f` Hebrew-only
+  font no longer prints the Latin text as missing glyphs).
+
+---
+
 ## v3.23.1 — 2026-10-08
 
 Pre-edit state: commit `28646b0` (v3.23.0). `pdfmd --install fonts`, and the fonts it

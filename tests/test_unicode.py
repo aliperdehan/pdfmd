@@ -354,6 +354,101 @@ class ManagedFonts(unittest.TestCase):
             pdfmd.UNICODE_UNCOVERED.clear()
 
 
+def make_color_font(path: Path, pictures: dict[int, bytes]) -> Path:
+    """A CBDT font with a rocket (glyph 1), a man (2), ZWJ (3), a laptop (4) and a ligature
+    man+ZWJ+laptop (5); ``pictures`` maps a glyph to its PNG bytes."""
+    cmap_groups = [(0x1F680, 1), (0x1F468, 2), (0x200D, 3), (0x1F4BB, 4)]
+    groups = b"".join(struct.pack(">III", cp, cp, glyph) for cp, glyph in sorted(cmap_groups))
+    format12 = struct.pack(">HHIII", 12, 0, 16 + len(groups), 0, len(cmap_groups)) + groups
+    cmap = struct.pack(">HH", 0, 1) + struct.pack(">HHI", 3, 10, 12) + format12
+    coverage = struct.pack(">HHH", 1, 1, 2)
+    ligature = struct.pack(">HHHH", 5, 3, 3, 4)
+    ligature_set = struct.pack(">HH", 1, 4) + ligature
+    # a LigatureSubst: format, offset to the coverage (right after this 8-byte header), set count,
+    # the offset of the one ligature set (after the coverage), then both
+    subtable = struct.pack(">HHHH", 1, 8, 1, 8 + len(coverage)) + coverage + ligature_set
+    lookup = struct.pack(">HHHH", 4, 0, 1, 8) + subtable
+    lookup_list = struct.pack(">HH", 1, 4) + lookup
+    gsub = struct.pack(">IHHH", 0x00010000, 10, 10, 10) + lookup_list  # the lookup list starts at byte 10
+    sbits, offsets, position = b"", [], 0
+    for glyph in range(1, 6):
+        offsets.append(position)
+        if glyph in pictures:
+            data = struct.pack(">BBbbB", 1, 1, 0, 0, 1) + struct.pack(">I", len(pictures[glyph])) + pictures[glyph]
+            sbits += data
+            position += len(data)
+    offsets.append(position)
+    index_table = struct.pack(">HHI", 1, 17, 4) + b"".join(struct.pack(">I", offset) for offset in offsets)
+    array = struct.pack(">HHI", 1, 5, 8)
+    size = struct.pack(">IIII", 8 + 48, len(array) + len(index_table), 1, 0) + b"\0" * 24 + struct.pack(">HHBBBB", 1, 5, 109, 109, 32, 1)
+    cblc = struct.pack(">II", 0x00030000, 1) + size + array + index_table
+    cbdt = struct.pack(">HH", 3, 0) + sbits
+    name = struct.pack(">HHH", 0, 0, 6)
+    tables = {b"cmap": cmap, b"GSUB": gsub, b"CBLC": cblc, b"CBDT": cbdt, b"name": name}
+    header = struct.pack(">4sHHHH", b"\x00\x01\x00\x00", len(tables), 0, 0, 0)
+    start, blob = 12 + 16 * len(tables), b""
+    for tag, table in sorted(tables.items()):
+        header += struct.pack(">4sIII", tag, 0, start + len(blob), len(table))
+        blob += table + b"\x00" * (-len(table) % 4)
+    path.write_bytes(header + blob)
+    return path
+
+
+class ColourEmoji(unittest.TestCase):
+    ROCKET = b"\x89PNG\r\n\x1a\nrocket"
+    MAN_AT_COMPUTER = b"\x89PNG\r\n\x1a\ntechnologist"
+
+    def setUp(self):
+        from pdfmd_unicode import colorfont
+
+        self.colorfont = colorfont
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+        self.font = make_color_font(self.root / "emoji.ttf", {1: self.ROCKET, 5: self.MAN_AT_COMPUTER})
+
+    def test_sequences_in_text(self):
+        found = self.colorfont.emoji_sequences("a \U0001F680 b \U0001F468\u200D\U0001F4BB c \U0001F1F0\U0001F1FF 1\uFE0F\u20E3 \u2764\uFE0F \u2764")
+        self.assertEqual(set(found), {"\U0001F680", "\U0001F468\u200D\U0001F4BB", "\U0001F1F0\U0001F1FF",
+                                      "1\uFE0F\u20E3", "\u2764\uFE0F"})  # a bare heart is text
+        self.assertEqual(self.colorfont.sequence_name("\U0001F468\u200D\U0001F4BB"), "1f468-200d-1f4bb")
+        self.assertEqual(self.colorfont.sequence_name("\u2764\uFE0F"), "2764")
+
+    def test_pictures_are_read_from_the_font(self):
+        font = self.colorfont.ColorFont(str(self.font))
+        self.assertEqual(font.png("\U0001F680"), self.ROCKET)
+        self.assertEqual(font.png("\U0001F468\u200D\U0001F4BB"), self.MAN_AT_COMPUTER)  # through the ligature
+        self.assertIsNone(font.png("\U0001F4BB"))  # a glyph with no picture
+        self.assertIsNone(font.png("\U0001F525"))  # a character the font does not have
+
+    def test_pictures_are_written_for_what_the_main_font_lacks(self):
+        text = "x \U0001F680 y \U0001F468\u200D\U0001F4BB"
+        wanted = {0x1F680, 0x1F468, 0x1F4BB}
+        pictures = self.colorfont.write_pictures(text, wanted, str(self.font), self.root / "out")
+        self.assertEqual(set(pictures), {"\U0001F680", "\U0001F468\u200D\U0001F4BB"})
+        self.assertEqual(Path(pictures["\U0001F680"]).read_bytes(), self.ROCKET)
+        self.assertEqual(self.colorfont.write_pictures(text, set(), str(self.font), self.root / "none"), {})
+        self.assertEqual(self.colorfont.write_pictures(text, wanted, str(self.root / "missing.ttf"), self.root / "x"), {})
+
+    def test_the_filter_replaces_a_sequence_with_its_picture(self):
+        if not shutil.which("pandoc"):
+            self.skipTest("Pandoc not installed")
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+        index = pu.FontIndex(self.root, use_system=False)
+        text = "go \U0001F680 and \U0001F468\u200D\U0001F4BB now"
+        plan = pu.plan_text(text, "Main Test", index)
+        plan.pictures = self.colorfont.write_pictures(text, plan.emoji, str(self.font), self.root / "out")
+        self.assertTrue(plan)
+        self.assertIn("\\pdfmdemoji", plan.latex_header())
+        filter_file = self.root / "f.lua"
+        filter_file.write_text(plan.lua_filter(), encoding="utf-8")
+        result = subprocess.run(["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(filter_file)],
+                                input=text + "\n", capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.stdout.count("\\pdfmdemoji{"), 2, result.stdout + result.stderr)
+        self.assertIn("1f468-200d-1f4bb.png", result.stdout)
+        self.assertNotIn("\U0001F680", result.stdout)
+
+
 class Integration(unittest.TestCase):
     def test_a_document_with_its_own_script_setup_is_left_alone(self):
         with tempfile.TemporaryDirectory() as directory:

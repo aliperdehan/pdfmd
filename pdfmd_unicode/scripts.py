@@ -65,7 +65,7 @@ CJK = {
 CHAINS = {
     "Latn": ("STIX Two Text", "Gentium Plus", "Charis SIL", "Doulos SIL", "Noto Serif", "DejaVu Serif",
              "Times New Roman"),
-    "Cyrl": ("STIX Two Text", "PT Serif", "Noto Serif", "DejaVu Serif", "Times New Roman"),
+    "Cyrl": ("STIX Two Text", "Noto Serif", "PT Serif", "DejaVu Serif", "Times New Roman"),
     "Grek": ("STIX Two Text", "Gentium Plus", "GFS Didot", "Noto Serif", "DejaVu Serif", "Palatino",
              "Times New Roman"),
     "Arab": ("Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", "Scheherazade New", "Geeza Pro",

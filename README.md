@@ -645,6 +645,13 @@ word is set half in one font and half in another. Characters that no
 installed font has are named in a warning, never dropped or swapped for
 something else. `-v` shows which font each script got.
 
+Emoji are set as pictures with lualatex and xelatex (which cannot draw colour
+fonts): each emoji, flag, skin tone, family or keycap is looked up in the colour
+emoji font (`pdfmd --install emoji`, or a system Noto Color Emoji), its picture
+taken out of the font file and included at the height of the text. The pictures
+are kept in pdfmd's cache folder; a `.tex` written with `--to latex` points
+there.
+
 The same fallback works with Typst (`-e typst`: `#text(font: ...)` runs, and
 the fonts folder handed to Typst) and WeasyPrint (styled spans). WeasyPrint draws
 Noto Color Emoji's bitmaps badly, so emoji are left to the system's own emoji font
