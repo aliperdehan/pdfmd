@@ -334,7 +334,7 @@ Stopping early (--stop-at, v3.19.0):
     are listed in the file's `pdfmd-options: no-auto`, so the discovery that
     would find them again stays off. A Lua filter can run any command, so
     an embedded one runs only if this machine's pdfmd wrote it (its SHA-256
-    is in `<cache>/pdfmd/embedded-trust.txt`); a file from elsewhere, or one
+    is in `~/.config/pdfmd/trusted-filters.txt`); a file from elsewhere, or one
     whose filter was edited, has the filter skipped with a warning (the
     build still completes) unless --trust-embedded. Not carried: the
     defaults pdfmd derives per machine (fonts, margins), re-derived on
@@ -689,6 +689,16 @@ One section of any document (`pdfmd doc#NAME`):
     soffice fallback); `--no-auto lookup` leaves only the exact name, ignoring
     case and spaces. `--split` cuts at the same headings, setext ones included.
 
+The global config file (v3.23.6):
+    ~/.config/pdfmd/config.yaml ($XDG_CONFIG_HOME, %APPDATA%\\pdfmd; PDFMD_CONFIG
+    names another file, an empty value none). `options:` holds `pdfmd-options`
+    defaults for every document -- the lowest source, below the document's own
+    block and its metadata files, below the command line; `translit:` the
+    romanization packs of the lookup (below --translit and PDFMD_TRANSLIT).
+    --init-config writes a commented template, --show-config says what is set.
+    What pdfmd itself remembers (trusted-filters.txt, the dismissed native-renderer
+    offer) lives beside it, not in the cache that --clear-cache empties.
+
 The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     Pandoc normally makes a .tex in a throwaway folder, runs the engine two
     or three times, and deletes everything, so every build starts with no
@@ -995,7 +1005,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.5"
+PDFMD_VERSION = "3.23.6"
 import argparse
 import csv
 import filecmp
@@ -3402,6 +3412,123 @@ def data_root() -> Path:
     return base / "pdfmd"
 
 
+# -- The global config file (v3.23.6) ------------------------------------------------
+# ~/.config/pdfmd/config.yaml (`$XDG_CONFIG_HOME`, `%APPDATA%\pdfmd` on Windows; PDFMD_CONFIG names
+# another file, or an empty value none): the user's own defaults, kept where `--clear-cache` and a
+# cleaned ~/.cache cannot take them. Its `options:` block holds `pdfmd-options` defaults that apply
+# to every document, below anything the document or its metadata files say; `translit:` is the
+# romanization packs of the lookup (below --translit and PDFMD_TRANSLIT). The decisions pdfmd itself
+# remembers for the user (filters it trusts, a dismissed offer) live in the same folder.
+CONFIG_FILENAME = "config.yaml"
+CONFIG_KEYS = ("translit", "options")
+CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a line to get the built-in default back.
+# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.
+
+# Romanization packs for finding a document by a name typed in Latin letters
+# (greek armenian georgian hebrew arabic hangul kana han other; Cyrillic is always on).
+# translit: [greek, hangul]
+
+# Defaults for the `pdfmd-options:` of every document.
+options:
+  # What to do about characters the main font cannot draw:
+  #   char      set just those characters in another installed font (default)
+  #   word      set the whole word in another font, so no word mixes fonts
+  #   document  use the one installed font that draws most of the document as the main font
+  #   off       nothing: what Pandoc and TeX do without pdfmd (missing glyphs vanish or print boxes)
+  #   box       no fallback; each missing character is drawn as a black box
+  #   error     no fallback; the build fails, listing the missing characters
+  # fallback: char
+  # What to do about characters no installed font draws (after the fallback): warn, box or error.
+  # missing: warn
+  # pdf-engine: lualatex
+  # cache: {aux: true}
+"""
+
+
+def config_root() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "pdfmd"
+
+
+def config_path() -> Path | None:
+    override = os.environ.get("PDFMD_CONFIG")
+    if override is not None:
+        return Path(override).expanduser() if override.strip() else None
+    return config_root() / CONFIG_FILENAME
+
+
+@lru_cache(maxsize=None)
+def load_config() -> dict:
+    """The config file as a dict ({} when there is none, or it cannot be read: with a WARN)."""
+    path = config_path()
+    if path is None or yaml is None or not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        print(f"WARN  config {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+        return {}
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        print(f"WARN  config {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
+        return {}
+    unknown = sorted(str(key) for key in set(data) - set(CONFIG_KEYS))
+    if unknown:
+        print(f"WARN  config {path}: unknown setting{'s' if len(unknown) > 1 else ''} "
+              f"{', '.join(unknown)} (known: {', '.join(CONFIG_KEYS)}); `options:` holds pdfmd-options",
+              file=sys.stderr)
+    return data
+
+
+def config_options() -> dict:
+    """`options:` of the config file: defaults for every document's ``pdfmd-options``."""
+    options = load_config().get("options")
+    return options if isinstance(options, dict) else {}
+
+
+def config_report(init: bool = False) -> bool:
+    """--show-config / --init-config."""
+    path = config_path()
+    if path is None:
+        print("The config file is switched off (PDFMD_CONFIG is empty).")
+        return True
+    if init:
+        if path.exists():
+            print(f"{path} exists already; left alone.")
+        else:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+            except OSError as error:
+                print(f"Could not write {path}: {error}", file=sys.stderr)
+                return False
+            print(f"Wrote {path} (every setting is commented out; edit it).")
+        return True
+    print(f"config file: {path} ({'present' if path.is_file() else 'not there: pdfmd --init-config writes one'})")
+    data = load_config()
+    for key in CONFIG_KEYS:
+        if key in data:
+            print(f"  {key}: {data[key]}")
+    if config_root().is_dir():
+        print(f"state kept beside it: {config_root()}")
+    return True
+
+
+def migrate_state(old: Path, new: Path) -> None:
+    """Move a file pdfmd used to keep in the cache folder (where cleaning it loses it) to ``new``."""
+    try:
+        if not new.exists() and old.is_file():
+            new.parent.mkdir(parents=True, exist_ok=True)
+            new.write_bytes(old.read_bytes())
+            old.unlink()
+    except OSError:
+        pass
+
+
 def tools_directory() -> Path:
     return data_root() / "bin"
 
@@ -3677,7 +3804,9 @@ def install_extra(kind: str) -> bool:
 
 
 def native_prompt_state() -> Path:
-    return cache_root() / "native-prompt-dismissed"
+    path = config_root() / "native-prompt-dismissed"
+    migrate_state(cache_root() / "native-prompt-dismissed", path)
+    return path
 
 
 def offer_native_upgrade() -> None:
@@ -5586,7 +5715,8 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
             value = str(top) if top is not None else None
         if value is not None:
             return str(value)
-    return None
+    value = config_options().get("pdf-engine") or config_options().get("engine")
+    return str(value) if value is not None else None
 
 
 # pdfmd-options.citation-engine: "citeproc" (the default -- a document only
@@ -5631,7 +5761,8 @@ def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) 
         value = options.get("citation-engine") if isinstance(options, dict) else None
         if value is not None:
             return str(value).casefold()
-    return None
+    value = config_options().get("citation-engine")
+    return str(value).casefold() if value is not None else None
 
 
 def option_names(options: dict, kind: str) -> list[str]:
@@ -6750,6 +6881,7 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
     for metadata_file in metadata_files:
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
+    sources.append(config_options())
     for options in sources:
         if "parts" not in options:
             continue
@@ -7591,6 +7723,7 @@ def cascaded_option(md_path: Path, metadata_files: list[Path], key: str):
     for metadata_file in metadata_files:
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(found if isinstance(found, dict) else {})
+    sources.append(config_options())
     for options in sources:
         if key in options:
             return options[key]
@@ -8289,6 +8422,7 @@ def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
     for metadata_file in metadata_files:
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(found if isinstance(found, dict) else {})
+    sources.append(config_options())
     for options in sources:
         for name in names:
             if name in options:
@@ -8444,7 +8578,9 @@ def parse_embedded_blocks(text: str) -> list[dict]:
 # run; any other embedded filter is code from elsewhere -- a Lua filter can
 # run any command -- and is skipped, with a warning, unless --trust-embedded.
 def trust_store_path() -> Path:
-    return cache_root() / "embedded-trust.txt"
+    path = config_root() / "trusted-filters.txt"
+    migrate_state(cache_root() / "embedded-trust.txt", path)  # v3.23.5 and before kept it in the cache
+    return path
 
 
 def trusted_hashes() -> set[str]:
@@ -9550,6 +9686,7 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
     for metadata_file in metadata_files:
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
+    sources.append(config_options())
     for options in sources:
         if "cache" not in options:
             continue
@@ -12870,6 +13007,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "(built in), han (pinyin, needs pypinyin or anyascii), other (every other script, "
                              "needs anyascii); `all`, `none` (Cyrillic too), `list` shows what is available. "
                              "Cyrillic (Russian, Kazakh, Ukrainian, Belarusian) is always on. Also PDFMD_TRANSLIT")
+    parser.add_argument("--show-config", action="store_true",
+                        help="print where pdfmd's global config file is, and what it sets")
+    parser.add_argument("--init-config", action="store_true",
+                        help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
     parser.add_argument("--uninstall", metavar="fonts:NAME", type=uninstall_kind,
                         help="remove fonts installed by --install fonts, e.g. --uninstall fonts:arabic,cjk")
     parser.add_argument("--check-dependencies", action="store_true",
@@ -13188,7 +13329,15 @@ def main() -> None:
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
-    translit = args.translit if args.translit is not None else os.environ.get("PDFMD_TRANSLIT")
+    configured = load_config().get("translit")
+    if isinstance(configured, list):
+        configured = ",".join(str(item) for item in configured)
+    if args.translit is not None:
+        translit = args.translit
+    elif os.environ.get("PDFMD_TRANSLIT") is not None:
+        translit = os.environ["PDFMD_TRANSLIT"]
+    else:
+        translit = configured
     if translit and translit.strip().casefold() == "list":
         raise SystemExit(0 if translit_report() else 1)
     for problem in set_translit(translit):
@@ -13196,6 +13345,8 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
+    if args.show_config or args.init_config:
+        raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.install:
         raise SystemExit(0 if install_extra(args.install) else 1)
     if args.uninstall:

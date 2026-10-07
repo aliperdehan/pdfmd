@@ -19,6 +19,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# never read or write the real user's config and state while testing
+import os as _os, tempfile as _tempfile  # noqa: E402
+_os.environ["PDFMD_CONFIG"] = ""
+_os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
+
 import pdfmd  # noqa: E402
 
 

@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.6 — 2026-10-08
+
+Pre-edit state: commit `0573687` (v3.23.5). A global config file, and the state pdfmd keeps
+about the user moved out of the cache.
+
+### Added
+
+- **`~/.config/pdfmd/config.yaml`** (`$XDG_CONFIG_HOME`, `%APPDATA%\pdfmd`; `PDFMD_CONFIG` names
+  another file or, empty, none). `options:` = defaults for every document's `pdfmd-options`,
+  the lowest source (document, then its metadata files, then the config; the command line
+  above all) for the options read through the shared cascade (`default-output`, `parts`,
+  `strip-comments`, `embed`, `cache`, `pdf-engine`/`engine`, `citation-engine`, ...);
+  `translit:` the lookup's romanization packs (below `--translit` and `PDFMD_TRANSLIT`).
+  `--init-config` writes a commented template, `--show-config` reports. A broken file or an
+  unknown setting is a WARN, never a failure.
+
+### Changed
+
+- **Persistent decisions left the cache.** The trusted embedded-filter hashes (a security
+  allow-list) and the dismissed native-renderer offer were in `~/.cache/pdfmd`, which
+  `--clear-cache` (or any cache cleaner) empties; they are now
+  `~/.config/pdfmd/trusted-filters.txt` and `native-prompt-dismissed`, moved from the old place
+  the first time they are read.
+- The test suite points the config and state folders at a temporary one.
+
+---
+
 ## v3.23.5 — 2026-10-08
 
 Pre-edit state: commit `2468b07` (v3.23.4).

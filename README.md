@@ -729,6 +729,28 @@ that kind of engine. For example, a document full of chemical structures
 can require TeX, and a plain memo can skip the slow LaTeX run. `-e` on the
 command line always wins, and a bare `-e` means "try every engine".
 
+### Your own defaults: the config file
+
+`pdfmd --init-config` writes a commented `~/.config/pdfmd/config.yaml`
+(`$XDG_CONFIG_HOME`; `%APPDATA%\pdfmd` on Windows), `pdfmd --show-config` says
+where it is and what it sets. Its `options:` block takes the same keys as a
+document's `pdfmd-options:` and applies to every document, below anything the
+document or its metadata files say (the command line beats all of them);
+`translit:` is the romanization packs of the name lookup. `PDFMD_CONFIG=other.yaml`
+uses another file, `PDFMD_CONFIG=` (empty) none.
+
+```yaml
+translit: [greek, hangul]
+options:
+  fallback: word
+  pdf-engine: lualatex
+```
+
+The decisions pdfmd remembers for you (the Lua filters it trusts, an offer you
+dismissed) live in the same folder, not in `~/.cache/pdfmd`, so cleaning the cache
+(`--clear-cache`) cannot lose them; files from an older version are moved there
+the first time they are needed.
+
 ## Project files
 
 `pdfmd` looks next to the document, and in a `metadata/` folder beside it,
