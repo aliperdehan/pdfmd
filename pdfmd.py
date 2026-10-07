@@ -9,6 +9,7 @@ Examples:
     pdfmd Downloads -b --recursive
     pdfmd book -r -o book.pdf
     pdfmd report#methods            (parts mode: build one part)
+    pdfmd animp                     (a unique start of a name or title works, with a WARN)
     pdfmd chapter.md -y metadata.yaml
     pdfmd book -r -y
     pdfmd notes.md -o notes.html
@@ -90,6 +91,32 @@ No Pandoc, or no PDF engine (v3.20.0):
     other front-matter keys are listed as unused. Not available there: filters,
     preambles, citations, slides, parts/report mode, non-Markdown input.
     See normalise_gfm() and the "native tier" section.
+
+Finding a document by name:
+    `pdfmd report` looks for report.md. When no file has exactly that name
+    (an existing path, a wildcard, any case, and the Latin spelling of a
+    Cyrillic name all still come first, silently), pdfmd goes on looking at
+    what a document is called inside, in this order, and the first step with
+    a hit decides:
+        1. an alias: `pdfmd-options: {alias: doc1}` (one name or a list; a
+           bare `pdfmd-title: doc1` is accepted too) -- so `pdfmd doc1` builds
+           that document whatever its file is called;
+        2. the file name, then 3. the title (`title:`, or a `% title` line),
+           ignoring case, spaces, `_ - . :`, accents and script, so
+           `pdfmd animportantdocument` or `pdfmd an_important_document` finds
+           "An Important Document.md" and `pdfmd glyukoza` a document titled
+           "Глюкоза";
+        4. the same with looser spelling (c/k/q, i/y/j, v/w, sh/ş/ш, ё/е, the
+           Kazakh қ = q = k, ү/ұ/у = u, ы/і = i, ...): `pdfmd glukoza`;
+        5. the START of an alias, file name or title (`pdfmd animp`,
+           `pdfmd glucose`), at least 3 characters, then the start of a word
+           inside one (`pdfmd body` for "Glucose in our body").
+    Steps 1-3 print an `AUTO MD` line; every guess after them is a `WARN` that
+    says what it matched. A name that fits two documents equally well is an
+    error listing both, never a pick. `--no-auto lookup` turns all of this
+    off (a command line switch only -- the document is not found yet when its
+    own `pdfmd-options` could say so). Single-file lookup only: -b and -r are
+    unaffected.
 
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
@@ -531,7 +558,9 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     setting -- see "Output formats" below; disabling this KIND always
     means plain `--citeproc`, regardless of what the document's own front
     matter or metadata file requests), csvtable (the `.csv`-div table
-    inclusion under "CSV/TSV table inclusion" above). An explicit
+    inclusion under "CSV/TSV table inclusion" above), lookup (finding a
+    document by alias, title, the start of its name or a looser spelling --
+    see "Finding a document by name"; CLI only). An explicit
     -y/-H/-f/-V/--from still always wins over --no-auto metadata/preamble
     regardless of this flag -- it only stops pdfmd from filling in or
     discovering what's otherwise unset.
@@ -735,7 +764,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.20.5"
+PDFMD_VERSION = "3.21.0"
 import argparse
 import csv
 import filecmp
@@ -947,7 +976,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize", "parts",
+    "papersize", "parts", "lookup",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3708,7 +3737,7 @@ def latin_candidates(value: str) -> list[str]:
     replacements = (
         ("shch", "щ"), ("sch", "щ"), ("yo", "ё"), ("zh", "ж"),
         ("kh", "х"), ("ts", "ц"), ("ch", "ч"), ("sh", "ш"),
-        ("yu", "ю"), ("ya", "я"), ("ai", "ай"), ("oi", "oй"), ("oy", "ой"),
+        ("yu", "ю"), ("ya", "я"), ("ai", "ай"), ("oi", "ой"), ("oy", "ой"),
     )
     variants = [value]
     for latin, cyrillic in replacements:
@@ -3781,6 +3810,209 @@ def find_wildcard_markdown(value: Path) -> Path | None:
     return matches[0]
 
 
+# --- Finding a document by something other than its exact file name (v3.21.0) -
+#
+# find_markdown() keeps its exact rules first (an existing path, a wildcard, a
+# case-insensitive stem, the Latin/Cyrillic spellings of it, "Пробный <name>").
+# Only when all of those fail does it fall through to the tiers below, which
+# compare *keys* instead of names, so `animportantdocument` finds
+# "An Important Document.md", `glyukoza` finds a document titled "Глюкоза", and
+# `animp` (announced with a WARN) finds the first of those by its start.
+#
+# A key keeps letters and digits only (case, spaces, `_`, `-`, `.`, `:` and
+# every other separator are gone, and so are accents) and writes Cyrillic in
+# Latin letters. It comes in two strengths: STRICT is a plain transliteration
+# (Latin ş = Cyrillic ш = "sh"), LOOSE also merges letters people swap when they
+# type a name in the other script (c/k/q, i/y/j, v/w, ё/е, ...).
+
+FUZZY_LOOKUP = True        # main() clears it for --no-auto lookup
+LOOKUP_MIN_PREFIX = 3      # a shorter start is too likely to be an accident
+LOOKUP_SCAN_LIMIT = 500    # Markdown files whose front matter is read
+LOOKUP_HEAD_BYTES = 65536
+
+# Russian, Ukrainian, Belarusian and Kazakh Cyrillic. Kazakh қ = q, ғ = g,
+# ң = n, ә = a, ө = o, ұ and ү = u, һ = h, і = i.
+CYRILLIC_STRICT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    "є": "ye", "і": "i", "ї": "yi", "ґ": "g", "ў": "u",
+    "ә": "a", "ғ": "g", "қ": "q", "ң": "n", "ө": "o", "ұ": "u", "ү": "u", "һ": "h",
+}
+# The loose key starts from the same transliteration, with ё read as е; the
+# Latin letters it produces are then merged (see lookup_key).
+CYRILLIC_LOOSE = {**CYRILLIC_STRICT, "ё": "e"}
+# Latin letters NFKD cannot take apart, spelt the way the Cyrillic sound is.
+LATIN_EXTRA = {"ş": "sh", "š": "sh", "ç": "ch", "č": "ch", "ž": "zh", "ğ": "g", "ı": "i",
+               "ß": "ss", "æ": "ae", "œ": "oe", "ø": "o", "đ": "d", "ł": "l"}
+
+
+@lru_cache(maxsize=None)
+def lookup_key(text: str, loose: bool = False, y: str = "i", w: str = "v") -> str:
+    """The comparison key of a name, title or heading (see the block comment
+    above). A loose key then merges what people swap when typing a name in the
+    other script or on a keyboard without the letter: sh/sch/shch/ş/ш/щ = s,
+    zh/ž/ж = z, ch/ç/ч = k, kh/х = h, c/q/k/қ = k, j/y = i (nothing before a
+    vowel: ю = yu = u), w/v = v, x = ks, and a doubled letter is one. ``y``/``w`` choose what a Latin y or w stands
+    for: у is written y in some Kazakh Latin spellings and w in others, so a
+    query tries both (lookup_query_keys) where a stored name has no choice."""
+    text = unicodedata.normalize("NFKC", text).casefold()
+    table = CYRILLIC_LOOSE if loose else CYRILLIC_STRICT
+    text = "".join(table.get(letter, LATIN_EXTRA.get(letter, letter)) for letter in text)
+    letters = "".join(letter for letter in unicodedata.normalize("NFKD", text) if letter.isalnum())
+    if not loose:
+        return letters
+    for digraph, merged in (("shch", "s"), ("sch", "s"), ("sh", "s"), ("zh", "z"), ("ch", "k"), ("kh", "h")):
+        letters = letters.replace(digraph, merged)
+    letters = re.sub(r"[yj](?=[aeiou])", "", letters)   # ю/я/ё/є: yu, ya, yo, ye ~ u, a, o, e
+    letters = letters.translate(str.maketrans({"c": "k", "q": "k", "j": "i", "x": "ks", "y": y, "w": w}))
+    return re.sub(r"(.)\1+", r"\1", letters)
+
+
+def lookup_query_keys(query: str) -> tuple[str, set[str]]:
+    """(strict key, every loose key) of what the user typed."""
+    loose = {lookup_key(query, True, y, w) for y in ("i", "u") for w in ("v", "u")}
+    return lookup_key(query), loose
+
+
+class LookupAmbiguous(FileNotFoundError):
+    """A name that fits several documents equally well. A FileNotFoundError so
+    every caller that already handles a missing document handles this; callers
+    that would swallow it as "no document" catch this one first."""
+
+
+# (strength, fields compared, how, WARN wording) in order of preference: the
+# first tier with a hit decides, two hits in it are an error. A file name or an
+# alias is preferred to a title at every step, and exact to a start to a word.
+LOOKUP_TIERS = (
+    ("strict", ("alias",), "exact", None),
+    ("strict", ("stem",), "exact", None),
+    ("strict", ("title",), "exact", None),
+    ("loose", ("alias",), "exact", "spelt differently from its alias"),
+    ("loose", ("stem",), "exact", "spelt differently from its file name"),
+    ("loose", ("title",), "exact", "spelt differently from its title"),
+    ("strict", ("alias", "stem"), "start", "the start of its file name or alias"),
+    ("strict", ("title",), "start", "the start of its title"),
+    ("loose", ("alias", "stem"), "start", "the start of its file name or alias, spelt differently"),
+    ("loose", ("title",), "start", "the start of its title, spelt differently"),
+    ("strict", ("alias", "stem", "title"), "word", "the start of a word in its file name, alias or title"),
+    ("loose", ("alias", "stem", "title"), "word", "the start of a word in its file name, alias or title, spelt differently"),
+)
+LOOKUP_FIELD_WORDS = {"alias": "alias", "stem": "file name", "title": "title"}
+
+
+def lookup_field_matches(strength: str, how: str, queries: tuple[str, set[str]], text: str) -> bool:
+    loose = strength == "loose"
+    wanted = queries[1] if loose else {queries[0]}
+    if how == "exact":
+        return lookup_key(text, loose) in wanted
+    wanted = {key for key in wanted if len(key) >= LOOKUP_MIN_PREFIX}
+    if not wanted:
+        return False
+    if how == "start":
+        return lookup_key(text, loose).startswith(tuple(wanted))
+    words = re.split(r"[\W_]+", text)
+    return any(lookup_key(" ".join(words[index:]), loose).startswith(tuple(wanted))
+               for index in range(1, len(words)))
+
+
+def rank_lookup(query: str, entries: list[tuple[Path, list[tuple[str, str]]]]):
+    """Choose among ``entries`` -- (path, [(field, text)]) with field one of
+    alias/stem/title -- by LOOKUP_TIERS. Returns (path, tier, field, text), or
+    None; raises LookupAmbiguous when the best tier holds several documents."""
+    queries = lookup_query_keys(query)
+    if not queries[0]:
+        return None
+    for tier in LOOKUP_TIERS:
+        strength, fields, how, _ = tier
+        hits: dict[Path, tuple[str, str]] = {}
+        for path, texts in entries:
+            for field, text in texts:
+                if field in fields and path not in hits and lookup_field_matches(strength, how, queries, text):
+                    hits[path] = (field, text)
+        if len(hits) == 1:
+            path, (field, text) = next(iter(hits.items()))
+            return path, tier, field, text
+        if hits:
+            names = ", ".join(f"{display_path(path)} ({LOOKUP_FIELD_WORDS[field]} '{text}')"
+                              for path, (field, text) in sorted(hits.items()))
+            raise LookupAmbiguous(f"'{query}' fits several Markdown files equally well: {names}. "
+                                  "Name one of them more exactly.")
+    return None
+
+
+def lookup_fields(path: Path) -> list[tuple[str, str]]:
+    """What a document can be found by: its file name, its title (front matter
+    `title:`, or a `% title` line) and its aliases (`pdfmd-options: {alias: ...}`,
+    one name or a list; a bare top-level `pdfmd-title:` is accepted too)."""
+    fields = [("stem", path.stem)]
+    try:
+        with path.open(encoding="utf-8-sig", errors="replace") as handle:
+            head = handle.read(LOOKUP_HEAD_BYTES)
+    except OSError:
+        return fields
+    title: object = None
+    aliases: list = []
+    front = re.match(r"^---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", head, re.DOTALL)
+    if front:
+        data = None
+        if yaml is not None:
+            try:
+                data = yaml.safe_load(front.group(1))
+            except yaml.YAMLError:
+                data = None
+        if isinstance(data, dict):
+            title = data.get("title")
+            options = data.get("pdfmd-options")
+            options = options if isinstance(options, dict) else {}
+            for value in (options.get("alias"), options.get("aliases"), data.get("pdfmd-title")):
+                aliases += value if isinstance(value, list) else [value]
+        else:
+            for key in ("title", "pdfmd-title"):
+                found = re.search(rf"^{key}\s*:\s*(.+?)\s*$", front.group(1), re.MULTILINE)
+                if found:
+                    value = found.group(1).strip("'\"")
+                    if key == "title":
+                        title = value
+                    else:
+                        aliases.append(value)
+    elif head.startswith("% "):
+        title = head.split("\n", 1)[0][2:]
+    if isinstance(title, (str, int, float)) and not isinstance(title, bool) and str(title).strip():
+        fields.append(("title", str(title).strip()))
+    fields += [("alias", str(alias).strip()) for alias in aliases
+               if isinstance(alias, (str, int, float)) and not isinstance(alias, bool) and str(alias).strip()]
+    return fields
+
+
+def lookup_entries(directory: Path, recursive: bool) -> list[tuple[Path, list[tuple[str, str]]]]:
+    folders = [directory] + ([item for item in directory.rglob("*") if item.is_dir()] if recursive else [])
+    files = sorted(file for folder in folders for file in folder.glob("*.md")
+                   if not file.name.startswith(".") and file.is_file())
+    return [(file, lookup_fields(file)) for file in files[:LOOKUP_SCAN_LIMIT]]
+
+
+_LOOKUP_ANNOUNCED: set[tuple[str, Path]] = set()
+
+
+def announce_lookup(query: str, path: Path, tier: tuple, field: str, text: str) -> None:
+    """Say, once per run, that a document was found by something other than its
+    exact name: a plain AUTO line when only case, separators and script differ,
+    a WARN for anything that guessed (a start, a word, a looser spelling)."""
+    if (query, path) in _LOOKUP_ANNOUNCED:
+        return
+    _LOOKUP_ANNOUNCED.add((query, path))
+    strength, _, how, wording = tier
+    what = f"{LOOKUP_FIELD_WORDS[field]} '{text}'" if field != "stem" else "file name"
+    if wording is None:
+        print(f"AUTO MD    {display_path(path)}  ('{query}' = its {what}, ignoring case, spaces and punctuation)")
+        return
+    print(f"WARN  '{query}' is not a file name; using {display_path(path)} ({wording}: {what}). "
+          "Name it exactly, or pass --no-auto lookup, to stop pdfmd guessing.", file=sys.stderr)
+
+
 def find_markdown(value: Path, recursive: bool = False) -> Path:
     # Always resolved to an absolute path: a relative path with a subdirectory
     # component (e.g. "sub/nested.md") would otherwise make Pandoc's cwd (set
@@ -3806,6 +4038,12 @@ def find_markdown(value: Path, recursive: bool = False) -> Path:
         normalized = unicodedata.normalize("NFC", candidate).casefold()
         if normalized in files:
             return files[normalized].resolve()
+    if FUZZY_LOOKUP and requested and not value.is_dir():
+        fuzzy_directory = value.parent if value.parent.is_dir() and str(value.parent) != "." else Path.cwd()
+        found = rank_lookup(requested, lookup_entries(fuzzy_directory, recursive))
+        if found:
+            announce_lookup(requested, found[0], *found[1:])
+            return found[0].resolve()
     available = ", ".join(sorted(files))
     raise FileNotFoundError(f"Could not find Markdown file for '{value}'. Available: {available or 'none'}")
 
@@ -9197,7 +9435,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "standalone (the --to latex/beamer/context --standalone default), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
-                             "files (metadata+preamble+lua together), texdirect (the direct-.tex-"
+                             "files (metadata+preamble+lua together), lookup (finding a document by "
+                             "its title, alias, the start of its name or a looser spelling), texdirect (the direct-.tex-"
                              "compile path -- see 'Input formats' in the module docstring; disabling "
                              "it routes .tex input back through Pandoc the pre-v3.1.0 way), "
                              "officedirect (the direct office-document-to-PDF path, same section -- "
@@ -9415,8 +9654,11 @@ def main() -> None:
     # which implies it just above) turns this on too, not just --full-paths
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP
     CITEPROC_DISABLED = args.no_citeproc
+    # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
+    # turn off the lookup that is still busy finding that document.
+    FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
     CACHE_PLOTS_CLI = args.cache_plots or None
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
@@ -9609,6 +9851,8 @@ def main() -> None:
     if not args.batch and not args.report and not args.presentation and len(paths) == 1:
         try:
             plan_source = find_markdown(paths[0])
+        except LookupAmbiguous as error:
+            raise SystemExit(str(error))
         except FileNotFoundError:
             plan_source = None
         if plan_source is not None:

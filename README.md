@@ -203,6 +203,15 @@ pdfmd lecture -w              # watch: rebuild on every save, until Ctrl+C
 A bare name is looked up as `<name>.md`. The name can contain dots:
 `pdfmd notes-v1.2` builds `notes-v1.2.md`.
 
+If no file has exactly that name, pdfmd also looks at what each document is
+called inside: its title, and any `pdfmd-options: {alias: ...}`. Case, spaces,
+`_`, `-`, accents and script don't matter (`pdfmd animportantdocument` finds
+`An Important Document.md`; `pdfmd glyukoza` finds a document titled
+`Глюкоза`), and a unique *start* of a name or title works too, with a warning
+saying what it matched (`pdfmd animp`, `pdfmd glucose`). A name that fits two
+documents is an error, never a guess; `--no-auto lookup` switches the guessing
+off. An exact file name always wins.
+
 ### Other output formats
 
 The format is taken from `-o`'s extension, or given explicitly with `--to`:

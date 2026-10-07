@@ -39,6 +39,51 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.0 — 2026-10-07
+
+Pre-edit state: commit `9af6dfd` (v3.20.5). First of three steps (3.21.0 to
+3.21.2) that let `pdfmd NAME#section` render one section of an ordinary
+document and find documents by what they are called inside. This one is the
+lookup engine every later step reuses.
+
+### Added
+
+- **A document can be found by its alias, its title, the start of either, or a
+  looser spelling**, after every rule that already worked has failed (so
+  nothing that resolved before resolves differently; checked against the
+  previous release on a folder of awkward names). In order, the first tier
+  with a hit decides: `pdfmd-options: {alias: ...}` (a name or a list; a bare
+  `pdfmd-title:` also counts), the file name, the title (`title:` or a
+  `% title` line), all ignoring case, spaces, `_ - . :` and accents
+  (`pdfmd animportantdocument`); then the same with merged letters
+  (c/k/q, i/y/j, v/w, sh/ş/ш, ё/е, Kazakh қ=q=k, ү/ұ/у=u, ы/і=i; a `y`/`w` in
+  what you type may be either vowel); then the start of an alias, file name or
+  title (`pdfmd animp`, at least 3 characters), then the start of a word in
+  one. A file name or alias beats a title at each step.
+- **Every guess is announced.** An exact match that only differs in case,
+  separators or script prints an `AUTO MD` line; everything after it is a
+  `WARN` saying what matched. Two documents fitting equally well is an error
+  naming both (`LookupAmbiguous`, a `FileNotFoundError`).
+- **`--no-auto lookup`** restores the previous lookup exactly. CLI only: a
+  document's own `pdfmd-options: no-auto` cannot apply to the lookup that is
+  still finding it.
+- `tests/test_lookup.py`: the old forms (exact, wildcard, Latin for Cyrillic,
+  `Пробный`, dots in names) as a regression guard, plus the new tiers.
+
+### Fixed
+
+- `latin_candidates` had `("oi", "oй")` with a Latin `o` inside the Cyrillic
+  replacement, a spelling that could never match a real name.
+
+### Not changed
+
+- `-b/--batch` and `-r/--report` still take names and folders exactly as
+  before; nothing there is guessed.
+- `pdfmd sub/name` still looks for `name.md` in the current folder first (an
+  old quirk, kept); only the new tiers look inside `sub/`.
+
+---
+
 ## v3.20.5 — 2026-10-07
 
 Pre-edit state: commit `21ca3fa` (v3.20.4). Three small things from the local
