@@ -10,13 +10,13 @@ dynamic = ["version"]
 description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults, project-file discovery and a multi-engine fallback chain"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "pdfmd_inkmd/LICENSE", "pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt"]
 authors = [{ name = "Ali Perdekhan" }]
 requires-python = ">=3.10"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
 # installed by default so `pdfmd-options:` front matter and PDF metadata
 # stamping just work.
-dependencies = ["pyyaml", "pypdf"]
+
 keywords = ["pandoc", "markdown", "pdf", "latex", "cli"]
 classifiers = [
     "Environment :: Console",
@@ -24,6 +24,15 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown",
     "Topic :: Text Processing :: Markup :: LaTeX",
 ]
+
+[project.optional-dependencies]
+# Without Pandoc or a PDF engine, pdfmd falls back to a built-in renderer
+# (a vendored inkmd, in pdfmd_inkmd/). These two make it better:
+#   math  - md2pdf (pymd2pdf, Python 3.11+) with offline LaTeX math
+#   emoji - the colour emoji font, which the vendored inkmd leaves out
+# `pdfmd --install math|emoji` installs the same things.
+math = ["pymd2pdf>=0.6,<0.7; python_version >= '3.11'", "matplotlib"]
+emoji = ["inkmd>=0.5,<0.6"]
 
 [project.urls]
 Homepage = "https://github.com/aliperdehan/pdfmd"
@@ -34,6 +43,10 @@ pdfmd = "pdfmd:main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
+packages = ["pdfmd_inkmd"]
+
+[tool.setuptools.package-data]
+pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pdfmd.PDFMD_VERSION" }

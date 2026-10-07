@@ -39,6 +39,113 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.0 — 2026-10-07
+
+Pre-edit state: commit `91b6a39` (v3.19.8). Minor bump: a new capability, and
+nothing changes for a machine that has Pandoc and a PDF engine.
+
+### Added
+
+- **A built-in fallback, so `pip install pdfmd-cli` works on a bare machine.**
+  With no Pandoc, or Pandoc but no PDF engine, pdfmd used to stop with an install
+  message. It now builds a plain PDF from a Markdown file with a pure-Python
+  renderer, says so (`NOTE  Pandoc was not found: building with the built-in
+  renderer ...`), and prints one `WARN  native (...)` line per kind of thing it
+  could not honour. Two renderers:
+  - **inkmd 0.5.0**, vendored in `pdfmd_inkmd/` (MIT; about 1.8 MB, standard
+    library only, offline, byte-deterministic). It is a generated copy: the
+    package is renamed so it cannot clash with a separately installed `inkmd`, its
+    CLI files are dropped, and its 10 MB colour-emoji font is left out (emoji
+    print as `[rocket]`-style labels). `scripts/vendor_inkmd.py` regenerates it
+    from the PyPI wheel (checked against PyPI's SHA-256), and `--check` reports
+    any drift; `pdfmd_inkmd/VENDORED.md` records the version and hash.
+  - **md2pdf** (PyPI `pymd2pdf` 0.6, ReportLab; Python 3.11+), when installed.
+    Footnotes, bookmarks, highlighted code, and (with matplotlib) offline math.
+  Neither is Pandoc: no LaTeX, preambles, filters, citations, slides, parts or
+  report mode, and Markdown input only; `.tex`, `.rst`, `--to html` and the rest
+  still say Pandoc is needed.
+- **Every input is read as GitHub-flavoured Markdown** (`normalise_gfm()`). Fenced
+  code is never touched. `\newpage`/`\pagebreak`/`\clearpage` and
+  `<!-- pagebreak -->` become a page break; every other `<!-- comment -->`
+  (one line or several) is dropped, since neither renderer is trusted to; footnotes stay
+  footnotes for md2pdf and become numbered endnotes for inkmd; heading and image
+  attributes (`{#id .class}`, `{width=50%}`), `:::` fenced-div markers (content
+  kept) and raw LaTeX (`{=latex}` blocks, command-only lines, non-math
+  environments) are removed; citations stay as written; a `::: {.csv file="..."}`
+  div becomes the same table the Pandoc filter builds (delimiter, `header=`,
+  `rows=`/`cols=`, the 10 x 7 cap and its note). The front matter's
+  title/author/date become a title block and the PDF's own Title/Author
+  (`papersize` and `fontsize` are honoured too); other keys are listed as not
+  used.
+- **Math without a typesetter.** inkmd cannot typeset math, and md2pdf only what
+  matplotlib's mathtext reads, so formulas are set as text: Greek letters and
+  operators as Unicode, `x^2`/`x_i` as super/subscripts (Unicode ones for md2pdf,
+  which ignores `<sup>`), variables in italics, `\frac{a}{b}` as `a/b`,
+  `\sqrt`, accents, `\mathbb`, `\mathbf`, cases and matrices in a rough linear
+  form. `$...$` is inline in the sentence; `$$...$$` (single or multi-line) and
+  `\begin{equation|align|gather|multline}` are display math, set as their own
+  centred lines (an `aligned`/`align` block stacks its rows). Centring is
+  approximate: inkmd has no text alignment, so the line is padded using Helvetica
+  metrics, with zero-width spaces between the no-break spaces because inkmd
+  collapses a run of whitespace. md2pdf with matplotlib keeps the formulas
+  mathtext reads (typeset, centred, rewriting `\tfrac`, `\frac13`, `\displaystyle`,
+  `\tag`, `\le`/`\ge`, ... first) and sets only the rest as text; without
+  matplotlib it is left alone (it would need the network). Dollar signs that are
+  not math (`$5 and $6`) are written as `&#36;` for md2pdf, which read them as a
+  formula (and printed a `\$` escape as it was).
+- **md2pdf printed a local path.** It prepends a hidden `<!-- SOURCE_FILE: /full/path
+  -->` marker and, when a paragraph follows it directly (a document that does not
+  start with a heading), printed that marker, path included, into the PDF. Such a
+  document now starts with an empty paragraph (`&nbsp;`) so the marker stays a
+  block of its own.
+- **`-e inkmd`, `-e md2pdf`, `-e native`** (and `pdf-engine:` in `pdfmd-options`)
+  ask for it explicitly. It is chosen automatically only when no Pandoc route
+  exists: an explicit request for a Pandoc engine or family without Pandoc is an
+  error, never a silent downgrade, and a failing Pandoc build never falls back to
+  it. With both renderers, md2pdf takes documents with footnotes, math (when
+  matplotlib is there) or a title; inkmd takes the rest, and either is the
+  other's fallback if it raises.
+- **`pdfmd --install math|emoji`** and the extras **`pdfmd-cli[math]`** (md2pdf and
+  matplotlib, about 150 MB) and **`pdfmd-cli[emoji]`** (the stock `inkmd` wheel,
+  whose emoji font the vendored copy is pointed at, about 11 MB).
+- **An offer after a lossy native build**, on an interactive terminal only (not in
+  CI or a pipe, not with `PDFMD_NO_PROMPT` set): install md2pdf with math, the
+  emoji font, show how to install Pandoc and Typst, or "continue and don't ask
+  again" (remembered in pdfmd's cache folder).
+- `--check-dependencies` lists the native renderers and prints which mode applies;
+  it now exits 0 when only the native route exists.
+- `tests/` (`python3 -m unittest discover -s tests`): the vendored copy, the
+  normaliser, engine selection with and without Pandoc, and real `pdfmd` runs
+  with nothing on PATH. `PDFMD_GOLDEN=1` compares inkmd's output with
+  `tests/golden/` after a re-vendor. CI runs them on Windows, macOS and Linux,
+  once without Pandoc installed; a weekly workflow checks for new inkmd and
+  pymd2pdf releases and tests the newest pymd2pdf.
+
+### Changed
+
+- `select_engines()` falls back to the native tier instead of exiting when there
+  is no Pandoc route (and never for slides), and `main()`'s Pandoc check is now
+  skipped for a plain Markdown-to-PDF run. Every other mode (`--to`, `-p`, `-r`,
+  `--split`, `--unpack`, `--stop-at`, `-w`, ...) still needs Pandoc and says so
+  as before.
+- `pyproject.toml` packages `pdfmd_inkmd` beside `pdfmd.py` (and its two licence
+  files). A bare copy of `pdfmd.py` without that folder behaves as before.
+
+### Verified here, and not
+
+Checked in a clean virtualenv built from this tree, with only Python on PATH: a
+`pip install .`, a build with inkmd (with and without the `[emoji]` font, the
+page images looked at), a build with md2pdf after `pdfmd --install math`
+(footnote, title, author, typeset and text-fallback formulas, prices, comments),
+the interactive offer through a pseudo-terminal (each choice, and "don't ask
+again" holding), the unit tests on Python 3.11, 3.12 and 3.13 (with and without
+md2pdf and matplotlib), and inkmd's byte-identical output across those three.
+Not checked: Windows and macOS, the `pip install` choices of the offer, md2pdf's
+emoji and Kroki fetches (the sandbox had no route to them), and anything with
+real Pandoc reports.
+
+---
+
 ## v3.19.8 — 2026-10-07
 
 Pre-edit state: commit `fb357d6` (v3.19.7). Patch bump by the one-time

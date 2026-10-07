@@ -1,0 +1,62 @@
+# Weekly: has inkmd (vendored in pdfmd_inkmd/) or pymd2pdf (the md2pdf renderer)
+# moved? Opens one issue per finding; changes nothing itself. Re-vendor with
+# `python3 scripts/vendor_inkmd.py --version X.Y.Z`, then
+# `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests`.
+name: Upstream check
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Is the vendored inkmd current, and unmodified?
+        run: |
+          python - <<'PY' > inkmd-report.txt || true
+          import json, re, subprocess, sys, urllib.request
+          vendored = re.search(r'INKMD_VERSION = "([^"]+)"', open("scripts/vendor_inkmd.py").read()).group(1)
+          latest = json.load(urllib.request.urlopen("https://pypi.org/pypi/inkmd/json"))["info"]["version"]
+          check = subprocess.run([sys.executable, "scripts/vendor_inkmd.py", "--check"], capture_output=True, text=True)
+          if check.returncode:
+              print(f"pdfmd_inkmd/ no longer matches inkmd {vendored}:\n\n```\n{check.stderr.strip()}\n```")
+          if latest != vendored:
+              print(f"inkmd {latest} is out (vendored: {vendored}). Re-vendor with "
+                    f"`python3 scripts/vendor_inkmd.py --version {latest}`, run the golden tests "
+                    "(`PDFMD_GOLDEN=1`), and read upstream's changelog for fixes and security notes.")
+          PY
+      - name: Does the newest pymd2pdf still pass our tests?
+        run: |
+          pip install . 
+          pip install --upgrade pymd2pdf matplotlib
+          pip list 2>/dev/null | grep -i -E "^(pymd2pdf|reportlab|mistletoe|matplotlib) "
+          python -m unittest discover -s tests -v > pymd2pdf-tests.txt 2>&1 || {
+            echo "The tests fail with the newest pymd2pdf (the range in pyproject.toml is <0.7):" > pymd2pdf-report.txt
+            echo >> pymd2pdf-report.txt
+            echo '```' >> pymd2pdf-report.txt
+            tail -n 60 pymd2pdf-tests.txt >> pymd2pdf-report.txt
+            echo '```' >> pymd2pdf-report.txt
+          }
+          latest=$(pip show pymd2pdf | sed -n 's/^Version: //p')
+          case "$latest" in 0.6.*) ;; *) echo "pymd2pdf $latest is outside the supported range <0.7; widen it in pyproject.toml and pdfmd.py's INSTALL_SPECS after checking the tests above." >> pymd2pdf-report.txt ;; esac
+      - name: Open an issue for each finding
+        run: |
+          for report in inkmd-report.txt pymd2pdf-report.txt; do
+            [ -s "$report" ] || continue
+            title="Upstream: ${report%-report.txt} needs a look"
+            if [ -z "$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')" ]; then
+              gh issue create --title "$title" --body-file "$report"
+            fi
+          done

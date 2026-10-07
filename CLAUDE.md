@@ -47,6 +47,19 @@ predict; it is very often pdfmd's own auto-applied defaults (a discovered
 metadata file, an auto-included preamble, its own table-width filter)
 doing something the project-specific files don't show at all.
 
+## Vendored inkmd and the native tier
+
+`pdfmd_inkmd/` is a generated copy of the PyPI package `inkmd` (the built-in
+PDF renderer used when there is no Pandoc or PDF engine). Never edit it by
+hand: change `scripts/vendor_inkmd.py` and re-run it
+(`python3 scripts/vendor_inkmd.py --version X.Y.Z`; `--check` reports drift),
+then `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests` and read what
+changed in inkmd's output. The native tier's code is in `pdfmd.py` (the section
+after `dependency_report()`: `normalise_gfm()`, the math-as-text converter,
+`convert_native()`); md2pdf (`pymd2pdf`) is an optional dependency, not vendored.
+`python3 -m unittest discover -s tests` runs everything; the end-to-end tests run
+`pdfmd` with an empty PATH, which is how to test "no Pandoc" without removing it.
+
 ## This is a shared dependency
 
 `pdfmd` is used across multiple, unrelated Markdown-to-PDF pipelines (the

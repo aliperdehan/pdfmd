@@ -39,3 +39,52 @@ jobs:
         with:
           name: pdfs-${{ matrix.os }}
           path: examples/*.pdf
+
+  # v3.20.0: a machine with no Pandoc and no PDF engine, where pdfmd falls back
+  # to its built-in renderers. The unit tests mock the lookups and the end-to-end
+  # ones run pdfmd with an empty PATH, so a Pandoc the runner image happens to
+  # carry makes no difference.
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install .
+      - run: pdfmd --check-dependencies
+      - run: python -m unittest discover -s tests -v
+      - name: Build an example with the built-in renderer
+        run: |
+          python - <<'EOF'
+          import subprocess, os, sys, tempfile, pathlib
+          empty = tempfile.mkdtemp()
+          env = {**os.environ, "PATH": empty, "PDFMD_NO_PROMPT": "1"}
+          subprocess.run([sys.executable, "-m", "pdfmd", "examples/lecture.md", "-e", "inkmd",
+                          "-o", "native-lecture.pdf"], check=True, env=env)
+          assert pathlib.Path("native-lecture.pdf").read_bytes().startswith(b"%PDF-")
+          EOF
+      - name: With md2pdf and math (Python 3.11 or newer)
+        if: matrix.python != '3.10'
+        run: |
+          pip install ".[math]"
+          python -m unittest discover -s tests -v
+          python - <<'EOF'
+          import subprocess, os, sys, tempfile, pathlib
+          env = {**os.environ, "PATH": tempfile.mkdtemp(), "PDFMD_NO_PROMPT": "1"}
+          subprocess.run([sys.executable, "-m", "pdfmd", "tests/fixtures/pandoc.md", "-e", "md2pdf",
+                          "-o", "native-md2pdf.pdf"], check=True, env=env)
+          assert pathlib.Path("native-md2pdf.pdf").read_bytes().startswith(b"%PDF-")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-pdfs-${{ matrix.os }}-${{ matrix.python }}
+          path: native-*.pdf
