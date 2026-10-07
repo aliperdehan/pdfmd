@@ -302,7 +302,9 @@ class EngineSelectionTests(unittest.TestCase):
     def test_missing_md2pdf_is_an_error_not_a_silent_downgrade(self):
         with self.assertRaises(SystemExit) as caught:
             self.select("md2pdf")
-        self.assertIn("pdfmd --install math", str(caught.exception))
+        # On Python 3.10 the honest hint is the version requirement instead.
+        hint = "Python 3.11" if sys.version_info < (3, 11) else "pdfmd --install math"
+        self.assertIn(hint, str(caught.exception))
 
     def test_a_pandoc_engine_request_needs_pandoc(self):
         with self.assertRaises(SystemExit) as caught:

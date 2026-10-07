@@ -39,6 +39,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.3 — 2026-10-07
+
+Pre-edit state: commit `b152b40` (v3.20.2). Found by the branch's first CI run.
+
+### Fixed
+
+- **`pyproject.toml` had lost `dependencies = ["pyyaml", "pypdf"]`** while the
+  built-in renderer was added, so a plain `pip install pdfmd-cli` installed
+  neither. Both are optional inside `pdfmd.py`, but without PyYAML the
+  `pdfmd-options:` front matter (`parts: auto`, `no-auto`, ...) is ignored and the
+  built-in renderer drops a document's `title:`/`author:`; without pypdf the PDF
+  Info stamp is skipped. Restored. This is what failed eight tests in the `native`
+  job and the `report#methods` step of the `examples` job.
+- `test_missing_md2pdf_is_an_error_not_a_silent_downgrade` expected the
+  `--install math` hint on Python 3.10, where md2pdf correctly says it needs 3.11.
+
+---
+
 ## v3.20.2 — 2026-10-07
 
 Pre-edit state: commit `9a03bfa` (v3.20.1). Found while checking that the

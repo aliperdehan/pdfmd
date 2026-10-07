@@ -16,7 +16,7 @@ requires-python = ">=3.10"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
 # installed by default so `pdfmd-options:` front matter and PDF metadata
 # stamping just work.
-
+dependencies = ["pyyaml", "pypdf"]
 keywords = ["pandoc", "markdown", "pdf", "latex", "cli"]
 classifiers = [
     "Environment :: Console",
