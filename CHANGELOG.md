@@ -39,6 +39,451 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.19.8 — 2026-10-07
+
+Pre-edit state: commit `fb357d6` (v3.19.7). Patch bump by the one-time
+numbering override above. From the author's re-test of v3.19.7 on real reports
+with Pandoc 3.11.
+
+### Fixed
+
+- **The math-method flag, third time right.** v3.19.7's check for
+  `--html-math-method` was wrong for Pandoc 3.11, which renamed the option to
+  `--math-method` (and warns `Deprecated: --mathml. Use --math-method=mathml
+  instead.`): the check failed and pdfmd fell back to the short flag, so the
+  warning stayed. pdfmd now tries `--math-method`, then `--html-math-method`,
+  then the short flags, taking the first the installed Pandoc lists in `--help`,
+  matched as a whole option name (`--math-method` is a substring of
+  `--html-math-method`, which a plain substring test would have taken for it).
+  Checked against stand-in help texts for each of the four cases (3.11, the
+  middle range, both listed, short flags only) and the real Pandoc 3.1.3; the
+  3.11 spelling itself is from the author's report, not seen here.
+- **A CSL style kept in Pandoc's user data folder was not embedded** (and, for
+  any file not found, nothing said why). A `csl:` is now also looked up in
+  Pandoc's `csl/` data folder (from the `User data directory:` line of
+  `pandoc --version`), and a bibliography or CSL file found nowhere prints a
+  `WARN  not embedded: ... (not found ...)` instead of only appearing in the
+  NOTE. Checked with a style that existed only in that folder: embedded, then
+  deleted from the machine, and the embedded file still built with a `.tex`
+  identical to the original build's.
+
+### Changed
+
+- Assembling with anything embedded now also prints, once, that data a macro in
+  the text reads (the CSV tables a report's plots take, images in raw LaTeX) is
+  never embedded and cannot be detected; it stays beside the document. (The
+  author's report: the real report's plots read CSV files from four folders,
+  without which its PDF would not build.)
+
+---
+
+## v3.19.7 — 2026-10-07
+
+Pre-edit state: commit `477e2bc` (v3.19.6). Patch bump by the one-time
+numbering override above. From the author's test of v3.19.6 on real reports.
+
+### Added
+
+- **`--embed-metadata bibliography`: bibliography and CSL files embedded**, the
+  way Lua filters are. The `bibliography:` and `csl:` files the merged metadata
+  names go into `{=pdfmd}` blocks (`type: bibliography` / `type: csl`, with the
+  `path:` the metadata gives them and a hash). A name that is absolute or climbs
+  out with `..` cannot be written back as it is, so the embedded file's
+  metadata then names it by its own safe path. At build time the blocks are
+  written to a temporary folder at that path, for the length of the build, and
+  the folder is searched after everything else -- by Pandoc's citeproc
+  (`--resource-path`) and by BibTeX/Biber (`BIBINPUTS`; the cache route's
+  compile step included) -- so a file beside the document still wins, and
+  nothing embedded changes a lookup that already worked. They are data, so no
+  trust is asked, unlike filters. It is a fourth kind: on in a bare
+  `--embed-metadata`, switchable as `--embed-metadata metadata preamble` or
+  `pdfmd-options: {embed: {bibliography: false}}`. With it off (or a file
+  missing, or not UTF-8 text) the `NOTE  not embedded:` line still names them.
+  An embedded file with its bibliography now builds alone in an empty folder
+  (checked: byte-identical `.tex`, with citations resolved).
+- `--unpack` writes the bibliography/CSL files back (at their paths, hash
+  checked) and `--unpack --slim` removes the blocks; the slimmed file finds them
+  in its `NAME.unpacked/` folder, which is now also searched for them.
+
+### Fixed
+
+- **`--self-contained` warned on Pandoc 3.11** (`[WARNING] Deprecated: ...`):
+  pdfmd passed `--mathml`, which Pandoc 3.11 deprecates in favour of
+  `--html-math-method=mathml`. pdfmd now uses the long form where the installed
+  Pandoc lists it in `--help`, and the short flag (`--mathml`, `--mathjax`,
+  `--katex`, `--webtex`, `--gladtex`) otherwise -- Pandoc 3.1 does not know
+  `--html-math-method` at all, which a first version of this fix got wrong and
+  a test on Pandoc 3.1.3 caught. (The `html: {math: ...}` option uses the same.)
+
+### Checked
+
+- Fixture with a metadata-owned `bibliography: refs/test.bib` and `csl:` in a
+  subfolder and citations: embedded copy alone in an empty folder, `.tex`
+  identical to the original build's (citations resolved); the same through
+  `--unpack --slim` and the unpacked folder; absolute and `../` names rewritten
+  and identical; `embed: {bibliography: false}` and `--embed-metadata metadata`
+  leave them out, say so, and fail to build alone as expected; the math method
+  against Pandoc 3.1.3 (short flag) and, by stubbing the capability, the long
+  form; BIBINPUTS and the
+  resource path carry the extracted folder. All earlier comparisons pass, also
+  under Python 3.11 (the project's minimum), which now runs the stand-in-engine
+  cache test as well.
+- Not checked: BibTeX/Biber itself finding an embedded `.bib` for
+  `citation-engine: natbib|biblatex` (no LaTeX here); only the search path is.
+
+---
+
+## v3.19.6 — 2026-10-07
+
+Pre-edit state: commit `38008e1` (v3.19.5). Patch bump by the one-time
+numbering override above. Everything here comes from a test of the branch on the
+author's machine with real nulabreport reports and LaTeX engines (every
+normal-build `.tex` and PDF text identical to main's; embedding round trips
+identical).
+
+### Fixed
+
+- **The cache route dropped an embedded Lua filter** (`pdfmd-options: {cache:
+  {aux: true}}` or `plots`, on an assembled file). `_convert_one` handed the
+  cache route the document's already-merged `no-auto`, which for an assembled file
+  lists `lua`; the Markdown-to-`.tex` pass inside re-reads the document's own
+  `no-auto` itself and then hid the embedded filter, silently (a real 29-page
+  report came out 28 pages). It now passes the command line's `--no-auto` only,
+  as that inner pass expects. Found on the real report; reproduced here with a
+  stand-in LaTeX engine: the `.tex` handed to the engine had no filter output
+  before the fix, and has it after. A normal document with the same cache option
+  is unaffected.
+- **`--unpack` then `--unpack --slim` on the same file** stopped on "already
+  holds". Files already there with exactly the content that would be written
+  are now left as they are (and counted); a file that differs still stops the
+  run, writing nothing.
+
+### Changed
+
+- **Corrected a too broad claim.** An embedded file does not "build the same
+  alone, in any folder": metadata, preamble and filters travel, but what the
+  text points at -- `bibliography:`/`csl:` files, images, files a preamble
+  `\input`s or `\includegraphics`, data -- does not. The docs now say so, and
+  assembling with `--embed-metadata` prints a `NOTE  not embedded: ...` naming
+  those it can see (a bibliography or CSL key, `\input`/`\includegraphics` in
+  the preamble, images in the text). `--lua-mode ref` paths are relative to the
+  output file's folder, so the layout must be kept.
+
+### Reported by the test, left as is
+
+- `pdfmd src.md -o src.md --to markdown` overwrites its own source; true on main
+  as well (not a regression). Only `--assemble-only` guards against it.
+- `--cache` / `--cache-plots` on the command line do not travel to an assembled
+  file (the `cache:` settings in `pdfmd-options` do); noted in v3.19.5.
+
+---
+
+## v3.19.5 — 2026-10-07
+
+Pre-edit state: commit `952d6d8` (v3.19.4). Patch bump by the one-time
+numbering override above.
+
+### Fixed
+
+- **An assembled partial build carries `pdfmd-partial`.** A partial parts-mode
+  build (`report#methods`, `--section`) tells Pandoc `-M pdfmd-partial=true` on
+  the command line, which a Lua filter such as nulabreport's reads to degrade
+  gracefully when the Appendix is not there. The assembled file of such a build
+  (`--assemble-only`, with or without `--embed-metadata`) did not carry it, so
+  building the file later ran the filter as if for the whole report. It is now
+  written into the front matter (`pdfmd-partial: true`, next to the assembled
+  marker); a partial scaffold with no front matter at all cannot hold it, and
+  says so. Found by tracing what a normal build passes to Pandoc outside the
+  text.
+
+### Checked
+
+- A probe filter that reports whether it sees `pdfmd-partial`: normal partial
+  build "partial", normal full build "full", the embedded copy of the partial
+  build built alone "partial", with a `.tex` byte-identical to the normal
+  partial build's. Earlier comparisons unchanged.
+
+### Known limits, for the record (what an assembled file does not carry)
+
+- Command-line options of the original run: `-V`, `--from`, passthrough Pandoc
+  options, `--cache`/`--cache-plots` (the cache settings in `pdfmd-options` do
+  travel), `-e`. Re-give them when building the assembled file.
+- The label seeding and part counters of a partial build with the cache on
+  (they come from the last full build of the scaffold, which the assembled file
+  is no longer).
+
+---
+
+## v3.19.4 — 2026-10-06
+
+Pre-edit state: commit `437596c` (v3.19.3). Patch bump by the one-time
+numbering override above; this closes the assemble/embed series.
+
+### Added
+
+- **`pdfmd-options: {default-output: FORMAT}`**: the format a document builds
+  to when the command line names none (no `--to`, no `-o` extension, no
+  `--stop-at`, no `-p`). Any Pandoc writer name or `pdf` (`tex`, `md`, `txt`,
+  `typ`, `htm` as shortcuts). Document first, then its metadata files (so a
+  shared `metadata.yaml` can set it for every document that finds it); per
+  document in `-b`, the first file in `-r`. A missing PDF engine is now an
+  error only for a document that actually builds a PDF (a machine with no
+  engine can build `default-output: html` documents); an explicit `-e` that is
+  not installed still fails as before.
+- **HTML options, `pdfmd-options: {html: {...}}`**, Quarto-style:
+  `self-contained: true` (`--standalone --embed-resources`; `--self-contained`
+  before Pandoc 2.19; MathML for math by default since it needs no network; a
+  page with no title gets the file name as `<title>`), `standalone: true` (a
+  full page, resources linked), `math:` (mathml, mathjax, katex, webtex,
+  plain), `css:` (a name or a list, relative to the document).
+  `--self-contained` / `--no-self-contained` on the command line win over the
+  document (a Pandoc `--self-contained` passed through before now means this,
+  which is what Pandoc meant by it). Nothing changes for HTML output unless one
+  of these is set: it is still the fragment it was.
+- An assembled file's **embedded LaTeX preamble stays out of every non-LaTeX
+  build** (HTML, docx, typst, ...), where Pandoc would have printed it into the
+  output; the HTML of an embedded copy equals the original's.
+
+### Checked
+
+- Self-contained from the document's option and from the flag: one file, image
+  inlined as a data URI, CSS inlined, `<math>` for the maths, `<title>` set; a
+  plain `-o x.html` and the fragment are unchanged. `default-output` from a
+  document, from a shared metadata file (report mode), mixed in `-b -j 2`
+  (html, typst and pdf side by side); beaten by `-o x.pdf`, `--to latex`;
+  needs no PDF engine for an HTML document. The PDF path was exercised only
+  through the Pandoc -> ODT -> LibreOffice fallback in the session that wrote
+  this (LibreOffice was installed, no LaTeX engine); CI builds with Typst. All
+  earlier comparisons and the normal-build baselines are unchanged.
+
+### Known limits
+
+- No PDF metadata stamping or engine chain for HTML (they are LaTeX/PDF only),
+  and a BUILD NOTES comment stays in the HTML source as a comment, as it did.
+- `math: mathjax|katex|webtex` fetch their scripts when the file is built, so
+  they need network access with `self-contained`.
+
+---
+
+## v3.19.3 — 2026-10-06
+
+Pre-edit state: commit `11f1c97` (v3.19.2). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`NAME.unpacked/` is discovered.** The folder `--unpack` writes is an
+  accessory folder for the document NAME.md, searched like `metadata/`: all of
+  its metadata YAML files (in name order, as the only metadata for that
+  document), every `.tex` in it as a preamble, every `.lua` in it as a filter
+  (the folder is made by pdfmd for that document alone, so the usual "only
+  fixed names" rule is not needed). `--watch` follows it.
+- **Origin of the merged keys, recorded.** An embedded file writes
+  `pdfmd-options.origin`: which keys came from the document and from each
+  metadata file, and the line count and hash of each preamble file. `--unpack`
+  uses it to write the metadata back as the files it came from
+  (`01-metadata.yaml`, `02-report.yaml`, ...) and the preamble as its original
+  files; a file without the record, or a preamble edited since, still unpacks
+  as one merged `metadata.yaml` / one `preamble.tex`, as before.
+- **`--unpack --slim`**: after writing the files, rewrites the assembled file
+  without them (embedded filters, preamble, and the metadata files' keys where
+  the origin is recorded), leaving the document's own front matter and its
+  `NAME.unpacked/` -- the original layout, which the discovery then builds
+  exactly like the embedded file (checked: byte-identical `.tex`).
+- **`pdfmd-options` file names**: `yaml:` (or `metadata:` with a name/list)
+  names metadata files, like `-y` but written in the document; the existing
+  `preamble:` and `lua-filter:` still work, and all three can be grouped under
+  `metadata:` (`metadata: {yaml: .., preamble: .., lua-filter: ..}`; `lua:` is
+  accepted for `lua-filter:` there). Flat and grouped add up. Paths are
+  relative to the document. `--no-auto metadata`/`preamble`/`lua` suppress them
+  as they do the other document-written options; an explicit `-y` wins.
+- **`pdfmd-options.embed`**: what `--assemble-only` embeds without the flag --
+  `true` (all three), `false`, a list of kinds, or a mapping (`metadata`,
+  `preamble` true/false, each on unless said otherwise; `lua`: embed|ref|apply
+  |off, true = embed, false = off). The document's own value wins over its
+  metadata files' (so a shared `metadata.yaml` can turn it on for every
+  report), the command line over both: `--embed-metadata KIND ..`,
+  `--lua-mode` (its default is now "the option, else embed"), and the new
+  `--no-embed-metadata`. Resolved per document in batch mode.
+- An embedded file drops the names it embedded (and `embed:`) from its own
+  `pdfmd-options`, which would point into the original folder.
+
+### Fixed
+
+- A metadata file given with a path relative to the current folder in a
+  subfolder (`-y cfg/x.yaml`, or the new `yaml:` key) made Pandoc, which runs
+  inside that file's own folder, look for `cfg/cfg/x.yaml`. `resolve_yaml` now
+  returns an absolute path (symlinks not resolved).
+
+### Checked
+
+- Slim + unpacked folder, embedded copy alone, and the original build give the
+  same `.tex` for the fixture with two metadata files, a preamble, a filter and
+  the document's own `header-includes`; editing an unpacked preamble changes the
+  next build. Flat and grouped file names build the same; a document naming its
+  files in a subfolder builds, and its embedded copy alone is identical.
+  `embed:` as `true`, a mapping, a list, `false`, from a shared metadata file,
+  and the CLI overrides behave as described. All earlier comparisons and the
+  normal-build baselines are unchanged.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+---
+
+## v3.19.2 — 2026-10-06
+
+Pre-edit state: commit `0434c8c` (v3.19.1). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`--lua-mode apply`**: the filters run during assembly, Markdown to Markdown
+  through Pandoc (`--wrap=preserve`, the reader pdfmd would pick), so the text
+  already has their effect; they are listed under `pdfmd-options.applied-lua`
+  and discovery of them stays off. Approximate by nature: Pandoc re-writes the
+  text (explicit heading ids, table and footnote layout), a filter's change to
+  the metadata and a filter that needs citeproc first are not reproduced. A
+  filter that mentions `FORMAT` (it would see `markdown` here) is embedded
+  instead, with a note; so is any filter when Pandoc fails on them.
+- **`--unpack FILE [-o DIR]`**: writes an assembled file's embedded Lua filters,
+  `preamble.tex` (the part of `header-includes` before the preamble marker) and
+  `metadata.yaml` (the merged front matter) back out, into `FILE.unpacked/` by
+  default. Checks each filter against the SHA-256 recorded when it was written
+  and says whether this machine's pdfmd knows it; exit status 1 on a mismatch.
+  Never overwrites (stops without writing anything) and never edits the file.
+
+### Fixed
+
+- An embedded `{=pdfmd}` block's backtick fence counted as "this document has
+  code" (and its text could trip the citation, cross-reference, CSV-table and
+  definition-list checks), so an embedded copy could gain a monofont line the
+  original did not have. These checks now ignore embedded blocks. (Found by the
+  round-trip comparison on a document with no code.)
+
+### Checked
+
+- `apply`, `embed` and `ref` copies of a fixture with a Header filter give a
+  `.tex` byte-identical to the original build's (`off` differs by design); a
+  filter that checks `FORMAT` is embedded instead and its copy is identical;
+  a filter with a Lua syntax error falls back to embedding with a warning.
+  `--unpack` round trip (filter byte-identical to the original, preamble and
+  metadata written, a second run refused, an edited filter flagged). The v3.19.0
+  and v3.19.1 comparisons and the normal-build baselines are unchanged.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+---
+
+## v3.19.1 — 2026-10-06
+
+Pre-edit state: commit `1086cfe` (v3.19.0). Patch bump by the one-time
+numbering override above.
+
+### Added
+
+- **`--embed-metadata [KIND ...]`** (with `--stop-at markdown`): the assembled
+  file also carries what pdfmd discovers beside the document, so it builds the
+  same alone, in any folder. Kinds: `metadata` (the YAML files merged as Pandoc
+  merges them -- later file over earlier, document over both, per top-level key,
+  checked against Pandoc 3.1.3 -- with the document's front matter, into ONE
+  block; `pdfmd-options` merged by pdfmd's own cascade; a file's `no-auto` and
+  `parts` are not carried), `preamble` (the preamble file(s) at the head of
+  `header-includes`, a literal block), `lua` (the Lua filters). None named =
+  all three. The kinds embedded are written into the file's own
+  `pdfmd-options: no-auto` (and `embedded`), or into the comment form of the
+  marker (`<!-- pdfmd-assembled: true; no-auto: lua -->`) where there is no
+  front matter, so the discovery that would find them again stays off.
+- **`--lua-mode embed|ref|off`** (default `embed`). `embed`: each filter whole,
+  in a fenced `{=pdfmd}` raw block at the very bottom (the fence is longer than
+  any backtick run inside; Pandoc ignores raw blocks of unknown formats); `ref`:
+  the filter's path in `pdfmd-options.lua-filter`, relative to the output, a
+  missing one a warning rather than an error; `off`: none. (`apply` comes in a
+  later step.)
+- **Embedded filters run only if trusted.** A Lua filter can run any command.
+  pdfmd records the SHA-256 of each filter it embeds in
+  `<cache>/pdfmd/embedded-trust.txt`; at build time an embedded filter runs only
+  if its own text hashes to one of those, else it is skipped with a warning (the
+  build completes) unless `--trust-embedded`. A hash stored in the file itself
+  cannot prove where it came from, so it is not what is trusted. A CLI
+  `--no-auto lua` skips embedded filters too.
+- The assembled file is always read with Pandoc's own markdown (never `gfm`,
+  which would print a `{=pdfmd}` block as code).
+
+### Changed
+
+- The BUILD NOTES stamp ignores embedded blocks when it looks for its comment
+  (a filter's text can contain the words) and, when it has to create the
+  comment, writes it above them, so they stay the last thing in the file.
+- Front-matter macros (`experiment:` and the like) are emitted after an embedded
+  preamble, as after a discovered one (a marker line in `header-includes`
+  records where the preamble ends; it never reaches the `.tex`).
+
+### Checked
+
+- Embedded file -> `--to latex` is byte-identical to the original build's
+  `.tex`, also when the file is copied alone into an empty folder (so the
+  filter can only come from its block), for: a parts report with a metadata
+  file, a preamble, a Lua filter and its own `header-includes`; a report/book
+  with metadata and preamble; unicode/quoted/nested YAML; a document without
+  front matter (with metadata, and with only a filter). Untrusted, edited and
+  `--trust-embedded` filters, `--lua-mode ref` (and a missing file), `off`,
+  selected kinds, the stamp, and `-b -j 2` behave as described. Normal builds and
+  v3.19.0's plain assembly are unchanged against the earlier baselines.
+- Not checked: PDF compilation (no LaTeX engine in this session).
+
+### Known limits
+
+- YAML goes through PyYAML (YAML 1.1 rules, comments lost): an ambiguous scalar
+  such as `007` is written back as `7`.
+- A document with no front matter and a bare leading `# Title` keeps its
+  preamble out of the file (a new front-matter block would stop the title being
+  promoted); a warning says so.
+- A report/book build applies no discovered Lua filter, so none is embedded.
+- The embedded preamble sits in `header-includes`, which a non-LaTeX target
+  (HTML) would also see; that is for the HTML step.
+
+---
+
+## v3.19.0 — 2026-10-06
+
+Pre-edit state: commit `26eb3ed` (after v3.18.0).
+
+**Version numbering, a one-time override (the author, 2026-10-06):** the
+"assemble / embed" feature series bumps the minor version once (this
+release) and then only the patch number per step (v3.19.1, v3.19.2, ...),
+instead of a minor bump each, to keep the version count down. The usual
+rule above resumes afterwards.
+
+### Added
+
+- **`--stop-at markdown|tex|pdf`, and `--assemble-only`** (= `--stop-at
+  markdown`). The build runs as normal and ends after the named stage.
+  `markdown` writes the assembled Markdown, `NAME.assembled.md`: the scaffold
+  and its parts joined into one text (a part's leading front matter dropped,
+  as the real build does), or the chapters of a `-r` report/book; `-o` may
+  name it, and an `-o` ending `.assembled.md` implies the stage. It carries
+  no discovered metadata, preamble or filter yet, runs no engine, writes no
+  stamp and makes no backup, and refuses to overwrite one of its own sources.
+  `tex` is `--to latex` (`beamer` with `-p`). Combinations that contradict
+  each other (`--to`, `-p`/`-w` with `markdown`, `--assemble-only --stop-at
+  tex`, a non-Markdown input) are an error.
+- **The `pdfmd-assembled: true` marker.** Written into the file's front
+  matter, or, for a document with none, as a trailing `<!-- pdfmd-assembled:
+  true -->` (a new front-matter block would stop a leading `# Title` being
+  promoted to the title, so it is never created). Parts mode ignores a marked
+  file (it would join the parts a second time, and `parts: auto` would
+  otherwise take it for another scaffold beside `parts/`), and `-b`/`-r` with
+  `--stop-at markdown` skip such files.
+
+### Checked
+
+- Assembled file fed back to pdfmd, `--to latex`: byte-identical `.tex` to
+  the original build for a parts report, a report/book (`-r`), a single
+  document with a bare `# Title`, and a `% title` block document. Normal
+  `--to latex` output of the examples is unchanged.
+- Not checked here: PDF compilation (no LaTeX engine in the cloud session
+  that wrote this); nothing in this release touches that path.
+
+---
+
 ## v3.18.0 — 2026-10-04
 
 Pre-edit state: commit `50d46d4` (v3.17.0).

@@ -152,6 +152,75 @@ pdfmd lecture --to typst -o lecture.typ
 pdfmd lecture -o lecture.tex      # a complete, compilable .tex, not a fragment
 ```
 
+### Stopping part-way
+
+`--stop-at` ends the build after a stage; everything before it runs as normal:
+
+```sh
+pdfmd report --stop-at markdown   # report.assembled.md: the parts joined into one file
+pdfmd report --assemble-only      # the same, shorter
+pdfmd report --stop-at tex        # the standalone .tex a LaTeX engine would get (= --to latex)
+```
+
+The assembled file holds just the document text (and is marked
+`pdfmd-assembled: true`), so pdfmd never joins its parts a second time.
+
+By default it holds just the text. `--embed-metadata` also folds in what pdfmd
+finds beside the document (metadata, preamble, Lua filters, and the
+bibliography and CSL files the metadata names), so the file no longer needs
+them beside it. What the text points at otherwise (images, files a preamble
+`\input`s) is not embedded: keep it where the document finds it, relative to
+the assembled file.
+
+```sh
+pdfmd report --assemble-only --embed-metadata                  # metadata.yaml, preamble.tex, Lua filters, .bib/.csl
+pdfmd report --assemble-only --embed-metadata metadata preamble   # only those
+pdfmd report --assemble-only --embed-metadata --lua-mode ref   # name the filter instead of copying it
+```
+
+An embedded Lua filter sits in a `{=pdfmd}` block at the end of the file. A
+Lua filter can run any command, so one only runs if this machine's pdfmd
+embedded it (otherwise it is skipped with a warning, unless you pass
+`--trust-embedded`).
+
+`--lua-mode apply` runs the filters at assembly time instead, so the text
+already has their effect (approximate: Pandoc re-writes the text, and a filter
+that looks at `FORMAT` is embedded instead). `--unpack` goes the other way:
+
+```sh
+pdfmd report.assembled.md --unpack     # filters, preamble and metadata back into report.assembled.unpacked/
+```
+
+`pdfmd` finds `report.assembled.unpacked/` beside `report.assembled.md` by
+itself (its metadata, preambles and Lua filters), and `--unpack --slim` strips
+the unpacked parts out of the assembled file, leaving the lean document plus
+that folder.
+
+A document can name its own files and set what to embed, in `pdfmd-options`:
+
+```yaml
+pdfmd-options:
+  yaml: [base.yaml]        # metadata files (like -y); also `metadata:`, or grouped:
+  metadata:
+    preamble: my-preamble.tex
+    lua-filter: my.lua
+  embed: {lua: ref}        # what --assemble-only embeds without the flag
+```
+
+Plain HTML output is a fragment. For a finished page, or one file with
+everything (images, CSS) inlined, ask for it, on the command line or in the
+document:
+
+```sh
+pdfmd lecture -o lecture.html --self-contained
+```
+
+```yaml
+pdfmd-options:
+  default-output: html     # build to HTML when no format is given
+  html: {self-contained: true, css: style.css}
+```
+
 ### Slides
 
 ```sh
