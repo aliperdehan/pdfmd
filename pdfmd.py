@@ -735,7 +735,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.20.4"
+PDFMD_VERSION = "3.20.5"
 import argparse
 import csv
 import filecmp
@@ -1873,7 +1873,8 @@ INSTALL_SIZES = {"emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "abou
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
                               "papersize", "fontsize"})
-PANDOC_MISSING = ("Pandoc was not found on PATH. Install it -- macOS: `brew install pandoc`; "
+PANDOC_MISSING = ("Pandoc was not found on PATH. Install it with `pdfmd --install pandoc` (no admin rights; "
+                  "`pdfmd --install full` adds Typst for PDF output), or -- macOS: `brew install pandoc`; "
                   "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
                   "-- then run `pdfmd --check-dependencies`.")
 # What this run could not render natively, by kind -> count; read by
@@ -3227,7 +3228,7 @@ def install_typst() -> bool:
               f"see https://github.com/{TYPST_REPOSITORY}/releases", file=sys.stderr)
         return False
     url, sha256 = github_release_asset(TYPST_REPOSITORY, name)
-    print(f"INSTALL  typst ({INSTALL_SIZES['typst']}): {url}" + ("" if sha256 else "  (no checksum available)"))
+    print(f"INSTALL  typst ({INSTALL_SIZES['typst']}): {url}")
     executable = "typst.exe" if name.endswith(".zip") else "typst"
     try:
         with NamedTemporaryFile(suffix=Path(name).suffix if name.endswith(".zip") else ".tar.xz",
@@ -3235,6 +3236,8 @@ def install_typst() -> bool:
             archive = Path(temporary.name)
         try:
             download_file(url, archive, sha256)
+            print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
+                  else "NOTE  no checksum was available for this download, so it could not be verified")
             target = extract_executable(archive, executable, tools_directory())
         finally:
             archive.unlink(missing_ok=True)

@@ -39,6 +39,32 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.5 — 2026-10-07
+
+Pre-edit state: commit `21ca3fa` (v3.20.4). Three small things from the local
+verification of v3.20.3.
+
+### Changed
+
+- **`pdfmd --install typst` now says whether the download was checked.** On
+  success it prints `SHA-256 verified (...)`, or a NOTE that no checksum was
+  available when GitHub's API could not be reached; before, only the absence was
+  ever mentioned, so a verified install looked the same as an unverifiable one.
+- **"Pandoc was not found" names `pdfmd --install pandoc`** (and `full`, which adds
+  Typst), so `-o file.html`, `-p`, `-e xelatex` and the rest of what still needs
+  Pandoc point at the one command that fixes it, as the other hints already did.
+
+### Not changed
+
+- The "pdf_metadata is on but pypdf is not installed" warning on built-in builds
+  was the missing `pypdf` dependency of v3.20.0 to v3.20.2, restored in v3.20.3;
+  with `pip install pdfmd-cli` it no longer appears.
+- Display math printed by the built-in inkmd renderer is centred with
+  zero-width spaces between no-break spaces (inkmd has no text alignment), so
+  text copied out of such a PDF carries runs of invisible characters.
+
+---
+
 ## v3.20.4 — 2026-10-07
 
 Pre-edit state: commit `a8bfbbf` (v3.20.3). Patch bump: a test, no behaviour change.
