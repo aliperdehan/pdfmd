@@ -39,6 +39,51 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.20.1 — 2026-10-07
+
+Pre-edit state: commit `e15ed13` (v3.20.0). Patch bump by the one-time
+numbering override above, though it adds a flag value.
+
+### Added
+
+- **`pdfmd --install pandoc | typst | full`**: the missing programs, without admin
+  rights and without a package manager.
+  - `pandoc` is `pip install pypandoc_binary` into pdfmd's own environment (the
+    wheel bundles the real Pandoc executable; about 35 MB, wheels for macOS,
+    Linux and Windows). Also `pdfmd-cli[pandoc]`.
+  - `typst` downloads Typst's release archive for this machine (Linux and macOS
+    `.tar.xz`, Windows `.zip`; x86-64 and ARM) from its GitHub release into
+    pdfmd's tools folder (`$XDG_DATA_HOME` or `~/.local/share/pdfmd/bin`;
+    `%LOCALAPPDATA%\pdfmd\bin` on Windows), checks the SHA-256 GitHub lists for
+    the asset (and refuses a file that does not match; without the API it falls
+    back to the `latest/download` link and says no checksum was available),
+    extracts only the one executable, and runs `typst --version`. Typst is not on
+    PyPI as a program (the `typst` package is Python bindings only), hence the
+    download.
+  - `full` is both. `math` and `emoji` are unchanged.
+- pdfmd appends those folders to `PATH` at start-up, **behind** the user's own:
+  a Pandoc or Typst already installed always wins. `--check-dependencies` lists
+  the folders in use.
+- The offer after a lossy native build now says "install Pandoc and Typst now"
+  and does it, instead of printing commands.
+
+### Changed
+
+- The "install Pandoc and Typst" hints name `pdfmd --install full` first, then the
+  system package manager.
+
+### Verified here, and not
+
+`--install pandoc` was run against the real PyPI in a clean virtualenv: the
+installed Pandoc was found by `--check-dependencies`, built HTML, and left the
+PDF to the built-in renderer (no engine). The Typst path is tested with a faked
+release (archive types, executable bit, checksum mismatch refused, no-checksum
+fallback, `.part` file removed), because the sandbox could not reach GitHub:
+**the real download is not verified here**. A new CI job runs
+`pdfmd --install full` and a Typst build on Windows, macOS and Linux.
+
+---
+
 ## v3.20.0 — 2026-10-07
 
 Pre-edit state: commit `91b6a39` (v3.19.8). Minor bump: a new capability, and

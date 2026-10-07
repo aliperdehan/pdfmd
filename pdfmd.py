@@ -735,13 +735,18 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.20.0"
+PDFMD_VERSION = "3.20.1"
 import argparse
 import csv
 import filecmp
 import hashlib
 import importlib.metadata
 import importlib.util
+import json
+import platform
+import tarfile
+import urllib.request
+import zipfile
 from collections import namedtuple
 from pathlib import PurePosixPath
 from fnmatch import fnmatchcase
@@ -1813,10 +1818,15 @@ def dependency_report() -> bool:
     print(f"{'OK  ' if font else 'MISS'}  colour emoji font for inkmd"
           + (f"  ({font})" if font else "  (pdfmd --install emoji)"))
     pandoc_route = bool(pandoc and installed_engines())
+    managed = managed_tool_directories()
+    if managed:
+        print("Installed by pdfmd (used when nothing else is on PATH): "
+              + ", ".join(str(folder) for folder in managed))
     if pandoc_route:
         print("Mode: Pandoc and PDF engines (the native renderers are used only on request: -e inkmd / -e md2pdf).")
     elif available_native_engines():
-        print("Mode: native only -- no Pandoc route; plain Markdown-to-PDF still works. "
+        why = "Pandoc is installed but no PDF engine is" if pandoc else "no Pandoc"
+        print(f"Mode: native only -- {why}; plain Markdown-to-PDF still works. "
               f"For the full pipeline install Pandoc and Typst: {pandoc_install_hint()}")
     return pandoc_route or bool(available_native_engines())
 
@@ -1854,8 +1864,12 @@ NATIVE_READERS = frozenset({"markdown", "md", "gfm", "commonmark", "commonmark_x
 INSTALL_SPECS = {
     "emoji": ["inkmd>=0.5,<0.6"],
     "math": ["pymd2pdf>=0.6,<0.7", "matplotlib"],
+    "pandoc": ["pypandoc_binary"],
 }
-INSTALL_SIZES = {"emoji": "about 11 MB", "math": "about 150 MB"}
+# Kinds that are not pip packages (see install_typst), and the one that is both.
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji")
+INSTALL_SIZES = {"emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+                 "typst": "about 15 MB download", "full": "about 50 MB download"}
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
                               "papersize", "fontsize"})
@@ -3072,20 +3086,180 @@ def native_run_note(engines: list[str]) -> None:
     reason = "Pandoc was not found" if not which("pandoc") else "no PDF engine was found"
     print(f"NOTE  {reason}: building with the built-in renderer ({' / '.join(engines)}). "
           "The output is plain -- no LaTeX, preambles, filters or citation processing. "
-          "Pandoc plus Typst or TeX gives the full result: `pdfmd --check-dependencies`.")
+          "Pandoc plus Typst or TeX gives the full result: `pdfmd --install full`, or "
+          "`pdfmd --check-dependencies`.")
 
 
-def pandoc_install_hint() -> str:
+def system_install_hint() -> str:
+    """How to install Pandoc and Typst with the system's own package manager."""
     if sys.platform == "darwin":
         return "brew install pandoc typst"
     if sys.platform == "win32":
         return "winget install JohnMacFarlane.Pandoc Typst.Typst"
-    return ("sudo apt install pandoc   (or your package manager), plus a typst binary from "
+    return ("sudo apt install pandoc (or your package manager), plus Typst from "
             "https://github.com/typst/typst/releases")
 
 
+def pandoc_install_hint() -> str:
+    """How to get Pandoc and Typst: pdfmd's own installer first, then the system way."""
+    return f"`pdfmd --install full` (no admin rights needed), or {system_install_hint()}"
+
+
+def data_root() -> Path:
+    """Where pdfmd keeps tools it installs itself (a sibling of cache_root())."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "pdfmd"
+
+
+def tools_directory() -> Path:
+    return data_root() / "bin"
+
+
+def bundled_pandoc_directory() -> Path | None:
+    """The folder of the Pandoc that `pip install pypandoc_binary` brings, if any."""
+    try:
+        spec = importlib.util.find_spec("pypandoc")
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin:
+        return None
+    folder = Path(spec.origin).parent / "files"
+    return folder if any((folder / name).is_file() for name in ("pandoc", "pandoc.exe")) else None
+
+
+def managed_tool_directories() -> list[Path]:
+    return [folder for folder in (tools_directory(), bundled_pandoc_directory())
+            if folder is not None and folder.is_dir()]
+
+
+def use_managed_tools() -> None:
+    """Make the tools `pdfmd --install` put in place findable, behind whatever the
+    user has on PATH (a system Pandoc or Typst always wins over ours)."""
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    extra = [str(folder) for folder in managed_tool_directories() if str(folder) not in entries]
+    if extra:
+        os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), *extra]).strip(os.pathsep)
+
+
+TYPST_REPOSITORY = "typst/typst"
+TYPST_TARGETS = {
+    ("linux", "x86_64"): "x86_64-unknown-linux-musl", ("linux", "aarch64"): "aarch64-unknown-linux-musl",
+    ("darwin", "x86_64"): "x86_64-apple-darwin", ("darwin", "aarch64"): "aarch64-apple-darwin",
+    ("windows", "x86_64"): "x86_64-pc-windows-msvc", ("windows", "aarch64"): "aarch64-pc-windows-msvc",
+}
+
+
+def typst_asset_name(system: str | None = None, machine: str | None = None) -> str | None:
+    """The file name of Typst's release archive for this machine, or None."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    target = TYPST_TARGETS.get((system, machine))
+    if target is None:
+        return None
+    return f"typst-{target}.zip" if system == "windows" else f"typst-{target}.tar.xz"
+
+
+def github_release_asset(repository: str, name: str) -> tuple[str, str | None]:
+    """(download URL, SHA-256 or None) of a release asset of the latest release.
+    GitHub lists a digest for each asset; without the API (offline, rate limit)
+    the stable `latest/download` link is used and nothing can be checked."""
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
+    if os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    try:
+        request = urllib.request.Request(f"https://api.github.com/repos/{repository}/releases/latest",
+                                         headers=headers)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            release = json.load(response)
+        for asset in release["assets"]:
+            if asset["name"] == name:
+                digest = str(asset.get("digest") or "")
+                return asset["browser_download_url"], (digest.split(":", 1)[1] if digest.startswith("sha256:") else None)
+    except (OSError, ValueError, KeyError):
+        pass
+    return f"https://github.com/{repository}/releases/latest/download/{name}", None
+
+
+def download_file(url: str, destination: Path, sha256: str | None) -> None:
+    """Download url to destination, refusing a file whose SHA-256 is not the expected one."""
+    request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
+    digest = hashlib.sha256()
+    with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as handle:
+        for chunk in iter(lambda: response.read(1 << 20), b""):
+            digest.update(chunk)
+            handle.write(chunk)
+    if sha256 and digest.hexdigest() != sha256.lower():
+        destination.unlink(missing_ok=True)
+        raise OSError(f"SHA-256 mismatch for {url}: expected {sha256}, got {digest.hexdigest()}")
+
+
+def extract_executable(archive: Path, wanted: str, destination: Path) -> Path:
+    """Write the one file called ``wanted`` out of a .zip / .tar.xz into ``destination``."""
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as bundle:
+            member = next((name for name in bundle.namelist() if PurePosixPath(name).name == wanted), None)
+            data = bundle.read(member) if member else None
+    else:
+        with tarfile.open(archive) as bundle:
+            found = next((item for item in bundle.getmembers()
+                          if item.isfile() and PurePosixPath(item.name).name == wanted), None)
+            data = bundle.extractfile(found).read() if found else None
+    if data is None:
+        raise OSError(f"{wanted} is not in {archive.name}")
+    destination.mkdir(parents=True, exist_ok=True)
+    target = destination / wanted
+    temporary = target.with_name(target.name + ".part")
+    temporary.write_bytes(data)
+    temporary.chmod(0o755)
+    temporary.replace(target)
+    return target
+
+
+def install_typst() -> bool:
+    """Download Typst's release binary for this machine into tools_directory()."""
+    name = typst_asset_name()
+    if name is None:
+        print(f"No Typst release is listed for {platform.system()} {platform.machine()}; "
+              f"see https://github.com/{TYPST_REPOSITORY}/releases", file=sys.stderr)
+        return False
+    url, sha256 = github_release_asset(TYPST_REPOSITORY, name)
+    print(f"INSTALL  typst ({INSTALL_SIZES['typst']}): {url}" + ("" if sha256 else "  (no checksum available)"))
+    executable = "typst.exe" if name.endswith(".zip") else "typst"
+    try:
+        with NamedTemporaryFile(suffix=Path(name).suffix if name.endswith(".zip") else ".tar.xz",
+                                delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            download_file(url, archive, sha256)
+            target = extract_executable(archive, executable, tools_directory())
+        finally:
+            archive.unlink(missing_ok=True)
+    except (OSError, tarfile.TarError, zipfile.BadZipFile, ImportError) as error:
+        print(f"Could not install Typst ({error}). Install it yourself: {system_install_hint()}",
+              file=sys.stderr)
+        return False
+    use_managed_tools()
+    version = subprocess.run([str(target), "--version"], capture_output=True, text=True)
+    if version.returncode != 0:
+        print(f"Typst was downloaded to {target} but does not run here: {version.stderr.strip()}",
+              file=sys.stderr)
+        return False
+    print(f"Installed {version.stdout.strip()} in {tools_directory()} "
+          "(used when no other Typst is on PATH; delete the file to remove it).")
+    return True
+
+
 def install_extra(kind: str) -> bool:
-    """pip-install an optional piece into the Python environment pdfmd runs from."""
+    """Install an optional piece: pip packages into the Python environment pdfmd runs
+    from (math, emoji, pandoc), or Typst's own binary into pdfmd's tools folder."""
+    if kind == "full":
+        return install_extra("pandoc") and install_extra("typst")
+    if kind == "typst":
+        return install_typst()
     if kind == "math" and sys.version_info < (3, 11):
         print("pymd2pdf needs Python 3.11 or newer; this is "
               f"{sys.version.split()[0]}. Install pdfmd with a newer Python (pipx install pdfmd-cli).",
@@ -3101,6 +3275,12 @@ def install_extra(kind: str) -> bool:
     if completed.returncode != 0:
         print(f'pip failed. Install by hand: pip install "pdfmd-cli[{kind}]"', file=sys.stderr)
         return False
+    if kind == "pandoc":
+        importlib.invalidate_caches()
+        use_managed_tools()
+        found = which("pandoc")
+        print(f"Installed Pandoc ({found or 'not found on PATH yet'}); "
+              "used when no other Pandoc is on PATH.")
     return True
 
 
@@ -3124,7 +3304,9 @@ def offer_native_upgrade() -> None:
         options.append(("math", f"install md2pdf with math now ({INSTALL_SIZES['math']})"))
     if "emoji" in NATIVE_LOST and inkmd_emoji_font() is None:
         options.append(("emoji", f"install the colour emoji font ({INSTALL_SIZES['emoji']})"))
-    options.append(("pandoc", "show how to install Pandoc and Typst (full-quality route)"))
+    if not (which("pandoc") and installed_engines()):
+        options.append(("full", f"install Pandoc and Typst now ({INSTALL_SIZES['full']}, into pdfmd's own "
+                                "folders, no admin rights) for the full-quality route"))
     options.append(("never", "continue as is and don't ask again"))
     print(f"\nThe native renderer could not render: {lost}.")
     for number, (_, label) in enumerate(options, 1):
@@ -3137,11 +3319,9 @@ def offer_native_upgrade() -> None:
     if not answer.isdigit() or not 1 <= int(answer) <= len(options):
         return
     choice = options[int(answer) - 1][0]
-    if choice in INSTALL_SPECS:
+    if choice in INSTALL_KINDS:
         if install_extra(choice):
             print("Installed. Run pdfmd again to use it.")
-    elif choice == "pandoc":
-        print(f"Install Pandoc and Typst: {pandoc_install_hint()}")
     else:
         try:
             native_prompt_state().parent.mkdir(parents=True, exist_ok=True)
@@ -8953,11 +9133,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
                              "is actually reStructuredText: --from rst")
-    parser.add_argument("--install", choices=sorted(INSTALL_SPECS), metavar="KIND",
-                        help="pip-install an optional piece into pdfmd's own Python environment: "
-                             "'math' (md2pdf with offline math, about 150 MB, Python 3.11+) or 'emoji' "
-                             "(colour emoji font for the built-in inkmd renderer, about 11 MB). "
-                             "The same as `pip install \"pdfmd-cli[KIND]\"`")
+    parser.add_argument("--install", choices=INSTALL_KINDS, metavar="KIND",
+                        help="install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
+                             "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
+                             "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
+                             "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
+                             "Python 3.11+) or 'emoji' (colour emoji font for the built-in inkmd renderer, "
+                             "about 11 MB). pandoc/math/emoji equal `pip install \"pdfmd-cli[KIND]\"`. "
+                             "A Pandoc or Typst already on PATH always wins over the installed ones")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -9220,6 +9403,7 @@ def run_watch(source: Path, argv: list[str]) -> None:
 
 def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
+    use_managed_tools()
     if args.debug:
         args.verbose = True
     global SHOW_FULL_PATHS

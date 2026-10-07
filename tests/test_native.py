@@ -10,7 +10,10 @@ a change in upstream's output to look at). PDFMD_GOLDEN=update rewrites them.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
+import json
 import os
 import subprocess
 import sys
@@ -374,6 +377,159 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
             result = self.run_pdfmd("--check-dependencies", cwd=directory)
             self.assertEqual(result.returncode, 0)
             self.assertIn("Mode: native only", result.stdout)
+
+
+class InstallToolsTests(unittest.TestCase):
+    """`pdfmd --install pandoc|typst|full`, with the network and pip faked."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        patcher = mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(root / "data"),
+                                               "LOCALAPPDATA": str(root / "data")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        quiet = contextlib.ExitStack()
+        quiet.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        quiet.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        self.addCleanup(quiet.close)
+
+    def archive(self, name: str) -> bytes:
+        import tarfile
+        import zipfile
+        buffer = io.BytesIO()
+        script = b"#!/bin/sh\necho typst 9.9.9\n"
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(buffer, "w") as bundle:
+                bundle.writestr("typst-x/typst.exe", script)
+                bundle.writestr("typst-x/LICENSE", b"x")
+        else:
+            with tarfile.open(fileobj=buffer, mode="w:xz") as bundle:
+                for member, payload in (("typst-x/typst", script), ("typst-x/LICENSE", b"x")):
+                    info = tarfile.TarInfo(member)
+                    info.size = len(payload)
+                    bundle.addfile(info, io.BytesIO(payload))
+        return buffer.getvalue()
+
+    def fake_download(self, payload: bytes):
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        return mock.patch.object(pdfmd.urllib.request, "urlopen", lambda *a, **k: Response(payload))
+
+    def install(self, name: str, sha256: str | None):
+        payload = self.archive(name)
+        digest = hashlib.sha256(payload).hexdigest() if sha256 == "good" else sha256
+        version = subprocess.CompletedProcess([], 0, stdout="typst 9.9.9\n", stderr="")
+        with mock.patch.object(pdfmd, "typst_asset_name", lambda: name), \
+                mock.patch.object(pdfmd, "github_release_asset", lambda repo, asset: ("https://example.invalid/" + asset, digest)), \
+                mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: version), \
+                self.fake_download(payload):
+            return pdfmd.install_typst()
+
+    def test_asset_names_per_platform(self):
+        names = {("Linux", "x86_64"): "typst-x86_64-unknown-linux-musl.tar.xz",
+                 ("Linux", "aarch64"): "typst-aarch64-unknown-linux-musl.tar.xz",
+                 ("Darwin", "arm64"): "typst-aarch64-apple-darwin.tar.xz",
+                 ("Darwin", "x86_64"): "typst-x86_64-apple-darwin.tar.xz",
+                 ("Windows", "AMD64"): "typst-x86_64-pc-windows-msvc.zip",
+                 ("Windows", "ARM64"): "typst-aarch64-pc-windows-msvc.zip",
+                 ("Linux", "riscv64"): None, ("FreeBSD", "x86_64"): None}
+        for (system, machine), expected in names.items():
+            self.assertEqual(pdfmd.typst_asset_name(system, machine), expected, (system, machine))
+
+    def test_typst_install_from_tar_and_zip(self):
+        for name, executable in (("typst-x86_64-unknown-linux-musl.tar.xz", "typst"),
+                                 ("typst-x86_64-pc-windows-msvc.zip", "typst.exe")):
+            with self.subTest(name):
+                self.assertTrue(self.install(name, "good"))
+                installed = pdfmd.tools_directory() / executable
+                self.assertTrue(installed.is_file())
+                self.assertEqual(installed.read_bytes(), b"#!/bin/sh\necho typst 9.9.9\n")
+                if sys.platform != "win32":
+                    self.assertTrue(os.access(installed, os.X_OK))
+                self.assertFalse(list(pdfmd.tools_directory().glob("*.part")))
+                installed.unlink()
+
+    def test_a_wrong_checksum_installs_nothing(self):
+        self.assertFalse(self.install("typst-x86_64-unknown-linux-musl.tar.xz", "0" * 64))
+        self.assertFalse(pdfmd.tools_directory().exists() and list(pdfmd.tools_directory().iterdir()))
+
+    def test_works_without_a_checksum(self):
+        self.assertTrue(self.install("typst-x86_64-unknown-linux-musl.tar.xz", None))
+
+    def test_release_lookup_falls_back_to_the_latest_download_link(self):
+        def offline(*args, **kwargs):
+            raise OSError("no network")
+
+        with mock.patch.object(pdfmd.urllib.request, "urlopen", offline):
+            url, digest = pdfmd.github_release_asset("typst/typst", "typst-x.tar.xz")
+        self.assertEqual(url, "https://github.com/typst/typst/releases/latest/download/typst-x.tar.xz")
+        self.assertIsNone(digest)
+
+    def test_release_lookup_reads_the_digest(self):
+        release = json.dumps({"assets": [{"name": "typst-x.tar.xz", "browser_download_url": "https://e/x",
+                                          "digest": "sha256:abc123"}]}).encode()
+
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        with mock.patch.object(pdfmd.urllib.request, "urlopen", lambda *a, **k: Response(release)):
+            self.assertEqual(pdfmd.github_release_asset("typst/typst", "typst-x.tar.xz"), ("https://e/x", "abc123"))
+
+    def test_managed_tools_come_after_the_users_own_path(self):
+        folder = pdfmd.tools_directory()
+        folder.mkdir(parents=True)
+        with mock.patch.dict(os.environ, {"PATH": os.pathsep.join(["/first", "/second"])}):
+            pdfmd.use_managed_tools()
+            pdfmd.use_managed_tools()
+            entries = os.environ["PATH"].split(os.pathsep)
+        self.assertEqual(entries[:2], ["/first", "/second"])
+        self.assertEqual(entries.count(str(folder)), 1)
+
+    def test_bundled_pandoc_is_found_through_pypandoc(self):
+        root = Path(self.directory.name) / "site"
+        (root / "pypandoc" / "files").mkdir(parents=True)
+        (root / "pypandoc" / "__init__.py").write_text("")
+        (root / "pypandoc" / "files" / "pandoc").write_text("")
+        (root / "pypandoc" / "files" / "pandoc.exe").write_text("")
+        sys.path.insert(0, str(root))
+        try:
+            importlib_invalidate = __import__("importlib").invalidate_caches
+            importlib_invalidate()
+            sys.modules.pop("pypandoc", None)
+            self.assertEqual(pdfmd.bundled_pandoc_directory(), root / "pypandoc" / "files")
+        finally:
+            sys.path.remove(str(root))
+            sys.modules.pop("pypandoc", None)
+
+    def test_pandoc_and_full_installs(self):
+        done = subprocess.CompletedProcess([], 0)
+        with mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done) as run:
+            self.assertTrue(pdfmd.install_extra("pandoc"))
+        with mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1)):
+            self.assertFalse(pdfmd.install_extra("pandoc"))
+        calls = []
+        with mock.patch.object(pdfmd, "install_extra", wraps=pdfmd.install_extra) as wrapped, \
+                mock.patch.object(pdfmd, "install_typst", lambda: calls.append("typst") or True), \
+                mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done):
+            self.assertTrue(pdfmd.install_extra("full"))
+        self.assertEqual(calls, ["typst"])
+        self.assertEqual([call.args[0] for call in wrapped.call_args_list], ["full", "pandoc", "typst"])
+
+    def test_every_install_kind_is_known(self):
+        for kind in pdfmd.INSTALL_KINDS:
+            self.assertIn(kind, pdfmd.INSTALL_SIZES)
+        self.assertEqual(set(pdfmd.INSTALL_SPECS), {"emoji", "math", "pandoc"})
 
 
 @unittest.skipUnless(pdfmd.md2pdf_available(), "pymd2pdf is not installed (pdfmd --install math)")

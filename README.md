@@ -60,7 +60,9 @@ install git+https://github.com/aliperdehan/pdfmd`.)
 
 For the full pipeline, `pdfmd` drives programs that pip can't install, so you
 also need (without them it still makes a plain PDF; see
-[No Pandoc?](#no-pandoc-the-built-in-fallback) below):
+[No Pandoc?](#no-pandoc-the-built-in-fallback) below). The quickest way, with no
+admin rights, is `pdfmd --install full`, which puts Pandoc and Typst in pdfmd's own
+folders; the system installers below do the same job:
 
 - **[Pandoc](https://pandoc.org/installing.html)**
 - **at least one PDF engine**. [Typst](https://typst.app) is the quickest
@@ -158,6 +160,13 @@ OK    notes.md
   Footnotes, bookmarks and syntax-highlighted code come with it.
 - `pdfmd --install emoji` (`pdfmd-cli[emoji]`, about 11 MB) adds the colour
   emoji font; without it emoji print as `[rocket]`-style labels.
+- `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
+  real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
+  / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about
+  15 MB, also `--install typst`, checked against the SHA-256 GitHub lists) into
+  pdfmd's own folders (`~/.local/share/pdfmd/bin`, `%LOCALAPPDATA%\pdfmd\bin`),
+  with no admin rights. A Pandoc or Typst already on your PATH always wins; to
+  remove them, `pip uninstall pypandoc_binary` and delete the `typst` file.
 
 Every input is treated as GitHub-flavoured Markdown. Pandoc-only syntax is
 converted where possible (`\newpage` and `<!-- pagebreak -->` become a page
@@ -168,8 +177,8 @@ and removed otherwise (heading and image attributes, `:::` divs, raw LaTeX,
 front matter become a title block and the PDF's own title and author; other
 front-matter keys (`documentclass`, `header-includes`, `pdfmd-options`) are
 listed as not used. There are no filters, preambles, citations, slides, parts or
-report mode, and only Markdown input: for any of those, install Pandoc and Typst
-(`brew install pandoc typst`, `winget install JohnMacFarlane.Pandoc Typst.Typst`).
+report mode, and only Markdown input: for any of those, `pdfmd --install full`
+(or `brew install pandoc typst`, `winget install JohnMacFarlane.Pandoc Typst.Typst`).
 
 The built-in renderer is chosen automatically only when there is no Pandoc
 route; a Pandoc build that fails never falls back to it. Ask for it with

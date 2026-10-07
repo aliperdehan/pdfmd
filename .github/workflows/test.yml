@@ -88,3 +88,39 @@ jobs:
         with:
           name: native-pdfs-${{ matrix.os }}-${{ matrix.python }}
           path: native-*.pdf
+
+  # v3.20.1: `pdfmd --install full` (Pandoc from PyPI, Typst from its GitHub
+  # release) really works on each system, and what it installs builds a PDF.
+  install-tools:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: pdfmd --install full
+      - run: pdfmd --check-dependencies
+      - name: The installed Typst runs, and builds a PDF through Pandoc
+        run: |
+          python - <<'EOF'
+          import shutil, subprocess, sys
+          import pdfmd
+          pdfmd.use_managed_tools()
+          folder = pdfmd.tools_directory()
+          found = [p for p in folder.iterdir() if p.stem == "typst"]
+          assert found, f"no typst in {folder}"
+          print(subprocess.run([str(found[0]), "--version"], capture_output=True, text=True, check=True).stdout)
+          EOF
+          cd examples
+          pdfmd lecture -e typst
+
