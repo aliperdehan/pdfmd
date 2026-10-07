@@ -421,6 +421,44 @@ package by batchocr's `md` extra and is never part of pdfmd. The command name
 name; this one installs as `pdfmd-cli` (and `pdfmd`), so if two are installed use
 `pdfmd-cli` to be sure which one runs.
 
+### Bookmarks, header and footer, linked files
+
+Ideas from [mdpdf](https://github.com/normanlorrain/mdpdf) (MIT), done on the
+finished PDF with pypdf, so they work with every engine. All off unless you ask:
+
+```sh
+pdfmd report.md --bookmarks                    # PDF bookmarks from the headings, if the engine made none
+pdfmd report.md --header "{title},,{date}" --footer ",Page {page} of {pages},{header}"
+pdfmd report.md --attach-links                 # the local files the text links to travel inside the PDF
+pdfmd report.md --pdf-author "A. Writer" --pdf-keywords "kinetics, rate"  --paper letter
+```
+
+A template is `left,middle,right`; `{page} {pages} {header} {date} {title}` are
+filled in per page (`{header}` is the current top-level heading; write `\,` for a
+comma inside a field). The text is Helvetica, so letters outside Latin-1 become
+their base letter or `?`. `--attach-links` stores each linked file as
+`linked/PATH` and puts a paperclip in the margin beside the link.
+
+### Other command names: `mdpdf` and `inkmd`
+
+pdfmd also installs `mdpdf` and `inkmd` commands that take those tools' own keys
+and do what they did, with pdfmd behind them:
+
+```sh
+mdpdf -o out.pdf -f ",,{page}" -a "Name" -p A4 chapter1.md chapter2.md
+inkmd notes.md -o notes.pdf --page-size a4 --family times
+cat notes.md | inkmd > notes.pdf            # standard input and output, like inkmd
+inkmd notes.md -e lualatex                   # naming another engine uses it instead
+```
+
+`mdpdf` turns bookmarks and attached links on and combines several inputs into one
+PDF. `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
+when you give `-o -`, or no `-o` while output is piped (at a terminal it writes
+`notes.pdf` beside the file instead). The default page is pdfmd's, not Letter: pass
+`-p letter` / `--page-size letter`. If the original `mdpdf` or `inkmd` package is
+installed too, whichever was installed last owns the command name; both accept the
+original's keys.
+
 ### Slides
 
 ```sh

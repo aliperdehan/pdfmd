@@ -1,8 +1,8 @@
 # pdfmd
 
 Converts Markdown (and other Pandoc-readable formats) to PDF or another
-output format via Pandoc. Started as a one-line `pandoc file.md -o
-file.pdf` wrapper; has since grown auto-discovery for metadata files,
+output format via Pandoc. Started as `batchmd`, a twenty-line `pypandoc`
+batch script (see the changelog's v0.1.0); has since grown auto-discovery for metadata files,
 LaTeX preambles, Lua filters, and fonts, a multi-engine PDF fallback chain,
 a `pdfmd-options:` front-matter block, batch/report/book modes, and its
 own generic table-width-balancing Lua filter (`TABLE_WIDTH_LUA_FILTER`) —

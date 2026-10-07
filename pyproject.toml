@@ -47,6 +47,10 @@ pdfmd = "pdfmd:main"
 # The same command under the package's own name: `pdfmd` is also the name of an unrelated
 # PDF-to-Markdown tool, and `pdfmd-cli` is never ambiguous when both are installed.
 pdfmd-cli = "pdfmd:main"
+# mdpdf's own command line (-o -h -f -t -s -a -k -p), answered by pdfmd; see mdpdf_translate.
+mdpdf = "pdfmd:mdpdf_main"
+# inkmd's own command line, answered by pdfmd with its built-in renderer; see inkmd_main.
+inkmd = "pdfmd:inkmd_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]

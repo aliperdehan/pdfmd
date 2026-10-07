@@ -469,6 +469,28 @@ PDF as (html, docx, ...) are refused. The exit status is batchocr's.
 package, never bundled) from the tagged GitHub release into the Python pdfmd runs
 from; `--check-dependencies` reports batchocr, Tesseract and Poppler.
 
+Finishing touches on the built PDF (v3.22.9, ideas from mdpdf), all with pypdf, so
+they work with every engine and are off unless asked for: --bookmarks adds PDF
+bookmarks from the Markdown headings when the engine made none (headings are
+found again in the PDF's own text, in order; a contents page is not mistaken for
+the chapters); --header/--footer "LEFT,MIDDLE,RIGHT" print a running header and
+footer in Helvetica, with {page} {pages} {header} (the current top-level heading;
+{heading} is the same) {date} {title} (a comma inside a field is written \\,;
+characters Helvetica cannot draw are reduced to their base letter or `?`);
+--attach-links attaches the local files the document links to
+(`linked/PATH`) with a paperclip in the margin beside the link; --pdf-title,
+--pdf-subject, --pdf-author and --pdf-keywords set the PDF's properties without
+touching the document; --paper SIZE is `-V papersize=SIZE` and also sets the
+built-in renderers' page. The built-in renderer's own options are flags too:
+--family helvetica|times, --no-autolinks, --no-html, --allow-unsafe-urls,
+--allow-remote-images, --emoji-fallback name|drop. Two more commands answer to
+the keys of the tools these came from: `mdpdf` (mdpdf's -o -h -f -t -s -a -k -p
+and long names, with bookmarks and attached links on, several inputs combined into
+one PDF) and `inkmd` (inkmd's -o, --page-size and the flags above, `-e inkmd`
+unless an engine is named; it reads standard input when no file is given and writes
+the PDF to standard output for `-o -`, or when standard output is not a terminal
+and no -o is given). Their page-size default is pdfmd's own, not Letter.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
@@ -936,10 +958,11 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.22.8"
+PDFMD_VERSION = "3.22.9"
 import argparse
 import csv
 import filecmp
+from glob import glob as expand_glob
 import contextlib
 import hashlib
 import importlib.metadata
@@ -3104,7 +3127,7 @@ def ignored_front_matter_keys(metadata: dict) -> list[str]:
 
 
 def native_paper(metadata: dict) -> str:
-    value = scalar_text(metadata.get("papersize")).casefold().replace("paper", "")
+    value = (PAPER_CLI or scalar_text(metadata.get("papersize"))).casefold().replace("paper", "")
     return value if value in PAPER_SIZES else "a4"
 
 
@@ -3209,6 +3232,7 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         size = native_font_size(source.metadata)
         if size:
             options["font_size"] = size
+        options.update(INKMD_CLI)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             data = ink.compile(source.text, **options)
@@ -10655,25 +10679,29 @@ def resolve_bibliography_pruning(md_path: Path, metadata_files: list[Path]) -> b
     return str(value).strip().casefold() not in {"all", "false", "no", "off", "whole", "full"}
 
 
+def add_deflated_attachment(writer: "pypdf.PdfWriter", name: str, data: bytes):
+    """Embed ``data`` as ``name`` and return its stream; deflated, as any other stream in the PDF."""
+    from pypdf.generic import DictionaryObject, NameObject, NumberObject
+    embedded = writer.add_attachment(name, data)._embedded_file
+    if len(data) > 256:
+        embedded.set_data(zlib.compress(data, 9))
+        embedded[NameObject("/Filter")] = NameObject("/FlateDecode")
+        embedded[NameObject("/Params")] = DictionaryObject({NameObject("/Size"): NumberObject(len(data))})
+    return embedded
+
+
 def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
     """Add ``files`` to ``pdf_path`` as attachments, in place (written beside it,
     then moved over it, so a failure leaves the PDF as it was)."""
-    from pypdf.generic import DictionaryObject, NameObject, NumberObject
     pypdf_logger = logging.getLogger("pypdf")
     previous_level = pypdf_logger.level
     pypdf_logger.setLevel(logging.ERROR)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            reader = pypdf.PdfReader(pdf_path)
-            writer = pypdf.PdfWriter()
-            writer.append(reader)
+            writer = pypdf.PdfWriter(clone_from=pdf_path)      # the whole document: properties, bookmarks, files
             for name, data in files.items():
-                embedded = writer.add_attachment(name, data)._embedded_file
-                if len(data) > 256:                  # deflated, as any other stream in the PDF
-                    embedded.set_data(zlib.compress(data, 9))
-                    embedded[NameObject("/Filter")] = NameObject("/FlateDecode")
-                    embedded[NameObject("/Params")] = DictionaryObject({NameObject("/Size"): NumberObject(len(data))})
+                add_deflated_attachment(writer, name, data)
             with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
                 writer.write(temporary)
                 temporary_path = Path(temporary.name)
@@ -11494,6 +11522,451 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
 
 
 
+# --- Finishing the built PDF: bookmarks, running header/footer, linked files ----------------
+# Ideas from mdpdf (MIT, github.com/normanlorrain/mdpdf): a small Markdown-to-PDF tool whose own
+# renderer needs PyMuPDF (AGPL), which pdfmd does not use. The ideas are done here on the finished
+# PDF with pypdf, so they work with every engine: headings become PDF bookmarks (when the engine
+# made none), a "left,middle,right" template prints a running header and footer, and local files
+# the document links to are attached to the PDF with a paperclip in the margin beside the link. All of it is
+# off unless asked for (`--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title` ...),
+# except under the `mdpdf` command, which asks for bookmarks and attachments like mdpdf does.
+
+POLISH_CLI: dict = {}                       # filled in by main() from the command line
+PAPER_CLI: str | None = None                # --paper, also used by the native renderers
+INKMD_CLI: dict = {}                        # inkmd's own compile options, from the command line
+HF_FIELDS = ("page", "pages", "header", "heading", "date", "title")
+HF_FONT, HF_SIZE, HF_MARGIN = "Helvetica", 9.0, 36.0
+LINKED_FILE_LIMIT = 25 * 1024 * 1024
+POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
+
+
+def parse_hf_template(text: str) -> tuple[str, str, str]:
+    """``"left,middle,right"`` (a comma inside a field is written ``\\,``)."""
+    parts = re.split(r"(?<!\\),", text)
+    if len(parts) != 3:
+        raise ValueError(f"header/footer template {text!r} needs three comma-separated fields "
+                         "(left,middle,right); write \\, for a comma inside one")
+    left, middle, right = (part.replace("\\,", ",") for part in parts)
+    return left, middle, right
+
+
+def fill_hf_field(template: str, values: dict[str, str]) -> str:
+    return re.sub(r"\{(" + "|".join(HF_FIELDS) + r")\}", lambda match: values[match.group(1)], template)
+
+
+def markdown_headings(texts: list[str]) -> list[tuple[int, str]]:
+    """(level, plain text) of the ATX and setext headings in Markdown ``texts``, in order, leaving out
+    front matter, fenced code and HTML comments."""
+    found: list[tuple[int, str]] = []
+    for text in texts:
+        text = re.sub(r"\A---\n.*?\n(?:---|\.\.\.)[ \t]*\n", "", text.lstrip("﻿"), count=1, flags=re.S)
+        text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+        lines = text.splitlines()
+        fence = ""
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+            opener = re.match(r"(`{3,}|~{3,})", stripped)
+            if fence:
+                if opener and opener.group(1)[0] == fence[0] and len(opener.group(1)) >= len(fence):
+                    fence = ""
+                continue
+            if opener:
+                fence = opener.group(1)
+                continue
+            level, title = 0, ""
+            atx = re.match(r"\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$", line)
+            if atx:
+                level, title = len(atx.group(1)), atx.group(2)
+            elif (index and re.fullmatch(r"\s{0,3}(=+|-+)\s*", line) and stripped
+                  and lines[index - 1].strip() and not re.match(r"\s*(#|[-*+>]\s|\d+[.)]\s|\|)", lines[index - 1])
+                  and (index == 1 or not lines[index - 2].strip())):
+                level, title = (1 if stripped[0] == "=" else 2), lines[index - 1].strip()
+            if level:
+                title = re.sub(r"\s*\{[^{}]*\}\s*$", "", title)                      # {#id .unnumbered}
+                title = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", title)             # links, images
+                title = re.sub(r"[*`]|(?<!\w)_|_(?!\w)|\\(?=\W)", "", title).strip()
+                if title:
+                    found.append((level, title))
+    return found
+
+
+def search_form(text: str) -> str:
+    """Text as compared when finding a heading on a page: ligatures and case undone, punctuation gone."""
+    return " ".join(re.sub(r"[\W_]+", " ", unicodedata.normalize("NFKC", text).casefold()).split())
+
+
+def locate_headings(headings: list[tuple[int, str]], page_texts: list[str]) -> list[tuple[int, int, str]]:
+    """(page index, level, text) for the headings found in the PDF's own text, in document order. Each
+    heading is looked for from the page of the previous one onward; a page that lists most of the
+    headings (a table of contents) is only used when a heading is nowhere else."""
+    pages = [search_form(text) for text in page_texts]
+    forms = [search_form(title) for _, title in headings]
+    contents = set()
+    if len(headings) >= 4:
+        for number, page in enumerate(pages):
+            if sum(1 for form in forms if form and form in page) >= max(4, int(0.6 * len(headings))):
+                contents.add(number)
+    located, start = [], 0
+    for (level, title), form in zip(headings, forms):
+        if not form:
+            continue
+        for allowed in (False, True):
+            hit = next((number for number in range(start, len(pages))
+                        if form in pages[number] and (allowed or number not in contents)), None)
+            if hit is not None:
+                located.append((hit, level, title))
+                start = hit
+                break
+    return located
+
+
+def outline_entries(reader: "pypdf.PdfReader") -> list[tuple[int, int, str]]:
+    """(page index, depth, title) of the PDF's existing bookmarks, flattened."""
+    entries: list[tuple[int, int, str]] = []
+
+    def walk(items, depth: int) -> None:
+        for item in items:
+            if isinstance(item, list):
+                walk(item, depth + 1)
+                continue
+            try:
+                entries.append((reader.get_destination_page_number(item), depth + 1, str(item.title)))
+            except Exception:  # noqa: BLE001 -- a bookmark pointing nowhere
+                continue
+
+    walk(reader.outline, 0)
+    return entries
+
+
+def hf_text(value: str) -> str:
+    """``value`` as far as Helvetica (WinAnsi) can draw it: accents are dropped, other letters become ``?``."""
+    from pdfmd_inkmd.fonts import to_winansi_byte
+    out = []
+    for char in value:
+        if to_winansi_byte(ord(char)) != ord("?") or char == "?":
+            out.append(char)
+            continue
+        base = "".join(part for part in unicodedata.normalize("NFKD", char) if not unicodedata.combining(part))
+        out.append(base if base and all(to_winansi_byte(ord(part)) != ord("?") for part in base) else "?")
+    return "".join(out)
+
+
+def hf_overlay(page: "pypdf.PageObject", values: dict[str, str],
+               top: str | None, bottom: str | None) -> "pypdf.PageObject":
+    """A transparent page carrying the header and footer text for one page."""
+    from pdfmd_inkmd.fonts import text_width, to_winansi_byte
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    box = page.cropbox
+    width, height = float(box.width), float(box.height)
+    left, bottom_edge = float(box.left), float(box.bottom)
+    overlay = pypdf.PageObject.create_blank_page(None, left + width, bottom_edge + height)
+    commands = ["0.25 g"]
+    for row, template in (("top", top), ("bottom", bottom)):
+        if not template:
+            continue
+        y = bottom_edge + (height - 24.0 if row == "top" else 20.0)
+        for slot, field in zip(("left", "middle", "right"), parse_hf_template(template)):
+            text = hf_text(fill_hf_field(field, values))
+            if not text:
+                continue
+            size = text_width(text, HF_FONT, HF_SIZE)
+            x = {"left": left + HF_MARGIN, "middle": left + (width - size) / 2,
+                 "right": left + width - HF_MARGIN - size}[slot]
+            encoded = bytes(to_winansi_byte(ord(char)) for char in text if ord(char) != 0xAD)
+            literal = encoded.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
+            commands.append(f"BT /PdfmdHF {HF_SIZE:g} Tf {x:.2f} {y:.2f} Td ({literal.decode('latin-1')}) Tj ET")
+    stream = DecodedStreamObject()
+    stream.set_data("\n".join(commands).encode("latin-1"))
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"),
+                             NameObject("/BaseFont"): NameObject("/Helvetica"),
+                             NameObject("/Encoding"): NameObject("/WinAnsiEncoding")})
+    overlay[NameObject("/Contents")] = stream
+    overlay[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/PdfmdHF"): font})})
+    return overlay
+
+
+def local_file_of_link(annotation, folder: Path) -> Path | None:
+    """The existing local file a link annotation points at, or None (web links, anchors, missing files)."""
+    action = annotation.get("/A")
+    action = action.get_object() if action is not None else None
+    if not action:
+        return None
+    target = action.get("/URI") if action.get("/S") == "/URI" else action.get("/F")
+    if isinstance(target, dict):                       # a file specification
+        target = target.get("/UF") or target.get("/F")
+    if not isinstance(target, str) or not target.strip() or target.startswith("#"):
+        return None
+    target = urllib.parse.unquote(target.split("#", 1)[0].split("?", 1)[0])
+    if re.match(r"[A-Za-z][A-Za-z0-9+.\-]+:", target) and not re.match(r"[A-Za-z]:[\\/]", target):
+        if not target.lower().startswith("file:"):
+            return None
+        target = urllib.parse.urlparse(target).path
+    path = Path(target)
+    path = path if path.is_absolute() else folder / path
+    try:
+        return path.resolve() if path.is_file() else None
+    except OSError:
+        return None
+
+
+def polish_wanted() -> bool:
+    options = POLISH_CLI
+    return bool(options.get("header") or options.get("footer") or options.get("bookmarks")
+                or options.get("attach_links") or options.get("info"))
+
+
+def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> None:
+    """Apply the requested finishing touches to the built ``pdf_path``; a failure leaves the PDF as it was."""
+    options = POLISH_CLI
+    if not polish_wanted() or pypdf is None or not pdf_path.is_file():
+        return
+    from pypdf.generic import (ArrayObject, DictionaryObject, FloatObject, NameObject, NumberObject,
+                               TextStringObject)
+    pypdf_logger = logging.getLogger("pypdf")
+    previous_level = pypdf_logger.level
+    pypdf_logger.setLevel(logging.ERROR)
+    done: list[str] = []
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            reader = pypdf.PdfReader(pdf_path)
+            writer = pypdf.PdfWriter(clone_from=reader)
+            count = len(writer.pages)
+            header_template, footer_template = options.get("header"), options.get("footer")
+            for template in (header_template, footer_template):
+                if template:
+                    parse_hf_template(template)
+            existing = outline_entries(reader)
+            wants_headings = bool(options.get("bookmarks") and not existing) or any(
+                template and re.search(r"\{(header|heading)\}", template) for template in (header_template, footer_template))
+            titles: list[tuple[int, int, str]] = existing
+            if wants_headings and not existing:
+                texts = []
+                for source in sources:
+                    try:
+                        texts.append(source.read_text(encoding="utf-8-sig"))
+                    except (OSError, UnicodeDecodeError):
+                        continue
+                page_texts = [(page.extract_text() or "") for page in reader.pages]
+                titles = locate_headings(markdown_headings(texts), page_texts)
+                if options.get("bookmarks") and titles:
+                    stack: list[tuple[int, object]] = []
+                    for number, level, title in titles:
+                        while stack and stack[-1][0] >= level:
+                            stack.pop()
+                        item = writer.add_outline_item(title, number, parent=stack[-1][1] if stack else None)
+                        stack.append((level, item))
+                    writer.page_mode = "/UseOutlines"
+                    done.append(f"{len(titles)} bookmarks")
+            elif options.get("bookmarks") and existing:
+                done.append(f"{len(existing)} bookmarks already there")
+            if header_template or footer_template:
+                top_level = min((level for _, level, _ in titles), default=1)
+                today = datetime.now().date().isoformat()
+                document_title = str((reader.metadata or {}).get("/Title") or options.get("info", {}).get("/Title") or "")
+                skipped_rotation = False
+                for number, page in enumerate(writer.pages):
+                    if page.get("/Rotate", 0) not in (0, None):
+                        skipped_rotation = True
+                        continue
+                    current = [title for index, level, title in titles if index <= number and level == top_level]
+                    values = {"page": str(number + 1), "pages": str(count), "date": today,
+                              "header": current[-1] if current else "", "heading": current[-1] if current else "",
+                              "title": document_title}
+                    page.merge_page(hf_overlay(page, values, header_template, footer_template))
+                if skipped_rotation:
+                    print("WARN  header/footer: rotated pages were left without them", file=sys.stderr)
+                done.append("header/footer")
+            if options.get("attach_links"):
+                folder = sources[0].resolve().parent if sources else pdf_path.resolve().parent
+                added: dict[Path, object] = {}
+                names: set[str] = set()
+                for page in writer.pages:
+                    kept = ArrayObject()
+                    for reference in page.get("/Annots") or []:
+                        annotation = reference.get_object()
+                        target = local_file_of_link(annotation, folder) if annotation.get("/Subtype") == "/Link" else None
+                        if target is None or target == pdf_path.resolve():
+                            kept.append(reference)
+                            continue
+                        if target.stat().st_size > LINKED_FILE_LIMIT:
+                            print(f"WARN  not attached (over 25 MB): {display_path(target)}", file=sys.stderr)
+                            kept.append(reference)
+                            continue
+                        if target not in added:
+                            try:
+                                name = "linked/" + target.relative_to(folder).as_posix()
+                            except ValueError:
+                                name = "linked/" + target.name
+                            while name in names:
+                                name += "_"
+                            names.add(name)
+                            embedded = add_deflated_attachment(writer, name, target.read_bytes())
+                            filespec = writer._add_object(DictionaryObject({
+                                NameObject("/Type"): NameObject("/Filespec"), NameObject("/F"): TextStringObject(name),
+                                NameObject("/UF"): TextStringObject(name),
+                                NameObject("/EF"): DictionaryObject({NameObject("/F"): embedded.indirect_reference})}))
+                            added[target] = (filespec, name)
+                        filespec, name = added[target]
+                        x0, y0, x1, y1 = (float(value) for value in annotation["/Rect"])
+                        clip_x = float(page.cropbox.right) - 24.0     # in the margin, level with the link
+                        kept.append(writer._add_object(DictionaryObject({
+                            NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/FileAttachment"),
+                            NameObject("/Rect"): ArrayObject([FloatObject(clip_x), FloatObject(max(y0, y1) - 12),
+                                                              FloatObject(clip_x + 12), FloatObject(max(y0, y1))]),
+                            NameObject("/FS"): filespec, NameObject("/Name"): NameObject("/Paperclip"),
+                            NameObject("/Contents"): TextStringObject(name), NameObject("/F"): NumberObject(4)})))
+                    if len(kept) != len(page.get("/Annots") or []) or kept:
+                        page[NameObject("/Annots")] = kept
+                if added:
+                    done.append(f"{len(added)} linked file" + ("s" if len(added) != 1 else "") + " attached")
+            if options.get("info"):
+                writer.add_metadata(dict(options["info"]))
+                done.append("properties")
+            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
+                writer.write(temporary)
+                temporary_path = Path(temporary.name)
+        temporary_path.replace(pdf_path)
+        if done:
+            print(f"PDF   {display_path(pdf_path)}: " + ", ".join(done))
+    except ValueError as error:
+        print(f"ERROR {error}", file=sys.stderr)
+    except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
+        print(f"WARN  could not finish the PDF ({type(error).__name__}: {error}); it is left as built",
+              file=sys.stderr)
+    finally:
+        pypdf_logger.setLevel(previous_level)
+
+
+MDPDF_KEYS = {"-o": "--out", "--output": "--out", "-h": "--header", "--header": "--header",
+              "-f": "--footer", "--footer": "--footer", "-t": "--pdf-title", "--title": "--pdf-title",
+              "-s": "--pdf-subject", "--subject": "--pdf-subject", "-a": "--pdf-author",
+              "--author": "--pdf-author", "-k": "--pdf-keywords", "--keywords": "--pdf-keywords",
+              "-p": "--paper", "--paper": "--paper"}
+
+
+def mdpdf_translate(argv: list[str]) -> list[str]:
+    """The ``mdpdf`` command's own keys (``-o -h -f -t -s -a -k -p`` and their long forms) as pdfmd options,
+    plus what mdpdf always does: bookmarks and attached linked files. Anything else is a pdfmd option as
+    usual. Wildcards in the inputs are expanded here, as mdpdf does, for shells that do not, and several
+    Markdown inputs are combined into one PDF (``--report``), as mdpdf does."""
+    out, rest, literal, documents = ["--bookmarks", "--attach-links"], list(argv), False, 0
+    while rest:
+        token = rest.pop(0)
+        if literal or token == "-" or not token.startswith("-"):
+            matches = sorted(expand_glob(token)) if re.search(r"[*?\[]", token) else []
+            out += matches or [token]
+            documents += sum(1 for name in (matches or [token])
+                             if Path(name).suffix.lower() in (".md", ".markdown") and Path(name).is_file())
+            continue
+        if token == "--":
+            literal = True
+            continue
+        if token.startswith("--"):
+            key, equals, value = token.partition("=")
+        else:
+            key, equals, value = token[:2], "", token[2:]
+        if key not in MDPDF_KEYS:
+            out.append(token)
+            continue
+        if not (equals or value):
+            if not rest:
+                out.append(MDPDF_KEYS[key])           # missing value: let the parser complain
+                continue
+            value = rest.pop(0)
+        out += [MDPDF_KEYS[key], value.casefold() if key in ("-p", "--paper") else value]
+    if documents > 1 and "--report" not in out and "-r" not in out:
+        out.append("--report")                      # several inputs make one PDF, as in mdpdf
+    return out
+
+
+def mdpdf_main() -> None:
+    """Entry point of the ``mdpdf`` command: pdfmd, answering to mdpdf's keys."""
+    sys.argv[1:] = mdpdf_translate(sys.argv[1:])
+    main()
+
+
+INKMD_KEYS = {"-o": "--out", "--output": "--out", "--page-size": "--paper"}
+
+
+def inkmd_translate(argv: list[str]) -> list[str]:
+    """The ``inkmd`` command's keys as pdfmd options: ``-o/--output`` and ``--page-size`` are renamed,
+    ``--family --no-autolinks --no-html --allow-unsafe-urls --allow-remote-images --emoji-fallback`` are
+    pdfmd's own, and ``-e inkmd`` is added unless an engine was named. Everything stays where it was."""
+    out, rest = [], list(argv)
+    while rest:
+        token = rest.pop(0)
+        key, equals, value = (token.partition("=") if token.startswith("--") else (token[:2], "", token[2:]))
+        if not token.startswith("-") or key not in INKMD_KEYS:
+            out.append(token)
+            continue
+        if not (equals or value):
+            if not rest:
+                out.append(INKMD_KEYS[key])                   # missing value: let the parser complain
+                continue
+            value = rest.pop(0)
+        out += [INKMD_KEYS[key], value.casefold() if key == "--page-size" else value]
+    if not any(token == "--engine" or token.startswith("--engine=") or (token.startswith("-e") and not token.startswith("--"))
+               for token in out):
+        out = ["-e", "inkmd", *out]
+    return out
+
+
+def inkmd_main() -> None:
+    """Entry point of the ``inkmd`` command: pdfmd with the built-in renderer unless another engine is named,
+    answering to inkmd's keys. Like inkmd it reads standard input when no file is given and writes the PDF to
+    standard output when ``-o -`` is given, or when no ``-o`` is given and standard output is not a terminal;
+    otherwise (a file and no ``-o`` at a terminal) it is pdfmd: ``name.pdf`` beside the input."""
+    options = inkmd_translate(sys.argv[1:])
+    if any(token in ("--version", "--help", "-h") for token in options):
+        sys.argv[1:] = options
+        main()
+        return
+    named, _ = build_parser().parse_known_args(options)
+    output = str(named.out) if named.out is not None else None
+    stdin = not named.path or [str(path) for path in named.path] == ["-"]
+    if output == "-":                                       # the pair `--out -`
+        at = options.index("--out")
+        options = options[:at] + options[at + 2:]
+    if stdin:
+        options = [token for token in options if token != "-"]
+    to_stdout = output == "-" or (output is None and (stdin or not sys.stdout.isatty()))
+    if stdin and sys.stdin.isatty() and output is None and sys.stdout.isatty():
+        raise SystemExit("inkmd: give a file to read, or -o FILE (standard input and output are both terminals)")
+    with tempfile.TemporaryDirectory(prefix="inkmd-") as scratch:
+        made = Path(scratch) / "out.pdf"
+        arguments = list(options)
+        temporary_input = None
+        if stdin:
+            try:                                  # beside the cwd so relative image paths resolve, as in inkmd
+                handle = NamedTemporaryFile("wb", suffix=".md", prefix=".inkmd-stdin-", dir=Path.cwd(), delete=False)
+            except OSError:
+                handle = NamedTemporaryFile("wb", suffix=".md", dir=scratch, delete=False)
+            with handle:
+                handle.write(sys.stdin.buffer.read())
+            temporary_input = Path(handle.name)
+            arguments.append(str(temporary_input))
+        if to_stdout:
+            arguments += ["--out", str(made), "--no-stamp"]
+        sys.argv[1:] = arguments
+        code = 0
+        try:
+            with contextlib.redirect_stdout(sys.stderr) if to_stdout else contextlib.nullcontext():
+                main()
+        except SystemExit as stop:
+            code = stop.code if isinstance(stop.code, int) else (0 if stop.code is None else 1)
+            if stop.code is not None and not isinstance(stop.code, int):
+                print(stop.code, file=sys.stderr)
+        finally:
+            if temporary_input is not None:
+                temporary_input.unlink(missing_ok=True)
+        if code == 0 and to_stdout and made.is_file():
+            sys.stdout.buffer.write(made.read_bytes())
+            sys.stdout.buffer.flush()
+        raise SystemExit(code)
+
+
 def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
@@ -11535,6 +12008,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                           else ([metadata_file] if metadata_file else []))
         for backed_up in [md_path, *(extra_inputs or [])]:
             backup_after_success(backed_up, metadata_files, backup, verbose, backup_format)
+        if target_format == "pdf" and source_override is None and not partial:
+            polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
+                       [md_path, *(extra_inputs or [])], verbose)
         if (target_format == "pdf" and source_override is None and not partial
                 and md_path.suffix.lower() in (".md", ".markdown")
                 and resolve_attach(md_path, metadata_files)):
@@ -11773,6 +12249,34 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.bundle-packages")
     parser.add_argument("--no-bundle", dest="bundle", action="store_const", const="off",
                         help="attach no files beside the source, even where a document's pdfmd-options.bundle asks")
+    parser.add_argument("--bookmarks", action="store_true",
+                        help="add PDF bookmarks from the Markdown headings when the engine made none "
+                             "(ideas from mdpdf; always on under the `mdpdf` command)")
+    parser.add_argument("--header", default=None, metavar="LEFT,MIDDLE,RIGHT",
+                        help="running header printed on every page; fields may use {page} {pages} {header} "
+                             "{date} {title}; write \\, for a comma inside a field")
+    parser.add_argument("--footer", default=None, metavar="LEFT,MIDDLE,RIGHT",
+                        help="running footer, same fields as --header")
+    parser.add_argument("--attach-links", action="store_true",
+                        help="attach the local files the document links to, with a paperclip in the margin beside the link")
+    parser.add_argument("--paper", default=None, metavar="SIZE",
+                        help="paper size (a4, letter ...); same as -V papersize=SIZE, and applies to the "
+                             "native renderers too")
+    parser.add_argument("--family", choices=("helvetica", "times"), default=None,
+                        help="font family of the built-in renderer (inkmd)")
+    parser.add_argument("--no-autolinks", action="store_true",
+                        help="built-in renderer: do not turn bare URLs and e-mail addresses into links")
+    parser.add_argument("--no-html", action="store_true",
+                        help="built-in renderer: show HTML as literal text instead of rendering the safe subset")
+    parser.add_argument("--allow-unsafe-urls", action="store_true",
+                        help="built-in renderer: allow javascript:, data:, file: links (trusted Markdown only)")
+    parser.add_argument("--allow-remote-images", action="store_true",
+                        help="built-in renderer: fetch http(s) images while building")
+    parser.add_argument("--emoji-fallback", choices=("name", "drop"), default=None,
+                        help="built-in renderer: an emoji its font lacks becomes a [name] label or is dropped")
+    for name in ("title", "subject", "author", "keywords"):
+        parser.add_argument(f"--pdf-{name}", default=None, metavar="TEXT",
+                            help=f"set the PDF's {name} property (the document itself is unchanged)")
     parser.add_argument("--extract", action="store_true",
                         help="a PDF input that carries its own pdfmd source is restored by default; "
                              "--extract reads its pages instead (through batchocr), as any other PDF is")
@@ -12123,6 +12627,20 @@ def main() -> None:
     BIB_ATTACH_CLI = args.attach_bibliography
     ATTACH_CLI = args.attach_source
     BUNDLE_CLI = args.bundle
+    global PAPER_CLI
+    PAPER_CLI = args.paper
+    INKMD_CLI.clear()
+    for flag, key, value in (("family", "family", args.family), ("no_autolinks", "autolinks", False),
+                             ("no_html", "html", False), ("allow_unsafe_urls", "safe", False),
+                             ("allow_remote_images", "allow_remote_images", True),
+                             ("emoji_fallback", "emoji_fallback", args.emoji_fallback)):
+        if getattr(args, flag) not in (None, False):
+            INKMD_CLI[key] = value
+    POLISH_CLI.clear()
+    POLISH_CLI.update(header=args.header, footer=args.footer, bookmarks=args.bookmarks,
+                      attach_links=args.attach_links,
+                      info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
+                            for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
         raise SystemExit(restore_from_pdf(args.restore, args.out.resolve() if args.out else None,
                                           args.list_only))
@@ -12183,6 +12701,8 @@ def main() -> None:
         except FileNotFoundError as error:
             raise SystemExit(str(error))
     variables = DEFAULT_VARS + args.variable
+    if args.paper and not any(variable.startswith("papersize") for variable in args.variable):
+        variables = variables + [f"papersize={args.paper}"]
     stamp_overrides: dict = {}
     if args.stamp:
         stamp_overrides["enabled"] = True
@@ -12686,6 +13206,8 @@ def main() -> None:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                     output, args.verbose, report_output=output)
                 backup_after_success(file, metadata_files, args.backup, args.verbose, args.backup_format)
+            if target_format == "pdf":
+                polish_pdf(output, list(files), args.verbose)
             if target_format == "pdf" and resolve_attach(files[0], metadata_files):
                 attach_source_after_success(
                     files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
