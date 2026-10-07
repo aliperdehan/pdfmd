@@ -709,9 +709,11 @@ pdfmd before it is kept, and each package keeps its licence beside it (all SIL O
 except DejaVu's own free licence). The list: STIX Two (pdfmd's default main font),
 JetBrains Mono (its default code font), Noto Serif, Amiri and Noto Naskh Arabic,
 Hebrew, Armenian, Georgian, the Indic and Southeast Asian scripts, Syriac,
-Thaana, Cherokee, symbols, Noto Serif for Chinese (simplified/traditional),
-Japanese and Korean (one weight each, bold is synthesised), DejaVu, and colour
-emoji. When a document needs a script no installed font has, the warning names
+Thaana, Cherokee, Oriya, Mongolian, Coptic, Gothic, Runic, Tifinagh, N'Ko,
+Canadian syllabics, Urdu Nastaliq (used for `lang: ur`), sans-serif Indic faces,
+symbols, Noto Serif for Chinese (simplified/traditional), Japanese and Korean (one
+weight each, bold is synthesised) and the Noto Sans CJK ones (`cjk-sans`), DejaVu,
+and colour emoji. When a document needs a script no installed font has, the warning names
 the package to install. `pdfmd --uninstall fonts:NAME` removes some.
 
 It stays out of the way of a document that has set up its own fonts per

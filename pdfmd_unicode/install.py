@@ -24,10 +24,12 @@ from .scripts import SCRIPT_NAMES
 MANIFEST = "manifest.json"
 CORE = ("stix", "jetbrains-mono", "noto-serif", "symbols")
 CJK = ("cjk-sc", "cjk-tc", "cjk-jp", "cjk-kr")
+CJK_SANS = tuple(key for key in sorted(PACKAGES) if key.startswith("cjk-sans-"))
 GROUPS = {
     "core": CORE,
-    "scripts": tuple(key for key in sorted(PACKAGES) if key not in CORE + CJK + ("emoji", "dejavu")),
+    "scripts": tuple(key for key in sorted(PACKAGES) if key not in CORE + CJK + CJK_SANS + ("emoji", "dejavu")),
     "cjk": CJK,
+    "cjk-sans": CJK_SANS,
     "all": tuple(sorted(PACKAGES)),
 }
 ALIASES = {
@@ -35,7 +37,7 @@ ALIASES = {
     "russian": ("noto-serif",), "stix-two": ("stix",), "mono": ("jetbrains-mono",), "jetbrains": ("jetbrains-mono",),
     "chinese": ("cjk-sc", "cjk-tc"), "zh": ("cjk-sc",), "zh-cn": ("cjk-sc",), "zh-hans": ("cjk-sc",),
     "zh-tw": ("cjk-tc",), "zh-hant": ("cjk-tc",), "japanese": ("cjk-jp",), "ja": ("cjk-jp",),
-    "korean": ("cjk-kr",), "ko": ("cjk-kr",), "persian": ("arabic",), "urdu": ("arabic",),
+    "korean": ("cjk-kr",), "ko": ("cjk-kr",), "persian": ("arabic",), "urdu": ("arabic", "nastaliq"),
     "arabic-script": ("arabic",), "devanagari-script": ("devanagari",), "hindi": ("devanagari",),
     "amiri": ("arabic",), "noto": ("noto-serif", "symbols"), "emojis": ("emoji",), "math": ("symbols",),
 }
@@ -95,9 +97,13 @@ def table(directory: Path) -> str:
         package = PACKAGES[key]
         state = "installed" if key in have else "-"
         lines.append(f"  {key:15} {megabytes(package['size']):>8}  {state:9} {package['title']}")
+    def size(group: str) -> str:
+        return megabytes(sum(PACKAGES[key]["size"] for key in GROUPS[group]))
+
     lines += ["",
-              "Groups: core (" + " ".join(CORE) + "), scripts (every other alphabet, about 10 MB), "
-              "cjk (all four, about 34 MB), all.",
+              "Groups: core (" + " ".join(CORE) + f", {size('core')}), scripts (every other alphabet, "
+              f"{size('scripts')}), cjk (the four serif CJK fonts, {size('cjk')}), cjk-sans ({size('cjk-sans')}), "
+              f"all ({size('all')}).",
               "Install: pdfmd --install fonts:arabic,cjk-sc    Remove: delete the folder, or "
               "pdfmd --uninstall fonts:arabic",
               "Fonts are used automatically: for other scripts in a document (see 'Other scripts'), and "

@@ -38,6 +38,17 @@ PACKAGES = {
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Regular.ttf', 'name': 'NotoSerifBengali-Regular.ttf', 'size': 324020, 'git_sha1': 'f396fbfa34dcfe4177cd1c5864ce56f4e658fe72'},
         ),
     },
+    'canadian': {
+        'title': 'Canadian Aboriginal syllabics: Noto Sans Canadian Aboriginal',
+        'scripts': ('Cans',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 345728,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansCanadianAboriginal/hinted/ttf/NotoSansCanadianAboriginal-Bold.ttf', 'name': 'NotoSansCanadianAboriginal-Bold.ttf', 'size': 169356, 'git_sha1': '88aad2571775885a0a6de4ff53da4b24c43d0e0a'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansCanadianAboriginal/hinted/ttf/NotoSansCanadianAboriginal-Regular.ttf', 'name': 'NotoSansCanadianAboriginal-Regular.ttf', 'size': 176372, 'git_sha1': '6bd1eef07d6a21b61a59dcf210431b2423ab8442'},
+        ),
+    },
     'cherokee': {
         'title': 'Cherokee: Noto Sans Cherokee',
         'scripts': ('Cher',),
@@ -71,6 +82,54 @@ PACKAGES = {
             {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/KR/NotoSerifKR-Regular.otf', 'name': 'NotoSerifKR-Regular.otf', 'size': 7669020, 'git_sha1': '4e21673ae96c11b39ec2ddb446d44a86189838ef'},
         ),
     },
+    'cjk-sans-jp': {
+        'title': 'Japanese: Noto Sans JP',
+        'scripts': ('Hani', 'Hira', 'Kana'),
+        'license': 'OFL-1.1',
+        'homepage': 'https://github.com/notofonts/noto-cjk',
+        'size': 9189476,
+        'note': 'a subset of the Noto CJK fonts',
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/JP/NotoSansJP-Bold.otf', 'name': 'NotoSansJP-Bold.otf', 'size': 4656448, 'git_sha1': '40262777db707145a08795e0e62ab5956eafe4b6'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf', 'name': 'NotoSansJP-Regular.otf', 'size': 4533028, 'git_sha1': '4af556abb9cc42e585aab777b01857246a110746'},
+        ),
+    },
+    'cjk-sans-kr': {
+        'title': 'Korean: Noto Sans KR',
+        'scripts': ('Hani', 'Hang'),
+        'license': 'OFL-1.1',
+        'homepage': 'https://github.com/notofonts/noto-cjk',
+        'size': 9460792,
+        'note': 'a subset of the Noto CJK fonts',
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/KR/NotoSansKR-Bold.otf', 'name': 'NotoSansKR-Bold.otf', 'size': 4816044, 'git_sha1': '497914abec9fcf714fedebb7b893e63657d19124'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/KR/NotoSansKR-Regular.otf', 'name': 'NotoSansKR-Regular.otf', 'size': 4644748, 'git_sha1': 'b8c11425a25c74dac1b51b28341ff1ef379f2ffa'},
+        ),
+    },
+    'cjk-sans-sc': {
+        'title': 'Chinese, simplified: Noto Sans SC',
+        'scripts': ('Hani',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://github.com/notofonts/noto-cjk',
+        'size': 16874504,
+        'note': 'a subset of the Noto CJK fonts',
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/SC/NotoSansSC-Bold.otf', 'name': 'NotoSansSC-Bold.otf', 'size': 8543168, 'git_sha1': 'bcc11bc30e65b69b9e5a508c3e2138197c5543cf'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf', 'name': 'NotoSansSC-Regular.otf', 'size': 8331336, 'git_sha1': 'fc0fda9394367c16c1af7555a2ae4d5e2e6a6f02'},
+        ),
+    },
+    'cjk-sans-tc': {
+        'title': 'Chinese, traditional: Noto Sans TC',
+        'scripts': ('Hani',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://github.com/notofonts/noto-cjk',
+        'size': 11523340,
+        'note': 'a subset of the Noto CJK fonts',
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/TC/NotoSansTC-Bold.otf', 'name': 'NotoSansTC-Bold.otf', 'size': 5839972, 'git_sha1': '3a3f5ed878b786e5cea68d2c2b1c3496a22ab2c1'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/TC/NotoSansTC-Regular.otf', 'name': 'NotoSansTC-Regular.otf', 'size': 5683368, 'git_sha1': '63c3422382411b4d132644794fd432c53faa2882'},
+        ),
+    },
     'cjk-sc': {
         'title': 'Chinese, simplified: Noto Serif SC',
         'scripts': ('Hani',),
@@ -91,6 +150,16 @@ PACKAGES = {
         'note': 'a subset of the Noto CJK fonts, one weight; bold is synthesised',
         'files': (
             {'url': 'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/TC/NotoSerifTC-Regular.otf', 'name': 'NotoSerifTC-Regular.otf', 'size': 7936104, 'git_sha1': 'abc153d74de8b1f0a84818dcab6cf8be647d8bc1'},
+        ),
+    },
+    'coptic': {
+        'title': 'Coptic: Noto Sans Coptic',
+        'scripts': ('Copt',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 48948,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansCoptic/hinted/ttf/NotoSansCoptic-Regular.ttf', 'name': 'NotoSansCoptic-Regular.ttf', 'size': 48948, 'git_sha1': '95542067d8ef07e87c011e21884332cc2b3ba417'},
         ),
     },
     'dejavu': {
@@ -159,6 +228,16 @@ PACKAGES = {
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifGeorgian/hinted/ttf/NotoSerifGeorgian-Regular.ttf', 'name': 'NotoSerifGeorgian-Regular.ttf', 'size': 61956, 'git_sha1': '73951e119b82f31b7318c6e2429254e44150388a'},
         ),
     },
+    'gothic': {
+        'title': 'Gothic: Noto Sans Gothic',
+        'scripts': ('Goth',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 11824,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansGothic/hinted/ttf/NotoSansGothic-Regular.ttf', 'name': 'NotoSansGothic-Regular.ttf', 'size': 11824, 'git_sha1': 'c246e340beaed29452c999a3a105fa7258f07104'},
+        ),
+    },
     'gujarati': {
         'title': 'Gujarati: Noto Serif Gujarati',
         'scripts': ('Gujr',),
@@ -190,6 +269,33 @@ PACKAGES = {
         'files': (
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifHebrew/hinted/ttf/NotoSerifHebrew-Bold.ttf', 'name': 'NotoSerifHebrew-Bold.ttf', 'size': 31024, 'git_sha1': 'e7e059fbfbe26a582f40ee982cfe93973fb2a7ff'},
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifHebrew/hinted/ttf/NotoSerifHebrew-Regular.ttf', 'name': 'NotoSerifHebrew-Regular.ttf', 'size': 30288, 'git_sha1': 'f00721b12abcb86b0c355ea7378dbcdf14708002'},
+        ),
+    },
+    'indic-sans': {
+        'title': 'Sans-serif faces of the Indic scripts (Devanagari, Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Sinhala), for documents set in a sans font',
+        'scripts': ('Deva', 'Beng', 'Taml', 'Telu', 'Knda', 'Mlym', 'Gujr', 'Guru', 'Sinh'),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 2872276,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Bold.ttf', 'name': 'NotoSansDevanagari-Bold.ttf', 'size': 250176, 'git_sha1': '65d2fe916197eb971249446df3a49eccb3e55867'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf', 'name': 'NotoSansDevanagari-Regular.ttf', 'size': 243520, 'git_sha1': '0bf16ff63ae3d743243226baa8d01b851e6f8410'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Bold.ttf', 'name': 'NotoSansBengali-Bold.ttf', 'size': 144828, 'git_sha1': 'dc8458b418e8b7072afba759d299ab8b20afe4a4'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansBengali/hinted/ttf/NotoSansBengali-Regular.ttf', 'name': 'NotoSansBengali-Regular.ttf', 'size': 143072, 'git_sha1': 'f558175a49b61f3b894d3df1b4286771f449476a'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Bold.ttf', 'name': 'NotoSansTamil-Bold.ttf', 'size': 77176, 'git_sha1': '0fde53845a7db7499f779692ed4b8d5b80653b4f'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansTamil/hinted/ttf/NotoSansTamil-Regular.ttf', 'name': 'NotoSansTamil-Regular.ttf', 'size': 73992, 'git_sha1': '3999af8ea261a31d594adcb68a45b795fdcdc34e'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Bold.ttf', 'name': 'NotoSansTelugu-Bold.ttf', 'size': 243412, 'git_sha1': '324cf7e121e5ff7e90d5d3ac4b28bc1274a157ef'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansTelugu/hinted/ttf/NotoSansTelugu-Regular.ttf', 'name': 'NotoSansTelugu-Regular.ttf', 'size': 235176, 'git_sha1': 'd72413a7ce3cabcde8f9c1be2a2015071fd01c87'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Bold.ttf', 'name': 'NotoSansKannada-Bold.ttf', 'size': 187208, 'git_sha1': '2b5284a2febb24ab9779b32d37411a57b21bc30c'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansKannada/hinted/ttf/NotoSansKannada-Regular.ttf', 'name': 'NotoSansKannada-Regular.ttf', 'size': 182416, 'git_sha1': '68da17f1bf347f334834a0ab380e85a3650823aa'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Bold.ttf', 'name': 'NotoSansMalayalam-Bold.ttf', 'size': 118480, 'git_sha1': '7891b09bfbe33dfa17ccf65bde3b499e46a2d520'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansMalayalam/hinted/ttf/NotoSansMalayalam-Regular.ttf', 'name': 'NotoSansMalayalam-Regular.ttf', 'size': 112936, 'git_sha1': '32dc2c625e9355993fe3b5ade4ec53fca702706c'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Bold.ttf', 'name': 'NotoSansGujarati-Bold.ttf', 'size': 201032, 'git_sha1': '2d333016e14e193cf3744cf9e2846176ace503d0'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansGujarati/hinted/ttf/NotoSansGujarati-Regular.ttf', 'name': 'NotoSansGujarati-Regular.ttf', 'size': 200704, 'git_sha1': 'cf100cfab23ac0564a0aed3edca86ba2b94d2127'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Bold.ttf', 'name': 'NotoSansGurmukhi-Bold.ttf', 'size': 55088, 'git_sha1': 'b8f51300e0bd92ed285873c72073efe00a878e35'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansGurmukhi/hinted/ttf/NotoSansGurmukhi-Regular.ttf', 'name': 'NotoSansGurmukhi-Regular.ttf', 'size': 55172, 'git_sha1': '3b08955a23cbfea801efc963474e803569cebb1c'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Bold.ttf', 'name': 'NotoSansSinhala-Bold.ttf', 'size': 192976, 'git_sha1': 'c8caaf552972f893494adb3b440a727c7dd4a348'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansSinhala/hinted/ttf/NotoSansSinhala-Regular.ttf', 'name': 'NotoSansSinhala-Regular.ttf', 'size': 154912, 'git_sha1': '12c260eaf0dd70dbf2158246993a9a0bda6ac305'},
         ),
     },
     'jetbrains-mono': {
@@ -249,6 +355,16 @@ PACKAGES = {
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifMalayalam/hinted/ttf/NotoSerifMalayalam-Regular.ttf', 'name': 'NotoSerifMalayalam-Regular.ttf', 'size': 111872, 'git_sha1': 'feb046a194f66eb8bc91e9b2c7db80b60f180d80'},
         ),
     },
+    'mongolian': {
+        'title': 'Mongolian: Noto Sans Mongolian',
+        'scripts': ('Mong',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 356408,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansMongolian/hinted/ttf/NotoSansMongolian-Regular.ttf', 'name': 'NotoSansMongolian-Regular.ttf', 'size': 356408, 'git_sha1': '2aa4c6e5b57b56393b49cb748f57d0afce952f64'},
+        ),
+    },
     'myanmar': {
         'title': 'Myanmar: Noto Serif Myanmar',
         'scripts': ('Mymr',),
@@ -258,6 +374,27 @@ PACKAGES = {
         'files': (
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifMyanmar/hinted/ttf/NotoSerifMyanmar-Bold.ttf', 'name': 'NotoSerifMyanmar-Bold.ttf', 'size': 283636, 'git_sha1': 'a7cf4204c61229b80b89f02bddff3386d15d18a4'},
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifMyanmar/hinted/ttf/NotoSerifMyanmar-Regular.ttf', 'name': 'NotoSerifMyanmar-Regular.ttf', 'size': 277152, 'git_sha1': 'bd4d81964ce553a34206406d0976623a0faabffe'},
+        ),
+    },
+    'nastaliq': {
+        'title': 'Urdu Nastaliq: Noto Nastaliq Urdu (chosen for text in `lang: ur`)',
+        'scripts': ('Arab',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 508340,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoNastaliqUrdu/hinted/ttf/NotoNastaliqUrdu-Bold.ttf', 'name': 'NotoNastaliqUrdu-Bold.ttf', 'size': 254944, 'git_sha1': '49602103d1026f4894d1957bbe3cbacb9fa79871'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoNastaliqUrdu/hinted/ttf/NotoNastaliqUrdu-Regular.ttf', 'name': 'NotoNastaliqUrdu-Regular.ttf', 'size': 253396, 'git_sha1': '80653678a78a07566003e836321cd88b97c5aeec'},
+        ),
+    },
+    'nko': {
+        'title': "N'Ko: Noto Sans NKo",
+        'scripts': ('Nkoo',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 39592,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansNKo/hinted/ttf/NotoSansNKo-Regular.ttf', 'name': 'NotoSansNKo-Regular.ttf', 'size': 39592, 'git_sha1': '89e5330bd3bbbbaeca86af2cd9c77e1f1ae47bd9'},
         ),
     },
     'noto-serif': {
@@ -271,6 +408,27 @@ PACKAGES = {
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerif/hinted/ttf/NotoSerif-BoldItalic.ttf', 'name': 'NotoSerif-BoldItalic.ttf', 'size': 779236, 'git_sha1': 'f0fbb6fb9d6e5da5434cba9fc7168b12c43c3251'},
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerif/hinted/ttf/NotoSerif-Italic.ttf', 'name': 'NotoSerif-Italic.ttf', 'size': 756796, 'git_sha1': 'ee42fc10ee9c18bfb29efd8126165afaa88babb1'},
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerif/hinted/ttf/NotoSerif-Regular.ttf', 'name': 'NotoSerif-Regular.ttf', 'size': 712444, 'git_sha1': '123a8c5763e73b196167b577014aa158da0f81fa'},
+        ),
+    },
+    'oriya': {
+        'title': 'Oriya: Noto Sans Oriya',
+        'scripts': ('Orya',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 261320,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Bold.ttf', 'name': 'NotoSansOriya-Bold.ttf', 'size': 130104, 'git_sha1': '3469d19284a03750a10824b053a0738dec13a45a'},
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansOriya/hinted/ttf/NotoSansOriya-Regular.ttf', 'name': 'NotoSansOriya-Regular.ttf', 'size': 131216, 'git_sha1': 'aab55a7f3f389a931cb29593208319f240718f4a'},
+        ),
+    },
+    'runic': {
+        'title': 'Runic: Noto Sans Runic',
+        'scripts': ('Runr',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 9856,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansRunic/hinted/ttf/NotoSansRunic-Regular.ttf', 'name': 'NotoSansRunic-Regular.ttf', 'size': 9856, 'git_sha1': '565fc7cfc923bf4f3bc1565da4267deacf2ce59a'},
         ),
     },
     'sinhala': {
@@ -376,6 +534,16 @@ PACKAGES = {
         'files': (
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifTibetan/hinted/ttf/NotoSerifTibetan-Bold.ttf', 'name': 'NotoSerifTibetan-Bold.ttf', 'size': 602368, 'git_sha1': 'e2d1838ef6025016e79adbb20365dd272867f094'},
             {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSerifTibetan/hinted/ttf/NotoSerifTibetan-Regular.ttf', 'name': 'NotoSerifTibetan-Regular.ttf', 'size': 609688, 'git_sha1': 'e4015f1c3066bb11a80859237a1b74e3d943ef5a'},
+        ),
+    },
+    'tifinagh': {
+        'title': 'Tifinagh: Noto Sans Tifinagh',
+        'scripts': ('Tfng',),
+        'license': 'OFL-1.1',
+        'homepage': 'https://notofonts.github.io',
+        'size': 79376,
+        'files': (
+            {'url': 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/b966e2e80feb783346a7d3b7c14c8d6e7e1a757b/fonts/NotoSansTifinagh/hinted/ttf/NotoSansTifinagh-Regular.ttf', 'name': 'NotoSansTifinagh-Regular.ttf', 'size': 79376, 'git_sha1': 'be0f0bad24569675ca810874e25e2ad22a0205bd'},
         ),
     },
 }

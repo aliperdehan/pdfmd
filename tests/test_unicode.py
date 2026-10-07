@@ -83,6 +83,14 @@ class ScriptTable(unittest.TestCase):
         self.assertEqual(pu.script_of(ord("1")), "Zyyy")
         self.assertEqual(pu.script_of(0x378), "Zzzz")  # unassigned
 
+    def test_urdu_is_set_in_nastaliq_and_other_arabic_script_text_in_naskh(self):
+        from pdfmd_unicode.scripts import chain_for
+
+        self.assertEqual(chain_for(0x627, "Arab", "sc", "ur")[0], "Noto Nastaliq Urdu")
+        self.assertEqual(chain_for(0x627, "Arab", "sc", "ur-PK")[0], "Noto Nastaliq Urdu")
+        self.assertEqual(chain_for(0x627, "Arab", "sc", "ar")[0], "Amiri")
+        self.assertEqual(chain_for(0x627, "Arab", "sc", None)[0], "Amiri")
+
     def test_han_language(self):
         self.assertEqual(pu.han_language("命運", None), "sc")
         self.assertEqual(pu.han_language("命運", "zh-TW"), "tc")
@@ -306,6 +314,15 @@ class Installer(unittest.TestCase):
             self.assertEqual(self.install.packages_for([0x1F680]), ["emoji"])
         finally:
             self.install.PACKAGES = real
+
+    def test_groups_cover_the_catalog_without_overlap(self):
+        groups = self.install.GROUPS
+        self.assertTrue(groups["cjk-sans"])
+        every = set(self._real)
+        self.assertEqual(set(groups["all"]), every)
+        parts = [set(groups[name]) for name in ("core", "scripts", "cjk", "cjk-sans")]
+        self.assertFalse(set.intersection(parts[0], parts[1], parts[2], parts[3]))
+        self.assertEqual(set.union(*parts) | {"emoji", "dejavu"}, every)
 
     def test_the_real_catalog_is_well_formed(self):
         for key, package in self._real.items():

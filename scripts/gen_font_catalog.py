@@ -56,6 +56,20 @@ NOTO_SCRIPTS = {
     "syriac": ("Syriac: Noto Sans Syriac", ("Syrc",), ["NotoSansSyriac"]),
     "thaana": ("Thaana: Noto Sans Thaana", ("Thaa",), ["NotoSansThaana"]),
     "cherokee": ("Cherokee: Noto Sans Cherokee", ("Cher",), ["NotoSansCherokee"]),
+    "nastaliq": ("Urdu Nastaliq: Noto Nastaliq Urdu (chosen for text in `lang: ur`)", ("Arab",), ["NotoNastaliqUrdu"]),
+    "oriya": ("Oriya: Noto Sans Oriya", ("Orya",), ["NotoSansOriya"]),
+    "mongolian": ("Mongolian: Noto Sans Mongolian", ("Mong",), ["NotoSansMongolian"]),
+    "coptic": ("Coptic: Noto Sans Coptic", ("Copt",), ["NotoSansCoptic"]),
+    "gothic": ("Gothic: Noto Sans Gothic", ("Goth",), ["NotoSansGothic"]),
+    "runic": ("Runic: Noto Sans Runic", ("Runr",), ["NotoSansRunic"]),
+    "canadian": ("Canadian Aboriginal syllabics: Noto Sans Canadian Aboriginal", ("Cans",), ["NotoSansCanadianAboriginal"]),
+    "tifinagh": ("Tifinagh: Noto Sans Tifinagh", ("Tfng",), ["NotoSansTifinagh"]),
+    "nko": ("N'Ko: Noto Sans NKo", ("Nkoo",), ["NotoSansNKo"]),
+    "indic-sans": ("Sans-serif faces of the Indic scripts (Devanagari, Bengali, Tamil, Telugu, Kannada, Malayalam, "
+                   "Gujarati, Gurmukhi, Sinhala), for documents set in a sans font",
+                   ("Deva", "Beng", "Taml", "Telu", "Knda", "Mlym", "Gujr", "Guru", "Sinh"),
+                   ["NotoSansDevanagari", "NotoSansBengali", "NotoSansTamil", "NotoSansTelugu", "NotoSansKannada",
+                    "NotoSansMalayalam", "NotoSansGujarati", "NotoSansGurmukhi", "NotoSansSinhala"]),
     "symbols": ("Symbols, arrows, dingbats, mathematical alphanumerics (Noto Sans Symbols, Symbols 2, Math)",
                 ("Zyyy",), ["NotoSansSymbols", "NotoSansSymbols2", "NotoSansMath"]),
 }
@@ -145,6 +159,13 @@ def build() -> dict:
                       lambda name, language=language: name == f"NotoSerif{language}-Regular.otf"),
             homepage="https://github.com/notofonts/noto-cjk",
             note="a subset of the Noto CJK fonts, one weight; bold is synthesised")
+
+    for key, (title, scripts, language) in CJK.items():
+        add(key.replace("cjk-", "cjk-sans-"), title.replace("Serif", "Sans"), scripts,
+            raw_files(CJK_REPOSITORY, cjk, f"Sans/SubsetOTF/{language}",
+                      lambda name, language=language: name in (f"NotoSans{language}-Regular.otf",
+                                                               f"NotoSans{language}-Bold.otf")),
+            homepage="https://github.com/notofonts/noto-cjk", note="a subset of the Noto CJK fonts")
 
     stix = archive_files("https://mirrors.ctan.org/fonts/stix2-otf.zip",
                          {f"STIXTwoText-{style}.otf": f"STIXTwoText-{style}.otf"

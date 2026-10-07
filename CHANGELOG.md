@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.11 — 2026-10-08
+
+Pre-edit state: commit `b4bbc31` (v3.23.10). More fonts in the catalog.
+
+### Added
+
+- Catalog (regenerated; every file still pinned): `nastaliq` (Noto Nastaliq Urdu, chosen for text
+  in `lang: ur` and the like, the other Arabic-script languages stay in Naskh), `oriya`,
+  `mongolian`, `coptic`, `gothic`, `runic`, `canadian`, `tifinagh`, `nko`, `indic-sans` (the
+  sans-serif faces of the nine Indic scripts), and `cjk-sans-sc/tc/jp/kr` (Noto Sans CJK subsets,
+  regular and bold) with a group `cjk-sans`. `fonts:urdu` installs Naskh and Nastaliq. The group sizes
+  in `pdfmd --install fonts` are computed.
+
+---
+
 ## v3.23.10 — 2026-10-08
 
 Pre-edit state: commit `2dbf10b` (v3.23.9).

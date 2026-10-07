@@ -299,7 +299,7 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
     uncovered: dict[int, int] = {}
 
     def pick(code_point: int, extra: tuple[str, ...] = ()) -> str | None:
-        installed = [family for family in chain_for(code_point, script_of(code_point), cjk)
+        installed = [family for family in chain_for(code_point, script_of(code_point), cjk, document_language)
                      if index.covers(family, code_point)]
         # A variable font would be set at its thinnest weight; use one only if nothing else will do.
         better = [family for family in installed if index.static(family)]

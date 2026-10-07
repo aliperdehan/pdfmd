@@ -91,6 +91,7 @@ CHAINS = {
     "Syrc": ("Noto Sans Syriac", "Estrangelo Edessa"),
     "Thaa": ("Noto Sans Thaana", "MV Boli"),
     "Mong": ("Noto Sans Mongolian", "Mongolian Baiti"),
+    "Orya": ("Noto Sans Oriya", "Oriya Sangam MN", "Kalinga"),
     "Cher": ("Noto Sans Cherokee", "Plantagenet Cherokee"),
     "Copt": ("Noto Sans Coptic", "Antinoou", "New Athena Unicode"),
     "Goth": ("Noto Sans Gothic", "Segoe UI Historic"),
@@ -127,14 +128,17 @@ def han_language(text: str, document_language: str | None) -> str:
     return "sc"
 
 
-def chain_for(code_point: int, script: str, cjk: str) -> tuple[str, ...]:
-    """The families to try for a character, best first, ending in the broad fallbacks."""
+def chain_for(code_point: int, script: str, cjk: str, language: str | None = None) -> tuple[str, ...]:
+    """The families to try for a character, best first, ending in the broad fallbacks. Urdu
+    (`lang: ur`) is set in Nastaliq, the other Arabic-script languages in Naskh."""
     if script in ("Hani", "Hira", "Kana", "Hang", "Bopo", "Yiii") or (
             script in COMMON and any(low <= code_point <= high for low, high in CJK_PUNCTUATION)):
         order = [cjk] + [flavour for flavour in ("sc", "ja", "tc", "ko") if flavour != cjk]
         specific = tuple(family for flavour in order for family in CJK[flavour])
     else:
         specific = CHAINS.get(script, ())
+        if script == "Arab" and (language or "").casefold().replace("_", "-").split("-")[0] in ("ur", "ks", "sd", "pa-arab"):
+            specific = ("Noto Nastaliq Urdu", *specific)
     return (*specific, *BROAD)
 
 
