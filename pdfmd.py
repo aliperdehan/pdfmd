@@ -183,13 +183,16 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     (Arabic and Hebrew right-to-left, Han in the Chinese, Japanese or Korean
     flavour the text or its `lang:` points to, symbols and punctuation in the
     font of the text beside them). How much changes is `pdfmd-options: {fallback: MODE}`
-    (--fallback, the config file): char (default: just those characters; the
-    main font stays, whatever the document names), word (the whole word in one
-    fallback font), document (the installed font that draws most of the
-    document becomes the main font), off (nothing: Pandoc's own behaviour),
-    box (no fallback, a black box per missing character) or error (no
-    fallback, the build stops). `missing: warn | box | error` is what happens
-    to characters no installed font draws.
+    (--fallback, the config file): word (default: the whole word in one
+    fallback font, so no word mixes two fonts), char (just those characters),
+    document (the installed font that draws most of the document becomes the
+    main font), off (nothing: Pandoc's own behaviour; false is the same), box (no
+    fallback, a black box per missing character) or error (no fallback, the
+    build stops). A font the document names is only replaced in document mode;
+    pdfmd's own default (STIX Two Text) is replaced, with an AUTO MAINFONT note,
+    by a serif with the letters when the document is mostly in a script it lacks
+    (Kazakh Cyrillic). `missing: warn | box | error` is what happens to
+    characters no installed font draws.
     Characters no installed font has are listed in
     a WARN, never silently dropped or replaced. A document that sets up its
     own scripts (ucharclasses, \\newfontfamily, xeCJK, \\babelfont,
@@ -1010,7 +1013,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.7"
+PDFMD_VERSION = "3.23.8"
 import argparse
 import csv
 import filecmp
@@ -3436,13 +3439,13 @@ CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a l
 # Defaults for the `pdfmd-options:` of every document.
 options:
   # What to do about characters the main font cannot draw:
-  #   char      set just those characters in another installed font (default)
-  #   word      set the whole word in another font, so no word mixes fonts
+  #   char      set just those characters in another installed font
+  #   word      set the whole word in another font, so no word mixes fonts (default)
   #   document  use the one installed font that draws most of the document as the main font
   #   off       nothing: what Pandoc and TeX do without pdfmd (missing glyphs vanish or print boxes)
   #   box       no fallback; each missing character is drawn as a black box
   #   error     no fallback; the build fails, listing the missing characters
-  # fallback: char
+  # fallback: word
   # What to do about characters no installed font draws (after the fallback): warn, box or error.
   # missing: warn
   # pdf-engine: lualatex
@@ -4393,7 +4396,7 @@ FALLBACK_MODES = ("char", "word", "document", "off", "box", "error")
 MISSING_MODES = ("warn", "box", "error")
 FALLBACK_NAMES = {"character": "char", "per-character": "char", "run": "char", "words": "word",
                   "per-word": "word", "whole": "document", "whole-document": "document", "doc": "document",
-                  "none": "off", "no": "off", "false": "off", "true": "char", "on": "char", "yes": "char",
+                  "none": "off", "no": "off", "false": "off", "true": "word", "on": "word", "yes": "word",
                   "black-box": "box", "err": "error", "fail": "error"}
 FALLBACK_CLI: str | None = None
 MISSING_CLI: str | None = None
@@ -4416,12 +4419,12 @@ def normalise_mode(value, allowed: tuple[str, ...], aliases: dict[str, str], lab
 
 def fallback_settings(md_path: Path, metadata_files: list[Path]) -> tuple[str, str]:
     """(fallback mode, missing mode): the command line, else the document, its metadata files, the
-    config file, else char / warn. `box` and `error` as a fallback mode mean no fallback and that
+    config file, else word / warn. `box` and `error` as a fallback mode mean no fallback and that
     treatment of every missing character."""
     where = f"{md_path}: pdfmd-options"
     mode = normalise_mode(FALLBACK_CLI, FALLBACK_MODES, FALLBACK_NAMES, "--fallback", "pdfmd") or normalise_mode(
         first_pdfmd_option(md_path, metadata_files, "fallback"), FALLBACK_MODES, FALLBACK_NAMES,
-        "fallback", where) or "char"
+        "fallback", where) or "word"
     missing = normalise_mode(MISSING_CLI, MISSING_MODES, FALLBACK_NAMES, "--missing", "pdfmd") or normalise_mode(
         first_pdfmd_option(md_path, metadata_files, "missing"), MISSING_MODES, FALLBACK_NAMES,
         "missing", where) or "warn"
@@ -4433,9 +4436,12 @@ def fallback_settings(md_path: Path, metadata_files: list[Path]) -> tuple[str, s
 def mainfont_choice(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
                     cli_font: str | None, document_font: bool, mainfont_auto: bool,
                     no_auto: list[str] | None, note=None) -> str | None:
-    """The main font to pass to Pandoc (None: leave the document's own). The font is never changed
-    for a few missing characters -- that is the fallback's job -- except in `fallback: document` mode,
-    where the installed font that draws most of the document replaces it."""
+    """The main font to pass to Pandoc (None: leave the document's own). A font the document or the
+    command line names is never changed for a few missing characters -- that is the fallback's job --
+    except in `fallback: document` mode, where the installed font that draws most of the document
+    replaces it. pdfmd's own default (no font named) is changed, with an AUTO MAINFONT note, when it
+    lacks letters of the script the document is mostly written in (STIX Two Text has no Kazakh
+    Cyrillic), so the text is not set half in one font and half in another."""
     explicit = cli_font or (document_font_setting("mainfont", md_paths, metadata_files, variables)
                             if document_font else None)
     if explicit:
@@ -4446,12 +4452,21 @@ def mainfont_choice(md_paths: list[Path], metadata_files: list[Path], variables:
         return None
     module, index = unicode_module(), font_index()
     if (module is not None and index is not None and not auto_disabled(no_auto, "unicode")
-            and fallback_settings(md_paths[0], metadata_files)[0] == "document"
             and not own_script_setup(md_paths, [], variables, metadata_files)):
-        chosen = module.choose_document_font(unicode_source_text(md_paths, metadata_files), base, index)
+        mode = fallback_settings(md_paths[0], metadata_files)[0]
+        text = unicode_source_text(md_paths, metadata_files) if mode in ("document", "char", "word") else ""
+        if mode == "document":
+            chosen = module.choose_document_font(text, base, index)
+            reason = "fallback: document"
+        elif mode in ("char", "word") and not explicit:
+            chosen = module.choose_main_font(text, base, index)
+            reason = "it lacks letters of the document's own script"
+        else:
+            chosen = base
         if chosen != base:
             if note:
-                note("MAINFONT", f"{md_paths[0]}: fallback: document -- {chosen} draws more of it than {base}")
+                note("MAINFONT", f"{md_paths[0]}: {chosen} instead of {base} ({reason}; "
+                                 f"name a font with mainfont: to keep your own)")
             return chosen
     if cli_font:
         return cli_font

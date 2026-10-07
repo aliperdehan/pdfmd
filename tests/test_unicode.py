@@ -551,6 +551,38 @@ class FallbackModes(unittest.TestCase):
                 os.environ["PDFMD_CONFIG"] = saved["PDFMD_CONFIG"]
             pdfmd.load_config.cache_clear()
 
+    def test_word_is_the_default_and_false_is_off(self):
+        plain = self.root / "plain.md"
+        plain.write_text("text\n", encoding="utf-8")
+        self.assertEqual(pdfmd.fallback_settings(plain, []), ("word", "warn"))
+        for written, expected in (("false", "off"), ("no", "off"), ("off", "off"), ("none", "off"),
+                                  ("true", "word"), ("on", "word"), ("char", "char")):
+            doc = self.root / f"{written}.md"
+            doc.write_text(f"---\npdfmd-options:\n  fallback: {written}\n---\ntext\n", encoding="utf-8")
+            self.assertEqual(pdfmd.fallback_settings(doc, [])[0], expected, written)
+
+    def test_pdfmds_own_default_font_is_replaced_for_the_documents_script_with_a_note(self):
+        make_font(self.root / "weak.ttf", "STIX Two Text", [(0x20, 0x7E), (0x410, 0x44F)])
+        make_font(self.root / "noto2.ttf", "Noto Serif", [(0x20, 0x7E), (0x400, 0x4FF)])
+        index = pu.FontIndex(self.root, use_system=False)
+        doc = self.root / "kk.md"
+        doc.write_text("\u049b\u0430\u0437\u0430\u049b \u0442\u0456\u043b\u0456 " * 30 + "\n", encoding="utf-8")
+        notes: list[tuple] = []
+        saved = pdfmd._FONT_INDEX, pdfmd.preferred_font
+        pdfmd._FONT_INDEX, pdfmd.preferred_font = index, (lambda: "STIX Two Text")
+        try:
+            chosen = pdfmd.mainfont_choice([doc], [], [], None, False, True, None, lambda *a: notes.append(a))
+            self.assertEqual(chosen, "Noto Serif")
+            self.assertEqual(notes[0][0], "MAINFONT")
+            self.assertIn("instead of STIX Two Text", notes[0][1])
+            # a font the user names is never replaced (but for fallback: document), nor with the fallback off
+            self.assertEqual(pdfmd.mainfont_choice([doc], [], [], "STIX Two Text", False, True, None), "STIX Two Text")
+            pdfmd.FALLBACK_CLI = "off"
+            self.assertEqual(pdfmd.mainfont_choice([doc], [], [], None, False, True, None), "STIX Two Text")
+        finally:
+            pdfmd._FONT_INDEX, pdfmd.preferred_font = saved
+            pdfmd.FALLBACK_CLI = None
+
     def test_the_main_font_is_not_changed_for_a_few_characters(self):
         doc = self.root / "d.md"
         doc.write_text("---\nmainfont: Main Test\n---\n" + self.text + "\n", encoding="utf-8")

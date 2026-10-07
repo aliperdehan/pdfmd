@@ -620,7 +620,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
 | `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
-| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed); retried with DejaVu Serif if a glyph is missing. The main font is never changed for a few missing characters: see *Other scripts* |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
@@ -665,10 +665,10 @@ or the config file's `options:`):
 
 | `fallback:` | What happens to a character the main font lacks |
 |---|---|
-| `char` (default) | just that character is set in another installed font; your main font stays for everything else, even if the document names `DejaVu Serif` |
-| `word` | the whole word goes in one fallback font that draws all of it, so no word mixes two fonts |
+| `word` (default) | the whole word goes in one fallback font that draws all of it, so no word mixes two fonts; your main font stays for every other word, even if the document names `DejaVu Serif` |
+| `char` | just that character is set in another installed font |
 | `document` | the installed font that draws most of the document replaces the main font (the old retry-with-DejaVu idea, chosen by coverage) |
-| `off` | nothing: what Pandoc and TeX do without pdfmd (a missing glyph vanishes or prints a box, and they warn) |
+| `off` (or `false`) | nothing: what Pandoc and TeX do without pdfmd (a missing glyph vanishes or prints a box, and they warn) |
 | `box` | no fallback; each missing character is drawn as a black box, so it cannot be overlooked |
 | `error` | no fallback; the build stops, naming the missing characters |
 

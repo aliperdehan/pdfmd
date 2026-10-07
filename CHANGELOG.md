@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.8 — 2026-10-08
+
+Pre-edit state: commit `5ba014b` (v3.23.7).
+
+### Changed
+
+- **`fallback: word` is the default** (no word set half in one font and half in another).
+  `fallback: true`/`on`/`yes` mean the default; `false`/`no`/`none` mean `off`.
+- **pdfmd's own default main font is chosen by script again**, with an `AUTO MAINFONT` note (shown
+  in full with `-v`, as the `AUTO:` summary line otherwise): when no font is named and STIX Two Text
+  lacks letters of the script the document is mostly in (Kazakh Cyrillic), a serif that has them
+  all is used. A font the document or the command line names is never replaced, except by
+  `fallback: document`; `off`, `box` and `error` never choose.
+
+---
+
 ## v3.23.7 — 2026-10-08
 
 Pre-edit state: commit `a61741e` (v3.23.6). The fallback is a choice, and by default it
