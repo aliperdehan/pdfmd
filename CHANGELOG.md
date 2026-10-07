@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.10 — 2026-10-08
+
+Pre-edit state: commit `2dbf10b` (v3.23.9).
+
+### Added
+
+- **`pdfmd --check-fonts DOC`**: the fonts report without a build: the mode, the main font and why
+  it was changed, which scripts (and which code) get which fallback font, emoji, the characters no
+  installed font draws and the `--install fonts:...` that would fix it. Exit status 1 when
+  something cannot be drawn.
+
+---
+
 ## v3.23.9 — 2026-10-08
 
 Pre-edit state: commit `84deaa5` (v3.23.8). Characters in code.

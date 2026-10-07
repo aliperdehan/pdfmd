@@ -672,6 +672,11 @@ or the config file's `options:`):
 | `box` | no fallback; each missing character is drawn as a black box, so it cannot be overlooked |
 | `error` | no fallback; the build stops, naming the missing characters |
 
+`pdfmd --check-fonts doc.md` shows what would happen without building: the main font (and
+why it was changed, if it was), which scripts get which fallback font, the characters no
+installed font draws and the `--install fonts:...` that would fix it; it exits 1 when
+something can't be drawn.
+
 Code is held to the same standard: a character the monofont lacks (an arrow, a CJK
 comment) in inline code or a code block is set in a fallback font under LaTeX (a code
 block that needs one is typeset as plain verbatim, without syntax highlighting). Math is

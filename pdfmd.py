@@ -1017,7 +1017,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.9"
+PDFMD_VERSION = "3.23.10"
 import argparse
 import csv
 import filecmp
@@ -4516,6 +4516,70 @@ def managed_fonts_css(engine: str | None) -> Iterator[Path | None]:
         yield temporary_path
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) -> bool:
+    """`--check-fonts`: what the fonts would do for one document, without building it. True when
+    every character can be drawn."""
+    module, index = unicode_module(), font_index()
+    if module is None or index is None:
+        print("The fonts check is part of the pdfmd_unicode package, which is not installed here.")
+        return False
+    found = find_metadata(md_path.parent, None, document_stem=md_path.stem)
+    metadata_files = ([found] if isinstance(found, Path) else found if isinstance(found, list) else [])
+    paths = [md_path]
+    mode, missing_mode = fallback_settings(md_path, metadata_files)
+    notes: list[tuple] = []
+    document_font = has_mainfont(md_path, variables)
+    main = (mainfont_choice(paths, metadata_files, variables, None, document_font,
+                            not auto_disabled(no_auto, "mainfont"), no_auto, lambda *a: notes.append(a))
+            or document_font_setting("mainfont", paths, metadata_files, variables)
+            or preferred_font())
+    print(f"{md_path}")
+    print(f"  fallback: {mode}   missing: {missing_mode}"
+          + ("   (switched off by --no-auto unicode)" if auto_disabled(no_auto, "unicode") else ""))
+    for _kind, detail in notes:
+        print(f"  note: {detail.split(': ', 1)[-1]}")
+    face = index.regular(main)
+    print(f"  main font: {main}" + ("" if face else "   (not installed: pdfmd cannot tell what it lacks)"))
+    if face is None:
+        return False
+    if own_script_setup(paths, [], variables, metadata_files) and not unicode_forced(md_path):
+        print("  the document sets up its own fonts for other scripts; pdfmd leaves them to it")
+        return True
+    text = unicode_source_text(paths, metadata_files)
+    language = document_font_setting("lang", paths, metadata_files, variables)
+    plan = module.plan_text(text, main, index, language, fonts=mode in ("char", "word", "document"))
+    undrawn = dict(plan.uncovered)
+    for line in plan.describe():
+        print(f"  {line.replace('->', 'takes')}")
+    if not plan.choices and not plan.emoji and not plan.uncovered:
+        print(f"  every character of the text is in {main}")
+    code_text = unicode_code_text(paths)
+    if code_text.strip():
+        mono = document_font_setting("monofont", paths, metadata_files, variables) or default_monofont()
+        code = module.plan_text(code_text, mono, index, language, fonts=mode in ("char", "word", "document"))
+        if code is not None:
+            for line in code.describe():
+                print(f"  code in {mono}: {line.replace('->', 'takes')}")
+            undrawn.update(code.uncovered)
+            undrawn.update({code_point: 1 for code_point in code.emoji})
+    if plan.emoji:
+        picture = managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+        print(f"  {len(plan.emoji)} emoji character(s): LaTeX sets them as pictures from "
+              + (picture.family if picture else "a colour emoji font (not installed: pdfmd --install emoji)")
+              + "; Typst draws them itself")
+        if picture is None:
+            undrawn.update({code_point: 1 for code_point in plan.emoji})
+    if undrawn:
+        from pdfmd_unicode import install as installer
+        wanted = installer.packages_for(undrawn, language)
+        print(f"  no installed font draws: {describe_code_points(undrawn)}")
+        print("  install: " + (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
+              + f"   (until then: missing: {missing_mode})")
+        return False
+    print("  everything can be drawn")
+    return True
 
 
 def describe_code_points(code_points, limit: int = 12) -> str:
@@ -13142,6 +13206,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--missing", metavar="MODE",
                         help="what to do about characters no installed font draws: warn (default), box "
                              "(a black box each) or error")
+    parser.add_argument("--check-fonts", action="store_true",
+                        help="say which fonts a document would be set in, which characters need a fallback "
+                             "font and which no installed font draws (and what to install), without building")
     parser.add_argument("--show-config", action="store_true",
                         help="print where pdfmd's global config file is, and what it sets")
     parser.add_argument("--init-config", action="store_true",
@@ -13482,6 +13549,15 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
+    if args.check_fonts:
+        ok = True
+        for target in (args.path or [Path.cwd()]):
+            try:
+                document = find_markdown(target)
+            except FileNotFoundError as error:
+                raise SystemExit(str(error))
+            ok = check_fonts(document, args.no_auto, list(args.variable or [])) and ok
+        raise SystemExit(0 if ok else 1)
     if args.show_config or args.init_config:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.install:

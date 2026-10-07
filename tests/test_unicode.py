@@ -644,6 +644,33 @@ class CodeFallback(unittest.TestCase):
         self.assertIn("\\pdfmdbox", self.convert(plan, "`a \u2192 b`\n"))
 
 
+class CheckFonts(unittest.TestCase):
+    def test_the_report_names_fonts_and_what_is_missing(self):
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            make_font(root / "amiri.ttf", "Amiri", [(0x600, 0x6FF)])
+            doc = root / "d.md"
+            doc.write_text("---\nmainfont: Main Test\n---\nhello \u0627\u0644 and \u547d\n", encoding="utf-8")
+            pdfmd._FONT_INDEX = pu.FontIndex(root, use_system=False)
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    ok = pdfmd.check_fonts(doc, None, [])
+            finally:
+                pdfmd._FONT_INDEX = None
+                pdfmd.reset_font_caches()
+        text = out.getvalue()
+        self.assertFalse(ok)                                   # the Han character has no font
+        self.assertIn("main font: Main Test", text)
+        self.assertIn("Arabic takes Amiri", text)
+        self.assertIn("U+547D", text)
+        self.assertIn("pdfmd --install fonts:cjk-sc", text)
+
+
 class FallbackErrors(unittest.TestCase):
     def test_missing_error_stops_the_build_naming_the_characters(self):
         with tempfile.TemporaryDirectory() as directory:
