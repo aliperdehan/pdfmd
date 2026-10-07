@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.21.2 — 2026-10-07
+
+Pre-edit state: commit `2e04eee` (v3.21.1). The third step: anything with a
+`{#label}`, not only a heading.
+
+### Added
+
+- **`pdfmd doc#fig:setup` builds one labelled element.** Named by its id, with
+  the same spelling tolerance as headings: a figure (`![..](..){#fig:x}`), an
+  equation (`$$..$$ {#eq:x}`), a table (its `: caption {#tbl:x}` line and the
+  table it belongs to, the caption written below or above), a fenced
+  `::: {#id}` div (to its closing fence, with whatever is inside), a fenced code
+  block with `{#lst:x}`, a `[span]{#id}`, or the paragraph or list holding any
+  other id. `doc#section/fig:x` finds one inside a section; a short name
+  (`doc#setup`) finds `fig:setup` by its word, with a WARN.
+- Built like a section, but a lone element does not bring the text before the
+  first heading (a section does, as before), and comes out as
+  `doc.fig-setup.pdf`. The document's title page stays: a title may come from a
+  shared metadata file, so it cannot be dropped reliably.
+- `--list-parts` lists the labelled elements as well, under the heading they
+  sit in, with their kind (figure, equation, table, div, code block, paragraph).
+- In parts mode the same names work for elements inside the parts.
+- Tests build each kind of element to LaTeX and check every block against the
+  full document's LaTeX.
+
+### Not changed
+
+- An element's number restarts at 1 and its references to other elements print
+  as `??` (as for a section). External links and bare citations have nothing to
+  cut out and are not addressable; an internal link names an id, which is.
+
+---
+
 ## v3.21.1 — 2026-10-07
 
 Pre-edit state: commit `c3df55a` (v3.21.0 and a changelog tidy). The second of

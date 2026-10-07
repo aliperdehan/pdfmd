@@ -224,6 +224,10 @@ warning), and so does a `{#label}`. `doc##yield` asks for a level-2 heading,
 shows what can be named. In a document split into parts the same names work
 for headings inside the parts.
 
+Anything with a `{#label}` can be named too: `pdfmd doc#fig:setup` builds just
+that figure, `doc#eq:energy` that equation, and likewise a table, a fenced div,
+a code block or a span (the figure's number restarts at 1).
+
 ### Other output formats
 
 The format is taken from `-o`'s extension, or given explicitly with `--to`:

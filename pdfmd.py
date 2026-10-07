@@ -497,6 +497,15 @@ One section of any document (`pdfmd doc#NAME`):
         doc#a+b, a,b     several, built in document order, each once
         #name            no document name: the folder's only Markdown file
     A name that fits two headings equally well is an error that lists both.
+    Anything that carries a Pandoc `{#label}` can be named too, not only a
+    heading: a figure (`doc#fig:setup`), an equation (`$$..$$ {#eq:energy}`), a
+    table (its `: caption {#tbl:values}` line, written above or below it), a
+    fenced `::: {#note}` div, a `{#lst:code}` code block, a `[span]{#id}`, or a
+    paragraph or list with one in it. Such an element is built alone, with the
+    document's front matter (title page included) but without the text before
+    the first heading; the output is `doc.fig-setup.pdf`. A figure inside a
+    section also answers to `doc#section/fig:setup`. Its number restarts at 1
+    (`pandoc-crossref` numbers what it is given).
     `--list-parts` prints every heading and `{#id}` a document can be cut at,
     and `--section NAME` is the same as `#NAME`. The build is a partial one, as
     in parts mode: the document's front matter, settings and the text before
@@ -796,7 +805,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.21.1"
+PDFMD_VERSION = "3.21.2"
 import argparse
 import csv
 import filecmp
@@ -3935,7 +3944,7 @@ LOOKUP_TIERS = (
     ("loose", ("alias", "stem", "title"), "word"),
 )
 LOOKUP_FIELD_WORDS = {"alias": "alias", "stem": "file name", "title": "title"}
-HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text", "title": "title"}
+HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text"}
 
 
 def lookup_wording(tier: tuple, words: dict) -> str | None:
@@ -3944,7 +3953,7 @@ def lookup_wording(tier: tuple, words: dict) -> str | None:
     strength, fields, how = tier
     if strength == "strict" and how == "exact":
         return None
-    names = " or ".join(words[field] for field in fields)
+    names = " or ".join(words[field] for field in fields if field in words)
     phrase = {"exact": f"spelt differently from its {names}", "start": f"the start of its {names}",
               "word": f"the start of a word in its {names}"}[how]
     return phrase + (", spelt differently" if strength == "loose" and how != "exact" else "")
@@ -6227,7 +6236,7 @@ def select_parts_and_sections(parts: list[Path], directory: Path,
         for part in parts:
             lines = strip_part_front_matter(part.read_text(encoding="utf-8-sig")).split("\n")
             headings += [heading._replace(line=heading.line + offset, end=heading.end + offset)
-                         for heading in scan_headings(lines)]
+                         for heading in scan_items(lines)]
             spans.append((offset, part, len(lines)))
             offset += len(lines) + 1
 
@@ -6236,8 +6245,8 @@ def select_parts_and_sections(parts: list[Path], directory: Path,
 
         def describe(heading: Heading) -> str:
             start, part = home(heading)
-            return (f"{part.relative_to(directory)}, line {heading.line - start + 1}: "
-                    f"{'#' * heading.level} {heading.text}")
+            return (f"{part.relative_to(directory)}, "
+                    + describe_heading(heading._replace(line=heading.line - start)))
 
         for request, part_error in heading_requests:
             try:
@@ -6284,7 +6293,7 @@ class ScaffoldPlan:
         for part in self.selected:
             if part in self.cuts:
                 for heading in self.cuts[part]:
-                    label = section_label(heading.text)
+                    label = item_label(heading)
                     if label not in labels:
                         labels.append(label)
                 continue
@@ -6445,9 +6454,14 @@ def print_parts(plan: ScaffoldPlan) -> None:
         heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
         mark = "*" if plan.selected is not None and part in plan.selected else " "
         print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
-        for inner in scan_headings(body.split("\n"))[1:]:
-            ids = "  " + " ".join(f"{{#{identifier}}}" for identifier in inner.ids) if inner.ids else ""
-            print(f"      {'  ' * (inner.level - 1)}{'#' * inner.level} {inner.text}{ids}")
+        depth = 0
+        for inner in scan_items(body.split("\n"))[1:]:
+            depth = inner.level or depth
+            ids = " ".join(f"{{#{identifier}}}" for identifier in inner.ids)
+            if inner.level:
+                print(f"      {'  ' * (inner.level - 1)}{'#' * inner.level} {inner.text}{'  ' + ids if ids else ''}")
+            else:
+                print(f"      {'  ' * depth}{ids}  [{inner.text}]")
 
 def split_top_level_sections(body: str, level: int = 1) -> list[list[str]]:
     """Cut Markdown at its ATX headings of exactly `level` (1 = `# `). Element
@@ -6579,6 +6593,102 @@ def scan_headings(lines: list[str]) -> list[Heading]:
     return headings
 
 
+DIV_FENCE_RE = re.compile(r" {0,3}(:{3,})(.*)$")
+ATTRIBUTE_ID_RE = re.compile(r"\{[^{}]*?#([^\s{}]+)[^{}]*\}")
+TABLE_LINE_RE = re.compile(r"\s*(?:[|+].*|[-=+| :]{3,})$")
+
+
+def block_ids(text: str) -> list[str]:
+    return ATTRIBUTE_ID_RE.findall(text)
+
+
+def scan_labelled_blocks(lines: list[str], headings: list[Heading]) -> list[Heading]:
+    """The elements of a Markdown body that carry a ``{#id}`` and are not
+    headings, as Heading(level=0): a fenced div (``::: {#id}``, to its closing
+    fence), a fenced code block (``{#lst:x}`` on the fence), a table (the
+    ``: caption {#tbl:x}`` line and the table it belongs to), and any other
+    paragraph with an id in it -- a figure ``![..](..){#fig:x}``, an equation
+    ``$$..$$ {#eq:x}``, a ``[span]{#id}``. A paragraph is a run of lines up to
+    a blank one, so a labelled list item is its whole list. ``text`` names the
+    kind; ``end`` is exclusive."""
+    taken = {heading.line for heading in headings}
+    taken |= {heading.line + 1 for heading in headings
+              if heading.line + 1 < len(lines) and SETEXT_UNDERLINE_RE.match(lines[heading.line + 1])
+              and not ATX_HEADING_RE.match(lines[heading.line])}
+    found: list[Heading] = []
+    chunks: list[list] = []                      # [start, end, ids] of text runs
+    divs: list[tuple[int, int, list[str]]] = []  # open fenced divs
+    run_start: int | None = None
+    index = 0
+
+    def close_run(end: int) -> None:
+        nonlocal run_start
+        if run_start is not None:
+            ids = [identifier for line_no in range(run_start, end) if line_no not in taken
+                   for identifier in block_ids(lines[line_no])]
+            chunks.append([run_start, end, ids])
+            run_start = None
+
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        fence = re.match(r"(`{3,}|~{3,})", stripped)
+        if fence:
+            close_run(index)
+            end = next((later + 1 for later in range(index + 1, len(lines))
+                        if lines[later].strip().startswith(fence.group(1)[0] * 3)), len(lines))
+            ids = block_ids(line)
+            if ids:
+                found.append(Heading(index, 0, "code block", tuple(ids), end))
+            index = end
+            continue
+        if stripped.startswith("<!--") and "-->" not in stripped:
+            close_run(index)
+            index = next((later + 1 for later in range(index + 1, len(lines)) if "-->" in lines[later]), len(lines))
+            continue
+        div = DIV_FENCE_RE.match(line)
+        if div:
+            close_run(index)
+            if div.group(2).strip():
+                divs.append((index, len(div.group(1)), block_ids(div.group(2))))
+            elif divs:
+                start, _, ids = divs.pop()
+                if ids:
+                    found.append(Heading(start, 0, "div", tuple(ids), index + 1))
+            index += 1
+            continue
+        if not stripped:
+            close_run(index)
+        elif run_start is None:
+            run_start = index
+        index += 1
+    close_run(len(lines))
+    for position, (start, end, ids) in enumerate(chunks):
+        if not ids:
+            continue
+        kind = "equation" if "$$" in "".join(lines[start:end]) else (
+            "figure" if lines[start].lstrip().startswith("![") else "paragraph")
+        first = lines[start].lstrip()
+        if first.startswith((": ", "Table:")):
+            # A table caption: the table is the run before it, or, for a caption written
+            # above the table, the run after it.
+            before = chunks[position - 1] if position else None
+            after = chunks[position + 1] if position + 1 < len(chunks) else None
+            if before and TABLE_LINE_RE.match(lines[before[0]]):
+                start, kind = before[0], "table"
+            elif after and TABLE_LINE_RE.match(lines[after[0]]):
+                end, kind = after[1], "table"
+        found.append(Heading(start, 0, kind, tuple(ids), end))
+    return sorted(found, key=lambda item: (item.line, item.end))
+
+
+def scan_items(lines: list[str]) -> list[Heading]:
+    """Everything `#name` can name in a body: its headings (level 1-6) and its
+    labelled elements (level 0), in order."""
+    headings = scan_headings(lines)
+    return sorted(headings + scan_labelled_blocks(lines, headings), key=lambda item: (item.line, item.level == 0))
+
+
 def parse_section_request(request: str) -> tuple[int | None, list[str]]:
     """``##yield`` -> (2, ["yield"]); ``results/yield`` -> (None, ["results", "yield"])."""
     match = re.match(r"\s*(#*)(.*)$", request)
@@ -6586,7 +6696,14 @@ def parse_section_request(request: str) -> tuple[int | None, list[str]]:
 
 
 def describe_heading(heading: Heading) -> str:
+    if not heading.level:
+        return f"line {heading.line + 1}: {heading.text} {{#{heading.ids[0]}}}"
     return f"line {heading.line + 1}: {'#' * heading.level} {heading.text}"
+
+
+def item_label(item: Heading) -> str:
+    """The file-name label of a section or element."""
+    return section_label(item.text if item.level else item.ids[0])
 
 
 def find_heading(headings: list[Heading], request: str, describe=None) -> Heading:
@@ -6604,20 +6721,21 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
         last = position == len(names) - 1
         candidates = [heading for heading in pool if not last or level is None or heading.level == level]
         entries = [(heading.line, [("alias", identifier) for identifier in heading.ids]
-                    + [("stem", heading.text)]) for heading in candidates]
+                    + ([("stem", heading.text)] if heading.level else [])) for heading in candidates]
         try:
             found = rank_lookup(name, entries, lambda line: describe(by_line[line]),
                                 HEADING_FIELD_WORDS, tiers)
         except LookupAmbiguous as error:
             raise SystemExit(f"--section '{request}': {error} Add `#`s for its level, or `parent/name`.")
         if not found:
-            choices = "; ".join(f"{'#' * heading.level} {heading.text}" for heading in candidates[:12])
+            choices = "; ".join((f"{'#' * heading.level} {heading.text}" if heading.level else f"{{#{heading.ids[0]}}}")
+                                for heading in candidates[:12])
             raise NoHeadingMatches(f"--section '{request}' matches no heading"
                              + (f" at level {level}" if last and level else "")
                              + (f" under '{pool_owner.text}'" if position else "")
                              + f". Headings: {choices or 'none'}" + (" ..." if len(candidates) > 12 else ""))
         heading = by_line[found[0]]
-        announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading")
+        announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading or element")
         pool_owner = heading
         pool = [other for other in headings if heading.line < other.line < heading.end]
     return heading
@@ -6639,6 +6757,7 @@ def section_label(text: str) -> str:
                            for letter in text.casefold()))
 
 
+
 class SectionPlan:
     """A plain document cut down to some of its sections (see above)."""
 
@@ -6650,7 +6769,7 @@ class SectionPlan:
 
     @property
     def output_stem(self) -> str:
-        labels = list(dict.fromkeys(section_label(heading.text) for heading in self.selected))
+        labels = list(dict.fromkeys(item_label(item) for item in self.selected))
         return f"{self.source.stem}.{'+'.join(labels)}"
 
 
@@ -6673,14 +6792,18 @@ def section_source(source: Path, cli_no_auto: list[str] | None,
 def plan_sections(source: Path, requests: list[str], cli_no_auto: list[str] | None,
                   requested_metadata: list[str] | None) -> SectionPlan:
     head, lines, shifted = section_source(source, cli_no_auto, requested_metadata)
-    headings = scan_headings(lines)
-    if not headings:
-        raise SystemExit(f"{display_path(source)} has no headings to take a section of"
+    items = scan_items(lines)
+    if not items:
+        raise SystemExit(f"{display_path(source)} has no headings or {{#labels}} to take a section of"
                          + (" (its first `# Title` became the document's title)" if shifted else ""))
-    selected = outermost_headings([find_heading(headings, request) for request in requests])
-    lead = "\n".join(lines[:headings[0].line]).strip("\n")
-    blocks = ([lead] if lead else []) + ["\n".join(lines[heading.line:heading.end]).rstrip("\n")
-                                         for heading in selected]
+    selected = outermost_headings([find_heading(items, request) for request in requests])
+    # The text before the first heading (an abstract, a \tableofcontents) comes
+    # with a section, as in parts mode, but not with a lone figure or equation.
+    first_heading = next((item.line for item in items if item.level), len(lines))
+    with_lead = any(item.level for item in selected)
+    lead = "\n".join(lines[:first_heading]).strip("\n") if with_lead else ""
+    blocks = ([lead] if lead else []) + ["\n".join(lines[item.line:item.end]).rstrip("\n")
+                                         for item in selected if not (lead and item.end <= first_heading)]
     return SectionPlan(source, head + "\n\n".join(blocks) + "\n", shifted, selected)
 
 
@@ -6688,10 +6811,15 @@ def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metada
     """--list-parts for a document that is not in parts mode: what `#` can name."""
     _, lines, _ = section_source(source, cli_no_auto, requested_metadata)
     print(f"DOCUMENT  {display_path(source)}")
-    for heading in scan_headings(lines):
-        ids = "  " + " ".join(f"{{#{identifier}}}" for identifier in heading.ids) if heading.ids else ""
-        print(f"  {'  ' * (heading.level - 1)}{'#' * heading.level} {heading.text}{ids}"
-              f"  (lines {heading.line + 1}-{heading.end})")
+    depth = 0
+    for item in scan_items(lines):
+        depth = item.level or depth
+        ids = " ".join(f"{{#{identifier}}}" for identifier in item.ids)
+        if item.level:
+            print(f"  {'  ' * (item.level - 1)}{'#' * item.level} {item.text}{'  ' + ids if ids else ''}"
+                  f"  (lines {item.line + 1}-{item.end})")
+        else:
+            print(f"  {'  ' * depth}{ids}  [{item.text}]  (lines {item.line + 1}-{item.end})")
 
 
 def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:

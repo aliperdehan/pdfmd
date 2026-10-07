@@ -91,6 +91,111 @@ class ScanHeadings(unittest.TestCase):
                          "See the docs and this")
 
 
+ELEMENTS = """\
+---
+title: Elements
+---
+
+Lead text before everything.
+
+![A lead figure](x.png){#fig:lead}
+
+# Results
+
+Some text with a span [important]{#span:imp} inside.
+
+$$ E = mc^2 $$ {#eq:energy}
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+: Measured values {#tbl:values}
+
+Table: Caption above {#tbl:above}
+
+| c | d |
+|---|---|
+| 3 | 4 |
+
+::: {#note1 .callout}
+Callout text.
+
+![Inside the callout](y.png){#fig:inside}
+:::
+
+```{#lst:code .python}
+# not a heading
+
+print("hi")
+```
+
+## Details {#sec:details}
+
+Detail text.
+
+# Next
+
+End.
+"""
+
+
+class LabelledElements(unittest.TestCase):
+    def setUp(self):
+        self.lines = ELEMENTS.split("---\n", 2)[2].split("\n")
+        self.items = {item.ids[0]: item for item in pdfmd.scan_items(self.lines) if item.level == 0}
+
+    def text(self, identifier):
+        item = self.items[identifier]
+        return "\n".join(self.lines[item.line:item.end]).rstrip("\n")
+
+    def test_every_kind_is_found_with_its_kind(self):
+        self.assertEqual({identifier: item.text for identifier, item in self.items.items()},
+                         {"fig:lead": "figure", "span:imp": "paragraph", "eq:energy": "equation",
+                          "tbl:values": "table", "tbl:above": "table", "note1": "div",
+                          "fig:inside": "figure", "lst:code": "code block"})
+
+    def test_a_table_is_its_caption_and_the_table_whichever_side_the_caption_is(self):
+        self.assertTrue(self.text("tbl:values").startswith("| a | b |"))
+        self.assertTrue(self.text("tbl:values").endswith("{#tbl:values}"))
+        self.assertTrue(self.text("tbl:above").startswith("Table: Caption above"))
+        self.assertTrue(self.text("tbl:above").endswith("| 3 | 4 |"))
+
+    def test_a_div_runs_to_its_closing_fence_and_a_code_block_to_its_own(self):
+        self.assertTrue(self.text("note1").endswith(":::"))
+        self.assertIn("Inside the callout", self.text("note1"))
+        self.assertIn('print("hi")', self.text("lst:code"))     # a blank line inside it does not end it
+
+    def test_a_heading_with_an_id_is_a_heading_not_an_element(self):
+        self.assertNotIn("sec:details", self.items)
+
+    def test_a_hash_line_in_code_is_not_a_heading(self):
+        self.assertEqual([h.text for h in pdfmd.scan_headings(self.lines)], ["Results", "Details", "Next"])
+
+    def test_elements_are_named_by_id_and_by_a_word_of_it(self):
+        pdfmd._LOOKUP_ANNOUNCED.clear()
+        items = pdfmd.scan_items(self.lines)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(pdfmd.find_heading(items, "fig:inside").ids, ("fig:inside",))
+            self.assertEqual(pdfmd.find_heading(items, "inside").ids, ("fig:inside",))
+            self.assertEqual(pdfmd.find_heading(items, "results/eq:energy").ids, ("eq:energy",))
+            with self.assertRaises(SystemExit):
+                pdfmd.find_heading(items, "##eq:energy")   # an element has no heading level
+
+    def test_a_lone_element_comes_without_the_lead_but_a_section_with_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "doc.md"
+            source.write_text(ELEMENTS, encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                lone = pdfmd.plan_sections(source, ["fig:inside"], None, None)
+                section = pdfmd.plan_sections(source, ["details"], None, None)
+                inside_lead = pdfmd.plan_sections(source, ["fig:lead", "details"], None, None)
+        self.assertNotIn("Lead text", lone.text)
+        self.assertEqual(lone.output_stem, "doc.fig-inside")
+        self.assertIn("Lead text", section.text)
+        self.assertEqual(inside_lead.text.count("A lead figure"), 1)   # in the lead already
+
+
 class FindHeading(unittest.TestCase):
     def setUp(self):
         self.headings = headings_of(DOCUMENT.split("---\n", 2)[2])
@@ -235,6 +340,26 @@ class EndToEnd(unittest.TestCase):
                 names = re.findall(r"section\{([^}]*)\}", (self.root / "part.tex").read_text(encoding="utf-8"))
                 self.assertEqual(names, expected)
                 self.assert_blocks_of_full_build("part.tex", "full.tex", "Lead paragraph.")
+
+    def test_labelled_elements_build_and_match_the_full_document(self):
+        (self.root / "doc.md").write_text(ELEMENTS, encoding="utf-8")
+        (self.root / "x.png").write_bytes(b"")
+        (self.root / "y.png").write_bytes(b"")
+        self.assertEqual(self.pdfmd("doc", "-o", "full.tex").returncode, 0)
+        full = (self.root / "full.tex").read_text(encoding="utf-8")
+        for request, needle in (("doc#fig:inside", "Inside the callout"), ("doc#eq:energy", "mc^2"),
+                                ("doc#tbl:values", "Measured values"), ("doc#tbl:above", "Caption above"),
+                                ("doc#note1", "Callout text."), ("doc#lst:code", "print"),
+                                ("doc#results/fig:inside", "Inside the callout")):
+            with self.subTest(request=request):
+                result = self.pdfmd(request, "-o", "part.tex")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                part = (self.root / "part.tex").read_text(encoding="utf-8")
+                body = part.split("\\maketitle", 1)[1].rsplit("\\end{document}", 1)[0].strip()
+                self.assertIn(needle, body)
+                self.assertNotIn("Lead text", body)
+                for block in re.split(r"\n\n(?=\\)", body):
+                    self.assertIn(block, full)
 
     def test_the_default_output_name_never_replaces_the_document_build(self):
         (self.root / "doc.md").write_text(DOCUMENT, encoding="utf-8")
