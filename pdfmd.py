@@ -1029,7 +1029,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.13"
+PDFMD_VERSION = "3.23.14"
 import argparse
 import csv
 import filecmp
@@ -10565,6 +10565,12 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     # unrelated way. prepared_latex_inputs()'s temp files never hit this
     # because they're only ever Pandoc INPUT (--metadata-file/a title
     # source) -- Pandoc has no concept of "jobname" to derive.
+    def note(kind: str, detail: str) -> None:
+        if verbose:
+            print(f"AUTO {kind}  {detail}")
+
+    nativebib_font = mainfont_choice([md_path], metadata_files, variables, font or None, document_font,
+                                     mainfont_auto, no_auto, note)
     fd, tex_path_str = mkstemp(suffix=".tex", prefix=f"{md_path.stem}-pdfmd-nativebib-",
                                dir=md_path.parent)
     os.close(fd)
@@ -10572,7 +10578,9 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     try:
         with prepared_latex_inputs([title_source, *metadata_files], True) as prepared, \
                 document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text)) as header_file, \
-                pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file:
+                pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
+                script_fallback([md_path], metadata_files, variables, preamble_files, nativebib_font, None,
+                                no_auto, note) as (fonts_header, fonts_filter):
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), "-o", str(tex_path), "-t", "beamer" if presentation else "latex",
                   "--standalone"]
@@ -10584,9 +10592,11 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
-            first_font = None if document_font else (font or (preferred_font() if mainfont_auto else None))
+            first_font = nativebib_font
             if first_font:
                 cmd += font_args("mainfont", first_font)
+            else:
+                cmd += document_font_args([md_path], metadata_files, variables)
             if geometry_needed:
                 cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
             if monofont_needed:
@@ -10601,6 +10611,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                     cmd += ["--include-in-header", str(preamble_file)]
             if pdf_meta_file is not None:
                 cmd += ["--include-in-header", str(pdf_meta_file)]
+            if fonts_header is not None:
+                cmd += ["--include-in-header", str(fonts_header)]
             # Last, so a document's own header-includes can override anything
             # the shared preamble/pdf-meta files above defined (Pandoc would
             # otherwise drop it entirely; see document_header_file). Added
@@ -10614,6 +10626,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            if fonts_filter is not None:
+                cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
                 cmd += ["--lua-filter", str(width_filter)]
             for lua_filter in lua_filters:

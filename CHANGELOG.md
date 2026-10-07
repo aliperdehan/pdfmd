@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.14 — 2026-10-08
+
+Pre-edit state: commit `9e79464` (v3.23.13). The fallback on the natbib/biblatex route.
+
+### Added
+
+- `citation-engine: natbib | biblatex` builds now get the script fallback, the main-font choice and
+  managed fonts like every other LaTeX build (the body text only: the bibliography itself is typeset by
+  bibtex/biber with the main font). The soffice last-resort fallback is left to LibreOffice's own font
+  replacement.
+
+---
+
 ## v3.23.13 — 2026-10-08
 
 Pre-edit state: commit `44091c8` (v3.23.12). Code on Typst and WeasyPrint.
