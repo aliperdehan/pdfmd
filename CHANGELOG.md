@@ -41,6 +41,48 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.5 — 2026-10-07
+
+Pre-edit state: commit `fb3fd74` (v3.22.4). A bundle that rebuilds on a machine
+that has only the PDF, found by restoring a real lab report and building it
+with its house style hidden from LaTeX.
+
+### Added
+
+- **A bundle follows what it stores**: a stored `.tex`, `.md`, CSV and the like
+  is read for the files it points at, to any depth (a figure's `tex/fig.tex`
+  that `\input`s `tex/fig-raw`, which the first version missed: the restored
+  report did not compile).
+- **Files only the TeX tree finds are stored**: an `\input{chemicals}` that
+  resolves through `kpsewhich` to the user's own tree (not the TeX
+  distribution's, not the document's folder) is stored and restored beside the
+  document (`FILE chemicals.tex (... from a TeX tree)`).
+- **`--bundle-packages`, `pdfmd-options.bundle-packages`**: also store the
+  packages and classes the preamble loads from that tree, what they `\input`
+  and the graphics they name (found by looking every braced word up with a
+  graphic's extension: a logo file named in a macro, and a few harmless
+  look-alikes). Checked on a real report: restored from the PDF alone and built
+  with `TEXMFHOME` pointing at an empty tree, it produced the same PDF text.
+- **The manifest records requirements** (`requirements`): the user's own TeX
+  files with their `\Provides...` version and hash and whether they were stored,
+  the fonts the metadata names, and pdfmd/pandoc/engine versions. `--restore`
+  and `--restore --list` print what is missing (`NEEDS package ...: not stored`)
+  and attaching says so in a note.
+- **`-r/--report` builds carry their source** (`--attach-source`, `--bundle`):
+  every chapter keeps its own front matter and its place relative to the
+  chapters' common folder; restore says `pdfmd -r DIR` builds it again.
+  (A `name#section` build still attaches nothing: it is a throwaway.)
+
+### Notes
+
+- Found while testing, not changed here, cause not found: on the real lab report
+  the first build of a source that has no BUILD NOTES block (a restored folder is
+  one, since comments go) prints REFERENCES without its "VIII." number, and the
+  same source after pdfmd has stamped it has it. The generated `.tex` is identical
+  in both (`--stop-at tex`), so it is the compile, not the restore.
+
+---
+
 ## v3.22.4 — 2026-10-07
 
 Pre-edit state: commit `b244bf7` (v3.22.3). What the attached source keeps and

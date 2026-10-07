@@ -392,8 +392,10 @@ Stopping early (--stop-at, v3.19.0):
     shared .bib of hundreds of entries does not travel whole: `pdfmd-options.
     attach-bibliography: all` / --attach-bibliography all keeps the file as it is.
     Attachments are deflated. (v3.22.4)
-    Off by default: the source holds everything its author wrote. Not for a
-    section build (name#section), -r/--report, or a non-PDF target.
+    Off by default: the source holds everything its author wrote. A -r/--report
+    build attaches its chapters (each keeping its own front matter) with the
+    folder layout relative to their common folder (v3.22.5); not for a section
+    build (name#section) or a non-PDF target.
     --restore FILE.pdf [-o DIR] (v3.22.1) writes the layout back into
     FILE.restored/ (or DIR): name.md, metadata/, a preamble, filters, the
     bibliography, parts/ ... -- --unpack --slim does the splitting of what was
@@ -425,6 +427,17 @@ Stopping early (--stop-at, v3.19.0):
     it only the source is attached, with a warning. --restore writes the files
     back, never over an existing one, checking each hash. With it a restored
     folder builds the same PDF text as the original (checked on a parts report).
+    (v3.22.5) A stored text file is read in turn for the files it points at (a
+    figure's .tex that \\inputs its raw data), and an `\\input` that only the
+    machine's TeX tree finds (`kpsewhich`, outside the TeX distribution: a
+    compound library installed beside a house style) is stored and restored
+    beside the document. `--bundle-packages` / `pdfmd-options.bundle-packages`
+    also stores the packages and classes a preamble loads from that tree and the
+    graphics they name, so a machine without the house style builds the same;
+    without it they are recorded (name, version) and restore says what is
+    missing. The manifest also records the fonts the metadata names and what
+    made the PDF (pdfmd, pandoc, the engine). Data a macro builds the name of
+    (`data\\i.csv` in a loop) cannot be found: `--bundle all` is the fallback.
 
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
@@ -885,7 +898,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.4"
+PDFMD_VERSION = "3.22.5"
 import argparse
 import csv
 import filecmp
@@ -929,6 +942,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from shutil import which
+import tempfile
 from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
 from textwrap import dedent
 from typing import Iterator
@@ -10179,6 +10193,8 @@ BUNDLE_CLI: str | None = None
 BUNDLE_MAX_MB = 100
 # --attach-bibliography used|all (None: the document's pdfmd-options decide).
 BIB_ATTACH_CLI: str | None = None
+# --bundle-packages / --no-bundle-packages (None: the document decides).
+BUNDLE_PACKAGES_CLI: bool | None = None
 EXTRA_PREFIX = "files/"
 RESTORED_SUFFIX = ".restored"
 RAW_REFERENCE_RES = (
@@ -10197,6 +10213,8 @@ BUNDLE_SKIP_SUFFIXES = (".aux", ".log", ".out", ".toc", ".bbl", ".blg", ".fls", 
 # reached through a project's own macros (`\\irpanel{ir/plain/x.csv}`) is found.
 PATH_TOKEN_RE = re.compile(r"(?<![\w/.\\:-])((?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]{1,5})(?![\w/-])")
 REFERENCE_EXTENSIONS = ("", ".pdf", ".png", ".jpg", ".jpeg", ".svg", ".tex", ".csv")
+# What a stored file is read for in turn (the files it points at): LaTeX, Markdown, data lists.
+SCANNED_SUFFIXES = (".tex", ".sty", ".cls", ".def", ".cfg", ".md", ".markdown", ".csv", ".tsv", ".txt", ".dat", ".lua")
 IMAGE_REF_RE = re.compile(
     r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)|<img\b[^>]*?\bsrc=[\"']([^\"']+)[\"']",
     re.IGNORECASE)
@@ -10267,29 +10285,169 @@ def referenced_images(text: str, base: Path) -> list[Path]:
     return found
 
 
+# LaTeX files that live in the user's own TeX tree (texmf-home, texmf-local), not in the
+# TeX distribution: what `\input{chemicals}` or `\usepackage{mystyle}` finds anywhere on the
+# machine and nowhere else. The distribution's packages need no carrying; these are what a
+# rebuild on another machine misses.
+PACKAGE_RE = re.compile(r"\\(?:usepackage|RequirePackage(?:WithOptions)?)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
+CLASS_RE = re.compile(r"\\(?:documentclass|LoadClass(?:WithOptions)?)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
+TEX_INPUT_RE = re.compile(r"\\(?:input|include|InputIfFileExists)\s*\{([^}]+)\}")
+PROVIDES_RE = re.compile(r"\\Provides(?:Package|Class|File)\s*\{[^}]*\}\s*\[([^\]]*)\]")
+GRAPHIC_RE = re.compile(r"\\includegraphics\*?\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}")
+GRAPHIC_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg")
+TEX_SOURCE_SUFFIXES = (".tex", ".sty", ".cls", ".def", ".cfg", ".clo", ".ltx", ".bbx", ".cbx")
+TEX_TREE_SCAN_LIMIT = 200
+
+
+@lru_cache(maxsize=None)
+def tex_distribution_roots() -> tuple[Path, ...]:
+    kpsewhich = which("kpsewhich")
+    roots: list[Path] = []
+    if kpsewhich:
+        for variable in ("TEXMFDIST", "TEXMFMAIN", "TEXMFSYSVAR", "TEXMFSYSCONFIG"):
+            try:
+                value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, text=True,
+                                       timeout=30).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                continue
+            roots.extend(Path(item).resolve() for item in value.split(os.pathsep) if item)
+    return tuple(roots)
+
+
+@lru_cache(maxsize=None)
+def graphics_named_in(text: str) -> tuple[Path, ...]:
+    """Graphics of the user's own TeX tree that a package's text names without `\\includegraphics`
+    next to the name (`\\newcommand{\\LogoFile}{nu-logo}` ... `\\includegraphics{\\LogoFile}`): every
+    braced word is looked up with a graphic's extension, in one kpsewhich call."""
+    kpsewhich = which("kpsewhich")
+    words = sorted({word for word in re.findall(r"\{([A-Za-z0-9][\w.-]{2,60})\}", text) if "." not in word})[:3000]
+    if not kpsewhich or not words:
+        return ()
+    names = [word + suffix for word in words for suffix in GRAPHIC_SUFFIXES]
+    try:
+        out = subprocess.run([kpsewhich, *names], capture_output=True, text=True, timeout=60,
+                             cwd=tempfile.gettempdir()).stdout.split("\n")
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    found = []
+    for line in out:
+        path = Path(line.strip()).resolve() if line.strip() else None
+        if path and path.is_file() and not any(path.is_relative_to(root) for root in tex_distribution_roots()):
+            found.append(path)
+    return tuple(dict.fromkeys(found))
+
+
+@lru_cache(maxsize=None)
+def find_in_tex_tree(name: str) -> Path | None:
+    """The file ``name`` as kpsewhich finds it in a TeX tree of the user's own (not the
+    distribution's, not the current folder), or None."""
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return None
+    try:
+        found = subprocess.run([kpsewhich, name], capture_output=True, text=True, timeout=30,
+                               cwd=tempfile.gettempdir()).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not found:
+        return None
+    path = Path(found).resolve()
+    if not path.is_file() or any(path.is_relative_to(root) for root in tex_distribution_roots()):
+        return None
+    return path
+
+
+def tex_names(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    """(kind, kpsewhich candidates) for each package, class and \\input a LaTeX text names."""
+    found: list[tuple[str, tuple[str, ...]]] = []
+    for regex, kind, suffix in ((PACKAGE_RE, "package", ".sty"), (CLASS_RE, "class", ".cls")):
+        for match in regex.finditer(text):
+            for name in match.group(1).split(","):
+                name = name.strip()
+                if name:
+                    found.append((kind, (name if name.endswith(suffix) else name + suffix,)))
+    for match in TEX_INPUT_RE.finditer(text):
+        name = match.group(1).strip()
+        if name and "\\" not in name:
+            found.append(("input", (name, name + ".tex") if not Path(name).suffix else (name,)))
+    for match in GRAPHIC_RE.finditer(text):
+        name = match.group(1).strip()
+        if name and "\\" not in name and "://" not in name:
+            found.append(("graphic", (name,) if name.lower().endswith(GRAPHIC_SUFFIXES)
+                          else tuple(name + suffix for suffix in GRAPHIC_SUFFIXES)))
+    return found
+
+
+def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Path) -> list[dict]:
+    """The files of the user's own TeX tree that the LaTeX ``sources`` (and ``extra_texts``,
+    e.g. a front matter header-includes) pull in, and those they pull in, as
+    {name, kind, path, version, sha256}: `name` is the file name a rebuild looks for."""
+    deps: list[dict] = []
+    seen: set[Path] = set()
+    queue: list[tuple[Path | None, str]] = []
+    for source in sources:
+        try:
+            queue.append((source, source.read_text(encoding="utf-8-sig", errors="replace")))
+        except OSError:
+            continue
+    queue.extend((None, text) for text in extra_texts)
+    scanned = 0
+    while queue and scanned < TEX_TREE_SCAN_LIMIT:
+        origin, text = queue.pop(0)
+        scanned += 1
+        for kind, candidates in tex_names(text):
+            if any((folder / candidate).is_file() for candidate in candidates
+                   for folder in ([origin.parent] if origin else []) + [base]):
+                continue                                   # in the document's own folders: the folder's business
+            hit = next((found for found in (find_in_tex_tree(candidate) for candidate in candidates) if found), None)
+            if hit is None or hit in seen:
+                continue
+            seen.add(hit)
+            try:
+                content = hit.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError:
+                continue
+            provides = PROVIDES_RE.search(content[:20000])
+            deps.append({"name": hit.name, "kind": kind, "path": hit,
+                         "version": " ".join(provides.group(1).split()) if provides else None,
+                         "sha256": hashlib.sha256(hit.read_bytes()).hexdigest()})
+            if hit.suffix.lower() in TEX_SOURCE_SUFFIXES:
+                queue.append((hit, content))
+                if kind in ("package", "class"):
+                    for graphic in graphics_named_in(content):
+                        if graphic not in seen:
+                            seen.add(graphic)
+                            deps.append({"name": graphic.name, "kind": "graphic", "path": graphic, "version": None,
+                                         "sha256": hashlib.sha256(graphic.read_bytes()).hexdigest()})
+    return deps
+
+
 def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
-                 represented: set[Path], output: Path, data_names: list[str]) -> tuple[list[Path], list[str]]:
+                 represented: set[Path], output: Path, data_names: list[str],
+                 base: Path | None = None) -> tuple[list[Path], list[str]]:
     """The files to store beside the source (the source carries the Markdown,
     metadata, preamble, filters, bibliography and CSL itself): the images and data
-    the text and the preamble point at ("referenced"), or every file in the
-    document's folder that is not output or housekeeping ("all"). Returns
-    (files inside the folder, names of referenced files outside it)."""
-    base = Path(os.path.abspath(md_path.parent))
+    the text and the preamble point at, and what the text files among them point at
+    in turn ("referenced"), or every file in the document's folder that is not output
+    or housekeeping ("all"). Returns (files inside the folder, names of referenced
+    files outside it)."""
+    base = Path(os.path.abspath(base or md_path.parent))
     found: list[Path] = []
     outside: list[str] = []
 
-    def add(path: Path) -> None:
+    def add(path: Path) -> bool:
         path = Path(os.path.abspath(path))
         if path in represented or path == Path(os.path.abspath(output)) or path in found:
-            return
+            return False
         if path.name in data_names and path.suffix.lower() in (".bib", ".csl", ".bibtex"):
-            return                                       # already embedded in the source
+            return False                                 # already embedded in the source
         try:
             path.relative_to(base)
         except ValueError:
             outside.append(str(path))
-            return
+            return False
         found.append(path)
+        return True
 
     if mode == "all":
         for folder, directories, names in os.walk(base):
@@ -10303,20 +10461,32 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
                     continue
                 add(full)
         return found, outside
-    for source in [md_path, *parts, *(preamble_files or [])]:
+    # Each file taken is read in turn for the files it points at: a figure's .tex that
+    # \inputs its raw data, a CSV a macro opens (to a depth no document needs).
+    queue: list[Path] = [md_path, *parts, *(preamble_files or [])]
+    scanned: set[Path] = set()
+    while queue and len(scanned) < 400:
+        source = queue.pop(0)
+        if Path(os.path.abspath(source)) in scanned:
+            continue
+        scanned.add(Path(os.path.abspath(source)))
+        deeper = source not in (md_path, *parts, *(preamble_files or []))
+        if deeper and (source.suffix.lower() not in SCANNED_SUFFIXES or source.stat().st_size > 2 * 1024 * 1024):
+            continue
         try:
             text = source.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError):
             continue
+        hits: list[Path] = []
         for image in referenced_images(text, source.parent):
-            add(image)
+            hits.append(image)
         visible = strip_markdown_comments(text) if source.suffix == ".md" else text
         for token in dict.fromkeys(PATH_TOKEN_RE.findall(visible)):
             for folder in (source.parent, base):
                 try:
                     candidate = folder / token
                     if candidate.is_file():
-                        add(candidate)
+                        hits.append(candidate)
                         break
                 except OSError:
                     break
@@ -10330,8 +10500,11 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
                                 for extension in REFERENCE_EXTENSIONS
                                 if (folder / (target + extension)).is_file()), None)
                     if hit is not None:
-                        add(hit)
+                        hits.append(hit)
                         break
+        for hit in hits:
+            if add(hit):
+                queue.append(hit)
     return found, outside
 
 
@@ -10450,34 +10623,103 @@ def read_pdf_attachments(pdf_path: Path) -> dict[str, bytes]:
         pypdf_logger.setLevel(previous_level)
 
 
+FONT_KEYS = ("mainfont", "sansfont", "monofont", "mathfont", "CJKmainfont", "CJKsansfont", "CJKmonofont")
+
+
+def resolve_bundle_packages(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the TeX packages and classes of the user's own tree that a preamble loads are
+    stored too: --bundle-packages, else `pdfmd-options.bundle-packages`."""
+    if BUNDLE_PACKAGES_CLI is not None:
+        return BUNDLE_PACKAGES_CLI
+    return bool(option_flag(first_pdfmd_option(md_path, metadata_files, "bundle-packages")))
+
+
+def front_matter_dict(text: str) -> dict:
+    front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if not front or yaml is None:
+        return {}
+    try:
+        loaded = yaml.safe_load(front.group("yaml"))
+    except yaml.YAMLError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf_path: Path) -> dict:
+    """What a rebuild needs that the PDF does not carry: the user's own TeX files (name,
+    version, whether stored), the fonts the metadata names, the tools that made it."""
+    front = front_matter_dict(merged)
+    producer = None
+    try:
+        info = pypdf.PdfReader(pdf_path).metadata
+        producer = str(info.get("/Producer") or info.get("/Creator") or "") or None if info else None
+    except Exception:  # noqa: BLE001 -- a hint only
+        pass
+    fonts = []
+    for key in FONT_KEYS:
+        value = front.get(key)
+        if isinstance(value, str) and value not in fonts:
+            fonts.append(value)
+    return {"pdfmd": PDFMD_VERSION, "pandoc": ".".join(map(str, pandoc_version())) or None,
+            "producer": producer, "fonts": fonts,
+            "tex": [{"name": dep["name"], "kind": dep["kind"], "version": dep["version"],
+                     "sha256": dep["sha256"], "stored": dep["name"] in stored} for dep in deps]}
+
+
+def requirement_lines(manifest: dict) -> list[str]:
+    needs = manifest.get("requirements") or {}
+    lines = []
+    for item in needs.get("tex") or []:
+        if not item.get("stored"):
+            version = f" ({item['version']})" if item.get("version") else ""
+            lines.append(f"NEEDS     {item['kind']} {item['name']}{version}: from the author's own TeX tree, not stored "
+                         "(install it, or build with bundle-packages)")
+    if needs.get("fonts"):
+        lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
+    made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
+            needs.get("producer") or ""]
+    if any(made):
+        lines.append(f"MADE WITH {', '.join(item for item in made if item)}")
+    return lines
+
+
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
-                                no_auto: list[str] | None, verbose: bool) -> None:
-    """--attach-source: put the document's source into the PDF just built."""
+                                no_auto: list[str] | None, verbose: bool,
+                                report: bool = False, base: Path | None = None) -> None:
+    """--attach-source: put the document's source into the PDF just built. ``report``: the
+    files are the chapters of a -r/--report build; ``base`` the folder their layout is relative to."""
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
         return
     if pypdf is None:
         print("WARN  attach-source: pypdf is not installed (pip install pypdf); nothing was attached",
               file=sys.stderr)
         return
+    base = Path(os.path.abspath(base or md_path.parent))
     try:
         with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
             merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
                                                resolve_strip_comments(md_path, metadata_files, default=True),
-                                               resolve_bibliography_pruning(md_path, metadata_files))
+                                               resolve_bibliography_pruning(md_path, metadata_files),
+                                               report=report, base=base)
         extras: dict[str, bytes] = {}
+        origins: dict[str, str] = {}
         mode = resolve_bundle(md_path, metadata_files)
+        header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
+        deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base)
         if mode:
-            base = md_path.parent
             represented = {Path(os.path.abspath(base / item["path"]))
                            for item in [*manifest["chunks"], *manifest["layout"]]}
             found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, pdf_path,
-                                          manifest["data_files"])
+                                          manifest["data_files"], base)
+            packages = resolve_bundle_packages(md_path, metadata_files)
+            from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
+                         and not (base / dep["name"]).exists()]
             limit = float(option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
                           or BUNDLE_MAX_MB) * 1024 * 1024
-            total = sum(item.stat().st_size for item in found)
+            total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
             if total > limit:
-                print(f"WARN  bundle: {len(found)} files, {total / 1048576:.0f} MB, is over the "
+                print(f"WARN  bundle: {len(found) + len(from_tree)} files, {total / 1048576:.0f} MB, is over the "
                       f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
                       file=sys.stderr)
             else:
@@ -10490,10 +10732,16 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                         except UnicodeDecodeError:
                             pass
                     extras[relative_posix(base, item)] = data
+                for dep in from_tree:
+                    if dep["name"] not in extras:
+                        extras[dep["name"]] = dep["path"].read_bytes()
+                        origins[dep["name"]] = "tex-tree"
                 manifest["bundle"] = mode
-                manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
+                                       **({"from": origins[name]} if name in origins else {})}
                                       for name, data in extras.items()]
                 manifest["outside"] = sorted({Path(name).name for name in outside})
+        manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, pdf_path)
         write_pdf_attachments(pdf_path, {
             ATTACH_SOURCE: merged.encode("utf-8"),
             ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
@@ -10504,8 +10752,9 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         return
     note = comments_note(manifest)
     kept = manifest.get("extras") or []
-    print(f"ATTACHED  {display_path(pdf_path)}: source of {display_path(md_path)} "
-          f"({len(merged.splitlines())} lines, {note}"
+    print(f"ATTACHED  {display_path(pdf_path)}: source of {display_path(md_path)}"
+          + (f" and {len(parts)} more" if report and parts else "")
+          + f" ({len(merged.splitlines())} lines, {note}"
           + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}, "
              f"{sum(item['size'] for item in kept) / 1048576:.1f} MB" if kept else "")
           + "); `pdfmd --restore` writes it back")
@@ -10516,6 +10765,11 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
               f"{', '.join(unstored)}")
     if manifest.get("outside"):
         print(f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
+    for line in requirement_lines(manifest):
+        if line.startswith("NEEDS") and "not stored" in line:
+            print("NOTE  " + line[10:])
+        elif verbose:
+            print(line)
 
 
 def restore_target_name(name: str) -> PurePosixPath | None:
@@ -10558,13 +10812,15 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
           f"{comments_note(manifest)})")
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
+    for line in requirement_lines(manifest):
+        print(line)
     extras = manifest.get("extras") or []
     stored = {item["path"] for item in extras}
     for image in manifest.get("images") or []:
         if image["path"] not in stored:
             print(f"IMAGE     {image['path']}  (recorded, not stored in the PDF)")
     for item in extras:
-        print(f"FILE      {item['path']}  ({item['size']} bytes)")
+        print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
     if list_only:
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
@@ -10596,6 +10852,8 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
             destination.write_text(content, encoding="utf-8", newline="\n")
         print(f"RESTORED  {item}")
     print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+    if manifest.get("mode") == "report":
+        print(f"NOTE  this PDF came from a -r/--report build: `pdfmd -r {display_path(target)}` builds it again")
     filters = [item for item in files if item.lower().endswith(".lua")]
     if filters:
         print(f"NOTE  {', '.join(filters)}: a Lua filter is code, and pdfmd runs one that sits beside a "
@@ -10975,6 +11233,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "backups). Implies --attach-source; --restore puts them back. A document sets it "
                              "with pdfmd-options.bundle (true | all); pdfmd-options.bundle-max-mb (default "
                              f"{BUNDLE_MAX_MB}) caps the size")
+    parser.add_argument("--bundle-packages", dest="bundle_packages", action="store_true", default=None,
+                        help="with --bundle, also store the LaTeX packages and classes of your own TeX tree "
+                             "that a preamble loads (a house style installed in texmf-home), so a machine "
+                             "without them builds the same. Off by default: they are recorded (name, version) "
+                             "and restore tells what is missing. A document sets it with "
+                             "pdfmd-options.bundle-packages")
     parser.add_argument("--no-bundle", dest="bundle", action="store_const", const="off",
                         help="attach no files beside the source, even where a document's pdfmd-options.bundle asks")
     parser.add_argument("--restore", type=Path, default=None, metavar="PDF",
@@ -11308,7 +11572,8 @@ def main() -> None:
     if args.debug:
         args.verbose = True
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI
-    global BIB_ATTACH_CLI
+    global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI
+    BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
     STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
     KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
@@ -11871,12 +12136,15 @@ def main() -> None:
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
         if result.returncode == 0:
-            if ATTACH_CLI or BUNDLE_CLI not in (None, "off"):
-                print("NOTE  --attach-source/--bundle do not cover -r/--report builds yet; nothing was attached")
             for file in files:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                     output, args.verbose, report_output=output)
                 backup_after_success(file, metadata_files, args.backup, args.verbose, args.backup_format)
+            if target_format == "pdf" and resolve_attach(files[0], metadata_files):
+                attach_source_after_success(
+                    files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
+                    args.verbose, report=True,
+                    base=Path(os.path.commonpath([str(item.parent.resolve()) for item in files])))
         for file in files:
             if not has_chapter_field(file):
                 print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")

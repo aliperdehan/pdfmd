@@ -461,3 +461,95 @@ class AttachedKinds(unittest.TestCase):
         self.assertLess(pdf.stat().st_size, 8000)
         attached = pypdf.PdfReader(pdf).attachments
         self.assertGreater(len(attached["pdfmd-source.md"][0]), 20000)
+
+
+@unittest.skipIf(pypdf is None, "pypdf not installed")
+class BundleReach(unittest.TestCase):
+    """What a bundle follows: files named by files it stores, chapters of a report, and the
+    user's own TeX tree (v3.22.5)."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = Path(self.folder.name)
+        self.addCleanup(self.folder.cleanup)
+        self.saved = pdfmd.BUNDLE_CLI
+        self.addCleanup(setattr, pdfmd, "BUNDLE_CLI", self.saved)
+
+    def attach(self, document: Path, parts=(), preamble=(), report=False, base=None, **flags) -> dict:
+        pdf = blank_pdf(document.with_suffix(".pdf"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(document, pdf, list(parts), [], list(preamble), None, False,
+                                              report=report, base=base)
+        return {name: b"".join(items) if len(items) > 1 else items[0]
+                for name, items in pypdf.PdfReader(pdf).attachments.items()}
+
+    def test_a_stored_tex_file_is_read_for_the_files_it_inputs(self):
+        (self.root / "tex").mkdir()
+        (self.root / "tex" / "fig.tex").write_text("\\input{tex/raw}\n", encoding="utf-8")
+        (self.root / "tex" / "raw.tex").write_text("\\addplot table {data/x.csv};\n", encoding="utf-8")
+        (self.root / "data").mkdir()
+        (self.root / "data" / "x.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n```{=latex}\n\\input{tex/fig}\n```\n", encoding="utf-8")
+        pdfmd.BUNDLE_CLI = "referenced"
+        attached = self.attach(document)
+        self.assertEqual({name for name in attached if name.startswith("files/")},
+                         {"files/tex/fig.tex", "files/tex/raw.tex", "files/data/x.csv"})
+
+    def test_report_chapters_keep_their_front_matter_and_places(self):
+        (self.root / "ch").mkdir()
+        first, second = self.root / "ch" / "one.md", self.root / "ch" / "two.md"
+        first.write_text("---\ntitle: Book\nchapter: 1\n---\n\n# One <!-- n -->\n\nText.\n", encoding="utf-8")
+        second.write_text("---\nchapter: 2\n---\n\n# Two\n\nMore.\n", encoding="utf-8")
+        attached = self.attach(first, parts=[second], report=True, base=self.root)
+        manifest = json.loads(attached["pdfmd-manifest.json"])
+        self.assertEqual(manifest["mode"], "report")
+        self.assertEqual([chunk["path"] for chunk in manifest["chunks"]], ["ch/one.md", "ch/two.md"])
+        out = self.root / "out"
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.restore_from_pdf(self.root / "ch" / "one.pdf", out)
+        self.assertIn("chapter: 1", (out / "ch" / "one.md").read_text(encoding="utf-8"))
+        self.assertNotIn("<!--", (out / "ch" / "one.md").read_text(encoding="utf-8"))
+        self.assertEqual((out / "ch" / "two.md").read_text(encoding="utf-8"),
+                         "---\nchapter: 2\n---\n\n# Two\n\nMore.\n")
+
+    @unittest.skipIf(not pdfmd.which("kpsewhich"), "kpsewhich not installed")
+    def test_the_users_own_tex_tree_is_recorded_and_stored_on_request(self):
+        tree = self.root / "texmf"
+        (tree / "tex" / "latex" / "mystyle").mkdir(parents=True)
+        (tree / "tex" / "latex" / "mystyle" / "mystyle.sty").write_text(
+            "\\ProvidesPackage{mystyle}[2026/01/01 v1.2 My style]\n\\input{mylib}\n", encoding="utf-8")
+        (tree / "tex" / "latex" / "mystyle" / "mylib.tex").write_text("\\def\\x{1}\n", encoding="utf-8")
+        work = self.root / "work"
+        work.mkdir()
+        (work / "preamble.tex").write_text("\\usepackage{mystyle}\n\\input{mylib}\n", encoding="utf-8")
+        document = work / "r.md"
+        document.write_text("---\ntitle: T\n---\n\nHi.\n", encoding="utf-8")
+        old = pdfmd.os.environ.get("TEXMFHOME")
+        pdfmd.os.environ["TEXMFHOME"] = str(tree)
+        pdfmd.find_in_tex_tree.cache_clear()
+        pdfmd.tex_distribution_roots.cache_clear()
+        try:
+            pdfmd.BUNDLE_CLI = "referenced"
+            plain = self.attach(document, preamble=[work / "preamble.tex"])
+            manifest = json.loads(plain["pdfmd-manifest.json"])
+            needs = {item["name"]: item for item in manifest["requirements"]["tex"]}
+            self.assertEqual(needs["mystyle.sty"]["version"], "2026/01/01 v1.2 My style")
+            self.assertFalse(needs["mystyle.sty"]["stored"])
+            self.assertTrue(needs["mylib.tex"]["stored"])             # an \input is data: stored with a bundle
+            self.assertIn("files/mylib.tex", plain)
+            self.assertNotIn("files/mystyle.sty", plain)
+            saved = pdfmd.BUNDLE_PACKAGES_CLI
+            pdfmd.BUNDLE_PACKAGES_CLI = True
+            try:
+                full = self.attach(document, preamble=[work / "preamble.tex"])
+            finally:
+                pdfmd.BUNDLE_PACKAGES_CLI = saved
+            self.assertIn("files/mystyle.sty", full)
+        finally:
+            if old is None:
+                pdfmd.os.environ.pop("TEXMFHOME", None)
+            else:
+                pdfmd.os.environ["TEXMFHOME"] = old
+            pdfmd.find_in_tex_tree.cache_clear()
+            pdfmd.tex_distribution_roots.cache_clear()
