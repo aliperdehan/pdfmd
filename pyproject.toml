@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "pdfmd_inkmd/LICENSE", "pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt"]
 authors = [{ name = "Ali Perdekhan" }]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
 # installed by default so `pdfmd-options:` front matter and PDF metadata
 # stamping just work.

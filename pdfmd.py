@@ -417,8 +417,9 @@ Stopping early (--stop-at, v3.19.0):
     PNG or other raster as a PNG of the PDF's pixels (alpha kept, the file is
     not the original's), an SVG or PDF figure as a one-page vector PDF -- a
     restored `fig.svg` is `fig.pdf`, and the restored Markdown points at it
-    (restore says so). A picture the PDF does not hold (TikZ, pgfplots, a
-    figure that is raw LaTeX) is only recorded.
+    (restore says so). A picture the PDF does not hold (TikZ, pgfplots) is only
+    recorded. Raw LaTeX `\\includegraphics{...}` in the Markdown or the preamble counts
+    like a Markdown image (v3.22.8); one in a stored .tex file is stored with --bundle.
 
     --bundle [all] / --no-bundle, `pdfmd-options: {bundle: true | all}` (v3.22.2)
     store, beside the source, the files it cannot carry, each as its own
@@ -906,6 +907,8 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     only reads its own front matter (no metadata.yaml, same as the rest
     of the Quarto path).
 """
+from __future__ import annotations
+
 # Versioned from here on -- see CHANGELOG.md next to this file.
 #
 # BEFORE EDITING THIS FILE: read CLAUDE.md next to this file first. In
@@ -927,7 +930,13 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-PDFMD_VERSION = "3.22.7"
+def write_text_lf(path: Path, text: str) -> None:
+    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of."""
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+
+
+PDFMD_VERSION = "3.22.8"
 import argparse
 import csv
 import filecmp
@@ -957,11 +966,8 @@ import subprocess
 import sys
 import time
 
-if sys.version_info < (3, 10):
-    # Checked before any annotation below is evaluated: on 3.9 the first
-    # `list[str] | None` would otherwise fail with a cryptic TypeError.
-    # macOS's own /usr/bin/python3 is 3.9, so this is a real first-run trap.
-    raise SystemExit(f"pdfmd needs Python 3.10 or newer (this is {sys.version.split()[0]}). "
+if sys.version_info < (3, 9):
+    raise SystemExit(f"pdfmd needs Python 3.9 or newer (this is {sys.version.split()[0]}). "
                      "Install it with `pipx install pdfmd-cli`, "
                      "which picks a suitable Python, or run pdfmd.py with a newer python3.")
 import unicodedata
@@ -7709,7 +7715,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
     if plan is not None:
         plan.output = output
     text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments)
-    output.write_text(text, encoding="utf-8", newline="\n")
+    write_text_lf(output, text)
     print(f"ASSEMBLED  {display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
           f"{len(text.splitlines())} lines)")
     return True, ""
@@ -7984,7 +7990,7 @@ def embedded_lua_filters(md_path: Path, allowed: bool, trust_all: bool) -> Itera
                       "run any command. Read it, then use --trust-embedded to run it", file=sys.stderr)
                 continue
             target = folder / f"{index:02d}-{label}"
-            target.write_text(block["source"], encoding="utf-8", newline="\n")
+            write_text_lf(target, block["source"])
             paths.append(target)
             print(f"AUTO LUA  {display_path(md_path)}: embedded filter {label}")
         yield paths
@@ -8147,7 +8153,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     fresh = [name for name in files if not (target / name).exists()]
     for name in fresh:
         (target / name).parent.mkdir(parents=True, exist_ok=True)
-        (target / name).write_text(files[name], encoding="utf-8", newline="\n")
+        write_text_lf((target / name), files[name])
     for note in notes:
         print(note)
     kept = len(files) - len(fresh)
@@ -8176,7 +8182,7 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
     if data is None:
         # No front matter: only the comment-form marker carries the kinds.
         body = ASSEMBLED_COMMENT_RE.sub(ASSEMBLED_COMMENT, body)
-        path.write_text(body, encoding="utf-8", newline="\n")
+        write_text_lf(path, body)
         print(f"SLIMMED   {display_path(path)}  (embedded files removed)")
         return
     data = dict(data)
@@ -8221,7 +8227,7 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
     dumped = yaml.dump(out, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
                        default_flow_style=False, width=10**6)
     head = "---\n" + dumped + (literal_block("header-includes", kept_header) if kept_header else "") + "---\n\n"
-    path.write_text(head + body.lstrip("\n"), encoding="utf-8", newline="\n")
+    write_text_lf(path, head + body.lstrip("\n"))
     print(f"SLIMMED   {display_path(path)}  (removed: {', '.join(removed) or 'nothing'})")
 
 
@@ -8252,7 +8258,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
         for block in blocks:
             target = folder / safe_relative_path(block["path"] or block["name"])
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(block["source"], encoding="utf-8", newline="\n")
+            write_text_lf(target, block["source"])
         added.append(folder)
     unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
     if unpacked.is_dir():
@@ -8369,7 +8375,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
     folder = Path(mkdtemp(prefix="pdfmd-apply-"))
     try:
         source = folder / "input.md"
-        source.write_text(front_text + body, encoding="utf-8", newline="\n")
+        write_text_lf(source, front_text + body)
         reader = resolve_from_format(source, None, metadata_files)[0] or "markdown"
         cmd = ["pandoc", str(source), "-f", reader, "-t", reader, "--wrap=preserve"]
         for metadata_file in metadata_files:
@@ -10324,16 +10330,29 @@ def layout_path(base: Path, item: Path) -> str:
     return inside
 
 
-def referenced_images(text: str, base: Path) -> list[Path]:
-    """Files the Markdown text points at as images (local, existing), in order."""
+def referenced_images(text: str, base: Path, latex: bool = False) -> list[Path]:
+    """Files the text points at as images (local, existing), in order: Markdown
+    `![](...)` and `<img>`, and raw LaTeX `\\includegraphics{...}` (in a Markdown file's
+    raw blocks, or in ``latex`` text such as a preamble)."""
     found: list[Path] = []
-    for match in IMAGE_REF_RE.finditer(strip_markdown_comments(text)):
+    visible = strip_tex_comments(text) if latex else strip_markdown_comments(text)
+    for match in ([] if latex else IMAGE_REF_RE.finditer(visible)):
         target = (match.group(1) or match.group(2) or "").split("#")[0].split("?")[0]
         if not target or "://" in target or target.startswith(("data:", "mailto:")):
             continue
         path = Path(os.path.abspath(base / urllib.parse.unquote(target)))
         if path.is_file() and path not in found:
             found.append(path)
+    for match in RAW_REFERENCE_RES[0].finditer(visible):
+        target = urllib.parse.unquote(match.group(1).strip())
+        if not target or "://" in target or "\\" in target:
+            continue
+        for extension in ("", ".png", ".jpg", ".jpeg", ".pdf"):
+            path = Path(os.path.abspath(base / (target + extension)))
+            if path.is_file():
+                if path not in found:
+                    found.append(path)
+                break
     return found
 
 
@@ -10530,7 +10549,7 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
         except (OSError, UnicodeDecodeError):
             continue
         hits: list[Path] = []
-        for image in referenced_images(text, source.parent):
+        for image in referenced_images(text, source.parent, source.suffix.lower() in TEX_SOURCE_SUFFIXES):
             hits.append(image)
         visible = strip_markdown_comments(text) if source.suffix == ".md" else text
         for token in dict.fromkeys(PATH_TOKEN_RE.findall(visible)):
@@ -10571,8 +10590,10 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
             if kind in plan.kinds:
                 layout.extend({"kind": kind, "path": layout_path(base, item)} for item in paths)
     images = []
-    for source in (md_path, *parts):
-        for image in referenced_images(source.read_text(encoding="utf-8-sig"), source.parent):
+    for source, latex in [(item, False) for item in (md_path, *parts)] + [
+            (item, True) for item in (plan.preamble_files if plan else [])]:
+        for image in referenced_images(source.read_text(encoding="utf-8-sig"), source.parent if not latex else base,
+                                       latex):
             entry = {"path": relative_posix(base, image), "sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
                      "size": image.stat().st_size}
             if entry not in images:
@@ -10743,6 +10764,15 @@ def requirement_lines(manifest: dict) -> list[str]:
     if any(made):
         lines.append(f"MADE WITH {', '.join(item for item in made if item)}")
     return lines
+
+
+def report_common_folder(files: list[Path]) -> Path:
+    """The folder a report's chapters are laid out relative to (the first chapter's, when they
+    share no folder, as on different Windows drives)."""
+    try:
+        return Path(os.path.commonpath([str(item.parent.resolve()) for item in files]))
+    except ValueError:
+        return files[0].parent.resolve()
 
 
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
@@ -11122,7 +11152,7 @@ def find_batchocr() -> list[str] | None:
     an alias that is not on PATH), `batchocr` on PATH, or the module in this Python."""
     override = os.environ.get("PDFMD_BATCHOCR")
     if override:
-        return shlex.split(override)
+        return shlex.split(override, posix=os.name != "nt")
     found = which("batchocr")
     if found:
         return [found]
@@ -11351,7 +11381,7 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         if isinstance(content, bytes):
             destination.write_bytes(content)
         else:
-            destination.write_text(content, encoding="utf-8", newline="\n")
+            write_text_lf(destination, content)
         print(f"RESTORED  {item}")
     print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
     if manifest.get("mode") == "report":
@@ -11405,7 +11435,7 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
     work = Path(mkdtemp(prefix="pdfmd-restore-"))
     try:
         assembled = work / "x.md"
-        assembled.write_text(merged, encoding="utf-8", newline="\n")
+        write_text_lf(assembled, merged)
         unpacked = work / "x.unpacked"
         with contextlib.redirect_stdout(io.StringIO()):
             unpack_assembled(assembled, unpacked, slim=True)
@@ -12078,6 +12108,8 @@ def main() -> None:
         # swallow one (`-c` is batchocr's --concat and an abbreviation of pdfmd's -cwd).
         reader_parser = build_parser()
         reader_parser.allow_abbrev = False
+        for flag in [flag for flag in reader_parser._option_string_actions if len(flag) > 2 and flag[1] != "-"]:
+            del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     use_managed_tools()
     if args.debug:
@@ -12658,7 +12690,7 @@ def main() -> None:
                 attach_source_after_success(
                     files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
                     args.verbose, report=True,
-                    base=Path(os.path.commonpath([str(item.parent.resolve()) for item in files])))
+                    base=report_common_folder(files))
         for file in files:
             if not has_chapter_field(file):
                 print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")

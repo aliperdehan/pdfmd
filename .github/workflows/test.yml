@@ -51,7 +51,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
-        python: ["3.10", "3.13"]
+        python: ["3.9", "3.10", "3.13"]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -74,8 +74,8 @@ jobs:
                           "-o", "native-lecture.pdf"], check=True, env=env)
           assert pathlib.Path("native-lecture.pdf").read_bytes().startswith(b"%PDF-")
           EOF
-      - name: With md2pdf and math (Python 3.11 or newer)
-        if: matrix.python != '3.10'
+      - name: With md2pdf and math (Python 3.11 or newer; run on 3.13)
+        if: matrix.python == '3.13'
         run: |
           pip install ".[math]"
           python -m unittest discover -s tests -v

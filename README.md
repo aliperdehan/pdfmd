@@ -108,7 +108,7 @@ Office files.
 <details>
 <summary>Without pipx</summary>
 
-`pdfmd.py` is a single file that needs Python 3.10+ (with `pdfmd_inkmd/`
+`pdfmd.py` is a single file that needs Python 3.9+ (with `pdfmd_inkmd/`
 beside it for the no-Pandoc fallback). It also runs
 directly, and `pyyaml`/`pypdf` are optional (features that need them are
 skipped with a warning):

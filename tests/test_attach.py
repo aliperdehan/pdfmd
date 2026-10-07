@@ -700,3 +700,33 @@ class PicturesFromThePdf(unittest.TestCase):
         text = "![a](x/v.svg) ![b](<x/v.svg> \"t\") <img src=\"x/v.svg\"> [link](x/v.svg) ![c](x/other.svg)\n"
         self.assertEqual(pdfmd.rewrite_image_paths(text, {"x/v.svg": "x/v.pdf"}),
                          "![a](x/v.pdf) ![b](<x/v.pdf> \"t\") <img src=\"x/v.pdf\"> [link](x/v.svg) ![c](x/other.svg)\n")
+
+
+@unittest.skipIf(pypdf is None, "pypdf not installed")
+class RawLatexPictures(unittest.TestCase):
+    """Pictures included by raw LaTeX (a raw block, or the preamble) are recorded and restored too."""
+    setUp = PicturesFromThePdf.setUp
+    pdf_with = PicturesFromThePdf.pdf_with
+
+    def test_includegraphics_in_a_raw_block_and_the_preamble(self):
+        import zlib
+        (self.root / "fig").mkdir()
+        pixels = bytes((5 * index) % 256 for index in range(2 * 2 * 3))
+        (self.root / "fig" / "p.png").write_bytes(pdfmd.encode_png(2, 2, 8, 2, pixels))
+        (self.root / "logo.png").write_bytes(pdfmd.encode_png(3, 1, 8, 2, bytes(9)))
+        (self.root / "preamble.tex").write_text("% logo\n\\newcommand{\\logo}{\\includegraphics{logo}}\n", encoding="utf-8")
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n```{=latex}\n\\includegraphics[width=2cm]{fig/p}\n```\n",
+                            encoding="utf-8")
+        pdf = self.pdf_with("r.pdf", [
+            {"kind": "image", "width": 2, "height": 2, "data": zlib.compress(pixels), "filter": "/FlateDecode"},
+            {"kind": "image", "width": 3, "height": 1, "data": zlib.compress(bytes(9)), "filter": "/FlateDecode"}])
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(document, pdf, [], [], [self.root / "preamble.tex"], None, False)
+        manifest = json.loads(pypdf.PdfReader(pdf).attachments["pdfmd-manifest.json"][0])
+        self.assertEqual({image["path"] for image in manifest["images"]}, {"fig/p.png", "logo.png"})
+        out = self.root / "out"
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.restore_from_pdf(pdf, out)
+        self.assertEqual(png_rows((out / "fig" / "p.png").read_bytes()), ((2, 2, 8, 2), pixels))
+        self.assertTrue((out / "logo.png").is_file())

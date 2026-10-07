@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.22.8 — 2026-10-07
+
+Pre-edit state: commit `a4e2780` (v3.22.7). Python 3.9, and pictures included by
+raw LaTeX.
+
+### Added
+
+- **Python 3.9 is supported again** (it was 3.10+): `from __future__ import
+  annotations`, and `write_text_lf()` for the one place that used `Path.write_text(newline=)`
+  (3.10+). macOS's own `/usr/bin/python3` is 3.9, so `python3 pdfmd.py` works
+  there without a newer Python. The whole suite passes on 3.9.6; CI now runs 3.9,
+  3.10 and 3.13. (The built-in math renderer, md2pdf, still needs 3.11.)
+- **Pictures included by raw LaTeX are recorded and restored from the PDF like
+  Markdown ones**: `\includegraphics{...}` in a raw block or the preamble
+  (extension optional). One inside a stored `.tex` file is stored by `--bundle`.
+
+### Fixed
+
+- On the PDF route, `-c` (batchocr's `--concat`) was still taken as an
+  abbreviation of pdfmd's `-cwd` by Python versions before 3.12 even with
+  abbreviations off; the single-dash long options are now removed from that parser.
+- `PDFMD_BATCHOCR` is split the Windows way on Windows (a path with backslashes),
+  and a report whose chapters sit on different drives falls back to the first
+  chapter's folder.
+
+---
+
 ## v3.22.7 — 2026-10-07
 
 Pre-edit state: commit `d584d35` (v3.22.6). A PDF given to pdfmd is read, not
