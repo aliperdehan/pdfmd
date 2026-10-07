@@ -335,6 +335,14 @@ class ManagedFonts(unittest.TestCase):
         self.assertEqual(pdfmd.font_args("mainfont", "Only In Pdfmd", latex=False), ["-V", "mainfont=Only In Pdfmd"])
         self.assertEqual(pdfmd.font_args("mainfont", "No Such Font Anywhere"), ["-V", "mainfont=No Such Font Anywhere"])
 
+    def test_a_font_the_document_names_is_found_by_file_too(self):
+        doc = Path(self._directory.name) / "doc.md"
+        doc.write_text("---\nmainfont: Only In Pdfmd\nmonofont: Menlo\n---\ntext\n", encoding="utf-8")
+        args = pdfmd.document_font_args([doc], [], [])
+        self.assertIn("mainfont=Only-Regular.ttf", args)
+        self.assertFalse(any(arg.startswith("monofont") for arg in args))  # not a managed font: left to the document
+        self.assertEqual(pdfmd.document_font_args([doc], [], ["mainfontoptions=Scale=0.9"]), [])  # its own options win
+
     def test_the_fonts_folder_is_given_to_typst_and_listed_for_weasyprint(self):
         with pdfmd.managed_fonts_css("weasyprint") as header:
             self.assertIn('font-family: "Only In Pdfmd"', header.read_text(encoding="utf-8"))

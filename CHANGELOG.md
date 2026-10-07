@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.4 — 2026-10-08
+
+Pre-edit state: commit `5a38677` (v3.23.3). Fonts in more places.
+
+### Added
+
+- **A font the document itself names** (`mainfont:`, `sansfont:`, `monofont:`) that exists only
+  in pdfmd's fonts folder is loaded by file under LaTeX (`document_font_args`), unless the
+  document gives its own `...options:`.
+- **Report mode** (`-r`) gets the script fallback, the managed fonts and the main font by script,
+  in both its `--to latex` and PDF-engine branches.
+
+---
+
 ## v3.23.3 — 2026-10-08
 
 Pre-edit state: commit `bc30b40` (v3.23.2). Finding documents by names in other scripts.

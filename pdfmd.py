@@ -995,7 +995,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.3"
+PDFMD_VERSION = "3.23.4"
 import argparse
 import csv
 import filecmp
@@ -4156,6 +4156,19 @@ def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
         other = managed_index().styles(face).get(style)
         if other is not None:
             args += ["-V", f"{kind}options={option}={{{Path(other.path).name}}}"]
+    return args
+
+
+def document_font_args(md_paths: list[Path], metadata_files: list[Path], variables: list[str]) -> list[str]:
+    """`-V` arguments for the fonts a document itself names (mainfont/sansfont/monofont) that
+    exist only in pdfmd's own fonts folder, so LaTeX can load them by file."""
+    args: list[str] = []
+    for kind in ("mainfont", "sansfont", "monofont"):
+        if any(variable.startswith(f"{kind}options=") for variable in variables):
+            continue
+        family = document_font_setting(kind, md_paths, metadata_files, variables)
+        if family and managed_face(family) is not None and system_font_missing(family):
+            args += font_args(kind, family)
     return args
 
 
@@ -10440,6 +10453,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     first_font = tex_first_font
                     if first_font:
                         cmd += font_args("mainfont", first_font)
+                    else:
+                        cmd += document_font_args([md_path, *parts_inputs], metadata_files, variables)
                     if geometry_needed:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     elif margin_options:
@@ -10628,6 +10643,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             cmd += ["--slide-level=" + str(slide_level)]
                     if selected_font:
                         cmd += font_args("mainfont", selected_font, engine in LATEX_ENGINES)
+                    elif engine in LATEX_ENGINES:
+                        cmd += document_font_args([md_path, *parts_inputs], metadata_files, variables)
                     if fallback and not any(variable.startswith("mainfontfallback=") for variable in variables):
                         cmd += ["-V", f"mainfontfallback={fallback_font()}"]
                     if geometry_needed and engine in LATEX_ENGINES:
@@ -13556,13 +13573,20 @@ def main() -> None:
                 if report_monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {default_monofont()} on LaTeX-family targets")
+                report_tex_font = (None if (not is_tex_target or report_document_font) else
+                                   (args.font or (default_mainfont(list(files), metadata_files, report_no_auto,
+                                                                   report_note) if report_mainfont_auto else None)))
                 with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
                                            typst_engine=(target_format == "typst"),
                                            doc_count=len(files),
                                            drop_embedded_preamble=not is_tex_target) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
                                              and is_tex_target) as report_header_file, \
-                        pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file:
+                        pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file, \
+                        (script_fallback(list(files), metadata_files, variables, report_preambles,
+                                         report_tex_font, None, report_no_auto, report_note)
+                         if target_format in ("latex", "beamer") else contextlib.nullcontext((None, None))) \
+                        as (report_fonts_header, report_fonts_filter):
                     prepared_files = prepared[:len(files)]
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
@@ -13581,10 +13605,11 @@ def main() -> None:
                         # mainfontfallback here -- it's the Pandoc mechanism
                         # PREFERRED_FONT's own comment already documents as
                         # crashing lualatex outright in this environment.
-                        report_first_font = None if report_document_font else (
-                            args.font or (preferred_font() if report_mainfont_auto else None))
+                        report_first_font = report_tex_font
                         if report_first_font:
                             cmd += font_args("mainfont", report_first_font)
+                        else:
+                            cmd += document_font_args(list(files), metadata_files, variables)
                         if report_geometry_needed:
                             cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                         elif report_margin_options:
@@ -13599,6 +13624,8 @@ def main() -> None:
                             cmd += ["--include-in-header", str(preamble)]
                     if report_pdf_meta_file is not None:
                         cmd += ["--include-in-header", str(report_pdf_meta_file)]
+                    if report_fonts_header is not None:
+                        cmd += ["--include-in-header", str(report_fonts_header)]
                     # Last -- see convert_one's matching comment; report_header_file
                     # is added whenever it exists, not only when report_preambles
                     # is non-empty (report_pdf_meta_file alone can trigger the drop
@@ -13617,6 +13644,8 @@ def main() -> None:
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options
+                    if report_fonts_filter is not None:
+                        cmd += ["--lua-filter", str(report_fonts_filter)]
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
                     log_cmd(cmd, pandoc_cwd, args.verbose)
@@ -13681,7 +13710,11 @@ def main() -> None:
                                                doc_count=len(files)) as prepared, \
                             pdf_metadata_header_file(
                                 report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
-                            ) as report_pdf_meta_file:
+                            ) as report_pdf_meta_file, \
+                            script_fallback(list(files), metadata_files, variables, preambles, None, engine,
+                                            report_no_auto, report_note) as (report_fonts_header,
+                                                                             report_fonts_filter), \
+                            managed_fonts_css(engine) as report_fonts_css:
                         prepared_files = prepared[:len(files)]
                         prepared_metadata = prepared[len(files):]
                         cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
@@ -13698,6 +13731,8 @@ def main() -> None:
                                 cmd += ["-V", f"geometry:{margin_option}"]
                         if monofont_needed and engine in LATEX_ENGINES:
                             cmd += font_args("monofont", default_monofont())
+                        if engine in LATEX_ENGINES:
+                            cmd += document_font_args(list(files), metadata_files, variables)
                         for variable in variables:
                             cmd += ["-V", variable]
                         if preambles and engine in LATEX_ENGINES:
@@ -13705,6 +13740,8 @@ def main() -> None:
                                 cmd += ["--include-in-header", str(preamble)]
                         if report_pdf_meta_file is not None:
                             cmd += ["--include-in-header", str(report_pdf_meta_file)]
+                        if report_fonts_header or report_fonts_css:
+                            cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
                         if (any(contains_citations(file) for file in files)
@@ -13714,6 +13751,8 @@ def main() -> None:
                         # pandoc_options after --citeproc: see convert_one's
                         # matching comment.
                         cmd += pandoc_options
+                        if report_fonts_filter is not None:
+                            cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += ["--lua-filter", str(width_filter)]
                         log_cmd(cmd, pandoc_cwd, args.verbose)
