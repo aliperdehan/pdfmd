@@ -623,6 +623,25 @@ comma inside a field). The text is Helvetica, so letters outside Latin-1 become
 their base letter or `?`. `--attach-links` stores each linked file as
 `linked/PATH` and puts a paperclip in the margin beside the link.
 
+### Use it from Python
+
+```python
+import pdfmd
+
+pdfmd.convert_file("report.md", "docx")                      # -> Path("report.docx")
+pdfmd.convert_file("report.md", "pdf", "out/report.pdf", variables={"geometry": "margin=2cm"},
+                   extra_args=["--engine", "typst"])
+html = pdfmd.convert_text("# Hi\n\nSome *text*.\n", "html")   # str for text formats, bytes for pdf/docx/odt/pptx/epub
+rst = pdfmd.convert_text(open("notes.rst").read(), "docx", format="rst")
+```
+
+Each call runs the command-line tool (as `pypandoc` runs Pandoc), so a document builds exactly as `pdfmd` would build it,
+with all the auto-discovery of the document's folder, and nothing in the caller's process is touched. The source is not
+stamped or backed up unless you ask (`stamp=True`, `backup=True`). A failure raises `pdfmd.PdfmdError` (with
+`returncode`, `stdout` and `stderr`); `check=False` returns the path anyway. `metadata=` takes metadata files,
+`variables=` a dict of Pandoc variables, `extra_args=` anything else the command line takes, `cwd=` the folder it runs
+in and `timeout=` seconds.
+
 ### Other command names: `mdpdf` and `inkmd`
 
 pdfmd also installs `mdpdf` and `inkmd` commands that take those tools' own keys
@@ -968,6 +987,16 @@ options:
   fallback: word
   pdf-engine: lualatex
 ```
+
+**`pdfmd --setup`** changes the same defaults from a menu, without editing the file: a numbered list (nothing to
+install, works over ssh) of what the config can set, each with its choices and what they mean: what to do about
+characters a font lacks, the PDF engine, the default output format, how LaTeX reaches a Word file, where the cache
+lives, and which of pdfmd's automatic behaviours (`--no-auto` kinds) are off for every document. Choosing 0 gives a
+setting its built-in default back; `s` saves, `q` quits. The file is rewritten without your comments (the old one is kept
+as `config.yaml.bak`). A full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then
+`pdfmd --setup fancy`, or set "This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time
+pdfmd finishes a build in a terminal with no config file yet, it prints one `TIP` line about `--setup`
+(never in a pipe, in CI, or from the Python API; `PDFMD_NO_PROMPT=1` silences it).
 
 The decisions pdfmd remembers for you (the Lua filters it trusts, an offer you
 dismissed) live in the same folder, not in `~/.cache/pdfmd`, so cleaning the cache

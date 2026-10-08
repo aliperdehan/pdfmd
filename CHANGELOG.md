@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.12 — 2026-10-08
+
+Pre-edit state: commit `bce6ad3` (v3.24.10); v3.24.11 above landed in the same commit.
+
+### Added
+
+- **`pdfmd --setup [plain|fancy]`**: change the global defaults from a menu instead of editing `config.yaml`. The default
+  screen is a numbered list (no dependency); `pdfmd --install tui` adds prompt_toolkit for a full-screen one
+  (`--setup fancy`, or `setup-ui: fancy` in the config; "This setup screen" is itself a setting, and a missing
+  prompt_toolkit falls back to the list with a note). Settings: what to do about characters a font lacks or none draws, fonts
+  for other scripts, romanization packs, the PDF engine, the default output format, LaTeX and reference numbers in Word
+  files, the cache, and which automatic behaviours are off. The file is rewritten without comments (the old one is kept as
+  `.bak`). New package `pdfmd_setup`; `--install tui` / `pip install "pdfmd-cli[tui]"`.
+- **`no-auto` in the config file** (`options: {no-auto: [margin, monofont]}`) switches those automatic behaviours off for every
+  document, merged with the command line's and the document's; `--setup` writes it.
+- A one-time `TIP` about `--setup` after the first successful build in an interactive terminal with no config file; never in
+  a pipe, in CI or from the Python API (`PDFMD_NO_PROMPT=1` silences it). `--doctor` reports which setup screens exist.
+
+---
+
+## v3.24.11 — 2026-10-08
+
+Pre-edit state: commit `bce6ad3` (v3.24.10).
+
+### Added
+
+- **A Python API**: `pdfmd.convert_file(source, to, outputfile, ...)` and `pdfmd.convert_text(text, to, format, ...)`,
+  `pdfmd.PdfmdError`, `pdfmd.pdfmd_version()`. Each call runs the command-line tool as a subprocess (the way `pypandoc` runs
+  Pandoc), so a document builds as `pdfmd` builds it and the caller's process is untouched; the source is neither stamped nor
+  backed up unless asked. Text outputs come back as `str`, binary ones as `bytes`; any format Pandoc reads can be the input.
+
+---
+
 ## v3.24.10 — 2026-10-08
 
 Pre-edit state: commit `7718a2b` (v3.24.9). A package's own table recipe: the chemicals table is native.

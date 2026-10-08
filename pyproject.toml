@@ -32,6 +32,7 @@ classifiers = [
 #   emoji - the colour emoji font, which the vendored inkmd leaves out
 #   pandoc - the real Pandoc (pypandoc_binary bundles the executable)
 #   translit - pypinyin and anyascii: pdfmd finds 命運.md when told `mingyun` (--translit han)
+#   tui - prompt_toolkit: the optional full-screen `pdfmd --setup fancy` (the numbered list needs nothing)
 # `pdfmd --install math|emoji|pandoc` installs the same things; `--install
 # typst` (a release binary from GitHub, not on PyPI) and `full` (pandoc + typst)
 # go beyond what pip can do.
@@ -39,6 +40,7 @@ math = ["pymd2pdf>=0.6,<0.7; python_version >= '3.11'", "matplotlib"]
 emoji = ["inkmd>=0.5,<0.6"]
 translit = ["pypinyin", "anyascii"]
 pandoc = ["pypandoc_binary"]
+tui = ["prompt_toolkit>=3"]
 
 [project.urls]
 Homepage = "https://github.com/aliperdehan/pdfmd"
@@ -56,7 +58,7 @@ inkmd = "pdfmd:inkmd_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
-packages = ["pdfmd_inkmd", "pdfmd_office", "pdfmd_unicode"]
+packages = ["pdfmd_inkmd", "pdfmd_office", "pdfmd_setup", "pdfmd_unicode"]
 
 [tool.setuptools.package-data]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]

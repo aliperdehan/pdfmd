@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.10"
+PDFMD_VERSION = "3.24.12"
 import argparse
 import csv
 import filecmp
@@ -1483,6 +1483,12 @@ def frontmatter_no_auto(md_path: Path) -> list[str] | None:
             if found and found.group("kinds"):
                 return found.group("kinds").split(",")
         return None
+    return no_auto_from_value(value)
+
+
+def no_auto_from_value(value) -> list[str] | None:
+    """A `no-auto` setting in any of its shapes (document, config file): True/"all" -> [] (everything off),
+    a kind name, or a list of kinds; None when nothing is switched off."""
     if isinstance(value, bool):
         return [] if value else None
     if isinstance(value, str):
@@ -1513,6 +1519,7 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
     the same file.
     """
     merged = merge_no_auto(cli_no_auto, frontmatter_no_auto(md_path))
+    merged = merge_no_auto(merged, no_auto_from_value(config_options().get("no-auto")))   # the config file's (--setup)
     if merged:
         unknown = sorted(set(merged) - NO_AUTO_KINDS)
         if unknown:
@@ -2208,10 +2215,11 @@ INSTALL_SPECS = {
     "emoji": ["inkmd>=0.5,<0.6"],
     "math": ["pymd2pdf>=0.6,<0.7", "matplotlib"],
     "pandoc": ["pypandoc_binary"],
+    "tui": ["prompt_toolkit>=3"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit", "ocr")
-INSTALL_SIZES = {"translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
+INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
@@ -3472,7 +3480,7 @@ def data_root() -> Path:
 # romanization packs of the lookup (below --translit and PDFMD_TRANSLIT). The decisions pdfmd itself
 # remembers for the user (filters it trusts, a dismissed offer) live in the same folder.
 CONFIG_FILENAME = "config.yaml"
-CONFIG_KEYS = ("translit", "options")
+CONFIG_KEYS = ("translit", "options", "setup-ui")
 CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a line to get the built-in default back.
 # Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.
 
@@ -3639,6 +3647,10 @@ def doctor_report() -> bool:
     config = config_path()
     line(None, "config file: " + ("switched off (PDFMD_CONFIG is empty)" if config is None else
                                   f"{config} ({'present' if config.is_file() else 'none; pdfmd --init-config writes one'})"))
+    setup = setup_module()
+    screens = "numbered list" + (", full screen too" if setup is not None and setup.fancy.available()
+                                 else " (full screen: pdfmd --install tui)")
+    line(None, f"pdfmd --setup: {screens}")
     cache = cache_root()
     size = folder_size(cache) if cache.is_dir() else 0
     line(None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --clear-cache)")
@@ -4769,12 +4781,99 @@ def install_extra(kind: str) -> bool:
         version = batchocr_version(found) if found else None
         print(f"Installed batchocr {'.'.join(map(str, version)) if version else '(not found yet)'}.")
         install_ocr_tools()
+    if kind == "tui":
+        print("Installed prompt_toolkit. `pdfmd --setup fancy` opens the full-screen setup; to make it the default, "
+              "set \"This setup screen\" to fancy there.")
     if kind == "pandoc":
         importlib.invalidate_caches()
         use_managed_tools()
         found = which("pandoc")
         print(f"Installed Pandoc ({found or 'not found on PATH yet'}); "
               "used when no other Pandoc is on PATH.")
+    return True
+
+
+def setup_module():
+    try:
+        import pdfmd_setup
+    except ImportError:
+        return None
+    return pdfmd_setup
+
+
+def setup_hint_state() -> Path:
+    return config_root() / "setup-hint-shown"
+
+
+def maybe_hint_setup() -> None:
+    """Once, at the end of a build in an interactive terminal, when there is no config file yet: say that
+    `pdfmd --setup` exists. Never in a pipe, in CI, from the Python API, or with PDFMD_NO_PROMPT set."""
+    path = config_path()
+    if (path is None or path.exists() or os.environ.get("PDFMD_NO_PROMPT") or not sys.stdin.isatty()
+            or not sys.stdout.isatty() or setup_hint_state().exists()):
+        return
+    print("TIP   `pdfmd --setup` changes pdfmd's defaults for every document (fonts, engine, what it does by itself)")
+    try:
+        setup_hint_state().parent.mkdir(parents=True, exist_ok=True)
+        setup_hint_state().write_text("shown\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by hand, or run that again).\n"
+                "# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.\n")
+
+
+def setup_command(screen: str = "") -> bool:
+    """`--setup [plain|fancy]`: change the global defaults without editing the config file."""
+    module = setup_module()
+    path = config_path()
+    if module is None:
+        print("pdfmd --setup is missing from this install (pdfmd_setup).", file=sys.stderr)
+        return False
+    if path is None:
+        print("The config file is switched off (PDFMD_CONFIG is empty).")
+        return False
+    if yaml is None:
+        print("pdfmd --setup needs PyYAML (pip install pyyaml).", file=sys.stderr)
+        return False
+    if screen not in ("", "plain", "fancy"):
+        print(f"--setup takes plain or fancy, not {screen!r}.", file=sys.stderr)
+        return False
+    config: dict = {}
+    text = ""
+    if path.is_file():
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+            loaded = yaml.safe_load(text)
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+            print(f"{path} cannot be read ({error}); fix or move it first.", file=sys.stderr)
+            return False
+        config = loaded if isinstance(loaded, dict) else {}
+    import copy
+    original = copy.deepcopy(config)
+    saved = module.run(config, NO_AUTO_KINDS, str(path), screen or None)
+    if not saved:
+        print("Nothing saved.")
+        return True
+    if config == original:
+        print("Nothing changed.")
+        return True
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        hand_written = [line for line in text.splitlines() if line.lstrip().startswith("#")
+                        and not line.startswith(SETUP_HEADER.splitlines()[0])]
+        if hand_written:
+            backup = path.with_name(path.name + ".bak")
+            backup.write_text(text, encoding="utf-8")
+            print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
+        path.write_text(SETUP_HEADER + yaml.safe_dump(config, sort_keys=False, allow_unicode=True,
+                                                       default_flow_style=False), encoding="utf-8")
+    except OSError as error:
+        print(f"Could not write {path}: {error}", file=sys.stderr)
+        return False
+    load_config.cache_clear()
+    print(f"Saved {path}")
     return True
 
 
@@ -14503,6 +14602,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "font and which no installed font draws (and what to install), without building")
     parser.add_argument("--show-config", action="store_true",
                         help="print where pdfmd's global config file is, and what it sets")
+    parser.add_argument("--setup", nargs="?", const="", metavar="SCREEN",
+                        help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
+                             "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file")
     parser.add_argument("--init-config", action="store_true",
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
     parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
@@ -14876,6 +14978,8 @@ def main() -> None:
         raise SystemExit(0 if ok else 1)
     if args.show_config or args.init_config:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
+    if args.setup is not None:
+        raise SystemExit(0 if setup_command(args.setup) else 1)
     if args.install:
         raise SystemExit(0 if install_extra(args.install) else 1)
     if args.uninstall:
@@ -15717,8 +15821,108 @@ def main() -> None:
             print(error)
     if native_auto and not failures:
         offer_native_upgrade()
+    if not failures:
+        maybe_hint_setup()
     if failures:
         raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
+# Python API: `import pdfmd; pdfmd.convert_file("report.md", "docx")`
+#
+# Every call runs the command-line tool as a subprocess (what pypandoc does with Pandoc): the CLI keeps its
+# module-level state to itself, a failure cannot take the caller down, and what you get is what `pdfmd`
+# would have made. Nothing is written into the source unless asked (`stamp=True`, `backup=True`).
+
+__all__ = ["PdfmdError", "convert_file", "convert_text", "pdfmd_version"]
+
+API_EXTENSIONS = {"pdf": "pdf", "docx": "docx", "odt": "odt", "pptx": "pptx", "epub": "epub", "html": "html",
+                  "html5": "html", "latex": "tex", "tex": "tex", "typst": "typ", "markdown": "md", "md": "md",
+                  "plain": "txt", "txt": "txt", "rtf": "rtf", "beamer": "pdf"}
+API_TEXT_OUTPUTS = {"html", "html5", "latex", "tex", "typst", "markdown", "md", "plain", "txt", "rtf"}
+
+
+class PdfmdError(RuntimeError):
+    """A conversion that failed: `returncode`, and what pdfmd printed (`stdout`, `stderr`)."""
+
+    def __init__(self, message: str, returncode: int = 1, stdout: str = "", stderr: str = ""):
+        super().__init__(message)
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def pdfmd_version() -> str:
+    return PDFMD_VERSION
+
+
+def _api_command(source: Path, to: str | None, output: Path, extra_args, metadata, variables, stamp: bool,
+                 backup: bool) -> list[str]:
+    command = [sys.executable, str(Path(__file__).resolve()), str(source), "-o", str(output)]
+    if to and to.lower() not in ("pdf", output.suffix.lstrip(".").lower()):
+        command += ["--to", to]
+    if not stamp:
+        command.append("--no-stamp")
+    if not backup:
+        command.append("--no-backup")
+    if metadata:
+        command += ["-y", *map(str, metadata)]
+    for key, value in (variables or {}).items():
+        command += ["-V", f"{key}={value}"]
+    return command + [str(item) for item in extra_args]
+
+
+def _api_run(command: list[str], cwd: Path | None, timeout: float | None) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(command, capture_output=True, text=True, cwd=cwd, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise PdfmdError(f"pdfmd timed out after {timeout} s", 124) from error
+
+
+def convert_file(source, to: str | None = None, outputfile=None, *, extra_args=(), metadata=(), variables=None,
+                 stamp: bool = False, backup: bool = False, check: bool = True, cwd=None,
+                 timeout: float | None = None) -> Path:
+    """Convert `source` (Markdown, or any format Pandoc reads) and return the output's path.
+
+    `to` is the target format (`pdf`, `docx`, `odt`, `html`, `latex`, `typst`...; default: from `outputfile`'s
+    suffix, else PDF). `outputfile` defaults to the source's name with the format's extension. `metadata` lists
+    metadata files, `variables` is a dict of Pandoc variables, `extra_args` anything else the command line takes
+    (`["--engine", "typst", "--no-auto", "preamble"]`). Raises `PdfmdError` when the build fails (`check=False`
+    returns the path anyway if the file exists)."""
+    path = Path(source)
+    if not path.exists():
+        raise PdfmdError(f"{path} does not exist", 2)
+    if outputfile is not None:
+        output = Path(outputfile)
+    else:
+        extension = API_EXTENSIONS.get((to or "pdf").lower(), (to or "pdf").lower())
+        output = path.with_suffix("." + extension)
+    done = _api_run(_api_command(path, to, output, extra_args, metadata, variables, stamp, backup),
+                    Path(cwd) if cwd else None, timeout)
+    if check and (done.returncode != 0 or not output.is_file()):
+        detail = (done.stderr.strip() or done.stdout.strip()).splitlines()
+        raise PdfmdError(f"pdfmd failed ({done.returncode}): {detail[-1] if detail else 'no output'}",
+                         done.returncode or 1, done.stdout, done.stderr)
+    return output
+
+
+def convert_text(source: str, to: str = "pdf", format: str = "md", *, extra_args=(), metadata=(), variables=None,
+                 outputfile=None, check: bool = True, cwd=None, timeout: float | None = None):
+    """Convert text held in memory. Returns the result as `str` for a text format (html, latex, typst, markdown,
+    plain) and as `bytes` for the others (pdf, docx, odt, pptx, epub); with `outputfile` the file is kept and
+    its path returned. `format` is the input's format by its usual extension (`md`, `rst`, `org`, `tex`...)."""
+    with tempfile.TemporaryDirectory(prefix="pdfmd-api-") as directory:
+        folder = Path(directory)
+        suffix = "." + {"markdown": "md", "latex": "tex", "plain": "txt"}.get(format.lower(), format.lower().lstrip("."))
+        path = folder / f"document{suffix}"
+        path.write_text(source, encoding="utf-8")
+        extension = API_EXTENSIONS.get(to.lower(), to.lower())
+        target = Path(outputfile) if outputfile is not None else folder / f"document.{extension}"
+        convert_file(path, to, target, extra_args=extra_args, metadata=metadata, variables=variables, check=check,
+                     cwd=cwd or folder, timeout=timeout)
+        if outputfile is not None:
+            return target
+        if not target.is_file():
+            return "" if to.lower() in API_TEXT_OUTPUTS else b""
+        return target.read_text(encoding="utf-8") if to.lower() in API_TEXT_OUTPUTS else target.read_bytes()
 
 
 if __name__ == "__main__":
