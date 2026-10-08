@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.18 — 2026-10-08
+
+Pre-edit state: commit `19d7d03` (v3.24.17).
+
+### Fixed
+
+- **`::: {.csv ...}` cells were read as GFM only**, so `H~2~O`, `$x^2$`, `\ce{...}` and `[@key]` in a CSV stayed literal. They are
+  read as Pandoc Markdown now (`reader="gfm"` for the old behaviour).
+- **A `: Caption` after the block printed as a paragraph**: the caption syntax belongs to a table the reader has already
+  seen, and the table was made later by the filter. The filter takes the `: Caption {#tbl:id}` (or `Table: Caption`) paragraph
+  after the block as the table's caption and identifier. Moved ahead of pandoc-crossref, the csv filter's tables are numbered and
+  referenced like any other (`@tbl:id`); the house convention (`\label{...}` in the caption, `\cref`) works as for a pipe table.
+- **A relative `file=` was looked for in the folder of the metadata file** (where Pandoc runs), so a report with `metadata/`
+  lost its tables; it is tried beside the document and along the resource path too.
+
+### Added
+
+- **`caption="..."` and `#tbl:id` among the attributes of the block**, instead of a line after it (Markdown allowed in the text).
+
+---
+
 ## v3.24.17 — 2026-10-08
 
 Pre-edit state: commit `8233fac` (v3.24.16), which failed its CI run and was never published.

@@ -798,6 +798,10 @@ Measured values:
   <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/results.png" width="480" alt="A CSV file rendered as a table">
 </p>
 
+- Cells are read as Pandoc Markdown (`H~2~O`, `$x^2$`, `\ce{...}`, `[@key]`); `reader="gfm"` makes them plain GFM.
+- A caption is the line after the block (`: Caption {#tbl:id}`, or `Table: Caption`), or `caption="Caption"` inside the
+  braces, with the identifier as `#tbl:id` there too. A caption in the attributes wins over a line after the block.
+- A relative `file=` is found beside the document (and along the resource path), wherever Pandoc runs.
 - The delimiter is detected from the extension (`.tsv` means tab), or set
   with `delimiter=";"`.
 - The first row is the header unless you add `header="false"`.
