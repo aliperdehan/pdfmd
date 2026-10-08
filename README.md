@@ -348,10 +348,23 @@ makes the Heading 1, Body Text and table Pandoc writes look like the template's 
 wording"}}` rewrites text in the template's headers and footers; `office: {title-page: true}` gives the first
 page a page of its own, without header or footer.
 
-**A LaTeX package can ship its own Word support.** Beside a package's `.sty` (or in an `office/` folder there) pdfmd
-looks for `<package>-reference.docx`/`.dotx`, `<package>-office.lua` (the profile above) and `<package>-office.yaml`
-(the `office:` defaults, with `by-option:` entries for what an option of `\usepackage[opt]{package}` adds); a
-document that loads the package gets them with no setting of its own.
+**A LaTeX package can tell pdfmd about itself.** Beside a package's `.sty` (or in an `office/` or `pdfmd/` folder there)
+pdfmd looks for `<package>-pdfmd.yaml`, and for its Word support: `<package>-reference.docx`/`.dotx`,
+`<package>-office.lua` (the profile above) and `<package>-office.yaml` (the `office:` defaults, with `by-option:`
+entries for what an option of `\usepackage[opt]{package}` adds). A document that loads the package gets all of it with
+no setting of its own, and a package without these files behaves exactly as before.
+
+`<package>-pdfmd.yaml` holds `latex-keys:`, the front-matter keys the package's macros are filled from
+(`experiment: LabExperiment` turns `experiment: Titration` into `\renewcommand{\LabExperiment}{Titration}` after the
+preamble), and an optional `office:` section, the same as `<package>-office.yaml`, for a package that wants one file:
+
+```yaml
+latex-keys:
+  experiment: LabExperiment
+  group: LabGroup
+office:
+  reference-doc: house.dotx
+```
 
 ```yaml
 pdfmd-options:

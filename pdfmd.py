@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.8"
+PDFMD_VERSION = "3.24.9"
 import argparse
 import csv
 import filecmp
@@ -3787,6 +3787,41 @@ def effective_metadata(md_path: Path, metadata_files: list[Path], variables: lis
     return merged
 
 
+def package_places(folder: Path) -> list[Path]:
+    """Where a local LaTeX package keeps what it ships for pdfmd: beside its `.sty`, else in an `office/` or a
+    `pdfmd/` folder there."""
+    return [folder, folder / "office", folder / "pdfmd"]
+
+
+def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
+    """{name: path} of the files TeX finds, one kpsewhich call for all of them (a missing name is left out)."""
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich or not names:
+        return {}
+    done = subprocess.run([kpsewhich, *names], capture_output=True, text=True)
+    found: dict[str, Path] = {}
+    for line in done.stdout.splitlines():
+        if line.strip():
+            found.setdefault(Path(line.strip()).name, Path(line.strip()))
+    return found
+
+
+def package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
+    """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
+    (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
+    (front-matter key -> the macro it fills) and `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`)."""
+    if yaml is None:
+        return None
+    for candidate in (folder / f"{package}-pdfmd.yaml", folder / "pdfmd" / f"{package}-pdfmd.yaml", folder / "pdfmd" / "pdfmd.yaml"):
+        if candidate.is_file():
+            try:
+                data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                return None
+            return (data, candidate) if isinstance(data, dict) else None
+    return None
+
+
 def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
                            ) -> list[tuple[Path, str]]:
     """(folder, package) of each local LaTeX package the preamble loads; see office_packages."""
@@ -3806,50 +3841,69 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
             texts.append(item.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
-    found: list[tuple[Path, str, list[str]]] = []
+    loaded: list[tuple[str, list[str]]] = []
     for match in re.finditer(r"\\(?:usepackage|RequirePackage)(?:\[([^\]]*)\])?\{([^}]+)\}", "\n".join(texts)):
         options = [part.strip() for part in (match.group(1) or "").split(",") if part.strip()]
-        for package in (part.strip() for part in match.group(2).split(",")):
-            located = kpsewhich_path_text(package + ".sty")
-            if located and "texmf-dist" not in str(located[0]) and "/texlive/" not in str(located[0]):
-                folder = located[0].resolve().parent
-                if not any(item[0] == folder and item[1] == package for item in found):
-                    found.append((folder, package, options))
+        loaded += [(part.strip(), options) for part in match.group(2).split(",") if part.strip()]
+    located = kpsewhich_locate(sorted({package + ".sty" for package, _ in loaded}))
+    found: list[tuple[Path, str, list[str]]] = []
+    for package, options in loaded:
+        path = located.get(package + ".sty")
+        if path and "texmf-dist" not in str(path) and "/texlive/" not in str(path):
+            folder = path.resolve().parent
+            if not any(item[0] == folder and item[1] == package for item in found):
+                found.append((folder, package, options))
     return found
+
+
+def office_defaults_sources(folder: Path, package: str) -> list[tuple[dict, Path]]:
+    """(mapping, its file) for each place a package keeps defaults of a Word/ODT build, best first:
+    `<package>-office.yaml` (beside the `.sty`, in `office/` or `pdfmd/`), then the `office:` section of
+    `<package>-pdfmd.yaml`."""
+    sources: list[tuple[dict, Path]] = []
+    if yaml is None:
+        return sources
+    for place in package_places(folder):
+        candidate = place / f"{package}-office.yaml"
+        if candidate.is_file():
+            try:
+                data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                data = None
+            if isinstance(data, dict):
+                sources.append((data, candidate))
+    helper = package_helper(folder, package)
+    if helper and isinstance(helper[0].get("office"), dict):
+        sources.append((dict(helper[0]["office"]), helper[1]))
+    return sources
 
 
 def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> dict:
     """`pdfmd-options: {office: ...}` as the document, its metadata files and the config file give it, over the
-    defaults of a package that ships `<name>-office.yaml` (the document wins key by key)."""
+    defaults of a package that ships them (`<name>-office.yaml`, or the `office:` of `<name>-pdfmd.yaml`); the
+    document wins key by key."""
     value = cascaded_option(md_path, metadata_files, "office")
     options = dict(value) if isinstance(value, dict) else {}
-    if yaml is not None:
-        for folder, package, chosen in reversed(office_packages(md_path, metadata_files, no_auto)):
-            for candidate in (folder / f"{package}-office.yaml", folder / "office" / f"{package}-office.yaml"):
-                if candidate.is_file():
-                    try:
-                        data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
-                    except (OSError, yaml.YAMLError):
-                        data = None
-                    if isinstance(data, dict):
-                        # `by-option:` holds what an option of \usepackage[...] adds (orgchem: footer wording...)
-                        variants = data.pop("by-option", None)
-                        if isinstance(variants, dict):
-                            for option in chosen:
-                                extra = variants.get(option)
-                                if isinstance(extra, dict):
-                                    for extra_key, extra_value in extra.items():
-                                        data[extra_key] = ({**data.get(extra_key, {}), **extra_value}
-                                                           if isinstance(extra_value, dict) and isinstance(data.get(extra_key), dict)
-                                                           else extra_value)
-                        options = {**data, **options}
-                        # a package's relative reference-doc / profile paths are relative to its folder
-                        for key in ("reference-doc", "profile"):
-                            if isinstance(data.get(key), str) and key not in (value or {}):
-                                options[key] = str((candidate.parent / data[key]).resolve())
-                        if isinstance(options.get("media"), dict) and "media" not in (value or {}):
-                            options["media"] = {name: str((candidate.parent / file).resolve())
-                                                for name, file in options["media"].items()}
+    for folder, package, chosen in reversed(office_packages(md_path, metadata_files, no_auto)):
+        for data, candidate in office_defaults_sources(folder, package):
+            # `by-option:` holds what an option of \usepackage[...] adds (orgchem: footer wording...)
+            variants = data.pop("by-option", None)
+            if isinstance(variants, dict):
+                for option in chosen:
+                    extra = variants.get(option)
+                    if isinstance(extra, dict):
+                        for extra_key, extra_value in extra.items():
+                            data[extra_key] = ({**data.get(extra_key, {}), **extra_value}
+                                               if isinstance(extra_value, dict) and isinstance(data.get(extra_key), dict)
+                                               else extra_value)
+            options = {**data, **options}
+            # a package's relative reference-doc / profile paths are relative to its folder
+            for key in ("reference-doc", "profile"):
+                if isinstance(data.get(key), str) and key not in (value or {}):
+                    options[key] = str((candidate.parent / data[key]).resolve())
+            if isinstance(options.get("media"), dict) and "media" not in (value or {}):
+                options["media"] = {name: str((candidate.parent / file).resolve())
+                                    for name, file in options["media"].items()}
     return options
 
 
@@ -3873,7 +3927,7 @@ def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict
             if (folder / name).is_file():
                 return (folder / name).resolve()
     for folder, package in packages:
-        for subfolder in (folder, folder / "office"):
+        for subfolder in package_places(folder):
             if (subfolder / f"{package}-office.lua").is_file():
                 return (subfolder / f"{package}-office.lua").resolve()
     return None
@@ -3903,7 +3957,7 @@ def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, o
         if candidate.is_file():
             return candidate, f"found {candidate} (the config folder)"
     for folder, package in packages:
-        for subfolder in (folder, folder / "office"):
+        for subfolder in package_places(folder):
             for name in (f"{package}-reference", "reference"):
                 for extension in extensions:
                     candidate = subfolder / f"{name}.{extension}"
@@ -5026,6 +5080,11 @@ def document_header_includes(text: str) -> str | None:
 # Front-matter keys that are not pandoc variables but that a LaTeX preamble may
 # want. Each becomes \\renewcommand{\\<macro>}{<value>}, appended after the
 # preambles so the preamble can supply a default with \\newcommand.
+#
+# NOTE: this table is nulabreport's own vocabulary, kept only for packages that do not say so themselves.
+# The place for it is the package: `<package>-pdfmd.yaml` beside its .sty holds a `latex-keys:` mapping
+# (see package_latex_keys), which is read first and adds to or overrides these. Once nulabreport and
+# the documents around it ship that file, this table can go (a breaking change: a major bump).
 DOCUMENT_LATEX_KEYS = {
     "experiment": "LabExperiment",
     "group": "LabGroup",
@@ -5040,10 +5099,25 @@ DOCUMENT_LATEX_KEYS = {
 }
 
 
+def package_latex_keys(md_path: Path) -> dict[str, str]:
+    """{front-matter key: macro name} the LaTeX packages of the document's preamble ask for in their
+    `<package>-pdfmd.yaml` (`latex-keys:`)."""
+    keys: dict[str, str] = {}
+    for folder, package, _ in office_packages(md_path, [], None):
+        helper = package_helper(folder, package)
+        wanted = helper[0].get("latex-keys") if helper else None
+        if isinstance(wanted, dict):
+            for key, macro in wanted.items():
+                name = str(macro).lstrip("\\")
+                if re.fullmatch(r"[A-Za-z@]+", name):
+                    keys.setdefault(str(key), name)
+    return keys
+
+
 def document_latex_definitions(md_path: Path) -> str:
-    """Return \\renewcommand lines for the front-matter keys listed above."""
+    """Return \\renewcommand lines for the front-matter keys listed above and those of the document's packages."""
     lines = []
-    for key, macro in DOCUMENT_LATEX_KEYS.items():
+    for key, macro in {**DOCUMENT_LATEX_KEYS, **package_latex_keys(md_path)}.items():
         value = frontmatter_value(md_path, key)
         if value:
             lines.append(f"\\renewcommand{{\\{macro}}}{{{value}}}")

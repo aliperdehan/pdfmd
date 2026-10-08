@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.9 — 2026-10-08
+
+Pre-edit state: commit `c84ece9` (v3.24.8). A package says in its own file what pdfmd cannot know.
+
+### Added
+
+- **`<package>-pdfmd.yaml`**, beside a LaTeX package's `.sty` (or in a `pdfmd/` folder there; found from the preamble's
+  `\usepackage` like the Word files). `latex-keys:` maps front-matter keys to the macros they fill
+  (`\renewcommand{\Macro}{value}` after the preamble) and an optional `office:` section holds the package's Word/ODT defaults,
+  under `<package>-office.yaml` (which may now also sit in `pdfmd/`, as `-office.lua` and `-reference.docx` may). nulabreport
+  ships its own (`experiment`, `group`, `course`, `section`, `instructor`, `performed`, `unknown(s)`).
+- The package lookup is one `kpsewhich` call for all `\usepackage`d names instead of one each.
+
+### Changed
+
+- `DOCUMENT_LATEX_KEYS` (those nulabreport keys, hard-coded in pdfmd) stays as the fallback for a nulabreport without the
+  file, now with a note: the keys of a package's own file are added to it and win. Documents of a package without
+  the file build exactly as before; the LaTeX of a nulabreport report is byte-identical with and without it.
+
+---
+
 ## v3.24.8 — 2026-10-08
 
 Pre-edit state: commit `5559552` (v3.24.7). The second reading of the Word builds.

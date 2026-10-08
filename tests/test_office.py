@@ -375,3 +375,67 @@ class PackageDefaults(unittest.TestCase):
             heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
             self.assertIn('w:val="FF0000"', heading)                       # Heading 1 looks like the package's MyH
             self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy
+
+
+@unittest.skipUnless(PANDOC and shutil.which("kpsewhich"), "needs Pandoc and kpsewhich")
+class PackageHelper(unittest.TestCase):
+    """`<package>-pdfmd.yaml` beside a package's .sty (or in its `pdfmd/` folder): the front-matter keys it
+    fills and the defaults of its Word output."""
+
+    def build(self, place: str, helper: str, front: str = "title: T\nmykey: Seven\n", extra: dict | None = None):
+        directory = tempfile.mkdtemp(prefix="pdfmd-helper-")
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        package = root / "tex" / "mypkg"
+        (package / place).mkdir(parents=True, exist_ok=True)
+        (package / "mypkg.sty").write_text("\\ProvidesPackage{mypkg}\n", encoding="utf-8")
+        if helper:
+            (package / place / ("mypkg-pdfmd.yaml" if place != "pdfmd" else "pdfmd.yaml")).write_text(helper, encoding="utf-8")
+        for name, content in (extra or {}).items():
+            (package / name).parent.mkdir(parents=True, exist_ok=True)
+            (package / name).write_text(content, encoding="utf-8")
+        work = root / "doc"
+        work.mkdir()
+        (work / "preamble.tex").write_text("\\usepackage{mypkg}\n\\newcommand{\\MyKey}{none}\n", encoding="utf-8")
+        (work / "d.md").write_text(f"---\n{front}---\n\nText.\n", encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "latex", "-o", "d.tex", "--no-stamp",
+                               "--no-backup"], cwd=work, capture_output=True, text=True, env=environment)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return (work / "d.tex").read_text(encoding="utf-8")
+
+    def test_a_package_names_the_front_matter_keys_it_wants(self):
+        tex = self.build("", "latex-keys:\n  mykey: MyKey\n  bad: 'not a macro!'\n")
+        self.assertIn("\\renewcommand{\\MyKey}{Seven}", tex)
+
+    def test_the_pdfmd_folder_is_the_other_place(self):
+        tex = self.build("pdfmd", "latex-keys: {mykey: \\MyKey}\n")
+        self.assertIn("\\renewcommand{\\MyKey}{Seven}", tex)
+
+    def test_a_package_without_the_file_changes_nothing_and_the_built_in_keys_still_work(self):
+        tex = self.build("", "", front="title: T\nmykey: Seven\nexperiment: Titration\n")
+        self.assertNotIn("\\renewcommand{\\MyKey}", tex)
+        self.assertIn("\\renewcommand{\\LabExperiment}{Titration}", tex)
+
+    def test_the_office_section_supplies_word_defaults(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        directory = tempfile.mkdtemp(prefix="pdfmd-helper-")
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        package = root / "tex" / "mypkg"
+        (package / "pdfmd").mkdir(parents=True)
+        (package / "mypkg.sty").write_text("\\ProvidesPackage{mypkg}\n", encoding="utf-8")
+        (package / "pdfmd" / "mypkg-pdfmd.yaml").write_text(
+            "office:\n  profile: mine.lua\n  title-page: false\n  by-option:\n    fancy: {title-page: true}\n", encoding="utf-8")
+        (package / "pdfmd" / "mypkg-office.yaml").write_text("title-page: false\nfonts: Serif\n", encoding="utf-8")
+        work = root / "doc"
+        work.mkdir()
+        (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
+        (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        self.addCleanup(os.environ.pop, "TEXINPUTS", None)
+        options = pdfmd.office_options(work / "d.md", [])
+        self.assertEqual(options["fonts"], "Serif")                   # <package>-office.yaml, beside the helper
+        self.assertEqual(options["profile"], str((package / "pdfmd" / "mine.lua").resolve()))
+        self.assertIs(options["title-page"], False)                   # the office yaml wins over the helper's section
