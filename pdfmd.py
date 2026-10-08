@@ -1033,7 +1033,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.19"
+PDFMD_VERSION = "3.23.20"
 import argparse
 import csv
 import filecmp
@@ -3520,6 +3520,121 @@ def config_options() -> dict:
     """`options:` of the config file: defaults for every document's ``pdfmd-options``."""
     options = load_config().get("options")
     return options if isinstance(options, dict) else {}
+
+
+def folder_size(folder: Path) -> int:
+    total = 0
+    try:
+        for path in folder.rglob("*"):
+            try:
+                if path.is_file():
+                    total += path.stat().st_size
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return total
+
+
+def doctor_report() -> bool:
+    """`--doctor`: one page on everything pdfmd uses (tools, fonts, PDF reading, config, cache) and
+    what to run to fix what is missing. True unless no PDF can be made at all."""
+    import platform
+    problems: list[tuple[str, str]] = []
+
+    def line(ok: bool | None, text: str, fix: str | None = None, why: str | None = None) -> None:
+        print(f"{'OK  ' if ok else 'MISS' if ok is False else 'NOTE'}  {text}")
+        if ok is False and fix:
+            problems.append((why or text, fix))
+
+    print(f"pdfmd {PDFMD_VERSION} -- Python {platform.python_version()}, {platform.system()} {platform.machine()}")
+    print(f"  {Path(__file__).resolve()}")
+    print("\nMarkdown to PDF:")
+    pandoc = which("pandoc")
+    version = ".".join(map(str, pandoc_version())) if pandoc else ""
+    line(bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else ""),
+         "pdfmd --install pandoc", "Pandoc (without it only the plain built-in renderer runs)")
+    engines = installed_engines()
+    line(bool(engines), "PDF engines: " + (", ".join(engines) if engines else "none"),
+         "pdfmd --install typst", "a PDF engine (Typst is the quickest)")
+    if engines:
+        print(f"      used first: {engines[0]}" + ("" if any(e in LATEX_ENGINES for e in engines)
+                                               else "  (no TeX: LaTeX packages and some math will not work)"))
+    if not pandoc or not engines:
+        native = available_native_engines()
+        line(bool(native), "built-in renderer: " + (", ".join(native) if native else "none"))
+    quarto = which("quarto")
+    line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
+    soffice = resolve_soffice()
+    line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
+    for module in ("yaml", "pypdf"):
+        found = importlib.util.find_spec(module) is not None
+        line(found, f"python package {module}", "pip install pyyaml pypdf",
+             f"the Python package {module} (front matter / PDF stamping are skipped without it)")
+
+    print("\nFonts and scripts:")
+    module = unicode_module()
+    if module is None:
+        line(False, "pdfmd_unicode package", "pip install --force-reinstall pdfmd-cli", "the pdfmd_unicode package")
+    else:
+        for family, fix in ((PREFERRED_FONT, "pdfmd --install fonts:core"), (DEFAULT_MONOFONT, "pdfmd --install fonts:core")):
+            line(not font_missing(family), f"{family}" + ("" if not font_missing(family) else "  (a stand-in is used)"),
+                 fix, f"the default font {family}")
+        from pdfmd_unicode import install as font_installer
+        installed = font_installer.installed(fonts_directory())
+        line(None, f"fonts installed by pdfmd: {', '.join(sorted(installed)) if installed else 'none'}"
+                   f"  ({fonts_directory()})")
+        try:
+            index = module.FontIndex(fonts_directory())
+            emoji = managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji") or index.regular("Apple Color Emoji")
+        except Exception:  # noqa: BLE001 -- a broken font folder must not stop the report
+            emoji = None
+        line(bool(emoji), "colour emoji font" + (f": {emoji.family}" if emoji else ""),
+             "pdfmd --install emoji", "a colour emoji font (emoji are labels or boxes without one)")
+        cjk = [family for family in ("Songti SC", "PingFang SC", "Noto Serif CJK SC", "Source Han Serif SC",
+                                     "SimSun", "Microsoft YaHei", "WenQuanYi Zen Hei") if not system_font_missing(family)]
+        line(bool(cjk) or "cjk-sc" in installed, "Chinese/Japanese/Korean font" + (f": {cjk[0]}" if cjk else ""),
+             "pdfmd --install fonts:cjk-sc  (cjk-jp, cjk-kr...)", "a CJK font (only needed for documents in those scripts)")
+        packs = sorted(TRANSLIT_PACKS)
+        line(None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "")
+                   + "  (--translit list; pdfmd --install translit for Chinese and the rest)")
+
+    print("\nReading PDFs (PDF to Markdown):")
+    reader = find_batchocr()
+    reader_version = batchocr_version(reader) if reader else None
+    line(bool(reader_version and reader_version >= BATCHOCR_MIN),
+         "batchocr" + (f" {'.'.join(map(str, reader_version))}" if reader_version else ""),
+         "pdfmd --install batchocr", "batchocr (reading PDFs)")
+    for tool, programs in (("tesseract", ("tesseract",)), ("poppler", ("pdftotext", "pdftoppm"))):
+        found = [program for program in programs if which(program)]
+        line(len(found) == len(programs), f"{tool}: " + (", ".join(found) or "not found")
+             + (f"  ({which(found[0])})" if found else ""),
+             tesseract_install_hint(), f"{tool} (scanned PDFs)")
+    if module is not None:
+        from pdfmd_unicode import tessdata
+        own = tessdata.installed(tessdata_directory())
+        line(None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
+
+    print("\nSettings and cache:")
+    config = config_path()
+    line(None, "config file: " + ("switched off (PDFMD_CONFIG is empty)" if config is None else
+                                  f"{config} ({'present' if config.is_file() else 'none; pdfmd --init-config writes one'})"))
+    cache = cache_root()
+    size = folder_size(cache) if cache.is_dir() else 0
+    line(None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --clear-cache)")
+    line(None, f"installed tools and fonts: {data_root()}")
+
+    print()
+    if problems:
+        print(f"{len(set(fix for _, fix in problems))} thing(s) to fix:")
+        merged: dict[str, list[str]] = {}
+        for what, fix in problems:
+            merged.setdefault(fix, []).append(what)
+        for number, (fix, what) in enumerate(merged.items(), start=1):
+            print(f"  {number}. {' and '.join(what)}\n       {fix}")
+    else:
+        print("Everything pdfmd uses is in place.")
+    return bool(pandoc and engines) or bool(available_native_engines())
 
 
 def config_report(init: bool = False) -> bool:
@@ -13561,6 +13676,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
     parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
                         help="remove fonts or OCR languages installed by --install, e.g. --uninstall fonts:arabic,cjk or ocr:rus")
+    parser.add_argument("--doctor", action="store_true",
+                        help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
+                             "reading, OCR, config, cache) and the command that fixes each missing piece")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -13900,6 +14018,8 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
+    if args.doctor:
+        raise SystemExit(0 if doctor_report() else 1)
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if args.check_fonts:

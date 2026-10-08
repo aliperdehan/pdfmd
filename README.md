@@ -157,6 +157,23 @@ OK    quarto (only needed for .qmd files)  (/usr/local/bin/quarto)
 The numbers are the fallback order, and also shortcuts: `-e 6` means
 `-e typst`.
 
+For everything at once, `pdfmd --doctor` is one page on the Markdown-to-PDF tools, fonts
+and emoji, PDF reading (batchocr, Tesseract, Poppler, OCR languages), your config file and
+the cache, ending with the command that fixes each missing piece:
+
+```console
+$ pdfmd --doctor
+...
+Reading PDFs (PDF to Markdown):
+OK    batchocr 1.2.4
+MISS  tesseract: not found
+MISS  poppler: not found
+
+1 thing(s) to fix:
+  1. tesseract (scanned PDFs) and poppler (scanned PDFs)
+       brew install tesseract poppler
+```
+
 ### No Pandoc? The built-in fallback
 
 On a machine with no Pandoc, or Pandoc but no PDF engine, `pdfmd` does not

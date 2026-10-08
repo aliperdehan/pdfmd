@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.20 — 2026-10-08
+
+Pre-edit state: commit `25dcb7b` (v3.23.19).
+
+### Added
+
+- **`pdfmd --doctor`**: one report on what pdfmd uses: Pandoc and the PDF engines (and which runs
+  first), the Python packages, the default fonts, the fonts pdfmd installed, a colour emoji font, a CJK
+  font, the name-lookup packs, batchocr, Tesseract and Poppler, the OCR languages pdfmd holds, the
+  config file and the cache; it ends with the command that fixes each missing piece (the same fix is
+  listed once). Exit status 0 while a PDF can still be made (the built-in renderer counts).
+  `--check-dependencies` and `--check-fonts` are unchanged.
+- `tests/test_doctor.py`.
+
+---
+
 ## v3.23.19 — 2026-10-08
 
 Pre-edit state: commit `3d169e9` (v3.23.18). OCR languages without a package manager.
