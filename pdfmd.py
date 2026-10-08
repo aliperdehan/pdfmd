@@ -1033,7 +1033,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.21"
+PDFMD_VERSION = "3.23.22"
 import argparse
 import csv
 import filecmp
@@ -4850,7 +4850,8 @@ def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) 
             undrawn.update(code.uncovered)
             undrawn.update({code_point: 1 for code_point in code.emoji})
     if plan.emoji:
-        picture = managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+        picture = (managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+                   or index.regular("Apple Color Emoji"))
         print(f"  {len(plan.emoji)} emoji character(s): LaTeX sets them as pictures from "
               + (picture.family if picture else "a colour emoji font (not installed: pdfmd --install emoji)")
               + "; Typst draws them itself")

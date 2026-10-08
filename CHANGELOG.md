@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.22 — 2026-10-08
+
+Pre-edit state: commit `d0afddc` (v3.23.21). Found while making the README's script screenshot: with
+Apple Color Emoji a skin tone, a joined emoji and a flag came out as a plain emoji or as boxes, though
+3.23.15 said they resolve.
+
+### Fixed
+
+- **Apple Color Emoji sequences**: the font keeps its sequences in AAT tables, but names each glyph
+  (`u1F469_u1F52C.3`, `u1F1F0_u1F1FF`, `u0031_u20E3`, `u1F9CE.0.W`); pdfmd reads the `post` table and
+  looks a sequence up by that name (the code points without joiners and selectors, a skin tone as
+  `.N`, two people `.NN`, a gender sign as `.W`/`.M`). Skin tones, flags, keycaps, tag flags and most
+  joined emoji now come out right; a joined emoji the font has no named glyph for (a family of four)
+  is reported as undrawn instead of drawn as its first emoji (the Noto path is unchanged).
+- `--check-fonts` knew a colour emoji font only if it was Noto; it now counts Apple's, as the build does.
+
+### Added
+
+- `examples/scripts.md` and `docs/scripts.png`, shown in the README's "Other scripts".
+- `tests/test_apple_emoji.py`.
+
+---
+
 ## v3.23.21 — 2026-10-08
 
 Pre-edit state: commit `202f29b` (v3.23.20).

@@ -735,6 +735,12 @@ The cause is usually one of these automatic decisions, and `-v` names it.
 
 ### Other scripts
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/scripts.png" width="560" alt="examples/scripts.md: Kazakh, Greek, Arabic, Hebrew, Chinese, Japanese, Korean and Hindi text, and emoji, in one PDF">
+</p>
+
+(That is [`examples/scripts.md`](https://github.com/aliperdehan/pdfmd/blob/main/examples/scripts.md), built with no configuration.)
+
 A document that mixes scripts needs more than one font. With lualatex or
 xelatex, `pdfmd` reads the character tables of your installed fonts, finds
 the characters the main font cannot draw and sets each run of them in a font
@@ -776,10 +782,10 @@ Emoji are set as pictures with lualatex and xelatex (which cannot draw colour
 fonts): each emoji, flag, skin tone, family or keycap is looked up in the colour
 emoji font (`pdfmd --install emoji`, a system Noto Color Emoji, or else Apple Color Emoji on
 a Mac), its picture taken out of the font file and included at the height of the text, in
-inline code and code blocks too. Apple's font is read less completely than Noto's: single
-emoji, skin tones and most joined emoji work, but flags and keycaps, and joined emoji it
-does not list, come out as their first emoji or are reported as undrawable (install Noto
-for those). The pictures
+inline code and code blocks too. Apple's font is read through its glyph names (the same
+way for single emoji, skin tones, flags, keycaps and the joined emoji it has a glyph for,
+such as a woman scientist); the few it composes in tables pdfmd does not read (a family of
+four, say) are reported as undrawable (install Noto for those). The pictures
 are kept in pdfmd's cache folder; a `.tex` written with `--to latex` points
 there.
 

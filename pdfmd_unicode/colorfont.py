@@ -15,6 +15,7 @@ from pathlib import Path
 from .emoji import EMOJI_BLOCKS, DEFAULT_EMOJI, TEXT_DEFAULT_EMOJI, VARIATION_EMOJI, ZERO_WIDTH_JOINER
 
 SKIN_TONES = "\U0001F3FB-\U0001F3FF"
+ZERO_WIDTH_JOINER_CHARACTER = chr(ZERO_WIDTH_JOINER)
 
 
 def _class(ranges) -> str:
@@ -49,7 +50,7 @@ def _u32(data: bytes, offset: int) -> int:
 
 
 def _tables(path: str, index: int = 0) -> dict[bytes, bytes]:
-    wanted = (b"cmap", b"GSUB", b"CBLC", b"CBDT", b"sbix", b"maxp")
+    wanted = (b"cmap", b"GSUB", b"CBLC", b"CBDT", b"sbix", b"maxp", b"post")
     with open(path, "rb") as handle:
         magic = handle.read(4)
         base = 0
@@ -67,6 +68,47 @@ def _tables(path: str, index: int = 0) -> dict[bytes, bytes]:
                 handle.seek(offset)
                 tables[tag] = handle.read(length)
     return tables
+
+
+def post_names(post: bytes) -> dict[str, int]:
+    """Glyph name -> glyph id from a `post` table of format 2 (empty for any other format). Apple Color
+    Emoji keeps its sequences (skin tones, joined emoji, flags, keycaps) in AAT tables a GSUB reader does
+    not see, but names every glyph for them: `u1F469_u1F52C.3` is a woman scientist, medium skin tone."""
+    if len(post) < 34 or _u32(post, 0) != 0x00020000:
+        return {}
+    count = _u16(post, 32)
+    indexes = struct.unpack_from(f">{count}H", post, 34)
+    strings: list[str] = []
+    offset = 34 + 2 * count
+    while offset < len(post):
+        size = post[offset]
+        strings.append(post[offset + 1:offset + 1 + size].decode("latin-1"))
+        offset += 1 + size
+    return {strings[index - 258]: glyph for glyph, index in enumerate(indexes)
+            if index >= 258 and index - 258 < len(strings)}
+
+
+def apple_names(sequence: str) -> list[str]:
+    """The glyph names Apple Color Emoji could give a sequence, best first: the code points
+    without joiners and selectors (`u1F469_u1F52C`), a skin tone as `.N` (1 to 5; two people `.NN`),
+    and a gender sign as the `.W`/`.M` of the base emoji."""
+    points = [ord(character) for character in sequence if ord(character) not in (VARIATION_EMOJI, ZERO_WIDTH_JOINER)]
+    tones = [str(point - 0x1F3FA) for point in points if 0x1F3FB <= point <= 0x1F3FF]
+    points = [point for point in points if not 0x1F3FB <= point <= 0x1F3FF]
+    if not points:
+        return []
+
+    def name(parts: list[int]) -> str:
+        return "_".join(f"u{point:04X}" for point in parts)
+
+    names: list[str] = []
+    for suffix in (["." + "".join(tones)] if tones else [".0", ".00", ""]):
+        names.append(name(points) + suffix)
+        if len(points) > 1 and points[-1] in (0x2640, 0x2642):
+            names.append(name(points[:-1]) + suffix + (".W" if points[-1] == 0x2640 else ".M"))
+    if tones:
+        names.append(name(points))
+    return names
 
 
 def _coverage(data: bytes, offset: int) -> list[int]:
@@ -221,10 +263,15 @@ class ColorFont:
         self._glyphs = _u16(tables[b"maxp"], 4) if b"maxp" in tables else 0
         self._cmap = _cmap(tables[b"cmap"])
         self._ligatures = _ligatures(tables[b"GSUB"]) if b"GSUB" in tables else {}
+        self._names = post_names(tables[b"post"]) if self._sbix is not None and b"post" in tables else {}
         self._selector = self._cmap.get(VARIATION_EMOJI)
         self._joiner = self._cmap.get(ZERO_WIDTH_JOINER)
 
     def glyph_for(self, sequence: str) -> int | None:
+        if self._names and len(sequence.replace("\ufe0f", "")) > 1:
+            for name in apple_names(sequence):
+                if name in self._names:
+                    return self._names[name]
         glyphs = [self._cmap.get(ord(character)) for character in sequence]
         if any(glyph is None for glyph in glyphs):
             # a character the font has no glyph for: try without the selector, else give up
@@ -238,6 +285,8 @@ class ColorFont:
         for variant in variants:
             if len(variant) == 1:
                 return variant[0]
+        if self._names and ZERO_WIDTH_JOINER_CHARACTER in sequence:
+            return None      # Apple composes families and the like in tables not read here: undrawn, not a wrong picture
         # a sequence the font does not know as a whole: show its first emoji
         return variants[1][0] if variants[1] else None
 
