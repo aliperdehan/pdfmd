@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.5 — 2026-10-08
+
+Pre-edit state: commit `e957078` (v3.24.4).
+
+### Fixed
+
+- The PDF build for a document's reference numbers and the `--to latex` run for its fragments' preamble are pdfmd runs of
+  their own: each added a "Compiled with pdfmd" line to the source's BUILD NOTES and might take a snapshot. They run with
+  `--no-stamp --no-backup` now; only the build the user asked for writes its note.
+
+---
+
 ## v3.24.4 — 2026-10-08
 
 Pre-edit state: commit `8a83d39` (v3.24.3). The other outputs, and what building every CHEM212L/CHEM220L report

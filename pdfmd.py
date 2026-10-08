@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.4"
+PDFMD_VERSION = "3.24.5"
 import argparse
 import csv
 import filecmp
@@ -3930,7 +3930,8 @@ def office_pdfmd_command(md_path: Path, metadata_files: list[Path], variables: l
                          no_auto: list[str] | None, *options: str) -> list[str]:
     """This pdfmd run again, as a subprocess, for the same document with other options (a PDF build for its
     labels, a `--to latex` run for its preamble)."""
-    command = [sys.executable, str(Path(__file__).resolve()), str(md_path), *options,
+    # --no-stamp/--no-backup: only the build the user asked for writes a note into the source and a snapshot
+    command = [sys.executable, str(Path(__file__).resolve()), str(md_path), *options, "--no-stamp", "--no-backup",
                "--no-auto", *(no_auto or ["officeref"])]
     for variable in variables:
         command += ["-V", variable]
