@@ -270,3 +270,79 @@ class Rendered(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+STYLES = ('<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+          '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+          '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/>'
+          '<w:pPr><w:keepNext/><w:spacing w:before="480"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="48"/></w:rPr></w:style>'
+          '<w:style w:type="paragraph" w:customStyle="1" w:styleId="LRH1"><w:name w:val="LR H1"/><w:basedOn w:val="Heading1"/>'
+          '<w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="both"/></w:pPr><w:rPr><w:sz w:val="24"/></w:rPr></w:style>'
+          '<w:style w:type="paragraph" w:customStyle="1" w:styleId="LRNormal"><w:name w:val="LR Normal"/><w:basedOn w:val="Normal"/>'
+          '<w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>'
+          '</w:styles>')
+
+
+class StyleAliases(unittest.TestCase):
+    def test_a_source_based_on_its_target_adds_to_it(self):
+        out = docx.alias_styles(STYLES, {"Heading1": "LRH1"})
+        block = re.search(r'w:styleId="Heading1".*?</w:style>', out, re.S).group(0)
+        self.assertIn('<w:keepNext/>', block)                    # kept
+        self.assertIn('w:before="0" w:after="0"', block)         # the source's spacing
+        self.assertIn('<w:sz w:val="24"/>', block)
+        self.assertIn("<w:b/>", block)                           # the target's own bold stays
+        self.assertIn('<w:outlineLvl w:val="0"/>', block)        # still a level-1 heading
+        self.assertNotIn('basedOn w:val="Heading1"', block)      # no loop onto itself
+
+    def test_any_other_source_replaces_the_look_and_a_missing_style_is_made(self):
+        out = docx.alias_styles(STYLES, {"BodyText": "LRNormal", "Compact": "Normal"})
+        body = re.search(r'w:styleId="BodyText".*?</w:style>', out, re.S).group(0)
+        self.assertIn('<w:name w:val="Body Text"/>', body)
+        self.assertIn('w:firstLine="720"', body)
+        self.assertIn('w:styleId="Compact"', out)
+        ElementTree.fromstring(out)
+
+    def test_title_page_and_replace_reach_the_package(self):
+        spec = spec_from_metadata({}, {"title-page": True, "replace": {"KICKER": "Course & Report"}})
+        self.assertTrue(spec.title_page)
+        document = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+                    '<w:sectPr><w:headerReference w:type="default" r:id="x"/><w:pgSz w:w="1" w:h="2"/></w:sectPr></w:body></w:document>')
+        patched = docx.patch_document(document, spec)
+        self.assertLess(patched.index("pgSz"), patched.index("titlePg"))
+
+
+@unittest.skipUnless(PANDOC and shutil.which("kpsewhich"), "needs Pandoc and kpsewhich")
+class PackageDefaults(unittest.TestCase):
+    def test_a_package_ships_its_word_support_beside_its_sty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "tex" / "mypkg"
+            (package / "office").mkdir(parents=True)
+            (package / "mypkg.sty").write_text("\\ProvidesPackage{mypkg}\n", encoding="utf-8")
+            reference = zipfile.ZipFile(io.BytesIO(docx.default_reference()))
+            out = io.BytesIO()
+            with zipfile.ZipFile(out, "w") as target:
+                for item in reference.infolist():
+                    content = reference.read(item.filename)
+                    if item.filename == "word/styles.xml":
+                        content = content.replace(b"</w:styles>", b'<w:style w:type="paragraph" w:customStyle="1" w:styleId="MyH">'
+                                                  b'<w:name w:val="My H"/><w:basedOn w:val="Normal"/><w:rPr><w:color w:val="FF0000"/>'
+                                                  b'</w:rPr></w:style></w:styles>')
+                    target.writestr(item, content)
+            (package / "office" / "mypkg-reference.docx").write_bytes(out.getvalue())
+            (package / "office" / "mypkg-office.yaml").write_text(
+                "styles: {Heading1: MyH}\nby-option:\n  fancy: {title-page: true}\n", encoding="utf-8")
+            work = root / "doc"
+            work.mkdir()
+            (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
+            (work / "d.md").write_text("---\ntitle: T\n---\n\n# Head\n\nText.\n", encoding="utf-8")
+            environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=work,
+                                  capture_output=True, text=True, env=environment)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("shipped with the mypkg package", done.stdout)
+            archive = zipfile.ZipFile(work / "d.docx")
+            styles = archive.read("word/styles.xml").decode()
+            heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
+            self.assertIn('w:val="FF0000"', heading)                       # Heading 1 looks like the package's MyH
+            self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy

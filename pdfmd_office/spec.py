@@ -23,13 +23,17 @@ class OfficeSpec:
     lang: str | None = None
     indent: bool = False
     house: bool = True                          # pdfmd's own look (black headings, centred title...)
+    aliases: dict[str, str] = field(default_factory=dict)   # Pandoc style -> the template's style it should look like
+    replace: dict[str, str] = field(default_factory=dict)   # text of the template's headers and footers -> new text
+    title_page: bool = False                    # a first page of its own: no header or footer on it
     notes: list[str] = field(default_factory=list)
 
     def has_page(self) -> bool:
         return bool(self.paper or self.margins or self.landscape)
 
     def has_text(self) -> bool:
-        return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent))
+        return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent,
+                    self.aliases, self.replace, self.title_page))
 
     def page_size(self) -> tuple[int, int]:
         width, height = self.paper or PAPER_TWIPS["letter"]
@@ -59,9 +63,16 @@ def spec_from_metadata(meta: dict, office: dict | None = None, font_policy: str 
     (papersize, geometry, margin, fontsize, mainfont, sansfont, monofont, CJKmainfont, linestretch, lang)."""
     merged = dict(meta)
     for key, value in (office or {}).items():
-        if key not in ("reference-doc", "fonts", "latex", "style", "profile"):
+        if key not in ("reference-doc", "fonts", "latex", "style", "profile", "styles", "labels", "replace", "title-page"):
             merged[key.replace("_", "-") if key != "CJKmainfont" else key] = value
     spec = OfficeSpec()
+    styles = (office or {}).get("styles")
+    if isinstance(styles, dict):
+        spec.aliases = {str(target): str(source) for target, source in styles.items() if source}
+    spec.title_page = str((office or {}).get("title-page", "")).strip().lower() in ("true", "yes", "on", "1")
+    texts = (office or {}).get("replace")
+    if isinstance(texts, dict):
+        spec.replace = {str(old): str(new) for old, new in texts.items()}
     paper = _first(merged, "papersize", "pagesize")
     classoption = merged.get("classoption")
     options = classoption if isinstance(classoption, list) else ([classoption] if classoption else [])

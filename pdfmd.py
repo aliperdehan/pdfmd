@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.2"
+PDFMD_VERSION = "3.24.3"
 import argparse
 import csv
 import filecmp
@@ -3754,7 +3754,7 @@ def completion_script(shell: str) -> str:
 # Pandoc's --reference-doc) and writes the document's page size, margins, fonts, size, language and
 # pdfmd's house look into a copy of it. See pdfmd_office/.
 OFFICE_REFERENCE_EXTENSIONS = {"docx": ("docx", "dotx"), "odt": ("odt", "ott"), "pptx": ("pptx", "potx")}
-OFFICE_OPTION_KEYS = ("reference-doc", "fonts", "latex", "style", "profile", "papersize", "geometry", "margin",
+OFFICE_OPTION_KEYS = ("reference-doc", "fonts", "latex", "style", "styles", "labels", "profile", "replace", "title-page", "papersize", "geometry", "margin",
                       "fontsize", "mainfont", "sansfont", "monofont", "CJKmainfont", "linestretch", "lang", "indent")
 
 
@@ -3787,12 +3787,71 @@ def effective_metadata(md_path: Path, metadata_files: list[Path], variables: lis
     return merged
 
 
-def office_options(md_path: Path, metadata_files: list[Path]) -> dict:
+def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
+                           ) -> list[tuple[Path, str]]:
+    """(folder, package) of each local LaTeX package the preamble loads; see office_packages."""
+    return [(folder, package) for folder, package, _ in office_packages(md_path, metadata_files, no_auto)]
+
+
+def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
+                    ) -> list[tuple[Path, str, list[str]]]:
+    """(folder, package name) of each LaTeX package the document's preamble loads that is not part of the TeX
+    distribution: a package may ship its Word support beside its .sty (`<name>-office.lua`,
+    `<name>-office.yaml`, `<name>-reference.dotx`), found here."""
+    if auto_disabled(no_auto, "preamble"):
+        return []
+    texts = []
+    for item in find_preambles(md_path.parent, md_path.stem, []):
+        try:
+            texts.append(item.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            pass
+    found: list[tuple[Path, str, list[str]]] = []
+    for match in re.finditer(r"\\(?:usepackage|RequirePackage)(?:\[([^\]]*)\])?\{([^}]+)\}", "\n".join(texts)):
+        options = [part.strip() for part in (match.group(1) or "").split(",") if part.strip()]
+        for package in (part.strip() for part in match.group(2).split(",")):
+            located = kpsewhich_path_text(package + ".sty")
+            if located and "texmf-dist" not in str(located[0]) and "/texlive/" not in str(located[0]):
+                folder = located[0].resolve().parent
+                if not any(item[0] == folder and item[1] == package for item in found):
+                    found.append((folder, package, options))
+    return found
+
+
+def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> dict:
+    """`pdfmd-options: {office: ...}` as the document, its metadata files and the config file give it, over the
+    defaults of a package that ships `<name>-office.yaml` (the document wins key by key)."""
     value = cascaded_option(md_path, metadata_files, "office")
-    return dict(value) if isinstance(value, dict) else {}
+    options = dict(value) if isinstance(value, dict) else {}
+    if yaml is not None:
+        for folder, package, chosen in reversed(office_packages(md_path, metadata_files, no_auto)):
+            for candidate in (folder / f"{package}-office.yaml", folder / "office" / f"{package}-office.yaml"):
+                if candidate.is_file():
+                    try:
+                        data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+                    except (OSError, yaml.YAMLError):
+                        data = None
+                    if isinstance(data, dict):
+                        # `by-option:` holds what an option of \usepackage[...] adds (orgchem: footer wording...)
+                        variants = data.pop("by-option", None)
+                        if isinstance(variants, dict):
+                            for option in chosen:
+                                extra = variants.get(option)
+                                if isinstance(extra, dict):
+                                    for extra_key, extra_value in extra.items():
+                                        data[extra_key] = ({**data.get(extra_key, {}), **extra_value}
+                                                           if isinstance(extra_value, dict) and isinstance(data.get(extra_key), dict)
+                                                           else extra_value)
+                        options = {**data, **options}
+                        # a package's relative reference-doc / profile paths are relative to its folder
+                        for key in ("reference-doc", "profile"):
+                            if isinstance(data.get(key), str) and key not in (value or {}):
+                                options[key] = str((candidate.parent / data[key]).resolve())
+    return options
 
 
-def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict) -> Path | None:
+def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict,
+                        packages: list[tuple[Path, str]] = ()) -> Path | None:
     """A house style's Word profile: `office: {profile: FILE}`, else `<name>-office.lua`, `office.lua` or
     `nulabreport-office.lua` beside the document, in its metadata/ folder or beside its metadata files, else in
     the config folder. A Lua file that says which of the style's own macros mean what in a Word file."""
@@ -3810,11 +3869,15 @@ def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict
         for name in (f"{md_path.stem}-office.lua", "office.lua", "nulabreport-office.lua"):
             if (folder / name).is_file():
                 return (folder / name).resolve()
+    for folder, package in packages:
+        for subfolder in (folder, folder / "office"):
+            if (subfolder / f"{package}-office.lua").is_file():
+                return (subfolder / f"{package}-office.lua").resolve()
     return None
 
 
 def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, output: Path,
-                       options: dict) -> tuple[Path | None, str]:
+                       options: dict, packages: list[tuple[Path, str]] = ()) -> tuple[Path | None, str]:
     """(reference document, where it came from) for a docx/odt/pptx build, or (None, '')."""
     extensions = OFFICE_REFERENCE_EXTENSIONS[target]
     named = options.get("reference-doc")
@@ -3836,6 +3899,13 @@ def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, o
         candidate = config_root() / f"reference.{extension}"
         if candidate.is_file():
             return candidate, f"found {candidate} (the config folder)"
+    for folder, package in packages:
+        for subfolder in (folder, folder / "office"):
+            for name in (f"{package}-reference", "reference"):
+                for extension in extensions:
+                    candidate = subfolder / f"{name}.{extension}"
+                    if candidate.is_file():
+                        return candidate.resolve(), f"found {candidate} (shipped with the {package} package)"
     return None, ""
 
 
@@ -3966,14 +4036,15 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         arguments.context = {"md_path": md_path, "metadata_files": metadata_files, "variables": variables,
                              "no_auto": no_auto, "target": target, "note": note}
         module = office_module()
-        options = office_options(md_path, metadata_files)
+        options = office_options(md_path, metadata_files, no_auto)
         latex = str(options.get("latex", "auto")).casefold()
         if (module is not None and target in ("docx", "odt") and latex not in ("off", "false", "no")
                 and not auto_disabled(no_auto, "officelatex")):
             arguments.report = Path(scratch) / "report.json"
             labels = office_label_data(md_path, metadata_files, variables, no_auto, note, Path(scratch),
                                        str(options.get("labels", "auto")).casefold())
-            profile = None if auto_disabled(no_auto, "officeprofile") else find_office_profile(md_path, metadata_files, options)
+            profile = None if auto_disabled(no_auto, "officeprofile") else find_office_profile(
+                md_path, metadata_files, options, office_package_folders(md_path, metadata_files, no_auto))
             if profile is not None:
                 note("OFFICE", f"{md_path}: profile {display_path(profile)}")
             arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'off' if latex == 'off' else 'auto'}",
@@ -3982,6 +4053,16 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]
             if profile is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-profile={profile}"]
+                preamble_copy = Path(scratch) / "preamble.txt"
+                parts = []
+                for item in (find_preambles(md_path.parent, md_path.stem, [])
+                             if not auto_disabled(no_auto, "preamble") else []):
+                    try:
+                        parts.append(item.read_text(encoding="utf-8", errors="replace"))
+                    except OSError:
+                        pass
+                preamble_copy.write_text("\n".join(parts), encoding="utf-8")
+                arguments.filter_arguments += ["-M", f"pdfmd-office-preamble={preamble_copy}"]
             # last: other filters (a house style's own) have shaped the document by then
             arguments.filter_arguments += ["--lua-filter", str(Path(module.__file__).parent / "office.lua")]
         yield arguments
@@ -3996,9 +4077,9 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         yield []
         return
     module = office_module()
-    options = office_options(md_path, metadata_files)
+    options = office_options(md_path, metadata_files, no_auto)
     found = (None, "") if auto_disabled(no_auto, "officeref") else find_reference_doc(
-        md_path, metadata_files, target, output, options)
+        md_path, metadata_files, target, output, options, office_package_folders(md_path, metadata_files, no_auto))
     reference, origin = found
     if module is None or target == "pptx":
         yield ["--reference-doc", str(reference)] if reference else []

@@ -20,9 +20,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
+BORDER = 10        # bp of room around every fragment, trimmed again after drawing (see crop_pages)
+
 SETUP = r"""
 \usepackage[active,tightpage]{preview}
-\setlength\PreviewBorder{0pt}
+\setlength\PreviewBorder{10bp}
 \makeatletter
 \newsavebox{\pdfmdbox}
 \newwrite\pdfmdlog
@@ -32,6 +34,8 @@ SETUP = r"""
   \immediate\write\pdfmdlog{\the\wd\pdfmdbox:\the\ht\pdfmdbox:\the\dp\pdfmdbox}\usebox{\pdfmdbox}}
 \PreviewEnvironment{pdfmdblock}
 \PreviewEnvironment{pdfmdinline}
+% a house style's header, footer and page furniture would land inside the cropped box
+\AtBeginDocument{\ifdefined\Lab@nofurnituretrue\Lab@nofurnituretrue\fi\pagestyle{empty}\thispagestyle{empty}}
 \makeatother
 """
 
@@ -74,17 +78,62 @@ def tools_available() -> bool:
     return shutil.which("pdftocairo") is not None
 
 
-def convert_pages(pdf: Path, count: int, folder: Path, jobs: int = 4) -> list[dict]:
-    """Page i of `pdf` as folder/page-i.svg and .png; returns [{svg, png, width, height}]."""
+def ink_box(pdf: Path, page: int) -> tuple[float, float, float, float] | None:
+    """The bounding box of what a page draws, from Ghostscript's `bbox` device."""
+    gs = shutil.which("gs")
+    if gs is None:
+        return None
+    done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", f"-dFirstPage={page}", f"-dLastPage={page}", "-sDEVICE=bbox", str(pdf)])
+    found = re.search(r"%%HiResBoundingBox:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)", done.stderr)
+    return tuple(float(value) for value in found.groups()) if found else None
+
+
+def crop_page(pdf: Path, page: int, kind: str, folder: Path) -> Path | None:
+    """Page `page` of the fragments PDF alone, cropped from its border back to the fragment: an inline one to
+    exactly its box (its depth is measured from it), a block to its box *and* everything it draws (a picture may
+    reach past its own bounding box, as the university logo does; `preview` would have cut it). None when
+    pypdf is missing (the bordered page is used)."""
+    try:
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import RectangleObject
+    except ImportError:
+        return None
+    reader = PdfReader(str(pdf))
+    target = reader.pages[page - 1]
+    media = target.mediabox
+    left, bottom = float(media.left) + BORDER, float(media.bottom) + BORDER
+    right, top = float(media.right) - BORDER, float(media.top) - BORDER
+    if kind not in INLINE_KINDS:
+        ink = ink_box(pdf, page)
+        if ink is not None:
+            left, bottom = min(left, ink[0] - 0.3), min(bottom, ink[1] - 0.3)
+            right, top = max(right, ink[2] + 0.3), max(top, ink[3] + 0.3)
+    rectangle = RectangleObject([left, bottom, right, top])
+    target.mediabox = rectangle
+    target.cropbox = rectangle
+    writer = PdfWriter()
+    writer.add_page(target)
+    single = folder / f"single-{page}.pdf"
+    with open(single, "wb") as handle:
+        writer.write(handle)
+    return single
+
+
+def convert_pages(pdf: Path, count: int, folder: Path, kinds: list[str] | None = None, jobs: int = 4) -> list[dict]:
+    """Page i of `pdf` as folder/page-i.svg and .png; returns [{svg, png, width, height, trimmed}]. With `kinds`
+    (one per page) the pages are first cropped from their border back to the fragment (crop_page); `trimmed` says
+    whether that worked (otherwise the border is still there)."""
     def one(page: int) -> dict:
         stem = folder / f"page-{page}"
-        _run(["pdftocairo", "-svg", "-f", str(page), "-l", str(page), str(pdf), f"{stem}.svg"])
-        _run(["pdftocairo", "-png", "-r", "300", "-transp", "-singlefile", "-f", str(page), "-l", str(page),
-              str(pdf), str(stem)])
+        single = crop_page(pdf, page, kinds[page - 1], folder) if kinds is not None else None
+        source, first = (single, 1) if single is not None else (pdf, page)
+        _run(["pdftocairo", "-svg", "-f", str(first), "-l", str(first), str(source), f"{stem}.svg"])
+        _run(["pdftocairo", "-png", "-r", "300", "-transp", "-singlefile", "-f", str(first), "-l", str(first),
+              str(source), str(stem)])
         svg = Path(f"{stem}.svg")
         size = re.search(r'<svg[^>]*\bwidth="([\d.]+)(?:pt)?"[^>]*\bheight="([\d.]+)(?:pt)?"', svg.read_text(encoding="utf-8")[:2000]) \
             if svg.is_file() else None
-        return {"svg": f"{stem}.svg", "png": f"{stem}.png",
+        return {"svg": f"{stem}.svg", "png": f"{stem}.png", "trimmed": single is not None or kinds is None,
                 "width": float(size.group(1)) if size else 0.0, "height": float(size.group(2)) if size else 0.0}
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         return list(pool.map(one, range(1, count + 1)))
@@ -126,7 +175,7 @@ def render(items: list[dict], preamble: str, labels_aux: Path | None, work: Path
             log_file = folder / "fragments.pdfmdlog"
             lines = log_file.read_text(encoding="utf-8").splitlines() if log_file.is_file() else []
             measured = [line.split(":") for line in lines]
-            converted = convert_pages(pdf, pages, folder)
+            converted = convert_pages(pdf, pages, folder, [item["kind"] for item in group])
             inline_index = 0
             for item, picture in zip(group, converted):
                 depth = 0.0
@@ -134,6 +183,8 @@ def render(items: list[dict], preamble: str, labels_aux: Path | None, work: Path
                     if inline_index < len(measured) and len(measured[inline_index]) == 3:
                         depth = parse_dimension(measured[inline_index][2])
                     inline_index += 1
+                    if not picture["trimmed"]:
+                        depth += BORDER
                 target_svg, target_png = store / f"{item['id']}.svg", store / f"{item['id']}.png"
                 shutil.copyfile(picture["svg"], target_svg)
                 shutil.copyfile(picture["png"], target_png)

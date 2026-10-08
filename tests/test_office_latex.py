@@ -248,3 +248,19 @@ class Pictures(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode())
         self.assertIn("Figure\u00a01: A circle.", text)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class DisplayBlocks(unittest.TestCase):
+    def test_a_bracket_display_is_converted_like_any_math_and_math_the_reader_made_is_translated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "d.md").write_text("```{=latex}\n\\par\\nointerlineskip\n\\[\\ce{H2O} = \\SI{5}{\\milli\\liter}\\]\n\\par\\nointerlineskip\n```\n",
+                                       encoding="utf-8")
+            done = subprocess.run(["pandoc", "d.md", "-o", "d.docx", "--lua-filter", str(FILTER)], cwd=root,
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertNotIn("Could not convert", done.stderr)
+            xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
+            self.assertIn("<m:oMathPara>", xml)
+            self.assertNotIn("\\ce", xml)

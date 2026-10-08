@@ -115,8 +115,88 @@ def _sz(points: float) -> tuple[str, str]:
     return f'<w:sz w:val="{half}"/>', f'<w:szCs w:val="{half}"/>'
 
 
+PANDOC_STYLE_NAMES = {"BodyText": "Body Text", "FirstParagraph": "First Paragraph", "Compact": "Compact",
+                      "ImageCaption": "Image Caption", "TableCaption": "Table Caption", "BlockText": "Block Text",
+                      "FootnoteText": "Footnote Text", "DefinitionTerm": "Definition Term", "Definition": "Definition",
+                      "CaptionedFigure": "Captioned Figure", "Figure": "Figure", "Table": "Table",
+                      "VerbatimChar": "Verbatim Char", "SourceCode": "Source Code", "TOCHeading": "TOC Heading",
+                      "Heading1": "heading 1", "Heading2": "heading 2", "Heading3": "heading 3",
+                      "Heading4": "heading 4", "Heading5": "heading 5", "Heading6": "heading 6"}
+
+
+def _style_text(styles: str, style_id: str) -> str | None:
+    span = _style(styles, style_id)
+    return styles[span[0]:span[1]] if span else None
+
+
+def _inner(block: str, container: str) -> str | None:
+    found = _block(block, container)
+    return found[2] if found else None
+
+
+def alias_styles(styles: str, aliases: dict[str, str]) -> str:
+    """Make Pandoc's style `target` look like the template's own `source` (`Heading1: LRH1`): a template with
+    house styles of its own names (LR H1, LR Normal...) is then used for the Heading 1 and Body Text Pandoc
+    writes. A source based on the target only adds its own settings to it; any other source replaces the
+    target's paragraph and character settings (and borders, for a table style)."""
+    for target, source in aliases.items():
+        source_block = _style_text(styles, source)
+        if source_block is None or target == source:
+            continue
+        target_block = _style_text(styles, target)
+        if target_block is None:
+            # Pandoc's styles a template lacks (Body Text, Image Caption...): made from the source, under the name
+            # Pandoc looks them up by
+            kind = "table" if 'w:type="table"' in source_block else "character" if 'w:type="character"' in source_block else "paragraph"
+            name = PANDOC_STYLE_NAMES.get(target, target)
+            parent = re.search(r'<w:basedOn w:val="([^"]+)"', source_block)
+            body = re.sub(r'^<w:style\b[^>]*>|</w:style>$', "", source_block)
+            body = re.sub(r'<w:(?:name|link|autoRedefine|rsid)\b[^>]*/>', "", body)
+            body = re.sub(r'<w:next\b[^>]*/>', "", body)
+            created = (f'<w:style w:type="{kind}" w:styleId="{target}"><w:name w:val="{name}"/>'
+                       + (f'<w:basedOn w:val="{parent.group(1)}"/>' if parent and not re.search(r"<w:basedOn", body) else "")
+                       + body + "</w:style>")
+            styles = styles.replace("</w:styles>", created + "</w:styles>")
+            continue
+        based_on = re.search(r'<w:basedOn w:val="([^"]+)"', source_block)
+        merge = bool(based_on and based_on.group(1) == target)
+        new = target_block
+        for container, order in (("pPr", PPR_ORDER), ("rPr", RPR_ORDER)):
+            source_inner = _inner(source_block, container)
+            if source_inner is None:
+                if not merge:
+                    new = _edit(new, container, order, "__none__", None, "</w:style>") if _block(new, container) else new
+                continue
+            if not merge:
+                # start from nothing: the source's own settings are the whole look
+                found = _block(new, container)
+                if found:
+                    new = new[:found[0]] + f"<w:{container}></w:{container}>" + new[found[1]:]
+            for tag, element in _children(source_inner):
+                if tag in ("outlineLvl", "numPr", "pStyle", "rStyle"):
+                    continue
+                new = _edit(new, container, order, tag, element, "</w:style>")
+        for container in ("tblPr", "tcPr", "trPr"):
+            source_inner = _inner(source_block, container)
+            if source_inner is not None and container == "tblPr":
+                found = _block(new, container)
+                if found:
+                    new = new[:found[0]] + f"<w:tblPr>{source_inner}</w:tblPr>" + new[found[1]:]
+        # keep the target's outline level for headings (the heading structure) but take the source's
+        # parent when it is not the target itself
+        if based_on and not merge and based_on.group(1) != target:
+            new = re.sub(r'<w:basedOn w:val="[^"]+"\s*/>', f'<w:basedOn w:val="{based_on.group(1)}"/>', new, count=1)
+        elif not based_on and not merge:
+            new = re.sub(r'<w:basedOn w:val="[^"]+"\s*/>', "", new, count=1)     # the source is a root style
+        span = _style(styles, target)
+        styles = styles[:span[0]] + new + styles[span[1]:]
+    return styles
+
+
 def patch_styles(styles: str, spec: OfficeSpec, house: bool) -> str:
     """Fonts, size, language, line spacing and (with `house`) pdfmd's look, written into styles.xml."""
+    if spec.aliases:
+        styles = alias_styles(styles, spec.aliases)
     base = spec.size
     if base is None:
         found = re.search(r"<w:docDefaults>.*?<w:sz w:val=\"(\d+)\"", styles, re.S)
@@ -223,7 +303,17 @@ def _house(styles: str, base: float) -> str:
 
 
 def patch_document(document: str, spec: OfficeSpec) -> str:
-    """The page size and margins, written into the last section's `<w:sectPr>`."""
+    """The page size and margins (and a title page's own first page), written into the last section's `<w:sectPr>`."""
+    if spec.title_page:
+        sections = list(re.finditer(r"<w:sectPr\b[^>]*?(?:/>|>.*?</w:sectPr>)", document, re.S))
+        if sections:
+            last = sections[-1]
+            text = last.group(0)
+            if text.endswith("/>") and "</w:sectPr>" not in text:
+                text = text[:-2] + "></w:sectPr>"
+            start = re.match(r"<w:sectPr\b[^>]*>", text).group(0)
+            inner = _set(text[len(start):-len("</w:sectPr>")], SECT_ORDER, "titlePg", "<w:titlePg/>")
+            document = document[:last.start()] + start + inner + "</w:sectPr>" + document[last.end():]
     if not spec.has_page():
         return document
     sections = list(re.finditer(r"<w:sectPr\b[^>]*?(?:/>|>.*?</w:sectPr>)", document, re.S))
@@ -258,6 +348,8 @@ EQUATION_STYLE = (
     '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/>'
     '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/>'
     '<w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tcPr><w:vAlign w:val="center"/></w:tcPr></w:style>')
+CENTERED_STYLE = ('<w:style w:type="paragraph" w:customStyle="1" w:styleId="PdfmdCentered"><w:name w:val="PdfmdCentered"/>'
+                  '<w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr></w:style>')
 
 
 def ensure_styles(styles: str) -> str:
@@ -265,6 +357,8 @@ def ensure_styles(styles: str) -> str:
     table an equation and its number sit in."""
     if 'w:styleId="PdfmdEquation"' not in styles:
         styles = styles.replace("</w:styles>", EQUATION_STYLE + "</w:styles>")
+    if 'w:styleId="PdfmdCentered"' not in styles:
+        styles = styles.replace("</w:styles>", CENTERED_STYLE + "</w:styles>")
     return styles
 
 
@@ -280,6 +374,11 @@ def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
                 content = ensure_styles(patch_styles(content.decode("utf-8"), spec, house)).encode("utf-8")
             elif item.filename == "word/document.xml":
                 content = patch_document(content.decode("utf-8"), spec).encode("utf-8")
+            elif spec.replace and re.match(r"word/(header|footer)\d*\.xml$", item.filename):
+                text = content.decode("utf-8")
+                for old, new in spec.replace.items():
+                    text = text.replace(old, new.replace("&", "&amp;").replace("<", "&lt;"))
+                content = text.encode("utf-8")
             elif item.filename == "[Content_Types].xml":
                 content = content.replace(b"wordprocessingml.template.main+xml", b"wordprocessingml.document.main+xml")
             target.writestr(item, content)

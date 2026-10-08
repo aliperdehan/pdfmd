@@ -16,6 +16,7 @@ write the list of left-over fragments to).
 local stringify = pandoc.utils.stringify
 local settings = {latex = "auto", report = nil}
 local equation_block   -- defined below
+local current_meta     -- the document's metadata, for a profile
 local profile = {ignore = {}, commands = {}}   -- a house style's own macros (office.lua beside the document)
 local labels, crefnames, caption_sep, cref_capital = {}, {}, ". ", true
 local counters_by = {equation = 0, figure = 0, table = 0}
@@ -704,6 +705,16 @@ local helpers = {
   end,
   group = group, trim = trim,
   labels = function() return labels end,
+  -- the text of the document's LaTeX preamble files (the house style's per-course macros live there)
+  preamble = function()
+    if not settings.preamble then return "" end
+    local file = io.open(settings.preamble, "r")
+    if not file then return "" end
+    local text = file:read("a")
+    file:close()
+    return text
+  end,
+  meta = function() return current_meta end,
   number_of = function(label) return number_of(label) end,
   fragment = function(kind, tex) return fragment_image(kind, tex) end,
 }
@@ -874,6 +885,19 @@ function RawBlock(el)
       or name == "pagestyle" or name == "setlength" or name == "FloatBarrier" or name == "linespread" then
     return {}
   end
+  -- \[ ... \] : a display nothing refers to (the house style's filter wraps $$...$$ like this)
+  local display = raw:match("^\\%[(.*)\\%]$")
+  if display then
+    local translated = math_translate(display)
+    if translated and math_native(translated, true) then
+      counters.math = counters.math + 1
+      return pandoc.Para({pandoc.Math("DisplayMath", translated)})
+    end
+    local image = fragment_image("math-display", display)
+    if image then return pandoc.Para({image}) end
+    record("equation", raw)
+    return nil
+  end
   local tex, eq_labels, unnumbered = math_block(raw)
   if tex then
     local translated = math_translate(tex)
@@ -899,8 +923,9 @@ function RawBlock(el)
     doc:walk({RawBlock = function() has_raw = true end, RawInline = function() has_raw = true end})
     if not has_raw and #doc.blocks > 0 then
       counters.native = counters.native + 1
-      doc = doc:walk({Image = asset_image,
-                      Figure = function(f) return number_caption(f, "figure") end,
+      -- what the reader made is not seen by the filter again: do its inline work here
+      doc = doc:walk({Math = Math, RawInline = RawInline, Image = asset_image})
+      doc = doc:walk({Figure = function(f) return number_caption(f, "figure") end,
                       Table = function(t) return number_caption(t, "table") end})
       return doc.blocks
     end
@@ -984,6 +1009,7 @@ function Table(el)
 end
 
 function Meta(meta)
+  current_meta = meta
   if meta["pdfmd-office-latex"] then settings.latex = stringify(meta["pdfmd-office-latex"]) end
   if meta["pdfmd-office-report"] then settings.report = stringify(meta["pdfmd-office-report"]) end
   if meta["pdfmd-office-profile"] then
@@ -999,6 +1025,7 @@ function Meta(meta)
       io.stderr:write("[pdfmd] the office profile " .. path .. " could not be loaded: " .. tostring(loaded) .. "\n")
     end
   end
+  if meta["pdfmd-office-preamble"] then settings.preamble = stringify(meta["pdfmd-office-preamble"]) end
   if meta["pdfmd-office-mode"] then settings.mode = stringify(meta["pdfmd-office-mode"]) end
   if meta["pdfmd-office-fragments"] then settings.fragments = stringify(meta["pdfmd-office-fragments"]) end
   if meta["pdfmd-office-wanted"] then settings.wanted = stringify(meta["pdfmd-office-wanted"]) end
@@ -1028,6 +1055,7 @@ local function write_report()
 end
 
 function Pandoc(doc)
+  current_meta = doc.meta
   if profile.pandoc then
     local ok, result = pcall(profile.pandoc, doc, helpers)
     if ok and result then doc = result

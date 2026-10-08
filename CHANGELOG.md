@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.3 — 2026-10-08
+
+Pre-edit state: commit `3fae4a4` (v3.24.2). A house style's own Word template and macros, and what building
+real lab reports showed.
+
+### Added
+
+- **Style aliases** (`office: {styles: {Heading1: LRH1, BodyText: LRNormal, Table: TableGrid}}`): Pandoc's styles take the look of
+  the template's own differently named ones (a source based on its target only adds its settings, any other
+  replaces the look; a Pandoc style the template lacks is made, under the name Pandoc looks it up by).
+  **`office: {replace: {FROM: TO}}`** rewrites text in the template's headers and footers;
+  **`office: {title-page: true}`** adds `titlePg` (the first page has no header or footer).
+- **Packages ship Word support**: beside a local LaTeX package's `.sty` (or in an `office/` folder there):
+  `<package>-reference.docx|dotx`, `<package>-office.lua`, `<package>-office.yaml` (defaults for `office:`, with
+  `by-option:` for what `\usepackage[opt]{package}` adds); found through `kpsewhich` from the preamble's
+  `\usepackage` lines. The document's own `office:` still wins key by key.
+- The profile can read the preamble (`helpers.preamble()`), the metadata (`helpers.meta()`), draw a fragment
+  (`helpers.fragment`) and rewrite the whole document (`pandoc = function(doc, helpers)`); `PdfmdCentered` style.
+- **Fragments**: drawn with a 10 bp border that is trimmed again (an inline one to exactly its box, a block to its box
+  and all it draws, through Ghostscript's bbox and pypdf: a picture can reach past its own bounding box); a house style's
+  header, footer and furniture are switched off so they cannot land in the crop (the university logo came out
+  with a ghost of the running header).
+- `\[ ... \]` displays (a house filter wraps `$$...$$` so) are converted like any math; math and macros inside what
+  Pandoc's LaTeX reader returned are translated too (they were seen by no filter again).
+
+### Verified
+
+- A real lab report (title page, headers, equations, a chemicals table, figures) built to `.docx` with the
+  department's template: cover, logo header, page-number footer with the course's wording, Roman headings,
+  numbered equations and cross-references all as in the PDF; checked page by page through LibreOffice.
+
+---
+
 ## v3.24.2 — 2026-10-08
 
 Pre-edit state: commit `11431ae` (v3.24.1). What cannot be native is drawn by LaTeX and embedded; a house

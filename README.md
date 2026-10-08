@@ -342,6 +342,17 @@ beside its metadata files, and finally in `~/.config/pdfmd/`. Pandoc's own `--re
 alone. Only builds whose output is `.docx`/`.odt`/`.pptx` look for one. `pdfmd --init-reference`
 writes `reference.docx` (also `odt`, `pptx`): Pandoc's styles with pdfmd's look, to restyle in Word.
 
+A template keeps its own style names. `office: {styles: {Heading1: LRH1, BodyText: LRNormal, Table: TableGrid}}`
+makes the Heading 1, Body Text and table Pandoc writes look like the template's own `LR H1`, `LR Normal` and
+`Table Grid` (a missing Pandoc style is created from the source); `office: {replace: {NULAB-KICKER: "Course
+wording"}}` rewrites text in the template's headers and footers; `office: {title-page: true}` gives the first
+page a page of its own, without header or footer.
+
+**A LaTeX package can ship its own Word support.** Beside a package's `.sty` (or in an `office/` folder there) pdfmd
+looks for `<package>-reference.docx`/`.dotx`, `<package>-office.lua` (the profile above) and `<package>-office.yaml`
+(the `office:` defaults, with `by-option:` entries for what an option of `\usepackage[opt]{package}` adds); a
+document that loads the package gets them with no setting of its own.
+
 ```yaml
 pdfmd-options:
   office:
