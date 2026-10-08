@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.13 — 2026-10-08
+
+Pre-edit state: commit `106b74f` (v3.24.12).
+
+### Added
+
+- **`--text-to-markdown [auto|force|paragraphs]`**: a `.txt` input is read as Markdown through batchocr 1.2.5 (headings,
+  lists, tables and paragraphs guessed from how the text is typed; the letters and digits never change; a garbled text gets
+  paragraphs only). `-o x.md` is the conversion alone; otherwise `notes.md` is written beside the text (never over an existing
+  file) and the build goes on from it. Off unless asked; also `options: {text-to-markdown: ...}` in the config and a
+  setting in `pdfmd --setup`.
+
+---
+
 ## v3.24.12 — 2026-10-08
 
 Pre-edit state: commit `bce6ad3` (v3.24.10); v3.24.11 above landed in the same commit.

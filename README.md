@@ -814,6 +814,15 @@ pdfmd analysis.qmd       # handed to Quarto, so code chunks actually run
 pdfmd page.html          # anything else Pandoc can read (give the extension)
 ```
 
+**A plain-text file as Markdown (opt-in).** `pdfmd notes.txt --text-to-markdown` reads a `.txt` file the way a person typed it
+and guesses its structure: headings (capitals, `1.2 Title`, `====` underlines), bullet and numbered lists, tables from
+columns separated by runs of spaces, indented blocks as code, hard-wrapped lines joined into paragraphs. The words never
+change (the letters and digits of the result are the input's), and a text that measures as garbled (symbol soup, OCR
+noise, replacement characters) gets paragraphs only, with the rule that fired printed. `MODE` is `auto` (default),
+`force` (guess even in a garbled text) or `paragraphs`. It needs batchocr 1.2.5 (`pdfmd --install batchocr`), writes `notes.md`
+beside the text (never over a file that is there) and builds from it; with `-o x.md` the conversion is all it does.
+Off unless asked: `--text-to-markdown`, or `options: {text-to-markdown: auto}` in the config file (or `pdfmd --setup`).
+
 ## What it does automatically
 
 Most of these print an `AUTO` line, and each can be switched off individually.

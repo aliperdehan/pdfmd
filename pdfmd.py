@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.12"
+PDFMD_VERSION = "3.24.13"
 import argparse
 import csv
 import filecmp
@@ -13315,6 +13315,7 @@ def rewrite_image_paths(text: str, renamed: dict[str, str]) -> str:
 BATCHOCR_REPOSITORY = "https://github.com/aliperdehan/batchocr.git"
 BATCHOCR_TAG = "v1.2.4"
 BATCHOCR_MIN = (1, 2, 4)
+BATCHOCR_TEXT_MIN = (1, 2, 5)      # reads a .txt file as Markdown (--text-to-markdown)
 PDF_READ_FORMATS = {"md": "md", "markdown": "md", "gfm": "md", "commonmark": "md", "commonmark_x": "md",
                     "txt": "txt", "text": "txt", "plain": "txt"}
 
@@ -13543,6 +13544,71 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
     if code == 0 and args.open and produced and produced[0].is_file():
         open_file(produced[0])
     return max(status, code)
+
+
+def text_to_markdown_mode(args) -> str | None:
+    """How .txt input is to be read as Markdown (batchocr's --txt-structure: `auto`, `force`, or `off` = paragraphs
+    only), from --text-to-markdown or the config's `options: {text-to-markdown: ...}`; None (the default) when it
+    is not asked for."""
+    value = args.text_to_markdown
+    if value is None:
+        value = config_options().get("text-to-markdown")
+    if value is None or value is False:
+        return None
+    if value is True:
+        return "auto"
+    value = str(value).strip().casefold()
+    return {"auto": "auto", "force": "force", "paragraphs": "off"}.get(value)
+
+
+def route_text_input(args, extra: list[str]) -> int | None:
+    """`pdfmd notes.txt --text-to-markdown`: read the .txt file as Markdown through batchocr (headings, lists, tables and
+    paragraphs guessed from how it is typed; the words never change). With `-o x.md` that is the whole job (returns its
+    status). Otherwise the Markdown is written beside the text as notes.md (never over a file that is there) and
+    replaces the .txt in the arguments (returns None), so the usual build goes on from it."""
+    mode = text_to_markdown_mode(args)
+    paths = list(args.path or [])
+    if mode is None or not paths or any(path.suffix.lower() != ".txt" for path in paths):
+        return None
+    if args.batch or args.report:
+        return None
+    for path in paths:
+        if not path.is_file():
+            raise SystemExit(f"{path}: no such file")
+    command = find_batchocr()
+    if command is None:
+        raise SystemExit(batchocr_missing_message())
+    version = batchocr_version(command)
+    if version is not None and version < BATCHOCR_TEXT_MIN:
+        raise SystemExit(batchocr_missing_message(version).replace(
+            ".".join(map(str, BATCHOCR_MIN)), ".".join(map(str, BATCHOCR_TEXT_MIN))))
+    out = args.out
+    only_markdown = out is not None and out.suffix.lower() in (".md", ".markdown")
+    structure = mode
+    produced: list[Path] = []
+    for path in paths:
+        if only_markdown and len(paths) == 1:
+            target = out
+        else:
+            target = path.with_suffix(".md")
+            if target.exists():
+                raise SystemExit(f"{target} exists already: pdfmd does not write over it. Remove it, or name another "
+                                 "file with -o x.md (a Markdown output is the conversion alone)")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        call = [*command, str(path), "--to", "md", "-o", str(target), "--txt-structure", structure]
+        if not args.verbose:
+            call.append("-q")
+        print(f"ROUTE  {path.name} -> batchocr"
+              + (f" {'.'.join(map(str, version))}" if version else "") + f" (txt to Markdown, {structure})", file=sys.stderr)
+        code = subprocess.run(call).returncode
+        if code != 0 or not target.is_file():
+            return code or 1
+        produced.append(target)
+    if only_markdown:
+        return 0
+    print("NOTE  the Markdown is kept beside the text file: " + ", ".join(path.name for path in produced), file=sys.stderr)
+    args.path = produced
+    return None
 
 
 def restore_target_name(name: str) -> PurePosixPath | None:
@@ -14602,6 +14668,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "font and which no installed font draws (and what to install), without building")
     parser.add_argument("--show-config", action="store_true",
                         help="print where pdfmd's global config file is, and what it sets")
+    parser.add_argument("--text-to-markdown", nargs="?", const="auto", choices=("auto", "force", "paragraphs"), metavar="MODE",
+                        help="read .txt input as Markdown: headings, lists, tables and paragraphs guessed from how the text "
+                             "is typed, the words never changing (needs batchocr 1.2.5: pdfmd --install batchocr). MODE: "
+                             "auto (default; a garbled text gets paragraphs only), force, or paragraphs (no structure). Writes "
+                             "notes.md beside the text; with -o x.md that is all it does. Off unless asked")
     parser.add_argument("--setup", nargs="?", const="", metavar="SCREEN",
                         help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
                              "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file")
@@ -14987,6 +15058,9 @@ def main() -> None:
             raise SystemExit(0 if install_ocr_languages(args.uninstall.partition(":")[2], remove=True) else 1)
         raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)
     routed = route_pdf_input(args, pandoc_options)
+    if routed is not None:
+        raise SystemExit(routed)
+    routed = route_text_input(args, pandoc_options)
     if routed is not None:
         raise SystemExit(routed)
     if not which("pandoc") and not native_possible(args):
