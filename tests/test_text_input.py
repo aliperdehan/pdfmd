@@ -17,7 +17,7 @@ TEXT = ("MY NOTES\n\n1. Intro\n\nSome text here that goes on for a while and the
         "seventy characters so that the paragraph needs joining by the converter.\n\n- one\n- two\n")
 
 
-@unittest.skipUnless(COMMAND, "needs batchocr 1.2.5 (set PDFMD_BATCHOCR)")
+@unittest.skipUnless(COMMAND and shutil.which("pandoc"), "needs batchocr 1.2.5 (set PDFMD_BATCHOCR) and Pandoc")
 class TextInput(unittest.TestCase):
     def run_pdfmd(self, folder: Path, *arguments: str):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "n.txt", *arguments, "--no-stamp", "--no-backup"],

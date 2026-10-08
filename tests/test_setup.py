@@ -89,6 +89,7 @@ class Plain(unittest.TestCase):
         done, path = self.run_setup([str(number("linestretch")), "wide", str(number("linestretch")), "1.5", "s"])
         self.assertEqual(yaml.safe_load(path.with_name("metadata.yaml").read_text(encoding="utf-8")), {"linestretch": 1.5})
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_the_global_metadata_reaches_a_build_below_the_documents_own(self):
         directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
         self.addCleanup(__import__("shutil").rmtree, directory, True)

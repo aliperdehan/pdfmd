@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.17 — 2026-10-08
+
+Pre-edit state: commit `8233fac` (v3.24.16), which failed its CI run and was never published.
+
+### Fixed
+
+- A `--setup` test that builds an HTML page ran on the CI jobs that have no Pandoc: it is skipped without one.
+
+---
+
 ## v3.24.16 — 2026-10-08
 
 Pre-edit state: commit `8c646c7` (v3.24.15).
