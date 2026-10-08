@@ -1155,11 +1155,59 @@ function Figure(el)
   return number_caption(el, "figure")
 end
 
+-- A table that gives no column widths (a pipe table whose lines are short) is left to the reader's guess:
+-- Word fits the columns to the text, LibreOffice and others make them equal and break words in two. Here the
+-- columns are sized to their text, as a LaTeX `tabular` would (about LINE_CHARS characters fill a line).
+local LINE_CHARS = 90
+
+local function natural_widths(el)
+  local count = #el.colspecs
+  for _, spec in ipairs(el.colspecs) do
+    if type(spec[2]) == "number" and spec[2] > 0 then return false end
+  end
+  local longest, word = {}, {}
+  for i = 1, count do longest[i], word[i] = 0, 0 end
+  local function scan(rows)
+    for _, row in ipairs(rows) do
+      local column = 1
+      for _, cell in ipairs(row.cells) do
+        local span = cell.col_span or 1
+        if span == 1 and column <= count then
+          local text = pandoc.utils.stringify(cell.contents)
+          longest[column] = math.max(longest[column], utf8.len(text) or #text)
+          for piece in text:gmatch("%S+") do word[column] = math.max(word[column], utf8.len(piece) or #piece) end
+        end
+        column = column + span
+      end
+    end
+  end
+  scan(el.head.rows)
+  for _, body in ipairs(el.bodies) do scan(body.body) end
+  scan(el.foot.rows)
+  local want, floor, total = {}, {}, 0
+  for i = 1, count do
+    want[i] = math.min(longest[i], 60) + 4
+    floor[i] = math.min(word[i], 60) + 4
+    total = total + want[i]
+  end
+  local specs, sum = {}, 0
+  local scale = math.max(total, LINE_CHARS)
+  for i = 1, count do
+    local share = math.max(want[i] / scale, floor[i] / LINE_CHARS)
+    specs[i] = {el.colspecs[i][1], share}
+    sum = sum + share
+  end
+  if sum > 1 then for i = 1, count do specs[i][2] = specs[i][2] / sum end end
+  el.colspecs = specs
+  return true
+end
+
 function Table(el)
   if off() or el.classes:includes("pdfmd-keep") then return nil end
   local style = el.attributes and el.attributes["custom-style"]
   if style == "PdfmdEquation" then return nil end
-  return number_caption(el, "table")
+  local sized = natural_widths(el)
+  return number_caption(el, "table") or (sized and el or nil)
 end
 
 function Meta(meta)

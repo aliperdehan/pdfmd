@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
+STORE_VERSION = "2"   # bumped when the pictures change in themselves (the way they are cropped): old ones are drawn again
 BORDER = 10        # bp of room around every fragment, trimmed again after drawing (see crop_pages)
 
 SETUP = r"""
@@ -96,8 +97,10 @@ def ink_box(pdf: Path, page: int) -> tuple[float, float, float, float] | None:
 def crop_page(pdf: Path, page: int, kind: str, folder: Path) -> Path | None:
     """Page `page` of the fragments PDF alone, cropped from its border back to the fragment: an inline one to
     exactly its box (its depth is measured from it), a block to its box *and* everything it draws (a picture may
-    reach past its own bounding box, as the university logo does; `preview` would have cut it). None when
-    pypdf is missing (the bordered page is used)."""
+    reach past its own bounding box, as the university logo does; `preview` would have cut it). A block is
+    also cut to the ink on both sides: it was typeset in a text-width box, and a picture narrower than that sits
+    at the box's left (a Word picture is centred, so the empty part would push it off). None when pypdf is
+    missing (the bordered page is used)."""
     try:
         from pypdf import PdfReader, PdfWriter
         from pypdf.generic import RectangleObject
@@ -111,8 +114,8 @@ def crop_page(pdf: Path, page: int, kind: str, folder: Path) -> Path | None:
     if kind not in INLINE_KINDS:
         ink = ink_box(pdf, page)
         if ink is not None:
-            left, bottom = min(left, ink[0] - 0.3), min(bottom, ink[1] - 0.3)
-            right, top = max(right, ink[2] + 0.3), max(top, ink[3] + 0.3)
+            left, right = ink[0] - 0.3, ink[2] + 0.3
+            bottom, top = min(bottom, ink[1] - 0.3), max(top, ink[3] + 0.3)
     rectangle = RectangleObject([left, bottom, right, top])
     target.mediabox = rectangle
     target.cropbox = rectangle
@@ -223,7 +226,7 @@ def labels_only(aux_text: str) -> str:
 def store_key(preamble: str, engine: str, labels_text: str) -> str:
     """The folder name pictures are kept under: they depend on the preamble, the engine and the labels."""
     digest = hashlib.sha1()
-    for part in (preamble, engine, labels_text):
+    for part in (STORE_VERSION, preamble, engine, labels_text):
         digest.update(part.encode("utf-8", "replace"))
         digest.update(b"\0")
     return digest.hexdigest()[:16]

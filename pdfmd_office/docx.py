@@ -348,6 +348,16 @@ EQUATION_STYLE = (
     '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/>'
     '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/>'
     '<w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tcPr><w:vAlign w:val="center"/></w:tcPr></w:style>')
+# a table with rules above, below and under its header row, no others (what booktabs draws)
+BOOKTABS_STYLE = (
+    '<w:style w:type="table" w:customStyle="1" w:styleId="PdfmdBooktabs"><w:name w:val="PdfmdBooktabs"/>'
+    '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:jc w:val="center"/>'
+    '<w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="auto"/>'
+    '<w:bottom w:val="single" w:sz="8" w:space="0" w:color="auto"/></w:tblBorders>'
+    '<w:tblCellMar><w:top w:w="29" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="29" w:type="dxa"/>'
+    '<w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr>'
+    '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:bCs/></w:rPr><w:tcPr><w:tcBorders>'
+    '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tcBorders></w:tcPr></w:tblStylePr></w:style>')
 CENTERED_STYLE = ('<w:style w:type="paragraph" w:customStyle="1" w:styleId="PdfmdCentered"><w:name w:val="PdfmdCentered"/>'
                   '<w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr></w:style>')
 
@@ -357,6 +367,8 @@ def ensure_styles(styles: str) -> str:
     table an equation and its number sit in."""
     if 'w:styleId="PdfmdEquation"' not in styles:
         styles = styles.replace("</w:styles>", EQUATION_STYLE + "</w:styles>")
+    if 'w:styleId="PdfmdBooktabs"' not in styles:
+        styles = styles.replace("</w:styles>", BOOKTABS_STYLE + "</w:styles>")
     if 'w:styleId="PdfmdCentered"' not in styles:
         styles = styles.replace("</w:styles>", CENTERED_STYLE + "</w:styles>")
     # a picture's paragraph is centred and never indented like the body text it may inherit from
@@ -387,7 +399,8 @@ def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
             elif spec.replace and re.match(r"word/(header|footer)\d*\.xml$", item.filename):
                 text = content.decode("utf-8")
                 for old, new in spec.replace.items():
-                    text = text.replace(old, new.replace("&", "&amp;").replace("<", "&lt;"))
+                    # a key with markup in it is XML for XML (a run's colour); any other is text
+                    text = text.replace(old, new if "<" in old else new.replace("&", "&amp;").replace("<", "&lt;"))
                 content = text.encode("utf-8")
             elif item.filename in spec.media:
                 content = spec.media[item.filename]

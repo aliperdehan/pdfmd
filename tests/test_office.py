@@ -147,6 +147,21 @@ class Patching(unittest.TestCase):
         patched = self.parts(patch_reference("docx", out.getvalue(), OfficeSpec(), False))
         self.assertIn("document.main+xml", patched["[Content_Types].xml"])
 
+    def test_a_replace_key_with_markup_is_xml_for_xml_and_booktabs_style_is_made(self):
+        reference = docx.default_reference()
+        archive = zipfile.ZipFile(io.BytesIO(reference))
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as target:
+            for item in archive.infolist():
+                target.writestr(item, archive.read(item.filename))
+            target.writestr("word/footer1.xml", '<w:ftr><w:r><w:rPr><w:color w:val="000000"/></w:rPr><w:t>A &amp; B</w:t></w:r></w:ftr>')
+        spec = spec_from_metadata({}, {"replace": {'<w:color w:val="000000"/>': '<w:color w:val="FFFFFF"/>', "A &amp; B": "C < D"}})
+        patched = patch_reference("docx", out.getvalue(), spec, False)
+        footer = self.parts(patched)["word/footer1.xml"]
+        self.assertIn('<w:color w:val="FFFFFF"/>', footer)
+        self.assertIn("C &lt; D", footer)
+        self.assertIn('w:styleId="PdfmdBooktabs"', self.parts(patched)["word/styles.xml"])
+
     def test_media_are_replaced_and_figure_paragraphs_are_centred_and_unindented(self):
         reference = docx.default_reference()
         picture = zipfile.ZipFile(io.BytesIO(reference)).namelist()

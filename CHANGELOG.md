@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.8 — 2026-10-08
+
+Pre-edit state: commit `5559552` (v3.24.7). The second reading of the Word builds.
+
+### Fixed
+
+- **A block picture sat at the left of its box.** A block fragment (an `\includegraphics` with `width=0.7\linewidth`, a
+  spectrum) was typeset in a text-wide box and cropped to that box, so a narrower picture carried empty space on its
+  right and, centred as a whole, looked shifted left. Block fragments are now cropped to what they draw on both sides
+  (vertically still to the box); the pictures of earlier builds are drawn again (the cache key carries a version).
+- **Tables were pictures.** A house filter that rewrites Pandoc tables into raw LaTeX leaves nothing for Word, so the
+  table was drawn as a picture; with the filter guarded to LaTeX output (nulabreport v1.27.2) they are Pandoc tables and
+  come out native and editable. A table that gives no column widths (a pipe table of short lines) is sized to its text,
+  as a LaTeX `tabular` would be, instead of equal columns that broke words in two ("Paracetam-ol"); a `PdfmdBooktabs`
+  table style (rules above, below and under the header row) is part of every reference document.
+- **A `replace` key with markup in it** (`<w:color .../>`) is now XML for XML, not escaped text, so a header or footer
+  colour can be changed (the page number on a black box turned black on black).
+
+---
+
 ## v3.24.7 — 2026-10-08
 
 Pre-edit state: commit `095f2e5` (v3.24.6). What reading the six Word builds page by page showed.

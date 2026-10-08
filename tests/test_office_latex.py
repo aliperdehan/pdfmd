@@ -278,6 +278,31 @@ class DisplayBlocks(unittest.TestCase):
             self.assertNotIn("\\ce", xml)
 
 
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class TableWidths(unittest.TestCase):
+    def grid(self, source: str) -> list[int]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "t.md").write_text(source, encoding="utf-8")
+            done = subprocess.run(["pandoc", "t.md", "-o", "t.docx", "--lua-filter", str(FILTER)], cwd=root,
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            xml = zipfile.ZipFile(root / "t.docx").read("word/document.xml").decode()
+            return [int(width) for width in re.findall(r'<w:gridCol w:w="(\d+)"', xml)]
+
+    def test_a_table_without_widths_is_sized_to_its_text(self):
+        widths = self.grid("| Lane | Sample | Feature |\n|---|---|---|\n| 1 | Paracetamol | faint, no lane or smear |\n")
+        self.assertEqual(len(widths), 3)
+        self.assertGreater(widths[2], widths[1])
+        self.assertGreater(widths[1], widths[0])
+
+    def test_given_widths_are_left_alone(self):
+        widths = self.grid("| a | b |\n|---|---|\n| 1 | 2 |\n")
+        self.assertEqual(len(set(widths)), 1)   # a pipe table's lines are short: Pandoc gives no widths, we do
+        widths = self.grid("| a | b |\n|--|------------------|\n| " + "x" * 30 + " | " + "y" * 90 + " |\n")
+        self.assertLess(widths[0], widths[1])
+
+
 TYPST = shutil.which("typst")
 SOFFICE_PATH = shutil.which("soffice") or ("/Applications/LibreOffice.app/Contents/MacOS/soffice"
                                            if Path("/Applications/LibreOffice.app/Contents/MacOS/soffice").exists() else None)
