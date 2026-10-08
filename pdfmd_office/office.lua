@@ -15,7 +15,7 @@ write the list of left-over fragments to).
 
 local stringify = pandoc.utils.stringify
 local settings = {latex = "auto", report = nil}
-local equation_block   -- defined below
+local equation_block, centred   -- defined below
 local current_meta     -- the document's metadata, for a profile
 local profile = {ignore = {}, commands = {}}   -- a house style's own macros (office.lua beside the document)
 local labels, crefnames, caption_sep, cref_capital = {}, {}, ". ", true
@@ -413,8 +413,75 @@ end
 ---------------------------------------------------------------------------
 -- macro translation shared by math and text
 
+-- `105\,^\circ\text{C}`: a superscript with nothing before it is an empty box in Word and LibreOffice; it is the degree sign
+local function fix_empty_scripts(tex)
+  local out, last = {}, 1
+  for start, stop in tex:gmatch("()%^%s*{?\\circ}?()") do
+    local raw_before = tex:sub(1, start - 1)
+    local after_space = raw_before:match("\\[,;:! ]%s*$") ~= nil      -- `\,^\circ`: the script hangs on the space
+    local previous = raw_before:gsub("%s+$", ""):sub(-1)
+    if after_space or previous == "" or not previous:match("[%w%)%]}]") then
+      out[#out + 1] = tex:sub(last, start - 1) .. "\\text{°}"
+      last = stop
+    end
+  end
+  out[#out + 1] = tex:sub(last)
+  return table.concat(out)
+end
+
+-- how wide a formula sets, in characters of body text: fractions count as the wider part, commands as one sign
+local function visual_length(tex)
+  local text = tex:gsub("\\text{([^}]*)}", "%1")
+  for _ = 1, 8 do
+    text = text:gsub("\\d?frac(%b{})(%b{})", function(a, b) return (#a > #b) and a or b end)
+  end
+  text = text:gsub("\\sqrt%[?[^%]{]*%]?(%b{})", "%1"):gsub("\\[%a]+", "x"):gsub("[{}%^_%s&]", "")
+  return #text
+end
+
+-- A long display that LaTeX sets on several lines (the house style breaks it at its equals signs) is cut the
+-- same way: rows of an aligned block, each new row starting with "=". `limit` is the width in characters.
+local function break_display(tex, limit)
+  if tex:find("\\\\", 1, true) or tex:find("&", 1, true) or tex:find("\\begin", 1, true) then return tex end
+  if visual_length(tex) <= limit then return tex end
+  local segments, depth, start, i = {}, 0, 1, 1
+  while i <= #tex do
+    local c = tex:sub(i, i)
+    if c == "\\" then
+      local name = tex:match("^\\(%a+)", i)
+      if name == "left" then depth = depth + 1 elseif name == "right" then depth = depth - 1 end
+      i = i + 1 + (name and #name or 1)
+    else
+      if c == "{" then depth = depth + 1 elseif c == "}" then depth = depth - 1
+      elseif c == "=" and depth == 0 and i > start then
+        segments[#segments + 1] = tex:sub(start, i - 1)
+        start = i
+      end
+      i = i + 1
+    end
+  end
+  segments[#segments + 1] = tex:sub(start)
+  if #segments < 3 then return tex end
+  local rows, row, length = {}, segments[1], visual_length(segments[1])
+  for index = 2, #segments do
+    local part = segments[index]
+    local width = visual_length(part)
+    if index > 2 and length + width > limit then
+      rows[#rows + 1] = row
+      row, length = "&" .. part, width
+    else
+      row = row .. (index == 2 and "&" or "") .. part
+      length = length + width
+    end
+  end
+  rows[#rows + 1] = row
+  if #rows < 2 then return tex end
+  return "\\begin{aligned}" .. table.concat(rows, "\\\\") .. "\\end{aligned}"
+end
+
 -- Replace \ce{..}, \si{..}, \SI{..}{..}, \num{..}, \qty{..}{..} in a math string. nil when one fails.
 local function math_translate(tex)
+  tex = fix_empty_scripts(tex)
   local out, i = {}, 1
   while i <= #tex do
     local at = tex:find("\\", i, true)
@@ -602,6 +669,7 @@ function Math(el)
   local display = el.mathtype == "DisplayMath"
   local text = el.text
   local translated = math_translate(text)
+  if translated and display then translated = break_display(translated, 68) end
   if translated == nil or not math_native(translated, display) then
     local image = fragment_image(display and "math-display" or "math-inline", text)
     if image then return image end
@@ -760,6 +828,7 @@ function RawInline(el)
     local tex, eq_labels, unnumbered = math_block(raw)
     if tex then
       local translated = math_translate(tex)
+      if translated then translated = break_display(translated, unnumbered and 68 or 52) end
       if translated and math_native(translated, true) then
         counters.math = counters.math + 1
         return pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
@@ -907,6 +976,24 @@ local function captioned_float(raw, env)
   return number_caption(figure, env == "table" and "table" or "figure")
 end
 
+-- a picture on a line of its own: centred, and not indented like body text
+function centred(image)
+  return pandoc.Div({pandoc.Para({image})}, pandoc.Attr("", {}, {{"custom-style", "PdfmdCentered"}}))
+end
+
+local input_depth = 0
+local function read_input(name)
+  for _, candidate in ipairs({name, name .. ".tex"}) do
+    local file = io.open(candidate, "r")
+    if file then
+      local text = file:read("a")
+      file:close()
+      return text
+    end
+  end
+  return nil
+end
+
 local PAGE_BREAK
 if FORMAT == "docx" then PAGE_BREAK = pandoc.RawBlock("openxml", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
 elseif FORMAT:match("^html") then PAGE_BREAK = pandoc.RawBlock("html", '<div style="page-break-after: always"></div>')
@@ -923,6 +1010,22 @@ function RawBlock(el)
   if raw == "" then return {} end
   local custom = profile_command(raw, true)
   if custom then counters.native = counters.native + 1; return custom end
+  -- \input{file}: what the file holds is what counts (a booktabs table in tex/table-x.tex is a table)
+  local included = raw:match("^\\input%s*{([^}]+)}$") or raw:match("^\\include%s*{([^}]+)}$")
+  if included and input_depth < 4 then
+    local text = read_input(included)
+    if text then
+      -- whole-line comments go with their line break (a blank line would end a paragraph inside a tikz option list)
+      text = text:gsub("\n[ \t]*%%[^\n]*", ""):gsub("^[ \t]*%%[^\n]*\n", "")
+      while text:match("^[ \t]*%%[^\n]*\n") do text = text:gsub("^[ \t]*%%[^\n]*\n", "", 1) end
+      local before = fragment_calls
+      input_depth = input_depth + 1
+      local result = RawBlock(pandoc.RawBlock("latex", text))
+      input_depth = input_depth - 1
+      if result ~= nil then return result end
+      if fragment_calls ~= before then return {} end    -- collect run: the file's own fragment is listed
+    end
+  end
   local name = raw:match("^\\(%a+)")
   if name == "newpage" or name == "clearpage" or name == "pagebreak" or name == "cleardoublepage" then
     return PAGE_BREAK
@@ -936,6 +1039,7 @@ function RawBlock(el)
   local display = raw:match("^\\%[(.*)\\%]$")
   if display then
     local translated = math_translate(display)
+    if translated then translated = break_display(translated, 68) end
     if translated and math_native(translated, true) then
       counters.math = counters.math + 1
       return pandoc.Para({pandoc.Math("DisplayMath", translated)})
@@ -948,6 +1052,7 @@ function RawBlock(el)
   local tex, eq_labels, unnumbered = math_block(raw)
   if tex then
     local translated = math_translate(tex)
+    if translated then translated = break_display(translated, unnumbered and 68 or 52) end
     if translated and math_native(translated, true) then
       counters.math = counters.math + 1
       return equation_block(pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
@@ -985,7 +1090,7 @@ function RawBlock(el)
     if figure then return figure end
   end
   local image = fragment_image("block", raw)
-  if image then return pandoc.Para({image}) end
+  if image then return centred(image) end
   record("block", raw)
   return nil
 end
@@ -1128,6 +1233,7 @@ if PDFMD_OFFICE_EXPORT then
   PDFMD_OFFICE_EXPORT.ce_parse, PDFMD_OFFICE_EXPORT.ce_math = ce_parse, ce_math
   PDFMD_OFFICE_EXPORT.math_translate, PDFMD_OFFICE_EXPORT.parse_unit = math_translate, parse_unit
   PDFMD_OFFICE_EXPORT.unit_math, PDFMD_OFFICE_EXPORT.math_native = unit_math, math_native
+  PDFMD_OFFICE_EXPORT.break_display, PDFMD_OFFICE_EXPORT.fix_empty_scripts = break_display, fix_empty_scripts
 end
 
 return {

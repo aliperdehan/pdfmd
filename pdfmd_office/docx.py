@@ -359,6 +359,16 @@ def ensure_styles(styles: str) -> str:
         styles = styles.replace("</w:styles>", EQUATION_STYLE + "</w:styles>")
     if 'w:styleId="PdfmdCentered"' not in styles:
         styles = styles.replace("</w:styles>", CENTERED_STYLE + "</w:styles>")
+    # a picture's paragraph is centred and never indented like the body text it may inherit from
+    for style_id, name in (("Figure", "Figure"), ("CaptionedFigure", "Captioned Figure")):
+        if _style(styles, style_id) is None:
+            styles = styles.replace("</w:styles>", (
+                f'<w:style w:type="paragraph" w:customStyle="1" w:styleId="{style_id}"><w:name w:val="{name}"/>'
+                '<w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr></w:style>'
+                "</w:styles>"))
+        else:
+            styles = _edit_style(styles, style_id, "pPr", "ind", '<w:ind w:left="0" w:firstLine="0"/>')
+            styles = _edit_style(styles, style_id, "pPr", "jc", '<w:jc w:val="center"/>')
     return styles
 
 
@@ -379,6 +389,8 @@ def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
                 for old, new in spec.replace.items():
                     text = text.replace(old, new.replace("&", "&amp;").replace("<", "&lt;"))
                 content = text.encode("utf-8")
+            elif item.filename in spec.media:
+                content = spec.media[item.filename]
             elif item.filename == "[Content_Types].xml":
                 content = content.replace(b"wordprocessingml.template.main+xml", b"wordprocessingml.document.main+xml")
             target.writestr(item, content)

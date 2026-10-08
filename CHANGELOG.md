@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.7 — 2026-10-08
+
+Pre-edit state: commit `095f2e5` (v3.24.6). What reading the six Word builds page by page showed.
+
+### Fixed
+
+- **Pictures were indented like body text** (a picture's paragraph inherited the first-line indent): the `Figure` and
+  `Captioned Figure` styles are centred with no indent in every reference document, and pdfmd's own picture
+  paragraphs use a centred, unindented `PdfmdCentered` style.
+- **`105\,^\circ\text{C}` showed an empty box** before the degree sign (a superscript with nothing before it, here the thin
+  space, is a placeholder in Word and LibreOffice): such a degree sign is text.
+- **A long display ran off the page.** LaTeX (or the house style) sets it on several lines; Word's equation cannot wrap. A
+  display wider than the line (estimated in characters, fractions counted as their wider part) is cut at its top-level
+  equals signs into the rows of an aligned block, each row after the first starting with "="; an equation of its own
+  `\\`/`&` or `\begin` is left as the author wrote it.
+- **`\input{tex/table-x}` was always a picture.** What the file holds now decides (a booktabs `tabular` is a native
+  table; whole-line comments are dropped with their line break, as a blank line would end a paragraph inside a tikz
+  option list); a file that cannot be read is drawn as before.
+
+### Added
+
+- `office: {media: {word/media/image1.png: logo.png}}` replaces a picture of the template (paths relative to the
+  package folder for a package's yaml). nulabreport uses it with `replace` to give every course but genchem the
+  black logo and page-number box its PDF has.
+
+---
+
 ## v3.24.6 — 2026-10-08
 
 Pre-edit state: commit `574f398` (v3.24.5).

@@ -147,6 +147,20 @@ class Patching(unittest.TestCase):
         patched = self.parts(patch_reference("docx", out.getvalue(), OfficeSpec(), False))
         self.assertIn("document.main+xml", patched["[Content_Types].xml"])
 
+    def test_media_are_replaced_and_figure_paragraphs_are_centred_and_unindented(self):
+        reference = docx.default_reference()
+        picture = zipfile.ZipFile(io.BytesIO(reference)).namelist()
+        spec = spec_from_metadata({})
+        spec.media = {"word/theme/theme1.xml": b"<replaced/>"}
+        out = patch_reference("docx", reference, spec, False)
+        self.assertEqual(zipfile.ZipFile(io.BytesIO(out)).read("word/theme/theme1.xml"), b"<replaced/>")
+        styles = self.parts(out)["word/styles.xml"]
+        figure = re.search(r'w:styleId="CaptionedFigure".*?</w:style>', styles, re.S).group(0)
+        self.assertIn('w:firstLine="0"', figure)
+        self.assertIn('w:val="center"', figure)
+        self.assertIn("PdfmdCentered", styles)
+        self.assertTrue(picture)
+
     def test_odt_page_and_fonts(self):
         data = subprocess.run(["pandoc", "--print-default-data-file", "reference.odt"], capture_output=True).stdout
         spec = spec_from_metadata({"papersize": "a4", "geometry": "margin=2cm", "mainfont": "Arial", "fontsize": "14pt",

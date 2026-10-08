@@ -81,6 +81,18 @@ class Translators(unittest.TestCase):
         self.assertEqual(self.lua(r"print(E.math_translate([[\SI{5}{\milli\liter}]]))"), r"5\,\text{mL}")
         self.assertEqual(self.lua(r"print(E.math_translate([[\si{\unknownunit}]]))"), "nil")
 
+    def test_a_degree_sign_without_a_base_is_text_not_an_empty_box(self):
+        self.assertEqual(self.lua(r"print(E.fix_empty_scripts([[105\,^\circ\text{C}]]))"), r"105\,\text{°}\text{C}")
+        self.assertEqual(self.lua(r"print(E.fix_empty_scripts([[x^\circ]]))"), r"x^\circ")
+
+    def test_a_long_display_is_cut_at_its_equals_signs(self):
+        long = r"a = \frac{1234567890+1234567890}{3} = \frac{1234567890}{3} = 411522630 = 4.1\times 10^{8} = 0.41\times 10^{9}"
+        cut = self.lua("print(E.break_display([[" + long + r"]], 40))")
+        self.assertTrue(cut.startswith(r"\begin{aligned}"), cut)
+        self.assertGreaterEqual(cut.count(r"\\"), 1)
+        self.assertEqual(self.lua(r"print(E.break_display([[a = b = c]], 40))"), "a = b = c")      # short: untouched
+        self.assertEqual(self.lua("print(E.break_display([[" + long + r" \\ x]], 40))"), long + r" \\ x")  # the author's own breaks
+
     def test_math_texmath_check(self):
         self.assertEqual(self.lua(r"print(E.math_native([[\frac{a}{b}]], true))"), "true")
         self.assertEqual(self.lua(r"print(E.math_native([[\ce{H2O}]], false))"), "false")

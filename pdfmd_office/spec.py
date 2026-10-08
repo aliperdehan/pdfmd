@@ -26,6 +26,7 @@ class OfficeSpec:
     aliases: dict[str, str] = field(default_factory=dict)   # Pandoc style -> the template's style it should look like
     replace: dict[str, str] = field(default_factory=dict)   # text of the template's headers and footers -> new text
     title_page: bool = False                    # a first page of its own: no header or footer on it
+    media: dict[str, bytes] = field(default_factory=dict)   # picture of the template (zip path) -> new bytes
     notes: list[str] = field(default_factory=list)
 
     def has_page(self) -> bool:
@@ -33,7 +34,7 @@ class OfficeSpec:
 
     def has_text(self) -> bool:
         return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent,
-                    self.aliases, self.replace, self.title_page))
+                    self.aliases, self.replace, self.title_page, self.media))
 
     def page_size(self) -> tuple[int, int]:
         width, height = self.paper or PAPER_TWIPS["letter"]

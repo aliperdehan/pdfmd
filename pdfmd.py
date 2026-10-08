@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.6"
+PDFMD_VERSION = "3.24.7"
 import argparse
 import csv
 import filecmp
@@ -3754,7 +3754,7 @@ def completion_script(shell: str) -> str:
 # Pandoc's --reference-doc) and writes the document's page size, margins, fonts, size, language and
 # pdfmd's house look into a copy of it. See pdfmd_office/.
 OFFICE_REFERENCE_EXTENSIONS = {"docx": ("docx", "dotx"), "odt": ("odt", "ott"), "pptx": ("pptx", "potx")}
-OFFICE_OPTION_KEYS = ("reference-doc", "fonts", "latex", "style", "styles", "labels", "profile", "replace", "title-page", "papersize", "geometry", "margin",
+OFFICE_OPTION_KEYS = ("reference-doc", "fonts", "latex", "style", "styles", "labels", "profile", "replace", "title-page", "media", "papersize", "geometry", "margin",
                       "fontsize", "mainfont", "sansfont", "monofont", "CJKmainfont", "linestretch", "lang", "indent")
 
 
@@ -3847,6 +3847,9 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
                         for key in ("reference-doc", "profile"):
                             if isinstance(data.get(key), str) and key not in (value or {}):
                                 options[key] = str((candidate.parent / data[key]).resolve())
+                        if isinstance(options.get("media"), dict) and "media" not in (value or {}):
+                            options["media"] = {name: str((candidate.parent / file).resolve())
+                                                for name, file in options["media"].items()}
     return options
 
 
@@ -4112,6 +4115,13 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         note("OFFICE", f"{md_path}: reference document {origin}")
         yield ["--reference-doc", str(reference)]
         return
+    media = options.get("media")
+    if isinstance(media, dict):
+        for zip_path, file in media.items():
+            try:
+                spec.media[str(zip_path)] = Path(str(file)).read_bytes()
+            except OSError as error:
+                print(f"WARN  {md_path}: office.media {file}: {error}", file=sys.stderr)
     try:
         base = reference.read_bytes() if reference else module.default_reference(target)
         data = module.patch_reference(target, base, spec, house)
