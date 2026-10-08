@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.5"
+PDFMD_VERSION = "3.24.6"
 import argparse
 import csv
 import filecmp
@@ -7183,6 +7183,9 @@ def build_stamp_line(options: dict, texts: list[str], output: Path,
         return f"Compiled as part of `{report_output.name}` with {summary} -- {timestamp}"
     if options["include_output"]:
         return f"Compiled to `{output.name}` with {summary} -- {timestamp}"
+    if output.suffix and output.suffix.lower() not in (".pdf", ".tex"):
+        # a build to another format says so: "Compiled to docx with ..."
+        return f"Compiled to {output.suffix.lower().lstrip('.')} with {summary} -- {timestamp}"
     return f"Compiled with {summary} -- {timestamp}"
 
 

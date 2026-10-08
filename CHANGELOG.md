@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.6 — 2026-10-08
+
+Pre-edit state: commit `574f398` (v3.24.5).
+
+### Changed
+
+- The "Compiled with ..." line pdfmd writes into BUILD NOTES says the format when it is not a PDF:
+  "Compiled to docx with nulabreport v1.27.0, pdfmd v3.24.6 -- TIMESTAMP" (a PDF's, and `--to latex`'s, stay as they were;
+  `stamp: {include-output: true}` still names the file).
+
+---
+
 ## v3.24.5 — 2026-10-08
 
 Pre-edit state: commit `e957078` (v3.24.4).
