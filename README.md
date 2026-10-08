@@ -459,7 +459,13 @@ sudo apt install tesseract-ocr poppler-utils         # Debian/Ubuntu; dnf: tesse
 scoop install tesseract poppler                      # Windows (or choco install ...)
 ```
 
-OCR languages are packs of their own, and large; they are named, never installed for you:
+OCR languages are packs of their own. `pdfmd --install ocr` lists the Tesseract languages
+pdfmd can fetch, and `pdfmd --install ocr:rus,kaz` (or `ru`, `kazakh`, `zh`, `ja`...) downloads
+them into pdfmd's own folder, with no admin rights and each file checked against a checksum
+pinned in pdfmd (the compact `tessdata_fast` models, Apache-2.0; English and the orientation
+model come along). `pdfmd scan.pdf --lang rus` then uses that folder whenever it has every
+language you asked for, and Tesseract's own languages otherwise (a `TESSDATA_PREFIX` you set
+always wins). `pdfmd --uninstall ocr:rus` removes one. The package managers have them too:
 `brew install tesseract-lang`, `apt install tesseract-ocr-rus`, `dnf install
 tesseract-langpack-rus`. `pdfmd --check-dependencies` reports batchocr, Tesseract and Poppler.
 

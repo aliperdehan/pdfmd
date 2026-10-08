@@ -518,7 +518,11 @@ one. Mixed PDF and Markdown inputs, `-o x.pdf` and a target pdfmd cannot read a
 PDF as (html, docx, ...) are refused. The exit status is batchocr's.
 `pdfmd --install batchocr` pip-installs `batchocr[md]` (PyMuPDF, AGPL-3.0, as its own
 package, never bundled) from the tagged GitHub release into the Python pdfmd runs
-from; `--check-dependencies` reports batchocr, Tesseract and Poppler.
+from; `--check-dependencies` reports batchocr, Tesseract and Poppler. `--install batchocr` also
+offers Tesseract and Poppler through the system's package manager, and `--install ocr:rus,kaz`
+fetches Tesseract language files (pinned `tessdata_fast`, pdfmd_unicode/tessdata.py) into
+~/.local/share/pdfmd/tessdata, which PDF reading hands to Tesseract (TESSDATA_PREFIX) when it
+has every language `--lang` names and the user set no TESSDATA_PREFIX.
 
 Finishing touches on the built PDF (v3.22.9, ideas from mdpdf), all with pypdf, so
 they work with every engine and are off unless asked for: --bookmarks adds PDF
@@ -1029,7 +1033,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.18"
+PDFMD_VERSION = "3.23.19"
 import argparse
 import csv
 import filecmp
@@ -2186,8 +2190,8 @@ INSTALL_SPECS = {
     "pandoc": ["pypandoc_binary"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit")
-INSTALL_SIZES = {"translit": "about 3 MB", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit", "ocr")
+INSTALL_SIZES = {"translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
@@ -3717,17 +3721,18 @@ def translit_report() -> bool:
 
 
 def install_kind(value: str) -> str:
-    """argparse type of --install: a kind, or `fonts:NAME[,NAME...]`."""
+    """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]`."""
     kind = value.partition(":")[0]
-    if kind not in INSTALL_KINDS or (":" in value and kind != "fonts"):
+    if kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr")):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
-                                         "fonts takes names: fonts:arabic,cjk-sc)")
+                                         "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz)")
     return value
 
 
 def uninstall_kind(value: str) -> str:
-    if value.partition(":")[0] != "fonts":
-        raise argparse.ArgumentTypeError("only fonts can be uninstalled: --uninstall fonts:NAME[,NAME...]")
+    if value.partition(":")[0] not in ("fonts", "ocr"):
+        raise argparse.ArgumentTypeError("only fonts and OCR languages can be uninstalled: "
+                                         "--uninstall fonts:NAME[,NAME...] or ocr:LANG[,LANG...]")
     return value
 
 
@@ -3776,6 +3781,58 @@ def uninstall_fonts(names: str) -> bool:
     return True
 
 
+def tessdata_directory() -> Path:
+    """Where pdfmd keeps the Tesseract language files `pdfmd --install ocr:LANG` fetches."""
+    return data_root() / "tessdata"
+
+
+def install_ocr_languages(names: str, remove: bool = False) -> bool:
+    """`pdfmd --install ocr[:LANG,...]` / `--uninstall ocr:LANG`: list the languages, or fetch them
+    (pdfmd_unicode/tessdata.py)."""
+    if unicode_module() is None:
+        print("The OCR language installer is part of the pdfmd_unicode package, which is not installed "
+              "beside this file (pip install pdfmd-cli).", file=sys.stderr)
+        return False
+    from pdfmd_unicode import tessdata
+    if not names.strip():
+        if remove:
+            print("Name what to remove: pdfmd --uninstall ocr:rus,kaz", file=sys.stderr)
+            return False
+        print(tessdata.table(tessdata_directory()))
+        return True
+    try:
+        codes = tessdata.resolve(names.split(","))
+    except tessdata.UnknownLanguage as error:
+        print(f"No Tesseract language called {error.args[0]!r}. `pdfmd --install ocr` lists them.", file=sys.stderr)
+        return False
+    if remove:
+        tessdata.uninstall(codes, tessdata_directory())
+        return True
+    failed = tessdata.install(codes, tessdata_directory())
+    done = [code for code in codes if code not in failed]
+    if done:
+        print(f"Installed {', '.join(done)} in {tessdata_directory()}; `pdfmd scan.pdf --lang {'+'.join(done)}` "
+              "uses them (remove with `pdfmd --uninstall ocr:LANG`).")
+    return not failed
+
+
+def tessdata_environment(extra: list[str]) -> dict[str, str] | None:
+    """The environment for batchocr: TESSDATA_PREFIX at pdfmd's own language folder when the user has
+    not set one and the folder has every language `--lang` asks for (English when it does not)."""
+    if os.environ.get("TESSDATA_PREFIX") or unicode_module() is None:
+        return None
+    from pdfmd_unicode import tessdata
+    wanted = "eng"
+    for index, item in enumerate(extra):
+        if item in ("--lang", "-l") and index + 1 < len(extra):
+            wanted = extra[index + 1]
+        elif item.startswith("--lang="):
+            wanted = item.partition("=")[2]
+    if tessdata.covers(tessdata_directory(), [code for code in re.split(r"[+,]", wanted) if code]):
+        return {**os.environ, "TESSDATA_PREFIX": str(tessdata_directory())}
+    return None
+
+
 def reset_font_caches() -> None:
     global _FONT_INDEX, _MANAGED_INDEX
     _FONT_INDEX = _MANAGED_INDEX = None
@@ -3792,6 +3849,8 @@ def install_extra(kind: str) -> bool:
         return install_extra("pandoc") and install_extra("typst")
     if kind == "typst":
         return install_typst()
+    if kind == "ocr" or kind.startswith("ocr:"):
+        return install_ocr_languages(kind.partition(":")[2])
     if kind == "emoji" or kind == "fonts" or kind.startswith("fonts:"):
         return install_fonts("emoji" if kind == "emoji" else kind.partition(":")[2])
     if kind == "math" and sys.version_info < (3, 11):
@@ -12329,7 +12388,7 @@ def install_ocr_tools() -> None:
             print(f"Could not run {command[0]} ({error}).", file=sys.stderr)
             return
         print("Installed." if code == 0 else f"{command[0]} exited with status {code}.")
-    print(f"      More OCR languages: {OCR_PACKAGE_MANAGERS[manager][2]}")
+    print(f"      More OCR languages: pdfmd --install ocr:rus,kaz  (or {OCR_PACKAGE_MANAGERS[manager][2]})")
 
 
 def batchocr_missing_message(found: tuple[int, ...] | None = None) -> str:
@@ -12435,7 +12494,7 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
     call += extra
     print(f"ROUTE  {', '.join(pdf.name for pdf in rest)} -> batchocr"
           + (f" {'.'.join(map(str, version))}" if version else "") + f" ({fmt})", file=sys.stderr)
-    code = subprocess.run(call).returncode
+    code = subprocess.run(call, env=tessdata_environment(extra)).returncode
     if code == 0 and args.open and produced and produced[0].is_file():
         open_file(produced[0])
     return max(status, code)
@@ -13473,7 +13532,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
                              "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
                              "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "
-                             "into pdfmd's own folder with no admin rights). "
+                             "into pdfmd's own folder with no admin rights) or 'ocr' (alone: lists the Tesseract "
+                             "languages pdfmd can fetch; ocr:rus,kaz installs some into its own folder). "
                              "pandoc/math equal `pip install \"pdfmd-cli[KIND]\"`. "
                              "A Pandoc or Typst already on PATH always wins over the installed ones")
     parser.add_argument("--translit", metavar="PACKS",
@@ -13499,8 +13559,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="print where pdfmd's global config file is, and what it sets")
     parser.add_argument("--init-config", action="store_true",
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
-    parser.add_argument("--uninstall", metavar="fonts:NAME", type=uninstall_kind,
-                        help="remove fonts installed by --install fonts, e.g. --uninstall fonts:arabic,cjk")
+    parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
+                        help="remove fonts or OCR languages installed by --install, e.g. --uninstall fonts:arabic,cjk or ocr:rus")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -13856,6 +13916,8 @@ def main() -> None:
     if args.install:
         raise SystemExit(0 if install_extra(args.install) else 1)
     if args.uninstall:
+        if args.uninstall.startswith("ocr"):
+            raise SystemExit(0 if install_ocr_languages(args.uninstall.partition(":")[2], remove=True) else 1)
         raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)
     routed = route_pdf_input(args, pandoc_options)
     if routed is not None:
