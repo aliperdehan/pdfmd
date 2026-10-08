@@ -228,6 +228,11 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     config folder is used instead of Pandoc's default and only the `office:` block changes it;
     `--init-reference` writes one; `--no-auto officeref|officestyle`. Fonts Word does not ship are
     mapped to Times New Roman/Arial/Consolas (`office: {fonts: exact}` keeps them).
+    A Lua filter (pdfmd_office/office.lua, `office: {latex: auto|off}`, `--no-auto officelatex`) makes
+    LaTeX native in those outputs: mhchem \ce and siunitx \si/\SI/\num as text and Word math,
+    equation environments as Word equations with numbers, raw figure/tabular via Pandoc's LaTeX reader,
+    \ref/\cref/captions numbered from the .aux of a PDF build made once in the cache
+    (`office: {labels: off}` counts instead); what remains is reported.
 
     Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
     ending `.tex`) produces a complete, standalone document -- the same
@@ -1042,7 +1047,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.0"
+PDFMD_VERSION = "3.24.1"
 import argparse
 import csv
 import filecmp
@@ -1268,7 +1273,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize", "parts", "lookup", "unicode", "officeref", "officestyle",
+    "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3807,11 +3812,137 @@ def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, o
     return None, ""
 
 
+OFFICE_LABEL_COMMANDS = re.compile(r"\\(?:ref|cref|Cref|eqref|autoref|pageref|labelcref|label)\s*\{"
+                                   r"|\\begin\{(?:equation|align|gather|multline|eqnarray|reaction|figure|table)")
+
+
+def kpsewhich_path_text(name: str) -> tuple[Path, str] | None:
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return None
+    found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
+    if not found:
+        return None
+    try:
+        return Path(found[0]), Path(found[0]).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def office_label_data(md_path: Path, metadata_files: list[Path], variables: list[str],
+                      no_auto: list[str] | None, note, scratch: Path, mode: str) -> Path | None:
+    """The numbers LaTeX gave this document's labels (an .aux from a real PDF build, reused while it is
+    newer than the sources), with the caption separator and reference names its preamble sets, written
+    as JSON for the Lua filter. None when the document has nothing to refer to or the build fails."""
+    module = office_module()
+    if module is None or md_path.suffix.lower() not in (".md", ".markdown", ".txt", ""):
+        return None
+    try:
+        text = md_path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return None
+    preambles = find_preambles(md_path.parent, md_path.stem, []) if not auto_disabled(no_auto, "preamble") else []
+    texts = []
+    for item in preambles:
+        try:
+            texts.append(item.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            pass
+    for name in dict.fromkeys(re.findall(r"\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{([^}]+)\}", "\n".join(texts))):
+        for package in name.split(","):
+            found = kpsewhich_path_text(package.strip() + ".sty")
+            if found and "texmf-dist" not in str(found[0]) and "/texlive/" not in str(found[0]):
+                texts.append(found[1])
+    data = {"captionsep": module.caption_separator(texts),
+            "crefcap": bool(re.search(r"cleveref[^\n]*|\\usepackage\[[^\]]*\]\{cleveref\}", "\n".join(texts)) and
+                            re.search(r"\[[^\]]*capitali[sz]e[^\]]*\]\{cleveref\}", "\n".join(texts)) is not None),
+            "crefnames": {key: list(value) for key, value in module.cref_names(texts).items()}, "labels": {}}
+    wanted = OFFICE_LABEL_COMMANDS.search(text) is not None and mode != "off"
+    if wanted:
+        base = cache_directory(md_path, document_cache_root(md_path, metadata_files))
+        aux = base / f"{safe_stem(md_path.stem)}.aux"
+        sources = [md_path, *metadata_files, *preambles]
+        newest = max((item.stat().st_mtime for item in sources if item.is_file()), default=0)
+        if not (aux.is_file() and aux.stat().st_mtime >= newest):
+            note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
+            command = [sys.executable, str(Path(__file__).resolve()), str(md_path), "-o",
+                       str(scratch / f"{md_path.stem}.pdf"), "--cache", "--no-auto", *(no_auto or ["officeref"])]
+            for variable in variables:
+                command += ["-V", variable]
+            if metadata_files:
+                command += ["-y", *map(str, metadata_files)]
+            done = subprocess.run(command, capture_output=True, text=True)
+            if done.returncode != 0:
+                print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
+                      "instead (build the PDF to see why)", file=sys.stderr)
+        if aux.is_file():
+            data["labels"] = module.parse_aux(aux.read_text(encoding="utf-8", errors="replace"))
+    path = scratch / "labels.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+class OfficeArguments(list):
+    """The Pandoc arguments an office build adds, and where its Lua filter reports what it left out."""
+    report: Path | None = None
+    filter_arguments: list[str] = []      # the Lua filter: added after every other filter
+
+
+def office_finish(arguments, md_path: Path, verbose: bool) -> None:
+    """After the Pandoc run: say what the LaTeX filter could not make native."""
+    report = getattr(arguments, "report", None)
+    if report is None or not report.is_file():
+        return
+    try:
+        data = json.loads(report.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    left = data.get("left_over") or []
+    done = int(data.get("math", 0)) + int(data.get("native", 0))
+    if done and verbose:
+        print(f"OFFICE  {md_path}: {data.get('math', 0)} formula(s) and {data.get('native', 0)} LaTeX piece(s) made native")
+    if left:
+        kinds: dict[str, int] = {}
+        for item in left:
+            kinds[item["kind"]] = kinds.get(item["kind"], 0) + 1
+        print(f"WARN  {md_path}: LaTeX the Word output could not express: "
+              + ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items())), file=sys.stderr)
+        if verbose:
+            for item in left[:20]:
+                print(f"      {item['kind']}: {' '.join(item['tex'].split())[:110]}", file=sys.stderr)
+
+
 @contextmanager
 def office_reference(md_path: Path, metadata_files: list[Path], variables: list[str], target: str, output: Path,
                      pandoc_options: list[str], no_auto: list[str] | None, note) -> Iterator[list[str]]:
-    """Pandoc arguments (`--reference-doc FILE`) for a docx/odt/pptx build: the user's own reference
-    document, or Pandoc's default, with the document's page setup, fonts and pdfmd's look written in."""
+    """Pandoc arguments for a docx/odt/pptx build: `--reference-doc FILE` (the user's own reference
+    document, or Pandoc's default, with the document's page setup, fonts and pdfmd's look written in)
+    and, with `office: {latex: auto}`, the filter that makes LaTeX native (OfficeArguments)."""
+    with tempfile.TemporaryDirectory(prefix="pdfmd-office-filter-") as scratch, \
+            office_reference_document(md_path, metadata_files, variables, target, output, pandoc_options,
+                                      no_auto, note) as reference_arguments:
+        arguments = OfficeArguments(reference_arguments)
+        module = office_module()
+        options = office_options(md_path, metadata_files)
+        latex = str(options.get("latex", "auto")).casefold()
+        if (module is not None and target in ("docx", "odt") and latex not in ("off", "false", "no")
+                and not auto_disabled(no_auto, "officelatex")):
+            arguments.report = Path(scratch) / "report.json"
+            labels = office_label_data(md_path, metadata_files, variables, no_auto, note, Path(scratch),
+                                       str(options.get("labels", "auto")).casefold())
+            arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'off' if latex == 'off' else 'auto'}",
+                                          "-M", f"pdfmd-office-report={arguments.report}"]
+            if labels is not None:
+                arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]
+            # last: other filters (a house style's own) have shaped the document by then
+            arguments.filter_arguments += ["--lua-filter", str(Path(module.__file__).parent / "office.lua")]
+        yield arguments
+
+
+@contextmanager
+def office_reference_document(md_path: Path, metadata_files: list[Path], variables: list[str], target: str,
+                              output: Path, pandoc_options: list[str], no_auto: list[str] | None,
+                              note) -> Iterator[list[str]]:
     if (target not in OFFICE_REFERENCE_EXTENSIONS
             or any(item == "--reference-doc" or item.startswith("--reference-doc=") for item in pandoc_options)):
         yield []
@@ -3843,7 +3974,7 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         # pdfmd's PDF defaults are STIX Two Text and JetBrains Mono: what Word has closest to them
         spec.main = spec.main or "Times New Roman"
         spec.mono = spec.mono or "Consolas"
-    if reference is not None and spec.empty():
+    if reference is not None and spec.empty() and target != "docx":
         note("OFFICE", f"{md_path}: reference document {origin}")
         yield ["--reference-doc", str(reference)]
         return
@@ -11479,8 +11610,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--lua-filter", str(width_filter)]
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
+                cmd += office_arguments.filter_arguments
                 log_cmd(cmd, pandoc_cwd, verbose)
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
@@ -14770,8 +14903,10 @@ def main() -> None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
+                    cmd += report_office_arguments.filter_arguments
                     log_cmd(cmd, pandoc_cwd, args.verbose)
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                    office_finish(report_office_arguments, files[0], args.verbose)
             else:
                 preambles = ([] if auto_disabled(report_no_auto, "preamble")
                             else find_preambles(files[0].parent, files[0].stem, pandoc_options)

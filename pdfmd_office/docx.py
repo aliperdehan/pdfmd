@@ -245,6 +245,21 @@ def patch_document(document: str, spec: OfficeSpec) -> str:
     return document[:last.start()] + start + inner + "</w:sectPr>" + document[last.end():]
 
 
+EQUATION_STYLE = (
+    '<w:style w:type="table" w:customStyle="1" w:styleId="PdfmdEquation"><w:name w:val="PdfmdEquation"/>'
+    '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/>'
+    '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/>'
+    '<w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tcPr><w:vAlign w:val="center"/></w:tcPr></w:style>')
+
+
+def ensure_styles(styles: str) -> str:
+    """Styles pdfmd's own output refers to, added when the reference document lacks them: the borderless
+    table an equation and its number sit in."""
+    if 'w:styleId="PdfmdEquation"' not in styles:
+        styles = styles.replace("</w:styles>", EQUATION_STYLE + "</w:styles>")
+    return styles
+
+
 def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
     """A copy of the `.docx`/`.dotx` bytes with the spec written into it (a template's content type is
     turned into a document's, so Pandoc and Word read it as an ordinary document)."""
@@ -254,7 +269,7 @@ def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
         for item in source.infolist():
             content = source.read(item.filename)
             if item.filename == "word/styles.xml":
-                content = patch_styles(content.decode("utf-8"), spec, house).encode("utf-8")
+                content = ensure_styles(patch_styles(content.decode("utf-8"), spec, house)).encode("utf-8")
             elif item.filename == "word/document.xml":
                 content = patch_document(content.decode("utf-8"), spec).encode("utf-8")
             elif item.filename == "[Content_Types].xml":

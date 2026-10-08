@@ -60,6 +60,7 @@ packages = ["pdfmd_inkmd", "pdfmd_office", "pdfmd_unicode"]
 
 [tool.setuptools.package-data]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
+pdfmd_office = ["*.lua"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pdfmd.PDFMD_VERSION" }

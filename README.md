@@ -353,6 +353,22 @@ pdfmd-options:
 
 `--no-auto officeref` turns the search off, `--no-auto officestyle` leaves Pandoc's default alone.
 
+**LaTeX in the document.** Pandoc turns `$x^2$` into a Word equation and drops everything else of
+LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it can:
+
+- `\ce{Ag+(aq) + Cl-(aq) -> AgCl(s)}` (mhchem) and `\si{\gram\per\mole}`, `\SI{5}{\milli\liter}`,
+  `\num{1.5e-3}` (siunitx) become formatted text with real subscripts, charges and units, and, inside
+  math, Word equation pieces;
+- `\begin{equation}`, `align`, `reaction`... become Word equations with their number at the right;
+- raw `figure`, `tabular`, lists, `\emph`, `\newpage`... are read by Pandoc's own LaTeX reader;
+- `\ref`, `\eqref`, `\cref`, `\Cref`, `\pageref` and the "Figure 3." in front of a caption use the numbers
+  LaTeX itself gave (pdfmd builds the PDF once, in its cache, and reads the `.aux`; reused while the sources
+  are older), with the caption separator (`labelsep=`) and `\crefname`s of your preamble;
+- what is left (tikz, chemfig, unknown macros) is named in a warning (`-v` lists it).
+
+`pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
+skips the PDF build (numbers are then counted).
+
 ### Stopping part-way
 
 `--stop-at` ends the build after a stage; everything before it runs as normal:

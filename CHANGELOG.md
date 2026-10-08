@@ -41,6 +41,43 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.1 — 2026-10-08
+
+Pre-edit state: commit `0f9d82e` (v3.24.0). LaTeX the document uses becomes native in Word/ODT output
+(tiers 1-3 and numbers; images for what is left follow).
+
+Found by building a lab report to `.docx`: every `\begin{equation}` with `\ce` was dropped, `\ce` and `\si`
+stayed literal, references and figures vanished. nulabreport's own filter (unguarded `FixDisplaySpacing`)
+also turns display math into LaTeX raw blocks a Word writer drops.
+
+### Added
+
+- **`pdfmd_office/office.lua`**, a Pandoc Lua filter run last for `.docx`/`.odt` (`office: {latex: auto|off}`,
+  `--no-auto officelatex`): math Pandoc can convert is kept (checked through the MathML writer, silently);
+  **mhchem** `\ce{...}` (species, coefficients, charges, subscripts, states, bonds, hydrates, arrows with
+  labels) and **siunitx** `\si \SI \qty \unit \num` (prefixes, powers, `\per`) are translated, in math
+  (`\text{...}` runs, so Word and LibreOffice both set them upright) and in text (real subscripts and
+  superscripts); `\xoverline`; **display environments** (`equation`, `align`, `gather`, `reaction`...,
+  also behind a house filter's `\par\nointerlineskip` wrapper) become a Word equation in a borderless
+  three-cell table with the number at the right; raw `figure`/`tabular`/lists/`\emph`... go through Pandoc's
+  LaTeX reader; `\newpage` is a page break; `\vspace` and friends are dropped.
+- **Numbers from LaTeX**: `\ref \eqref \cref \Cref \autoref \pageref` and the "Figure N. " / "Table N. "
+  before captions use `\newlabel`s read from the `.aux` of one PDF build made in the cache (reused while the
+  sources are older; `office: {labels: off}` counts instead), cleveref names and the "Equation (1)" form,
+  list and pair wording ("Equations (1) and (2)"), the caption separator from `labelsep=`, `\crefname`s and
+  `capitalize` read from the preamble and the local packages it loads. A reference with no label is `??`.
+  A reference to a single label is a link to it.
+- What cannot be made native is counted and named once per run (`-v` lists up to 20): `WARN ... LaTeX the Word
+  output could not express: 1 block, 2 inline`.
+- `pdfmd_office/labels.py`, `tests/test_office_latex.py`; the reference document gets a `PdfmdEquation` table style.
+
+### Fixed
+
+- nulabreport.lua's `FixDisplaySpacing` was not guarded by the output format (fixed in nulabreport; pdfmd
+  runs its filter after the others and reads the wrapped block too, so older copies work).
+
+---
+
 ## v3.24.0 — 2026-10-08
 
 Pre-edit state: commit `8beeb9e` (v3.23.23). Word and OpenDocument output follows the document: the
