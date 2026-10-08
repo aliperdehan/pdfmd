@@ -315,6 +315,44 @@ pdfmd lecture --to typst -o lecture.typ
 pdfmd lecture -o lecture.tex      # a complete, compilable .tex, not a fragment
 ```
 
+### Word and OpenDocument output
+
+Plain Pandoc ignores `papersize`, `geometry`, `mainfont` and `fontsize` when it writes `.docx`
+or `.odt`: you get a Letter page in the default fonts. pdfmd writes them into the *reference
+document* Pandoc builds the file from, so the page and the text follow the same front matter as the PDF:
+
+| Front matter | In the Word file |
+|---|---|
+| `papersize: a4` (also `letter`, `legal`, `a5`, `b5`..., `classoption: [a4paper, landscape]`) | page size and orientation |
+| `geometry:` (a list, `margin=2cm`, `top=1in,left=...`, `paperwidth=...`) or `margin:` | page margins |
+| `mainfont`, `sansfont`, `monofont`, `CJKmainfont`, `fontsize`, `linestretch`, `lang`, `indent` | body, heading and code fonts, sizes, line spacing, language, first-line indent |
+
+A `.docx` carries font *names*, not fonts, and the person opening it has Times New Roman, not
+STIX Two Text. So well-known fonts Word does not ship are mapped to the closest one it does (STIX
+Two Text, Libertinus, Latin Modern to Times New Roman; Helvetica Neue, Inter to Arial; JetBrains
+Mono, Menlo, Fira Code to Consolas), with an `AUTO OFFICE` note; `office: {fonts: exact}` keeps
+your names. Without any of these keys pdfmd's own look applies: black bold headings sized like a LaTeX
+article, a centred title block, booktabs-style table rules, Times New Roman and Consolas.
+
+**Your own template.** A reference document decides the page and fonts itself, and pdfmd then
+changes only what the document's `office:` block names. It is found, in order, as
+`office: {reference-doc: FILE}`, `<name>-reference.docx` or `reference.docx` (`.dotx` works too,
+`.odt`/`.ott` for ODT, `.pptx`/`.potx` for slides) beside the document, in its `metadata/` folder or
+beside its metadata files, and finally in `~/.config/pdfmd/`. Pandoc's own `--reference-doc` is left
+alone. Only builds whose output is `.docx`/`.odt`/`.pptx` look for one. `pdfmd --init-reference`
+writes `reference.docx` (also `odt`, `pptx`): Pandoc's styles with pdfmd's look, to restyle in Word.
+
+```yaml
+pdfmd-options:
+  office:
+    reference-doc: ../templates/house.dotx   # or leave it to be found
+    papersize: a4                            # change just this on top of the template
+    fonts: exact                             # keep STIX Two Text and friends as named
+    style: plain                             # no pdfmd look (headings, title block, table rules)
+```
+
+`--no-auto officeref` turns the search off, `--no-auto officestyle` leaves Pandoc's default alone.
+
 ### Stopping part-way
 
 `--stop-at` ends the build after a stage; everything before it runs as normal:

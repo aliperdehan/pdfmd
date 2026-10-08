@@ -94,3 +94,9 @@ Windows/macOS/Linux tests (`test.yml`) and then, only if they pass and
 changelog commit, pushed. A push without a version bump publishes nothing.
 Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
 publisher is registered to exactly those names.
+
+## Version numbers
+
+One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line
+is a patch (`3.N.x`), whatever it adds, so the version count stays small. The changelog
+entry and the `PDFMD_VERSION` bump still go in the same commit as the change.

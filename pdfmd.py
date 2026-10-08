@@ -220,6 +220,15 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     removes. Those fonts are found by every engine: LaTeX gets them by file and
     Path, Typst by --font-path, WeasyPrint by @font-face.
 
+    Word and OpenDocument output (--to docx|odt, or -o x.docx): Pandoc builds the file from a
+    reference document; pdfmd writes the document's papersize/geometry/margin/classoption,
+    mainfont/sansfont/monofont/CJKmainfont/fontsize/linestretch/lang/indent and its own house
+    look into a copy of it (pdfmd_office/). A reference.docx/.dotx (.odt/.ott, .pptx/.potx) beside
+    the document, in metadata/, named by `pdfmd-options: {office: {reference-doc: F}}` or in the
+    config folder is used instead of Pandoc's default and only the `office:` block changes it;
+    `--init-reference` writes one; `--no-auto officeref|officestyle`. Fonts Word does not ship are
+    mapped to Times New Roman/Arial/Consolas (`office: {fonts: exact}` keeps them).
+
     Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
     ending `.tex`) produces a complete, standalone document -- the same
     `\\documentclass`...`\\begin{document}`...`\\end{document}` a direct PDF
@@ -1033,7 +1042,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.23"
+PDFMD_VERSION = "3.24.0"
 import argparse
 import csv
 import filecmp
@@ -1259,7 +1268,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize", "parts", "lookup", "unicode",
+    "papersize", "parts", "lookup", "unicode", "officeref", "officestyle",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3725,6 +3734,169 @@ def completion_script(shell: str) -> str:
                 lines.append(" ".join(parts))
         return "\n".join(lines) + "\n"
     raise ValueError(shell)
+
+
+# -- Word / OpenDocument output (pdfmd_office/) -----------------------------------------
+# `-o x.docx`, `--to docx|odt`: Pandoc builds the file from a *reference document* (styles, page
+# setup, headers and footers). pdfmd finds the user's own (a `reference.docx`/`.dotx`, `<name>-reference.*`
+# beside the document or in its metadata/ folder, `office: {reference-doc: ...}`, the config folder, or
+# Pandoc's --reference-doc) and writes the document's page size, margins, fonts, size, language and
+# pdfmd's house look into a copy of it. See pdfmd_office/.
+OFFICE_REFERENCE_EXTENSIONS = {"docx": ("docx", "dotx"), "odt": ("odt", "ott"), "pptx": ("pptx", "potx")}
+OFFICE_OPTION_KEYS = ("reference-doc", "fonts", "latex", "style", "profile", "papersize", "geometry", "margin",
+                      "fontsize", "mainfont", "sansfont", "monofont", "CJKmainfont", "linestretch", "lang", "indent")
+
+
+def office_module():
+    try:
+        import pdfmd_office
+    except ImportError:
+        return None
+    return pdfmd_office
+
+
+def effective_metadata(md_path: Path, metadata_files: list[Path], variables: list[str]) -> dict:
+    """The metadata Pandoc sees for a document, as plain data: -V variables over the document's front
+    matter over its metadata files (the first file wins, as in Pandoc)."""
+    merged: dict = {}
+    for path in reversed(metadata_files):
+        merged.update(metadata_file_yaml(path))
+    if md_path.suffix.lower() in (".md", ".markdown", ".txt", ""):
+        try:
+            merged.update(front_matter_dict(md_path.read_text(encoding="utf-8-sig")))
+        except (OSError, UnicodeDecodeError):
+            pass
+    from_variables: dict = {}
+    for variable in variables:
+        match = re.match(r"^([^:=]+)[:=](.*)$", variable)
+        key, value = (match.group(1), match.group(2)) if match else (variable, "true")
+        from_variables.setdefault(key, []).append(value)
+    for key, values in from_variables.items():
+        merged[key] = values[0] if len(values) == 1 and key != "geometry" else values
+    return merged
+
+
+def office_options(md_path: Path, metadata_files: list[Path]) -> dict:
+    value = cascaded_option(md_path, metadata_files, "office")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, output: Path,
+                       options: dict) -> tuple[Path | None, str]:
+    """(reference document, where it came from) for a docx/odt/pptx build, or (None, '')."""
+    extensions = OFFICE_REFERENCE_EXTENSIONS[target]
+    named = options.get("reference-doc")
+    if isinstance(named, str) and named.strip():
+        path = Path(named).expanduser()
+        path = path if path.is_absolute() else md_path.parent / path
+        if not path.is_file():
+            raise SystemExit(f"{md_path}: office.reference-doc {named!r} does not exist")
+        return path.resolve(), "office: reference-doc"
+    folders = [*accessory_directories(md_path.parent, md_path.stem)]
+    folders += [path.parent for path in metadata_files if path.parent not in folders]
+    for folder in folders:
+        for name in (f"{md_path.stem}-reference", "reference"):
+            for extension in extensions:
+                candidate = folder / f"{name}.{extension}"
+                if candidate.is_file() and candidate.resolve() != output.resolve():
+                    return candidate.resolve(), f"found {display_path(candidate)}"
+    for extension in extensions:
+        candidate = config_root() / f"reference.{extension}"
+        if candidate.is_file():
+            return candidate, f"found {candidate} (the config folder)"
+    return None, ""
+
+
+@contextmanager
+def office_reference(md_path: Path, metadata_files: list[Path], variables: list[str], target: str, output: Path,
+                     pandoc_options: list[str], no_auto: list[str] | None, note) -> Iterator[list[str]]:
+    """Pandoc arguments (`--reference-doc FILE`) for a docx/odt/pptx build: the user's own reference
+    document, or Pandoc's default, with the document's page setup, fonts and pdfmd's look written in."""
+    if (target not in OFFICE_REFERENCE_EXTENSIONS
+            or any(item == "--reference-doc" or item.startswith("--reference-doc=") for item in pandoc_options)):
+        yield []
+        return
+    module = office_module()
+    options = office_options(md_path, metadata_files)
+    found = (None, "") if auto_disabled(no_auto, "officeref") else find_reference_doc(
+        md_path, metadata_files, target, output, options)
+    reference, origin = found
+    if module is None or target == "pptx":
+        yield ["--reference-doc", str(reference)] if reference else []
+        if reference:
+            note("OFFICE", f"{md_path}: reference document {origin}")
+        return
+    styled = not auto_disabled(no_auto, "officestyle") and str(options.get("style", "")).casefold() != "none"
+    policy = "exact" if str(options.get("fonts", "")).casefold() == "exact" else "safe"
+    explicit = {key: value for key, value in options.items() if key in OFFICE_OPTION_KEYS}
+    if reference is not None:
+        # a template decides its own page and fonts; only what `office:` names changes it
+        spec = module.spec_from_metadata({}, explicit, policy)
+        house = False
+    elif styled:
+        spec = module.spec_from_metadata(effective_metadata(md_path, metadata_files, variables), explicit, policy)
+        house = str(options.get("style", "house")).casefold() != "plain"
+    else:
+        yield []
+        return
+    if reference is None and house:
+        # pdfmd's PDF defaults are STIX Two Text and JetBrains Mono: what Word has closest to them
+        spec.main = spec.main or "Times New Roman"
+        spec.mono = spec.mono or "Consolas"
+    if reference is not None and spec.empty():
+        note("OFFICE", f"{md_path}: reference document {origin}")
+        yield ["--reference-doc", str(reference)]
+        return
+    try:
+        base = reference.read_bytes() if reference else module.default_reference(target)
+        data = module.patch_reference(target, base, spec, house)
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
+        print(f"WARN  {md_path}: could not prepare the {target} reference document ({error}); "
+              "Pandoc's default is used", file=sys.stderr)
+        yield []
+        return
+    for text in spec.notes:
+        note("OFFICE", f"{md_path}: font {text}")
+    shown = []
+    if spec.paper or spec.landscape:
+        width, height = spec.page_size()
+        shown.append(f"page {width / 1440:.2f} x {height / 1440:.2f} in")
+    if spec.margins:
+        shown.append("margins " + "/".join(f"{spec.margins.get(side, 0) / 1440:.2f}" for side in
+                                           ("top", "right", "bottom", "left")) + " in")
+    if spec.main or spec.size:
+        shown.append(", ".join(filter(None, [spec.main, f"{spec.size:g} pt" if spec.size else None])))
+    note("OFFICE", f"{md_path}: {target} " + ("from " + origin + "; " if reference else "from Pandoc's default; ")
+         + ("; ".join(shown) if shown else "pdfmd's styles"))
+    with tempfile.TemporaryDirectory(prefix="pdfmd-office-") as folder:
+        path = Path(folder) / f"reference.{target}"
+        path.write_bytes(data)
+        yield ["--reference-doc", str(path)]
+
+
+def init_reference(kind: str) -> bool:
+    """`pdfmd --init-reference [docx|odt|pptx]`: write reference.<kind> (Pandoc's own, with pdfmd's
+    look) into the current folder, ready to be restyled in Word/LibreOffice."""
+    module = office_module()
+    kind = (kind or "docx").lower().lstrip(".")
+    if kind not in OFFICE_REFERENCE_EXTENSIONS:
+        print(f"--init-reference takes docx, odt or pptx, not {kind!r}", file=sys.stderr)
+        return False
+    target = Path.cwd() / f"reference.{kind}"
+    if target.exists():
+        print(f"{target.name} exists already; left alone.")
+        return True
+    try:
+        data = module.default_reference(kind)
+        if kind != "pptx":
+            data = module.patch_reference(kind, data, module.OfficeSpec(), True)
+    except (OSError, AttributeError) as error:
+        print(f"Could not write {target.name}: {error}", file=sys.stderr)
+        return False
+    target.write_bytes(data)
+    print(f"Wrote {target.name}: Pandoc's styles with pdfmd's look. Edit the styles in Word or LibreOffice "
+          f"(Heading 1, Body Text, Title, Table...); pdfmd uses it for every .{kind} it writes beside or below it.")
+    return True
 
 
 def config_report(init: bool = False) -> bool:
@@ -11206,7 +11378,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     (script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
                                      tex_first_font, None, no_auto, note)
                      if target_format in ("latex", "beamer") else contextlib.nullcontext((None, None))) \
-                    as (fonts_header, fonts_filter):
+                    as (fonts_header, fonts_filter), \
+                    office_reference(md_path, metadata_files, variables, target_format, output, pandoc_options,
+                                     no_auto, note) as office_arguments:
                 source, *prepared_metadata = prepared
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and standalone_auto:
@@ -11297,6 +11471,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # auto-discovered lua_filters below).
                 if target_format in HTML_TARGETS:
                     cmd += html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
+                cmd += office_arguments
                 cmd += pandoc_options
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
@@ -13767,6 +13942,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
     parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
                         help="remove fonts or OCR languages installed by --install, e.g. --uninstall fonts:arabic,cjk or ocr:rus")
+    parser.add_argument("--init-reference", nargs="?", const="docx", metavar="FORMAT",
+                        help="write reference.docx (or odt, pptx) into this folder: Pandoc's own reference document "
+                             "with pdfmd's look, to restyle in Word; pdfmd then uses it for every .docx/.odt/.pptx "
+                             "it writes beside it (or below it, or in a metadata/ folder)")
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
@@ -14112,6 +14291,8 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
+    if args.init_reference:
+        raise SystemExit(0 if init_reference(args.init_reference) else 1)
     if args.completion:
         sys.stdout.write(completion_script(args.completion))
         raise SystemExit(0)
@@ -14524,7 +14705,9 @@ def main() -> None:
                         (script_fallback(list(files), metadata_files, variables, report_preambles,
                                          report_tex_font, None, report_no_auto, report_note)
                          if target_format in ("latex", "beamer") else contextlib.nullcontext((None, None))) \
-                        as (report_fonts_header, report_fonts_filter):
+                        as (report_fonts_header, report_fonts_filter), \
+                        office_reference(files[0], metadata_files, variables, target_format, output,
+                                         pandoc_options, report_no_auto, report_note) as report_office_arguments:
                     prepared_files = prepared[:len(files)]
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
@@ -14581,6 +14764,7 @@ def main() -> None:
                         cmd.append("--citeproc")
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
+                    cmd += report_office_arguments
                     cmd += pandoc_options
                     if report_fonts_filter is not None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]

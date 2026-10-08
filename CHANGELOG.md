@@ -41,6 +41,50 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.0 — 2026-10-08
+
+Pre-edit state: commit `8beeb9e` (v3.23.23). Word and OpenDocument output follows the document: the
+first part of the office-export line (the rest, LaTeX the document cannot express natively, comes in
+the 3.24.x patches).
+
+Found by building a lab report (`papersize: a4`, `geometry:`, STIX Two Text) to `.docx`: Pandoc
+writes a Letter page in its default fonts and ignores every one of those keys.
+
+### Added
+
+- **`pdfmd_office/`**: `papersize`, `pagesize`, `classoption` (a4paper, landscape...), `geometry:` (every
+  spelling: list, comma string, mapping, `margin=`, `top=`/`hmargin=`/`paperwidth=`...), `margin:`,
+  `fontsize`, `mainfont`, `sansfont`, `monofont`, `CJKmainfont`, `linestretch`, `lang` and `indent` are
+  written into a copy of the reference document before Pandoc runs (page size, margins and orientation
+  into the last section, fonts and sizes into `styles.xml`, theme fonts replaced, every other size
+  scaled with `fontsize`, `lang` into the defaults, first-line indent into Body Text). `.docx` by
+  text edits that keep a Word template's namespaces intact and elements in schema order; `.odt`
+  likewise on `styles.xml`.
+- **Fonts Word has**: a `.docx` carries font names, so STIX Two Text and its kind map to Times New
+  Roman, Helvetica Neue and kind to Arial, JetBrains Mono and kind to Consolas, with an `AUTO OFFICE`
+  note; `office: {fonts: exact}` keeps the names. An unknown font is kept, with a note.
+- **pdfmd's own Word look** when nothing else says otherwise: black bold headings sized like a LaTeX
+  article (1.2x, 1x), a centred title block, booktabs-style table rules, Times New Roman and Consolas
+  (`office: {style: plain}` or `--no-auto officestyle` leaves Pandoc's styles).
+- **Reference documents are found**, only for `.docx`/`.odt`/`.pptx` output: `office: {reference-doc: F}`,
+  `<name>-reference.<ext>`, `reference.<ext>` (`.dotx`/`.ott`/`.potx` too) beside the document, in its
+  `metadata/` folder or beside its metadata files, then `~/.config/pdfmd/`. A template keeps its own page
+  and fonts; the `office:` block changes just the keys it names. A document's own output is never taken
+  as its template. Pandoc's `--reference-doc` is left alone. `--no-auto officeref`.
+- **`pdfmd --init-reference [docx|odt|pptx]`** writes `reference.<ext>` (Pandoc's styles with pdfmd's
+  look) into the folder, never over an existing one.
+- Single files, `-r` reports and `-b` batches all go through it. README section "Word and OpenDocument
+  output"; `tests/test_office.py` (units, XML well-formedness and order, discovery, and a LibreOffice
+  render that checks the page size).
+
+### Verified
+
+- A 27-document matrix through Pandoc and LibreOffice (A4, Letter, Legal, A5, B5, landscape, every
+  geometry/margin spelling, `-V` variables, font sizes, fonts, ODT): page size and margins come out as
+  asked, fonts as mapped.
+
+---
+
 ## v3.23.23 — 2026-10-08
 
 Pre-edit state: commit `80e8a0a` (v3.23.22). Documentation only.
