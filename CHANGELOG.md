@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.15 — 2026-10-08
+
+Pre-edit state: commit `5b25832` (v3.23.14). Emoji pictures: Apple's font, and inside code.
+
+### Added
+
+- **Apple Color Emoji as a picture source** for LaTeX (its `sbix` PNG strikes, largest first, `dupe`
+  glyphs followed), used when no Noto Color Emoji is installed. Single emoji, skin tones and most ZWJ
+  sequences resolve; flags and keycaps are not found in Apple's font by this reader, so they are
+  reported as undrawn (install `pdfmd --install emoji` for those).
+- **Emoji in inline code and code blocks** become pictures too. They are referenced by number
+  (`\pdfmdemojin{N}`, the path defined in the preamble), because a path cannot be read inside a
+  `Verbatim` block. A code block is only rewritten as `Verbatim` when something in it needs work (a digit
+  that could begin a keycap does not count).
+
+---
+
 ## v3.23.14 — 2026-10-08
 
 Pre-edit state: commit `9e79464` (v3.23.13). The fallback on the natbib/biblatex route.

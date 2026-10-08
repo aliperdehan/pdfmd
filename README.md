@@ -710,8 +710,12 @@ font draws, after the fallback (`box` and `error` as a fallback mode imply it). 
 
 Emoji are set as pictures with lualatex and xelatex (which cannot draw colour
 fonts): each emoji, flag, skin tone, family or keycap is looked up in the colour
-emoji font (`pdfmd --install emoji`, or a system Noto Color Emoji), its picture
-taken out of the font file and included at the height of the text. The pictures
+emoji font (`pdfmd --install emoji`, a system Noto Color Emoji, or else Apple Color Emoji on
+a Mac), its picture taken out of the font file and included at the height of the text, in
+inline code and code blocks too. Apple's font is read less completely than Noto's: single
+emoji, skin tones and most joined emoji work, but flags and keycaps, and joined emoji it
+does not list, come out as their first emoji or are reported as undrawable (install Noto
+for those). The pictures
 are kept in pdfmd's cache folder; a `.tex` written with `--to latex` points
 there.
 

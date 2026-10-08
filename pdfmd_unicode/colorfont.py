@@ -49,7 +49,7 @@ def _u32(data: bytes, offset: int) -> int:
 
 
 def _tables(path: str, index: int = 0) -> dict[bytes, bytes]:
-    wanted = (b"cmap", b"GSUB", b"CBLC", b"CBDT")
+    wanted = (b"cmap", b"GSUB", b"CBLC", b"CBDT", b"sbix", b"maxp")
     with open(path, "rb") as handle:
         magic = handle.read(4)
         base = 0
@@ -186,15 +186,39 @@ def _glyph_image(cblc: bytes, cbdt: bytes, glyph: int) -> bytes | None:
     return best[1] if best else None
 
 
+def _sbix_image(sbix: bytes, glyphs: int, glyph: int, depth: int = 0) -> bytes | None:
+    """The PNG of ``glyph`` from the largest sbix strike that has it (Apple Color Emoji)."""
+    if not 0 <= glyph < glyphs or depth > 2:
+        return None
+    best: tuple[int, bytes] | None = None
+    for strike in range(_u32(sbix, 4)):
+        base = _u32(sbix, 8 + 4 * strike)
+        ppem = _u16(sbix, base)
+        start, end = struct.unpack_from(">II", sbix, base + 4 + 4 * glyph)
+        if end <= start + 8:
+            continue
+        kind, data = sbix[base + start + 4:base + start + 8], sbix[base + start + 8:base + end]
+        if kind == b"dupe" and len(data) >= 2:
+            data = _sbix_image(sbix, glyphs, _u16(data, 0), depth + 1)
+            kind = b"png "
+        if kind == b"png " and data and data[:4] == b"\x89PNG" and (best is None or ppem > best[0]):
+            best = (ppem, data)
+    return best[1] if best else None
+
+
 class ColorFont:
-    """A bitmap colour font: look up the picture of an emoji sequence."""
+    """A bitmap colour font (CBDT as in Noto Color Emoji, or sbix as in Apple Color Emoji): look up
+    the picture of an emoji sequence."""
 
     def __init__(self, path: str, index: int = 0):
         tables = _tables(path, index)
-        if not all(tag in tables for tag in (b"cmap", b"CBLC", b"CBDT")):
-            raise ValueError("not a CBDT colour font")
+        cbdt = all(tag in tables for tag in (b"CBLC", b"CBDT"))
+        if b"cmap" not in tables or not (cbdt or (b"sbix" in tables and b"maxp" in tables)):
+            raise ValueError("not a bitmap colour font")
         self.path = path
-        self._cblc, self._cbdt = tables[b"CBLC"], tables[b"CBDT"]
+        self._cblc, self._cbdt = tables.get(b"CBLC"), tables.get(b"CBDT")
+        self._sbix = None if cbdt else tables[b"sbix"]
+        self._glyphs = _u16(tables[b"maxp"], 4) if b"maxp" in tables else 0
         self._cmap = _cmap(tables[b"cmap"])
         self._ligatures = _ligatures(tables[b"GSUB"]) if b"GSUB" in tables else {}
         self._selector = self._cmap.get(VARIATION_EMOJI)
@@ -219,7 +243,11 @@ class ColorFont:
 
     def png(self, sequence: str) -> bytes | None:
         glyph = self.glyph_for(sequence)
-        return _glyph_image(self._cblc, self._cbdt, glyph) if glyph is not None else None
+        if glyph is None:
+            return None
+        if self._sbix is not None:
+            return _sbix_image(self._sbix, self._glyphs, glyph)
+        return _glyph_image(self._cblc, self._cbdt, glyph)
 
 
 def sequence_name(sequence: str) -> str:

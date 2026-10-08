@@ -59,6 +59,7 @@ class Plan:
     code_candidates: dict[int, list[str]] = field(default_factory=dict)  # the same, for code (lacking in the monofont)
     code_common: set[int] = field(default_factory=set)
     code_boxes: set[int] = field(default_factory=set)
+    code_emoji: bool = False                        # the code has emoji (pictures in Verbatim blocks)
 
     def __bool__(self) -> bool:
         return bool(self.choices) or bool(self.pictures) or bool(self.boxes) or bool(self.code_boxes)
@@ -79,6 +80,7 @@ class Plan:
                 self.choices[new_key] = choice
         self.code_candidates = {code_point: [remap[key] for key in keys] for code_point, keys in code.candidates.items()}
         self.code_common = set(code.common)
+        self.code_emoji = bool(code.emoji)
 
     def describe(self) -> list[str]:
         """One line per font: what it was chosen for."""
@@ -121,10 +123,14 @@ class Plan:
             lines.append(_font_line(choice))
         if self.boxes or self.code_boxes:
             lines.append(r"\providecommand{\pdfmdbox}{\rule[-0.1ex]{0.55em}{0.75em}}")
-        if self.code_candidates or self.code_boxes:
+        if self.code_candidates or self.code_boxes or self.code_emoji:
             lines.append(r"\usepackage{fancyvrb}")
         if self.pictures:
-            lines += [r"\usepackage{graphicx}",
+            for number, (_sequence, path) in enumerate(sorted(self.pictures.items())):
+                # by number: inside a Verbatim block a path would be read with verbatim catcodes
+                lines.append(r"\expandafter\gdef\csname pdfmdpic@%d\endcsname{%s}" % (number, _tex_option_path(path)))
+            lines += [r"\newcommand{\pdfmdemojin}[1]{\expandafter\pdfmdemoji\expandafter{\csname pdfmdpic@#1\endcsname}}",
+                      r"\usepackage{graphicx}",
                       r"\providecommand{\pdfmdemoji}[1]{\raisebox{-0.2em}{\includegraphics[height=1.1em]{#1}}}"]
         lines += [
             r"\DeclareRobustCommand{\pdfmdrun}[2]{\texorpdfstring{{\csname pdfmdf#1\endcsname #2}}{#2}}",
@@ -143,6 +149,8 @@ class Plan:
         rtl = ", ".join(f'{choice.key}=true' for choice in self.choices.values() if choice.rtl)
         sequences = ", ".join("[%s]=%s" % (_lua_string(sequence), _lua_string(_tex_option_path(path)))
                               for sequence, path in sorted(self.pictures.items()))
+        numbers = ", ".join("[%s]=%d" % (_lua_string(sequence), number)
+                            for number, (sequence, _path) in enumerate(sorted(self.pictures.items())))
         first = ", ".join(f"[{code}]=true" for code in sorted({ord(sequence[0]) for sequence in self.pictures}))
         longest = max((len(sequence) for sequence in self.pictures), default=1)
         families = ", ".join(f'{choice.key}="{choice.family}"' for choice in self.choices.values())
@@ -157,7 +165,7 @@ class Plan:
         return (LUA_FILTER.replace("@CODECANDIDATES@", code_entries).replace("@CODECOMMON@", code_common)
                 .replace("@CODEBOXES@", code_boxes).replace("@BOXES@", boxes).replace("@WORDS@", "true" if self.words else "false")
                 .replace("@COVER@", covers).replace("@CANDIDATES@", entries).replace("@COMMON@", common).replace("@RTL@", rtl)
-                .replace("@FAMILIES@", families).replace("@LANGS@", langs).replace("@SEQUENCES@", sequences)
+                .replace("@FAMILIES@", families).replace("@LANGS@", langs).replace("@SEQUENCES@", sequences).replace("@PICTURENUMBERS@", numbers)
                 .replace("@EMOJIFIRST@", first).replace("@LONGEST@", str(longest)))
 
 
@@ -363,6 +371,7 @@ local RTL = { @RTL@ }
 local FAMILIES = { @FAMILIES@ }
 local LANGS = { @LANGS@ }
 local SEQUENCES = { @SEQUENCES@ }   -- emoji sequence -> picture (LaTeX only)
+local PICTURE_NUMBERS = { @PICTURENUMBERS@ }   -- sequence -> number of its \pdfmdpic@N path
 local EMOJI_FIRST = { @EMOJIFIRST@ }
 local LONGEST = @LONGEST@
 local BOXES = { @BOXES@ }        -- characters drawn as a black box
@@ -423,8 +432,25 @@ end
 -- Code (LaTeX only): split `text` into runs of one font, black boxes and plain text
 local function code_segments(text)
   local segments, current, previous = {}, nil, nil
-  for _, code in utf8.codes(text) do
+  local codes = {}
+  for _, code in utf8.codes(text) do codes[#codes + 1] = code end
+  local position = 1
+  while position <= #codes do
+    local code = codes[position]
+    position = position + 1
+    local picture
+    if EMOJI_FIRST[code] then
+      for length = math.min(LONGEST, #codes - position + 2), 1, -1 do
+        local sequence = utf8.char(table.unpack(codes, position - 1, position + length - 2))
+        if SEQUENCES[sequence] then picture, position = PICTURE_NUMBERS[sequence], position + length - 1; break end
+      end
+    end
     local char, key, box = utf8.char(code), nil, false
+    if picture then
+      segments[#segments + 1] = { picture = picture }
+      current, previous = nil, nil
+      goto continue
+    end
     if CODE_BOXES[code] then
       box = true
     elseif CODE_CANDIDATES[code] then
@@ -442,13 +468,14 @@ local function code_segments(text)
       segments[#segments + 1] = current
     end
     previous = key
+    ::continue::
   end
   return segments
 end
 
 local function has_code_trouble(text)
   for _, code in utf8.codes(text) do
-    if CODE_CANDIDATES[code] or CODE_BOXES[code] then return true end
+    if CODE_CANDIDATES[code] or CODE_BOXES[code] or EMOJI_FIRST[code] then return true end
   end
   return false
 end
@@ -465,11 +492,22 @@ local function verbatim_escape(text)
   return table.concat(out)
 end
 
+local function needs_work(segments)
+  for _, segment in ipairs(segments) do
+    if segment.key or segment.box or segment.picture then return true end
+  end
+  return false
+end
+
 function Code(element)
   if mode() ~= "latex" or not has_code_trouble(element.text) then return nil end
+  local segments = code_segments(element.text)
+  if not needs_work(segments) then return nil end
   local out = {}
-  for _, segment in ipairs(code_segments(element.text)) do
-    if segment.box then
+  for _, segment in ipairs(segments) do
+    if segment.picture then
+      out[#out + 1] = pandoc.RawInline("latex", "\\pdfmdemojin{" .. segment.picture .. "}")
+    elseif segment.box then
       out[#out + 1] = pandoc.RawInline("latex", "\\pdfmdbox{}")
     elseif segment.key then
       out[#out + 1] = pandoc.RawInline("latex", (RTL[segment.key] and "\\pdfmdrunrtl{" or "\\pdfmdrun{")
@@ -485,9 +523,13 @@ end
 
 function CodeBlock(element)
   if mode() ~= "latex" or not has_code_trouble(element.text) then return nil end
+  local segments = code_segments(element.text)
+  if not needs_work(segments) then return nil end
   local body = {}
-  for _, segment in ipairs(code_segments(element.text)) do
-    if segment.box then
+  for _, segment in ipairs(segments) do
+    if segment.picture then
+      body[#body + 1] = "\\pdfmdemojin{" .. segment.picture .. "}"
+    elseif segment.box then
       body[#body + 1] = "\\pdfmdbox{}"
     elseif segment.key then
       body[#body + 1] = (RTL[segment.key] and "\\pdfmdrunrtl{" or "\\pdfmdrun{") .. segment.key .. "}{"

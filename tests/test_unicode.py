@@ -688,6 +688,39 @@ class CheckFonts(unittest.TestCase):
         self.assertIn("pdfmd --install fonts:cjk-sc", text)
 
 
+class CodeEmoji(unittest.TestCase):
+    def test_emoji_in_code_become_pictures_and_plain_code_is_left_alone(self):
+        if not shutil.which("pandoc"):
+            self.skipTest("Pandoc not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            make_font(root / "mono.ttf", "Mono Test", [(0x20, 0x7E)])
+            font = make_color_font(root / "emoji.ttf", {1: b"\x89PNG\r\n\x1a\nrocket"})
+            index = pu.FontIndex(root, use_system=False)
+            code_text = "go \U0001F680 now"
+            plan = pu.plan_text("body", "Main Test", index)
+            code = pu.plan_text(code_text, "Mono Test", index)
+            self.assertIn(0x1F680, code.emoji)
+            plan.add_code(code)
+            plan.pictures = __import__("pdfmd_unicode.colorfont", fromlist=["x"]).write_pictures(code_text, code.emoji, str(font), root / "pics")
+            filter_file = root / "f.lua"
+            filter_file.write_text(plan.lua_filter(), encoding="utf-8")
+
+            def convert(markdown):
+                return subprocess.run(["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(filter_file)],
+                                      input=markdown, capture_output=True, text=True, encoding="utf-8").stdout
+
+            self.assertIn("fancyvrb", plan.latex_header())
+            self.assertIn("\\pdfmdemojin{0}", convert("`go \U0001F680 now`\n"))
+            block = convert("```\ngo \U0001F680 now\n```\n")
+            self.assertIn("\\pdfmdemojin{0}", block)
+            self.assertIn("Verbatim", block)
+            plain = convert("```\n1 + 1\n```\n")             # a digit starts a keycap sequence, but is not one
+            self.assertNotIn("Verbatim}[", plain)
+            self.assertNotIn("pdfmdemoji", plain)
+
+
 class CodeFontsForOtherEngines(unittest.TestCase):
     """Typst takes a `codefont` list, WeasyPrint a CSS font-family for code."""
 

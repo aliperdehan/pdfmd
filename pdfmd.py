@@ -1029,7 +1029,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.14"
+PDFMD_VERSION = "3.23.15"
 import argparse
 import csv
 import filecmp
@@ -4642,6 +4642,8 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
     UNICODE_UNCOVERED.clear()
     UNICODE_CODE_FONTS.clear()
     code_uncovered: set[int] = set()
+    code_emoji: set[int] = set()
+    code_text = ""
     if plan is not None:
         # Code is set in the monofont, which lacks other characters than the main font does.
         code_text = unicode_code_text(md_paths)
@@ -4652,8 +4654,9 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
                      if index.has(family)), "DejaVu Sans Mono")))
         code_plan = module.plan_text(code_text, mono, index, language, fonts=fonts_on) if code_text.strip() else None
         if code_plan is not None:
-            code_uncovered = set(code_plan.uncovered) | set(code_plan.emoji)
+            code_uncovered = set(code_plan.uncovered)
             if latex:
+                code_emoji = set(code_plan.emoji)   # LaTeX sets these as pictures, like those in the text
                 plan.add_code(code_plan)
             elif code_plan.choices:
                 UNICODE_CODE_FONTS.extend(dict.fromkeys(choice.family for choice in code_plan.choices.values()))
@@ -4666,7 +4669,7 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
                         "cannot be told")
         yield None, None
         return
-    if plan.emoji:
+    if plan.emoji or code_emoji:
         # WeasyPrint draws Noto Color Emoji (bitmaps) badly, so it only counts the others for it.
         usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:4]
         emoji_font = next((family for family in usable if index.has(family)), None)
@@ -4676,18 +4679,22 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
                                    else "pdfmd --install emoji") + ")", file=sys.stderr)
         elif engine in LATEX_ENGINES or engine is None:
             # LaTeX cannot draw a colour font: each emoji becomes the picture the font holds for it.
-            face = managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+            # Noto's bitmaps first (the managed copy, then a system one), else Apple's.
+            face = (managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
+                    or index.regular("Apple Color Emoji"))
             if face is not None:
                 from pdfmd_unicode import colorfont
                 stat = Path(face.path).stat()
-                digest = hashlib.sha1(f"{face.path}{stat.st_size}{stat.st_mtime_ns}".encode()).hexdigest()[:8]
+                digest = hashlib.sha1(f"{face.path}{face.index}{stat.st_size}{stat.st_mtime_ns}".encode()
+                                      ).hexdigest()[:8]
                 plan.pictures = colorfont.write_pictures(
-                    text, plan.emoji, face.path, document_cache_root(md_paths[0], metadata_files) / "emoji" / digest,
-                    face.index)
+                    text + "\n" + code_text, plan.emoji | code_emoji, face.path,
+                    document_cache_root(md_paths[0], metadata_files) / "emoji" / digest, face.index)
             drawn = {ord(character) for sequence in plan.pictures for character in sequence}
             left = plan.emoji - drawn
             if plan.pictures:
                 note("UNICODE", f"{md_paths[0]}: {len(plan.pictures)} emoji set as pictures from {face.family}")
+            code_uncovered |= code_emoji - drawn
             if left:
                 plan.uncovered.update({code_point: 1 for code_point in left})
     undrawn = {**plan.uncovered, **{code_point: 1 for code_point in code_uncovered}}
