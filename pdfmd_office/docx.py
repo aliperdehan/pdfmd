@@ -361,7 +361,7 @@ BOOKTABS_STYLE = (
 # a table ruled on every side (what a LaTeX `|c|c|` tabular draws), with the tight cell padding of a dense table
 GRID_STYLE = (
     '<w:style w:type="table" w:customStyle="1" w:styleId="PdfmdGrid"><w:name w:val="PdfmdGrid"/>'
-    '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:tblBorders>'
+    '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:jc w:val="center"/><w:tblBorders>'
     + "".join(f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
               for side in ("top", "left", "bottom", "right", "insideH", "insideV")) +
     '</w:tblBorders><w:tblCellMar><w:top w:w="29" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>'

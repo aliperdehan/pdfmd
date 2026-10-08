@@ -281,6 +281,9 @@ local function species(word)
       elseif c == "-" then
         push("-"); parts[#parts].bond = true; i = i + 1
       else push("+"); i = i + 1 end
+    elseif c == "=" or c == "#" then      -- a double or triple bond: C=O, HC#CH
+      local glyph = (c == "=") and "=" or "\u{2261}"
+      push(glyph); parts[#parts].bond = true; parts[#parts].glyph = glyph; i = i + 1
     elseif c == "." or c == "*" then
       push("·"); parts[#parts].dot = true; i = i + 1
     elseif c == "{" then
@@ -374,7 +377,7 @@ local function ce_math(tokens)
     else
       for _, p in ipairs(t.parts) do
         if p.coef then flush(); out[#out + 1] = p.t .. "\\,"
-        elseif p.bond then flush(); out[#out + 1] = "\\text{-}"
+        elseif p.bond then flush(); out[#out + 1] = "\\text{" .. (p.glyph or "-") .. "}"
         elseif p.sub or p.sup then
           flush()
           local text = mathrm(p.t)
@@ -812,6 +815,17 @@ local function find_file(name)
       return text, candidate
     end
   end
+  -- last, where TeX itself would find it (a package's shared chemicals.tex in the texmf tree)
+  local ok, found = pcall(pandoc.pipe, "kpsewhich", {name:match("%.%w+$") and name or (name .. ".tex")}, "")
+  found = ok and found:gsub("%s+$", "") or ""
+  if found ~= "" then
+    local file = io.open(found, "r")
+    if file then
+      local text = file:read("a")
+      file:close()
+      return text, found
+    end
+  end
   return nil
 end
 
@@ -1062,8 +1076,31 @@ function RawBlock(el)
     raw = trim(raw:gsub("^\\par%s*", ""):gsub("^\\nointerlineskip%s*", ""):gsub("%s*\\par%s*$", ""):gsub("%s*\\nointerlineskip%s*$", ""))
   end
   if raw == "" then return {} end
+  -- a `%` ending a line joins it to the next, as TeX does (`\chemicals{...}%` over `{caption}`)
+  raw = raw:gsub("([^\\])%%[ \t]*\n[ \t]*", "%1")
   local custom = profile_command(raw, true)
   if custom then counters.native = counters.native + 1; return custom end
+  -- `\setcounter{table}{1}\chemicals{...}`: the counter is set, and what follows may be a profile's own
+  local peeled, resets = raw, {}
+  while true do
+    local name, value, rest = peeled:match("^\\setcounter%s*{(%a+)}%s*{(%-?%d+)}%s*(.*)$")
+    if not name then break end
+    resets[#resets + 1] = {name, tonumber(value)}
+    peeled = rest
+  end
+  if #resets > 0 and peeled ~= "" then
+    local before = {}
+    for _, reset in ipairs(resets) do
+      before[reset[1]] = counters_by[reset[1]]
+      if counters_by[reset[1]] ~= nil then counters_by[reset[1]] = reset[2] end
+    end
+    local after = profile_command(peeled, true)
+    if after then
+      counters.native = counters.native + 1
+      return after
+    end
+    for name, value in pairs(before) do counters_by[name] = value end     -- not ours: the fragment keeps its own
+  end
   -- \input{file}: what the file holds is what counts (a booktabs table in tex/table-x.tex is a table)
   local included = raw:match("^\\input%s*{([^}]+)}$") or raw:match("^\\include%s*{([^}]+)}$")
   if included and input_depth < 4 then

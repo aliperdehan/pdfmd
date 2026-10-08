@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.15 — 2026-10-08
+
+Pre-edit state: commit `539f38d` (v3.24.14).
+
+### Added
+
+- **`pdfmd FILE --check-docx`**: what a Word build would make native (formulas, other LaTeX pieces) and what it would draw as
+  pictures, each named by the environment or macro behind it, without drawing or writing anything (the first pass of the build
+  only).
+
+### Fixed
+
+- A table that was still a picture: `\setcounter{table}{1}\chemicals{...}` (a house filter puts the counter in front) and
+  `\chemicals{...}%` newline `{caption}` (a `%` ending a line, which TeX joins) were not recognised as the profile's
+  `\chemicals`. A leading `\setcounter` now sets the filter's own counter before the command, and a `%` at a line end joins
+  the lines in every raw block.
+- A package's shared `chemicals.tex` (found only through TeX's own search path) is found by the filter too (`kpsewhich`, as
+  a last resort).
+- `PdfmdGrid` tables (the chemicals table, a `tablestyle: grid` table) are centred like the booktabs ones.
+- `\ce{C=O}`, `\ce{CH=CH}` (double bond) and `\ce{HC#CH}` (triple) are native text, not pictures.
+
+---
+
 ## v3.24.14 — 2026-10-08
 
 Pre-edit state: commit `bd4ba95` (v3.24.13).

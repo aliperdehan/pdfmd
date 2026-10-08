@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.14"
+PDFMD_VERSION = "3.24.15"
 import argparse
 import csv
 import filecmp
@@ -4319,6 +4319,13 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
         items = json.loads(wanted_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         items = []
+    if os.environ.get("PDFMD_OFFICE_CHECK"):
+        # `pdfmd --check-docx`: say what the Word file would draw as pictures; draw nothing
+        print_office_check(context["md_path"], items, arguments.report)
+        first_output = scratch / f"pass1{suffix}"
+        if first_output.is_file():
+            shutil.copyfile(first_output, output)
+        return result
     if not items:
         return run(cmd)
     store, failures = office_render_fragments(items, arguments, pandoc_cwd, verbose, debug)
@@ -4339,6 +4346,76 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
         if done and verbose:
             print(f"OFFICE  {context['md_path']}: {done} LaTeX picture(s) drawn by LaTeX and embedded (SVG with PNG fallback)")
     return result
+
+
+def describe_fragment(item: dict) -> str:
+    """What a fragment is, in a few words: the environment or macro that made it a picture."""
+    tex = item["tex"].strip()
+    kind = item["kind"]
+    if kind in ("math-inline", "math-display"):
+        return "math Word cannot convert"
+    if kind == "asset":
+        return "a PDF/SVG image converted to PNG"
+    found = re.match(r"\\begin\{(\w+)\*?\}", tex)
+    if found:
+        return f"the {found.group(1)} environment"
+    found = re.match(r"\\(\w+)", tex)
+    if found:
+        return f"the macro \\{found.group(1)}"
+    return "LaTeX only LaTeX draws" if kind == "block" else "an inline LaTeX piece"
+
+
+def print_office_check(md_path: Path, items: list[dict], report: Path | None) -> None:
+    """`--check-docx`: what the Word build of `md_path` makes native, what it draws as a picture and what it cannot."""
+    data: dict = {}
+    if report is not None and report.is_file():
+        try:
+            data = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+    pictures = [item for item in items if item["kind"] != "asset"]
+    assets = [item for item in items if item["kind"] == "asset"]
+    print(f"CHECK  {display_path(md_path)} as a Word file:")
+    print(f"  native and editable: {data.get('math', 0)} formula(s), {data.get('native', 0)} other LaTeX piece(s)"
+          " (units, chemistry, references, tables, lists...)")
+    if not pictures:
+        print("  pictures drawn by LaTeX: none")
+    else:
+        print(f"  pictures drawn by LaTeX: {len(pictures)} (vector with a PNG fallback; not editable in Word)")
+        for item in pictures:
+            print(f"    {item['kind']:<12} {describe_fragment(item):<34} {' '.join(item['tex'].split())[:70]}")
+    if assets:
+        print(f"  images converted for Word (PDF/SVG to PNG): {len(assets)}")
+    if pictures:
+        print("  To make a macro native, the package's office profile (`<package>-office.lua`) can give it a recipe; "
+              "see the README, `LaTeX in the document`.")
+
+
+def check_docx_command(args, pandoc_options: list[str]) -> int:
+    """`pdfmd --check-docx FILE...`: the Word build's first pass only, reported (nothing is drawn or written)."""
+    status = 0
+    for target in (args.path or [Path.cwd()]):
+        try:
+            document = find_markdown(target)
+        except FileNotFoundError as error:
+            print(str(error), file=sys.stderr)
+            status = 1
+            continue
+        with tempfile.TemporaryDirectory(prefix="pdfmd-check-") as scratch:
+            command = [sys.executable, str(Path(__file__).resolve()), str(document), "--to", "docx",
+                       "-o", str(Path(scratch) / f"{document.stem}.docx"), "--no-stamp", "--no-backup"]
+            for variable in args.variable or []:
+                command += ["-V", variable]
+            if args.metadata_file is not None:
+                command += ["-y", *map(str, args.metadata_file)]
+            if args.no_auto is not None:
+                command += ["--no-auto", *args.no_auto]
+            command += pandoc_options
+            done = subprocess.run(command, env={**os.environ, "PDFMD_OFFICE_CHECK": "1"}, capture_output=True, text=True)
+            print(done.stdout.rstrip())
+            sys.stderr.write(done.stderr)
+            status = max(status, done.returncode)
+    return status
 
 
 def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verbose: bool,
@@ -14776,6 +14853,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
+    parser.add_argument("--check-docx", action="store_true",
+                        help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
+                             "drawing or writing anything (the macro or environment behind each picture is named)")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
@@ -15128,6 +15208,8 @@ def main() -> None:
         raise SystemExit(0)
     if args.doctor:
         raise SystemExit(0 if doctor_report() else 1)
+    if args.check_docx:
+        raise SystemExit(check_docx_command(args, pandoc_options))
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if args.check_fonts:

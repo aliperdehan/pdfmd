@@ -407,6 +407,10 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
   does for `\chemicals`.
 - what cannot be done at all is named in a warning (`-v` lists it).
 
+`pdfmd report.md --check-docx` says what a Word build would make native and what it would draw as pictures, naming the
+environment or macro behind each (`the tikzpicture environment`, `the macro \irspectrum`), without drawing or writing anything: a
+quick way to see what is left to give a recipe (see the profile below).
+
 `pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
 skips the PDF build (numbers are then counted).
 

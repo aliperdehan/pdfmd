@@ -73,6 +73,8 @@ class Translators(unittest.TestCase):
         self.assertEqual(self.ce("R2CH-O-Cl"), r"\text{R}_{2}\text{CH}\text{-}\text{O}\text{-}\text{Cl}")
         self.assertEqual(self.ce("Q+X-"), r"\text{Q}^{+}\text{X}^{-}")
         self.assertEqual(self.ce("CuSO4.5H2O"), r"\text{CuS}\text{O}_{4}\text{·}5\,\text{H}_{2}\text{O}")
+        self.assertEqual(self.ce("C=O"), r"\text{C}\text{=}\text{O}")
+        self.assertEqual(self.ce("HC#CH"), "\\text{HC}\\text{\u2261}\\text{CH}")
         self.assertEqual(self.ce("nonsense $"), "FAIL")
 
     def test_siunitx_in_math(self):
@@ -222,7 +224,8 @@ class Profile(unittest.TestCase):
                 '  local t = pandoc.Table(pandoc.Caption({pandoc.Plain(h.inlines("A caption") or {})}), {{pandoc.AlignLeft, 1}},\n'
                 '    pandoc.TableHead({}), {pandoc.TableBody({pandoc.Row({cell})})}, pandoc.TableFoot({}))\n'
                 '  return {h.number_caption(t, "table") or t}\nend}}\n', encoding="utf-8")
-            (root / "d.md").write_text("---\ntitle: T\n---\n\n\\records{x}\n", encoding="utf-8")
+            (root / "d.md").write_text("---\ntitle: T\n---\n\n```{=latex}\n\\setcounter{table}{4}\\records{x}%\n{ignored}\n```\n",
+                                       encoding="utf-8")
             done = subprocess.run(["pandoc", "d.md", "-o", "d.docx", "--lua-filter", str(FILTER), "-M",
                                    f"pdfmd-office-profile={root / 'office.lua'}", "-M", f"pdfmd-office-path={root / 'lib'}",
                                    "-M", "pdfmd-office-latex=auto"], cwd=root, capture_output=True, text=True)
@@ -231,7 +234,7 @@ class Profile(unittest.TestCase):
             self.assertIn("<w:tbl>", xml)
             text = re.sub(r"<[^>]+>", "", xml)
             self.assertIn("Water, 18.02 18", text)          # \allowbreak is no picture and no text
-            self.assertIn("Table\u00a01. A caption", text)       # numbered by the filter's own counter
+            self.assertIn("Table\u00a05. A caption", text)       # \setcounter{table}{4} before it, a % at the line end joined
 
 
 @unittest.skipUnless(PANDOC and LUALATEX and POPPLER and shutil.which("pdfinfo"), "needs Pandoc, LuaLaTeX and Poppler")
@@ -308,6 +311,24 @@ class DisplayBlocks(unittest.TestCase):
             xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
             self.assertIn("<m:oMathPara>", xml)
             self.assertNotIn("\\ce", xml)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class CheckDocx(unittest.TestCase):
+    def test_it_names_what_would_be_a_picture_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "preamble.tex").write_text("\\usepackage{tikz}\n", encoding="utf-8")
+            (root / "d.md").write_text("---\ntitle: T\n---\n\nWater \\ce{H2O} and $x^2$.\n\n"
+                                       "\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--check-docx"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
+                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("pictures drawn by LaTeX: 1", done.stdout)
+            self.assertIn("tikzpicture", done.stdout)
+            self.assertRegex(done.stdout, r"native and editable: \d+ formula\(s\), [1-9]")
+            self.assertEqual(sorted(path.name for path in root.iterdir() if path.is_file()), ["d.md", "preamble.tex"])
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
