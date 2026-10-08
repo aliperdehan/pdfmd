@@ -41,6 +41,17 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.16 — 2026-10-08
+
+Pre-edit state: commit `8c646c7` (v3.24.15).
+
+### Fixed
+
+- `H$_2$O`, `CCl$_4$`, `Fe$^{3+}$` (math that is only a script, its base being the text outside the dollars) came out as an empty box
+  before the subscript: it is a real subscript or superscript now.
+
+---
+
 ## v3.24.15 — 2026-10-08
 
 Pre-edit state: commit `539f38d` (v3.24.14).

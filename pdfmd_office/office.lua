@@ -694,6 +694,18 @@ local function plain_number(text)
   return digits and table.concat(out) or nil
 end
 
+-- `H$_2$O`: a script with nothing before it (the base is the text outside the dollars) is a real subscript or
+-- superscript, not an equation whose empty base shows as a box
+local function script_only(text)
+  local mark, body = text:match("^%s*([_%^])%s*(.-)%s*$")
+  if not mark then return nil end
+  body = body:match("^{(.*)}$") or body
+  local plain = plain_number(body) or (body:match("^[%w%+%-]+$") and body:gsub("%-", "\u{2212}")) or nil
+  if not plain or plain == "" then return nil end
+  local piece = pandoc.Str(plain)
+  return mark == "_" and pandoc.Subscript({piece}) or pandoc.Superscript({piece})
+end
+
 function Math(el)
   if off() then return nil end
   local display = el.mathtype == "DisplayMath"
@@ -701,6 +713,8 @@ function Math(el)
   if not display then
     local plain = plain_number(text)
     if plain then counters.math = counters.math + 1; return pandoc.Str(plain) end
+    local script = script_only(text)
+    if script then counters.math = counters.math + 1; return script end
   end
   local translated = math_translate(text)
   if translated and display then translated = break_display(translated, 68) end
@@ -1383,6 +1397,7 @@ if PDFMD_OFFICE_EXPORT then
   PDFMD_OFFICE_EXPORT.unit_math, PDFMD_OFFICE_EXPORT.math_native = unit_math, math_native
   PDFMD_OFFICE_EXPORT.break_display, PDFMD_OFFICE_EXPORT.fix_empty_scripts = break_display, fix_empty_scripts
   PDFMD_OFFICE_EXPORT.plain_number = plain_number
+  PDFMD_OFFICE_EXPORT.script_only = script_only
 end
 
 return {

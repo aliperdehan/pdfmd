@@ -95,6 +95,12 @@ class Translators(unittest.TestCase):
         self.assertEqual(self.lua(r"print(E.plain_number([[10^{-3}]]))"), "nil")
         self.assertEqual(self.lua(r"print(E.plain_number([[\alpha 5]]))"), "nil")
 
+    def test_a_script_with_no_base_is_a_real_script_not_an_empty_box(self):
+        self.assertEqual(self.lua(r"print(E.script_only([[_2]]).t)"), "Subscript")
+        self.assertEqual(self.lua(r"print(E.script_only([[^{3+}]]).t)"), "Superscript")
+        self.assertEqual(self.lua(r"print(E.script_only([[x_1]]))"), "nil")
+        self.assertEqual(self.lua(r"print(E.script_only([[_{\alpha}]]))"), "nil")
+
     def test_a_long_display_is_cut_at_its_equals_signs(self):
         long = r"a = \frac{1234567890+1234567890}{3} = \frac{1234567890}{3} = 411522630 = 4.1\times 10^{8} = 0.41\times 10^{9}"
         cut = self.lua("print(E.break_display([[" + long + r"]], 40))")
