@@ -25,8 +25,9 @@ class CacheCase(unittest.TestCase):
         self._directory = tempfile.TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
         self.root = Path(self._directory.name).resolve()
-        self._saved = {key: os.environ.get(key) for key in ("XDG_CACHE_HOME", "PDFMD_CONFIG")}
+        self._saved = {key: os.environ.get(key) for key in ("XDG_CACHE_HOME", "PDFMD_CONFIG", "LOCALAPPDATA")}
         os.environ["XDG_CACHE_HOME"] = str(self.root / "cache")
+        os.environ["LOCALAPPDATA"] = str(self.root / "cache")      # the same place on Windows
         pdfmd.CACHE_LOCATION_CLI = None
         self.addCleanup(self._restore)
 

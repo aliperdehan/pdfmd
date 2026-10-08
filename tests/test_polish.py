@@ -219,7 +219,8 @@ class FinishedPdf(unittest.TestCase):
 
     def test_linked_file_is_attached_and_marked(self):
         reader, _ = self.run_pdfmd("doc.md", "-e", "inkmd", "--attach-links")
-        self.assertEqual(reader.attachments["linked/data.csv"], [b"a,b\n1,2\n"])
+        self.assertEqual([data.replace(b"\r\n", b"\n") for data in reader.attachments["linked/data.csv"]],
+                         [b"a,b\n1,2\n"])
         kinds = [annotation.get_object()["/Subtype"] for page in reader.pages for annotation in page.get("/Annots", [])]
         self.assertIn("/FileAttachment", kinds)
         self.assertIn("/Link", kinds)                       # the web link is still a link

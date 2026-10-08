@@ -340,6 +340,8 @@ class ManagedFonts(unittest.TestCase):
         self.addCleanup(self._directory.cleanup)
         self._previous = os.environ.get("XDG_DATA_HOME")
         os.environ["XDG_DATA_HOME"] = self._directory.name
+        self._windows = os.environ.get("LOCALAPPDATA")
+        os.environ["LOCALAPPDATA"] = self._directory.name   # where Windows keeps pdfmd's data folder
         pdfmd.reset_font_caches()
         self.addCleanup(self._restore)
         folder = Path(self._directory.name) / "pdfmd" / "fonts" / "pack"
@@ -354,6 +356,10 @@ class ManagedFonts(unittest.TestCase):
             os.environ.pop("XDG_DATA_HOME", None)
         else:
             os.environ["XDG_DATA_HOME"] = self._previous
+        if self._windows is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = self._windows
         pdfmd.reset_font_caches()
 
     def test_a_font_only_in_pdfmds_folder_is_named_by_file_for_latex(self):

@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,7 @@ class StripComments(unittest.TestCase):
         self.assertEqual(strip(strip(text)), strip(text))
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "Pandoc is not installed")
 class AssembledStrip(unittest.TestCase):
     def run_pdfmd(self, *args: str, cwd: Path) -> str:
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=cwd,

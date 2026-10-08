@@ -25,9 +25,11 @@ class ConfigCase(unittest.TestCase):
         self._directory = tempfile.TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
         self.root = Path(self._directory.name)
-        self._saved = {key: os.environ.get(key) for key in ("PDFMD_CONFIG", "XDG_CONFIG_HOME", "XDG_CACHE_HOME")}
+        self._saved = {key: os.environ.get(key) for key in ("PDFMD_CONFIG", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "APPDATA", "LOCALAPPDATA")}
         os.environ["XDG_CONFIG_HOME"] = str(self.root / "config")
         os.environ["XDG_CACHE_HOME"] = str(self.root / "cache")
+        os.environ["APPDATA"] = str(self.root / "config")          # the same places on Windows
+        os.environ["LOCALAPPDATA"] = str(self.root / "cache")
         self.config = self.root / "config" / "pdfmd" / "config.yaml"
         os.environ["PDFMD_CONFIG"] = str(self.config)
         pdfmd.load_config.cache_clear()

@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.16 — 2026-10-08
+
+Pre-edit state: commit `f1110f3` (v3.23.15). Tests only: what the first CI run on Windows and on a
+machine without Pandoc showed (nothing of pdfmd itself changed).
+
+### Fixed
+
+- Tests that assumed POSIX paths, `\n` line ends or the XDG folders (Windows uses `%APPDATA%`/
+  `%LOCALAPPDATA%`), and two `--assemble-only` tests that need Pandoc now skip without it.
+
+---
+
 ## v3.23.15 — 2026-10-08
 
 Pre-edit state: commit `5b25832` (v3.23.14). Emoji pictures: Apple's font, and inside code.

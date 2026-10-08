@@ -70,7 +70,7 @@ class PdfInput(unittest.TestCase):
         self.run_pdfmd("a.pdf", "--output", "out/b.md", "--ocr", "off", "--lang", "eng", "-c", "--page-breaks",
                        "-q", "--no-color", "--keep-headers", batchocr=self.fake())
         call = self.call()
-        self.assertEqual(call[:5], ["a.pdf", "--to", "md", "-o", "out/b.md"])
+        self.assertEqual(call[:5], ["a.pdf", "--to", "md", "-o", str(Path("out/b.md"))])
         for flag in ("--ocr", "off", "--lang", "eng", "-c", "--page-breaks", "-q", "--no-color", "--keep-headers"):
             self.assertIn(flag, call)
 
@@ -86,7 +86,7 @@ class PdfInput(unittest.TestCase):
 
     def test_an_output_folder_gets_the_name_of_the_pdf(self):
         self.run_pdfmd("a.pdf", "-o", "notes", batchocr=self.fake())
-        self.assertEqual(self.call()[3:], ["-o", "notes/a.md"])
+        self.assertEqual(self.call()[3:], ["-o", str(Path("notes/a.md"))])
 
     def test_contradictions_are_refused_before_anything_runs(self):
         for args in (["a.pdf", "-o", "a.pdf"], ["a.pdf", "--to", "html"], ["a.pdf", "-o", "x.txt", "--to", "md"],
