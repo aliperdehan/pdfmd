@@ -161,3 +161,90 @@ class Documents(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LUALATEX = shutil.which("lualatex")
+POPPLER = shutil.which("pdftocairo")
+MINIMAL_PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+               b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 100 50]/Contents 4 0 R>>endobj\n"
+               b"4 0 obj<</Length 33>>stream\n0 0 1 rg 10 10 80 30 re f\nendstream endobj\n"
+               b"trailer<</Root 1 0 R/Size 5>>\n%%EOF\n")
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Profile(unittest.TestCase):
+    def test_a_profile_says_what_a_house_macro_means(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "office.lua").write_text(
+                'return {ignore = {"\\\\Hidden"}, commands = {tag = function(args) '
+                'return {pandoc.Strong({pandoc.Str("[tag " .. args[1] .. "]")})} end}}\n', encoding="utf-8")
+            (root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  office: {labels: off}\n---\n\n"
+                                       "A \\tag{7} and \\Hidden here.\n\n\\Hidden\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode())
+            self.assertIn("[tag 7]", text)
+            self.assertNotIn("Hidden", text)
+            self.assertIn("profile", done.stdout)
+
+
+@unittest.skipUnless(PANDOC and LUALATEX and POPPLER and shutil.which("pdfinfo"), "needs Pandoc, LuaLaTeX and Poppler")
+class Pictures(unittest.TestCase):
+    def build(self, files: dict[str, str | bytes], markdown: str) -> tuple[Path, subprocess.CompletedProcess]:
+        directory = tempfile.mkdtemp(prefix="pdfmd-pictures-")
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        for name, content in files.items():
+            (root / name).write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
+        (root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  office: {labels: off}\n---\n\n" + markdown, encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx"], cwd=root, capture_output=True,
+                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+        return root, done
+
+    def test_unknown_latex_becomes_a_vector_picture_with_a_png_fallback(self):
+        root, done = self.build({"preamble.tex": "\\usepackage{tikz}\n\\newcommand{\\boxtag}[1]{\\textbf{[tag #1]}}\n"},
+                                "Before \\boxtag{1} after.\n\n\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n\nEnd.\n")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        archive = zipfile.ZipFile(root / "d.docx")
+        names = archive.namelist()
+        self.assertEqual(sorted(name for name in names if name.endswith(".svg")), ["word/media/pdfmd-1.svg", "word/media/pdfmd-2.svg"])
+        xml = archive.read("word/document.xml").decode()
+        self.assertEqual(xml.count("svgBlip"), 2)
+        self.assertIn('<w:position w:val="-', xml)           # the inline one sits on the baseline
+        self.assertNotIn("pdfmd:svg", xml)
+        self.assertIn("image/svg+xml", archive.read("[Content_Types].xml").decode())
+        self.assertNotIn("WARN", done.stderr)
+
+    def test_a_picture_is_drawn_once(self):
+        files = {"preamble.tex": "\\usepackage{tikz}\n"}
+        text = "\\begin{tikzpicture}\\draw (0,0) rectangle (2,1);\\end{tikzpicture}\n"
+        root, done = self.build(files, text)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        again = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=root,
+                               capture_output=True, text=True,
+                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertNotIn("drawing 1 LaTeX fragment", again.stdout)      # cached
+
+    def test_a_fragment_that_will_not_compile_is_named_and_the_rest_still_builds(self):
+        root, done = self.build({}, "Good \\textbf{bold}.\n\n\\begin{nosuchenv}x\\end{nosuchenv}\n\nEnd.\n")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("could not draw a LaTeX block", done.stderr)
+        self.assertIn("End.", re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()))
+
+    def test_a_pdf_picture_is_converted(self):
+        root, done = self.build({"plot.pdf": MINIMAL_PDF}, "![A plot](plot.pdf)\n")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        archive = zipfile.ZipFile(root / "d.docx")
+        self.assertTrue(any(name.endswith(".svg") for name in archive.namelist()))
+        self.assertIn("<pic:pic", archive.read("word/document.xml").decode())
+
+    def test_a_figure_with_tikz_keeps_its_caption_as_text_and_its_number(self):
+        root, done = self.build({"preamble.tex": "\\usepackage{tikz}\n"},
+                                "\\begin{figure}[H]\n\\centering\n\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n"
+                                "\\caption{A circle.\\label{fig:c}}\n\\end{figure}\n")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode())
+        self.assertIn("Figure\u00a01: A circle.", text)

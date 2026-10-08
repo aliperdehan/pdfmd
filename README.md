@@ -364,7 +364,20 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
 - `\ref`, `\eqref`, `\cref`, `\Cref`, `\pageref` and the "Figure 3." in front of a caption use the numbers
   LaTeX itself gave (pdfmd builds the PDF once, in its cache, and reads the `.aux`; reused while the sources
   are older), with the caption separator (`labelsep=`) and `\crefname`s of your preamble;
-- what is left (tikz, chemfig, unknown macros) is named in a warning (`-v` lists it).
+- **what is left is drawn by LaTeX**: tikz, chemfig, a house style's own macros, math Pandoc cannot convert are compiled in
+  *your document's own preamble* (the same fonts, packages and macros as the PDF, one fragment to a page), and the
+  pages go into the Word file as vector pictures: an SVG with a 300 dpi PNG fallback (Word 2016 and later draw the SVG,
+  LibreOffice and older readers the PNG). An inline fragment sits on the text's baseline, a wide one is scaled to the
+  text width, a figure's caption stays text with its number. `\includegraphics{plot.pdf}` and `![](plot.pdf)` (Word cannot
+  show a PDF) are converted the same way. Pictures are cached by content, so a rebuild draws only what changed
+  (`pdfmd --clear-cache` empties it). A fragment that will not compile is named in a warning and left out; the rest of
+  the document is built. Needs `pdftocairo` (Poppler) and a LaTeX engine; without them the fragments are reported only.
+- **a house style's own macros** can be told to pdfmd: `office.lua` (or `<name>-office.lua`) beside the document, in its
+  `metadata/` folder or in `~/.config/pdfmd/`, or `office: {profile: FILE}`, is a small Lua file:
+  `return {ignore = {"\\LabCaptionBegin"}, commands = {prelab = function(args) return {pandoc.Strong{pandoc.Str("[pre-lab " .. args[1] .. "]")}} end}}`
+  says which macros to drop and what the others mean in a Word file (a command may return text, or blocks such as a
+  native table); an optional `pandoc = function(doc)` hook may restructure the whole document.
+- what cannot be done at all is named in a warning (`-v` lists it).
 
 `pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
 skips the PDF build (numbers are then counted).

@@ -16,6 +16,7 @@ write the list of left-over fragments to).
 local stringify = pandoc.utils.stringify
 local settings = {latex = "auto", report = nil}
 local equation_block   -- defined below
+local profile = {ignore = {}, commands = {}}   -- a house style's own macros (office.lua beside the document)
 local labels, crefnames, caption_sep, cref_capital = {}, {}, ". ", true
 local counters_by = {equation = 0, figure = 0, table = 0}
 local left_over = {}      -- {kind=, tex=}
@@ -55,6 +56,51 @@ end
 
 local function record(kind, tex)
   left_over[#left_over + 1] = {kind = kind, tex = tex}
+end
+
+---------------------------------------------------------------------------
+-- fragments: what cannot be native is drawn by LaTeX (pdfmd compiles it between two runs of this filter)
+-- mode "collect": note the fragment; mode "render": use the picture pdfmd made (or leave the piece out)
+
+local wanted = {}          -- id -> {kind, tex}
+local wanted_order = {}
+local fragment_meta = {}
+
+local function counter_prefix(tex)
+  local label = tex:match("\\label%s*{([^}]*)}")
+  local entry = label and labels[label]
+  if entry and entry.type and entry.type ~= "" and tonumber(entry.num) then
+    local counter = (entry.type == "equation" or entry.type == "figure" or entry.type == "table") and entry.type or nil
+    if counter then return string.format("\\setcounter{%s}{%d}", counter, tonumber(entry.num) - 1) end
+  end
+  return ""
+end
+
+-- the picture of a fragment as an Image, or nil (collect mode, or no picture)
+local function fragment_image(kind, tex)
+  if settings.mode ~= "collect" and settings.mode ~= "render" then return nil end
+  tex = counter_prefix(tex) .. tex
+  local id = pandoc.sha1(kind .. "\0" .. tex)
+  if settings.mode == "collect" then
+    if not wanted[id] then wanted[id] = {id = id, kind = kind, tex = tex}; wanted_order[#wanted_order + 1] = id end
+    return nil
+  end
+  if fragment_meta[id] == nil then
+    local file = io.open(settings.fragments .. "/" .. id .. ".json", "r")
+    if file then
+      local ok, data = pcall(pandoc.json.decode, file:read("a"), false)
+      file:close()
+      fragment_meta[id] = ok and data or false
+    else fragment_meta[id] = false end
+  end
+  local meta = fragment_meta[id]
+  if not meta then return nil end
+  local src = (FORMAT == "docx") and meta.png or meta.svg
+  local width, height = meta.width, meta.height
+  local alt = ("LaTeX: " .. tex:gsub("%s+", " ")):sub(1, 160)
+  local attrs = {{"width", string.format("%.2fpt", width)}, {"height", string.format("%.2fpt", height)}}
+  local title = "pdfmd:svg=" .. meta.svg .. ";dp=" .. string.format("%.3f", meta.depth or 0)
+  return pandoc.Image({pandoc.Str(alt)}, src, title, pandoc.Attr("", {}, attrs))
 end
 
 ---------------------------------------------------------------------------
@@ -552,15 +598,13 @@ function Math(el)
   local display = el.mathtype == "DisplayMath"
   local text = el.text
   local translated = math_translate(text)
-  if translated == nil then
+  if translated == nil or not math_native(translated, display) then
+    local image = fragment_image(display and "math-display" or "math-inline", text)
+    if image then return image end
     record("math", text)
     return nil
   end
   if translated ~= text then counters.math = counters.math + 1 end
-  if not math_native(translated, display) then
-    record("math", text)
-    return nil
-  end
   if translated ~= text then return pandoc.Math(el.mathtype, translated) end
   return nil
 end
@@ -630,11 +674,70 @@ local function math_block(raw)
   return tex, labels, star == "*"
 end
 
+-- every {group} argument after a command name, and what follows them
+local function command_args(raw)
+  local name, position = raw:match("^\\(%a+)%*?()")
+  if not name then return nil end
+  local args = {}
+  while true do
+    local _, after_optional = optional(raw, position)
+    local brace = raw:match("^%s*(){", after_optional)
+    if not brace then break end
+    local content, nxt = group(raw, brace)
+    if not content then break end
+    args[#args + 1] = content
+    position = nxt
+  end
+  return name, args, trim(raw:sub(position))
+end
+
+local helpers = {
+  inlines = function(tex)
+    local ok, doc = pcall(pandoc.read, tex, "latex")
+    if ok then return inlines_of(doc.blocks) end
+    return nil
+  end,
+  blocks = function(tex)
+    local ok, doc = pcall(pandoc.read, tex, "latex")
+    if ok then return doc.blocks end
+    return nil
+  end,
+  group = group, trim = trim,
+  labels = function() return labels end,
+  number_of = function(label) return number_of(label) end,
+  fragment = function(kind, tex) return fragment_image(kind, tex) end,
+}
+
+local INLINE_TYPES = {Str = true, Space = true, SoftBreak = true, LineBreak = true, Emph = true, Strong = true,
+  Underline = true, Strikeout = true, Superscript = true, Subscript = true, SmallCaps = true, Quoted = true,
+  Cite = true, Code = true, Math = true, RawInline = true, Link = true, Image = true, Note = true, Span = true}
+
+-- the profile's answer for a command: Inlines/Blocks, {} to drop it, or nil
+local function profile_command(raw, as_block)
+  local name, args, rest = command_args(raw)
+  if not name or rest ~= "" then return nil end
+  if profile.ignore[name] then return {} end
+  local handler = profile.commands[name]
+  if not handler then return nil end
+  local ok, result = pcall(handler, args, raw, helpers, as_block)
+  if not ok then
+    io.stderr:write("[pdfmd] profile command \\" .. name .. " failed: " .. tostring(result) .. "\n")
+    return nil
+  end
+  if type(result) ~= "table" then return nil end
+  local first = result[1]
+  if as_block and first and INLINE_TYPES[first.t] then return {pandoc.Para(result)} end
+  if not as_block and first and not INLINE_TYPES[first.t] then return nil end
+  return result
+end
+
 function RawInline(el)
   if off() or el.format ~= "latex" and el.format ~= "tex" then return nil end
   local raw = trim(el.text)
   local reference = ref_inlines(raw)
   if reference then counters.native = counters.native + 1; return reference end
+  local custom = profile_command(raw, false)
+  if custom then counters.native = counters.native + 1; return custom end
   if raw:match("^\\%a*ref%*?{") or raw:match("^\\[cC]ref%*?{") then
     record("reference", raw)
     return {pandoc.Str("??")}
@@ -646,6 +749,11 @@ function RawInline(el)
       if translated and math_native(translated, true) then
         counters.math = counters.math + 1
         return pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
+          {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}}))
+      end
+      local image = fragment_image("math-display", tex)
+      if image then
+        return pandoc.Span({image}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
           {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}}))
       end
       record("equation", raw)
@@ -672,8 +780,74 @@ function RawInline(el)
       end
     end
   end
+  local image = fragment_image("inline", raw)
+  if image then return image end
   record("inline", raw)
   return nil
+end
+
+local READER_ENVS = {figure = true, table = true, tabular = true, tabularx = true, center = true, itemize = true,
+  enumerate = true, description = true, quote = true, quotation = true, verbatim = true, abstract = true,
+  flushleft = true, flushright = true, minipage = true, subfigure = true, longtable = true, tabbing = false}
+
+-- only environments Pandoc's LaTeX reader keeps, and no \input (it would read a file it cannot draw)
+local function reader_safe(raw)
+  if raw:find("\\input%s*{") or raw:find("\\include%s*{") then return false end
+  for env in raw:gmatch("\\begin{([%a]+)%*?}") do
+    if not READER_ENVS[env] then return false end
+  end
+  return true
+end
+
+-- a PDF/EPS picture cannot go into Word: pdfmd converts it (collect mode names it, render mode swaps it)
+local function asset_image(img)
+  if off() or (settings.mode ~= "collect" and settings.mode ~= "render") then return nil end
+  local ext = img.src:lower():match("%.(%w+)$")
+  if ext ~= "pdf" and ext ~= "eps" and ext ~= "ps" then return nil end
+  local new = fragment_image("asset", img.src)
+  if not new then return nil end
+  if img.attributes.width or img.attributes.height then
+    new.attributes = img.attributes
+  end
+  if #img.caption > 0 then new.caption = img.caption end
+  new.title = new.title
+  return new
+end
+
+-- a `figure`/`table` whose body Pandoc cannot read: the body is drawn, the caption stays text
+local function captioned_float(raw, env)
+  local inner = raw:match("^\\begin{" .. env .. "%*?}%s*%b[]%s*(.*)\\end{" .. env .. "%*?}%s*$")
+      or raw:match("^\\begin{" .. env .. "%*?}(.*)\\end{" .. env .. "%*?}%s*$")
+  if not inner then return nil end
+  local caption, label
+  local at = inner:find("\\caption", 1, true)
+  if at then
+    local _, after_optional = optional(inner, at + 8)
+    local text, stop = group(inner, after_optional)
+    if text then
+      caption = text
+      inner = inner:sub(1, at - 1) .. inner:sub(stop)
+    end
+  end
+  if caption then
+    label = caption:match("\\label%s*{([^}]*)}")
+    caption = caption:gsub("\\label%s*{[^}]*}", "")
+  end
+  label = label or inner:match("\\label%s*{([^}]*)}")
+  inner = inner:gsub("\\label%s*{[^}]*}", ""):gsub("\\centering", ""):gsub("\\noindent", "")
+  local image = fragment_image("block", inner)
+  if not image then
+    if settings.mode == "collect" then return {} end    -- the first run only lists the body
+    return nil
+  end
+  local caption_blocks = {}
+  if caption then
+    local ok, doc = pcall(pandoc.read, trim(caption), "latex")
+    if ok then caption_blocks = doc.blocks end
+  end
+  local figure = pandoc.Figure({pandoc.Plain({image})}, pandoc.Caption(caption_blocks),
+    pandoc.Attr(label or ""))
+  return number_caption(figure, env == "table" and "table" or "figure")
 end
 
 local PAGE_BREAK
@@ -689,6 +863,8 @@ function RawBlock(el)
     raw = trim(raw:gsub("^\\par%s*", ""):gsub("^\\nointerlineskip%s*", ""):gsub("%s*\\par%s*$", ""):gsub("%s*\\nointerlineskip%s*$", ""))
   end
   if raw == "" then return {} end
+  local custom = profile_command(raw, true)
+  if custom then counters.native = counters.native + 1; return custom end
   local name = raw:match("^\\(%a+)")
   if name == "newpage" or name == "clearpage" or name == "pagebreak" or name == "cleardoublepage" then
     return PAGE_BREAK
@@ -706,21 +882,36 @@ function RawBlock(el)
       return equation_block(pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
         {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}})))
     end
+    local image = fragment_image("math-display", tex)
+    if image then
+      return equation_block(pandoc.Span({image}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
+        {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}})))
+    end
     record("equation", raw)
     return nil
   end
-  -- Pandoc's own LaTeX reader: figure, table, tabular, itemize, center, quote...
-  local ok, doc = pcall(pandoc.read, raw, "latex")
+  -- Pandoc's own LaTeX reader: figure, table, tabular, itemize, center, quote... It silently drops the
+  -- environments it does not know (tikzpicture, axis...), so only text made of the ones it does goes through.
+  local ok, doc = false, nil
+  if reader_safe(raw) then ok, doc = pcall(pandoc.read, raw, "latex") end
   if ok then
     local has_raw = false
     doc:walk({RawBlock = function() has_raw = true end, RawInline = function() has_raw = true end})
     if not has_raw and #doc.blocks > 0 then
       counters.native = counters.native + 1
-      doc = doc:walk({Figure = function(f) return number_caption(f, "figure") end,
+      doc = doc:walk({Image = asset_image,
+                      Figure = function(f) return number_caption(f, "figure") end,
                       Table = function(t) return number_caption(t, "table") end})
       return doc.blocks
     end
   end
+  local env = raw:match("^\\begin{(%a+)%*?}")
+  if env == "figure" or env == "table" then
+    local figure = captioned_float(raw, env)
+    if figure then return figure end
+  end
+  local image = fragment_image("block", raw)
+  if image then return pandoc.Para({image}) end
   record("block", raw)
   return nil
 end
@@ -795,6 +986,22 @@ end
 function Meta(meta)
   if meta["pdfmd-office-latex"] then settings.latex = stringify(meta["pdfmd-office-latex"]) end
   if meta["pdfmd-office-report"] then settings.report = stringify(meta["pdfmd-office-report"]) end
+  if meta["pdfmd-office-profile"] then
+    local path = stringify(meta["pdfmd-office-profile"])
+    local ok, loaded = pcall(dofile, path)
+    if ok and type(loaded) == "table" then
+      profile.ignore = {}
+      for _, name in ipairs(loaded.ignore or {}) do profile.ignore[(name:gsub("^\\", ""))] = true end
+      profile.commands = loaded.commands or {}
+      profile.pandoc = loaded.pandoc
+      profile.name = loaded.name or path
+    else
+      io.stderr:write("[pdfmd] the office profile " .. path .. " could not be loaded: " .. tostring(loaded) .. "\n")
+    end
+  end
+  if meta["pdfmd-office-mode"] then settings.mode = stringify(meta["pdfmd-office-mode"]) end
+  if meta["pdfmd-office-fragments"] then settings.fragments = stringify(meta["pdfmd-office-fragments"]) end
+  if meta["pdfmd-office-wanted"] then settings.wanted = stringify(meta["pdfmd-office-wanted"]) end
   if meta["pdfmd-office-labels"] then
     local file = io.open(stringify(meta["pdfmd-office-labels"]), "r")
     if file then
@@ -821,8 +1028,22 @@ local function write_report()
 end
 
 function Pandoc(doc)
+  if profile.pandoc then
+    local ok, result = pcall(profile.pandoc, doc, helpers)
+    if ok and result then doc = result
+    elseif not ok then io.stderr:write("[pdfmd] the office profile's pandoc hook failed: " .. tostring(result) .. "\n") end
+  end
   write_report()
-  return nil
+  if settings.mode == "collect" and settings.wanted then
+    local file = io.open(settings.wanted, "w")
+    if file then
+      local list = {}
+      for _, id in ipairs(wanted_order) do list[#list + 1] = wanted[id] end
+      file:write(pandoc.json.encode(list))
+      file:close()
+    end
+  end
+  return doc
 end
 
 -- for the tests: `pandoc lua` can load this file and reach the helpers
@@ -834,7 +1055,7 @@ end
 
 return {
   {Meta = Meta},
-  {Math = Math, RawInline = RawInline},
+  {Math = Math, RawInline = RawInline, Image = asset_image},
   {RawBlock = RawBlock, Para = Para, Figure = Figure, Table = Table},
   {Pandoc = Pandoc},
 }

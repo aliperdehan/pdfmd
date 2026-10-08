@@ -7,7 +7,10 @@ document cannot express natively. No dependencies beyond the standard library; p
 from __future__ import annotations
 
 from .docx import default_reference, patch_docx
+from . import fragments
+from .docx_post import finish_docx
 from .fonts import office_font
+from .fragments import labels_only
 from .labels import cref_names, caption_separator, parse_aux
 from .spec import OfficeSpec, spec_from_metadata
 from .units import PAPER_TWIPS, length_to_twips, parse_geometry, parse_paper
@@ -22,5 +25,5 @@ def patch_reference(kind: str, data: bytes, spec: OfficeSpec, house: bool = True
     raise ValueError(f"no reference-document patching for {kind}")
 
 
-__all__ = ["caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
+__all__ = ["finish_docx", "fragments", "labels_only", "caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
            "spec_from_metadata"]

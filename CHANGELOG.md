@@ -41,6 +41,49 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.2 — 2026-10-08
+
+Pre-edit state: commit `11431ae` (v3.24.1). What cannot be native is drawn by LaTeX and embedded; a house
+style's macros can be declared.
+
+### Added
+
+- **Fragments drawn by LaTeX** (`pdfmd_office/fragments.py`, `docx_post.py`): the filter runs twice. The first run
+  lists what it could not make native (unknown raw blocks and inline commands, math Pandoc's converter rejects,
+  display environments it cannot convert, the body of a `figure`/`table` it cannot read) and pdfmd compiles
+  them in the document's own preamble (taken from a `--to latex` run of the same document, so fonts,
+  packages, house macros and the script fallback are the PDF's), one fragment to a `preview` page, all at once
+  and, on an error, halved until the fragment that breaks is alone (one engine, no retries; `\newlabel`s of the
+  real build are loaded, `\setcounter` restores a captioned float's number). Each page becomes an SVG
+  (pdftocairo, glyphs as outlines) and a 300 dpi transparent PNG, with the box's depth. Cached under
+  `~/.cache/pdfmd/office/<hash of preamble, engine and labels>/` by content.
+- The second run puts them in: a `.docx` gets the PNG as the picture, then **docx_post** adds the SVG as
+  Word's `svgBlip` extension beside it (Word 2016+ draws the vector, LibreOffice and older readers the PNG),
+  lowers an inline picture by its depth (`w:position`) so it sits on the baseline, scales a picture wider than
+  the text to the text width, and clears the marker. `.odt` gets the SVG directly.
+- **PDF and EPS pictures** (`\includegraphics{x.pdf}`, `![](x.pdf)`) are converted to SVG and PNG
+  (pdftocairo; EPS through epstopdf or Ghostscript), again when the file is newer than its cache entry.
+- A `figure`/`table` whose body Pandoc's LaTeX reader would silently drop (tikz, pgfplots, `\input`, any environment
+  it does not know) keeps its **caption as text** with its number ("Figure 3. ...") and its body drawn as a
+  picture; the reader is only trusted with environments it knows.
+- **Profiles**: `office.lua`, `<name>-office.lua`, `nulabreport-office.lua` (beside the document, in `metadata/`, beside
+  its metadata files or in `~/.config/pdfmd/`) or `office: {profile: FILE}` tell pdfmd what a house style's own
+  macros mean in a Word file: `ignore = {...}`, `commands = {name = function(args, raw, helpers, as_block)}`
+  (text, blocks such as a native table, or `{}`), `pandoc = function(doc, helpers)` for the whole document.
+  `--no-auto officeprofile`.
+- Captions, figures and tables get a Word look of the LaTeX one (centred, italic, 0.9x) in pdfmd's styles.
+- `tests/test_office_latex.py`: profile, vector picture with baseline, caching, a failing fragment, PDF picture,
+  captioned tikz figure.
+
+### Fixed
+
+- Pandoc's LaTeX reader returns a `figure` with an empty body (no raw block left to notice) when it meets tikz;
+  such figures were rendered as a bare caption.
+- Reference-number lookups, fragments and the preamble run use `pdfmd` as a subprocess with the same
+  `-V`, metadata files and `--no-auto` kinds (`office_pdfmd_command`).
+
+---
+
 ## v3.24.1 — 2026-10-08
 
 Pre-edit state: commit `0f9d82e` (v3.24.0). LaTeX the document uses becomes native in Word/ODT output

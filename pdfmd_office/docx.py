@@ -202,6 +202,14 @@ def _house(styles: str, base: float) -> str:
         styles = _edit_style(styles, style_id, "rPr", "b", "<w:b/>" if bold else None)
         styles = _edit_style(styles, style_id, "rPr", "sz", sz)
         styles = _edit_style(styles, style_id, "rPr", "szCs", szcs)
+    for style_id in ("CaptionedFigure", "Figure"):
+        styles = _edit_style(styles, style_id, "pPr", "jc", '<w:jc w:val="center"/>')
+    for style_id in ("ImageCaption", "TableCaption", "Caption"):
+        sz, szcs = _sz(base * 0.9)
+        styles = _edit_style(styles, style_id, "pPr", "jc", '<w:jc w:val="center"/>')
+        styles = _edit_style(styles, style_id, "rPr", "i", "<w:i/>")
+        styles = _edit_style(styles, style_id, "rPr", "sz", sz)
+        styles = _edit_style(styles, style_id, "rPr", "szCs", szcs)
     span = _style(styles, "Table")
     if span and "<w:tblBorders" not in styles[span[0]:span[1]]:
         # booktabs: a rule above and below the table, one under the header row

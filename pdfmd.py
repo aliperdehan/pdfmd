@@ -229,10 +229,16 @@ Text in other scripts (v3.23.0, lualatex/xelatex):
     `--init-reference` writes one; `--no-auto officeref|officestyle`. Fonts Word does not ship are
     mapped to Times New Roman/Arial/Consolas (`office: {fonts: exact}` keeps them).
     A Lua filter (pdfmd_office/office.lua, `office: {latex: auto|off}`, `--no-auto officelatex`) makes
-    LaTeX native in those outputs: mhchem \ce and siunitx \si/\SI/\num as text and Word math,
+    LaTeX native in those outputs: mhchem \\ce and siunitx \\si/\\SI/\\num as text and Word math,
     equation environments as Word equations with numbers, raw figure/tabular via Pandoc's LaTeX reader,
-    \ref/\cref/captions numbered from the .aux of a PDF build made once in the cache
-    (`office: {labels: off}` counts instead); what remains is reported.
+    \\ref/\\cref/captions numbered from the .aux of a PDF build made once in the cache
+    (`office: {labels: off}` counts instead). What remains (tikz, chemfig, unknown macros, rejected math,
+    PDF/EPS pictures) is compiled in the document's own preamble (fragments.py: one fragment per page via
+    `preview`, cropped, SVG + 300 dpi PNG with the depth for baseline alignment, cached by content under
+    ~/.cache/pdfmd/office/) between two runs of the filter, and a .docx is finished by docx_post.py (SVG
+    beside the PNG, baseline, width). A house style's macros are declared in `office.lua` / `<name>-office.lua`
+    (`office: {profile: F}`, `--no-auto officeprofile`): ignore = {...}, commands = {name = function(args)...},
+    pandoc = function(doc).
 
     Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
     ending `.tex`) produces a complete, standalone document -- the same
@@ -1047,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.1"
+PDFMD_VERSION = "3.24.2"
 import argparse
 import csv
 import filecmp
@@ -1273,7 +1279,7 @@ NO_AUTO_KINDS = frozenset({
     "reader", "title", "margin", "mainfont", "monofont", "font", "tablewidth",
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
-    "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex",
+    "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3786,6 +3792,27 @@ def office_options(md_path: Path, metadata_files: list[Path]) -> dict:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict) -> Path | None:
+    """A house style's Word profile: `office: {profile: FILE}`, else `<name>-office.lua`, `office.lua` or
+    `nulabreport-office.lua` beside the document, in its metadata/ folder or beside its metadata files, else in
+    the config folder. A Lua file that says which of the style's own macros mean what in a Word file."""
+    named = options.get("profile")
+    if isinstance(named, str) and named.strip():
+        path = Path(named).expanduser()
+        path = path if path.is_absolute() else md_path.parent / path
+        if not path.is_file():
+            raise SystemExit(f"{md_path}: office.profile {named!r} does not exist")
+        return path.resolve()
+    folders = [*accessory_directories(md_path.parent, md_path.stem)]
+    folders += [path.parent for path in metadata_files if path.parent not in folders]
+    folders.append(config_root())
+    for folder in folders:
+        for name in (f"{md_path.stem}-office.lua", "office.lua", "nulabreport-office.lua"):
+            if (folder / name).is_file():
+                return (folder / name).resolve()
+    return None
+
+
 def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, output: Path,
                        options: dict) -> tuple[Path | None, str]:
     """(reference document, where it came from) for a docx/odt/pptx build, or (None, '')."""
@@ -3829,6 +3856,19 @@ def kpsewhich_path_text(name: str) -> tuple[Path, str] | None:
         return None
 
 
+def office_pdfmd_command(md_path: Path, metadata_files: list[Path], variables: list[str],
+                         no_auto: list[str] | None, *options: str) -> list[str]:
+    """This pdfmd run again, as a subprocess, for the same document with other options (a PDF build for its
+    labels, a `--to latex` run for its preamble)."""
+    command = [sys.executable, str(Path(__file__).resolve()), str(md_path), *options,
+               "--no-auto", *(no_auto or ["officeref"])]
+    for variable in variables:
+        command += ["-V", variable]
+    if metadata_files:
+        command += ["-y", *map(str, metadata_files)]
+    return command
+
+
 def office_label_data(md_path: Path, metadata_files: list[Path], variables: list[str],
                       no_auto: list[str] | None, note, scratch: Path, mode: str) -> Path | None:
     """The numbers LaTeX gave this document's labels (an .aux from a real PDF build, reused while it is
@@ -3865,18 +3905,16 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
         newest = max((item.stat().st_mtime for item in sources if item.is_file()), default=0)
         if not (aux.is_file() and aux.stat().st_mtime >= newest):
             note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
-            command = [sys.executable, str(Path(__file__).resolve()), str(md_path), "-o",
-                       str(scratch / f"{md_path.stem}.pdf"), "--cache", "--no-auto", *(no_auto or ["officeref"])]
-            for variable in variables:
-                command += ["-V", variable]
-            if metadata_files:
-                command += ["-y", *map(str, metadata_files)]
+            command = office_pdfmd_command(md_path, metadata_files, variables, no_auto,
+                                           "-o", str(scratch / f"{md_path.stem}.pdf"), "--cache")
             done = subprocess.run(command, capture_output=True, text=True)
             if done.returncode != 0:
                 print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
                       "instead (build the PDF to see why)", file=sys.stderr)
         if aux.is_file():
             data["labels"] = module.parse_aux(aux.read_text(encoding="utf-8", errors="replace"))
+            (scratch / "labels.aux").write_text(
+                module.labels_only(aux.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
     path = scratch / "labels.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
@@ -3886,6 +3924,8 @@ class OfficeArguments(list):
     """The Pandoc arguments an office build adds, and where its Lua filter reports what it left out."""
     report: Path | None = None
     filter_arguments: list[str] = []      # the Lua filter: added after every other filter
+    scratch: Path | None = None
+    context: dict = {}
 
 
 def office_finish(arguments, md_path: Path, verbose: bool) -> None:
@@ -3922,6 +3962,9 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
             office_reference_document(md_path, metadata_files, variables, target, output, pandoc_options,
                                       no_auto, note) as reference_arguments:
         arguments = OfficeArguments(reference_arguments)
+        arguments.scratch = Path(scratch)
+        arguments.context = {"md_path": md_path, "metadata_files": metadata_files, "variables": variables,
+                             "no_auto": no_auto, "target": target, "note": note}
         module = office_module()
         options = office_options(md_path, metadata_files)
         latex = str(options.get("latex", "auto")).casefold()
@@ -3930,10 +3973,15 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
             arguments.report = Path(scratch) / "report.json"
             labels = office_label_data(md_path, metadata_files, variables, no_auto, note, Path(scratch),
                                        str(options.get("labels", "auto")).casefold())
+            profile = None if auto_disabled(no_auto, "officeprofile") else find_office_profile(md_path, metadata_files, options)
+            if profile is not None:
+                note("OFFICE", f"{md_path}: profile {display_path(profile)}")
             arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'off' if latex == 'off' else 'auto'}",
                                           "-M", f"pdfmd-office-report={arguments.report}"]
             if labels is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]
+            if profile is not None:
+                arguments.filter_arguments += ["-M", f"pdfmd-office-profile={profile}"]
             # last: other filters (a house style's own) have shaped the document by then
             arguments.filter_arguments += ["--lua-filter", str(Path(module.__file__).parent / "office.lua")]
         yield arguments
@@ -4003,6 +4051,157 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         path = Path(folder) / f"reference.{target}"
         path.write_bytes(data)
         yield ["--reference-doc", str(path)]
+
+
+def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
+    """Run the Pandoc command of a docx/odt build. With the LaTeX filter on it runs twice: once to list the
+    fragments LaTeX must draw (compiled in the document's own preamble, cached), once to put their
+    pictures in; a `.docx` is then finished (SVG beside the PNG, baselines, widths)."""
+    def run(command: list[str]):
+        return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd)
+
+    module = office_module()
+    context = arguments.context if hasattr(arguments, "context") else {}
+    if module is None or not arguments.filter_arguments or not context or "-o" not in cmd:
+        return run(cmd)
+    scratch = arguments.scratch
+    target = context["target"]
+    note = context["note"]
+    first = list(cmd)
+    first[first.index("-o") + 1] = str(scratch / f"pass1{output.suffix}")
+    wanted_path = scratch / "wanted.json"
+    first += ["-M", "pdfmd-office-mode=collect", "-M", f"pdfmd-office-wanted={wanted_path}"]
+    log_cmd(first, pandoc_cwd, verbose)
+    result = run(first)
+    if result.returncode != 0 or not wanted_path.is_file():
+        return result
+    try:
+        items = json.loads(wanted_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        items = []
+    if not items:
+        return run(cmd)
+    store, failures = office_render_fragments(items, arguments, pandoc_cwd, verbose, debug)
+    final = list(cmd) + ["-M", "pdfmd-office-mode=render", "-M", f"pdfmd-office-fragments={store}"]
+    log_cmd(final, pandoc_cwd, verbose)
+    result = run(final)
+    for item in items:
+        if item["id"] in failures:
+            excerpt = " ".join(item["tex"].split())[:90]
+            print(f"WARN  {context['md_path']}: could not draw a LaTeX {item['kind']} ({failures[item['id']]}): {excerpt}",
+                  file=sys.stderr)
+    if result.returncode == 0 and target == "docx" and output.is_file():
+        try:
+            done = module.finish_docx(output)
+        except (OSError, zipfile.BadZipFile, KeyError) as error:
+            print(f"WARN  {context['md_path']}: could not finish the pictures in {output.name} ({error})", file=sys.stderr)
+            done = 0
+        if done and verbose:
+            print(f"OFFICE  {context['md_path']}: {done} LaTeX picture(s) drawn by LaTeX and embedded (SVG with PNG fallback)")
+    return result
+
+
+def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verbose: bool,
+                            debug: bool) -> tuple[Path, dict[str, str]]:
+    """Draw the fragments in `items` that are not cached yet; returns the folder holding their pictures
+    and {id: reason} for those that would not compile."""
+    module = office_module()
+    context = arguments.context
+    md_path, metadata_files = context["md_path"], context["metadata_files"]
+    scratch = arguments.scratch
+    note = context["note"]
+    failures: dict[str, str] = {}
+    root = cache_root() / "office"
+    if not module.fragments.tools_available():
+        print("WARN  LaTeX the Word output cannot express is left out: drawing it needs pdftocairo "
+              "(Poppler: `pdfmd --install batchocr` explains how to get it)", file=sys.stderr)
+        return root / "none", {item["id"]: "pdftocairo is missing" for item in items}
+    engines = [engine for engine in installed_engines() if engine in LATEX_ENGINES
+               and engine not in ("context", "latexmk", "tectonic")]
+    latex_items = [item for item in items if item["kind"] != "asset"]
+    assets = [item for item in items if item["kind"] == "asset"]
+    preamble = ""
+    store = root / "assets"
+    if latex_items:
+        if not engines:
+            print("WARN  LaTeX the Word output cannot express is left out: there is no LaTeX engine "
+                  "(lualatex, xelatex or pdflatex)", file=sys.stderr)
+            failures.update({item["id"]: "no LaTeX engine" for item in latex_items})
+            latex_items = []
+        else:
+            tex_file = scratch / "fragments-preamble.tex"
+            command = office_pdfmd_command(md_path, metadata_files, context["variables"], context["no_auto"],
+                                           "--to", "latex", "-o", str(tex_file))
+            done = subprocess.run(command, capture_output=True, text=True)
+            text = tex_file.read_text(encoding="utf-8") if tex_file.is_file() else ""
+            preamble = module.fragments.preamble_of(text) or ""
+            if done.returncode != 0 or not preamble:
+                print("WARN  LaTeX the Word output cannot express is left out: the document's LaTeX preamble "
+                      "could not be made", file=sys.stderr)
+                failures.update({item["id"]: "no preamble" for item in latex_items})
+                latex_items = []
+    labels_aux = scratch / "labels.aux"
+    labels_text = labels_aux.read_text(encoding="utf-8") if labels_aux.is_file() else ""
+    key = module.fragments.store_key(preamble, engines[0] if engines else "", labels_text)
+    store = root / key
+    store.mkdir(parents=True, exist_ok=True)
+    os.utime(store)
+    todo = [item for item in latex_items if not (store / f"{item['id']}.json").is_file()]
+    if todo:
+        note("OFFICE", f"{md_path}: drawing {len(todo)} LaTeX fragment(s) with {engines[0]}"
+                       f" ({len(latex_items) - len(todo)} cached)")
+        pandoc_work = pandoc_cwd
+        tex_env = tex_search_env(md_path.parent, pandoc_work)
+        work = scratch / "fragments"
+        work.mkdir(exist_ok=True)
+
+        def compile_tex(tex_path: Path, pdf: Path) -> tuple[bool, str]:
+            # one engine, no retries: fragments are drawn in the font the PDF uses or not at all
+            ok, reason = run_tex_engine(engines[0], tex_path, tex_path.parent, verbose, cwd=pandoc_work, env=tex_env)
+            if ok and not (tex_path.parent / f"{tex_path.stem}.pdf").is_file():
+                ok, reason = False, "no PDF"
+            if not ok:
+                log = tex_path.parent / f"{tex_path.stem}.log"
+                reason = module.fragments.first_error(log.read_text(encoding="utf-8", errors="replace")) if log.is_file() else reason
+            return ok, reason
+        failures.update(module.fragments.render(todo, preamble, labels_aux if labels_text else None, work, store,
+                                                compile_tex))
+    for item in assets:
+        ok, reason = office_convert_asset(item, [pandoc_cwd, md_path.parent, md_path.parent / "metadata"], store, scratch)
+        if not ok:
+            failures[item["id"]] = reason
+    return store, failures
+
+
+def office_convert_asset(item: dict, folders: list[Path], store: Path, scratch: Path) -> tuple[bool, str]:
+    """A PDF/EPS picture as SVG and PNG, converted again when the file is newer than its cached copy."""
+    name = item["tex"]
+    path = next((folder / name for folder in folders if (folder / name).is_file()), None)
+    if path is None:
+        return False, "file not found"
+    meta = store / f"{item['id']}.json"
+    if meta.is_file() and meta.stat().st_mtime >= path.stat().st_mtime:
+        return True, ""
+    source = path
+    if path.suffix.lower() in (".eps", ".ps"):
+        source = scratch / f"{item['id']}.pdf"
+        converter = which("epstopdf")
+        command = [converter, f"--outfile={source}", str(path)] if converter else (
+            [which("gs"), "-q", "-dNOPAUSE", "-dBATCH", "-dEPSCrop", "-sDEVICE=pdfwrite", f"-sOutputFile={source}", str(path)]
+            if which("gs") else None)
+        if command is None or subprocess.run(command, capture_output=True).returncode != 0 or not source.is_file():
+            return False, "EPS needs epstopdf or Ghostscript"
+    module = office_module()
+    pictures = module.fragments.convert_pages(source, 1, scratch, jobs=1)
+    picture = pictures[0]
+    if not Path(picture["svg"]).is_file() or not Path(picture["png"]).is_file():
+        return False, "pdftocairo failed"
+    svg, png = store / f"{item['id']}.svg", store / f"{item['id']}.png"
+    shutil.copyfile(picture["svg"], svg)
+    shutil.copyfile(picture["png"], png)
+    meta.write_text(json.dumps({"svg": str(svg), "png": str(png), "width": picture["width"],
+                                "height": picture["height"], "depth": 0.0, "kind": "asset"}), encoding="utf-8")
+    return True, ""
 
 
 def init_reference(kind: str) -> bool:
@@ -11611,8 +11810,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
-                log_cmd(cmd, pandoc_cwd, verbose)
-                result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                if office_arguments.filter_arguments:
+                    result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
+                else:
+                    log_cmd(cmd, pandoc_cwd, verbose)
+                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
                 office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
@@ -14904,8 +15106,12 @@ def main() -> None:
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += ["--lua-filter", str(width_filter)]
                     cmd += report_office_arguments.filter_arguments
-                    log_cmd(cmd, pandoc_cwd, args.verbose)
-                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                    if report_office_arguments.filter_arguments:
+                        result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
+                                                   args.verbose, args.debug)
+                    else:
+                        log_cmd(cmd, pandoc_cwd, args.verbose)
+                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
                     office_finish(report_office_arguments, files[0], args.verbose)
             else:
                 preambles = ([] if auto_disabled(report_no_auto, "preamble")
