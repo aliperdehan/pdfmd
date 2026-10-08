@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .registry import Setting, from_stored, get, put, shown, to_stored
+from .registry import Setting, from_stored, read, shown, to_stored, write
 
 
 def available() -> bool:
@@ -13,8 +13,9 @@ def available() -> bool:
     return True
 
 
-def run(config: dict, settings: list[Setting], path: str, input=None, output=None) -> bool:
-    """Edit `config` in place; True when the user chose to save. `input`/`output` let a test drive it."""
+def run(stores: dict, settings: list[Setting], path: str, input=None, output=None, ask=None) -> bool:
+    """Edit `stores` ({"config": ..., "metadata": ...}) in place; True when the user chose to save. `input`/`output`
+    let a test drive it; `ask(title, now)` answers a text setting (default: a prompt on the real terminal)."""
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.data_structures import Point
@@ -25,26 +26,26 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
     state = {"row": 0, "sub": None, "subrow": 0, "dirty": False, "message": "", "line": 0}
 
     def cycle(setting: Setting, step: int) -> None:
-        current = from_stored(setting, get(config, setting.key))
+        current = from_stored(setting, read(stores, setting))
         values = [None] + [value for value, _ in setting.choices]
         index = values.index(current) if current in values else 0
         new = values[(index + step) % len(values)]
-        put(config, setting.key, None if new is None else to_stored(setting, new))
+        write(stores, setting, None if new is None else to_stored(setting, new))
         state["dirty"] = True
 
     def toggle(setting: Setting, value: str) -> None:
-        current = get(config, setting.key)
+        current = read(stores, setting)
         chosen = [str(item) for item in current] if isinstance(current, list) else []
         chosen = [item for item in chosen if item != value] if value in chosen else chosen + [value]
         ordered = [item for item, _ in setting.choices if item in chosen]
-        put(config, setting.key, ordered or None)
+        write(stores, setting, ordered or None)
         state["dirty"] = True
 
     def render():
         lines = [("class:title", f" pdfmd setup  --  {path}\n\n")]
         if state["sub"] is not None:
             setting = state["sub"]
-            chosen = get(config, setting.key)
+            chosen = read(stores, setting)
             chosen = chosen if isinstance(chosen, list) else []
             lines.append(("class:section", f" {setting.title}\n"))
             lines.append(("class:help", f" {setting.help}\n\n"))
@@ -64,7 +65,7 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
             if index == state["row"]:
                 state["line"] = sum(text.count("\n") for _, text in lines)
             lines.append((style, f"  {setting.title:<46}"))
-            lines.append((style + " class:value" if style else "class:value", f"{shown(setting, get(config, setting.key))}\n"))
+            lines.append((style + " class:value" if style else "class:value", f"{shown(setting, read(stores, setting))}\n"))
         current = settings[state["row"]]
         lines.append(("class:help", f"\n {current.help}\n"))
         lines.append(("class:help", "\n up/down move   space/right next value   left previous   d default   enter: choose list"
@@ -74,7 +75,7 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
         return lines
 
     keys = KeyBindings()
-    result = {"save": False}
+    result = {"save": False, "edit": None}
 
     @keys.add("down")
     @keys.add("j")
@@ -96,7 +97,10 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
     @keys.add("right")
     def _next(event):
         setting = state["sub"] or settings[state["row"]]
-        if setting.kind == "multi":
+        if setting.kind == "text":
+            result["edit"] = setting
+            event.app.exit()
+        elif setting.kind == "multi":
             if state["sub"] is None:
                 state["sub"], state["subrow"] = setting, 0
             else:
@@ -118,6 +122,9 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
         setting = settings[state["row"]]
         if setting.kind == "multi":
             state["sub"], state["subrow"] = setting, 0
+        elif setting.kind == "text":
+            result["edit"] = setting
+            event.app.exit()
         else:
             cycle(setting, 1)
 
@@ -128,7 +135,7 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
     @keys.add("d")
     def _default(event):
         if state["sub"] is None:
-            put(config, settings[state["row"]].key, None)
+            write(stores, settings[state["row"]], None)
             state["dirty"] = True
 
     @keys.add("s")
@@ -144,11 +151,42 @@ def run(config: dict, settings: list[Setting], path: str, input=None, output=Non
             return
         event.app.exit()
 
-    application = Application(
-        layout=Layout(HSplit([Window(FormattedTextControl(render, get_cursor_position=lambda: Point(0, state["line"])),
-                                      wrap_lines=True, scroll_offsets=ScrollOffsets(top=3, bottom=6))])),
-        key_bindings=keys, full_screen=True, mouse_support=False, input=input, output=output,
-        style=Style.from_dict({"title": "bold", "section": "bold #5fafd7", "cursor": "reverse", "value": "#87d787",
-                               "help": "#888888", "warn": "#ffaf5f"}))
-    application.run()
+    def make_application():
+        return Application(
+            layout=Layout(HSplit([Window(FormattedTextControl(render, get_cursor_position=lambda: Point(0, state["line"])),
+                                          wrap_lines=True, scroll_offsets=ScrollOffsets(top=3, bottom=6))])),
+            key_bindings=keys, full_screen=True, mouse_support=False, input=input, output=output,
+            style=Style.from_dict({"title": "bold", "section": "bold #5fafd7", "cursor": "reverse", "value": "#87d787",
+                                   "help": "#888888", "warn": "#ffaf5f"}))
+    while True:
+        result["edit"] = None
+        make_application().run()
+        setting = result["edit"]
+        if setting is None:
+            break
+        # a text setting: leave the full screen for a prompt, then come back
+        current = read(stores, setting)
+        answer = (ask or _prompt)(setting, "" if current is None else str(current))
+        if answer is not None:
+            if answer.strip() in ("", "-"):
+                write(stores, setting, None)
+            else:
+                value = answer.strip()
+                if setting.check == "number":
+                    try:
+                        number = float(value)
+                        value = int(number) if number == int(number) else number
+                    except ValueError:
+                        state["message"] = "A number, please."
+                        continue
+                write(stores, setting, value)
+            state["dirty"] = True
     return result["save"]
+
+
+def _prompt(setting: Setting, now: str):
+    from prompt_toolkit import prompt
+    try:
+        return prompt(f"{setting.title} ({setting.help or 'empty or - = back to the default'}): ", default=now)
+    except (EOFError, KeyboardInterrupt):
+        return None

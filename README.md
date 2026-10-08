@@ -410,7 +410,7 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
 `pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
 skips the PDF build (numbers are then counted).
 
-The same filter serves the other outputs when LaTeX is the problem: **the soffice fallback** (Pandoc, then LibreOffice) now
+The same filter serves the other outputs when LaTeX is the problem: **the soffice fallback** (the Word file above, then LibreOffice: `pdfmd -e soffice report.md` is the `.docx` as LibreOffice draws it) now
 keeps the page size, margins and fonts, shows equations and draws what LaTeX can; a **Typst or WeasyPrint run after LaTeX
 failed** gets what the document says in LaTeX as native text or pictures instead of nothing; and HTML, Typst and
 WeasyPrint builds do it on request (`pdfmd-options: {office: {latex: auto}}`).
@@ -997,15 +997,26 @@ options:
   pdf-engine: lualatex
 ```
 
-**`pdfmd --setup`** changes the same defaults from a menu, without editing the file: a numbered list (nothing to
-install, works over ssh) of what the config can set, each with its choices and what they mean: what to do about
-characters a font lacks, the PDF engine, the default output format, how LaTeX reaches a Word file, where the cache
-lives, and which of pdfmd's automatic behaviours (`--no-auto` kinds) are off for every document. Choosing 0 gives a
-setting its built-in default back; `s` saves, `q` quits. The file is rewritten without your comments (the old one is kept
-as `config.yaml.bak`). A full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then
-`pdfmd --setup fancy`, or set "This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time
-pdfmd finishes a build in a terminal with no config file yet, it prints one `TIP` line about `--setup`
-(never in a pipe, in CI, or from the Python API; `PDFMD_NO_PROMPT=1` silences it).
+**`pdfmd --setup`** changes the same defaults from a menu, without editing the files: a numbered list (nothing to
+install, works over ssh), each setting with its choices and what they mean. It covers what a document would otherwise
+say in `pdfmd-options:` or its front matter, for every document:
+
+- *global metadata* (a `metadata.yaml` beside the config file, below anything a document's own folder says): author, language,
+  paper size, font size, page geometry, main and code font, line spacing, coloured links, table of contents, and for
+  citations the bibliography file, the CSL style and linked citations;
+- characters a font lacks or none draws, fonts for other scripts, romanization packs;
+- the citation engine, the PDF engine, the default output format, HTML (one file, math method), LaTeX and reference
+  numbers in Word files;
+- PDF finishing (header, footer, bookmarks, attached links) and the source file (the "Compiled with..." stamp, backups,
+  comment stripping, attaching the source and its files to the PDF);
+- the cache, reading `.txt` as Markdown, and which of pdfmd's automatic behaviours (`--no-auto` kinds) are off.
+
+Choosing 0 (for a text, `-`) gives a setting its built-in default back; `s` saves, `q` quits. The files are rewritten without your
+comments (the old one is kept as `.bak`). The same keys can be written by hand under `options:` of `config.yaml`. A
+full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then `pdfmd --setup fancy`, or set
+"This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time pdfmd finishes a build in a terminal
+with no config file yet, it prints one `TIP` line about `--setup` (never in a pipe, in CI, or from the Python API;
+`PDFMD_NO_PROMPT=1` silences it).
 
 The decisions pdfmd remembers for you (the Lua filters it trusts, an offer you
 dismissed) live in the same folder, not in `~/.cache/pdfmd`, so cleaning the cache

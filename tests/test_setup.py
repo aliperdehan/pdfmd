@@ -24,7 +24,8 @@ SETTINGS = settings_for(pdfmd.NO_AUTO_KINDS)
 
 
 def number(key: str) -> int:
-    return [setting.key for setting in SETTINGS].index(key) + 1
+    return [setting.key for setting in SETTINGS if setting.store == "config" or "." not in key].index(key) + 1 \
+        if False else [setting.key for setting in SETTINGS].index(key) + 1
 
 
 @unittest.skipUnless(yaml, "needs PyYAML")
@@ -57,7 +58,7 @@ class Plain(unittest.TestCase):
 
     def test_zero_restores_the_default_and_empty_sections_go(self):
         done, path = self.run_setup([str(number("options.fallback")), "0", "s"], "options:\n  fallback: box\n")
-        self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8")) or {}, {})
+        self.assertFalse(path.exists())                      # nothing left to keep: the file goes
 
     def test_quitting_saves_nothing(self):
         done, path = self.run_setup([str(number("options.fallback")), "2", "q", "y"])
@@ -75,6 +76,33 @@ class Plain(unittest.TestCase):
         done, path = self.run_setup(["q"], None, "fancy")
         self.assertIn("pdfmd --install tui", done.stdout)
         self.assertIn("numbered list", done.stdout)
+
+    def test_metadata_settings_go_to_metadata_yaml_beside_the_config(self):
+        author, fontsize = number("author"), number("fontsize")
+        done, path = self.run_setup([str(author), "Ali P.", str(fontsize), "2", "s"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        data = yaml.safe_load(path.with_name("metadata.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(data, {"author": "Ali P.", "fontsize": "11pt"})
+        self.assertFalse(path.exists())                                  # nothing in config.yaml
+
+    def test_a_number_is_checked(self):
+        done, path = self.run_setup([str(number("linestretch")), "wide", str(number("linestretch")), "1.5", "s"])
+        self.assertEqual(yaml.safe_load(path.with_name("metadata.yaml").read_text(encoding="utf-8")), {"linestretch": 1.5})
+
+    def test_the_global_metadata_reaches_a_build_below_the_documents_own(self):
+        directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
+        self.addCleanup(__import__("shutil").rmtree, directory, True)
+        folder = Path(directory)
+        (folder / "config.yaml").write_text("options: {}\n", encoding="utf-8")
+        (folder / "metadata.yaml").write_text("author: Global Author\nlang: de\n", encoding="utf-8")
+        (folder / "a.md").write_text("---\ntitle: T\nlang: fr\n---\n\nText.\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "-o", "a.html", "--standalone", "--no-stamp",
+                               "--no-backup"], cwd=folder, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": str(folder / "config.yaml")})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (folder / "a.html").read_text(encoding="utf-8")
+        self.assertIn("Global Author", html)            # the document names no author: the global one
+        self.assertIn('lang="fr"', html)                # its own language wins
 
     def test_the_config_can_switch_automatic_behaviour_off_for_every_document(self):
         directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
@@ -96,6 +124,51 @@ class Plain(unittest.TestCase):
             pdfmd.load_config.cache_clear()
 
 
+@unittest.skipUnless(yaml, "needs PyYAML")
+class ConfigLayer(unittest.TestCase):
+    """What `pdfmd --setup` writes under `options:` is honoured: below the document, above the built-in default."""
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp(prefix="pdfmd-config-")
+        self.addCleanup(__import__("shutil").rmtree, self.directory, True)
+        self.old = os.environ.get("PDFMD_CONFIG")
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        if self.old is None:
+            os.environ.pop("PDFMD_CONFIG", None)
+        else:
+            os.environ["PDFMD_CONFIG"] = self.old
+        pdfmd.load_config.cache_clear()
+
+    def use(self, text: str) -> Path:
+        path = Path(self.directory) / "config.yaml"
+        path.write_text(text, encoding="utf-8")
+        os.environ["PDFMD_CONFIG"] = str(path)
+        pdfmd.load_config.cache_clear()
+        document = Path(self.directory) / "d.md"
+        document.write_text("Hello.\n", encoding="utf-8")
+        return document
+
+    def test_stamp_backup_and_unicode_follow_the_config(self):
+        document = self.use("options:\n  stamp: {enabled: true}\n  backup: {enabled: true}\n  unicode: true\n")
+        self.assertTrue(pdfmd.resolve_stamp_options(document, [], {})["enabled"])
+        self.assertTrue(pdfmd.resolve_backup_options(document, [], None)["enabled"])
+        self.assertTrue(pdfmd.unicode_forced(document))
+
+    def test_the_documents_own_setting_wins(self):
+        document = self.use("options:\n  stamp: {enabled: true}\n  unicode: true\n")
+        document.write_text("---\npdfmd-options:\n  stamp: false\n  unicode: false\n---\n\nHello.\n", encoding="utf-8")
+        self.assertFalse(pdfmd.resolve_stamp_options(document, [], {})["enabled"])
+        self.assertFalse(pdfmd.unicode_forced(document))
+
+    def test_without_the_config_nothing_is_on(self):
+        document = self.use("options: {}\n")
+        self.assertFalse(pdfmd.resolve_stamp_options(document, [], {})["enabled"])
+        self.assertFalse(pdfmd.resolve_backup_options(document, [], None)["enabled"])
+        self.assertFalse(pdfmd.unicode_forced(document))
+
+
 class Registry(unittest.TestCase):
     def test_put_and_get_nest_and_prune(self):
         config: dict = {}
@@ -109,28 +182,35 @@ class Registry(unittest.TestCase):
 
     def test_every_setting_has_a_key_a_kind_and_choices(self):
         for setting in SETTINGS:
-            self.assertIn(setting.kind, ("choice", "multi"))
-            self.assertTrue(setting.choices, setting.key)
+            self.assertIn(setting.kind, ("choice", "multi", "text"))
+            self.assertIn(setting.store, ("config", "metadata"))
+            self.assertEqual(bool(setting.choices), setting.kind != "text", setting.key)
 
 
 @unittest.skipUnless(fancy.available() and yaml, "needs prompt_toolkit")
 class Fancy(unittest.TestCase):
-    def drive(self, keys: str, config: dict):
+    def drive(self, keys: str, stores: dict, ask=None):
         from prompt_toolkit.input import create_pipe_input
         from prompt_toolkit.output import DummyOutput
         with create_pipe_input() as pipe:
             pipe.send_text(keys)
-            return fancy.run(config, SETTINGS, "config.yaml", input=pipe, output=DummyOutput())
+            return fancy.run(stores, SETTINGS, "config.yaml", input=pipe, output=DummyOutput(), ask=ask)
 
     def test_space_cycles_a_choice_and_s_saves(self):
-        config: dict = {}
-        self.assertTrue(self.drive(" s", config))                 # first setting: unset -> first choice
-        self.assertEqual(config, {"options": {"fallback": "word"}})
+        stores: dict = {}
+        down = "j" * [s.key for s in SETTINGS].index("options.fallback")
+        self.assertTrue(self.drive(down + " s", stores))          # unset -> first choice
+        self.assertEqual(stores["config"], {"options": {"fallback": "word"}})
+
+    def test_a_text_setting_is_asked_for_and_stored_in_its_file(self):
+        stores: dict = {}
+        self.assertTrue(self.drive("\rs", stores, ask=lambda setting, now: "Ali P."))   # the first row is the author
+        self.assertEqual(stores["metadata"], {"author": "Ali P."})
 
     def test_q_quits_without_saving(self):
-        config: dict = {}
-        self.assertFalse(self.drive("q", config))
-        self.assertEqual(config, {})
+        stores: dict = {}
+        self.assertFalse(self.drive("q", stores))
+        self.assertEqual(stores.get("config", {}), {})
 
 
 if __name__ == "__main__":

@@ -441,3 +441,36 @@ class PackageHelper(unittest.TestCase):
         self.assertEqual(options["fonts"], "Serif")                   # <package>-office.yaml, beside the helper
         self.assertEqual(options["profile"], str((package / "pdfmd" / "mine.lua").resolve()))
         self.assertIs(options["title-page"], False)                   # the office yaml wins over the helper's section
+
+
+@unittest.skipUnless(PANDOC and shutil.which("kpsewhich"), "needs Pandoc and kpsewhich")
+class PackagePick(unittest.TestCase):
+    """`pick:` of a package's office yaml: the variant the document's own preamble selects."""
+
+    def options(self, preamble: str, yaml_text: str | None = None):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        directory = tempfile.mkdtemp(prefix="pdfmd-pick-")
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        package = root / "tex" / "mypkg"
+        package.mkdir(parents=True)
+        (package / "mypkg.sty").write_text("\\ProvidesPackage{mypkg}\n", encoding="utf-8")
+        (package / "mypkg-office.yaml").write_text(yaml_text or (
+            "pick:\n  default: dark\n  default-by-option: {warm: sepia}\n  from-preamble: '\\\\Scheme\\s*\\{(\\w+)\\}|scheme\\s*=\\s*(\\w+)'\n"
+            "  variants:\n    dark: {replace: {A: B}}\n    sepia: {replace: {A: C}}\n    light: {fonts: Serif}\n"), encoding="utf-8")
+        work = root / "doc"
+        work.mkdir()
+        (work / "preamble.tex").write_text(preamble, encoding="utf-8")
+        (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        self.addCleanup(os.environ.pop, "TEXINPUTS", None)
+        return pdfmd.office_options(work / "d.md", [])
+
+    def test_the_default_the_courses_default_and_the_preambles_last_choice(self):
+        self.assertEqual(self.options("\\usepackage{mypkg}\n")["replace"], {"A": "B"})
+        self.assertEqual(self.options("\\usepackage[warm]{mypkg}\n")["replace"], {"A": "C"})
+        self.assertEqual(self.options("\\usepackage[warm]{mypkg}\n\\Scheme{dark}\n")["replace"], {"A": "B"})
+        chosen = self.options("\\usepackage{mypkg}\n\\Scheme{dark}\n\\labsetup{x=1, scheme=light}\n")
+        self.assertEqual(chosen["fonts"], "Serif")
+        self.assertNotIn("replace", chosen)

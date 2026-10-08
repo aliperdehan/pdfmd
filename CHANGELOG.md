@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.14 — 2026-10-08
+
+Pre-edit state: commit `bd4ba95` (v3.24.13).
+
+### Changed
+
+- **The soffice route goes through the Word file.** `pdfmd -e soffice` (and the last-resort fallback) went Pandoc -> `.odt` ->
+  LibreOffice, which lost the cover and tables of a house style and, on a nulabreport report, most of the text. It now writes
+  the same `.docx` as `-o x.docx` (template, native equations and tables, pictures for what only LaTeX draws) and has
+  LibreOffice turn that into the PDF; with `-e soffice` named explicitly the reference numbers come from LaTeX's own
+  `.aux` like a `.docx` build, in the fallback chain they are counted (LaTeX is what failed).
+- **`pick:` in a package's office yaml.** A package whose own macros choose its colour scheme says where to read the choice
+  (`pick: {default, default-by-option, from-preamble: REGEX, variants}`): the last match in the preamble or the document's
+  header-includes names the variant, whose `replace`/`media`/... are merged in, so the Word file follows the PDF
+  (nulabreport's `\LabScheme{word|black|gold}` instead of "every course but genchem is black").
+- **`--setup` covers what the config can say.** The config file's `options:` is now honoured for the `stamp`, `backup`, `unicode`,
+  `header`, `footer`, `bookmarks` and `attach-links` too (it was only read for part of them), and a `metadata.yaml` beside
+  `config.yaml` is global metadata, found last, so lowest in priority, whenever metadata is found automatically. The menu lists
+  all of these (metadata, citations, output, PDF finishing, the source file, cache, input) and takes text and numbers as
+  well as choices.
+
+---
+
 ## v3.24.13 — 2026-10-08
 
 Pre-edit state: commit `106b74f` (v3.24.12).

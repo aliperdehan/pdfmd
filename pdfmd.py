@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.13"
+PDFMD_VERSION = "3.24.14"
 import argparse
 import csv
 import filecmp
@@ -3890,6 +3890,44 @@ def office_defaults_sources(folder: Path, package: str) -> list[tuple[dict, Path
     return sources
 
 
+def pick_variant(pick: dict, chosen: list[str], md_path: Path, no_auto: list[str] | None) -> dict | None:
+    """The variant of a package's `pick:` block that the document selects, as a mapping to merge into its
+    office options. `pick: {default: black, default-by-option: {genchem: word}, from-preamble: REGEX, variants:
+    {word: {...}, black: {...}}}`: the name starts as the default (of the last package option that has
+    one), and the last match of the regex in the preamble (or the document's header-includes) takes over, the
+    first capture group that matched being the name; a package whose own macros pick its colour scheme says
+    where to read it, and the Word file follows."""
+    name = pick.get("default")
+    by_option = pick.get("default-by-option")
+    if isinstance(by_option, dict):
+        for option in chosen:
+            if option in by_option:
+                name = by_option[option]
+    pattern = pick.get("from-preamble")
+    if isinstance(pattern, str):
+        texts = []
+        for item in (find_preambles(md_path.parent, md_path.stem, []) if not auto_disabled(no_auto, "preamble") else []):
+            try:
+                texts.append(item.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
+        try:
+            texts.append(document_header_includes(md_path.read_text(encoding="utf-8-sig")) or "")
+        except (OSError, UnicodeDecodeError):
+            pass
+        try:
+            for match in re.finditer(pattern, "\n".join(texts)):
+                found = next((group for group in match.groups() if group), None)
+                if found:
+                    name = found
+        except re.error:
+            pass
+    variants = pick.get("variants")
+    if isinstance(variants, dict) and isinstance(variants.get(name), dict):
+        return variants[name]
+    return None
+
+
 def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> dict:
     """`pdfmd-options: {office: ...}` as the document, its metadata files and the config file give it, over the
     defaults of a package that ships them (`<name>-office.yaml`, or the `office:` of `<name>-pdfmd.yaml`); the
@@ -3908,6 +3946,13 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
                             data[extra_key] = ({**data.get(extra_key, {}), **extra_value}
                                                if isinstance(extra_value, dict) and isinstance(data.get(extra_key), dict)
                                                else extra_value)
+            pick = data.pop("pick", None)
+            if isinstance(pick, dict):
+                extra = pick_variant(pick, chosen, md_path, no_auto)
+                for extra_key, extra_value in (extra or {}).items():
+                    data[extra_key] = ({**data.get(extra_key, {}), **extra_value}
+                                       if isinstance(extra_value, dict) and isinstance(data.get(extra_key), dict)
+                                       else extra_value)
             options = {**data, **options}
             # a package's relative reference-doc / profile paths are relative to its folder
             for key in ("reference-doc", "profile"):
@@ -4824,6 +4869,10 @@ SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by
                 "# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.\n")
 
 
+METADATA_HEADER = ("# pdfmd's global metadata, written by `pdfmd --setup`: every document gets these, below anything its own\n"
+                   "# front matter and its folder's metadata files say.\n")
+
+
 def setup_command(screen: str = "") -> bool:
     """`--setup [plain|fancy]`: change the global defaults without editing the config file."""
     module = setup_module()
@@ -4840,40 +4889,50 @@ def setup_command(screen: str = "") -> bool:
     if screen not in ("", "plain", "fancy"):
         print(f"--setup takes plain or fancy, not {screen!r}.", file=sys.stderr)
         return False
-    config: dict = {}
-    text = ""
-    if path.is_file():
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-            loaded = yaml.safe_load(text)
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
-            print(f"{path} cannot be read ({error}); fix or move it first.", file=sys.stderr)
-            return False
-        config = loaded if isinstance(loaded, dict) else {}
     import copy
-    original = copy.deepcopy(config)
-    saved = module.run(config, NO_AUTO_KINDS, str(path), screen or None)
+    files = {"config": path, "metadata": path.with_name("metadata.yaml")}
+    stores: dict = {}
+    texts: dict = {}
+    for name, file in files.items():
+        stores[name], texts[name] = {}, ""
+        if file.is_file():
+            try:
+                texts[name] = file.read_text(encoding="utf-8-sig")
+                loaded = yaml.safe_load(texts[name])
+            except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+                print(f"{file} cannot be read ({error}); fix or move it first.", file=sys.stderr)
+                return False
+            stores[name] = loaded if isinstance(loaded, dict) else {}
+    original = copy.deepcopy(stores)
+    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None)
     if not saved:
         print("Nothing saved.")
         return True
-    if config == original:
+    if stores == original:
         print("Nothing changed.")
         return True
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        hand_written = [line for line in text.splitlines() if line.lstrip().startswith("#")
-                        and not line.startswith(SETUP_HEADER.splitlines()[0])]
-        if hand_written:
-            backup = path.with_name(path.name + ".bak")
-            backup.write_text(text, encoding="utf-8")
-            print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
-        path.write_text(SETUP_HEADER + yaml.safe_dump(config, sort_keys=False, allow_unicode=True,
-                                                       default_flow_style=False), encoding="utf-8")
-    except OSError as error:
-        print(f"Could not write {path}: {error}", file=sys.stderr)
-        return False
+    for name, file in files.items():
+        if stores[name] == original[name]:
+            continue
+        try:
+            file.parent.mkdir(parents=True, exist_ok=True)
+            header = SETUP_HEADER if name == "config" else METADATA_HEADER
+            hand_written = [line for line in texts[name].splitlines() if line.lstrip().startswith("#")
+                            and not line.startswith(header.splitlines()[0])]
+            if hand_written:
+                backup = file.with_name(file.name + ".bak")
+                backup.write_text(texts[name], encoding="utf-8")
+                print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
+            if stores[name]:
+                file.write_text(header + yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
+                                                               default_flow_style=False), encoding="utf-8")
+            elif file.exists():
+                file.unlink()
+        except OSError as error:
+            print(f"Could not write {file}: {error}", file=sys.stderr)
+            return False
+        print(f"Saved {file}")
     load_config.cache_clear()
-    print(f"Saved {path}")
     return True
 
 
@@ -5491,7 +5550,8 @@ def own_script_setup(md_paths: list[Path], preamble_files: list[Path], variables
 
 
 def unicode_forced(md_path: Path) -> bool:
-    return str(frontmatter_pdfmd_options(md_path).get("unicode", "")).casefold() in ("true", "yes", "on", "force")
+    value = frontmatter_pdfmd_options(md_path).get("unicode", config_options().get("unicode", ""))
+    return str(value).casefold() in ("true", "yes", "on", "force")
 
 
 # What to do about characters the main font cannot draw (`pdfmd-options: {fallback: ..., missing: ...}`,
@@ -7282,6 +7342,8 @@ def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | 
         nested = data.get("pdfmd-options")
         if isinstance(nested, dict) and "stamp" in nested:
             return normalize_stamp_value(nested["stamp"])
+    if "stamp" in config_options():           # the config file's default (pdfmd --setup)
+        return normalize_stamp_value(config_options()["stamp"])
     return None
 
 
@@ -7768,6 +7830,9 @@ def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enable
             if isinstance(nested, dict) and "backup" in nested:
                 options = normalize_backup_value(nested["backup"])
                 break
+        else:
+            if "backup" in config_options():          # the config file's default (pdfmd --setup)
+                options = normalize_backup_value(config_options()["backup"])
     options = options or dict(DEFAULT_BACKUP_OPTIONS)
     if cli_enabled is not None:
         options["enabled"] = cli_enabled
@@ -8011,9 +8076,31 @@ def resolve_yaml(directory: Path, value: str) -> Path:
     raise FileNotFoundError(f"Metadata file not found: {value}")
 
 
+def global_metadata_file() -> Path | None:
+    """`metadata.yaml` beside the config file (`pdfmd --setup` writes it): metadata every document gets, below
+    anything its own folder's metadata says. None when absent or the config is switched off."""
+    config = config_path()
+    candidate = None if config is None else config.with_name("metadata.yaml")
+    return candidate if candidate is not None and candidate.is_file() else None
+
+
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                   document_class: str | None = None,
                   document_stem: str | None = None) -> Path | list[Path] | object | None:
+    """Choose metadata files (see find_local_metadata), with the global metadata file last, so lowest in
+    priority, when the files were found automatically (not named with -y)."""
+    found = find_local_metadata(directory, requested, report, document_class, document_stem)
+    extra = global_metadata_file() if requested is None else None
+    if extra is None or found is AUTO_METADATA_DISABLED:
+        return found
+    if found is None:
+        return extra
+    return [*(found if isinstance(found, list) else [found]), extra]
+
+
+def find_local_metadata(directory: Path, requested: list[str] | None, report: bool = False,
+                        document_class: str | None = None,
+                        document_stem: str | None = None) -> Path | list[Path] | object | None:
     """Choose metadata files, supporting explicit stacks and automatic discovery."""
     if requested == []:
         return AUTO_METADATA_DISABLED
@@ -11549,9 +11636,10 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                metadata_files: list[Path], variables: list[str],
                                pandoc_options: list[str], lua_filters: list[Path],
                                csv_filter: Path, no_auto: list[str] | None,
-                               verbose: bool) -> tuple[bool, str]:
-    """The "soffice" PDF-engine fallback: Pandoc -> .odt -> headless
-    LibreOffice -> PDF. Deliberately skips every LaTeX-only concern
+                               verbose: bool, labels: str = "off") -> tuple[bool, str]:
+    """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
+    LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
+    for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
     convert_one's own per-engine run() closure applies for a real engine
     (geometry/mainfont/monofont/preamble/table-width filter) -- none of
     it means anything for an ODT target. Citeproc and a document's own
@@ -11559,8 +11647,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
     """
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
     try:
-        odt = scratch / f"{md_path.stem}.odt"
-        cmd = ["pandoc", str(md_path), "-o", str(odt), "-t", "odt"]
+        odt = scratch / f"{md_path.stem}.docx"
+        cmd = ["pandoc", str(md_path), "-o", str(odt), "-t", "docx"]
         if effective_from:
             cmd += ["-f", effective_from]
         for metadata in metadata_files:
@@ -11581,8 +11669,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             if verbose:
                 print(f"AUTO {kind}  {detail}")
         # the LaTeX the document uses is made native or drawn (no PDF build for its numbers here: LaTeX is what failed)
-        with office_reference(md_path, metadata_files, variables, "odt", odt, pandoc_options, no_auto, note,
-                              labels="off", force_filter=True) as office_arguments:
+        with office_reference(md_path, metadata_files, variables, "docx", odt, pandoc_options, no_auto, note,
+                              labels=labels, force_filter=True) as office_arguments:
             cmd += office_arguments
             cmd += pandoc_options
             for lua_filter in lua_filters:
@@ -11595,7 +11683,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
             office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
-            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .odt"
+            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"
         return run_soffice_convert(odt, output, verbose)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -12211,12 +12299,13 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # own docstring for why this is special-cased here instead.
                 ok, reason = convert_via_soffice_bridge(md_path, output, effective_from, metadata_files,
                                                         variables, pandoc_options, lua_filters, csv_filter,
-                                                        no_auto, verbose)
+                                                        no_auto, verbose,
+                                                        labels="auto" if engines == ["soffice"] else "off")
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
                     if verbose:
-                        print(f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .odt -> soffice "
+                        print(f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
                               "(last-resort fallback)")
                     break
                 failed_families.add(family)
@@ -14613,7 +14702,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-e", "--engine", nargs="?", const="", default=None,
                         help="PDF engine, family (tex/html/typst/office), numeric shortcut, or alias; run "
                              "--check-dependencies to see engine choices. 'soffice' (family 'office') is "
-                             "a last-resort fallback for Markdown/Pandoc input -- Pandoc -> .odt -> "
+                             "a last-resort fallback for Markdown/Pandoc input -- Pandoc -> .docx -> "
                              "headless LibreOffice -- tried only after every tex/typst/html engine has "
                              "failed or is missing in the unrestricted chain, or on request. Meaningless "
                              "(and ignored) when "
@@ -14994,8 +15083,11 @@ def main() -> None:
         if getattr(args, flag) not in (None, False):
             INKMD_CLI[key] = value
     POLISH_CLI.clear()
-    POLISH_CLI.update(header=args.header, footer=args.footer, bookmarks=args.bookmarks,
-                      attach_links=args.attach_links,
+    configured = config_options()          # the config file's defaults (pdfmd --setup); the command line wins
+    POLISH_CLI.update(header=args.header or configured.get("header") or None,
+                      footer=args.footer or configured.get("footer") or None,
+                      bookmarks=args.bookmarks or bool(configured.get("bookmarks")),
+                      attach_links=args.attach_links or bool(configured.get("attach-links")),
                       info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
                             for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
