@@ -14,7 +14,7 @@ write the list of left-over fragments to).
 ]]
 
 local stringify = pandoc.utils.stringify
-local settings = {latex = "auto", report = nil}
+local settings = {latex = "auto", report = nil, path = {}}
 local equation_block, centred   -- defined below
 local current_meta     -- the document's metadata, for a profile
 local profile = {ignore = {}, commands = {}}   -- a house style's own macros (office.lua beside the document)
@@ -664,10 +664,41 @@ end
 
 local function off() return settings.latex == "off" end
 
+-- `$-4$`, `$\sim 825$`, `$>500$`: a number with a sign is text, not an equation to open in an editor
+local PLAIN_MATH = {["\\sim"] = "~", ["\\approx"] = "\u{2248}", ["\\pm"] = "\u{00B1}", ["\\mp"] = "\u{2213}",
+  ["\\times"] = "\u{00D7}", ["\\leq"] = "\u{2264}", ["\\le"] = "\u{2264}", ["\\geq"] = "\u{2265}", ["\\ge"] = "\u{2265}",
+  ["\\,"] = "\u{2009}", ["\\;"] = " ", ["\\:"] = " ", ["\\ "] = " ", ["\\!"] = ""}
+
+local function plain_number(text)
+  local out, digits, i = {}, false, 1
+  while i <= #text do
+    local macro = text:match("^\\%a+", i) or text:match("^\\[,;:! ]", i)
+    if macro then
+      local replacement = PLAIN_MATH[macro]
+      if not replacement then return nil end
+      out[#out + 1] = replacement
+      i = i + #macro
+    else
+      local c = text:sub(i, i)
+      if c:match("[%d]") then digits = true; out[#out + 1] = c
+      elseif c:match("[%.,%s<>=+]") then out[#out + 1] = c
+      elseif c == "~" then out[#out + 1] = "\u{00A0}"
+      elseif c == "-" then out[#out + 1] = "\u{2212}"
+      else return nil end
+      i = i + 1
+    end
+  end
+  return digits and table.concat(out) or nil
+end
+
 function Math(el)
   if off() then return nil end
   local display = el.mathtype == "DisplayMath"
   local text = el.text
+  if not display then
+    local plain = plain_number(text)
+    if plain then counters.math = counters.math + 1; return pandoc.Str(plain) end
+  end
   local translated = math_translate(text)
   if translated and display then translated = break_display(translated, 68) end
   if translated == nil or not math_native(translated, display) then
@@ -719,6 +750,9 @@ local function text_command(raw)
       for _, item in ipairs(unit_inlines(units)) do out[#out + 1] = item end
       return out
     end
+  elseif name == "allowbreak" then
+    local rest = trim((raw:gsub("^\\allowbreak%s*", "")))
+    return rest ~= "" and {pandoc.Str(rest)} or {}
   elseif name == "newline" or name == "linebreak" then return {pandoc.LineBreak()}
   elseif name == "label" then return {}
   elseif name == "relax" or name == "noindent" or name == "centering" or name == "protect" or name == "xspace"
@@ -763,17 +797,45 @@ local function command_args(raw)
   return name, args, trim(raw:sub(position))
 end
 
+-- a file the document pulls in: as named (the working folder), else in the folders pdfmd found it in
+local function find_file(name)
+  local candidates = {name, name .. ".tex"}
+  for _, folder in ipairs(settings.path) do
+    candidates[#candidates + 1] = folder .. "/" .. name
+    candidates[#candidates + 1] = folder .. "/" .. name .. ".tex"
+  end
+  for _, candidate in ipairs(candidates) do
+    local file = io.open(candidate, "r")
+    if file then
+      local text = file:read("a")
+      file:close()
+      return text, candidate
+    end
+  end
+  return nil
+end
+
+-- what the LaTeX reader made is not seen by the filter again: its math and macros are done here
+local function worked(doc)
+  return doc:walk({Math = Math, RawInline = RawInline})
+end
+
 local helpers = {
   inlines = function(tex)
-    local ok, doc = pcall(pandoc.read, tex, "latex")
-    if ok then return inlines_of(doc.blocks) end
+    local ok, doc = pcall(pandoc.read, tex, "latex+raw_tex")
+    if ok then return inlines_of(worked(doc).blocks) end
     return nil
   end,
   blocks = function(tex)
-    local ok, doc = pcall(pandoc.read, tex, "latex")
-    if ok then return doc.blocks end
+    local ok, doc = pcall(pandoc.read, tex, "latex+raw_tex")
+    if ok then return worked(doc).blocks end
     return nil
   end,
+  -- the text of a file of the document's folders (the `\input` rules), and where it was
+  read_file = find_file,
+  -- "Table 3. " in front of a table's or figure's caption, from the numbers LaTeX gave (nil without a caption)
+  number_caption = function(el, kind) return number_caption(el, kind) end,
+  warn = function(message) io.stderr:write("[pdfmd] " .. message .. "\n") end,
   group = group, trim = trim,
   labels = function() return labels end,
   -- the text of the document's LaTeX preamble files (the house style's per-course macros live there)
@@ -983,15 +1045,7 @@ end
 
 local input_depth = 0
 local function read_input(name)
-  for _, candidate in ipairs({name, name .. ".tex"}) do
-    local file = io.open(candidate, "r")
-    if file then
-      local text = file:read("a")
-      file:close()
-      return text
-    end
-  end
-  return nil
+  return (find_file(name))
 end
 
 local PAGE_BREAK
@@ -1018,6 +1072,8 @@ function RawBlock(el)
       -- whole-line comments go with their line break (a blank line would end a paragraph inside a tikz option list)
       text = text:gsub("\n[ \t]*%%[^\n]*", ""):gsub("^[ \t]*%%[^\n]*\n", "")
       while text:match("^[ \t]*%%[^\n]*\n") do text = text:gsub("^[ \t]*%%[^\n]*\n", "", 1) end
+      -- a `%` ending a line joins it to the next, as TeX does (`\chemicals{...}%` newline `{caption}`)
+      text = text:gsub("([^\\])%%[ \t]*\n[ \t]*", "%1")
       local before = fragment_calls
       input_depth = input_depth + 1
       local result = RawBlock(pandoc.RawBlock("latex", text))
@@ -1228,6 +1284,13 @@ function Meta(meta)
     end
   end
   if meta["pdfmd-office-preamble"] then settings.preamble = stringify(meta["pdfmd-office-preamble"]) end
+  if meta["pdfmd-office-path"] then
+    local separator = package.config:sub(1, 1) == "\\" and ";" or ":"
+    settings.path = {}
+    for folder in (stringify(meta["pdfmd-office-path"]) .. separator):gmatch("([^" .. separator .. "]+)" .. separator) do
+      settings.path[#settings.path + 1] = folder
+    end
+  end
   if meta["pdfmd-office-mode"] then settings.mode = stringify(meta["pdfmd-office-mode"]) end
   if meta["pdfmd-office-fragments"] then settings.fragments = stringify(meta["pdfmd-office-fragments"]) end
   if meta["pdfmd-office-wanted"] then settings.wanted = stringify(meta["pdfmd-office-wanted"]) end
@@ -1282,6 +1345,7 @@ if PDFMD_OFFICE_EXPORT then
   PDFMD_OFFICE_EXPORT.math_translate, PDFMD_OFFICE_EXPORT.parse_unit = math_translate, parse_unit
   PDFMD_OFFICE_EXPORT.unit_math, PDFMD_OFFICE_EXPORT.math_native = unit_math, math_native
   PDFMD_OFFICE_EXPORT.break_display, PDFMD_OFFICE_EXPORT.fix_empty_scripts = break_display, fix_empty_scripts
+  PDFMD_OFFICE_EXPORT.plain_number = plain_number
 end
 
 return {

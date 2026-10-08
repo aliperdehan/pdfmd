@@ -358,6 +358,14 @@ BOOKTABS_STYLE = (
     '<w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr>'
     '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:bCs/></w:rPr><w:tcPr><w:tcBorders>'
     '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tcBorders></w:tcPr></w:tblStylePr></w:style>')
+# a table ruled on every side (what a LaTeX `|c|c|` tabular draws), with the tight cell padding of a dense table
+GRID_STYLE = (
+    '<w:style w:type="table" w:customStyle="1" w:styleId="PdfmdGrid"><w:name w:val="PdfmdGrid"/>'
+    '<w:basedOn w:val="TableNormal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:tblPr><w:tblBorders>'
+    + "".join(f'<w:{side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+              for side in ("top", "left", "bottom", "right", "insideH", "insideV")) +
+    '</w:tblBorders><w:tblCellMar><w:top w:w="29" w:type="dxa"/><w:left w:w="60" w:type="dxa"/>'
+    '<w:bottom w:w="29" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>')
 CENTERED_STYLE = ('<w:style w:type="paragraph" w:customStyle="1" w:styleId="PdfmdCentered"><w:name w:val="PdfmdCentered"/>'
                   '<w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr></w:style>')
 
@@ -367,8 +375,16 @@ def ensure_styles(styles: str) -> str:
     table an equation and its number sit in."""
     if 'w:styleId="PdfmdEquation"' not in styles:
         styles = styles.replace("</w:styles>", EQUATION_STYLE + "</w:styles>")
+    if 'w:styleId="PdfmdGrid"' not in styles:
+        styles = styles.replace("</w:styles>", GRID_STYLE + "</w:styles>")
     if 'w:styleId="PdfmdBooktabs"' not in styles:
         styles = styles.replace("</w:styles>", BOOKTABS_STYLE + "</w:styles>")
+    if 'w:styleId="PdfmdSmall"' not in styles:   # a table of reference data: LaTeX's \footnotesize, 80% of the text
+        half = max(14, round(_doc_default_size(styles) * 0.8 * 2))
+        styles = styles.replace("</w:styles>", (
+            '<w:style w:type="paragraph" w:customStyle="1" w:styleId="PdfmdSmall"><w:name w:val="PdfmdSmall"/>'
+            '<w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="0"/><w:ind w:left="0" w:firstLine="0"/>'
+            f'<w:jc w:val="left"/></w:pPr><w:rPr><w:sz w:val="{half}"/><w:szCs w:val="{half}"/></w:rPr></w:style></w:styles>'))
     if 'w:styleId="PdfmdCentered"' not in styles:
         styles = styles.replace("</w:styles>", CENTERED_STYLE + "</w:styles>")
     # a picture's paragraph is centred and never indented like the body text it may inherit from

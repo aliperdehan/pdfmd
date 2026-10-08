@@ -400,7 +400,11 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
   `metadata/` folder or in `~/.config/pdfmd/`, or `office: {profile: FILE}`, is a small Lua file:
   `return {ignore = {"\\LabCaptionBegin"}, commands = {prelab = function(args) return {pandoc.Strong{pandoc.Str("[pre-lab " .. args[1] .. "]")}} end}}`
   says which macros to drop and what the others mean in a Word file (a command may return text, or blocks such as a
-  native table); an optional `pandoc = function(doc)` hook may restructure the whole document.
+  native table); an optional `pandoc = function(doc, helpers)` hook may restructure the whole document. The helpers
+  include `inlines(tex)`/`blocks(tex)` (LaTeX read with the filter's own math, `\ce` and `\si` applied),
+  `read_file(name)` (a file the document's `\input` would find), `number_caption(table, "table")`, `labels()`,
+  `preamble()`, `meta()`, `warn(text)`; a profile can thus build a house table from the package's own data, as nulabreport
+  does for `\chemicals`.
 - what cannot be done at all is named in a warning (`-v` lists it).
 
 `pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`

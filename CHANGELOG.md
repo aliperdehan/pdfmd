@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.10 — 2026-10-08
+
+Pre-edit state: commit `7718a2b` (v3.24.9). A package's own table recipe: the chemicals table is native.
+
+### Added
+
+- **A profile can build tables and read the document's files.** The helpers of an office profile now include
+  `read_file(name)` (a file of the document's folders: its own, the metadata and preamble folders, as `\input` finds
+  them), `number_caption(table, "table")` (the "Table 3." number LaTeX gave), `warn(text)`, and `inlines`/`blocks` now
+  carry the filter's own math, `\ce`/`\si` and profile commands through (a LaTeX string of a package's data becomes
+  finished Word inlines). nulabreport's profile uses them for `\chemicals{...}{caption}`: its library
+  (`\DeclareChemical` of `chemicals.tex`), the house column widths, per-call `key[form]` lines and the caption below.
+- A `PdfmdGrid` (ruled all round, tight padding) and a `PdfmdSmall` (80% of the text, a `\footnotesize` table) style in
+  every reference document, beside the `PdfmdBooktabs` of 3.24.8. A table cell's custom style must sit on a `Para`
+  (Pandoc ignores it on a `Plain`).
+
+### Fixed
+
+- A signed number in math (`$-4$`, `$\sim 825$`, `$>500$`) is text with a real minus sign, not a small equation of its own
+  (in a table cell it was a larger, different-looking figure).
+- `\allowbreak` in text is not a picture; a `%` at the end of a line in an `\input` file joins it to the next, as TeX does
+  (`\chemicals{...}%` over `{caption}`).
+
+---
+
 ## v3.24.9 — 2026-10-08
 
 Pre-edit state: commit `c84ece9` (v3.24.8). A package says in its own file what pdfmd cannot know.

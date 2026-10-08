@@ -160,7 +160,9 @@ class Patching(unittest.TestCase):
         footer = self.parts(patched)["word/footer1.xml"]
         self.assertIn('<w:color w:val="FFFFFF"/>', footer)
         self.assertIn("C &lt; D", footer)
-        self.assertIn('w:styleId="PdfmdBooktabs"', self.parts(patched)["word/styles.xml"])
+        styles = self.parts(patched)["word/styles.xml"]
+        for style in ("PdfmdBooktabs", "PdfmdGrid", "PdfmdSmall"):
+            self.assertIn(f'w:styleId="{style}"', styles)
 
     def test_media_are_replaced_and_figure_paragraphs_are_centred_and_unindented(self):
         reference = docx.default_reference()

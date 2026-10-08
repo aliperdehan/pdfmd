@@ -85,6 +85,14 @@ class Translators(unittest.TestCase):
         self.assertEqual(self.lua(r"print(E.fix_empty_scripts([[105\,^\circ\text{C}]]))"), r"105\,\text{°}\text{C}")
         self.assertEqual(self.lua(r"print(E.fix_empty_scripts([[x^\circ]]))"), r"x^\circ")
 
+    def test_a_signed_number_is_text_not_an_equation(self):
+        self.assertEqual(self.lua(r"print(E.plain_number([[-4]]))"), "\u2212" + "4")
+        self.assertEqual(self.lua(r"print(E.plain_number([[\sim 825]]))"), "~ 825")
+        self.assertEqual(self.lua(r"print(E.plain_number([[>500]]))"), ">500")
+        self.assertEqual(self.lua(r"print(E.plain_number([[x]]))"), "nil")
+        self.assertEqual(self.lua(r"print(E.plain_number([[10^{-3}]]))"), "nil")
+        self.assertEqual(self.lua(r"print(E.plain_number([[\alpha 5]]))"), "nil")
+
     def test_a_long_display_is_cut_at_its_equals_signs(self):
         long = r"a = \frac{1234567890+1234567890}{3} = \frac{1234567890}{3} = 411522630 = 4.1\times 10^{8} = 0.41\times 10^{9}"
         cut = self.lua("print(E.break_display([[" + long + r"]], 40))")
@@ -200,6 +208,30 @@ class Profile(unittest.TestCase):
             self.assertIn("[tag 7]", text)
             self.assertNotIn("Hidden", text)
             self.assertIn("profile", done.stdout)
+
+
+    def test_a_profile_reads_files_of_the_documents_folders_and_builds_a_native_table(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "lib").mkdir()
+            (root / "lib" / "data.tex").write_text("Water, 18.02 \\allowbreak 18\n", encoding="utf-8")
+            (root / "office.lua").write_text(
+                'return {commands = {records = function(args, raw, h)\n'
+                '  local text = h.read_file("data")\n'
+                '  local cell = pandoc.Cell({pandoc.Para(h.inlines(text) or {})})\n'
+                '  local t = pandoc.Table(pandoc.Caption({pandoc.Plain(h.inlines("A caption") or {})}), {{pandoc.AlignLeft, 1}},\n'
+                '    pandoc.TableHead({}), {pandoc.TableBody({pandoc.Row({cell})})}, pandoc.TableFoot({}))\n'
+                '  return {h.number_caption(t, "table") or t}\nend}}\n', encoding="utf-8")
+            (root / "d.md").write_text("---\ntitle: T\n---\n\n\\records{x}\n", encoding="utf-8")
+            done = subprocess.run(["pandoc", "d.md", "-o", "d.docx", "--lua-filter", str(FILTER), "-M",
+                                   f"pdfmd-office-profile={root / 'office.lua'}", "-M", f"pdfmd-office-path={root / 'lib'}",
+                                   "-M", "pdfmd-office-latex=auto"], cwd=root, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
+            self.assertIn("<w:tbl>", xml)
+            text = re.sub(r"<[^>]+>", "", xml)
+            self.assertIn("Water, 18.02 18", text)          # \allowbreak is no picture and no text
+            self.assertIn("Table\u00a01. A caption", text)       # numbered by the filter's own counter
 
 
 @unittest.skipUnless(PANDOC and LUALATEX and POPPLER and shutil.which("pdfinfo"), "needs Pandoc, LuaLaTeX and Poppler")

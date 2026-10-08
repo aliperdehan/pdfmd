@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.9"
+PDFMD_VERSION = "3.24.10"
 import argparse
 import csv
 import filecmp
@@ -4016,11 +4016,14 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
             texts.append(item.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
-    for name in dict.fromkeys(re.findall(r"\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{([^}]+)\}", "\n".join(texts))):
-        for package in name.split(","):
-            found = kpsewhich_path_text(package.strip() + ".sty")
-            if found and "texmf-dist" not in str(found[0]) and "/texlive/" not in str(found[0]):
-                texts.append(found[1])
+    names = [package.strip() for name in dict.fromkeys(re.findall(r"\\(?:usepackage|RequirePackage)(?:\[[^\]]*\])?\{([^}]+)\}",
+                                                                 "\n".join(texts))) for package in name.split(",")]
+    for path in kpsewhich_locate([package + ".sty" for package in names if package]).values():
+        if "texmf-dist" not in str(path) and "/texlive/" not in str(path):
+            try:
+                texts.append(path.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
     data = {"captionsep": module.caption_separator(texts),
             "crefcap": bool(re.search(r"cleveref[^\n]*|\\usepackage\[[^\]]*\]\{cleveref\}", "\n".join(texts)) and
                             re.search(r"\[[^\]]*capitali[sz]e[^\]]*\]\{cleveref\}", "\n".join(texts)) is not None),
@@ -4113,6 +4116,14 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                                           "-M", f"pdfmd-office-report={arguments.report}"]
             if labels is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]
+            # where a file the document pulls in (\input, a package's chemicals.tex) may be: its own folder, the
+            # metadata and preamble folders, as the PDF build finds them
+            places = [md_path.parent, *accessory_directories(md_path.parent, md_path.stem),
+                      *(item.parent for item in metadata_files),
+                      *(item.parent for item in (find_preambles(md_path.parent, md_path.stem, [])
+                                                  if not auto_disabled(no_auto, "preamble") else []))]
+            arguments.filter_arguments += ["-M", "pdfmd-office-path=" + os.pathsep.join(
+                dict.fromkeys(str(Path(item).resolve()) for item in places))]
             if profile is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-profile={profile}"]
                 preamble_copy = Path(scratch) / "preamble.txt"
