@@ -78,8 +78,11 @@ local function counter_prefix(tex)
 end
 
 -- the picture of a fragment as an Image, or nil (collect mode, or no picture)
+local fragment_calls = 0     -- how often a fragment was asked for: both runs must decide alike
+
 local function fragment_image(kind, tex)
   if settings.mode ~= "collect" and settings.mode ~= "render" then return nil end
+  if kind ~= "asset" then fragment_calls = fragment_calls + 1 end
   tex = counter_prefix(tex) .. tex
   local id = pandoc.sha1(kind .. "\0" .. tex)
   if settings.mode == "collect" then
@@ -801,13 +804,56 @@ local READER_ENVS = {figure = true, table = true, tabular = true, tabularx = tru
   enumerate = true, description = true, quote = true, quotation = true, verbatim = true, abstract = true,
   flushleft = true, flushright = true, minipage = true, subfigure = true, longtable = true, tabbing = false}
 
--- only environments Pandoc's LaTeX reader keeps, and no \input (it would read a file it cannot draw)
+-- The reader also keeps the *arguments* of a command it does not know and forgets the command (`\chemicals{a}{b}` becomes
+-- the text "b"), so only text whose commands are all ones it understands goes through.
+local READER_COMMANDS = {}
+for name in ([[begin end emph textbf textit texttt textsc textsf textrm textup textmd textnormal underline textsuperscript
+  textsubscript mbox hbox makebox footnote url href section subsection subsubsection paragraph subparagraph chapter item
+  includegraphics caption captionof label centering raggedright raggedleft noindent hline cline toprule midrule bottomrule
+  multicolumn multirow par newline linebreak ldots dots textbackslash textasciitilde textquotedblleft textquotedblright
+  textendash textemdash quad qquad hspace small footnotesize large Large normalsize tiny scriptsize bfseries itshape
+  scshape ttfamily upshape rmfamily sffamily ref cite citep citet nocite degree textdegree textmu checkmark
+  today and ce si SI num qty unit cref Cref eqref autoref pageref text mathrm}]]):gmatch("%a+") do READER_COMMANDS[name] = true end
+
 local function reader_safe(raw)
   if raw:find("\\input%s*{") or raw:find("\\include%s*{") then return false end
   for env in raw:gmatch("\\begin{([%a]+)%*?}") do
     if not READER_ENVS[env] then return false end
   end
+  local text = raw:gsub("%$%$.-%$%$", ""):gsub("%$[^$]*%$", ""):gsub("\\%[.-\\%]", ""):gsub("\\%(.-\\%)", "")
+  for name in text:gmatch("\\(%a+)") do
+    if not READER_COMMANDS[name] and not READER_ENVS[name] then return false end
+  end
   return true
+end
+
+-- Pandoc's docx writer ignores a lone height (or width) on a picture the LaTeX reader put in a table cell, so
+-- both are given: the missing one from the picture's own proportions
+local UNIT_POINTS = {cm = 28.3465, mm = 2.83465, ["in"] = 72, pt = 1, px = 0.75, bp = 1.00375}
+
+local function points(text)
+  local number, unit = tostring(text):match("^([%d.]+)%s*(%a*)$")
+  if not number then return nil end
+  local factor = UNIT_POINTS[unit == "" and "px" or unit]
+  return factor and tonumber(number) * factor or nil
+end
+
+local function sized_image(img)
+  local width, height = img.attributes["width"], img.attributes["height"]
+  if (width and height) or not (width or height) then return nil end
+  if img.src:lower():match("%.svg$") then return nil end
+  local ok, _, contents = pcall(pandoc.mediabag.fetch, img.src)
+  if not ok or not contents then return nil end
+  local known, info = pcall(pandoc.image.size, contents)
+  if not known or not info or not info.width or info.width == 0 then return nil end
+  if height and points(height) then
+    img.attributes["width"] = string.format("%.2fpt", points(height) * info.width / info.height)
+    img.attributes["height"] = string.format("%.2fpt", points(height))
+  elseif width and points(width) then
+    img.attributes["height"] = string.format("%.2fpt", points(width) * info.height / info.width)
+    img.attributes["width"] = string.format("%.2fpt", points(width))
+  else return nil end
+  return img
 end
 
 -- a PDF/EPS picture cannot go into Word: pdfmd converts it (collect mode names it, render mode swaps it)
@@ -864,6 +910,7 @@ end
 local PAGE_BREAK
 if FORMAT == "docx" then PAGE_BREAK = pandoc.RawBlock("openxml", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
 elseif FORMAT:match("^html") then PAGE_BREAK = pandoc.RawBlock("html", '<div style="page-break-after: always"></div>')
+elseif FORMAT == "typst" then PAGE_BREAK = pandoc.RawBlock("typst", "#pagebreak()")
 else PAGE_BREAK = {} end
 
 function RawBlock(el)
@@ -918,16 +965,18 @@ function RawBlock(el)
   -- environments it does not know (tikzpicture, axis...), so only text made of the ones it does goes through.
   local ok, doc = false, nil
   if reader_safe(raw) then ok, doc = pcall(pandoc.read, raw, "latex") end
-  if ok then
-    local has_raw = false
-    doc:walk({RawBlock = function() has_raw = true end, RawInline = function() has_raw = true end})
-    if not has_raw and #doc.blocks > 0 then
+  if ok and #doc.blocks > 0 then
+    -- what the reader made is not seen by the filter again: do its inline work here
+    local calls = fragment_calls
+    local worked = doc:walk({Math = Math, RawInline = RawInline,
+                             Image = function(img) return asset_image(img) or sized_image(img) end})
+    local has_raw = fragment_calls ~= calls
+    worked:walk({RawBlock = function() has_raw = true end, RawInline = function() has_raw = true end})
+    if not has_raw then
       counters.native = counters.native + 1
-      -- what the reader made is not seen by the filter again: do its inline work here
-      doc = doc:walk({Math = Math, RawInline = RawInline, Image = asset_image})
-      doc = doc:walk({Figure = function(f) return number_caption(f, "figure") end,
-                      Table = function(t) return number_caption(t, "table") end})
-      return doc.blocks
+      worked = worked:walk({Figure = function(f) return number_caption(f, "figure") end,
+                            Table = function(t) return number_caption(t, "table") end})
+      return worked.blocks
     end
   end
   local env = raw:match("^\\begin{(%a+)%*?}")

@@ -35,7 +35,12 @@ SETUP = r"""
 \PreviewEnvironment{pdfmdblock}
 \PreviewEnvironment{pdfmdinline}
 % a house style's header, footer and page furniture would land inside the cropped box
-\AtBeginDocument{\ifdefined\Lab@nofurnituretrue\Lab@nofurnituretrue\fi\pagestyle{empty}\thispagestyle{empty}}
+\AtBeginDocument{\ifdefined\Lab@nofurnituretrue\Lab@nofurnituretrue\fi\pagestyle{empty}\thispagestyle{empty}
+  % a macro that makes a float (a spectrum, a scheme with a caption) cannot do it inside the box: it stays where it is
+  \renewenvironment{figure}[1][]{\par\def\@captype{figure}\centering}{\par}
+  \renewenvironment{figure*}[1][]{\par\def\@captype{figure}\centering}{\par}
+  \renewenvironment{table}[1][]{\par\def\@captype{table}\centering}{\par}
+  \renewenvironment{table*}[1][]{\par\def\@captype{table}\centering}{\par}}
 \makeatother
 """
 
@@ -146,7 +151,8 @@ def page_count(pdf: Path) -> int:
 
 
 def first_error(log_text: str) -> str:
-    match = re.search(r"^! (.+)$", log_text, re.M)
+    """The first error of a LaTeX log (`! message`, or `file:line: message` under -file-line-error)."""
+    match = re.search(r"^! (.+)$", log_text, re.M) or re.search(r"^[^\s:][^\n:]*:\d+: (.+)$", log_text, re.M)
     return match.group(1).strip() if match else "LaTeX failed"
 
 

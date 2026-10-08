@@ -41,6 +41,41 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.4 — 2026-10-08
+
+Pre-edit state: commit `8a83d39` (v3.24.3). The other outputs, and what building every CHEM212L/CHEM220L report
+to `.docx` showed.
+
+### Added
+
+- **The soffice fallback** (Pandoc -> .odt -> LibreOffice -> PDF) goes through the same reference document and filter:
+  papersize, geometry and fonts are kept (it printed Letter in LibreOffice's defaults), equations are numbered, what is
+  LaTeX is made native or drawn. No PDF build for numbers there (LaTeX is what failed).
+- **Typst and WeasyPrint runs** go through the filter when a LaTeX engine failed before them, or the document says
+  `office: {latex: auto}`; the first run lists the fragments as Typst/HTML source instead of building a PDF. HTML,
+  Typst and EPUB-like outputs use it only on request.
+
+### Fixed
+
+- Pandoc's LaTeX reader forgets an unknown command and keeps its arguments as text (`\chemicals{a}{b}` became the
+  text "b"): a raw block is read only when every command in it is one the reader knows (`\ce`, `\si`, `\cref`... count
+  as known: they are translated afterwards), otherwise it is drawn. The two runs of the filter decide this alike.
+- A lone `height=` or `width=` on a picture the reader put in a table cell was ignored by the docx writer (three
+  TLC plates came out a page wide each); both are now given, the missing one from the picture's proportions.
+- A macro that makes a float (a spectrum comparison) failed inside the fragment box ("Not in outer par mode"):
+  `figure` and `table` do not float there. A fragment error shows the real LaTeX message (`-file-line-error` form).
+- A picture's border: fragments are drawn with 10 bp of room and trimmed back (see 3.24.3); a house style's
+  furniture is switched off in them.
+
+### Verified
+
+- All six lab reports of CHEM212L (LR1-2 draft, LR3, LR4-5) and CHEM220L (LR1, LR2, LR2 plain) built to `.docx`
+  with the department's template: 3 to 41 LaTeX pictures each, no fragment lost, text 91-98 % the PDF's, page counts
+  within a few pages (the PDFs' full-page spectra and wide tables set differently in Word); read page by page
+  through LibreOffice.
+
+---
+
 ## v3.24.3 — 2026-10-08
 
 Pre-edit state: commit `3fae4a4` (v3.24.2). A house style's own Word template and macros, and what building

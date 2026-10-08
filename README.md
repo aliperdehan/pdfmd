@@ -393,6 +393,11 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
 `pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
 skips the PDF build (numbers are then counted).
 
+The same filter serves the other outputs when LaTeX is the problem: **the soffice fallback** (Pandoc, then LibreOffice) now
+keeps the page size, margins and fonts, shows equations and draws what LaTeX can; a **Typst or WeasyPrint run after LaTeX
+failed** gets what the document says in LaTeX as native text or pictures instead of nothing; and HTML, Typst and
+WeasyPrint builds do it on request (`pdfmd-options: {office: {latex: auto}}`).
+
 ### Stopping part-way
 
 `--stop-at` ends the build after a stage; everything before it runs as normal:

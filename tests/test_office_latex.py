@@ -264,3 +264,52 @@ class DisplayBlocks(unittest.TestCase):
             xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
             self.assertIn("<m:oMathPara>", xml)
             self.assertNotIn("\\ce", xml)
+
+
+TYPST = shutil.which("typst")
+SOFFICE_PATH = shutil.which("soffice") or ("/Applications/LibreOffice.app/Contents/MacOS/soffice"
+                                           if Path("/Applications/LibreOffice.app/Contents/MacOS/soffice").exists() else None)
+FALLBACK_DOCUMENT = ("---\ntitle: T\npapersize: a4\n{options}---\n\nWater \\ce{{H2O}}.\n\n"
+                     "\\begin{{tikzpicture}}\\draw (0,0) circle (1cm);\\end{{tikzpicture}}\n\nAfter.\n")
+
+
+@unittest.skipUnless(PANDOC and LUALATEX and POPPLER and shutil.which("pdfinfo"), "needs Pandoc, LuaLaTeX and Poppler")
+class OtherOutputs(unittest.TestCase):
+    def folder(self, options: str = "") -> Path:
+        directory = tempfile.mkdtemp(prefix="pdfmd-others-")
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        (root / "preamble.tex").write_text("\\usepackage{tikz}\n", encoding="utf-8")
+        (root / "d.md").write_text(FALLBACK_DOCUMENT.format(options=options), encoding="utf-8")
+        return root
+
+    def run_pdfmd(self, root: Path, *arguments: str):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *arguments], cwd=root, capture_output=True,
+                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_typst_gets_the_drawing_when_the_document_asks(self):
+        root = self.folder("pdfmd-options:\n  office: {latex: auto, labels: off}\n")
+        done = self.run_pdfmd(root, "-e", "typst")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("After.", text)
+        self.assertNotIn("\\ce", text)
+        self.assertTrue(list((root / "cache").rglob("*.svg")))        # the picture was drawn
+
+    def test_html_is_untouched_unless_asked(self):
+        plain = self.folder()
+        self.assertEqual(self.run_pdfmd(plain, "-o", "d.html", "--self-contained").returncode, 0)
+        self.assertNotIn("<img", (plain / "d.html").read_text(encoding="utf-8"))
+        asked = self.folder("pdfmd-options:\n  office: {latex: auto, labels: off}\n")
+        self.assertEqual(self.run_pdfmd(asked, "-o", "d.html", "--self-contained").returncode, 0)
+        self.assertIn("<img", (asked / "d.html").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(SOFFICE_PATH, "needs LibreOffice")
+    def test_the_soffice_fallback_keeps_the_page_and_draws_what_it_can(self):
+        root = self.folder()
+        done = self.run_pdfmd(root, "-e", "soffice")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        info = subprocess.run(["pdfinfo", str(root / "d.pdf")], capture_output=True, text=True).stdout
+        self.assertIn("A4", info)
+        self.assertTrue(list((root / "cache").rglob("*.svg")))

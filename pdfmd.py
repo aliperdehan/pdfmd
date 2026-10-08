@@ -1053,7 +1053,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.3"
+PDFMD_VERSION = "3.24.4"
 import argparse
 import csv
 import filecmp
@@ -4024,7 +4024,8 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
 
 @contextmanager
 def office_reference(md_path: Path, metadata_files: list[Path], variables: list[str], target: str, output: Path,
-                     pandoc_options: list[str], no_auto: list[str] | None, note) -> Iterator[list[str]]:
+                     pandoc_options: list[str], no_auto: list[str] | None, note,
+                     labels: str | None = None, force_filter: bool = False) -> Iterator[list[str]]:
     """Pandoc arguments for a docx/odt/pptx build: `--reference-doc FILE` (the user's own reference
     document, or Pandoc's default, with the document's page setup, fonts and pdfmd's look written in)
     and, with `office: {latex: auto}`, the filter that makes LaTeX native (OfficeArguments)."""
@@ -4037,12 +4038,15 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                              "no_auto": no_auto, "target": target, "note": note}
         module = office_module()
         options = office_options(md_path, metadata_files, no_auto)
-        latex = str(options.get("latex", "auto")).casefold()
-        if (module is not None and target in ("docx", "odt") and latex not in ("off", "false", "no")
+        latex = str(options.get("latex", "auto" if target in ("docx", "odt") else "")).casefold()
+        # Word and ODF always; Typst and HTML only when the document asks (`office: {latex: auto}`) or LaTeX failed
+        wanted = target in ("docx", "odt") or force_filter or latex in ("auto", "images")
+        if (module is not None and target in ("docx", "odt", "typst", "html") and wanted
+                and latex not in ("off", "false", "no")
                 and not auto_disabled(no_auto, "officelatex")):
             arguments.report = Path(scratch) / "report.json"
             labels = office_label_data(md_path, metadata_files, variables, no_auto, note, Path(scratch),
-                                       str(options.get("labels", "auto")).casefold())
+                                       labels or str(options.get("labels", "auto")).casefold())
             profile = None if auto_disabled(no_auto, "officeprofile") else find_office_profile(
                 md_path, metadata_files, options, office_package_folders(md_path, metadata_files, no_auto))
             if profile is not None:
@@ -4134,6 +4138,14 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         yield ["--reference-doc", str(path)]
 
 
+def office_fallback_wanted(md_path: Path, metadata_files: list[Path], failed_families: set) -> bool:
+    """Whether a Typst/WeasyPrint run should go through the LaTeX filter: a LaTeX engine has failed already, or the
+    document says `office: {latex: auto}` for it."""
+    if any(family in ("lualatex", "xelatex", "pdflatex", "tex", "latexmk", "tectonic") for family in failed_families):
+        return True
+    return str(office_options(md_path, metadata_files).get("latex", "")).casefold() in ("auto", "images")
+
+
 def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
     """Run the Pandoc command of a docx/odt build. With the LaTeX filter on it runs twice: once to list the
     fragments LaTeX must draw (compiled in the document's own preamble, cached), once to put their
@@ -4149,7 +4161,21 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
     target = context["target"]
     note = context["note"]
     first = list(cmd)
-    first[first.index("-o") + 1] = str(scratch / f"pass1{output.suffix}")
+    if output.suffix.lower() == ".pdf":
+        # the first run only lists fragments: write the engine's own source format instead of building a PDF
+        engine = next((item.split("=", 1)[1] for item in first if item.startswith("--pdf-engine=")), "")
+        if "--pdf-engine" in first:
+            engine = first[first.index("--pdf-engine") + 1]
+        first = [item for item in first if not item.startswith("--pdf-engine=")]
+        if "--pdf-engine" in first:
+            index = first.index("--pdf-engine")
+            del first[index:index + 2]
+        writer = "typst" if engine == "typst" else "html5"
+        first += ["-t", writer]
+        suffix = ".typ" if writer == "typst" else ".html"
+    else:
+        suffix = output.suffix
+    first[first.index("-o") + 1] = str(scratch / f"pass1{suffix}")
     wanted_path = scratch / "wanted.json"
     first += ["-M", "pdfmd-office-mode=collect", "-M", f"pdfmd-office-wanted={wanted_path}"]
     log_cmd(first, pandoc_cwd, verbose)
@@ -11353,11 +11379,23 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         # passes through needs resolved citations already in the AST, same
         # invariant as the auto-discovered lua_filters below (see run()'s
         # matching comment in convert_one).
-        cmd += pandoc_options
-        for lua_filter in lua_filters:
-            cmd += ["--lua-filter", str(lua_filter)]
-        log_cmd(cmd, pandoc_cwd, verbose)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+        def note(kind: str, detail: str) -> None:
+            if verbose:
+                print(f"AUTO {kind}  {detail}")
+        # the LaTeX the document uses is made native or drawn (no PDF build for its numbers here: LaTeX is what failed)
+        with office_reference(md_path, metadata_files, variables, "odt", odt, pandoc_options, no_auto, note,
+                              labels="off", force_filter=True) as office_arguments:
+            cmd += office_arguments
+            cmd += pandoc_options
+            for lua_filter in lua_filters:
+                cmd += ["--lua-filter", str(lua_filter)]
+            cmd += office_arguments.filter_arguments
+            if office_arguments.filter_arguments:
+                result = run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
+            else:
+                log_cmd(cmd, pandoc_cwd, verbose)
+                result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+            office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .odt"
         return run_soffice_convert(odt, output, verbose)
@@ -12090,6 +12128,18 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(width_filter)]
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
+                    if engine in ("typst", "weasyprint") and office_fallback_wanted(
+                            md_path, metadata_files, failed_families):
+                        # LaTeX failed (or the document asks): what the document says in LaTeX becomes native or
+                        # a picture instead of nothing
+                        with office_reference(md_path, metadata_files, variables, "typst" if engine == "typst" else "html",
+                                              output, pandoc_options, no_auto, note, labels="off",
+                                              force_filter=True) as office_arguments:
+                            if office_arguments.filter_arguments:
+                                cmd += office_arguments.filter_arguments
+                                answer = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose)
+                                office_finish(office_arguments, md_path, verbose)
+                                return answer
                     log_cmd(cmd, pandoc_cwd, verbose)
                     return subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                           env=tex_search_env(md_path.parent, pandoc_cwd))
