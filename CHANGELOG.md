@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.18 — 2026-10-08
+
+Pre-edit state: commit `33aae99` (v3.23.17). `--install batchocr` reaches the system programs on
+every platform; the README catches up with the 3.23 line.
+
+### Added
+
+- **`pdfmd --install batchocr` offers Tesseract and Poppler** through the system's package manager
+  (Homebrew, apt, dnf, pacman, zypper, apk on macOS/Linux; scoop, Chocolatey, winget on Windows): it
+  shows the exact command (with `sudo` where the manager needs it and the user is not root) and runs
+  it only after a yes on an interactive terminal (`PDFMD_NO_PROMPT=1` or a pipe: printed only). They
+  are not bundled: separate programs with their own licences and per-platform builds. OCR languages
+  are named per manager, never installed. `--check-dependencies` reports `pdftoppm` too, and the
+  hints in it and in the "batchocr not found" message use the manager found instead of a fixed
+  macOS/apt/choco line.
+- `tests/test_install_ocr.py`.
+
+### Documentation
+
+- README: the Why list now names scripts and emoji, name lookup in any script and PDF reading; the
+  Install section has Fedora and Arch lines and says `--install full` needs no root on Linux; the
+  PDF-to-Markdown section explains the Tesseract/Poppler step and OCR languages.
+
+---
+
 ## v3.23.17 — 2026-10-08
 
 Pre-edit state: commit `a126fa7` (v3.23.16).

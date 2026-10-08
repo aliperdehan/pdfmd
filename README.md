@@ -42,6 +42,16 @@ turns that knowledge into defaults:
 - **It doesn't give up on the first engine.** If `lualatex` fails or isn't
   installed, it tries the next engine, then the next, and tells you why each
   one failed.
+- **It handles every script and emoji.** Text the main font cannot draw (Arabic,
+  Hebrew, Chinese, Japanese, Korean, Greek, Cyrillic with Kazakh letters, Indic and
+  more) is set run by run in an installed font for its script, emoji become colour
+  pictures, and `pdfmd --install fonts` fetches missing fonts without admin rights
+  (see [Other scripts](#other-scripts)).
+- **It finds documents by name, in any script.** `pdfmd glyukoza` opens
+  `Глюкоза.md`; with `--translit` packs, `pdfmd tyche` finds `Τύχη.md` and
+  `pdfmd mingyun` finds `命運.md`.
+- **It reads PDFs too.** `pdfmd paper.pdf` restores a PDF's own embedded source or
+  OCRs the pages to Markdown (see [PDF to Markdown](#pdf-to-markdown)).
 - **It shows what it did.** Every automatic decision prints an `AUTO` line,
   `-v` shows the exact Pandoc command, and every default can be switched off.
 
@@ -89,7 +99,11 @@ brew install --cask mactex-no-gui           # optional: full LaTeX (large)
 
 ```sh
 sudo apt install pipx pandoc texlive-xetex  # Debian/Ubuntu
+sudo dnf install pipx pandoc texlive-xetex  # Fedora (add Typst with `pdfmd --install typst`)
+sudo pacman -S python-pipx pandoc-cli typst texlive   # Arch
 ```
+
+On any Linux, `pdfmd --install full` (Pandoc and Typst) needs no package manager and no root.
 
 ```powershell
 py -m pip install --user pipx; py -m pipx ensurepath          # Windows
@@ -429,9 +443,25 @@ options of [M1ck4's pdfmd](https://github.com/M1ck4/pdfmd) (`--ocr`, `--lang`,
 work as they did. Install the reader once:
 
 ```sh
-pdfmd --install batchocr         # pip install batchocr[md] from its GitHub release
-brew install tesseract poppler   # for scanned pages (apt: tesseract-ocr poppler-utils)
+pdfmd --install batchocr         # pip install batchocr[md] from its GitHub release,
+                                 # then offers the system programs below
 ```
+
+Scanned pages also need **Tesseract** (OCR) and **Poppler** (`pdftotext`, `pdftoppm`).
+Those are separate programs with their own builds for every platform, so pdfmd does not
+bundle them; `--install batchocr` finds your package manager (Homebrew, apt, dnf, pacman,
+zypper, apk, scoop, Chocolatey or winget), shows the exact command and, on an interactive
+terminal, runs it if you say yes (`PDFMD_NO_PROMPT=1` only prints it). By hand:
+
+```sh
+brew install tesseract poppler                       # macOS (and Linuxbrew)
+sudo apt install tesseract-ocr poppler-utils         # Debian/Ubuntu; dnf: tesseract poppler-utils
+scoop install tesseract poppler                      # Windows (or choco install ...)
+```
+
+OCR languages are packs of their own, and large; they are named, never installed for you:
+`brew install tesseract-lang`, `apt install tesseract-ocr-rus`, `dnf install
+tesseract-langpack-rus`. `pdfmd --check-dependencies` reports batchocr, Tesseract and Poppler.
 
 Credits and licences: batchocr's Markdown structure stages are M1ck4's
 (MIT; that project is archived) and are vendored inside batchocr with their

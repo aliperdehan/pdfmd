@@ -1029,7 +1029,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.17"
+PDFMD_VERSION = "3.23.18"
 import argparse
 import csv
 import filecmp
@@ -2132,7 +2132,7 @@ def dependency_report() -> bool:
     reader_version = batchocr_version(reader) if reader else None
     print(f"{'OK  ' if reader_version and reader_version >= BATCHOCR_MIN else 'MISS'}  batchocr"
           + (f"  ({'.'.join(map(str, reader_version))})" if reader_version else "  (pdfmd --install batchocr)"))
-    for tool in ("tesseract", "pdftotext"):
+    for tool in ("tesseract", "pdftotext", "pdftoppm"):
         path = which(tool)
         print(f"{'OK  ' if path else 'MISS'}  {tool}" + (f"  ({path})" if path else f"  ({tesseract_install_hint()})"))
     pandoc_route = bool(pandoc and installed_engines())
@@ -3819,9 +3819,7 @@ def install_extra(kind: str) -> bool:
         found = find_batchocr()
         version = batchocr_version(found) if found else None
         print(f"Installed batchocr {'.'.join(map(str, version)) if version else '(not found yet)'}.")
-        missing = [tool for tool in ("tesseract", "pdftotext") if not which(tool)]
-        if missing:
-            print(f"NOTE  {', '.join(missing)} not found; scanned pages need them: {tesseract_install_hint()}")
+        install_ocr_tools()
     if kind == "pandoc":
         importlib.invalidate_caches()
         use_managed_tools()
@@ -12246,12 +12244,92 @@ def batchocr_version(command: list[str]) -> tuple[int, ...] | None:
         return None
 
 
+# What batchocr needs from the system for scanned pages: Tesseract (OCR) and Poppler (pdftotext,
+# pdftoppm). They are programs with their own licences and per-platform builds, so pdfmd never
+# bundles them; it asks the system's package manager (`pdfmd --install batchocr`).
+# manager -> (install command, {tool: packages}, how to add OCR languages)
+OCR_PACKAGE_MANAGERS = {
+    "brew": (["brew", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+             "brew install tesseract-lang"),
+    "apt-get": (["apt-get", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
+                "apt-get install tesseract-ocr-rus  (tesseract-ocr-LANGUAGE)"),
+    "dnf": (["dnf", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler-utils"]},
+            "dnf install tesseract-langpack-rus  (tesseract-langpack-LANGUAGE)"),
+    "pacman": (["pacman", "-S", "--needed", "--noconfirm"],
+               {"tesseract": ["tesseract", "tesseract-data-eng"], "poppler": ["poppler"]},
+               "pacman -S tesseract-data-rus  (tesseract-data-LANGUAGE)"),
+    "zypper": (["zypper", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-tools"]},
+               "zypper install tesseract-ocr-traineddata-russian"),
+    "apk": (["apk", "add"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
+            "apk add tesseract-ocr-data-rus  (tesseract-ocr-data-LANGUAGE)"),
+    "scoop": (["scoop", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+              "scoop install tesseract-languages"),
+    "choco": (["choco", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+              "download LANGUAGE.traineddata from github.com/tesseract-ocr/tessdata_fast into Tesseract's tessdata folder"),
+    "winget": (["winget", "install", "-e", "--id"], {"tesseract": ["UB-Mannheim.TesseractOCR"], "poppler": []},
+               "the installer offers languages; Poppler is not in winget (use scoop or choco)"),
+}
+
+
+def system_package_manager() -> str | None:
+    """The first package manager of OCR_PACKAGE_MANAGERS this system has."""
+    order = {"darwin": ("brew",), "win32": ("scoop", "choco", "winget")}.get(
+        sys.platform, ("apt-get", "dnf", "pacman", "zypper", "apk", "brew"))
+    return next((name for name in order if which(name)), None)
+
+
+def ocr_install_command(manager: str, tools: tuple[str, ...] = ("tesseract", "poppler")) -> list[str]:
+    """The command that installs `tools` with `manager` (sudo in front where the system wants it)."""
+    command, packages, _ = OCR_PACKAGE_MANAGERS[manager]
+    names = [name for tool in tools for name in packages[tool]]
+    needs_root = (manager in ("apt-get", "dnf", "pacman", "zypper", "apk") and hasattr(os, "geteuid")
+                  and os.geteuid() != 0 and which("sudo"))
+    return (["sudo"] if needs_root else []) + command + names
+
+
 def tesseract_install_hint() -> str:
-    if sys.platform == "darwin":
-        return "brew install tesseract poppler"
-    if sys.platform == "win32":
-        return "choco install tesseract poppler (or scoop install tesseract poppler)"
-    return "sudo apt install tesseract-ocr poppler-utils (or your package manager)"
+    manager = system_package_manager()
+    if manager:
+        return shlex.join(ocr_install_command(manager))
+    return {"darwin": "brew install tesseract poppler",
+            "win32": "scoop install tesseract poppler (or choco install tesseract poppler)"}.get(
+        sys.platform, "sudo apt install tesseract-ocr poppler-utils (or your package manager's equivalents)")
+
+
+def install_ocr_tools() -> None:
+    """After `--install batchocr`: install Tesseract/Poppler through the system's package
+    manager if they are missing. Only on an interactive terminal, only after a yes; otherwise the
+    command is printed. Languages are named, never installed (they are large and personal)."""
+    missing = [tool for tool, programs in (("tesseract", ("tesseract",)), ("poppler", ("pdftotext", "pdftoppm")))
+               if not all(which(program) for program in programs)]
+    if not missing:
+        return
+    manager = system_package_manager()
+    if not manager:
+        print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {tesseract_install_hint()}")
+        return
+    command = ocr_install_command(manager, tuple(missing))
+    base = OCR_PACKAGE_MANAGERS[manager][0]
+    if command[-len(base):] == base:  # nothing this manager can install (Poppler under winget)
+        print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {tesseract_install_hint()}")
+        return
+    print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them (pdfmd does not bundle them).")
+    print(f"      {shlex.join(command)}")
+    if os.environ.get("PDFMD_NO_PROMPT") or not sys.stdin.isatty() or not sys.stdout.isatty():
+        print("      (run it yourself; pdfmd asks only on an interactive terminal)")
+        return
+    try:
+        answer = input("      Run it now? [y/N] ").strip().lower()
+    except EOFError:
+        return
+    if answer in ("y", "yes"):
+        try:
+            code = subprocess.run(command).returncode
+        except OSError as error:
+            print(f"Could not run {command[0]} ({error}).", file=sys.stderr)
+            return
+        print("Installed." if code == 0 else f"{command[0]} exited with status {code}.")
+    print(f"      More OCR languages: {OCR_PACKAGE_MANAGERS[manager][2]}")
 
 
 def batchocr_missing_message(found: tuple[int, ...] | None = None) -> str:
