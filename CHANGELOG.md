@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.23 — 2026-10-08
+
+Pre-edit state: commit `80e8a0a` (v3.23.22). Documentation only.
+
+### Added
+
+- `docs/recipes.md`: "how do I..." answers (scripts and fonts, finding documents by a name in another
+  script, scanned PDFs to Markdown, a PDF that carries its source, a folder's house style, books and
+  reports, other formats, fast rebuilds, debugging, completion), linked from the README's Reference.
+
+---
+
 ## v3.23.22 — 2026-10-08
 
 Pre-edit state: commit `d0afddc` (v3.23.21). Found while making the README's script screenshot: with

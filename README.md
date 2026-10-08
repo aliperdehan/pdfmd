@@ -928,6 +928,7 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 
 ## Reference
 
+- [`docs/recipes.md`](https://github.com/aliperdehan/pdfmd/blob/main/docs/recipes.md) has short "how do I..." answers: a paper in several scripts, a scanned PDF to Markdown, a folder with a house style, a book from many files.
 - `pdfmd --help` lists every flag.
 - The docstring at the top of [`pdfmd.py`](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd.py) is the full reference
   for each behaviour and its edge cases.

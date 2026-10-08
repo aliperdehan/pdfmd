@@ -1033,7 +1033,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.22"
+PDFMD_VERSION = "3.23.23"
 import argparse
 import csv
 import filecmp
