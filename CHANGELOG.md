@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.19 — 2026-10-08
+
+Pre-edit state: commit `faabca0` (v3.24.18).
+
+### Fixed
+
+- **`AUTO YAML` printed the long path for a symlinked metadata file.** The short (relative) form of a path was worked out
+  from the file after following its symlink, so `metadata/metadata.yaml` linking to a shared house-style file outside the
+  folder fell back to the absolute path. The folder is resolved, the link itself is not: it is shown where it sits
+  (`metadata/metadata.yaml`). The same goes for every other AUTO/CMD line (`--full-paths` still prints absolute paths).
+
+---
+
 ## v3.24.18 — 2026-10-08
 
 Pre-edit state: commit `19d7d03` (v3.24.17).

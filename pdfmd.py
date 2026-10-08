@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.18"
+PDFMD_VERSION = "3.24.19"
 import argparse
 import csv
 import filecmp
@@ -1257,6 +1257,12 @@ def display_path(path: Path) -> str:
     """
     if SHOW_FULL_PATHS:
         return str(path)
+    # The folder is resolved, the file itself is not: a symlink (`metadata/metadata.yaml` pointing at
+    # a shared house-style file) is shown where it sits, not where it leads.
+    try:
+        return str((path.parent.resolve() / path.name).relative_to(Path.cwd()))
+    except (OSError, ValueError):
+        pass
     try:
         return str(path.resolve().relative_to(Path.cwd()))
     except (OSError, ValueError):
