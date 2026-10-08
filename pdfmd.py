@@ -1029,7 +1029,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.23.16"
+PDFMD_VERSION = "3.23.17"
 import argparse
 import csv
 import filecmp
@@ -1142,7 +1142,11 @@ def system_font_missing(family: str) -> bool:
         return family.casefold() not in families
     tool = shutil.which("luaotfload-tool")
     if not tool:
-        return False
+        # No fontconfig and no TeX: pdfmd's own scan of the system font folders (Windows, mostly)
+        index = font_index()
+        if index is None:
+            return False
+        return not any(not face.managed for face in index._by_name.get(family.casefold(), []))
     try:
         result = subprocess.run([tool, f"--find={family}"], capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):

@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.17 — 2026-10-08
+
+Pre-edit state: commit `a126fa7` (v3.23.16).
+
+### Fixed
+
+- Without fontconfig and without TeX (a typical Windows machine) pdfmd could not tell that a font is
+  absent from the system, so a font that exists only in its own fonts folder was named by family and
+  failed to load; its own scan of the system font folders answers now (after `fc-list` and
+  `luaotfload-tool`).
+- The test that compared the generated Unicode script table with fontTools' own copy failed whenever
+  fontTools shipped another Unicode version; the table is checked for being well-formed instead
+  (`scripts/gen_unicode_scripts.py --check` stays as a development check).
+
+---
+
 ## v3.23.16 — 2026-10-08
 
 Pre-edit state: commit `f1110f3` (v3.23.15). Tests only: what the first CI run on Windows and on a
