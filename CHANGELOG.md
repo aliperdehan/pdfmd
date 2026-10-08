@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.23.21 — 2026-10-08
+
+Pre-edit state: commit `202f29b` (v3.23.20).
+
+### Added
+
+- **`pdfmd --completion bash|zsh|fish`** prints a tab-completion script generated from the argument
+  parser (flags, their one-line help, the choices of `--stop-at` and the like, the kinds of
+  `--install`; fish also completes `fonts:NAME` and `ocr:LANG`; flags that take a file complete
+  files). Also registered for `pdfmd-cli`.
+- `tests/test_completion.py` (the scripts are syntax-checked in the shells that are there).
+
+---
+
 ## v3.23.20 — 2026-10-08
 
 Pre-edit state: commit `25dcb7b` (v3.23.19).

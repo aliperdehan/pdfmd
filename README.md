@@ -174,6 +174,17 @@ MISS  poppler: not found
        brew install tesseract poppler
 ```
 
+### Tab completion
+
+`pdfmd --completion bash|zsh|fish` prints a completion script, generated from the command
+line itself so it never goes out of date:
+
+```sh
+pdfmd --completion zsh > ~/.zfunc/_pdfmd                              # ~/.zfunc in $fpath, then compinit
+pdfmd --completion bash > ~/.local/share/bash-completion/completions/pdfmd
+pdfmd --completion fish > ~/.config/fish/completions/pdfmd.fish
+```
+
 ### No Pandoc? The built-in fallback
 
 On a machine with no Pandoc, or Pandoc but no PDF engine, `pdfmd` does not
