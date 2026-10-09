@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.14 — 2026-10-09
+
+Pre-edit state: commit `cc01974` (v3.26.13).
+
+### Added
+
+- A LaTeX error is placed in the Markdown. Pandoc prints the line of the LaTeX it wrote (`l.67 Second has \badmacro`), which
+  nobody has; pdfmd now looks for those words in the `.md` (whitespace collapsed, since LaTeX re-wraps the paragraph; then
+  the last 30 characters; then the last command) and adds `near line 9 of doc.md: ...paragraph runs over two lines and
+  has \badmacro` under the failed-engine warning, once per place even when several LaTeX engines fail in it. Only for a
+  Markdown file built directly (not a book, a part or the cache route, which have no single source). Typst errors are not
+  mapped.
+
 ## v3.26.13 — 2026-10-09
 
 Pre-edit state: commit `b665ade` (v3.26.12).

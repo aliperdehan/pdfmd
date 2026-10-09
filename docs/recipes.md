@@ -764,6 +764,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | `--extract-tables` refuses | Pandoc would read the tables differently after the change | read the reason it prints; `<!-- pdfmd: ignore -->` that table |
 | boxes instead of letters | no installed font draws them | `pdfmd --check-fonts doc.md`, `pdfmd --install fonts` |
 | `H~2~O` or `x^2^` printed as typed | the file has no front matter, so it is read as gfm (a `NOTE` says so) | add a front-matter block, `--from markdown`, or `pdfmd-options: {reader: markdown}` |
+| `! Undefined control sequence` and a LaTeX line number nobody has | LaTeX numbers its own generated file | the warning under it says `near line N of doc.md` |
 | LaTeX fails, Typst output differs | an engine failed and the chain went on (the closing line names it) | `-v`, `--debug`, `--strict`, or pin the engine |
 
 ---

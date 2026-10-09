@@ -1227,7 +1227,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.13"
+PDFMD_VERSION = "3.26.14"
 import argparse
 import csv
 import filecmp
@@ -12763,6 +12763,51 @@ def engine_failure_reason(stderr: str) -> str | None:
     return lines[-1] if lines else None
 
 
+SHOWN_LOCATIONS: set[tuple[str, str]] = set()
+LATEX_CONTEXT_RE = re.compile(r"(?m)^l\.(\d+) (.+)$")
+
+
+def source_line_for(text: str, context: str) -> int | None:
+    """The line of ``text`` (a Markdown source) that ``context`` (the words LaTeX printed up to its error) came from.
+    The generated LaTeX is wrapped and escaped differently, so the match is on the words with whitespace collapsed,
+    first the whole context, then its last 30 characters, then the last command in it."""
+    collapsed: list[str] = []
+    starts: list[tuple[int, int]] = []
+    size = 0
+    for number, line in enumerate(text.splitlines(), 1):
+        piece = re.sub(r"\s+", " ", line.strip())
+        if piece:
+            starts.append((size, number))
+            collapsed.append(piece)
+            size += len(piece) + 1
+    haystack = " ".join(collapsed)
+    context = re.sub(r"\s+", " ", context.strip())
+    command = re.search(r"(\\[A-Za-z@]+)\s*$", context)
+    for needle in (context, context[-30:], command.group(1) if command else ""):
+        if len(needle) < 4:
+            continue
+        found = haystack.find(needle)
+        if found >= 0:
+            return [number for start, number in starts if start <= found][-1]
+    return None
+
+
+def latex_error_location(label: str, stderr: str) -> str | None:
+    """`near line 9 of doc.md: Second has \\badmacro` for a LaTeX error whose context is in the Markdown ``label``
+    names (Pandoc prints `l.67 Second has \\badmacro`, a line of the LaTeX it wrote, which nobody sees)."""
+    path = Path(label)
+    found = LATEX_CONTEXT_RE.search(stderr or "")
+    if not found or path.suffix.lower() not in (".md", ".markdown") or not path.is_file():
+        return None
+    try:
+        number = source_line_for(path.read_text(encoding="utf-8-sig"), found.group(2))
+    except (OSError, UnicodeDecodeError):
+        return None
+    if number is None:
+        return None
+    return f"near line {number} of {display_path(path)}: {found.group(2).strip()[:100]}"
+
+
 def report_engine_failure(label: str, engine: str, result: subprocess.CompletedProcess,
                           remaining: list[str], debug: bool) -> None:
     """Print why one PDF-engine attempt failed -- always, not just under --verbose.
@@ -12781,10 +12826,18 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
     hint = f" ({reason})" if reason else ""
     if remaining:
         print(f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
+        where = latex_error_location(label, result.stderr)
+        if where and (label, where) not in SHOWN_LOCATIONS:       # the next LaTeX engine fails in the same place: once
+            SHOWN_LOCATIONS.add((label, where))
+            print(f"      {where}", file=sys.stderr)
     else:
         print(f"WARN  {label}: {engine} failed{hint}; no more engines to try. "
               f"Rerun with --engine {engine} --verbose (or --debug) for the full log.",
               file=sys.stderr)
+        where = latex_error_location(label, result.stderr)
+        if where and (label, where) not in SHOWN_LOCATIONS:
+            SHOWN_LOCATIONS.add((label, where))
+            print(f"      {where}", file=sys.stderr)
     if debug and result.stderr.strip():
         print(f"----- {label}: {engine} stderr (--debug) -----", file=sys.stderr)
         print(result.stderr.strip(), file=sys.stderr)
