@@ -477,6 +477,7 @@ pdfmd slides -p --slide-level 2          # Beamer; level 2 headings start slides
 ```sh
 pdfmd report --to gfm                 # report.gfm.md: title, numbers, captions, citations, tables, all in plain Markdown
 pdfmd report --to gfm --gfm-scripts ascii -o report.txt.md      # H_2O, x^2, CO_3^(2-) for a viewer with no Unicode scripts
+pdfmd report -o report.gfm.md        # the name alone asks for it (a plain -o report.md is Pandoc's Markdown)
 pdfmd report --to gfm+raw             # Pandoc's own gfm writer (HTML left in) instead
 ```
 
@@ -488,6 +489,11 @@ error unless `-o` names another file). Settings: `pdfmd-options: {gfm: {scripts:
 `--keep-source` ends the file with its whole source in an HTML comment, `--restore FILE.md` writes it back, so the flat
 copy can go to a reader and the original is not lost: `pdfmd report --to gfm --keep-source`, then `pdfmd --restore
 report.gfm.md` makes `report.gfm.restored/` with `report.md`, the parts and the CSV data (details in the README).
+
+The same build as text, for an e-mail, a chat or a terminal: `pdfmd report --to txt` (or `-o report.txt`) writes the title
+and headings underlined, `Table 1. caption` above a table, `[Figure 1. caption]` for a figure, `words <https://link>` for a
+link, and Unicode `H₂O`; `--columns=100` changes the wrapping. `--to plain` is Pandoc's own plain writer (no title, no
+links).
 
 ---
 

@@ -15,7 +15,8 @@
 --
 -- Configuration arrives as metadata (written by pdfmd): `pdfmd-raw` = {tex = [...], typst = [...], html = [...],
 -- office = [...]} (the syntaxes each family takes) and `pdfmd-raw-cache` (where pictures are kept).
--- The families are the writer's: latex/beamer -> tex, typst, html/html5/epub -> html, docx/odt/pptx -> office.
+-- The families are the writer's: latex/beamer -> tex, typst, html/html5/epub -> html, docx/odt/pptx -> office, and the flat
+-- outputs (gfm, plain) -> md.
 
 local SENTINEL = "PDFMDRAWMARK"
 
@@ -26,6 +27,7 @@ local FAMILY = {
   slideous = "html", revealjs = "html", s5 = "html", dzslides = "html", chunkedhtml = "html",
   docx = "office", odt = "office", opendocument = "office", pptx = "office", openxml = "office",
   gfm = "md",          -- flat Markdown (--to gfm), only when pdfmd marks the build (`pdfmd-flat` in the metadata)
+  plain = "md",        -- flat text (--to txt): the same, but no picture is drawn (a text file cannot show one)
 }
 local SYNTAX = {
   html = "html", html4 = "html", html5 = "html",
@@ -212,7 +214,7 @@ local function tex_picture(text, package)
 end
 
 local function drawable_family()
-  return family == "html" or family == "md" or family == "typst"
+  return (family == "html" or family == "md" or family == "typst") and FORMAT ~= "plain"
 end
 
 local function link_to(path)
@@ -221,6 +223,10 @@ local function link_to(path)
 end
 
 local function picture(text, tex_package)
+  if FORMAT == "plain" then
+    warn("text", "a Typst piece is a picture, which a text file cannot show; it was left out")
+    return nil
+  end
   local source = tex_package and tex_picture(text, tex_package) or (not tex_package and typst_picture(text)) or nil
   if not source then return nil end
   return pandoc.Image({}, link_to(source), "", pandoc.Attr("", {"pdfmd-raw"}))

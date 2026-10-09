@@ -48,6 +48,13 @@ class Settings(unittest.TestCase):
         self.assertEqual(pdfmd_flat.writer("gfm", "fenced", both), "gfm-raw_html")
         self.assertEqual(pdfmd_flat.writer("gfm", "dollars", frozenset()), "gfm-raw_html")     # an older Pandoc
 
+    def test_text_is_the_plain_writer_and_takes_its_own_option(self):
+        self.assertEqual(pdfmd_flat.writer("txt", "dollars", frozenset()), "plain")
+        self.assertTrue(pdfmd_flat.is_flat("txt"))
+        self.assertTrue(pdfmd_flat.is_family("txt"))
+        with self.assertRaisesRegex(pdfmd_flat.FlatError, "pdfmd-options.txt must be a mapping"):
+            pdfmd_flat.settings("no", target="txt")
+
     def test_the_two_targets(self):
         self.assertTrue(pdfmd_flat.is_flat("GFM"))
         self.assertFalse(pdfmd_flat.is_flat("gfm+raw"))
@@ -164,6 +171,117 @@ class Filter(unittest.TestCase):
         out, _ = self.flatten("Inline $a_1^2$ and\n\n$$E = mc^2$$\n", title=False)
         self.assertIn("$a_1^2$", out)
         self.assertIn("E = mc^2", out)
+
+
+TEXT_DOCUMENT = """---
+title: Study
+subtitle: A sub
+author: [A One, B Two]
+date: 2026-10-09
+abstract: Short abstract.
+number-sections: true
+bibliography: refs.bib
+---
+
+# One {#sec:one}
+
+## Sub *emph*
+
+Visit [the site](https://example.org) or [https://x.org](https://x.org) or [top](#sec:one). H~2~O, x^2^ and X~q+z~.
+
+See @fig:a, @tbl:t and [@doe2020].
+
+![A figure](fig.png){#fig:a}
+
+| A | B |
+|---|---|
+| 1 | 2 |
+
+: A table {#tbl:t}
+
+<div class="k">
+
+Raw <b>html</b> and \\textbf{tex}.
+
+</div>
+
+Term
+:   Definition
+"""
+
+
+@needs_pandoc(3, 1, 3)
+class FlatText(unittest.TestCase):
+    """`--to txt`: the same pipeline as flat Markdown, written by Pandoc's plain writer (v3.26.7)."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-flat-txt-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+        self.env = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+
+    def run_pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
+                              encoding="utf-8", cwd=self.directory, env=self.env)
+
+    def write(self, name: str, text: str) -> Path:
+        path = self.directory / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def build(self, *extra: str) -> str:
+        self.write("refs.bib", "@article{doe2020, author={Doe, Jane}, title={A Title}, journal={J}, year={2020}}\n")
+        self.write("doc.md", TEXT_DOCUMENT)
+        result = self.run_pdfmd("doc.md", "--to", "txt", *extra)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return (self.directory / "doc.txt").read_text(encoding="utf-8")
+
+    def test_title_headings_links_captions_and_notation(self):
+        text = self.build()
+        self.assertTrue(text.startswith("Study\n=====\n\nA sub\n\nA One, B Two — 2026-10-09\n\nAbstract. Short abstract.\n"), text)
+        self.assertIn("1 One\n=====\n", text)
+        self.assertIn("1.1 Sub emph\n------------\n", text)
+        self.assertIn("the site <https://example.org>", text)
+        self.assertIn("https://x.org", text)
+        self.assertNotIn("<https://x.org>", text)              # the words are the address
+        self.assertIn("top.", text)                           # a link to a heading is its words
+        self.assertIn("H₂O, x² and X_(q+z).", " ".join(text.split()))
+        self.assertIn("[Figure 1. A figure]", text)
+        self.assertIn("Table 1. A table\n", text)
+        self.assertIn("(Doe 2020)", text)
+        self.assertIn("Raw html and tex.", text)
+        self.assertNotIn("{#", text)
+        self.assertNotIn("**", text)
+        self.assertNotIn("<b>", text)
+
+    def test_scripts_option_and_document_option(self):
+        self.assertIn("H_2O", self.build("--gfm-scripts", "ascii"))
+        self.assertIn("H2O", self.build("--gfm-scripts", "drop"))
+        self.assertIn("H₂O", self.build("--gfm-scripts", "html"))          # nothing to hold <sub> in: unicode
+
+    def test_dash_o_dot_txt_is_flat_text_and_plain_is_pandocs_own(self):
+        self.write("refs.bib", "")
+        self.write("doc.md", "---\ntitle: T\n---\n\nSee [it](https://example.org).\n")
+        self.assertEqual(self.run_pdfmd("doc.md", "-o", "a.txt").returncode, 0)
+        self.assertIn("it <https://example.org>", (self.directory / "a.txt").read_text(encoding="utf-8"))
+        self.assertEqual(self.run_pdfmd("doc.md", "--to", "plain", "-o", "b.txt").returncode, 0)
+        own = (self.directory / "b.txt").read_text(encoding="utf-8")
+        self.assertNotIn("example.org", own)
+        self.assertNotIn("=", own)
+
+    def test_a_text_file_never_replaces_its_source(self):
+        source = self.write("doc.txt", "---\ntitle: T\n---\n\nText.\n")
+        result = self.run_pdfmd("doc.txt", "--to", "txt", "-f", "markdown")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(source.read_text(encoding="utf-8"), "---\ntitle: T\n---\n\nText.\n")
+
+    def test_wrapping_is_pandocs_and_columns_are_honoured(self):
+        self.write("doc.md", "---\ntitle: T\n---\n\n" + "word " * 40 + "\n")
+        self.assertEqual(self.run_pdfmd("doc.md", "--to", "txt").returncode, 0)
+        lines = (self.directory / "doc.txt").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(all(len(line) <= 72 for line in lines))
+        self.assertEqual(self.run_pdfmd("doc.md", "--to", "txt", "--columns=30").returncode, 0)
+        narrow = (self.directory / "doc.txt").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(all(len(line) <= 30 for line in narrow), narrow)
 
 
 @needs_pandoc(3, 1, 3)

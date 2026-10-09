@@ -851,7 +851,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     GitHub anchors, section numbers in the headings, and counts what no Markdown can carry. The output is
     `<name>.gfm.md` beside its source; `--to gfm+raw` is Pandoc's own gfm writer. A Markdown writer never replaces its
     own source. `--keep-source [packed|readable]` ends a Markdown output with its source in one HTML comment
-    (v3.26.4; pdfmd_flat/keep.py), `pdfmd --restore FILE.md` writes it back.
+    (v3.26.4; pdfmd_flat/keep.py), `pdfmd --restore FILE.md` writes it back. `--to txt` (v3.26.7; also `-o x.txt`) is the
+    same build written by Pandoc's plain writer: the title and the headings underlined, `text <url>` for a link,
+    `[Figure 1. Caption]` for a figure, no raw piece left; `--to plain` is Pandoc's own plain writer.
 
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
@@ -1214,7 +1216,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.6"
+PDFMD_VERSION = "3.26.7"
 import argparse
 import csv
 import filecmp
@@ -1991,7 +1993,8 @@ def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
-                    flat_pictures: Path | None = None, preamble: list[Path] | None = None) -> list[str]:
+                    flat_pictures: Path | None = None, preamble: list[Path] | None = None,
+                    flat_text: bool = False) -> list[str]:
     """The filters of pdfmd_lua for non-Markdown pieces: raw.lua when `raw` asks for it (any writer), pdf_images.lua
     when a document names a PDF image (it acts for HTML writers only: a browser cannot show a PDF). Both read the
     picture cache folder and the table from one metadata file written here."""
@@ -2001,7 +2004,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     except ImportError:
         return []
     files = sources if isinstance(sources, list) else [sources]
-    table = (resolve_raw(files[0], metadata_files, flat=flat_pictures is not None)
+    table = (resolve_raw(files[0], metadata_files, flat=flat_pictures is not None or flat_text)
              if raw_filter is not None and files else None)
     pdf_images = (pdf_filter is not None and not auto_disabled(no_auto, "pdfimages")
                   and any(PDF_IMAGE_RE.search(read_text_best_effort(file)) for file in files))
@@ -2051,30 +2054,31 @@ def pandoc_extensions(name: str) -> frozenset[str]:
     return _PANDOC_EXTENSIONS[name]
 
 
-def flat_settings(md_path: Path, metadata_files: list[Path]) -> dict:
+def flat_settings(md_path: Path, metadata_files: list[Path], target: str = "gfm") -> dict:
     try:
         import pdfmd_flat
     except ImportError:
-        raise SystemExit("--to gfm needs the pdfmd_flat package (install pdfmd-cli; a lone copy of pdfmd.py has "
-                         "only Pandoc's own writer: --to gfm+raw)")
+        raise SystemExit(f"--to {target} needs the pdfmd_flat package (install pdfmd-cli; a lone copy of pdfmd.py has "
+                         f"only Pandoc's own writer: --to {'plain' if target == 'txt' else 'gfm+raw'})")
     try:
-        return pdfmd_flat.settings(cascaded_option(md_path, metadata_files, "gfm"), **GFM_CLI)
+        return pdfmd_flat.settings(cascaded_option(md_path, metadata_files, target), target=target, **GFM_CLI)
     except pdfmd_flat.FlatError as error:
         raise SystemExit(f"{display_path(md_path)}: {error}")
 
 
 def flat_writer(target_format: str, settings: dict | None) -> str:
-    """The Pandoc writer of a target: the flat writer for `gfm`, plain `gfm` for `gfm+raw`, else the target itself."""
+    """The Pandoc writer of a target: the flat writer for `gfm`, plain `gfm` for `gfm+raw`, `plain` for `txt`, else the
+    target itself."""
     try:
         import pdfmd_flat
     except ImportError:
-        return "gfm" if target_format == "gfm+raw" else target_format
+        return {"gfm+raw": "gfm", "txt": "plain"}.get(target_format, target_format)
     if not pdfmd_flat.is_family(target_format):
         return target_format
     return pdfmd_flat.writer(target_format, (settings or pdfmd_flat.DEFAULTS)["math"], pandoc_extensions("gfm"))
 
 
-def flat_filter_args(settings: dict) -> list[str]:
+def flat_filter_args(settings: dict, target: str = "gfm") -> list[str]:
     """The arguments that make a build flat: its settings (a metadata file) and pdfmd_lua/flat.lua, which must be last."""
     try:
         import pdfmd_lua
@@ -2082,9 +2086,9 @@ def flat_filter_args(settings: dict) -> list[str]:
     except ImportError:
         filter_path = None
     if filter_path is None:
-        raise SystemExit("--to gfm needs pdfmd_lua/flat.lua (install pdfmd-cli; a lone copy of pdfmd.py has only "
-                         "Pandoc's own writer: --to gfm+raw)")
-    config = {"pdfmd-flat": {"scripts": settings["scripts"], "title": bool(settings["title"])}}
+        raise SystemExit(f"--to {target} needs pdfmd_lua/flat.lua (install pdfmd-cli; a lone copy of pdfmd.py has only "
+                         f"Pandoc's own writer: --to {'plain' if target == 'txt' else 'gfm+raw'})")
+    config = {"pdfmd-flat": {"scripts": settings["scripts"], "title": bool(settings["title"]), "target": target}}
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     map_file = cache_root() / "flat" / f"{digest}.yaml"
     if not map_file.is_file():
@@ -10581,7 +10585,7 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 #   math: mathml|mathjax|katex|webtex|plain
 #   css: file.css | [..]   --css, relative to the document
 HTML_TARGETS = frozenset({"html", "html4", "html5"})
-DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "plain", "md": "markdown", "htm": "html",
+DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "txt", "text": "txt", "md": "markdown", "htm": "html",
                           "typ": "typst", "markdown": "markdown"}
 # The math method, in whichever spelling the installed Pandoc has -- three
 # generations: `--math-method=X` (3.11, which deprecates the others and warns),
@@ -12323,7 +12327,7 @@ FORMAT_EXTENSION = {
     "html": ".html", "html4": ".html", "html5": ".html", "chunkedhtml": ".html",
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
-    "plain": ".txt",
+    "plain": ".txt", "txt": ".txt",
     "markdown": ".md", "gfm": ".md", "gfm+raw": ".md", "commonmark": ".md", "commonmark_x": ".md",
     "docx": ".docx", "odt": ".odt", "pptx": ".pptx",
     "epub": ".epub", "epub2": ".epub", "epub3": ".epub",
@@ -12347,7 +12351,7 @@ EXTENSION_FORMAT = {
     ".html": "html", ".htm": "html",
     ".tex": "latex",
     ".typ": "typst",
-    ".txt": "plain",
+    ".txt": "txt",
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf",
@@ -13884,8 +13888,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         preamble_files = [*(preamble_files or []), *label_scan.headers]
         part_markers = part_markers or bool(parts_inputs and label_scan.markers)
 
-    flat_target = target_format == "gfm"
-    flat = flat_settings(md_path, metadata_files) if flat_target else None
+    flat_markdown = target_format == "gfm"             # flat Markdown: pictures beside the output, relative links, one line a paragraph
+    flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
+    flat = flat_settings(md_path, metadata_files, target_format) if flat_target else None
     with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title") or flat_target,
                                override=source_override) \
             as (title_source, title_shifted), \
@@ -13981,11 +13986,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     office_reference(md_path, metadata_files, variables, target_format, output, pandoc_options,
                                      no_auto, note) as office_arguments:
                 source, *prepared_metadata = prepared
-                writer = flat_writer(target_format, flat) if target_format in ("gfm", "gfm+raw") else target_format
+                writer = flat_writer(target_format, flat) if target_format in ("gfm", "gfm+raw", "txt") else target_format
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", writer]
-                if flat_target and not any(option.startswith("--wrap") for option in pandoc_options):
+                if flat_markdown and not any(option.startswith("--wrap") for option in pandoc_options):
                     cmd.append("--wrap=none")      # a paragraph is one line: a viewer wraps it, a diff shows what changed
-                if (flat_target and output.parent.resolve() != md_path.parent.resolve()
+                if (flat_markdown and output.parent.resolve() != md_path.parent.resolve()
                         and any(RELATIVE_IMAGE_RE.search(read_text_best_effort(item)) for item in [md_path, *parts_inputs])):
                     note("FLAT", f"{md_path}: the images keep the paths the document wrote, relative to ITS folder; the "
                                  f"output is in {display_path(output.parent)}, so those links point from there "
@@ -14062,8 +14067,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
-                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_target else None,
-                                       preamble=list(preamble_files or []) if flat_target else None)
+                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
+                                       preamble=list(preamble_files or []) if flat_markdown else None,
+                                       flat_text=target_format == "txt")
                 cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                 cmd += select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
@@ -14095,13 +14101,13 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
                 if flat_target:
-                    cmd += flat_filter_args(flat)       # last: it sees what every other filter made
+                    cmd += flat_filter_args(flat, target_format)       # last: it sees what every other filter made
                 if office_arguments.filter_arguments:
                     result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                 else:
                     log_cmd(cmd, pandoc_cwd, verbose)
                     result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
-                                            env=tex_search_env(md_path.parent, pandoc_cwd) if flat_target else None)
+                                            env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
                 office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
@@ -17196,10 +17202,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "(families: tex, typst, html, office, md; syntaxes: tex, html, typst, office; a syntax "
                              "left out is dropped, the family's own included). Repeat for more families")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
-                        help="with --to gfm (flat Markdown): how subscripts and superscripts are written -- unicode "
+                        help="with --to gfm (flat Markdown) or --to txt: how subscripts and superscripts are written -- unicode "
                              "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "
-                             "(<sub>/<sup>), drop (the plain text) or ascii (`_2`, `^(2+)`). Also "
-                             "`pdfmd-options: {gfm: {scripts: ...}}`")
+                             "(<sub>/<sup>; unicode in a text file), drop (the plain text) or ascii (`_2`, `^(2+)`). Also "
+                             "`pdfmd-options: {gfm: {scripts: ...}}` (`txt:` for text)")
     parser.add_argument("--gfm-math", choices=("dollars", "fenced"), default=None, metavar="MODE",
                         help="with --to gfm: math as `$..$` / `$$..$$` (default; GitHub, VS Code and Obsidian read it) "
                              "or as ```math fences (GitHub's older form). Also `pdfmd-options: {gfm: {math: ...}}`")

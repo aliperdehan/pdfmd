@@ -447,6 +447,24 @@ you the file was edited since. Comments are stripped from the kept copy unless `
 gets a warning, since GitHub stops showing a Markdown file that large. It works for every Markdown output: `--to gfm`,
 `gfm+raw`, `markdown`, `commonmark`.
 
+### Plain text: `--to txt`
+
+```sh
+pdfmd report --to txt                # report.txt; the same as -o report.txt
+pdfmd report --to txt --columns=100  # Pandoc's wrapping, 72 columns unless you say otherwise
+pdfmd report --to plain              # Pandoc's own plain writer, as it was
+```
+
+`--to txt` is the flat build of `--to gfm` written by Pandoc's plain writer: includes, parts, `::: {.csv}` tables,
+pandoc-crossref, citations, raw HTML and LaTeX and your filters all run first. What a text file shows: the title, the
+author line and the abstract, then headings underlined with `=` (level 1) and `-` (level 2) and numbered when the
+document numbers its sections; `Table 1. caption` above a table and `[Figure 1. caption]` for a figure; a link as
+`words <https://address>` (just the words when they are the address, or the link points into the document); no `**` or
+`_`; Unicode sub/superscripts (`H₂O`, `x²`, else `_(..)` / `^(..)`; `--gfm-scripts drop` or `ascii` change that, `html`
+means `unicode` here); math as Pandoc's plain writer sets it (`E = mc²`). A picture cannot be shown: its caption stands
+for it, and a Typst or LaTeX picture piece is left out with a `WARN`. `pdfmd-options: {txt: {scripts: unicode, title:
+true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc's own plain writer; that is `--to plain`.
+
 ### Word and OpenDocument output
 
 Plain Pandoc ignores `papersize`, `geometry`, `mainfont` and `fontsize` when it writes `.docx`

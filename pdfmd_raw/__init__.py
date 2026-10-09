@@ -9,7 +9,7 @@ format it is writing and drops the rest. This turns the choice into a table, per
         typst:  [typst, html, tex]     # Typst builds
         html:   [html, tex, typst]     # HTML, EPUB, PDF through weasyprint and the other HTML engines
         office: [office, html]         # Word and OpenDocument (and PDF through soffice)
-        md:     [html, tex, typst]     # flat Markdown (--to gfm); it takes every syntax unless this says otherwise
+        md:     [html, tex, typst]     # flat Markdown and text (--to gfm, --to txt); every syntax unless this says otherwise
 
 A family takes the syntaxes it lists: its own stay as they are, the others are carried over by pdfmd_lua/raw.lua (HTML and
 LaTeX read by Pandoc into the target's own elements, Typst drawn as a vector picture); a syntax left out is dropped,
@@ -23,7 +23,7 @@ FAMILIES = ("tex", "typst", "html", "office", "md")
 SYNTAXES = ("tex", "html", "typst", "office")
 FAMILY_ALIASES = {"latex": "tex", "pdf-tex": "tex", "web": "html", "epub": "html", "word": "office", "docx": "office",
                   "odt": "office", "opendocument": "office", "markdown": "md", "gfm": "md", "flat": "md",
-                  "commonmark": "md"}
+                  "commonmark": "md", "txt": "md", "text": "md", "plain": "md"}
 SYNTAX_ALIASES = {"latex": "tex", "word": "office", "docx": "office", "odt": "office", "openxml": "office",
                   "opendocument": "office", "xml": "office"}
 ON = {"all", "on", "yes", "true", "everything"}

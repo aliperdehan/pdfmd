@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.7 — 2026-10-09
+
+Pre-edit state: commit `8f8a3bf` (v3.26.6).
+
+### Changed
+
+- `--to txt` (and `-o x.txt`, `default-output: txt`) is flat text: the flat build of `--to gfm` (includes, parts, `.csv`
+  tables, pandoc-crossref, citations, raw HTML and LaTeX, the document's filters, then `pdfmd_lua/flat.lua`) written by
+  Pandoc's plain writer. Title, subtitle, author line and abstract are written; headings are underlined (`=`, `-`) and
+  numbered with `number-sections`; a table caption is `Table 1. text` above the table, a figure is `[Figure 1. text]`;
+  a link is `words <address>` (the words alone when they are the address or point into the document); no emphasis marks;
+  Unicode scripts. Wrapping is Pandoc's (72 columns, `--columns`). The raw filter has its `md` family for text too but
+  draws no picture (a Typst piece is left out with a `WARN`). Settings: `--gfm-scripts` (`html` means `unicode`),
+  `pdfmd-options: {txt: {scripts, title}}`.
+- Until now `--to txt` was Pandoc's plain writer, which drops links, the title and captions' numbers and leaves
+  `{#tbl:x}` in captions. Pandoc's own writer is `--to plain`, as `--to gfm+raw` is for gfm.
+
 ## v3.26.6 — 2026-10-09
 
 Pre-edit state: commit `a9cf06d` (v3.26.5).

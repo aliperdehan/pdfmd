@@ -18,12 +18,20 @@
 --   * raw pieces that no writer could carry (a raw Word XML, a LaTeX macro nothing read) are left out and counted in a
 --     warning, not dropped silently.
 --
--- Configuration arrives as metadata written by pdfmd: `pdfmd-flat` = {scripts = "unicode|html|drop|ascii", title = true|false}.
+-- `--to txt` (v3.26.7) runs the same filter with Pandoc's plain writer (FORMAT `plain`), in text mode: a title and headings
+-- underlined with = and -, no emphasis marks, `text <url>` for a link, a figure as `[Figure 1. Caption]`, captions in
+-- plain words above a table, and no Markdown (nor HTML) left to write: tables, definition lists and line blocks are the
+-- plain writer's own.
+--
+-- Configuration arrives as metadata written by pdfmd: `pdfmd-flat` = {scripts = "unicode|html|drop|ascii", title = true|false,
+-- target = "gfm|txt"}.
 
-if not FORMAT:match("^gfm") and not FORMAT:match("^commonmark") and not FORMAT:match("^markdown") then return {} end
+local text_format = FORMAT == "plain"
+if not text_format and not FORMAT:match("^gfm") and not FORMAT:match("^commonmark") and not FORMAT:match("^markdown") then return {} end
 
 local config = {scripts = "unicode", title = true}
 local flat = false
+local label = text_format and "txt" or "gfm"      -- how the notes name the output
 
 local function truthy(value)
   if value == nil then return false end
@@ -37,6 +45,7 @@ local function read_config(meta)
   if type(setting) ~= "table" then return end
   flat = true
   if setting.scripts then config.scripts = pandoc.utils.stringify(setting.scripts):lower() end
+  if text_format and config.scripts == "html" then config.scripts = "unicode" end     -- nothing to hold <sub> in a text file
   if setting.title ~= nil then config.title = truthy(setting.title) end
 end
 
@@ -95,8 +104,10 @@ local function script(element, marker, table_, tag)
     if unicode then return pandoc.Str(unicode) end
   end
   if text then
-    if utf8.len(text) == 1 and text:match("^[%w]$") then return pandoc.RawInline("markdown", marker .. text) end
-    return pandoc.RawInline("markdown", marker .. "(" .. text .. ")")
+    -- a Str in a text file; in Markdown a raw piece, so that the writer does not escape the _ or ^
+    local function written(piece) return text_format and pandoc.Str(piece) or pandoc.RawInline("markdown", piece) end
+    if utf8.len(text) == 1 and text:match("^[%w]$") then return written(marker .. text) end
+    return written(marker .. "(" .. text .. ")")
   end
   return content            -- emphasis or math inside a script: the plain content
 end
@@ -177,6 +188,17 @@ end
 
 local function link(element)
   local target = element.target
+  if text_format then
+    -- a text file has no links: the address follows the words, unless the words are the address
+    if target:sub(1, 1) == "#" or target == "" then return element.content end
+    local shown = pandoc.utils.stringify(element.content)
+    if shown == target or shown == target:gsub("^mailto:", "") then return element.content end
+    local out = pandoc.Inlines{}
+    out:extend(element.content)
+    out:insert(pandoc.Space())
+    out:insert(pandoc.Str("<" .. target .. ">"))
+    return out
+  end
   if target:sub(1, 1) ~= "#" then
     element.attr = pandoc.Attr()
     return element
@@ -188,6 +210,18 @@ local function link(element)
     return element
   end
   return element.content                 -- the anchor is gone (a figure, a table, a reference entry): the text stays
+end
+
+-- a text file's headings: the words, then a line of = (level 1) or - (level 2) as long as they are
+local function underlined_heading(header)
+  local words = pandoc.utils.stringify(header)
+  local rule = header.level == 1 and "=" or header.level == 2 and "-" or nil
+  local inlines = pandoc.Inlines(header.content)
+  if rule and words ~= "" then
+    inlines:insert(pandoc.LineBreak())
+    inlines:insert(pandoc.Str(rule:rep(utf8.len(words) or #words)))
+  end
+  return pandoc.Blocks{pandoc.Para(inlines)}
 end
 
 -- captions -------------------------------------------------------------------------------------------------------------
@@ -227,13 +261,13 @@ end
 local function caption_paragraph(caption)
   local inlines = caption_inlines(caption)
   if #inlines == 0 then return nil end
-  local label, rest = split_caption(inlines)
-  if label then
-    local out = pandoc.Inlines{pandoc.Strong(label)}
+  local number, rest = split_caption(inlines)
+  if number then
+    local out = text_format and pandoc.Inlines(number) or pandoc.Inlines{pandoc.Strong(number)}
     if #rest > 0 then out:insert(pandoc.Space()) out:extend(rest) end
     return pandoc.Para(out)
   end
-  return pandoc.Para{pandoc.Emph(inlines)}
+  return pandoc.Para(text_format and inlines or pandoc.Inlines{pandoc.Emph(inlines)})
 end
 
 -- tables ---------------------------------------------------------------------------------------------------------------
@@ -268,7 +302,7 @@ local function convert_table(tbl)
   tbl.attr = pandoc.Attr()
   local out = pandoc.Blocks{}
   if caption then out:insert(caption) end
-  if simple_table(tbl) then
+  if text_format or simple_table(tbl) then
     out:insert(tbl)
   else
     html_tables = html_tables + 1
@@ -279,6 +313,22 @@ end
 
 -- figures --------------------------------------------------------------------------------------------------------------
 local function convert_figure(figure)
+  if text_format then
+    -- a picture cannot be shown: its caption stands for it, in brackets
+    local caption = caption_paragraph(figure.caption)
+    local out = pandoc.Blocks{}
+    if caption then
+      local inlines = pandoc.Inlines{pandoc.Str("[")}
+      inlines:extend(caption.content)
+      inlines:insert(pandoc.Str("]"))
+      out:insert(pandoc.Para(inlines))
+    else
+      for _, block in ipairs(figure.content) do
+        out:insert(block.t == "Plain" and pandoc.Para(block.content) or block)
+      end
+    end
+    return out
+  end
   local out = pandoc.Blocks{}
   for _, block in ipairs(figure.content) do
     if block.t == "Plain" then out:insert(pandoc.Para(block.content)) else out:insert(block) end
@@ -319,18 +369,20 @@ end
 local function title_block(meta)
   local out = pandoc.Blocks{}
   local title = meta_inlines(meta.title)
-  if title then out:insert(pandoc.Header(1, title)) end
+  if title then
+    if text_format then out:extend(underlined_heading(pandoc.Header(1, title))) else out:insert(pandoc.Header(1, title)) end
+  end
   local subtitle = meta_inlines(meta.subtitle)
-  if subtitle then out:insert(pandoc.Para{pandoc.Strong(subtitle)}) end
+  if subtitle then out:insert(pandoc.Para(text_format and subtitle or pandoc.Inlines{pandoc.Strong(subtitle)})) end
   local line = table.concat(author_names(meta.author), ", ")
   local date = meta.date and pandoc.utils.stringify(meta.date) or ""
   if line ~= "" and date ~= "" then line = line .. " — " .. date elseif date ~= "" then line = date end
-  if line ~= "" then out:insert(pandoc.Para{pandoc.Emph{pandoc.Str(line)}}) end
+  if line ~= "" then out:insert(pandoc.Para{text_format and pandoc.Str(line) or pandoc.Emph{pandoc.Str(line)}}) end
   local abstract = meta.abstract
   if abstract then
     local inlines = meta_inlines(abstract)
     if inlines then
-      local text = pandoc.Inlines{pandoc.Strong{pandoc.Str("Abstract.")}, pandoc.Space()}
+      local text = pandoc.Inlines{text_format and pandoc.Str("Abstract.") or pandoc.Strong{pandoc.Str("Abstract.")}, pandoc.Space()}
       text:extend(inlines)
       out:insert(pandoc.Para(text))
     end
@@ -363,12 +415,13 @@ local function report_dropped()
   table.sort(names)
   for _, name in ipairs(names) do
     local count = dropped[name]
-    io.stderr:write(string.format("WARN  gfm: %d raw %s piece%s (e.g. %s) %s no plain-Markdown form and %s left out\n",
-      count, name, count == 1 and "" or "s", samples[name], count == 1 and "has" or "have", count == 1 and "was" or "were"))
+    io.stderr:write(string.format("WARN  %s: %d raw %s piece%s (e.g. %s) %s no plain-%s form and %s left out\n",
+      label, count, name, count == 1 and "" or "s", samples[name], count == 1 and "has" or "have",
+      text_format and "text" or "Markdown", count == 1 and "was" or "were"))
   end
   if html_tables > 0 then
-    io.stderr:write(string.format("NOTE  gfm: %d table%s too rich for a Markdown table (spans, several header rows, block cells) "
-      .. "%s written as an HTML table\n", html_tables, html_tables == 1 and "" or "s", html_tables == 1 and "was" or "were"))
+    io.stderr:write(string.format("NOTE  %s: %d table%s too rich for a Markdown table (spans, several header rows, block cells) "
+      .. "%s written as an HTML table\n", label, html_tables, html_tables == 1 and "" or "s", html_tables == 1 and "was" or "were"))
   end
 end
 
@@ -432,6 +485,11 @@ local block_pass = {
   LineBlock = line_block,
   RawBlock = note_raw,
 }
+if text_format then       -- the plain writer has its own definition lists, line blocks and tables
+  block_pass.DefinitionList = nil
+  block_pass.LineBlock = nil
+  block_pass.Header = underlined_heading
+end
 
 local function flatten(doc)
   read_config(doc.meta)
