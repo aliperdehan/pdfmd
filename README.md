@@ -349,6 +349,39 @@ letters, no tones, vowels left out where the script leaves them out. Names that
 romanize alike (homophones) are listed as ambiguous, never picked between. The
 same spelling rules find a section by its heading (`doc#tyche`).
 
+### Check a document before you build it
+
+```sh
+pdfmd report --check                  # read report.md (a scaffold and its parts too) and list what is wrong; builds nothing
+pdfmd a.md b.md --check               # several files, one report each
+pdfmd report --check --strict         # warnings fail too (exit 1), for CI
+pdfmd report --check --check-ignore heading-jump,link-missing
+```
+
+`--check` reads the source, with no Pandoc and no LaTeX, and prints compiler-style lines
+(`report.md:12: error: image not found: figs/a.png  [image-missing]`) that an editor can jump to, then
+`CHECK  report.md: 1 error(s), 2 warning(s)`. It exits 1 on an error, and on a warning too with `--strict`. It finds:
+
+| check | |
+|---|---|
+| `image-missing`, `file-missing`, `link-missing` | an image (`![](..)`, `<img>`, `\includegraphics`), a `file=` of a `.csv` div or a link to a local file that is not there |
+| `anchor-missing` | `[x](#methods)` with no heading or `{#id}` of that name (the ids Pandoc and GitHub make from a heading count) |
+| `id-duplicate`, `crossref-missing`, `ref-missing` | the same `{#id}` twice; a `@fig:x`, `@tbl:x`, `@eq:x`, `@sec:x`, `@lst:x` or `\ref{x}` nothing defines |
+| `cite-missing`, `cite-no-bibliography`, `bibliography-missing` | a `@key` the `.bib`, CSL JSON or `references:` lacks (with a "did you mean"), citations with no bibliography set, a bibliography file that is missing |
+| `footnote-missing`, `footnote-unused` | `[^1]` with no text, a `[^1]:` nobody uses |
+| `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
+| `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
+| `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |
+
+Code, comments, math and URLs are not read, so `@decorator` in a code block or `me@x.org` is not a citation. A
+document in parts is checked as one: a link to `#methods` in the scaffold is found in a part. A file with no front
+matter is taken for a fragment and its citations are not held against a missing bibliography, and neither are those of
+a document with a Lua filter or `citation-engine` (something else may do the citing). A part checked on its own cannot
+see the other parts' labels, so check the scaffold, not a part, to judge links across parts.
+Leave a check out for the project with `pdfmd-options: {check-ignore: [heading-jump]}` (a document, a metadata file or
+the config), or on one line with `<!-- pdfmd-check: ignore image-missing -->` on it or on the line above. `pdfmd --check`
+is for Markdown; the build's own `WARN` and `--strict` still catch what only a build can see.
+
 ### A small editor
 
 ```sh
@@ -364,7 +397,7 @@ for the build, and a name that does not exist yet starts a new file. It is delib
 
 ### In VS Code
 
-`pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, extract tables; Terminal > Run
+`pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, check, extract tables; Terminal > Run
 Build Task). The [`vscode/`](https://github.com/aliperdehan/pdfmd/tree/main/vscode) folder of the repository is a small
 extension over the same command line: build (`Cmd/Ctrl+Alt+B`), build and open, build as Word/HTML/Typst/slides, extract
 tables (all, or chosen ones), file history, compare and restore, restore the source a PDF carries (right-click it). Every

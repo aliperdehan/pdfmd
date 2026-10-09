@@ -95,7 +95,11 @@ class VsCode(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             target = Path(folder) / ".vscode" / "tasks.json"
             data = json.loads(re.sub(r"^\s*//.*\n", "", target.read_text(encoding="utf-8"), flags=re.M))
-            self.assertIn("pdfmd: build", [task["label"] for task in data["tasks"]])
+            labels = [task["label"] for task in data["tasks"]]
+            self.assertIn("pdfmd: build", labels)
+            matcher = next(task for task in data["tasks"] if task["label"] == "pdfmd: check")["problemMatcher"]["pattern"]
+            found = re.match(matcher["regexp"], "doc.md:7: error: image not found: a.png  [image-missing]")
+            self.assertEqual(found.groups(), ("doc.md", "7", "error", "image not found: a.png  [image-missing]"))
             target.write_text("mine", encoding="utf-8")
             second = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--init-vscode"], cwd=folder,
                                     capture_output=True, text=True, env=env)

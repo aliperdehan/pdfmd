@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.15 — 2026-10-09
+
+Pre-edit state: commit `af34059` (v3.26.14).
+
+### Added
+
+- `pdfmd FILE --check`: a linter that reads a Markdown document (a scaffold and its parts as one) and builds nothing. It
+  prints compiler-style lines (`doc.md:12: error: image not found: a.png  [image-missing]`) and a `CHECK` summary, and exits 1
+  on an error (on a warning too with `--strict`). Checks: missing images, `file=` of csv divs and local links;
+  `#anchor` links to no heading or `{#id}` (Pandoc's and GitHub's heading ids both count, a duplicate heading's `-1`
+  too); duplicate `{#id}`; `@fig:`/`@tbl:`/`@eq:`/`@sec:`/`@lst:` references and `\ref{}` that nothing defines; citations the
+  bibliography (`.bib`, CSL JSON, YAML, or `references:`, from the document or a metadata file) lacks, with a "did you
+  mean", citations with no bibliography, a bibliography file that is missing; footnotes without text or unused; a skipped
+  heading level, `#Heading` without a space, an empty heading; a code fence, `<!--`, `:::` div or `$$` never closed; YAML
+  front matter that does not parse or never closes, a key set twice. Code, comments, math and URLs are masked first.
+  `--check-ignore CODE[,CODE]`, `pdfmd-options: {check-ignore: [...]}` and `<!-- pdfmd-check: ignore CODE -->` turn checks off.
+- `pdfmd --init-vscode` adds a "pdfmd: check" task whose problem matcher puts the findings in VS Code's Problems panel.
+- New package `pdfmd_check` (plain text analysis; `pdfmd.py` finds the files and the bibliography keys).
+- Run over the author's course notes and the nulabreport snippets it found a real typo (`notes_l2.jpf`) and no false alarm
+  in the docs of this repository.
+
 ## v3.26.14 — 2026-10-09
 
 Pre-edit state: commit `cc01974` (v3.26.13).

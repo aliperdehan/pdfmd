@@ -866,6 +866,13 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;
     only `--strict` skips a new or edited filter outside a trusted folder.
 
+    `pdfmd FILE --check` (v3.26.15) reads a Markdown document (a scaffold and its parts as one) and reports, without
+    building, a missing image or csv file, a link or #anchor to nowhere, a duplicate {#id}, an undefined @fig:x or
+    \\ref, a citation the bibliography lacks, a footnote without text, a skipped heading level, a fence or comment
+    never closed, front matter that does not parse. The reading is in the pdfmd_check package; the exit code is 1 on an
+    error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
+    `<!-- pdfmd-check: ignore CODE -->` turn checks off.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1227,7 +1234,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.14"
+PDFMD_VERSION = "3.26.15"
 import argparse
 import csv
 import filecmp
@@ -4923,6 +4930,160 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
             print(done.stdout.rstrip())
             sys.stderr.write(done.stderr)
             status = max(status, done.returncode)
+    return status
+
+
+# --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------
+#
+# pdfmd_check/lint.py does the reading (plain text, no Pandoc); what needs pdfmd's own discovery is here: which
+# files make up the document (a scaffold and its parts), which metadata files apply, and the keys of the
+# bibliography the document names.
+
+def check_module():
+    try:
+        import pdfmd_check
+    except ImportError:
+        return None
+    return pdfmd_check
+
+
+def bibliography_names(value) -> list[str]:
+    return [str(item) for item in (value if isinstance(value, list) else [value]) if item and not isinstance(item, (dict, bool))]
+
+
+def bibliography_file_keys(path: Path) -> set[str] | None:
+    """The citation keys a bibliography file holds, lower-cased; None for a kind pdfmd does not read."""
+    suffix = path.suffix.lower()
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return None
+    if suffix in (".bib", ".bibtex", ".biblatex"):
+        return {item["key"].lower() for item in parse_bibliography(text)[0] if item["key"]}
+    if suffix == ".json":
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return None
+        data = data.get("items", data) if isinstance(data, dict) else data
+        return {str(item["id"]).lower() for item in data if isinstance(item, dict) and "id" in item} \
+            if isinstance(data, list) else None
+    if suffix in (".yaml", ".yml") and yaml is not None:
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None
+        data = data.get("references", []) if isinstance(data, dict) else data
+        return {str(item["id"]).lower() for item in data if isinstance(item, dict) and "id" in item} \
+            if isinstance(data, list) else None
+    return None
+
+
+def check_bibliography(document: Path, metadata_files: list[Path], variables: list[str]):
+    """(the Bibliography the document names, [(file name, label of where it was named)] for the ones not there)."""
+    check = check_module()
+    metadata = effective_metadata(document, metadata_files, variables)
+    names = bibliography_names(metadata.get("bibliography"))
+    references = metadata.get("references")
+    keys: set[str] = set()
+    complete = True
+    if isinstance(references, list):
+        keys.update(str(item["id"]).lower() for item in references if isinstance(item, dict) and "id" in item)
+    folders = [*accessory_directories(document.parent, document.stem), Path.cwd()]
+    missing: list[str] = []
+    for name in names:
+        found = next((folder / name for folder in folders if (folder / name).is_file()), None)
+        if found is None and Path(name).is_absolute() and Path(name).is_file():
+            found = Path(name)
+        if found is None:
+            missing.append(name)
+            continue
+        file_keys = bibliography_file_keys(found)
+        if file_keys is None:
+            complete = False                       # a kind of file pdfmd cannot list: report no key as missing
+        else:
+            keys.update(file_keys)
+    declared = bool(names) or isinstance(references, list) or bool(metadata.get("csl-json"))
+    if not declared and (not metadata and not metadata_files                      # a fragment: its metadata is elsewhere
+                         or find_lua_filters(document, metadata_files)           # a filter may do the citing
+                         or first_pdfmd_option(document, metadata_files, "citation-engine") is not None):
+        return None, missing
+    return check.Bibliography(declared, frozenset(keys), complete and not missing), missing
+
+
+def check_documents(target: Path, args) -> tuple[list[Path], Path]:
+    """(the files `--check` reads for ``target``, the document's main file): the scaffold and its parts when
+    it is one."""
+    document = find_markdown(target)
+    if document.suffix.lower() not in (".md", ".markdown"):
+        raise FileNotFoundError(f"--check reads Markdown files; {display_path(document)} is not one")
+    files = [document]
+    metadata_files = scaffold_metadata_files(document, args.metadata_file)
+    setting = parts_setting(document, metadata_files)
+    if setting is not None and not auto_disabled(effective_no_auto(document, args.no_auto), "parts"):
+        directory = parts_directory(document, setting)
+        if directory is not None:
+            files += collect_parts(directory)
+    return files, document
+
+
+def check_command(args) -> int:
+    """`pdfmd --check [FILE...]`: what would go wrong or print wrongly in the build, found by reading the source."""
+    check = check_module()
+    if check is None:
+        print("--check needs the pdfmd_check package next to pdfmd.py", file=sys.stderr)
+        return 1
+    status = 0
+    for target in (args.path or [Path.cwd()]):
+        try:
+            files, document = check_documents(target, args)
+        except (FileNotFoundError, SystemExit) as error:
+            print(str(error), file=sys.stderr)
+            status = 1
+            continue
+        metadata_files = scaffold_metadata_files(document, args.metadata_file)
+        try:
+            ignore = check.parse_ignore(args.check_ignore) | check.parse_ignore(
+                first_pdfmd_option(document, metadata_files, "check-ignore"))
+        except ValueError as error:
+            print(f"{display_path(document)}: {error}", file=sys.stderr)
+            status = 1
+            continue
+        bibliography, missing = check_bibliography(document, metadata_files, args.variable or [])
+        sources = []
+        for path in files:
+            try:
+                sources.append(check.Source(display_path(path), path.parent, path.read_text(encoding="utf-8-sig")))
+            except (OSError, UnicodeDecodeError) as error:
+                print(f"{display_path(path)}: cannot read it ({error})", file=sys.stderr)
+                status = 1
+        folders = [folder for folder in accessory_directories(document.parent, document.stem)[1:]]
+        problems = check.lint(sources, bibliography, ignore, folders)
+        for name in missing:
+            if "bibliography-missing" in ignore:
+                continue
+            line, label = 0, sources[0].label if sources else display_path(document)
+            for source in sources:
+                spot = next((number for number, text in enumerate(source.text.split("\n"), 1) if name in text), 0)
+                if spot:
+                    line, label = spot, source.label
+                    break
+            problems.insert(0, check.Problem(label, line, "bibliography-missing", f"bibliography file not found: {name}"))
+        errors = sum(problem.severity == "error" for problem in problems)
+        warnings = len(problems) - errors
+        for problem in problems:
+            place = f"{problem.file}:{problem.line}" if problem.line else problem.file
+            print(f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
+        name = display_path(document) + (f" and {len(files) - 1} part(s)" if len(files) > 1 else "")
+        if not problems:
+            print(f"CHECK  {name}: no problems")
+        else:
+            counts = ", ".join(part for part in (f"{errors} error(s)" if errors else "",
+                                                 f"{warnings} warning(s)" if warnings else "") if part)
+            print(f"CHECK  {name}: {counts}")
+        strict = resolve_strict(document, metadata_files)
+        if errors or (warnings and strict):
+            status = 1
     return status
 
 
@@ -8806,6 +8967,18 @@ VSCODE_TASKS = """{
       "isBackground": true,
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "pdfmd: check",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["--check", "${file}"],
+      "presentation": {"reveal": "never", "panel": "shared"},
+      "problemMatcher": {
+        "owner": "pdfmd-check",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {"regexp": "^(.+?):(\\\\d+): (error|warning): (.*)$", "file": 1, "line": 2, "severity": 3, "message": 4}
+      }
     },
     {
       "label": "pdfmd: extract tables",
@@ -17697,6 +17870,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
+    parser.add_argument("--check", action="store_true",
+                        help="read FILE (a scaffold and its parts too) and report what would go wrong or print wrongly, "
+                             "without building: a missing image or csv file, a link or #anchor to nowhere, a duplicate "
+                             "{#id}, a @fig:x or \\ref{x} nothing defines, a citation the bibliography lacks, a "
+                             "footnote with no text, a skipped heading level, a code fence or <!-- never closed, front "
+                             "matter that does not parse. Exit 1 on an error (also on a warning with --strict)")
+    parser.add_argument("--check-ignore", action="append", metavar="CODE[,CODE]",
+                        help="with --check: leave out these checks (also `pdfmd-options: {check-ignore: [heading-jump]}`; "
+                             "one line: `<!-- pdfmd-check: ignore CODE -->` on it or the line above)")
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
@@ -18201,6 +18383,10 @@ def main() -> None:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))
+    if args.check_ignore and not args.check:
+        raise SystemExit("--check-ignore goes with --check: pdfmd --check --check-ignore heading-jump")
+    if args.check:
+        raise SystemExit(check_command(args))
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
     if args.extract_tables or args.expand_tables or args.extract_inline_csv:

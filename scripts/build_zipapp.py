@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGES = ("pdfmd_direct", "pdfmd_flat", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_office", "pdfmd_setup",
+PACKAGES = ("pdfmd_check", "pdfmd_direct", "pdfmd_flat", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_office", "pdfmd_setup",
             "pdfmd_tables", "pdfmd_unicode")
 DEPENDENCIES = ("yaml", "pypdf")
 SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}

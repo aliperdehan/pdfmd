@@ -686,7 +686,7 @@ pdfmd --edit lecture -e lualatex       # options given beside it are used for th
 ### 13.2 VS Code
 
 ```sh
-pdfmd --init-vscode         # .vscode/tasks.json: build, build and open, watch, extract tables (Cmd/Ctrl+Shift+B)
+pdfmd --init-vscode         # .vscode/tasks.json: build, build and open, watch, check, extract tables (Cmd/Ctrl+Shift+B)
 ```
 
 The `vscode/` folder of the repository is an extension over the same command line (build, build as ..., extract tables,
@@ -749,11 +749,14 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
    every installed engine, to find one that is installed but cannot make a PDF (a missing LaTeX package, a broken font).
 5. **`pdfmd doc --stop-at tex`** (or `--assemble-only`) shows what is handed to the engine.
 6. **`pdfmd --clear-cache`** starts over.
-7. **A table or section will not be found?** `pdfmd doc --list-parts`.
-8. **Which engine built it?** The closing line names it: `OK    doc.md  (typst; lualatex failed)` means LaTeX failed
+7. **`pdfmd doc --check`** reads the source without building and lists a missing image, a link or `#anchor` to nowhere,
+   a duplicate `{#id}`, a `@fig:x` or `\ref{x}` nothing defines, a citation the bibliography lacks, a skipped heading
+   level, a fence or `<!--` that is never closed ([README](../README.md#check-a-document-before-you-build-it)).
+8. **A table or section will not be found?** `pdfmd doc --list-parts`.
+9. **Which engine built it?** The closing line names it: `OK    doc.md  (typst; lualatex failed)` means LaTeX failed
    and Typst made the file. `pdfmd doc --strict` turns that, and any other warning (an image or citation that was not
    found, an undefined reference), into a failed build with exit code 1, for a script or CI; the output is kept.
-9. **A build changed after an update?** `pdfmd --history doc.md` and `--history-diff` compare the source; the
+10. **A build changed after an update?** `pdfmd --history doc.md` and `--history-diff` compare the source; the
    CHANGELOG lists what each version changed.
 
 | Symptom | Likely cause | Try |
@@ -765,6 +768,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | boxes instead of letters | no installed font draws them | `pdfmd --check-fonts doc.md`, `pdfmd --install fonts` |
 | `H~2~O` or `x^2^` printed as typed | the file has no front matter, so it is read as gfm (a `NOTE` says so) | add a front-matter block, `--from markdown`, or `pdfmd-options: {reader: markdown}` |
 | `! Undefined control sequence` and a LaTeX line number nobody has | LaTeX numbers its own generated file | the warning under it says `near line N of doc.md` |
+| a figure, link or citation is missing in the PDF | the file name, `#anchor` or key does not match | `pdfmd doc --check` names the line |
 | LaTeX fails, Typst output differs | an engine failed and the chain went on (the closing line names it) | `-v`, `--debug`, `--strict`, or pin the engine |
 
 ---
@@ -787,6 +791,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
+| check the source | `--check`, `--check-ignore`, `--strict` |
 | tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
 
