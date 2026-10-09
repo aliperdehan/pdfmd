@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.22"
+PDFMD_VERSION = "3.24.23"
 import argparse
 import csv
 import filecmp
@@ -4289,7 +4289,7 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                 md_path, metadata_files, options, office_package_folders(md_path, metadata_files, no_auto))
             if profile is not None:
                 note("OFFICE", f"{md_path}: profile {display_path(profile)}")
-            arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'off' if latex == 'off' else 'auto'}",
+            arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'images' if latex == 'images' else 'auto'}",
                                           "-M", f"pdfmd-office-report={arguments.report}"]
             if labels is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]

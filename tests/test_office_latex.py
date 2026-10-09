@@ -336,6 +336,42 @@ class CheckDocx(unittest.TestCase):
             self.assertRegex(done.stdout, r"native and editable: \d+ formula\(s\), [1-9]")
             self.assertEqual(sorted(path.name for path in root.iterdir() if path.is_file()), ["d.md", "preamble.tex"])
 
+    def test_the_preamble_in_the_front_matter_is_not_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "d.md").write_text("---\ntitle: T\nheader-includes: |\n  \\usepackage{tikz}\n  \\usepackage{siunitx}\n---\n\n"
+                                       "\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--check-docx"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
+                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("pictures drawn by LaTeX: 1", done.stdout)
+            self.assertNotIn("usepackage", done.stdout + done.stderr)
+
+
+@unittest.skipUnless(PANDOC and shutil.which("pdftocairo") and (shutil.which("lualatex") or shutil.which("xelatex")),
+                     "needs Pandoc, a LaTeX engine and pdftocairo")
+class PicturesMode(unittest.TestCase):
+    def build(self, option: str) -> str:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "preamble.tex").write_text("\\usepackage{mhchem}\n", encoding="utf-8")
+            (root / "d.md").write_text(f"---\ntitle: T\npdfmd-options:\n  office:\n    latex: {option}\n---\n\n"
+                                       "Water \\ce{H2O} and $E = mc^2 + \\frac{a}{b}$.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "docx"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
+                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            with zipfile.ZipFile(root / "d.docx") as archive:
+                return archive.read("word/document.xml").decode() + " ".join(archive.namelist())
+
+    def test_images_draws_what_auto_makes_native(self):
+        auto, images = self.build("auto"), self.build("images")
+        self.assertIn("<m:oMath>", auto)
+        self.assertNotIn("media/", auto)
+        self.assertNotIn("<m:oMath>", images)
+        self.assertIn("media/", images)
+
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class TableWidths(unittest.TestCase):

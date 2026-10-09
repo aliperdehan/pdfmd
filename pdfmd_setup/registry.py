@@ -112,7 +112,7 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
                (("mathml", "MathML (no network)"), ("mathjax", "MathJax"), ("katex", "KaTeX"), ("webtex", "WebTeX images"),
                 ("plain", "plain text")), "", "", "Output"),
         choice("options.office.latex", "LaTeX in Word and ODT files",
-               (("auto", "native where possible, pictures for the rest"), ("images", "pictures"),
+               (("auto", "native where possible, pictures for the rest"), ("images", "pictures, formulas and units too"),
                 ("off", "Pandoc's own behaviour")), "auto", "How `\\ce`, `\\si`, tikz and house macros reach a .docx/.odt.",
                "Output"),
         choice("options.office.labels", "Reference numbers in Word files",

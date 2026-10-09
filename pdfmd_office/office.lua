@@ -666,6 +666,8 @@ end
 -- the filter
 
 local function off() return settings.latex == "off" end
+-- `office: {latex: images}`: formulas, chemistry and units are drawn by LaTeX instead of being made native
+local function pictures() return settings.latex == "images" end
 
 -- `$-4$`, `$\sim 825$`, `$>500$`: a number with a sign is text, not an equation to open in an editor
 local PLAIN_MATH = {["\\sim"] = "~", ["\\approx"] = "\u{2248}", ["\\pm"] = "\u{00B1}", ["\\mp"] = "\u{2213}",
@@ -718,7 +720,7 @@ function Math(el)
   end
   local translated = math_translate(text)
   if translated and display then translated = break_display(translated, 68) end
-  if translated == nil or not math_native(translated, display) then
+  if pictures() or translated == nil or not math_native(translated, display) then
     local image = fragment_image(display and "math-display" or "math-inline", text)
     if image then return image end
     record("math", text)
@@ -919,7 +921,7 @@ function RawInline(el)
     if tex then
       local translated = math_translate(tex)
       if translated then translated = break_display(translated, unnumbered and 68 or 52) end
-      if translated and math_native(translated, true) then
+      if not pictures() and translated and math_native(translated, true) then
         counters.math = counters.math + 1
         return pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
           {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}}))
@@ -933,10 +935,16 @@ function RawInline(el)
       return nil
     end
   end
-  local done = text_command(raw)
+  local done = not pictures() and text_command(raw) or nil
   if done then
     counters.native = counters.native + 1
     return done
+  end
+  if pictures() and raw:match("^\\[%a]+") and text_command(raw) then
+    local image = fragment_image("inline", raw)
+    if image then return image end
+    record("inline", raw)
+    return nil
   end
   if raw == "\\\\" then return pandoc.LineBreak() end
   if raw == "~" then return pandoc.Str("\u{00A0}") end
@@ -1317,8 +1325,30 @@ function Table(el)
   return number_caption(el, "table") or (sized and el or nil)
 end
 
+-- LaTeX in `header-includes` (and the include-before/after keys) is the document's preamble, not content:
+-- Pandoc's filters walk the metadata too, so without this each such block was drawn as a fragment and
+-- failed ("can be used only in preamble"). The Word, ODF, HTML and Typst writers do not use it anyway.
+local function without_latex(value)
+  local kind = pandoc.utils.type(value)
+  if kind == "Blocks" or kind == "Inlines" then
+    return value:walk({
+      RawBlock = function(el) if el.format == "latex" or el.format == "tex" then return {} end end,
+      RawInline = function(el) if el.format == "latex" or el.format == "tex" then return {} end end,
+    })
+  elseif kind == "List" then
+    local kept = pandoc.List()
+    for _, item in ipairs(value) do kept:insert(without_latex(item)) end
+    return kept
+  end
+  return value
+end
+
 function Meta(meta)
   current_meta = meta
+  local stripped = false
+  for _, key in ipairs({"header-includes", "include-before", "include-after"}) do
+    if meta[key] ~= nil then meta[key] = without_latex(meta[key]); stripped = true end
+  end
   if meta["pdfmd-office-latex"] then settings.latex = stringify(meta["pdfmd-office-latex"]) end
   if meta["pdfmd-office-report"] then settings.report = stringify(meta["pdfmd-office-report"]) end
   if meta["pdfmd-office-profile"] then
@@ -1358,7 +1388,7 @@ function Meta(meta)
       end
     end
   end
-  return nil
+  return stripped and meta or nil
 end
 
 local function write_report()

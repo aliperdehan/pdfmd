@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.23 — 2026-10-09
+
+Pre-edit state: commit `c54ad1c` (v3.24.22).
+
+### Fixed
+
+- **A preamble in the front matter was drawn as a picture in Word files.** `header-includes: | \usepackage{tikz}` is
+  LaTeX for the preamble, but Pandoc's filters walk the metadata too, so the Word filter treated the block as content,
+  tried to draw it ("can be used only in preamble"), warned, and listed it in `--check-docx`. The filter now takes
+  LaTeX out of `header-includes`, `include-before` and `include-after` before it looks at the document (the Word, ODF,
+  HTML and Typst writers do not use it).
+- **`office: {latex: images}` did the same as `auto`.** It is now what `--setup` says: formulas, `\ce`, `\si`/`\SI`/`\num`
+  and equation environments are drawn by LaTeX as pictures (vector with a PNG fallback) instead of being made native;
+  `auto` (the default) still makes them native where it can, `off` is Pandoc's own behaviour.
+
+---
+
 ## v3.24.22 — 2026-10-09
 
 Pre-edit state: commit `7cd78d5` (v3.24.21).
