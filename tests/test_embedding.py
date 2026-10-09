@@ -165,6 +165,7 @@ class FilesEndToEnd(Env):
             "![red](img/red.png){width=2cm}\n\nRaw LaTeX: \\includegraphics[width=2cm]{img/raw.png}\n", encoding="utf-8")
         return source
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_files_are_not_embedded_unless_asked_and_are_with_files_or_all(self):
         source = self.make_source()
         self.assertEqual(self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "-o", "plain.md", cwd=source).returncode, 0)
@@ -178,6 +179,7 @@ class FilesEndToEnd(Env):
         every = self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "all", "-o", "every.md", cwd=source)
         self.assertEqual((source / "every.md").read_text(encoding="utf-8").count("type: file"), 3, every.stdout)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_unpack_gives_back_the_same_bytes_and_slim_leaves_a_clean_document(self):
         source = self.make_source()
         self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "files", "-o", "one.md", cwd=source)

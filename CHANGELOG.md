@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.19 — 2026-10-09
+
+Pre-edit state: commit `840ef6f` (v3.25.18).
+
+### Fixed
+
+- **`pdfmd --help` no longer crashes on a console that cannot show every character**: the `--translit` help carries a
+  CJK sample, and a Windows pipe or console in cp1252 raised `UnicodeEncodeError` (empty output, exit 1) for
+  `--help all` and for the `fonts` topic. Characters the console cannot show now print as `?`.
+
+### Tests
+
+- The first push of the 3.24.20-3.25.18 line failed the CI matrix (Windows, macOS and Linux, no Pandoc installed there)
+  because several tests assumed the author's machine. Tests that build a document through Pandoc are skipped without it;
+  the tests whose stand-in programs are `sh` scripts (the direct HTML route, the SVG converters, `pandoc-crossref`) are
+  skipped on Windows; the browser-choosing tests no longer see a Chrome that is really installed (macOS runners have
+  one); the backup-folder test builds its absolute path from the temporary folder instead of writing `/abs`.
+
 ## v3.25.18 — 2026-10-09
 
 Pre-edit state: commit `137aea7` (v3.25.17).

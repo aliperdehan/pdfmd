@@ -55,6 +55,7 @@ class Versions(unittest.TestCase):
 
 
 class Crossref(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "the stand-in programs are sh scripts")
     def test_a_pandoc_crossref_built_for_another_pandoc_is_not_run(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-crossref-"))
         self.addCleanup(shutil.rmtree, directory, True)

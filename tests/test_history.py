@@ -204,6 +204,7 @@ class CommandLine(unittest.TestCase):
         printed = self.run_pdfmd("--merge-history", "a.hst", "b.hst")
         self.assertIn("| two", printed.stdout)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_history_travels_in_an_assembled_file_and_comes_out_of_it(self):
         self.run_pdfmd("doc.md", "--history-to-file")
         done = self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "-o", "one.md")

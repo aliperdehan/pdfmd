@@ -97,6 +97,7 @@ class Packaging(unittest.TestCase):
         self.assertIn('"pdfmd_lua"', pyproject)
         self.assertIn('pdfmd_lua = ["*.lua", "*.tex"]', pyproject)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_lone_pdfmd_py_still_builds_without_the_package(self):
         import tempfile
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-lone-"))

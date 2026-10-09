@@ -524,7 +524,8 @@ class BackupDirectory(unittest.TestCase):
             (Path(directory) / "backups").mkdir()
             self.assertEqual(pdfmd.backup_directory(document, {"dir": ""}), Path(directory) / "backups")
             self.assertEqual(pdfmd.backup_directory(document, {"dir": "old"}), Path(directory) / "old")
-            self.assertEqual(pdfmd.backup_directory(document, {"dir": "/abs"}), Path("/abs"))
+            elsewhere = Path(tempfile.gettempdir()) / "abs"
+            self.assertEqual(pdfmd.backup_directory(document, {"dir": str(elsewhere)}), elsewhere)
 
 
 if __name__ == "__main__":

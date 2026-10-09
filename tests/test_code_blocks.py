@@ -146,6 +146,7 @@ OVERRIDING_PREAMBLE = r"""\usepackage{amsmath}
 
 
 class WithAClassThatOverridesDisplayMath(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_code_wrapping_does_not_break_a_documents_own_display_math(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-code-math-"))
         self.addCleanup(shutil.rmtree, directory, True)

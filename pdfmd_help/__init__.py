@@ -147,6 +147,17 @@ def _short(parser: argparse.ArgumentParser) -> str:
     return SHORT.format(options=options, topics=", ".join(TOPICS))
 
 
+def _write(text: str) -> None:
+    """Print `text`; a console that cannot show a character (a cp1252 Windows pipe and the CJK sample in
+    `--translit`'s help) gets `?` for it instead of a traceback."""
+    text = text if text.endswith("\n") else text + "\n"
+    try:
+        sys.stdout.write(text)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+        sys.stdout.write(text.encode(encoding, "replace").decode(encoding))
+
+
 class TieredHelp(argparse.Action):
     """`-h` / `--help` [TOPIC]: the short page, a topic, or `all`."""
 
@@ -163,5 +174,5 @@ class TieredHelp(argparse.Action):
             text = _full(parser)
         else:
             text = _topic(parser, values)
-        sys.stdout.write(text if text.endswith("\n") else text + "\n")
+        _write(text)
         parser.exit()

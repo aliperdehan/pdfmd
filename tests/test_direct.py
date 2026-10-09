@@ -8,7 +8,9 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +39,13 @@ class Choosing(unittest.TestCase):
         for name in ("weasyprint", "wkhtmltopdf", "chromium", "microsoft-edge"):
             fake(self.bin, name, "exit 0")
         self.which = lambda name: str(self.bin / name) if (self.bin / name).exists() else None
+        # find_browser also looks in the folders browsers install to; the machine's own Chrome must not leak in
+        patcher = mock.patch.object(direct.html, "sys", types.SimpleNamespace(platform="linux"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch.dict(os.environ, {"PDFMD_BROWSER": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def names(self, text, request=None):
         return [name for name, _ in direct.html_attempts(text, request, self.which)]
@@ -63,6 +72,7 @@ class Choosing(unittest.TestCase):
         self.assertTrue(direct.typst_accepts_request("typst"))
 
 
+@unittest.skipIf(os.name == "nt", "the stand-in programs are sh scripts")
 class Rendering(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-direct-render-"))

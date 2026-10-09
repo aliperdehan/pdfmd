@@ -53,6 +53,7 @@ class Scan(unittest.TestCase):
         self.assertFalse(item.is_svg)
 
 
+@unittest.skipIf(os.name == "nt", "the stand-in programs are sh scripts")
 class Converting(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-images-"))
@@ -212,6 +213,7 @@ class Remote(unittest.TestCase):
         none, why, down = images.fetch_remote(f"http://127.0.0.1:{port}/x.png", self.directory, timeout=2)
         self.assertEqual((none, down), (None, True))
 
+    @unittest.skipIf(os.name == "nt", "the stand-in programs are sh scripts")
     def test_an_svg_badge_is_converted_for_latex(self):
         bin_dir = self.directory / "bin"
         bin_dir.mkdir()
