@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.20 — 2026-10-10
+
+Pre-edit state: commit `28944c3` (v3.26.19).
+
+### Fixed
+
+- On Windows, a path in a message (`OK    doc.md`, `doc.md:3: warning ...`, `--check`'s lines) was printed in full instead of
+  relative to the working folder whenever that folder was in its 8.3 short form (`C:\Users\RUNNER~1\...`, as on a GitHub
+  runner) while the file's folder resolved to the long one: `display_path` compared the two spellings. It resolves the working
+  folder too. The first push of 3.26.0-3.26.19 failed six tests (`test_check` four, `test_build_record` two) on Windows with
+  this one cause, and was not published.
+
 ## v3.26.19 — 2026-10-09
 
 Pre-edit state: commit `da231ff` (v3.26.18).
