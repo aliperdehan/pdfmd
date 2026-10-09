@@ -1196,7 +1196,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.13"
+PDFMD_VERSION = "3.25.14"
 import argparse
 import csv
 import filecmp
@@ -16252,7 +16252,14 @@ def convert_qmd(source: Path, output: Path, target_format: str,
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.")
+    try:
+        from pdfmd_help import TieredHelp           # a lone pdfmd.py keeps argparse's one long page
+    except ImportError:
+        TieredHelp = None
+    parser = argparse.ArgumentParser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.",
+                                     add_help=TieredHelp is None)
+    if TieredHelp is not None:
+        parser.add_argument("-h", "--help", action=TieredHelp)
     parser.add_argument("--version", action="version", version=f"pdfmd {PDFMD_VERSION}")
     parser.add_argument("path", type=Path, nargs="*", help="Markdown name, files, or directory (default: current directory)")
     parser.add_argument("-p", "--presentation", action="store_true", help="create Beamer slides")

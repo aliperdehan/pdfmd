@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.14 — 2026-10-09
+
+Pre-edit state: commit `b014262` (v3.25.13).
+
+### Changed
+
+- **`pdfmd --help` is one short page** (about 30 lines, down from 651): the usual jobs, a dozen options and the list of
+  topics. `pdfmd --help all` is the complete list as before; `pdfmd --help TOPIC` is that list for one subject (`output`,
+  `modes`, `source`, `tables`, `history`, `code`, `fonts`, `builtin`, `office`, `cache`, `setup`, `debug`; `other` shows
+  options no topic claims, and a test keeps that empty). `-h` is the same. The topics live in the new `pdfmd_help`
+  package; a lone `pdfmd.py` keeps argparse's single page. The README says that `pdfmd` alone builds the one Markdown
+  file of a folder.
+
 ## v3.25.13 — 2026-10-09
 
 Pre-edit state: commit `2dbf316` (v3.25.12).

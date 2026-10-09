@@ -16,6 +16,11 @@ AUTO: READER TITLE MARGIN MONOFONT. Use --verbose to see in full
 OK    lecture.md
 ```
 
+In a folder with a single Markdown file you do not even need the name: `cd` into the folder and run `pdfmd`. It finds
+the file, its metadata, preamble and filters, and writes the PDF beside it (with several Markdown files it asks for
+one, or for `-b` to convert all of them or `-r` to join them). `pdfmd --help` is one short page; `pdfmd --help all`
+is the complete option list and `pdfmd --help tables` (or `source`, `history`, `output` ...) one subject at a time.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/lecture.png" width="560" alt="lecture.md rendered to PDF">
 </p>
