@@ -141,6 +141,8 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
         choice("options.stamp.store", "Where the compile history goes", (("notes", "the document's BUILD NOTES"),
                ("file", "a NAME.hst file in the backup folder; the document is left alone"), ("both", "both")), "notes",
                "Only matters when the line above is on.", "The source file"),
+        choice("options.stamp.restored-note", "A \"Restored ...\" entry when a version is put back", (("true", "yes"), ("false", "no")),
+               "true", "pdfmd --history-restore adds it to the history when the document keeps one.", "The source file"),
         choice("options.backup.enabled", "A backup of the source after each build", on_off, "",
                "Into .backups/ beside the document, when it changed. Off unless set.", "The source file"),
         text("options.backup.dir", "Backup folder", "Where the copies go, beside the document (or an absolute path). Without "

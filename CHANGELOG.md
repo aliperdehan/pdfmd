@@ -41,6 +41,46 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.9 — 2026-10-09
+
+Pre-edit state: commit `dc02d9d` (v3.25.8).
+
+### Added
+
+- **`pdfmd --history FILE`** lists a file's versions newest first in one numbered list: its backups -- the configured
+  folder and every folder of the spellings in use beside the document (`.backups`, `backup`, `backups`, `.backup`,
+  `_backups`), whichever of the five naming forms each file has -- the git commits that changed it (the repository may be
+  above the document's folder), and the compiles and restores recorded in its `.hst` or BUILD NOTES that no backup
+  holds. A backup shows what was compiled when it was taken. The newest 15 are shown, `--history-all` lists the rest; in a
+  terminal the list is navigable (a number: what differs, `d N`, `r N`, `a`, `q`). A document in parts lists its parts too.
+- **`--history-diff REF` and `--history-restore REF`** (`--dry-run` shows without writing). REF: a number of the list, a
+  backup's timestamp (any prefix), a file name, a commit hash, `latest`, or `previous` (the newest version that is not
+  the file as it is). A restore backs the file up first, keeps the BUILD NOTES and history of the file as it is, and adds a
+  `Restored version ID (NAME)` entry -- to the `.hst` when the document keeps one, else to its BUILD NOTES -- unless
+  `pdfmd-options: {stamp: {restored-note: false}}` (in `--setup`) or `--no-restored-note` says not to or the document
+  was never stamped. BUILD NOTES and `.hst` now hold `Restored` entries as well as compiles; a compile in the `.hst` also
+  records `git=<hash>` (a `+` when the file differed from it).
+- **`pdfmd --init-backups FILE`** sets `backup` and `stamp: {store: file}` in the file's front matter (or its
+  metadata.yaml) under an `# AUTO GENERATED` comment, leaving whatever is there alone, makes the folder
+  (`--backup-folder DIR`, default `.backups`), backs the file up once and starts its `.hst`. A document with no front
+  matter and no metadata file is not given one (it would change how pdfmd reads it: Pandoc's markdown, not GitHub's);
+  `--init-backups --global` sets the same in the config for every document.
+
+### Deviation from the plan
+
+- `--init-backups [FOLDER]` became `--init-backups` with `--backup-folder FOLDER`, for the reason `--table-names` exists:
+  argparse would take the file name as the folder.
+
+### Tests
+
+- Backups of three naming forms in two folders and git commits from a repository above the document, truncation and
+  `--history-all`, the ways to name a version, `previous`, diff, restore (the file backed up first, the notes of the newest
+  file kept, the entry in the `.hst` or in BUILD NOTES, none for an untracked document, `--no-restored-note`), a commit
+  restored, the interactive loop, and `--init-backups` (front matter, an existing `pdfmd-options` extended, no front
+  matter refused, `--global`).
+
+---
+
 ## v3.25.8 — 2026-10-09
 
 Pre-edit state: commit `738426a` (v3.25.7).

@@ -1193,6 +1193,17 @@ only one there is, or starts one of its own when there are several and none is i
 line `pdfmd: ignore` in a block keeps pdfmd out of it. The file travels with the document: `--embed-metadata` folds it
 in (`hst`), `--unpack` writes it out, and `--attach-source` stores it in the PDF for `--restore`.
 
+**Going back.** `pdfmd --history report.md` lists every version it can find, newest first: the backups (in `.backups`,
+and in an older `backup/`, `backups/`... beside the document, whatever naming each file has), the git commits that
+changed the file (the repository may be a folder above), and the compiles recorded in its history. In a terminal the
+list is navigable: a number shows what differs, `d 3` the diff, `r 3` restores. Without one, `--history-diff` and
+`--history-restore` take a number, a backup's timestamp (any start of it: `20261003`), a file name, a commit hash,
+`latest`, or `previous` (the newest that is not the file as it is). A restore backs the file up first, so nothing is
+ever lost; it keeps the build notes and history of the file as it is now, and adds a `Restored version ...` entry
+(`stamp: {restored-note: false}` or `--no-restored-note` leave it out; `--dry-run` shows what would change).
+`pdfmd --init-backups report.md` turns all of this on for a document: backups and a history file, set in its front
+matter under an `AUTO GENERATED` comment (`--global` for every document), and a first copy.
+
 Separately, when `pypdf` is installed, every PDF built by `pdfmd` gets two
 hidden metadata keys, `PdfmdVersions` and `PdfmdBuildDate`, which you can
 read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.

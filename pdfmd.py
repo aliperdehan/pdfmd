@@ -990,6 +990,28 @@ The history file (v3.25.8; the package pdfmd_history):
     `hst` embed kind: `--embed-metadata` folds it into the assembled file (`type: hst`), `--unpack` writes it out,
     `--attach-source` stores it in the PDF and `--restore` puts it back beside the backups.
 
+Versions: --history, --history-diff, --history-restore, --init-backups (v3.25.9):
+    `pdfmd --history FILE` lists the versions of a file, newest first, as one numbered list: its backups -- in the
+    configured folder and in every folder of the spellings pdfmd and its author have used beside it (`.backups`,
+    `backup`, `backups`, `.backup`, `_backups`), whichever naming form each file has (`report.md.bak.20261003110005`,
+    `report_20261003-110005.md`, `report.md.20261003-110005.bak`, ...) -- the git commits that changed it (the
+    repository may be above the document's folder), and the compiles and restores recorded in its .hst or BUILD NOTES that
+    no backup holds. A backup shows what was compiled when it was taken (read from its own BUILD NOTES, else matched by
+    hash in the .hst). The newest 15 are shown; --history-all lists the rest. In a terminal the list is navigable
+    (a number: what differs, `d N`: the diff, `r N`: restore, `a`: all, `q`). `--history-diff REF` prints the diff
+    between the file and a version; `--history-restore REF` puts it back. REF is a number of the list, a backup's
+    timestamp (any prefix: 20261003), a file name, a commit hash (4 digits or more), `latest`, or `previous` (the newest
+    version that is not the file as it is). A restore first backs the file up (the state it was in is never lost),
+    keeps the BUILD NOTES and history of the file as it is (an old version has the notes of its own day), and adds a
+    "Restored version ID (NAME) -- WHEN" entry to the history -- the .hst when the document keeps one, else its
+    BUILD NOTES -- unless `pdfmd-options: {stamp: {restored-note: false}}` or --no-restored-note says not to, or the
+    document has never been stamped. --dry-run shows the difference without writing.
+    `pdfmd --init-backups FILE` (v3.25.9) sets `backup` and `stamp: {store: file}` in the file's front matter (or its
+    metadata.yaml) after an `# AUTO GENERATED` comment, without touching what is there, makes the folder (--backup-folder
+    DIR, default .backups), backs the file up once and starts its .hst. A document with neither front matter nor a
+    metadata file is not given one (that would change how pdfmd reads it); `--init-backups --global` sets the same in
+    the config for every document.
+
 Build-provenance stamping (--stamp):
     Off by default. On a successful compile, appends or updates a
     `<!-- ===... BUILD NOTES ...=== -->` HTML comment near the end of the
@@ -1146,7 +1168,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.8"
+PDFMD_VERSION = "3.25.9"
 import argparse
 import csv
 import filecmp
@@ -7526,6 +7548,8 @@ DEFAULT_STAMP_OPTIONS = {
     # Where a compile is written: the document's BUILD NOTES block (notes, the default), a NAME.hst file beside the
     # backups that leaves the document alone (file), or both.
     "store": "notes",
+    # `pdfmd --history-restore` leaves a "Restored ..." entry in the history; false for a document that must not.
+    "restored_note": True,
     "packages": [],
     "scope": "always",
     "include_output": False,
@@ -7571,6 +7595,9 @@ def normalize_stamp_value(value) -> dict:
             options["mode"] = str(value["mode"])
         if "store" in value:
             options["store"] = str(value["store"])
+        restored_note = value.get("restored_note", value.get("restored-note"))
+        if restored_note is not None:
+            options["restored_note"] = bool(restored_note)
         if "packages" in value:
             packages = value["packages"]
             options["packages"] = ([str(item) for item in packages] if isinstance(packages, list)
@@ -7866,17 +7893,24 @@ def history_module():
         return None
 
 
-def compile_entry(line: str, meta: tuple = ()):
-    """The .hst entry of a "Compiled ... -- WHEN" line of BUILD NOTES (a bullet's dash is allowed), or None."""
+def note_entry(line: str, meta: tuple = ()):
+    """The .hst entry of a "Compiled ... -- WHEN" or "Restored ... -- WHEN" line of BUILD NOTES (a bullet's dash is
+    allowed), or None."""
     history = history_module()
     found = HISTORY_TIME_RE.match(line.strip().removeprefix("- ").strip())
-    if history is None or not found or not found.group("text").startswith("Compiled"):
+    if history is None or not found:
         return None
-    return history.Entry(found.group("when"), "compiled", found.group("text")[len("Compiled"):].strip(), meta)
+    for word, kind in (("Compiled", "compiled"), ("Restored", "restored")):
+        if found.group("text").startswith(word):
+            return history.Entry(found.group("when"), kind, found.group("text")[len(word):].strip(), meta)
+    return None
+
+
+compile_entry = note_entry
 
 
 def entry_line(entry) -> str:
-    return f"Compiled {entry.text} -- {entry.when}"
+    return f"{'Restored' if entry.kind == 'restored' else 'Compiled'} {entry.text} -- {entry.when}"
 
 
 def history_file(md_path: Path, metadata_files: list[Path] = (), existing: bool = False) -> Path:
@@ -7904,8 +7938,9 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
         digest = sha256_text(normalized_source(md_path.read_text(encoding="utf-8-sig")))[:12]
     except (OSError, UnicodeDecodeError):
         digest = ""
-    entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (("sha", digest),
-                                                                                      ("out", output.name)) if item[1]))
+    where = history.git.state(md_path)
+    entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (
+        ("sha", digest), ("out", output.name), ("git", (where[0] + ("+" if where[1] else "")) if where else "")) if item[1]))
     path = history_file(md_path, metadata_files)
     try:
         history.add_entry(path, entry, md_path.name)
@@ -7931,8 +7966,9 @@ def notes_to_entries(text: str) -> tuple[str, list]:
         heading_at: int | None = None
         for raw in body.split("\n"):
             probe = raw[len(indent):] if raw.startswith(indent) else raw
-            own = (stamp_line_pattern(indent).match(raw) or re.match(rf"^{re.escape(indent)}  - Compiled\b", raw))
-            entry = compile_entry(raw) if own else None
+            own = (stamp_line_pattern(indent).match(raw)
+                   or re.match(rf"^{re.escape(indent)}  - (?:Compiled|Restored)\b", raw))
+            entry = note_entry(raw) if own else None
             if entry is not None:
                 entries.append(entry)
                 continue
@@ -7956,13 +7992,380 @@ def notes_to_entries(text: str) -> tuple[str, list]:
 
 
 def entries_to_notes(text: str, entries: list) -> str:
-    """BUILD NOTES with `entries` (compiled ones) in it, newest on top and the rest as the history list, together
-    with what was already there."""
+    """BUILD NOTES with `entries` (compiled and restored) in it, together with what was already there: the newest
+    compile as the live line, the rest newest first as the "Compile History:" list."""
     history = history_module()
     text, existing = notes_to_entries(text)
-    for entry in reversed(history.merge(existing, entries)):
-        text, _ = update_build_notes(text, entry_line(entry), "history")
-    return text
+    merged = history.merge(existing, entries)
+    if not merged:
+        return text
+    live = next((entry for entry in merged if entry.kind == "compiled"), None)
+    bullets = [entry for entry in merged if entry is not live]
+    if live is not None:
+        text, _ = update_build_notes(text, entry_line(live), "replace")
+    if not bullets:
+        return text
+    match = pdfmd_build_notes(text) if live is not None else None
+    if match is None:
+        indent = "     "
+        block = (f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}Compile History:\n"
+                 + "".join(f"{indent}  - {entry_line(entry)}\n" for entry in bullets) + f"{indent}{'=' * 60} -->\n")
+        embedded = EMBED_BLOCK_RE.search(text)
+        if embedded:
+            return text[:embedded.start()].rstrip("\n") + "\n\n" + block + "\n" + text[embedded.start():]
+        return text.rstrip("\n") + "\n\n" + block
+    indent, body = match.group("indent"), match.group("body")
+    trimmed = body.rstrip(" \t").rstrip("\n")
+    new_body = (trimmed + "\n\n" + f"{indent}Compile History:\n"
+                + "".join(f"{indent}  - {entry_line(entry)}\n" for entry in bullets) + indent)
+    return text[:match.start("body")] + new_body + text[match.end("body"):]
+
+
+# --- --history, --history-diff, --history-restore, --init-backups --------------------------------------------
+
+HISTORY_SHOWN = 15                       # versions listed without --history-all
+
+
+def backup_folders(document: Path, options: dict) -> list[Path]:
+    """Every folder where a snapshot of `document` may be: the configured one, then each folder of the spellings pdfmd
+    and its author have used (`.backups`, `backup`, `backups`, `.backup`, `_backups`) beside the document."""
+    folders: list[Path] = []
+    for folder in (backup_directory(document, options),
+                   *(document.parent / name for name in (DEFAULT_BACKUP_DIR, *LEGACY_BACKUP_DIRS))):
+        if folder.is_dir() and folder not in folders:
+            folders.append(folder)
+    return folders
+
+
+def document_versions(document: Path, metadata_files: list[Path], include_git: bool = True) -> list:
+    """The versions of one file: its backups in every folder and naming form, the commits that changed it, and the
+    compiles recorded in its .hst and BUILD NOTES that no backup accounts for."""
+    history = history_module()
+    versions = history.versions
+    options = resolve_backup_options(document, metadata_files, None)
+    template = backup_template(options["format"])
+    recorded, _ = history.read_file(history_file(document, metadata_files, existing=True))
+    try:
+        _, in_notes = notes_to_entries(document.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError):
+        in_notes = []
+    compiles = history.merge(recorded, in_notes)
+    result = []
+    seen: set[Path] = set()
+    for folder in backup_folders(document, options):
+        try:
+            found, _ = backup_snapshots(folder, document, template)
+        except OSError:
+            continue
+        for path in found:
+            if path in seen or path.resolve() in seen:
+                continue
+            seen.add(path)
+            seen.add(path.resolve())
+            try:
+                text = path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError):
+                continue
+            _, inside = notes_to_entries(text)
+            digest = sha256_text(normalized_source(text))[:12]
+            absorbed = [entry for entry in compiles if entry.kind == "compiled" and entry.meta_dict().get("sha") == digest]
+            summary = ""
+            newest = next((entry for entry in sorted(inside, key=lambda item: item.when, reverse=True)
+                           if entry.kind == "compiled"), None) or next(iter(absorbed), None)
+            if newest is not None:
+                summary = f"compiled {newest.text}"
+            result.append(versions.Version(backup_sort_key(path)[0], "backup", versions.timestamp_id(path.name),
+                                           path.name, summary, path=path, document=document,
+                                           lines=len(text.splitlines())))
+    backup_times = [version.when for version in result]
+    backup_digests = {sha256_text(normalized_source(version.path.read_text(encoding="utf-8-sig", errors="replace")))[:12]
+                      for version in result if version.path is not None}
+    for entry in compiles:
+        stamp = datetime.strptime(entry.when, "%Y-%m-%d %H:%M:%S").timestamp()
+        if entry.kind == "compiled" and (entry.meta_dict().get("sha") in backup_digests
+                                         or any(abs(stamp - when) <= 5 for when in backup_times)):
+            continue                                       # a backup holds that compile and says so itself
+        result.append(versions.Version(stamp, {"restored": "restore", "note": "note"}.get(entry.kind, "compile"),
+                                       f"{entry.kind}-{entry.when}", entry.text, "", document=document))
+    if include_git:
+        for commit in history.git.log(document):
+            result.append(versions.Version(commit.when, "git", commit.short, commit.subject, commit.author,
+                                           commit=commit.full, document=document))
+    return versions.sort_newest_first(result)
+
+
+def version_text(version) -> str | None:
+    history = history_module()
+    if version.kind == "backup" and version.path is not None:
+        try:
+            return version.path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            return None
+    if version.kind == "git" and version.document is not None:
+        return history.git.show(version.document, version.commit)
+    return None
+
+
+def version_differs(version) -> bool:
+    """Whether `version`'s text, apart from pdfmd's own lines of BUILD NOTES, is not the document as it is."""
+    text = version_text(version)
+    if text is None or version.document is None:
+        return False
+    try:
+        current = version.document.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return normalized_source(notes_to_entries(text)[0]) != normalized_source(notes_to_entries(current)[0])
+
+
+def restore_version(document: Path, version, metadata_files: list[Path], note: bool, dry_run: bool) -> int:
+    """Put `version` back as `document`. The file as it is now is backed up first; the BUILD NOTES and the history
+    stay those of the NEWEST file (an old version has the notes of its own day); and a "Restored" entry says what
+    happened and when, unless the document or the command line says not to."""
+    history = history_module()
+    text = version_text(version)
+    if text is None:
+        print(f"ERROR  {display_path(document)}: cannot read {version.label}", file=sys.stderr)
+        return 1
+    current = document.read_text(encoding="utf-8-sig")
+    options = resolve_stamp_options(document, metadata_files, {})
+    old_stripped, _ = notes_to_entries(text)
+    _, kept = notes_to_entries(current)
+    result = entries_to_notes(old_stripped, kept) if kept else old_stripped
+    if normalized_source(result) == normalized_source(current):
+        print(f"{display_path(document)}: already the same as {version.label}; nothing to restore")
+        return 0
+    store = options["store"]
+    hst_exists = history_file(document, metadata_files, existing=True).is_file()
+    wanted = note and options.get("restored_note", True) and (options["enabled"] or hst_exists or bool(kept))
+    to_file = wanted and (store in ("file", "both") or (store == "notes" and not kept and hst_exists))
+    to_notes = wanted and store in ("notes", "both") and not (to_file and store == "notes")
+    source = version.label if version.kind == "backup" else f"commit {version.ref}"
+    entry = history.Entry(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "restored", f"version {version.ref} ({source})",
+                          tuple(item for item in (("sha", sha256_text(normalized_source(text))[:12]),
+                                                  ("from", version.kind)) if item[1]))
+    if to_notes:
+        result = entries_to_notes(old_stripped, [*kept, entry])
+    print(f"{'WOULD RESTORE' if dry_run else 'RESTORING'}  {display_path(document)} <- {source}  ({version.when_text})")
+    if dry_run:
+        print(history.versions.unified(current, result, version.label, "current", sys.stdout.isatty()) or "  (no difference)")
+        return 0
+    saved = backup_before_edit(document, metadata_files)
+    if saved is None:
+        print(f"ERROR  {display_path(document)}: not restored, since the file as it is could not be backed up.",
+              file=sys.stderr)
+        return 1
+    document.write_text(result, encoding="utf-8")
+    if to_file:
+        history.add_entry(history_file(document, metadata_files), entry, document.name)
+    print(f"  BACKUP    {display_path(saved)}  (the file as it was a moment ago)")
+    print(f"  RESTORED  {display_path(document)}" + ("  (a \"Restored\" entry is in its history)" if to_file or to_notes else ""))
+    return 0
+
+
+def history_documents(args) -> list[Path]:
+    documents: list[Path] = []
+    for target in (args.path or [Path.cwd()]):
+        try:
+            document = find_markdown(target)
+        except FileNotFoundError as error:
+            raise SystemExit(f"ERROR  {error}")
+        with contextlib.redirect_stderr(io.StringIO()):
+            plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
+        for item in (plan.files if plan else [document]):
+            if item not in documents:
+                documents.append(item)
+    return documents
+
+
+def linked_metadata(document: Path, requested) -> list[Path]:
+    found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
+    return [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
+
+
+def history_view_command(args) -> int:
+    """--history / --history-diff REF / --history-restore REF."""
+    history = history_module()
+    if history is None:
+        print("ERROR  --history needs the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
+        return 1
+    documents = history_documents(args)
+    reference = args.history_diff or args.history_restore
+    all_versions: list = []
+    for document in documents:
+        all_versions += document_versions(document, linked_metadata(document, args.metadata_file))
+    all_versions = history.versions.sort_newest_first(all_versions)
+    many = len(documents) > 1
+    if not reference:
+        shown = all_versions if args.history_all else all_versions[:HISTORY_SHOWN]
+        label = ", ".join(display_path(item) for item in documents)
+        if not all_versions:
+            print(f"{label}: no versions found (no backups in {display_path(backup_directory(documents[0], resolve_backup_options(documents[0], [], None)))}"
+                  " or beside it, no commits, no recorded compiles). `pdfmd --init-backups` starts keeping them.")
+            return 0
+        print(f"{label}: {len(all_versions)} version{'s' if len(all_versions) != 1 else ''}")
+        print(history.versions.table(shown, many))
+        if len(shown) < len(all_versions):
+            print(f"  ... {len(all_versions) - len(shown)} older; --history-all lists them")
+        if sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT"):
+            return history_interactive(documents, all_versions, shown, args)
+        print("  pdfmd --history-diff N|ID FILE shows what differs; --history-restore N|ID FILE puts a version back "
+              "(N is the number above; ID a timestamp, a file name or a commit)")
+        return 0
+    try:
+        version = history.versions.resolve(reference, all_versions, version_differs)
+    except history.versions.Ambiguous as error:
+        print(f"ERROR  {reference!r} matches several versions: {error}", file=sys.stderr)
+        return 1
+    if version is None or version.kind not in ("backup", "git") or version.document is None:
+        print(f"ERROR  no version of {', '.join(display_path(item) for item in documents)} matches {reference!r}"
+              + (" (a recorded entry has no copy of the file to go back to)" if version is not None else "")
+              + ". `pdfmd --history FILE` lists them.", file=sys.stderr)
+        return 1
+    return history_act(version, "restore" if args.history_restore else "diff", args)
+
+
+def history_act(version, action: str, args) -> int:
+    history = history_module()
+    document = version.document
+    if action == "diff":
+        text = version_text(version)
+        if text is None:
+            print(f"ERROR  cannot read {version.label}", file=sys.stderr)
+            return 1
+        current = document.read_text(encoding="utf-8-sig")
+        diff = history.versions.unified(current, text, version.label, document.name, sys.stdout.isatty())
+        print(diff or f"{display_path(document)} is the same as {version.label}")
+        return 0
+    return restore_version(document, version, linked_metadata(document, args.metadata_file),
+                           not args.no_restored_note, args.dry_run)
+
+
+def history_interactive(documents: list[Path], versions: list, shown: list, args) -> int:
+    """The list, navigable: a number shows what a version changed, `d N` the full difference, `r N` restores it."""
+    history = history_module()
+    print("  [N] what differs   d N  diff   r N  restore   a  list all   q  quit")
+    while True:
+        try:
+            answer = input("history> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not answer or answer.casefold() in ("q", "quit", "exit"):
+            return 0
+        if answer.casefold() in ("a", "all"):
+            print(history.versions.table(versions, len(documents) > 1))
+            continue
+        word, _, rest = answer.partition(" ")
+        action, target = ("diff", answer) if word.isdigit() else (
+            {"d": "diff", "diff": "diff", "r": "restore", "restore": "restore"}.get(word.casefold(), ""), rest.strip())
+        if not action:
+            print("  a number, `d N`, `r N`, `a` or `q`")
+            continue
+        try:
+            version = history.versions.resolve(target, versions, version_differs)
+        except history.versions.Ambiguous as error:
+            print(f"  {target!r} matches several: {error}")
+            continue
+        if version is None or version.kind not in ("backup", "git"):
+            print("  no such version" if version is None else "  that is a recorded entry; there is no copy of the file to use")
+            continue
+        if action == "restore":
+            if input(f"  put {version.label} back as {version.document.name}? the file as it is now is backed up first [y/N] "
+                     ).strip().casefold() not in ("y", "yes"):
+                continue
+        history_act(version, action, args)
+
+
+def init_backups_command(args) -> int:
+    """`--init-backups [FOLDER]`: switch on backups and a history file for a document (or, with --global, for all)."""
+    folder = args.backup_folder or DEFAULT_BACKUP_DIR
+    note_text = f"AUTO GENERATED by pdfmd --init-backups on {datetime.now().strftime('%Y-%m-%d')}; edit freely"
+    wanted = {"backup": {"enabled": True, **({"dir": folder} if folder != DEFAULT_BACKUP_DIR else {})},
+              "stamp": {"enabled": True, "store": "file"}}
+    if args.global_:
+        if yaml is None or config_path() is None:
+            print("ERROR  the config file is switched off or PyYAML is missing.", file=sys.stderr)
+            return 1
+        data = load_config()
+        options = data.setdefault("options", {}) if isinstance(data.get("options"), dict) or "options" not in data else {}
+        added = [key for key in wanted if key not in options]
+        for key in added:
+            options[key] = wanted[key]
+        if added:
+            config_path().parent.mkdir(parents=True, exist_ok=True)
+            config_path().write_text(f"# {note_text}\n" + SETUP_HEADER + yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+                                     encoding="utf-8")
+        print(f"CONFIG  {config_path()}: " + (f"set {', '.join(added)}" if added else "backup and stamp were already set; left alone"))
+        return 0
+    status = 0
+    for document in history_documents(args):
+        text = document.read_text(encoding="utf-8-sig")
+        front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+        metadata = [item for item in linked_metadata(document, args.metadata_file) if item.parent == document.parent]
+        target = document if front else (metadata[0] if metadata else None)
+        if target is None:
+            print(f"{display_path(document)}: has no front matter and no metadata.yaml beside it. Adding either one changes how "
+                  "pdfmd reads the document (Pandoc's markdown instead of GitHub's), so it is not done for you. "
+                  "Add a front matter block yourself, or run `pdfmd --init-backups --global` to set it for every document.")
+            status = 1
+            continue
+        body = front.group("yaml") if target == document else target.read_text(encoding="utf-8-sig")
+        try:
+            existing = yaml.safe_load(body) if yaml is not None else None
+        except yaml.YAMLError:
+            existing = None
+        existing = existing if isinstance(existing, dict) else {}
+        options = existing.get("pdfmd-options") if isinstance(existing.get("pdfmd-options"), dict) else {}
+        missing = {key: value for key, value in wanted.items() if key not in options}
+        if existing.get("pdfmd-options") not in (None, {}) and not isinstance(existing.get("pdfmd-options"), dict):
+            print(f"{display_path(target)}: its pdfmd-options is not a mapping; add backup/stamp by hand.", file=sys.stderr)
+            status = 1
+            continue
+        saved = None
+        if missing:
+            lines = body.split("\n")
+            at = next((index for index, line in enumerate(lines) if re.match(r"^pdfmd-options\s*:\s*(#.*)?$", line)), None)
+            if at is None and "pdfmd-options" in existing:
+                print(f"{display_path(target)}: its pdfmd-options is written in one line; add backup/stamp by hand: "
+                      + json.dumps(missing), file=sys.stderr)
+                status = 1
+                continue
+            def flow(value) -> str:
+                if isinstance(value, dict):
+                    return "{" + ", ".join(f"{key}: {flow(item)}" for key, item in value.items()) + "}"
+                return str(value).lower() if isinstance(value, bool) else str(value)
+
+            block = [f"  {key}: {flow(value)}" for key, value in missing.items()]
+            if at is None:
+                lines = [*lines, f"# {note_text}", "pdfmd-options:", *block]
+            else:
+                lines[at + 1:at + 1] = [f"  # {note_text}", *block]
+            saved = backup_before_edit(target) if target.is_file() else None
+            if saved is None:
+                print(f"ERROR  {display_path(target)}: not changed, since its backup could not be made.", file=sys.stderr)
+                status = 1
+                continue
+            new_body = "\n".join(lines)
+            target.write_text(text[:front.start("yaml")] + new_body + text[front.end("yaml"):] if target == document else new_body,
+                              encoding="utf-8")
+        options_now = resolve_backup_options(document, linked_metadata(document, args.metadata_file), None)
+        backup_dir = backup_directory(document, {**options_now, **({"dir": folder} if folder != DEFAULT_BACKUP_DIR else {})})
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        first = saved if saved is not None and target == document else backup_before_edit(
+            document, linked_metadata(document, args.metadata_file))
+        history = history_module()
+        if history is not None:
+            history.add_entry(history_file(document, linked_metadata(document, args.metadata_file)),
+                              history.Entry(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "note",
+                                            "history kept from here (pdfmd --init-backups)"), document.name)
+        print(f"{display_path(document)}:")
+        print(f"  {'SET' if missing else 'ALREADY SET'}  backup + stamp (store: file) in {display_path(target)}"
+              + (f"  ({', '.join(missing)} added; the old file is {display_path(saved)})" if saved else ""))
+        print(f"  FOLDER  {display_path(backup_dir)}" + ("" if first is None else f"  (first copy: {first.name})"))
+        print("  from now on every build keeps a copy of the source when it changed, and records the compile in "
+              f"{document.stem}.hst, without editing the document. `pdfmd --history {document.name}` lists them.")
+    return status
 
 
 def history_command(args) -> int:
@@ -15611,8 +16014,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tables-inline", action="store_true",
                         help="with --extract-tables: write each table's data inside its `.csv` block, no files")
     parser.add_argument("--dry-run", action="store_true",
-                        help="with --extract-tables, --expand-tables, --history-to-file or --history-to-notes: show what would "
-                             "change and write nothing")
+                        help="with --extract-tables, --expand-tables, --history-to-file, --history-to-notes or "
+                             "--history-restore: show what would change and write nothing")
     parser.add_argument("--line-numbers", nargs="?", const="1", metavar="STEP",
                         help="number the lines of every code block (LaTeX builds); STEP numbers every STEP-th line. "
                              "Per block: {.numberLines startFrom=10 step=5}, {.noNumberLines}. Off unless asked; "
@@ -15788,6 +16191,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--history-to-notes", action="store_true",
                         help="the reverse: the compiles in NAME.hst go into FILE's BUILD NOTES (newest on top, the rest as "
                              "the history list) and leave the file")
+    parser.add_argument("--history", action="store_true",
+                        help="list FILE's versions, newest first: its backups (in every folder and naming form pdfmd "
+                             "knows), its git commits, and compiles recorded in its history; in a terminal the list "
+                             "is navigable (a number: what differs, d N: diff, r N: restore). Shows the newest 15")
+    parser.add_argument("--history-all", action="store_true", help="with --history: list every version")
+    parser.add_argument("--history-diff", metavar="REF",
+                        help="show what differs between FILE and one of its versions: a number from --history, a "
+                             "backup's timestamp (any prefix), its file name, a commit hash, `latest` or `previous`")
+    parser.add_argument("--history-restore", metavar="REF",
+                        help="put a version back as FILE (REF as for --history-diff). The file as it is now is backed up "
+                             "first, its BUILD NOTES and history stay those of the newest file, and a 'Restored' entry "
+                             "is added to the history; --dry-run shows the difference without writing")
+    parser.add_argument("--no-restored-note", action="store_true",
+                        help="with --history-restore: leave no 'Restored ...' entry (also `stamp: {restored-note: false}`)")
+    parser.add_argument("--init-backups", action="store_true",
+                        help="switch on backups and a history file for FILE: `backup` and `stamp: {store: file}` go into its "
+                             "front matter (or its metadata.yaml) with an AUTO GENERATED note, the folder is made "
+                             "(.backups, or --backup-folder), and the file is backed up once. --global sets them in "
+                             "the config for every document instead")
+    parser.add_argument("--backup-folder", metavar="FOLDER", default=None,
+                        help="with --init-backups: where the copies go (beside the document, or an absolute path); "
+                             "default .backups")
+    parser.add_argument("--global", dest="global_", action="store_true", help="with --init-backups: for every document")
     parser.add_argument("--merge-history", nargs="+", metavar="HST",
                         help="join NAME.hst files: every entry once, newest first (to -o FILE, else printed)")
     parser.add_argument("--stamp-packages", nargs="+", default=None, metavar="PKG",
@@ -16006,6 +16432,12 @@ def main() -> None:
         raise SystemExit(0 if dependency_report() else 1)
     if args.extract_tables or args.expand_tables:
         raise SystemExit(tables_command(args))
+    if args.history or args.history_diff or args.history_restore:
+        if args.history_diff and args.history_restore:
+            raise SystemExit("--history-diff and --history-restore are different things; pick one.")
+        raise SystemExit(history_view_command(args))
+    if args.init_backups:
+        raise SystemExit(init_backups_command(args))
     if args.history_to_file or args.history_to_notes or args.merge_history:
         if args.history_to_file and args.history_to_notes:
             raise SystemExit("--history-to-file and --history-to-notes are opposites; pick one.")

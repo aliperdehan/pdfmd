@@ -5,6 +5,7 @@ anything. pdfmd.py works without this package: the history then stays in the doc
 
 from __future__ import annotations
 
+from . import git, versions
 from .hst import Entry, HST_SUFFIX, add_entry, merge, parse, read_file, render, write_file
 
-__all__ = ["Entry", "HST_SUFFIX", "add_entry", "merge", "parse", "read_file", "render", "write_file"]
+__all__ = ["git", "versions", "Entry", "HST_SUFFIX", "add_entry", "merge", "parse", "read_file", "render", "write_file"]
