@@ -817,7 +817,22 @@ The parts are joined in filename order into one Pandoc run, so the result is
 identical to the same text in a single file: labels, citations and numbering
 work across parts, and paths are written relative to the scaffold's folder
 whichever part they are in. A part rebuilt alone is much faster to compile
-but cannot see the others, so references to them print as `??`. See
+and still shows the numbers of the others: before it is typeset, pdfmd has
+Pandoc write the LaTeX of the whole document once more (about a second, no
+images, no engine), reads which headings, captions, equations and labels it
+holds, and has LaTeX replay them at the start of the part. A reference to a
+section, figure, table or equation outside the part then prints its number
+(`Section 2`, `Equation (3)`, a `\cref` too), in the document's own number style
+(Roman sections, numbers per chapter), as a link that leads nowhere; the part's
+own sections, figures and equations continue from the parts before it. What the
+scan cannot count is whatever the document defines itself (a macro that opens
+a figure, say): that label stays `??`, and the build says the numbers are
+approximate. `\pageref` is always `??`. The last full build's `.aux` (cache on,
+below) is exact and is used first; the scan fills in what it does not know.
+`pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` or `--seed-labels` picks
+the source; `off` brings back the `??`. A section of an ordinary document
+(`doc#results`) gets the same for the references it makes, but keeps numbering
+its own headings from 1. See
 [`examples/parts/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/parts/).
 
 #### Faster rebuilds: the cache
@@ -829,8 +844,9 @@ pdfmd-options:
 
 keeps LaTeX's cross-reference files between builds (in `~/.cache/pdfmd`), so
 an unchanged document is typeset once instead of two or three times, and a
-part built on its own shows the real numbers of the parts left out (taken
-from the last full build) instead of `??`. It never skips a build: Pandoc and
+part built on its own shows the exact numbers of the parts left out (taken
+from the last full build; without the cache they are counted from the
+sources, above). It never skips a build: Pandoc and
 LaTeX still process the whole document from the current sources and package
 every time, so a change shows in the next build. `cache: {plots: true}` (or
 `--cache-plots`, with nulabreport >= 1.26.0) additionally stores each plot as a

@@ -41,6 +41,30 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.0 — 2026-10-09
+
+Pre-edit state: commit `8257ff7` (v3.25.20).
+
+### Added
+
+- A part of a split document (`report#methods`), or a section of an ordinary document (`doc#results`), built on its own
+  now shows the numbers of the rest instead of `??`, without the cache and without an earlier full build. Pandoc writes
+  the LaTeX of the whole document once more (no images, no engine; about a second), the new `pdfmd_labels` package reads
+  it for what steps a counter or defines a label (numbered headings, captions in figures and tables, equations and align
+  rows, labels, `\appendix`, footnotes, the parts' markers), and the TeX it renders replays those events at
+  `\AtBeginDocument` in a box that is thrown away, with the `.aux` write redirected: LaTeX does the counting, so Roman
+  `\thesection`, `\counterwithin`, package counters and cleveref's `\cref` entries come out as in the full build, and
+  every counter and `\the...` macro is put back afterwards. A part's own sections, figures and equations continue from
+  the parts before it. A label is defined only if nothing defined it before: the part's own, then the last full build's
+  `.aux` (cache on; exact), then the scan. Approximate where the document defines its own macros (that label stays `??`);
+  `\pageref` stays `??`. The build says "N labels counted from the sources".
+- `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` and `--seed-labels MODE`. `auto` is the default (`.aux`, then
+  the scan), `aux` the old behaviour, `scan` the scan alone, `off` the old `??`. (`draft` is accepted and behaves as
+  `auto` until the whole-document draft pass lands.)
+- `test_sections.py`: the no-full-build test builds with `--seed-labels off` (the default now counts the labels).
+- `tests/test_labels.py`: the scanner and the rendered TeX on fixed LaTeX (no Pandoc), a mode/trigger table, and builds
+  of a part and of a section compared with the full build (Pandoc, LuaLaTeX, pdftotext).
+
 ## v3.25.20 — 2026-10-09
 
 Pre-edit state: commit `4c468e6` (v3.25.19).

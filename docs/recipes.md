@@ -226,8 +226,14 @@ pdfmd report --list-parts
 ```
 
 The parts are joined into one Pandoc run, so the result is the same as the text in one file: labels, citations and numbers
-work across parts and paths are written relative to the scaffold's folder. A part built alone cannot see the others
-(`??` for references to them) unless the cache remembers the numbers ([12.1](#121-faster-rebuilds)).
+work across parts and paths are written relative to the scaffold's folder. A part built alone still shows the numbers of
+the others: pdfmd has Pandoc write the LaTeX of the whole document once more (about a second), reads which headings,
+captions, equations and labels it holds, and LaTeX replays them at the start of the part, so a reference to another
+section, figure, table or equation (`\ref`, `\cref`, `[@fig:a]`) prints its number in the document's own style and the
+part's own numbers continue from the parts before it. It is approximate for whatever the document defines itself (a
+macro that opens a figure): that label stays `??`, and the build says so. The cache's `.aux` from the last full build is
+exact and wins when there is one ([12.1](#121-faster-rebuilds)). `--seed-labels auto|aux|scan|draft|off` or
+`pdfmd-options: {seed-labels: scan}` picks the source; `off` gives the `??` back.
 
 ### 3.3 Cut a single file into parts, or join parts back
 
@@ -616,7 +622,7 @@ pdfmd report --clear-cache            # delete this document's cache;  pdfmd --c
 ```
 
 It never skips a build. With the cache a part built alone (`report#methods`) shows the real numbers of the parts left
-out instead of `??`. Per document: `pdfmd-options: {cache: {aux: true, plots: true, location: document}}`.
+out, exact where the scan of 3.3 is approximate. Per document: `pdfmd-options: {cache: {aux: true, plots: true, location: document}}`.
 
 ### 12.2 Parallel and watching
 
@@ -710,7 +716,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 |---|---|---|
 | a raw `<img>` or `\ce` vanished | the output family does not take that syntax | `--raw` ([5.3](#53-raw-html-latex-typst-and-word-inside-markdown)) |
 | a PDF figure missing from HTML | no `pdftocairo`/`mutool`/`pdf2svg`/`inkscape` | install poppler |
-| `??` in a part built alone | the other parts' numbers are unknown | `--cache`, then one full build |
+| `??` in a part built alone | a label the scan cannot count (the document's own macro), `\pageref`, or `--seed-labels off` | `--cache`, then one full build; `--seed-labels draft` |
 | `--extract-tables` refuses | Pandoc would read the tables differently after the change | read the reason it prints; `<!-- pdfmd: ignore -->` that table |
 | boxes instead of letters | no installed font draws them | `pdfmd --check-fonts doc.md`, `pdfmd --install fonts` |
 | LaTeX fails, Typst output differs | an engine failed and the chain went on | `-v`, `--debug`, or pin the engine |

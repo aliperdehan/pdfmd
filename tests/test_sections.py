@@ -496,8 +496,8 @@ class SectionLabelSeeding(unittest.TestCase):
         self.environment = {**os.environ, "XDG_CACHE_HOME": str(self.cache), "LOCALAPPDATA": str(self.cache)}
         (self.root / "doc.md").write_text(self.DOCUMENT, encoding="utf-8")
 
-    def build(self, request):
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), request, "-e", "lualatex", "--cache"],
+    def build(self, request, *more):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), request, "-e", "lualatex", "--cache", *more],
                               cwd=self.root, env=self.environment, capture_output=True, text=True)
 
     def log(self, stem):
@@ -520,7 +520,7 @@ class SectionLabelSeeding(unittest.TestCase):
                 self.assertIn("come from the last full build", result.stdout)
 
     def test_without_a_full_build_they_still_print_as_question_marks(self):
-        result = self.build("doc#results")
+        result = self.build("doc#results", "--seed-labels", "off")      # (the default now counts them from the sources)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIsNotNone(self.UNDEFINED.search(self.log("doc.results")))
         self.assertIn("a full build", result.stdout)
