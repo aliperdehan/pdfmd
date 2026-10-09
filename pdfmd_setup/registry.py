@@ -131,7 +131,9 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
         choice("options.stamp.enabled", "A \"Compiled with...\" line in the source", on_off, "",
                "Written into the document's BUILD NOTES after each build. Off unless set.", "The source file"),
         choice("options.backup.enabled", "A backup of the source after each build", on_off, "",
-               "Into backup/ beside the document, when it changed. Off unless set.", "The source file"),
+               "Into .backups/ beside the document, when it changed. Off unless set.", "The source file"),
+        text("options.backup.dir", "Backup folder", "Where the copies go, beside the document (or an absolute path). Without "
+             "one: .backups, a hidden folder, or a backup/ folder that is already there.", "The source file"),
         choice("options.strip-comments", "Drop <!-- comments --> from what is assembled or attached", on_off, "", "",
                "The source file"),
         choice("options.attach-source", "Attach the source to the PDF", on_off, "",

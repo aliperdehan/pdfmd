@@ -212,17 +212,20 @@ local function read_align(value)
   return out
 end
 
--- `widths="2,5,1"` (or with %): relative widths of the columns
+-- `widths="2,5,1"`: relative widths of the columns; with a % on every number (`widths="30%,60%"`) the share of the
+-- text width itself, so the table may be narrower than the text (what a grid table's column layout asks for)
 local function read_widths(value)
   if not value or value == "" then return nil end
-  local out, total = {}, 0
+  local out, total, percent = {}, 0, true
   for word in value:gmatch("[^,%s]+") do
     local number = tonumber((word:gsub("%%$", "")))
     if not number or number <= 0 then return nil end
+    if not word:match("%%$") then percent = false end
     out[#out + 1] = number
     total = total + number
   end
-  for i = 1, #out do out[i] = out[i] / total end
+  local divisor = (percent and total <= 100.5) and 100 or total
+  for i = 1, #out do out[i] = out[i] / divisor end
   return out
 end
 

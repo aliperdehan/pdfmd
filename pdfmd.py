@@ -658,6 +658,22 @@ CSV/TSV table inclusion:
     the real thing -- a raw-text approach keyed on some other character
     would not have that guarantee.
 
+Tables to CSV and back (v3.25.2; the package pdfmd_tables):
+    `pdfmd --extract-tables doc.md` rewrites the document so that each table -- pipe, simple, multiline or grid;
+    not the ones inside code -- is a `.csv` block reading `tables/<name>.csv` (`--tables-dir`; `--tables-inline`
+    writes the data inside the block instead), with the caption as `caption="..."` (a caption with quotes stays a
+    `: caption` line under the block), the alignments as `align="lcr"`, the widths the document chose as `widths=`
+    (only a pipe table with a line over Pandoc's 72 columns has any; a grid table's are percentages of the line),
+    `rows=all`/`cols=all` when the table is over the 10 x 7 cap and `separator=none` when its first data row is
+    all dashes. The files are named from the captions, else `table1`, `table2`... by position (`--table-names a,b,c`
+    names them all; the count must match, or it is an error); a file that exists with other content is never
+    overwritten. Before anything is written Pandoc reads the old and the new document (the CSV filter applied) and
+    the two must give the same tables; the old document is copied to the backup folder first (see below). Tables
+    Pandoc cannot write as CSV (several lines of block content in a cell, spans, no header row) are left with the
+    reason. `pdfmd --expand-tables doc.md` is the reverse: every `.csv` block, all its rows, becomes a pipe table
+    with `caption=` under it as a `: caption` line; the CSV files stay where they are. `--dry-run` shows the diff
+    and writes nothing. A document in parts has every part done.
+
 A long document in parts (parts mode):
     A document too long to edit comfortably as one file can be a scaffold
     (`report.md`: front matter only) plus a `parts/` or `sections/` folder
@@ -1012,7 +1028,8 @@ Build-provenance stamping (--stamp):
 Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     Off by default. After every successful compile (single-file, batch,
     report/book chapter, .qmd, direct .tex, office), copies the source into
-    `backup/` beside it. Runs after the BUILD NOTES stamp, and writes
+    `.backups/` beside it (v3.25.2: a hidden folder; an existing `backup/`, `backups/` or
+    `.backup/` is kept using; the first time, a note says where the copies are). Runs after the BUILD NOTES stamp, and writes
     nothing when the newest existing snapshot already matches (ignoring the
     stamp's own lines). --no-backup forces it off for one run. Same front-
     matter/metadata-file cascade as `stamp:` above, as a bare `true`/
@@ -1075,12 +1092,13 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.1"
+PDFMD_VERSION = "3.25.2"
 import argparse
 import csv
 import filecmp
 from glob import glob as expand_glob
 import contextlib
+import difflib
 import hashlib
 import importlib.metadata
 import io
@@ -1653,7 +1671,7 @@ def csv_table_filter() -> Iterator[Path]:
         yield path
 
 
-CSV_DIV_RE = re.compile(r"\{[^}\n]*\.csv\b[^}\n]*\}")
+CSV_DIV_RE = re.compile(r"""\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*\.csv\b""")
 
 
 def contains_csv_table(md_path: Path) -> bool:
@@ -2594,9 +2612,9 @@ def split_front_matter(text: str) -> tuple[dict, str]:
     return (data if isinstance(data, dict) else {}), body
 
 
-CSV_DIV_LINE_RE = re.compile(r"^\s*:{3,}\s*\{([^}]*\.csv\b[^}]*)\}\s*$")
+CSV_DIV_LINE_RE = re.compile(r"""^\s*:{3,}\s*\{((?:[^}"]|"(?:[^"\\]|\\.)*")*\.csv\b(?:[^}"]|"(?:[^"\\]|\\.)*")*)\}\s*$""")
 DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
-DIV_ATTRIBUTE_RE = re.compile(r"""([\w-]+)=(?:"([^"]*)"|'([^']*)'|(\S+))""")
+DIV_ATTRIBUTE_RE = re.compile(r"""([\w-]+)=(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""")
 
 
 CSV_DELIMITER_NAMES = {"comma": ",", "semicolon": ";", "tab": "\t", "pipe": "|", "space": " ", "colon": ":"}
@@ -7685,9 +7703,9 @@ BACKUP_FORMATS = {
 }
 DEFAULT_BACKUP_OPTIONS = {
     "enabled": False,
-    # Relative to the document's own directory (absolute also accepted).
-    # Singular "backup" to match the per-report folders that already exist.
-    "dir": "backup",
+    # Relative to the document's own directory (absolute also accepted). Empty is the default
+    # place, see backup_directory(): ".backups", or a folder of the older spellings that is already there.
+    "dir": "",
     # Newest N plain-timestamp snapshots of this one file kept; 0 keeps all.
     # Never counts or deletes tagged ones -- see backup_snapshots().
     "keep": 0,
@@ -7703,6 +7721,44 @@ _STRFTIME_PATTERNS = {
 # Collision counter a snapshot name gets when its second (or minute, for a
 # coarse format) is already taken -- "-2", "-3", ...
 _COUNTER = r"(?:-\d+)?"
+
+
+DEFAULT_BACKUP_DIR = ".backups"
+LEGACY_BACKUP_DIRS = ("backup", "backups", ".backup", "_backups")
+
+
+def backup_directory(md_path: Path, options: dict) -> Path:
+    """Where md_path's snapshots live: `dir:` when it is set, else the folder of the older spellings that is already
+    beside the document (`backup/`, `backups/`...), else the hidden `.backups/`."""
+    name = options.get("dir") or ""
+    if name:
+        folder = Path(os.path.expanduser(name))
+        return folder if folder.is_absolute() else md_path.parent / folder
+    for candidate in (DEFAULT_BACKUP_DIR, *LEGACY_BACKUP_DIRS):
+        if (md_path.parent / candidate).is_dir():
+            return md_path.parent / candidate
+    return md_path.parent / DEFAULT_BACKUP_DIR
+
+
+def notice_once(name: str, text: str) -> None:
+    """Say `text` the first time only (a marker file in pdfmd's config folder); never in a pipe or from the API."""
+    path = config_root() / f"notice-{name}"
+    if os.environ.get("PDFMD_NO_PROMPT") or path.exists():
+        return
+    print(text)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("shown\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def backup_notice(backup_dir: Path, options: dict) -> None:
+    """The first time a backup lands in the default hidden folder, say where it is."""
+    if not options.get("dir") and backup_dir.name == DEFAULT_BACKUP_DIR:
+        notice_once("backup-folder", f"NOTE  backups go to {DEFAULT_BACKUP_DIR}/ beside the document by default. It is a "
+                    "hidden folder (ls -a shows it), so don't worry if you don't see it; "
+                    "`pdfmd --setup` or `pdfmd-options: {backup: {dir: ...}}` changes the place.")
 
 
 def backup_template(value: str) -> str:
@@ -7923,11 +7979,10 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
     if not options["enabled"]:
         return
     template = backup_template(options["format"])
-    backup_dir = Path(os.path.expanduser(options["dir"]))
-    if not backup_dir.is_absolute():
-        backup_dir = md_path.parent / backup_dir
+    backup_dir = backup_directory(md_path, options)
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_notice(backup_dir, options)
         every, prunable = backup_snapshots(backup_dir, md_path, template)
         if every and backup_unchanged(every[-1], md_path):
             if verbose:
@@ -7945,6 +8000,122 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
                     print(f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
     except OSError as error:
         print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+
+
+def backup_before_edit(md_path: Path, metadata_files: list[Path] | None = None) -> Path | None:
+    """A snapshot of md_path before pdfmd rewrites it (`--extract-tables`...): in the backup folder, named by the
+    configured format, whether or not backups are switched on for compiles. The path, or None if it failed."""
+    options = resolve_backup_options(md_path, metadata_files or [], None)
+    backup_dir = backup_directory(md_path, options)
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_notice(backup_dir, options)
+        target = backup_target(backup_dir, backup_template(options["format"]), md_path)
+        shutil.copy2(md_path, target)
+        return target
+    except OSError as error:
+        print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+        return None
+
+
+# --- --extract-tables / --expand-tables (the work is in pdfmd_tables) -------------------------------------------
+
+def tables_command(args) -> int:
+    """Rewrite documents so their tables are `.csv` blocks (or the other way round). Returns the exit status."""
+    try:
+        import pdfmd_tables as tables
+    except ImportError:
+        print("ERROR  --extract-tables needs the pdfmd_tables package (a full install of pdfmd-cli).", file=sys.stderr)
+        return 1
+    if args.extract_tables and args.expand_tables:
+        print("ERROR  --extract-tables and --expand-tables are opposites; pick one.", file=sys.stderr)
+        return 1
+    pandoc = which("pandoc")
+    names = [name for name in re.split(r"[,\s]+", args.table_names or "") if name] or None
+    csv_filter = None
+    try:
+        import pdfmd_lua
+        csv_filter = pdfmd_lua.path("csv_table")
+    except ImportError:
+        pass
+    documents: list[Path] = []
+    for target in (args.path or [Path.cwd()]):
+        try:
+            document = find_markdown(target)
+        except FileNotFoundError as error:
+            print(f"ERROR  {error}", file=sys.stderr)
+            return 1
+        with contextlib.redirect_stderr(io.StringIO()):
+            plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
+        for item in (plan.files if plan else [document]):
+            if item not in documents:
+                documents.append(item)
+    if names and len(documents) > 1:
+        print("ERROR  --table-names names the tables of one document; this is a document in parts.", file=sys.stderr)
+        return 1
+    status = 0
+    for document in documents:
+        text = document.read_text(encoding="utf-8")
+        base = document.parent
+        try:
+            if args.extract_tables:
+                result = tables.extract(text, base, pandoc=pandoc, names=names, directory=args.tables_dir,
+                                        inline=args.tables_inline)
+            else:
+                result = tables.expand(text, base)
+            if result.changed and pandoc and args.extract_tables:
+                scratch_files: list[Path] = []
+                try:
+                    for name, data in result.files.items():     # the new document reads them: put them there for the check
+                        target = base / name
+                        if not target.exists():
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_text(data, encoding="utf-8")
+                            scratch_files.append(target)
+                    problems = tables.same_tables(pandoc, text, result.text, base, csv_filter)
+                    if not problems:
+                        result.report.append("checked: Pandoc reads the same tables from the new document")
+                finally:
+                    for target in scratch_files:
+                        target.unlink(missing_ok=True)
+                        try:
+                            target.parent.rmdir()
+                        except OSError:
+                            pass
+                if problems:
+                    print(f"ERROR  {display_path(document)}: Pandoc would read different tables after the change "
+                          f"({'; '.join(problems)}). Nothing was written.", file=sys.stderr)
+                    status = 1
+                    continue
+        except tables.TablesError as error:
+            print(f"ERROR  {display_path(document)}: {error}", file=sys.stderr)
+            status = 1
+            continue
+        print(f"{display_path(document)}:")
+        for line in result.report:
+            print(f"  {line}")
+        if not result.changed:
+            continue
+        if args.dry_run:
+            diff = difflib.unified_diff(text.split("\n"), result.text.split("\n"), "before", "after", lineterm="", n=1)
+            print("\n".join(diff))
+            for name in result.files:
+                print(f"  would write {name}")
+            continue
+        backup = backup_before_edit(document)
+        if backup is None:
+            status = 1
+            print(f"ERROR  {display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+            continue
+        for name, data in result.files.items():
+            target = base / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(data, encoding="utf-8")
+        document.write_text(result.text, encoding="utf-8")
+        print(f"  BACKUP  {display_path(backup)}")
+        print(f"  WROTE   {display_path(document)}" + (f" and {len(result.files)} CSV file"
+              f"{'' if len(result.files) == 1 else 's'}" if result.files else ""))
+    return status
 
 
 # PDF Info-dictionary key names pdfmd writes when pdf_metadata is on. Two
@@ -14849,6 +15020,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
+    parser.add_argument("--extract-tables", action="store_true",
+                        help="rewrite FILE so that each of its tables (pipe, simple, multiline or grid) is a `.csv` block "
+                             "reading tables/<name>.csv (--tables-inline: the data inside the document instead), the "
+                             "caption and alignment kept as block attributes, after checking that Pandoc reads the same "
+                             "tables back. Names come from the captions, else table1, table2... (--table-names a,b,c "
+                             "gives them; the count must match). The old file is backed up first; --dry-run only shows")
+    parser.add_argument("--expand-tables", action="store_true",
+                        help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
+                             "(all its rows), its caption= the line under it. The CSV files are left where they are")
+    parser.add_argument("--table-names", metavar="A,B,C",
+                        help="with --extract-tables: the file names for the tables, in the order they appear")
+    parser.add_argument("--tables-dir", default="tables", metavar="DIR",
+                        help="with --extract-tables: the folder for the CSV files, beside the document (default tables)")
+    parser.add_argument("--tables-inline", action="store_true",
+                        help="with --extract-tables: write each table's data inside its `.csv` block, no files")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --extract-tables or --expand-tables: show what would change and write nothing")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
@@ -15043,7 +15231,7 @@ def build_parser() -> argparse.ArgumentParser:
     backup_enable = parser.add_mutually_exclusive_group()
     backup_enable.add_argument("--backup", action="store_true", default=None,
                                help="after a successful compile, copy the source to "
-                                    "backup/<name>.bak.YYYYMMDDHHMMSS beside it (skipped when the "
+                                    ".backups/<name>.bak.YYYYMMDDHHMMSS beside it (skipped when the "
                                     "newest backup is already identical). Off by default; also "
                                     "settable via pdfmd-options.backup in a document's own front "
                                     "matter or a --metadata-file (with dir:/keep: there), which this "
@@ -15209,6 +15397,8 @@ def main() -> None:
         raise SystemExit(check_docx_command(args, pandoc_options))
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
+    if args.extract_tables or args.expand_tables:
+        raise SystemExit(tables_command(args))
     if args.check_fonts:
         ok = True
         for target in (args.path or [Path.cwd()]):

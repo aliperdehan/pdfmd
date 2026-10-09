@@ -840,6 +840,23 @@ Water,18.015,1.20
 
 This works for every output format.
 
+#### Turning tables into CSV blocks, and back
+
+```
+pdfmd --extract-tables report.md      # every table becomes a .csv block reading tables/<name>.csv
+pdfmd --expand-tables report.md       # and back to ordinary tables
+```
+
+`--extract-tables` rewrites the document in place, after copying the old one to the backup folder, and says so. Pipe,
+simple, multiline and grid tables are all read (the ones inside code blocks are not tables). The files are named after
+the captions (`Masses and prices` gives `tables/masses-and-prices.csv`), or `table1`, `table2` by position;
+`--table-names a,b,c` names them, and a list that does not match the number of tables is an error that changes nothing.
+The caption, the alignment and the widths the document chose stay as attributes of the block, and before anything is
+written Pandoc reads the old and the new document and the tables must come out the same. A table Pandoc cannot write
+as CSV (a list inside a cell, a cell spanning rows) is left as it is, with the reason. `--tables-inline` puts the data
+inside the document (in a fenced block) instead of in files, `--tables-dir DIR` picks the folder, and `--dry-run` shows
+the change without making it. `--expand-tables` is the reverse, every row included.
+
 ### Not just Markdown
 
 ```sh
@@ -1101,7 +1118,8 @@ Both are off by default.
   up to date. It records when the document was compiled and with which
   `pdfmd` version, plus the versions of any LaTeX packages you name with
   `--stamp-packages`. The comment is invisible in the PDF. `--stamp-mode history` also keeps a list of past compiles.
-- **`--backup`** saves a timestamped copy of the source into `backup/`
+- **`--backup`** saves a timestamped copy of the source into `.backups/` (a hidden folder; an existing `backup/` is kept
+  using, and pdfmd says where the first copy went)
   after every successful build. A copy is skipped when nothing changed,
   and `keep: 30` limits how many are kept.
 
@@ -1110,7 +1128,7 @@ Both can be turned on for a whole folder from `metadata.yaml`:
 ```yaml
 pdfmd-options:
   stamp: true
-  backup: { dir: backup, keep: 30 }
+  backup: { dir: .backups, keep: 30 }
 ```
 
 Separately, when `pypdf` is installed, every PDF built by `pdfmd` gets two

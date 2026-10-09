@@ -41,6 +41,32 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.2 — 2026-10-09
+
+Pre-edit state: commit `64044d7` (v3.25.1).
+
+### Added
+
+- **`pdfmd --extract-tables FILE`** turns every table of a document (pipe, simple, multiline or grid; code blocks are
+  skipped) into a `.csv` block reading `tables/<name>.csv`, or holding its data (`--tables-inline`); `--tables-dir`,
+  `--table-names a,b,c` (the count must match the tables, or it is an error), `--dry-run`. Captions become `caption=`,
+  alignments `align=`, chosen widths `widths=`; a table over the 10 x 7 cap gets `rows=all`/`cols=all`. Pandoc reads the old
+  and the new document and the tables must be identical before anything is written; the old file is backed up first;
+  tables Pandoc cannot write as CSV are left with the reason. A document in parts is done part by part.
+- **`pdfmd --expand-tables FILE`**, the reverse: every `.csv` block becomes a pipe table, all rows, `caption=` as the
+  `: caption` line. The package behind both is `pdfmd_tables/`.
+- **`widths="30%,60%"`** on a `.csv` block: with a % on every number the shares of the text width itself (what a grid
+  table's columns ask for), not just relative.
+
+### Changed
+
+- **Backups go to `.backups/` by default** (was `backup/`): a hidden folder, and the first time pdfmd writes there it says
+  so. A `backup/`, `backups/`, `.backup/` or `_backups/` folder that is already beside the document is kept using, and
+  `pdfmd-options: {backup: {dir: ...}}` or `pdfmd --setup` ("Backup folder") still names any place.
+- A `.csv` block whose attributes hold braces in quotes (`caption="Masses {#tbl:m}"`) is recognised by the native tier too.
+
+---
+
 ## v3.25.1 — 2026-10-09
 
 Pre-edit state: commit `70baa48` (v3.25.0).
