@@ -6,7 +6,9 @@
 [Pandoc](https://pandoc.org) and fills in everything you would otherwise
 have to remember: sensible fonts and margins, the right Markdown dialect,
 your project's metadata/preamble/filter files, and a fallback chain across
-every PDF engine you have installed.
+every PDF engine you have installed. The same document also builds to a
+Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
+[Word and OpenDocument output](#word-and-opendocument-output)).
 
 ```console
 $ pdfmd lecture
@@ -42,6 +44,13 @@ turns that knowledge into defaults:
 - **It doesn't give up on the first engine.** If `lualatex` fails or isn't
   installed, it tries the next engine, then the next, and tells you why each
   one failed.
+- **It writes real Word files.** `pdfmd report -o report.docx` reads the front matter the PDF reads (paper size,
+  margins, fonts, line spacing) and writes it into the file's page setup and styles, so the Word file is laid out the
+  way the PDF is. With LaTeX installed, what only LaTeX can say in the document comes along: `\ce{...}` chemistry,
+  `\SI{...}{...}` units and equations become native, editable Word text and equations; a house style's own macros can be
+  given a Word recipe; what is left (tikz, chemfig, math Pandoc cannot convert) is drawn by LaTeX in the document's
+  own preamble and embedded as vector pictures. `pdfmd-options: {office: {latex: auto|images|off}}`, `--no-auto
+  officelatex` and `pdfmd --setup` switch it (see [Word and OpenDocument output](#word-and-opendocument-output)).
 - **It handles every script and emoji.** Text the main font cannot draw (Arabic,
   Hebrew, Chinese, Japanese, Korean, Greek, Cyrillic with Kazakh letters, Indic and
   more) is set run by run in an installed font for its script, emoji become colour
@@ -122,8 +131,8 @@ Office files.
 <details>
 <summary>Without pipx</summary>
 
-`pdfmd.py` is a single file that needs Python 3.9+ (with `pdfmd_inkmd/`
-beside it for the no-Pandoc fallback). It also runs
+`pdfmd.py` needs Python 3.9+ and runs straight from a clone, with the folders beside it
+(`pdfmd_inkmd/` for the no-Pandoc fallback, `pdfmd_office/`, `pdfmd_setup/`, `pdfmd_unicode/`). It also runs
 directly, and `pyyaml`/`pypdf` are optional (features that need them are
 skipped with a warning):
 
@@ -165,7 +174,7 @@ the cache, ending with the command that fixes each missing piece:
 $ pdfmd --doctor
 ...
 Reading PDFs (PDF to Markdown):
-OK    batchocr 1.2.4
+OK    batchocr 1.2.5
 MISS  tesseract: not found
 MISS  poppler: not found
 
@@ -411,8 +420,9 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
 environment or macro behind each (`the tikzpicture environment`, `the macro \irspectrum`), without drawing or writing anything: a
 quick way to see what is left to give a recipe (see the profile below).
 
-`pdfmd-options: {office: {latex: off}}` or `--no-auto officelatex` skips all of it, `office: {labels: off}`
-skips the PDF build (numbers are then counted).
+`pdfmd-options: {office: {latex: auto}}` is the default; `latex: images` draws everything LaTeX says as a picture
+(formulas, `\ce` and units too, instead of making them native); `latex: off` or `--no-auto officelatex` skips all of it
+(Pandoc's own behaviour). `office: {labels: off}` skips the PDF build (numbers are then counted).
 
 The same filter serves the other outputs when LaTeX is the problem: **the soffice fallback** (the Word file above, then LibreOffice: `pdfmd -e soffice report.md` is the `.docx` as LibreOffice draws it) now
 keeps the page size, margins and fonts, shows equations and draws what LaTeX can; a **Typst or WeasyPrint run after LaTeX
@@ -820,7 +830,12 @@ pdfmd paper.tex          # compiled directly with a LaTeX engine: reruns until
 pdfmd minutes.docx       # Word/PowerPoint/Excel/ODF: converted by LibreOffice
 pdfmd analysis.qmd       # handed to Quarto, so code chunks actually run
 pdfmd page.html          # anything else Pandoc can read (give the extension)
+pdfmd note.typ           # a Typst source is read as Typst (`.typst` too), not as Markdown
 ```
+
+The reader comes from the file's extension, as in Pandoc, and a bare name is looked up as `<name>.md`, so give the
+extension for anything else. The automatic decisions about Markdown (`READER`, `TITLE`, `citeproc`, `crossref` below)
+apply to Markdown files only.
 
 **A plain-text file as Markdown (opt-in).** `pdfmd notes.txt --text-to-markdown` reads a `.txt` file the way a person typed it
 and guesses its structure: headings (capitals, `1.2 Title`, `====` underlines), bullet and numbered lists, tables from
@@ -837,16 +852,16 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
-| `READER` | no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
-| `TITLE` | no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
+| `READER` | a Markdown file with no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
+| `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
-| `citeproc` | `@key` / `[@key, p. 90]` citations | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
-| `crossref` | `@fig:`/`@tbl:` references | adds the `pandoc-crossref` filter, ahead of citeproc |
+| `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
+| `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 
 `-v` explains each decision and prints the exact command it runs:

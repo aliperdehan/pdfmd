@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.25 — 2026-10-09
+
+Pre-edit state: commit `527e61c` (v3.24.24).
+
+### Changed
+
+- **README (docs only).** "Why" and the opening now say that pdfmd writes Word and OpenDocument files that follow the
+  document's page setup and fonts, carry its LaTeX over as native Word text or vector pictures, and are switched by
+  `office: {latex: auto|images|off}`, `--no-auto officelatex` and `--setup`. "Not just Markdown" says a Typst source is
+  read as Typst and that the automatic Markdown decisions apply to Markdown files only; the `AUTO` table says the same
+  and how citations and crossref are detected; the install note no longer calls `pdfmd.py` a single file (four package
+  folders sit beside it); the `--doctor` sample shows batchocr 1.2.5.
+
+---
+
 ## v3.24.24 — 2026-10-09
 
 Pre-edit state: commit `8f4a027` (v3.24.23).
