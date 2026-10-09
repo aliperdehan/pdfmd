@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.1 — 2026-10-09
+
+Pre-edit state: commit `70baa48` (v3.25.0).
+
+### Added
+
+- **`.csv` blocks can hold their data.** A `::: {.csv}` div with no `file=` reads the data written inside it, from a
+  fenced code block (verbatim: nothing in it is Markdown) or from plain lines; a file named by `file=` wins when both
+  are there. Quoted fields may contain line breaks (the file reader read line by line before).
+- **Any delimiter.** `delimiter=` takes a character or a name (`comma`, `semicolon`, `tab`, `pipe`, `space`, `colon`);
+  without one the extension decides (`.tsv`), else the first line (whichever of `,` `;` tab `|` it holds most of).
+- **Alignment and widths for CSV tables.** `align="lcr"` / `align="left,center,right"`, or a second data row of `---`,
+  `:--`, `:-:`, `--:` read as a pipe table's separator row (`separator="none"` keeps such a row as data; `align=` wins
+  over the row); `widths="5,1,1"` gives relative widths, kept as written even when equal, and unequal dashes in the
+  separator row are widths too. The native tier (no Pandoc) reads all of it except `widths=`.
+
+---
+
 ## v3.25.0 — 2026-10-09
 
 Pre-edit state: commit `0ff734c` (v3.24.26). First commit of the 3.25 line (tables, code blocks, direct routes,

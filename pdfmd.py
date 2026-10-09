@@ -616,7 +616,7 @@ CSV/TSV table inclusion:
 
     -- is replaced with an actual table read from that file, instead of a
     hand-transcribed pipe table (`contains_csv_table()`,
-    CSV_TABLE_LUA_FILTER; v3.24.18: cells are Pandoc Markdown (`reader="gfm"` for
+    pdfmd_lua/csv_table.lua; v3.24.18: cells are Pandoc Markdown (`reader="gfm"` for
     plain GFM), a `: Caption {#tbl:id}` or `Table: Caption` paragraph right after
     the block, or `caption="..."` among its attributes, is the table's caption,
     and a relative `file=` is found beside the document, not only in Pandoc's
@@ -629,9 +629,21 @@ CSV/TSV table inclusion:
     nobody intended; a truncated table gets both a one-line `WARN` (naming
     how many of how many rows/columns were kept) and a note printed
     directly under the table itself, in the rendered output, not just on
-    the compiling terminal. A `.csv` div with no `file=` attribute, or one
+    the compiling terminal. A `.csv` div with neither `file=` nor data, or one
     naming a file that can't be opened, gets a `WARN` and is left empty
-    rather than failing the whole compile. Works for any output format
+    rather than failing the whole compile.
+
+    v3.25.1: the data may be written inside the div, in a fenced code block
+    (read verbatim: nothing in it is Markdown) or as plain lines; `file=` wins
+    when both are there. The delimiter is a character or its name (`comma`,
+    `semicolon`, `tab`, `pipe`, `space`, `colon`), else the extension's, else
+    guessed from the first line (, ; tab |). Alignment: `align="lcr"` or
+    `align="left,center,right"`, or a second row of `---`, `:--`, `:-:`, `--:` (a
+    separator row, as in a pipe table; the attribute wins; `separator="none"`
+    keeps such a row as data). `widths="5,1,1"` are relative column widths, kept
+    as given (a separator row's unequal dashes are widths too, counted as Pandoc
+    counts them). Quoted fields may hold line breaks. The native tier (no Pandoc)
+    reads the same forms except `widths=`. Works for any output format
     (not LaTeX-specific, unlike the table-width filter above) -- Markdown/
     Pandoc input, single-file/batch/report modes, and the soffice PDF-
     engine fallback all support it; a real .tex or office-document INPUT
@@ -1063,7 +1075,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.0"
+PDFMD_VERSION = "3.25.1"
 import argparse
 import csv
 import filecmp
@@ -2587,23 +2599,70 @@ DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
 DIV_ATTRIBUTE_RE = re.compile(r"""([\w-]+)=(?:"([^"]*)"|'([^']*)'|(\S+))""")
 
 
-def csv_div_table(attributes: str, base_dir: Path, source: Path | None) -> list[str]:
+CSV_DELIMITER_NAMES = {"comma": ",", "semicolon": ";", "tab": "\t", "pipe": "|", "space": " ", "colon": ":"}
+CSV_ALIGNMENTS = {"l": "left", "left": "left", "c": "center", "center": "center", "centre": "center",
+                  "r": "right", "right": "right", "d": "default", "default": "default"}
+CSV_SEPARATOR_CELL_RE = re.compile(r"^\s*:?-+:?\s*$")
+
+
+def csv_guess_delimiter(text: str, name: str | None) -> str:
+    """The delimiter of a CSV nobody named: tab for `.tsv`, else the one of , ; tab | the first line holds most of
+    (outside quotes), a comma when none."""
+    if name and name.lower().endswith(".tsv"):
+        return "\t"
+    first = text.splitlines()[0] if text.strip() else ""
+    best, best_count = ",", 0
+    for candidate in (",", ";", "\t", "|"):
+        count, quoted = 0, False
+        for char in first:
+            if char == '"':
+                quoted = not quoted
+            elif char == candidate and not quoted:
+                count += 1
+        if count > best_count:
+            best, best_count = candidate, count
+    return best
+
+
+def csv_alignments(value: str | None) -> list[str] | None:
+    """`align="lcr"` / `align="left,center,right"` as a list of left/center/right/default (None when not given)."""
+    if not value:
+        return None
+    if re.fullmatch(r"[lcrdLCRD]+", value):
+        return [CSV_ALIGNMENTS[letter] for letter in value.lower()]
+    return [CSV_ALIGNMENTS.get(word, "default") for word in re.split(r"[,\s]+", value.lower()) if word]
+
+
+def csv_separator_alignments(row: list[str]) -> list[str]:
+    """What a `---`, `:--`, `--:`, `:-:` row says about each column."""
+    out = []
+    for cell in row:
+        cell = cell.strip()
+        left, right = cell.startswith(":"), cell.endswith(":")
+        out.append("center" if left and right else "left" if left else "right" if right else "default")
+    return out
+
+
+def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: str | None = None) -> list[str]:
     """The Markdown pipe table for a `::: {.csv file="data.csv"}` div, the way
-    CSV_TABLE_LUA_FILTER builds it for Pandoc: delimiter from the extension or
-    `delimiter=`, first row the header unless `header="false"`, capped at
-    10 rows x 7 columns unless `rows=`/`cols=` (or `all`) say otherwise."""
+    pdfmd_lua/csv_table.lua builds it for Pandoc: the data from `file=` or written inside the div, the delimiter
+    from `delimiter=` (a character or its name), the extension or the first line, the first row the header unless
+    `header="false"`, a `---`/`:-:`/`--:` second row or `align="lcr"` for the alignments, capped at 10 rows x 7
+    columns unless `rows=`/`cols=` (or `all`) say otherwise. (Column `widths=` need Pandoc.)"""
     options = {name: next(value for value in groups if value is not None)
                for name, *groups in ((m.group(1), m.group(2), m.group(3), m.group(4))
                                      for m in DIV_ATTRIBUTE_RE.finditer(attributes))}
     name = options.get("file")
-    if not name:
-        native_note("csv", ".csv div has no file= attribute; left empty", source)
-        return []
-    path = (base_dir / name)
-    try:
-        text = path.read_text(encoding="utf-8-sig")
-    except OSError:
-        native_note("csv", f"could not open '{name}'; left empty", source)
+    if name:
+        try:
+            text = (base_dir / name).read_text(encoding="utf-8-sig")
+        except OSError:
+            native_note("csv", f"could not open '{name}'; left empty", source)
+            return []
+    elif inline is not None:
+        text = inline
+    else:
+        native_note("csv", ".csv div has neither file= nor data inside it; left empty", source)
         return []
 
     def limit(key: str, default: int) -> float:
@@ -2614,21 +2673,29 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None) -> list[
             return float("inf")
         return int(value) if value.isdigit() else default
 
-    delimiter = options.get("delimiter") or ("\t" if name.lower().endswith(".tsv") else ",")
+    delimiter = options.get("delimiter")
+    delimiter = CSV_DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1]) if delimiter else csv_guess_delimiter(text, name)
     max_rows, max_columns = limit("rows", 10), limit("cols", 7)
     has_header = options.get("header") != "false"
-    rows = [row for row in csv.reader(text.splitlines(), delimiter=delimiter) if row]
+    rows = [row for row in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter) if row]
     total_columns = max((len(row) for row in rows), default=0)
     shown_columns = int(min(total_columns, max_columns))
     rows = [row[:shown_columns] for row in rows]
     header = rows.pop(0) if has_header and rows else [f"Column {n}" for n in range(1, max(shown_columns, 1) + 1)]
+    alignments = None
+    if (has_header and rows and options.get("separator", "auto").lower() not in ("none", "false")
+            and all(CSV_SEPARATOR_CELL_RE.match(cell) for cell in rows[0])):
+        alignments = csv_separator_alignments(rows.pop(0))
+    alignments = csv_alignments(options.get("align")) or alignments or []
     shown = rows[:int(min(len(rows), max_rows))]
 
     def cell(value: str | None) -> str:
         return (value or "").replace("\r", "").replace("\n", " ").replace("|", "\\|")
 
+    marks = {"left": " :--- |", "center": " :---: |", "right": " ---: |"}
     lines = ["| " + " | ".join(cell(header[n] if n < len(header) else "") for n in range(len(header))) + " |",
-             "|" + " --- |" * len(header)]
+             "|" + "".join(marks.get(alignments[n] if n < len(alignments) else "", " --- |")
+                           for n in range(len(header)))]
     for row in shown:
         lines.append("| " + " | ".join(cell(row[n] if n < len(row) else "") for n in range(len(header))) + " |")
     if len(shown) < len(rows) or shown_columns < total_columns:
@@ -2802,7 +2869,8 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     in_comment = False
     in_display = False
     skip_csv_div = False
-    for line in body.splitlines():
+    body_lines = iter(body.splitlines())
+    for line in body_lines:
         match = FENCE_RE.match(line)
         if fence is not None:
             closes = match and match.group(1)[0] == fence[0] and len(match.group(1)) >= fence[1] \
@@ -2881,9 +2949,19 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
             continue
         csv_div = CSV_DIV_LINE_RE.match(line)
         if csv_div:
-            table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path)
+            inline = None
+            if not re.search(r"\bfile=", csv_div.group(1)):
+                data = []
+                for data_line in body_lines:      # the data written inside the div, up to its closing :::
+                    if DIV_CLOSE_RE.match(data_line):
+                        break
+                    data.append(data_line)
+                if data and FENCE_RE.match(data[0]):
+                    data = data[1:-1] if len(data) > 1 and FENCE_RE.match(data[-1]) else data[1:]
+                inline = "\n".join(data) if any(part.strip() for part in data) else None
+            table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path, inline)
             items.extend([("", False), *[(row, False) for row in table], ("", False)])
-            skip_csv_div = True
+            skip_csv_div = inline is None and bool(re.search(r"\bfile=", csv_div.group(1)))
             count("csv")
             continue
         if DIV_FENCE_RE.match(line):

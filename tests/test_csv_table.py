@@ -58,5 +58,68 @@ class CsvTables(unittest.TestCase):
         self.assertIn("(Caption Nothing [])", out)
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class InlineData(CsvTables):
+    """Data written inside the div (no file=), delimiters, alignment and widths."""
+
+    def cells(self, out: str) -> list[str]:
+        import re
+        return re.findall(r'Plain \[ Str "([^"]*)"', out)
+
+    def test_data_in_a_code_block_inside_the_div_is_verbatim(self):
+        out = self.native('::: {.csv}\n```\nname,note\n"a, b",*not emphasis*\nx,"say ""hi"""\n```\n:::\n')
+        self.assertIn('Str "a,"', out)                          # the quoted comma stayed inside the cell
+        self.assertIn("hi", out)
+        self.assertNotIn("CodeBlock", out)
+
+    def test_data_typed_straight_into_the_div_works_too(self):
+        out = self.native('::: {.csv}\nname,qty\nwater,3\nacid,4\n:::\n')
+        self.assertIn('Str "water"', out)
+        self.assertIn('Str "acid"', out)
+
+    def test_a_quoted_field_may_hold_a_line_break(self):
+        out = self.native('::: {.csv}\n```\nk,v\n"one\ntwo",3\n```\n:::\n')
+        self.assertIn('Str "one"', out)
+        self.assertIn('Str "two"', out)
+
+    def test_the_delimiter_is_guessed_named_or_given(self):
+        for body, attribute in (("a;b\n1;2\n", ""), ("a\tb\n1\t2\n", ""), ("a|b\n1|2\n", ""),
+                                ("a;b\n1;2\n", " delimiter=semicolon"), ("a b\n1 2\n", " delimiter=space")):
+            out = self.native('::: {.csv%s}\n```\n%s```\n:::\n' % (attribute, body))
+            self.assertTrue(out.startswith("[ Table"), body)
+            self.assertIn('Str "b"', out, body)
+            self.assertNotIn('Str "a;b"', out, body)
+
+    def test_alignment_comes_from_align_or_from_a_separator_row(self):
+        out = self.native('::: {.csv align="lcr"}\n```\nA,B,C\n1,2,3\n```\n:::\n')
+        self.assertIn("AlignLeft , ColWidthDefault", out)
+        self.assertIn("AlignCenter , ColWidthDefault", out)
+        self.assertIn("AlignRight , ColWidthDefault", out)
+        out = self.native('::: {.csv}\n```\nA,B,C\n:--,:-:,--:\n1,2,3\n```\n:::\n')
+        self.assertIn("AlignRight , ColWidthDefault", out)
+        self.assertNotIn(':--', out)                            # the separator row is not a data row
+        out = self.native('::: {.csv align="rrr"}\n```\nA,B,C\n:--,:-:,--:\n1,2,3\n```\n:::\n')
+        self.assertEqual(out.count("AlignRight , ColWidthDefault"), 3)                     # align= wins over the row
+
+    def test_a_dashes_only_row_can_be_data(self):
+        out = self.native('::: {.csv separator=none}\n```\nA,B\n---,---\n1,2\n```\n:::\n')
+        self.assertEqual(out.count('Str "\\8212"'), 2)          # Markdown's `---` in a cell is an em dash
+        out = self.native('::: {.csv header="false"}\n```\n---,---\n1,2\n```\n:::\n')
+        self.assertEqual(out.count('Str "\\8212"'), 2)
+
+    def test_widths_are_relative_and_kept_even_when_equal(self):
+        out = self.native('::: {.csv widths="1,3"}\n```\nA,B\n1,2\n```\n:::\n')
+        self.assertIn("ColWidth 0.25", out)
+        self.assertIn("ColWidth 0.75", out)
+        out = self.native('::: {.csv}\n```\nA,B\n--,------\n1,2\n```\n:::\n')
+        self.assertIn("ColWidth 0.25", out)
+        self.assertIn("ColWidth 0.75", out)
+
+    def test_data_in_the_div_and_file_together_use_the_file(self):
+        out = self.native('::: {.csv file="d.csv"}\n```\nx,y\n9,9\n```\n:::\n')
+        self.assertIn('Str "water"', out)
+        self.assertNotIn('Str "9"', out)
+
+
 if __name__ == "__main__":
     unittest.main()

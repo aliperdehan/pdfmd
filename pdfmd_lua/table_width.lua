@@ -173,6 +173,7 @@ end
 local function rebalance(tbl)
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
+  if tbl.attr.attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
   local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs)
   if chosen then return nil end
   if ncols == 1 and not has_default(tbl.colspecs) then

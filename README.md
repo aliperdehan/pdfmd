@@ -808,12 +808,31 @@ Measured values:
   <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/results.png" width="480" alt="A CSV file rendered as a table">
 </p>
 
+Or write the data in the document itself, in a code block so that nothing in it is read as Markdown:
+
+````markdown
+::: {.csv align="lrr"}
+```
+Compound,Mass (g),Price
+Water,18.015,1.20
+"Ethanol, dry",46.07,3.45
+```
+:::
+
+: Masses and prices {#tbl:m}
+````
+
 - Cells are read as Pandoc Markdown (`H~2~O`, `$x^2$`, `\ce{...}`, `[@key]`); `reader="gfm"` makes them plain GFM.
 - A caption is the line after the block (`: Caption {#tbl:id}`, or `Table: Caption`), or `caption="Caption"` inside the
   braces, with the identifier as `#tbl:id` there too. A caption in the attributes wins over a line after the block.
-- A relative `file=` is found beside the document (and along the resource path), wherever Pandoc runs.
-- The delimiter is detected from the extension (`.tsv` means tab), or set
-  with `delimiter=";"`.
+- A relative `file=` is found beside the document (and along the resource path), wherever Pandoc runs. With both
+  `file=` and data inside the block, the file is used.
+- The delimiter is `delimiter=";"` or its name (`semicolon`, `tab`, `pipe`, `space`, `colon`, `comma`); without one it
+  comes from the extension (`.tsv` means tab) or from the first line (whichever of `,` `;` tab `|` it holds most of).
+- Columns are aligned with `align="lcr"` (or `align="left,center,right"`), or by a second row in the data made of
+  `---`, `:--`, `:-:`, `--:` as in a pipe table; `align=` wins. If such a row is really data, say `separator="none"`.
+  `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Without either, pdfmd picks
+  widths that suit the contents.
 - The first row is the header unless you add `header="false"`.
 - Large files are capped at 10 rows × 7 columns, so a huge CSV can't
   silently fill 40 pages. `rows=all` or `cols=20` raise the cap. When a

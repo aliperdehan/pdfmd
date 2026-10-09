@@ -147,6 +147,17 @@ class NormaliseTests(unittest.TestCase):
             self.assertIn("| n | square | text |", full.text)
             self.assertIn("| 12 | 144 |", full.text)
 
+    def test_csv_div_with_its_data_inside_and_alignment(self):
+        source, counts = pdfmd.normalise_gfm(
+            'A\n\n::: {.csv align="lr"}\n```\nname;n\nwater;1\nacid;22\n```\n:::\n\nB\n', "inkmd")
+        self.assertEqual(counts["csv"], 1)
+        self.assertIn("| name | n |\n| :--- | ---: |\n| water | 1 |\n| acid | 22 |", source.text)
+        self.assertTrue(source.text.rstrip().endswith("B"))
+        source, _ = pdfmd.normalise_gfm('::: {.csv}\nk,v\n:-:,--:\n"a,b",2\n:::\n', "inkmd")
+        self.assertIn("| k | v |\n| :---: | ---: |\n| a,b | 2 |", source.text)
+        source, _ = pdfmd.normalise_gfm('::: {.csv separator=none}\n```\nk,v\n---,---\n```\n:::\n', "inkmd")
+        self.assertIn("| --- | --- |\n| --- | --- |", source.text)
+
     def test_html_comments_are_dropped_outside_code(self):
         text = ("Before <!-- inline --> after.\n\n<!--\nmulti\nline -->\n\nKept `<!-- code -->` here.\n\n"
                 "```\n<!-- fenced -->\n```\n")
