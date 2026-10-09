@@ -744,7 +744,10 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 5. **`pdfmd doc --stop-at tex`** (or `--assemble-only`) shows what is handed to the engine.
 6. **`pdfmd --clear-cache`** starts over.
 7. **A table or section will not be found?** `pdfmd doc --list-parts`.
-8. **A build changed after an update?** `pdfmd --history doc.md` and `--history-diff` compare the source; the
+8. **Which engine built it?** The closing line names it: `OK    doc.md  (typst; lualatex failed)` means LaTeX failed
+   and Typst made the file. `pdfmd doc --strict` turns that, and any other warning (an image or citation that was not
+   found, an undefined reference), into a failed build with exit code 1, for a script or CI; the output is kept.
+9. **A build changed after an update?** `pdfmd --history doc.md` and `--history-diff` compare the source; the
    CHANGELOG lists what each version changed.
 
 | Symptom | Likely cause | Try |
@@ -754,7 +757,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | `??` in a part built alone | a label the scan cannot count (the document's own macro), `\pageref`, or `--seed-labels off` | `--cache`, then one full build; `--seed-labels draft` |
 | `--extract-tables` refuses | Pandoc would read the tables differently after the change | read the reason it prints; `<!-- pdfmd: ignore -->` that table |
 | boxes instead of letters | no installed font draws them | `pdfmd --check-fonts doc.md`, `pdfmd --install fonts` |
-| LaTeX fails, Typst output differs | an engine failed and the chain went on | `-v`, `--debug`, or pin the engine |
+| LaTeX fails, Typst output differs | an engine failed and the chain went on (the closing line names it) | `-v`, `--debug`, `--strict`, or pin the engine |
 
 ---
 

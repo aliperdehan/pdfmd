@@ -51,7 +51,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--setup", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
         "--check-dependencies", "--version")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
-        "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux")),
+        "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict")),
 }
 
 COMMON = {

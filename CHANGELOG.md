@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.10 — 2026-10-09
+
+Pre-edit state: commit `7e050f8` (v3.26.9).
+
+### Added
+
+- The closing line of a build names the engine that made the PDF: `OK    report.md  (lualatex)`; when an engine was
+  tried and failed first, it says which: `OK    report.md  (typst; lualatex, xelatex failed)`. Built-in renderers
+  (`inkmd`, `md2pdf`), direct `.tex`/`.typ`/`.html` builds, `soffice` and Quarto are named too; a build that needs no
+  engine (Word, HTML...) prints the line as before. `convert_one` now returns a `Built` (a tuple of the same three
+  items with `.engine` and `.failed`), so the name also arrives from `-j` workers.
+- `--strict` / `--no-strict` and `pdfmd-options: {strict: true}`: a file whose build printed any `WARN` line (an engine
+  that failed and was replaced, the fonts retry, lost ASCII characters, a skipped embedded filter...) or whose Pandoc run
+  printed a `[WARNING]` (a missing image or citation, a LaTeX undefined reference) is reported `FAIL` with the first
+  warnings listed; the output is kept and the exit code is 1. In a batch only that file fails; `-r` reports the book.
+
 ## v3.26.9 — 2026-10-09
 
 Pre-edit state: commit `dc15f10` (v3.26.8).

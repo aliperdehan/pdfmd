@@ -1216,7 +1216,7 @@ AUTO READER  lecture.md: no YAML front matter; reading as gfm
 AUTO TITLE  lecture.md: promoted leading '# ' heading to Pandoc title metadata
 AUTO MARGIN  lecture.md: no geometry/margin set; using geometry:margin=1in on LaTeX-family engines
 AUTO MONOFONT  lecture.md: has code but no monofont set; using JetBrains Mono on LaTeX-family engines
-OK    lecture.md
+OK    lecture.md  (lualatex)
 ```
 
 The second `CMD` line is the font fallback at work: STIX Two Text was
@@ -1225,6 +1225,21 @@ file paths are shortened here.)
 
 **When a PDF doesn't look the way the Markdown suggests, run `-v` first.**
 The cause is usually one of these automatic decisions, and `-v` names it.
+
+The closing line also names the engine that made the PDF. If an earlier one failed, the line says so, so a
+build that quietly fell back to Typst does not look like one that did not:
+
+```console
+$ pdfmd paper
+WARN  paper.md: lualatex failed (! Undefined control sequence.); trying xelatex...
+WARN  paper.md: xelatex failed (! Undefined control sequence.); trying typst...
+OK    paper.md  (typst; lualatex, xelatex failed)
+```
+
+`--strict` (or `pdfmd-options: {strict: true}` in the document; `--no-strict` overrides it) makes that, and every other
+warning, an error for scripts and CI: a file whose build printed a `WARN` line, or about which Pandoc warned (an image
+or citation it could not find, a LaTeX reference left undefined), is reported `FAIL` with the first warnings listed and
+the exit code is 1. The output file is kept. In a batch only that file fails.
 
 ### Other scripts
 

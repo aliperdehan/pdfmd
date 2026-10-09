@@ -857,6 +857,11 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `--to ascii:FORMAT` (v3.26.8; pdfmd_flat/asciify.py, pdfmd_lua/ascii.lua; `-o x.ascii.txt`, --ascii-missing) build a
     text format with no byte above 127: the words are mapped before the writer, the written file once more.
 
+    The closing line names the engine that made a PDF (v3.26.10): `OK    report.md  (lualatex)`, or
+    `(typst; lualatex, xelatex failed)` when the build fell back. `--strict` (or `pdfmd-options: {strict: true}`;
+    `--no-strict` overrides) turns a build that printed a WARN line, or about which Pandoc warned (a missing image or
+    citation, a LaTeX undefined reference), into a failed file: the output is kept, the exit code is 1.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1218,7 +1223,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.9"
+PDFMD_VERSION = "3.26.10"
 import argparse
 import csv
 import filecmp
@@ -1259,6 +1264,7 @@ if sys.version_info < (3, 9):
 import unicodedata
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import inspect
 from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -3779,6 +3785,7 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
             if position + 1 < len(order):
                 native_note(engine, f"failed ({error}); trying {order[position + 1]}", md_path)
             continue
+        record_engine(engine, [attempt.split(":", 1)[0] for attempt in attempts])
         print(f"NATIVE  {display_path(md_path)} via {engine}")
         report_messages(engine, messages, md_path)
         describe_native_changes(engine, md_path, source, counts)
@@ -13034,6 +13041,89 @@ def safe_stem(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._+-]", "-", name)
 
 
+# -- Which engine built the file, and --strict (v3.26.10) --------------------------------------------------------
+# The closing line names the engine that made a PDF (`OK    report.md  (lualatex)`) and, when an earlier one was tried
+# and failed, which (`(typst; lualatex failed)`): a build that quietly fell back used to look the same as one that did
+# not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
+# about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
+STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
+BUILD: dict = {"engine": None, "failed": []}     # what built the file convert_one is working on
+
+
+def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
+    """Note the engine that succeeded and the engines that were tried and failed before it."""
+    BUILD["engine"], BUILD["failed"] = engine, [name for name in failed if name != engine]
+
+
+class Built(tuple):
+    """convert_one's `(path, ok, message)`, carrying the engine too (a tuple subclass: three-way unpacking and pickling
+    through a process pool both keep working)."""
+
+    def __new__(cls, items, engine: str | None = None, failed=()):
+        self = super().__new__(cls, items)
+        self.engine, self.failed = engine, list(failed)
+        return self
+
+
+def engine_label(result) -> str:
+    """`  (lualatex)` or `  (typst; lualatex failed)` for the closing line; nothing when no engine was involved."""
+    engine = getattr(result, "engine", None)
+    if not engine or not result[1]:
+        return ""
+    failed = getattr(result, "failed", [])
+    return f"  ({engine}" + (f"; {', '.join(failed)} failed" if failed else "") + ")"
+
+
+WARNING_LINE_RE = re.compile(r"^\s*(?:WARN\b|\[WARNING\])")
+
+
+class _WarningTee:
+    """A text stream that passes everything on and remembers the lines that are warnings."""
+
+    def __init__(self, stream, lines: list[str]):
+        self._stream, self._lines, self._partial = stream, lines, ""
+
+    def write(self, text):
+        self._partial += text
+        *complete, self._partial = self._partial.split("\n")
+        self._lines.extend(line.strip() for line in complete if WARNING_LINE_RE.match(line))
+        return self._stream.write(text)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+@contextmanager
+def warning_capture() -> Iterator[list[str]]:
+    """Yield the list that fills with each WARN / [WARNING] line printed meanwhile (stdout and stderr)."""
+    lines: list[str] = []
+    out, err = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = _WarningTee(out, lines), _WarningTee(err, lines)
+    try:
+        yield lines
+    finally:
+        sys.stdout, sys.stderr = out, err
+
+
+def resolve_strict(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether warnings fail ``md_path``'s build: --strict / --no-strict, else `pdfmd-options.strict`."""
+    if STRICT_CLI is None and os.environ.get("PDFMD_STRICT") in ("0", "1"):
+        return os.environ["PDFMD_STRICT"] == "1"       # a -j worker is a fresh process: main hands the flag down
+    if STRICT_CLI is not None:
+        return STRICT_CLI
+    if md_path.suffix.lower() not in (".md", ".markdown"):
+        return False
+    return bool(option_flag(first_pdfmd_option(md_path, metadata_files, "strict")))
+
+
+def strict_message(lines: list[str]) -> str:
+    unique = list(dict.fromkeys(lines))
+    shown = "\n".join(f"  {line[:220]}" for line in unique[:5])
+    more = f"\n  ... and {len(unique) - 5} more" if len(unique) > 5 else ""
+    return (f"--strict: the build printed {len(unique)} warning{'s' if len(unique) != 1 else ''}, so it counts as "
+            f"failed (the output was written):\n{shown}{more}")
+
+
 # -- The cross-references of a part built alone, counted from the sources (v3.26.0; see pdfmd_labels) --------------
 # `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` / --seed-labels. A partial build (a part, or a section of an
 # ordinary document) used to know the labels of the rest only from the last full build's .aux (cache on). The scan
@@ -13416,6 +13506,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                        "(need one of lualatex/xelatex/pdflatex/latexmk/tectonic)")
 
     failed_families: set[str] = set()
+    failed_engines: list[str] = []
     last_reason = ""
     for engine_index, engine in enumerate(tex_engines):
         family = ENGINE_FAMILY.get(engine, engine)
@@ -13453,12 +13544,14 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                     where = ("in place (--keep-aux)" if keep_aux else
                              f"in the cache {output_dir}" if aux_dir else "in a scratch directory, then discarded")
                     print(f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
+                record_engine(engine, failed_engines)
                 return True, ""
             last_reason = reason
         finally:
             if scratch is not None:
                 shutil.rmtree(scratch, ignore_errors=True)
         failed_families.add(family)
+        failed_engines.append(engine)
         remaining = [e for e in tex_engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
         fake_result = subprocess.CompletedProcess(args=[engine], returncode=1, stdout="", stderr=last_reason)
         report_engine_failure(str(tex_path), engine, fake_result, remaining, debug)
@@ -13931,6 +14024,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 "input (see CHANGELOG-pdfmd.md's known-limitation note)."
             )
         ok, reason = convert_office_direct(md_path, output, verbose, debug)
+        if ok:
+            record_engine("soffice")
         flush_summary()
         return md_path, ok, reason[-3000:]
 
@@ -14288,6 +14383,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
         result = None
         failed_families: set[str] = set()
+        failed_engines: list[str] = []
         for engine_index, engine in enumerate(engines):
             family = ENGINE_FAMILY.get(engine, engine)
             if family in failed_families:
@@ -14309,8 +14405,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if verbose:
                         print(f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
                               "(last-resort fallback)")
+                    record_engine(engine, failed_engines)
                     break
                 failed_families.add(family)
+                failed_engines.append(engine)
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                 report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
@@ -14465,8 +14563,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         and missing_glyph_warning(combined_output)):
                     result = run(font or fallback_font())
             if result.returncode == 0:
+                record_engine(engine, failed_engines)
                 break
             failed_families.add(family)
+            failed_engines.append(engine)
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         if result is None:
@@ -14477,6 +14577,28 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
+
+
+def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Path]) -> "Built":
+    """Attach the engine that built the file and apply --strict: a build that printed a warning (or about which Pandoc
+    warned) fails, its output kept."""
+    problems = list(seen)
+    if result[1] and len(result) > 2 and isinstance(result[2], str):
+        problems += re.findall(r"(?m)^\[WARNING\].*$", result[2])
+    if result[1] and problems and resolve_strict(md_path, metadata_files):
+        result = (result[0], False, strict_message(problems))
+    return Built(result, BUILD["engine"], BUILD["failed"])
+
+
+def convert_one(md_path: Path, *args, **kwargs) -> "Built":
+    """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
+    BUILD["engine"], BUILD["failed"] = None, []
+    bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
+    given = bound.get("metadata_file")
+    metadata_files = given if isinstance(given, list) else ([given] if given else [])
+    with warning_capture() as seen:
+        result = _convert_one_recorded(md_path, *args, **kwargs)
+    return finish_build(result, seen, md_path, metadata_files)
 
 
 def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: list[Path] | None,
@@ -16588,7 +16710,7 @@ def inkmd_main() -> None:
         raise SystemExit(code)
 
 
-def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
+def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: bool, font: str,
                 engines: list[str], variables: list[str], slide_level: int | None,
                 pandoc_options: list[str],
                 metadata_file: Path | list[Path] | None = None,
@@ -17007,6 +17129,8 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
             reason = re.sub(re.escape(built.name) + r":(\d+)", lambda found: f"{source.name}:{max(1, int(found.group(1)) - offset)}", reason)
             reason = reason.replace(built.name, source.name)
             reason = re.sub(r"(?m)^(\s*)(\d+)( │)", lambda found: f"{found.group(1)}{max(1, int(found.group(2)) - offset)}{found.group(3)}", reason)
+        if ok:
+            record_engine("typst")
         if ok and verbose:
             print(f"AUTO TYPSTDIRECT  {display_path(source)}: compiled with Typst directly (no Pandoc)")
         elif not ok:
@@ -17025,6 +17149,8 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
 
     ok, reason, used = direct.render_html(built, output, order, soffice_convert=lambda src, out: run_soffice_convert(src, out, verbose),
                                           on_failure=failed, log=lambda command, cwd: log_cmd(command, cwd, verbose))
+    if ok and used:
+        record_engine(str(used))
     if ok and verbose:
         print(f"AUTO HTMLDIRECT  {display_path(source)}: {used} (no Pandoc)")
     return source, ok, reason
@@ -17066,6 +17192,8 @@ def convert_qmd(source: Path, output: Path, target_format: str,
     rendered = source.parent / output.name
     if result.returncode == 0 and rendered.exists() and rendered.resolve() != output.resolve():
         rendered.replace(output)
+    if result.returncode == 0:
+        record_engine("quarto")
     return source, result.returncode == 0, (result.stdout + result.stderr)[-3000:]
 
 
@@ -17092,6 +17220,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="output directory (batch) or filename (single-file/report/book); "
                              "a recognized extension (e.g. .html, .tex, .typ) also selects the "
                              "target format, same as --to")
+    parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=None,
+                        help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
+                             "a Pandoc [WARNING]...) counts as failed: the output is kept, the exit code is 1 "
+                             "(also `pdfmd-options: {strict: true}`); --no-strict overrides the document")
     parser.add_argument("--stop-at", choices=STOP_STAGES, default=None, metavar="STAGE",
                         help="stop the build early, after STAGE: 'markdown' -- the assembled Markdown "
                              "(the parts joined into one file, NAME.assembled.md); 'tex' -- the "
@@ -17773,8 +17905,10 @@ def main() -> None:
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
-    global FALLBACK_CLI, MISSING_CLI
-    FALLBACK_CLI, MISSING_CLI = args.fallback, args.missing
+    global FALLBACK_CLI, MISSING_CLI, STRICT_CLI
+    FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
+    if args.strict is not None:
+        os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
     configured = load_config().get("translit")
     if isinstance(configured, list):
         configured = ",".join(str(item) for item in configured)
@@ -18131,6 +18265,9 @@ def main() -> None:
         target_format = default_target(files[0], metadata_files)
         need_engines(target_format)
         engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
+        BUILD["engine"], BUILD["failed"] = None, []
+        report_capture = warning_capture()
+        report_seen = report_capture.__enter__()       # --strict: the warnings of this build (closed before the OK lines)
         report_from, report_reader_reason = (
             (args.from_format, None) if auto_disabled(report_no_auto, "reader")
             else resolve_from_format(files[0], args.from_format, metadata_files)
@@ -18362,6 +18499,7 @@ def main() -> None:
                 # -r/--report build of a file that has its own header-includes.
                 result = None
                 failed_families: set[str] = set()
+                failed_engines: list[str] = []
                 for engine_index, engine in enumerate(engines):
                     family = ENGINE_FAMILY.get(engine, engine)
                     if family in failed_families:
@@ -18426,11 +18564,17 @@ def main() -> None:
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))
                     if result.returncode == 0:
+                        record_engine(engine, failed_engines)
                         break
                     failed_families.add(family)
+                    failed_engines.append(engine)
                     remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
+        report_capture.__exit__(None, None, None)
+        report_problems = list(report_seen) + (re.findall(r"(?m)^\[WARNING\].*$", result.stderr or "")
+                                               if result.returncode == 0 else [])
+        report_strict_failed = bool(result.returncode == 0 and report_problems and resolve_strict(files[0], metadata_files))
         if result.returncode == 0:
             for file in files:
                 stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
@@ -18456,10 +18600,13 @@ def main() -> None:
         if not args.verbose and report_auto_summary:
             kinds = " ".join(dict.fromkeys(report_auto_summary))
             print(f"AUTO: {kinds}. Use --verbose to see in full")
-        print(f"{'OK  ' if result.returncode == 0 else 'FAIL'}  REPORT  {display_path(output)}")
+        print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
+              + engine_label(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"])))
         if result.stderr:
             print(result.stderr[-3000:])
-        if result.returncode:
+        if report_strict_failed:
+            print(strict_message(report_problems))
+        if result.returncode or report_strict_failed:
             raise SystemExit(1)
         if args.open:
             open_file(output)
@@ -18610,16 +18757,22 @@ def main() -> None:
             if args.presentation:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
                                  "format in the document's own Quarto front matter instead")
-            results = [convert_qmd(source, output, target_format, variables, pandoc_options)]
+            BUILD["engine"], BUILD["failed"] = None, []
+            with warning_capture() as seen:
+                built = convert_qmd(source, output, target_format, variables, pandoc_options)
+            results = [finish_build(built, seen, source, [])]
             if results[0][1]:
                 # Front matter only: Quarto has its own metadata system, so no
                 # metadata.yaml is looked up for a .qmd (see convert_qmd).
                 backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
         elif direct_kind is not None:
-            results = [convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
-                                      apply_defaults=(config_options().get("apply-defaults", False) if args.apply_defaults is None
-                                                      else args.apply_defaults) not in (False, "false", "False", 0, ""),
-                                      metadata_request=args.metadata_file)]
+            BUILD["engine"], BUILD["failed"] = None, []
+            with warning_capture() as seen:
+                built = convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
+                                       apply_defaults=(config_options().get("apply-defaults", False) if args.apply_defaults is None
+                                                       else args.apply_defaults) not in (False, "false", "False", 0, ""),
+                                       metadata_request=args.metadata_file)
+            results = [finish_build(built, seen, source, [])]
             if results[0][1]:
                 backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
         elif source.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
@@ -18723,8 +18876,9 @@ def main() -> None:
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]
-    for source, ok, error in results:
-        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}")
+    for result in results:
+        source, ok, error = result
+        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{engine_label(result)}")
         if error:
             print(error)
     if native_auto and not failures:
