@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.0 — 2026-10-09
+
+Pre-edit state: commit `0ff734c` (v3.24.26). First commit of the 3.25 line (tables, code blocks, direct routes,
+history and restore, images); nothing of it is pushed until the whole line is done.
+
+### Changed
+
+- **A `---|---` pipe table is laid out by its content.** Pandoc gives a pipe table whose lines run long the widths of
+  its separator dashes, and the usual `---|---` is the same count in every column, so such a table came out in equal
+  columns whatever it held (the README's own tables: a one-word key column as wide as the prose beside it). The
+  filter now reads equal dashes as "no opinion" and picks the widths that make the rows take the fewest lines within
+  the text width, a column never narrower than its longest word nor wider than its longest cell; a table that
+  fits is given back its natural width. Unequal dashes (`--|-----`) are a choice and are kept. `pdfmd-options:
+  {table-widths: keep}`, the same key in the config or `--setup` ("Pipe-table column widths"), switches it off;
+  `--no-auto tablewidth` still removes the filter altogether.
+- **pdfmd's Lua filters are files now.** The table-width and CSV-table filters were Python strings inside
+  `pdfmd.py`; they live in the package `pdfmd_lua/` (`table_width.lua`, `csv_table.lua`), as `pdfmd_office/office.lua`
+  already did. A lone copy of `pdfmd.py` without the package still builds, only without the two filters.
+
+---
+
 ## v3.24.26 — 2026-10-09
 
 Pre-edit state: commit `7b111ba` (v3.24.25).

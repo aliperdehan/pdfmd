@@ -858,7 +858,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
-| `tablewidth` | a wide pipe table | balances column widths so the table fits the page, and leaves narrow tables at their natural width |
+| `tablewidth` | a pipe table with plain `---` separators and long lines | picks the column widths that give the fewest lines within the text width (a column never narrower than its longest word), and gives a table that fits its natural width back; unequal dashes (`--|-----`) are kept, and `table-widths: keep` in `pdfmd-options` leaves every table as written |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |

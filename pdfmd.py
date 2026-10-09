@@ -821,6 +821,12 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     natbib/biblatex still can't express a table caption's citation through
     a Lua filter that rebuilds captions (nulabreport.lua does).
 
+Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
+    lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text
+    width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.
+    Unequal dashes (`--|-----`) are a choice and kept. `pdfmd-options: {table-widths: keep}` (or the same in the
+    config, or --setup) leaves every table as written; `--no-auto tablewidth` switches the filter off.
+
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
     standalone defaults documented above, plus pdfmd's own file-discovery
@@ -1057,7 +1063,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.26"
+PDFMD_VERSION = "3.25.0"
 import argparse
 import csv
 import filecmp
@@ -1576,98 +1582,7 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
 # fontsize/geometry front-matter override is not specially accounted for;
 # revisit CHAR_BUDGET (or make it geometry-aware) if that turns out to
 # matter in practice, rather than assuming this estimate transfers exactly.
-TABLE_WIDTH_LUA_FILTER = r"""
-local MIN_FRACTION = 0.08
--- ~95 characters is a commonly-cited rule of thumb for how much 12pt serif
--- text fits on one line within a standard 1in-margin A4/Letter page -- see
--- the long comment above this filter's Python source for what this is and
--- is not measuring, and why an estimate is all that's available here.
-local CHAR_BUDGET = 95
--- Rough per-column overhead (rule padding + inter-column gap) so a table
--- with many columns, each individually short, doesn't dodge the budget
--- check on a technicality -- \tabcolsep-scale, not a real measurement.
-local PER_COLUMN_OVERHEAD = 3
--- pandoc.utils.stringify() renders a Math inline as its raw LaTeX SOURCE
--- (e.g. "\frac{1.0 \times 10^{-14}}{[OH^-]}", 34 characters), not its
--- typeset width (a fraction that renders at a fraction of that) -- found
--- via a real chemistry-report table (Ksp/uncertainty-propagation cells)
--- getting stretched by cell_length() treating that raw command text as
--- 34 characters of visual width. No exact fix is possible here either
--- (same reasoning as CHAR_BUDGET above -- no font has been measured yet
--- when this filter runs), so this is a flat divisor, not a real LaTeX-
--- width estimator: a short subscript/superscript like "K_{sp}" (6 raw
--- characters, renders about as wide as "Ksp") and a stacked fraction
--- like the one above (34 raw characters, renders roughly as wide as its
--- widest of numerator/denominator, maybe 10-12) both land closer to
--- their real rendered width divided by roughly 3 than left undivided.
-local MATH_LENGTH_DIVISOR = 3
-
-local function math_overcount(contents)
-  local overcount = 0
-  contents:walk({
-    Math = function(m)
-      local source_len = #m.text
-      overcount = overcount + (source_len - math.ceil(source_len / MATH_LENGTH_DIVISOR))
-    end
-  })
-  return overcount
-end
-
-local function cell_length(cell)
-  local length = #pandoc.utils.stringify(cell.contents) - math_overcount(cell.contents)
-  if length < 1 then length = 1 end
-  return length
-end
-
-local function scan_row(row, max_len)
-  for i, cell in ipairs(row.cells) do
-    local span = cell.col_span or 1
-    local share = cell_length(cell) / span
-    for k = i, math.min(i + span - 1, #max_len) do
-      if share > max_len[k] then max_len[k] = share end
-    end
-  end
-end
-
-function Table(tbl)
-  local ncols = #tbl.colspecs
-  if ncols == 0 then return nil end
-  local has_default = false
-  for _, spec in ipairs(tbl.colspecs) do
-    if spec[2] == nil then has_default = true end
-  end
-  if not has_default then return nil end
-
-  local max_len = {}
-  for i = 1, ncols do max_len[i] = 1 end
-  for _, row in ipairs(tbl.head.rows) do scan_row(row, max_len) end
-  for _, body in ipairs(tbl.bodies) do
-    for _, row in ipairs(body.head) do scan_row(row, max_len) end
-    for _, row in ipairs(body.body) do scan_row(row, max_len) end
-  end
-
-  local total = 0
-  for i = 1, ncols do total = total + max_len[i] end
-  -- The table's own content already fits a reasonable line width -- leave
-  -- it at its natural size (nil widths preserved) rather than opinion-ate
-  -- a table nobody asked to have stretched or rebalanced.
-  if total + ncols * PER_COLUMN_OVERHEAD <= CHAR_BUDGET then return nil end
-
-  local fractions = {}
-  for i = 1, ncols do fractions[i] = max_len[i] / total end
-  local sum_clamped = 0
-  for i = 1, ncols do
-    if fractions[i] < MIN_FRACTION then fractions[i] = MIN_FRACTION end
-    sum_clamped = sum_clamped + fractions[i]
-  end
-  for i = 1, ncols do fractions[i] = fractions[i] / sum_clamped end
-
-  for i, spec in ipairs(tbl.colspecs) do
-    tbl.colspecs[i] = {spec[1], fractions[i]}
-  end
-  return tbl
-end
-"""
+TABLE_WIDTH_LUA_FILTER = "table_width"   # pdfmd_lua/table_width.lua
 
 # Auto-applied whenever a document uses a `.csv`-classed fenced Div (see
 # contains_csv_table()) -- turns a Div like
@@ -1706,292 +1621,24 @@ end
 # multiple physical lines -- a genuine RFC 4180 parser is real added
 # complexity for a case simple spreadsheet exports essentially never
 # produce, and this filter is explicitly meant to stay simple.
-CSV_TABLE_LUA_FILTER = r"""
-local DEFAULT_MAX_ROWS = 10
-local DEFAULT_MAX_COLS = 7
+CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
-local function parse_csv_line(line, delim)
-  local fields = {}
-  local field = {}
-  local in_quotes = false
-  local i = 1
-  local n = #line
-  while i <= n do
-    local c = line:sub(i, i)
-    if in_quotes then
-      if c == '"' then
-        if line:sub(i + 1, i + 1) == '"' then
-          table.insert(field, '"')
-          i = i + 1
-        else
-          in_quotes = false
-        end
-      else
-        table.insert(field, c)
-      end
-    else
-      if c == '"' then
-        in_quotes = true
-      elseif c == delim then
-        table.insert(fields, table.concat(field))
-        field = {}
-      else
-        table.insert(field, c)
-      end
-    end
-    i = i + 1
-  end
-  table.insert(fields, table.concat(field))
-  return fields
-end
 
-local function limit_or_all(value, default)
-  if value == nil or value == "" then return default end
-  if value:lower() == "all" then return math.huge end
-  return tonumber(value) or default
-end
-
-local function escape_cell(text)
-  text = (text or ""):gsub("\r", ""):gsub("\n", " ")
-  -- A leading/trailing "|" (already escaped) still needs the pipe-table
-  -- delimiter itself escaped; a literal backslash is left alone, unlike
-  -- a general Markdown escaper, since a CSV cell's own backslashes (a
-  -- Windows path, a regex) should render as typed, not be mistaken for
-  -- Markdown escape sequences. Wrapped in parens: string.gsub returns
-  -- TWO values (the string, and a count of substitutions made), and a
-  -- bare `return text:gsub(...)` -- as the LAST argument to a later
-  -- table.insert(escaped, escape_cell(...)) call -- leaks that count as
-  -- a second, unwanted argument, which table.insert then misreads as
-  -- its own `pos` parameter. Caught directly, as a real Lua runtime
-  -- error ("bad argument #2 to 'insert' (number expected, got
-  -- string)"), the first time this filter ran against an actual CSV.
-  return (text:gsub("|", "\\|"))
-end
-
--- the attribute block at the end of a caption, `{#tbl:id .class key=value}`, as (identifier, classes, pairs);
--- the inlines without it
-local function split_attributes(inlines)
-  local copy = {}
-  for i, inline in ipairs(inlines) do copy[i] = inline end
-  local last = copy[#copy]
-  if last and last.t == "Str" then
-    local inner = last.text:match("^{(.*)}$")
-    if inner and inner:match("^%s*[#%.]") then
-      local identifier, classes, pairs_ = "", {}, {}
-      for token in inner:gmatch("%S+") do
-        local id = token:match("^#(.+)$")
-        local class = token:match("^%.(.+)$")
-        local key, value = token:match('^([%w_%-]+)="?([^"]*)"?$')
-        if id then identifier = id
-        elseif class then classes[#classes + 1] = class
-        elseif key then pairs_[#pairs_ + 1] = {key, value} end
-      end
-      table.remove(copy)
-      while #copy > 0 and (copy[#copy].t == "Space" or copy[#copy].t == "SoftBreak") do table.remove(copy) end
-      return identifier, classes, pairs_, copy
-    end
-  end
-  return "", {}, {}, copy
-end
-
-local function inlines_of_text(text, reader)
-  local ok, doc = pcall(pandoc.read, text, reader)
-  if ok and doc.blocks[1] and (doc.blocks[1].t == "Para" or doc.blocks[1].t == "Plain") then return doc.blocks[1].content end
-  return {pandoc.Str(text)}
-end
-
--- `: Caption` or `Table: Caption` right after the block: the pipe-table caption syntax, which Pandoc's reader cannot
--- attach to a table that does not exist yet when it reads the text
-local function caption_paragraph(block)
-  if not block or (block.t ~= "Para" and block.t ~= "Plain") then return nil end
-  local first, second = block.content[1], block.content[2]
-  if not first or first.t ~= "Str" then return nil end
-  local rest
-  if first.text == ":" and second and second.t == "Space" then rest = 3
-  elseif first.text == "Table:" and second and second.t == "Space" then rest = 3
-  else return nil end
-  local out = {}
-  for i = rest, #block.content do out[#out + 1] = block.content[i] end
-  return out
-end
-
-local function csv_blocks(div)
-  local path = div.attributes["file"]
-  if not path then
-    io.stderr:write("WARN  .csv div has no file= attribute; leaving it empty\n")
-    return {}
-  end
-  -- Pandoc runs in the folder of the document's metadata file, so a relative name is tried as given, then beside the
-  -- document, then along the resource path
-  local file = io.open(path, "r")
-  if not file and not path:match("^/") and not path:match("^%a:[\\/]") then
-    local candidates = {}
-    for _, input in ipairs(PANDOC_STATE.input_files or {}) do
-      local folder = input:match("^(.*)[/\\][^/\\]*$")
-      if folder then candidates[#candidates + 1] = folder .. "/" .. path end
-    end
-    for _, folder in ipairs(PANDOC_STATE.resource_path or {}) do candidates[#candidates + 1] = folder .. "/" .. path end
-    for _, candidate in ipairs(candidates) do
-      file = io.open(candidate, "r")
-      if file then break end
-    end
-  end
-  if not file then
-    io.stderr:write("WARN  .csv: could not open '" .. path .. "'; leaving it empty\n")
-    return {}
-  end
-
-  local delim = div.attributes["delimiter"]
-  if delim == nil or delim == "" then
-    delim = path:match("%.tsv$") and "\t" or ","
-  end
-  local max_rows = limit_or_all(div.attributes["rows"], DEFAULT_MAX_ROWS)
-  local max_cols = limit_or_all(div.attributes["cols"], DEFAULT_MAX_COLS)
-  local has_header = div.attributes["header"] ~= "false"
-  -- cells are read as Pandoc's own Markdown (H~2~O, $x^2$, [@key], \ce{...}); reader="gfm" restores plain GFM
-  local reader = div.attributes["reader"]
-  if reader == nil or reader == "" then reader = "markdown" end
-
-  local header_fields = nil
-  local data_rows = {}
-  local total_data_rows = 0
-  local total_cols = 0
-  local rows_truncated = false
-  local cols_truncated = false
-
-  for line in file:lines() do
-    line = line:gsub("\r$", "")
-    if line ~= "" then
-      local fields = parse_csv_line(line, delim)
-      if #fields > total_cols then total_cols = #fields end
-      if #fields > max_cols then
-        cols_truncated = true
-        local kept = {}
-        for i = 1, max_cols do kept[i] = fields[i] end
-        fields = kept
-      end
-      if has_header and header_fields == nil then
-        header_fields = fields
-      else
-        total_data_rows = total_data_rows + 1
-        if #data_rows < max_rows then
-          table.insert(data_rows, fields)
-        else
-          rows_truncated = true
-        end
-      end
-    end
-  end
-  file:close()
-
-  local shown_cols = math.min(total_cols, max_cols)
-  if not header_fields then
-    header_fields = {}
-    for i = 1, math.max(shown_cols, 1) do
-      header_fields[i] = "Column " .. i
-    end
-  end
-
-  local lines = {}
-  local function emit_row(fields)
-    local escaped = {}
-    for i = 1, #header_fields do
-      table.insert(escaped, escape_cell(fields[i]))
-    end
-    table.insert(lines, "| " .. table.concat(escaped, " | ") .. " |")
-  end
-  emit_row(header_fields)
-  table.insert(lines, "|" .. string.rep(" --- |", #header_fields))
-  for _, row in ipairs(data_rows) do
-    emit_row(row)
-  end
-
-  -- Trailing blank line required: confirmed directly (a real generated
-  -- table's last row rendered as a stray, unparsed Str/Space paragraph
-  -- instead of the table's own last row) that pandoc.read(), called from
-  -- inside a Lua filter, needs one to correctly close out a pipe table's
-  -- final row -- pandoc's own CLI reading the identical text from a file
-  -- does not need this, so this is specifically a pandoc.read()-from-a-
-  -- filter quirk, not a general GFM pipe-table requirement.
-  local parsed = pandoc.read(table.concat(lines, "\n") .. "\n\n", reader)
-  local blocks = parsed.blocks
-
-  if rows_truncated or cols_truncated then
-    local shown_rows = #data_rows
-    local note = string.format(
-      "*(showing %d of %d row%s, %d of %d column%s -- use `rows=all`/`cols=all`, or " ..
-      "`rows=N`/`cols=N`, on this `.csv` div to include more)*",
-      shown_rows, total_data_rows, total_data_rows == 1 and "" or "s",
-      shown_cols, total_cols, total_cols == 1 and "" or "s")
-    for _, block in ipairs(pandoc.read(note .. "\n", "markdown").blocks) do blocks[#blocks + 1] = block end
-    io.stderr:write("WARN  " .. path .. ": showing " .. shown_rows .. " of " ..
-                     total_data_rows .. " row(s), " .. shown_cols .. " of " ..
-                     total_cols .. " column(s) -- see the note under the table\n")
-  end
-  return blocks, reader
-end
-
--- the table (first Table of `blocks`) gets its caption, identifier and attributes
-local function attach_caption(blocks, inlines, div)
-  local identifier, classes, pairs_, words = split_attributes(inlines)
-  for _, block in ipairs(blocks) do
-    if block.t == "Table" then
-      if #words > 0 then block.caption = pandoc.Caption({pandoc.Plain(words)}) end
-      if identifier == "" then identifier = div.identifier end
-      if identifier ~= "" or #classes > 0 or #pairs_ > 0 then block.attr = pandoc.Attr(identifier, classes, pairs_) end
-      return
-    end
-  end
-end
-
-function Blocks(blocks)
-  local out, changed, i = {}, false, 1
-  while i <= #blocks do
-    local block = blocks[i]
-    if block.t == "Div" and block.classes:includes("csv") then
-      changed = true
-      local made, reader = csv_blocks(block)
-      local text = block.attributes["caption"]
-      local following
-      if text and text ~= "" then
-        following = inlines_of_text(text, reader or "markdown")
-      else
-        following = caption_paragraph(blocks[i + 1])
-        if following then i = i + 1 end
-      end
-      if following then attach_caption(made, following, block)
-      elseif block.identifier ~= "" then
-        for _, item in ipairs(made) do
-          if item.t == "Table" then item.attr = pandoc.Attr(block.identifier) break end
-        end
-      end
-      for _, item in ipairs(made) do out[#out + 1] = item end
-    else
-      out[#out + 1] = block
-    end
-    i = i + 1
-  end
-  if changed then return out end
-  return nil
-end
-"""
+def width_filter_args(width_filter: Path) -> list[str]:
+    """``--lua-filter`` for the table-width filter, with the global `table-widths` setting (auto or keep)
+    handed to it; a document's own `pdfmd-options: {table-widths: ...}` reaches it through the metadata."""
+    args = ["--lua-filter", str(width_filter)]
+    value = config_options().get("table-widths")
+    if isinstance(value, str) and value.strip().casefold() in ("auto", "keep"):
+        args += ["-M", f"pdfmd-table-widths={value.strip().casefold()}"]
+    return args
 
 
 @contextmanager
 def csv_table_filter() -> Iterator[Path]:
-    """Materialize CSV_TABLE_LUA_FILTER to a temp file for --lua-filter.
-
-    Same reasoning as table_width_filter(): fixed content, so a plain
-    system-tempdir file, not one placed beside the document.
-    """
-    with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua",
-                            prefix="pdfmd-csvtable-", delete=False) as temporary:
-        temporary.write(CSV_TABLE_LUA_FILTER)
-        temporary_path = Path(temporary.name)
-    try:
-        yield temporary_path
-    finally:
-        temporary_path.unlink(missing_ok=True)
+    """pdfmd_lua/csv_table.lua, for --lua-filter."""
+    with lua_filter_file(CSV_TABLE_LUA_FILTER, "pdfmd-csvtable-") as path:
+        yield path
 
 
 CSV_DIV_RE = re.compile(r"\{[^}\n]*\.csv\b[^}\n]*\}")
@@ -5578,22 +5225,35 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
 
 
 @contextmanager
-def table_width_filter() -> Iterator[Path]:
-    """Materialize TABLE_WIDTH_LUA_FILTER to a temp file for --lua-filter.
+def lua_filter_file(name: str, prefix: str) -> Iterator[Path]:
+    """The path of pdfmd's own Lua filter `name` (pdfmd_lua/NAME.lua) for --lua-filter.
 
-    Content is fixed (not document-specific), so this is just a plain
-    temp file in the system tempdir rather than beside the document --
-    unlike prepared_latex_inputs()'s temp files, nothing needs it to sit
-    next to the source for relative paths to resolve.
+    Without the pdfmd_lua package (a lone copy of this script) a filter that does nothing is
+    written to a temporary file instead, so the callers need no special case.
     """
-    with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua",
-                            prefix="pdfmd-tablewidth-", delete=False) as temporary:
-        temporary.write(TABLE_WIDTH_LUA_FILTER)
+    shipped = None
+    try:
+        import pdfmd_lua
+        shipped = pdfmd_lua.path(name)
+    except ImportError:
+        pass
+    if shipped is not None:
+        yield shipped
+        return
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua", prefix=prefix, delete=False) as temporary:
+        temporary.write("return {}\n")
         temporary_path = Path(temporary.name)
     try:
         yield temporary_path
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+@contextmanager
+def table_width_filter() -> Iterator[Path]:
+    """pdfmd_lua/table_width.lua, for --lua-filter."""
+    with lua_filter_file(TABLE_WIDTH_LUA_FILTER, "pdfmd-tablewidth-") as path:
+        yield path
 
 
 # -- Script-aware font fallback (v3.23.0) ----------------------------------------
@@ -12126,7 +11786,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if fonts_filter is not None:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
-                cmd += ["--lua-filter", str(width_filter)]
+                cmd += width_filter_args(width_filter)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -12546,7 +12206,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
-                    cmd += ["--lua-filter", str(width_filter)]
+                    cmd += width_filter_args(width_filter)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -12745,7 +12405,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if fonts_filter is not None:
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in LATEX_ENGINES:
-                        cmd += ["--lua-filter", str(width_filter)]
+                        cmd += width_filter_args(width_filter)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
@@ -15945,7 +15605,7 @@ def main() -> None:
                     if report_fonts_filter is not None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
-                        cmd += ["--lua-filter", str(width_filter)]
+                        cmd += width_filter_args(width_filter)
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -16058,7 +15718,7 @@ def main() -> None:
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
-                            cmd += ["--lua-filter", str(width_filter)]
+                            cmd += width_filter_args(width_filter)
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

@@ -5,7 +5,7 @@ output format via Pandoc. Started as `batchmd`, a twenty-line `pypandoc`
 batch script (see the changelog's v0.1.0); has since grown auto-discovery for metadata files,
 LaTeX preambles, Lua filters, and fonts, a multi-engine PDF fallback chain,
 a `pdfmd-options:` front-matter block, batch/report/book modes, and its
-own generic table-width-balancing Lua filter (`TABLE_WIDTH_LUA_FILTER`) —
+own generic table-width-balancing Lua filter (`pdfmd_lua/table_width.lua`) —
 see the module's own docstring (`pdfmd.py`'s opening lines) for the
 current, authoritative feature list; don't rely on this file for feature
 details, only for process.
