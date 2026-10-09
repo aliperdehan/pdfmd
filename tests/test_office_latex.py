@@ -15,7 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
+from pandoc_support import needs_pandoc  # noqa: E402
 from pdfmd_office import caption_separator, cref_names, parse_aux  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
@@ -140,6 +142,7 @@ class Documents(unittest.TestCase):
             "\\begin{equation}\\label{eq:precip}\n  \\ce{Ag+(aq) -> Ag(s)}\n\\end{equation}\n\n"
             "As \\cref{eq:precip} and \\ref{fig:a} show, \\eqref{eq:precip}.\n")
 
+    @needs_pandoc(3, 4, why="Word tables take a style from 3.4; the equation table is plain before")
     def test_chemistry_and_units_become_text_and_equations(self):
         xml = self.document_xml(self.TEXT, "-M", self.labels())
         self.assertNotIn("\\ce", xml)
@@ -173,6 +176,7 @@ class Documents(unittest.TestCase):
         xml = self.document_xml("Water \\ce{H2O}.\n", "-M", "pdfmd-office-latex=off")
         self.assertNotIn("subscript", xml)      # Pandoc drops the raw command; no chemistry was made
 
+    @needs_pandoc(3, 4, why="Word tables take a style from 3.4; the equation table is plain before")
     def test_a_layout_wrapped_equation_is_still_an_equation(self):
         raw = "```{=latex}\n\\par\\nointerlineskip\n\\begin{equation}\\label{e}\n  a = b\n\\end{equation}\n\\par\\nointerlineskip\n```\n"
         xml = self.document_xml(raw)
@@ -456,6 +460,7 @@ class OtherOutputs(unittest.TestCase):
                               text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
 
     @unittest.skipUnless(TYPST, "needs Typst")
+    @needs_pandoc(3, 2, why="an older Pandoc writes an absolute image path Typst reads as relative to its root")
     def test_typst_gets_the_drawing_when_the_document_asks(self):
         root = self.folder("pdfmd-options:\n  office: {latex: auto, labels: off}\n")
         done = self.run_pdfmd(root, "-e", "typst")

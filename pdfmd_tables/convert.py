@@ -168,7 +168,8 @@ def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]
 
 
 def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] | None = None,
-            directory: str = "tables", inline: bool = False, reader: str = "markdown") -> Extracted:
+            directory: str = "tables", inline: bool = False, reader: str = "markdown",
+            pandoc_version: tuple | None = None) -> Extracted:
     """Every table of `text` as a `.csv` block: the data in `directory` beside the document (`file=`), or inside
     the block with `inline`. Tables that cannot be written as CSV are left as they are, with the reason.
     `reader` is the Pandoc reader the document is built with: gfm and commonmark read pipe tables only, so a grid
@@ -199,6 +200,11 @@ def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] |
                 read_with_pandoc(table, pandoc)
         elif not table.header:
             table.problem = "it has no header"
+        if (not table.problem and pandoc_version and pandoc_version < (3, 8, 2) and table.caption
+                and caption_parts(table.caption)[2]):
+            table.problem = (f"its caption carries attributes ({{{caption_parts(table.caption)[2]}}}) and Pandoc "
+                             f"{'.'.join(map(str, pandoc_version))} reads them as text, not as the table's (3.8.2 and later "
+                             "do), so the change could not be checked; use a newer Pandoc to extract it")
         if table.problem:
             result.report.insert(0, f"SKIP  {label}: {table.problem}")
             continue

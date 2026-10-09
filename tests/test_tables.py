@@ -13,13 +13,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+sys.path.insert(0, str(ROOT / "tests"))
+
 import pdfmd  # noqa: E402
 import pdfmd_tables as tables  # noqa: E402
+from pandoc_support import PANDOC_VERSION, needs_pandoc  # noqa: E402
 
 FILTER = ROOT / "pdfmd_lua" / "csv_table.lua"
 PANDOC = shutil.which("pandoc")
 
-DOCUMENT = """---
+DOCUMENT_WITH_ID = """---
 title: Tables
 ---
 
@@ -60,10 +63,14 @@ Table: Demonstration of simple table syntax.
 | 1 | 2 |
 """
 
+# Before Pandoc 3.8.2 a table caption's `{#id}` is words, not the table's identifier: --extract-tables leaves such a table
+# (and says why), so the tests that count what it extracts use the document without it there.
+DOCUMENT = DOCUMENT_WITH_ID if PANDOC_VERSION >= (3, 8, 2) else DOCUMENT_WITH_ID.replace(" {#tbl:settings}", "")
+
 
 class Scan(unittest.TestCase):
     def test_every_kind_is_found_and_code_is_not(self):
-        found = tables.find_tables(DOCUMENT)
+        found = tables.find_tables(DOCUMENT_WITH_ID)
         self.assertEqual([table.kind for table in found], ["pipe", "simple", "grid", "pipe"])
         self.assertEqual(found[0].caption, "Settings and what they do {#tbl:settings}")
         self.assertEqual(found[0].identifier, "tbl:settings")
@@ -138,7 +145,8 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual([t["bodies"] for t in again], [t["bodies"] for t in before])
         self.assertEqual([t["aligns"] for t in again], [t["aligns"] for t in before])
         self.assertEqual(again[0]["caption"], before[0]["caption"])
-        self.assertEqual(again[0]["id"], "tbl:settings")
+        if PANDOC_VERSION >= (3, 8, 2):
+            self.assertEqual(again[0]["id"], "tbl:settings")
 
     def test_a_table_longer_than_the_default_cap_is_not_cut(self):
         rows = "\n".join(f"| {n} | {n * n} |" for n in range(1, 31))
@@ -153,6 +161,7 @@ class RoundTrip(unittest.TestCase):
         self.assertIn("separator=none", result.text)
         self.assertEqual(tables.same_tables(PANDOC, text, result.text, self.directory, FILTER), [])
 
+    @needs_pandoc(3, 8, 2, why="the caption's {#id} is the table's identifier from then on")
     def test_a_caption_with_quotes_goes_under_the_block(self):
         text = '| a | b |\n|---|---|\n| 1 | 2 |\n\n: Say "hi" {#tbl:q}\n'
         result = self.extract(text)
@@ -188,6 +197,18 @@ class RoundTrip(unittest.TestCase):
         result = self.extract(directory="data/csv")
         self.assertIn('file="data/csv/', result.text)
         self.assertTrue((self.directory / "data" / "csv").is_dir())
+
+
+class OldPandoc(unittest.TestCase):
+    def test_a_caption_with_attributes_is_left_when_pandoc_would_read_them_as_words(self):
+        text = "| a | b |\n|---|---|\n| 1 | 2 |\n\n: Stock {#tbl:stock}\n"
+        old = tables.extract(text, Path("."), pandoc=PANDOC, pandoc_version=(3, 1, 3))
+        self.assertEqual(old.changed, 0)
+        self.assertIn("reads them as text", " ".join(old.report))
+        self.assertIn("3.8.2", " ".join(old.report))
+        if PANDOC and PANDOC_VERSION >= (3, 8, 2):
+            new = tables.extract(text, Path("."), pandoc=PANDOC, pandoc_version=PANDOC_VERSION)
+            self.assertEqual(new.changed, 1)
 
 
 class Expand(unittest.TestCase):

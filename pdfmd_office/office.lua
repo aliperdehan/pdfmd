@@ -13,6 +13,17 @@ Settings arrive in metadata `pdfmd-office` (set by pdfmd): `latex` (auto | off),
 write the list of left-over fragments to).
 ]]
 
+-- Pandoc before 3.2 has no pandoc.Caption, no pandoc.TableBody: a caption is the table {long, short}, a body the table
+-- {attr, body, head, row_head_columns}. These stand in, so this filter and a profile written for a newer Pandoc work.
+if not pandoc.Caption then
+  pandoc.Caption = function(long, short) return {long = long or {}, short = short} end
+end
+if not pandoc.TableBody then
+  pandoc.TableBody = function(body, head, row_head_columns, attr)
+    return {attr = attr or pandoc.Attr(), body = body or {}, head = head or {}, row_head_columns = row_head_columns or 0}
+  end
+end
+
 local stringify = pandoc.utils.stringify
 local settings = {latex = "auto", report = nil, path = {}}
 local equation_block, centred   -- defined below
@@ -27,6 +38,7 @@ local counters = {math = 0, native = 0}
 -- small helpers
 
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+
 
 -- the {...} group starting at or after `pos`: content, position after it
 local function group(s, pos)
@@ -536,10 +548,12 @@ local function math_native(tex, display)
   if math_cache[key] ~= nil then return math_cache[key] end
   local kind = display and "DisplayMath" or "InlineMath"
   local result = false
-  pandoc.log.silence(function()
+  local function attempt()
     local ok, html = pcall(pandoc.write, pandoc.Pandoc({pandoc.Plain({pandoc.Math(kind, tex)})}), "html", mathml)
     result = ok and html:find("<math", 1, true) ~= nil
-  end)
+  end
+  -- pandoc.log (Pandoc 3.2 and later) keeps texmath's warnings out of the output; before it they go to stderr
+  if pandoc.log and pandoc.log.silence then pandoc.log.silence(attempt) else attempt() end
   math_cache[key] = result
   return result
 end

@@ -61,6 +61,17 @@ turns that knowledge into defaults:
   `pdfmd mingyun` finds `命運.md`.
 - **It reads PDFs too.** `pdfmd paper.pdf` restores a PDF's own embedded source or
   OCRs the pages to Markdown (see [PDF to Markdown](#pdf-to-markdown)).
+- **Tables can be data.** A `::: {.csv}` block puts a table's data in a CSV file or right in the document (any
+  delimiter, alignment and widths as attributes), and `pdfmd --extract-tables` turns the tables you already have into
+  such blocks after checking that Pandoc reads the same tables back (see [Tables straight from a CSV
+  file](#tables-straight-from-a-csv-file)). A table that is too wide gets its columns sized by their content.
+- **Long code wraps, SVG and web images work.** Code lines wrap at the margin in a LaTeX build, an SVG is converted for
+  LaTeX with whatever is installed, and an image from the web is fetched once and kept.
+- **Finished files are not rewritten.** A `.typ` file goes to Typst and an `.html` file to WeasyPrint or a browser, so
+  the page setup, styles and scripts survive; `--hybrid` makes the PDF open in LibreOffice as an editable document.
+- **It keeps the history.** `pdfmd --history` lists the backups, commits and compiles of a file, `--history-restore`
+  puts a version back (backing up the one it replaces), and the build history can live in a `.hst` file instead of the
+  document (see [Build stamps, history and snapshots](#build-stamps-history-and-snapshots)).
 - **It shows what it did.** Every automatic decision prints an `AUTO` line,
   `-v` shows the exact Pandoc command, and every default can be switched off.
 
@@ -192,6 +203,27 @@ line itself so it never goes out of date:
 pdfmd --completion zsh > ~/.zfunc/_pdfmd                              # ~/.zfunc in $fpath, then compinit
 pdfmd --completion bash > ~/.local/share/bash-completion/completions/pdfmd
 pdfmd --completion fish > ~/.config/fish/completions/pdfmd.fish
+```
+
+### An older Pandoc, and a machine with no network
+
+The oldest Pandoc `pdfmd` is tested with is **3.1.3** (what the claude.ai sandbox has); the whole test suite runs against
+it. An older one may work, and the first build with it says so once; `pdfmd --doctor` lists what a given Pandoc does
+without. With 3.1.3: Typst PDFs cannot show a picture `pdfmd` drew itself (before 3.2), a numbered equation in a Word file
+sits in a plain table instead of a borderless one (before 3.4), and `--extract-tables` leaves a table whose caption has
+a `{#tbl:id}` (before 3.8.2: Pandoc reads that as words, so the change could not be checked). A `pandoc-crossref` must be
+the release built for the Pandoc you run; one built for another is not run, with a warning, because it would put `??` where
+the numbers go.
+
+Where `pip install pdfmd-cli` cannot reach the network (a sandbox with no DNS that only takes an upload), two ways:
+
+```sh
+python3 scripts/build_zipapp.py          # on a machine with pdfmd's source: dist/pdfmd.pyz, 1.4 MB, PyYAML and pypdf inside
+python3 pdfmd.pyz report.md              # on the other: needs Python 3.9+, Pandoc and a PDF engine; unpacks itself once
+                                         # into ~/.cache/pdfmd/pyz/ because Pandoc has to open the Lua filters as files
+
+pip download pdfmd-cli -d wheelhouse     # or: a folder of wheels, carried over
+pip install --no-index --find-links wheelhouse pdfmd-cli
 ```
 
 ### No Pandoc? The built-in fallback

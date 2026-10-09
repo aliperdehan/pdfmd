@@ -1,4 +1,10 @@
+-- Pandoc before 3.2 has no pandoc.Caption, no pandoc.TableBody: a caption is the table {long, short}, a body the table
+-- {attr, body, head, row_head_columns}. These stand in, so this filter and a profile written for a newer Pandoc work.
+if not pandoc.Caption then
+  pandoc.Caption = function(long, short) return {long = long or {}, short = short} end
+end
 local DEFAULT_MAX_ROWS = 10
+
 local DEFAULT_MAX_COLS = 7
 
 -- The whole text at once (a quoted field may hold a line break, and inline data arrives as one string): rows of

@@ -91,6 +91,16 @@ Input formats:
     route through Pandoc (with a WARN for the last). A `.tex` file that no LaTeX engine can compile is tried through
     Pandoc after the engines fail, with a WARN.
 
+Older Pandoc, and no network (v3.25.11):
+    The oldest Pandoc pdfmd is tested with is PANDOC_MIN, 3.1.3 (the claude.ai sandbox's); the suite runs against it, with
+    a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Typst pictures, Word equation tables, caption
+    attributes). The first compile with an older Pandoc warns once (per version, a marker in the config folder), and
+    --doctor lists what the one installed does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
+    pandoc.log (Pandoc 3.2); a pandoc-crossref built for another Pandoc than the running one is not run (it would leave
+    ?? for the numbers) and a WARN says which release to get. scripts/build_zipapp.py makes dist/pdfmd.pyz, pdfmd and
+    its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
+    ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
+
 Images LaTeX cannot read (v3.25.7; the package pdfmd_images):
     LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown
     image, a raw `\\includegraphics{a.svg}` or `\\includesvg{a}` -- once, with the first converter found (rsvg-convert,
@@ -1182,7 +1192,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.10"
+PDFMD_VERSION = "3.25.11"
 import argparse
 import csv
 import filecmp
@@ -2238,6 +2248,41 @@ INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdf
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
                               "papersize", "fontsize"})
+# The oldest Pandoc pdfmd is tested with: 3.1.3, which is what the claude.ai sandbox has (the suite runs against it). An
+# older one may still work; the first compile with it says so once. What an older-than-latest one does without:
+PANDOC_MIN = (3, 1, 3)
+PANDOC_FEATURES = (
+    ((3, 2), "Typst PDFs with a picture pdfmd drew (an older writer gives Typst an absolute path it reads from its root)"),
+    ((3, 4), "Word files: the borderless style of numbered equations (the equation and its number sit in a plain table)"),
+    ((3, 8, 2), "a table caption's {#id} read as the table's identifier: --extract-tables leaves a table whose caption "
+                "has one"),
+)
+
+
+def pandoc_limits(version: tuple[int, ...]) -> list[str]:
+    """What the given Pandoc version does without, from PANDOC_FEATURES."""
+    return [text for needed, text in PANDOC_FEATURES if version < needed]
+
+
+def warn_old_pandoc() -> None:
+    """The first compile with a Pandoc older than PANDOC_MIN says so, once for that version on this machine."""
+    version = pandoc_version()
+    if version == (0,) or version >= PANDOC_MIN:
+        return
+    shown = ".".join(map(str, version))
+    path = config_root() / f"notice-pandoc-{shown}"
+    if os.environ.get("PDFMD_NO_PROMPT") or path.exists():
+        return
+    print(f"WARN  Pandoc {shown} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with; "
+          "it may work, and a newer one (`pdfmd --install pandoc`) is the first thing to try if something looks wrong. "
+          "This is said once.", file=sys.stderr)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("shown\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 PANDOC_MISSING = ("Pandoc was not found on PATH. Install it with `pdfmd --install pandoc` (no admin rights; "
                   "`pdfmd --install full` adds Typst for PDF output), or -- macOS: `brew install pandoc`; "
                   "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
@@ -3663,6 +3708,12 @@ def doctor_report() -> bool:
     version = ".".join(map(str, pandoc_version())) if pandoc else ""
     line(bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else ""),
          "pdfmd --install pandoc", "Pandoc (without it only the plain built-in renderer runs)")
+    if pandoc and pandoc_version() < PANDOC_MIN:
+        line(False, f"pandoc {version} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with",
+             "pdfmd --install pandoc", "a newer Pandoc (this one may work, but is not tested)")
+    if pandoc:
+        for limit in pandoc_limits(pandoc_version()):
+            line(None, f"with Pandoc {version}, not available: {limit}")
     engines = installed_engines()
     line(bool(engines), "PDF engines: " + (", ".join(engines) if engines else "none"),
          "pdfmd --install typst", "a PDF engine (Typst is the quickest)")
@@ -6965,6 +7016,8 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
 
 
 CROSSREF_ID_RE = re.compile(r"^(?:" + "|".join(("fig", "eq", "tbl", "sec", "lst")) + r"):[-\w]+")
+# before Pandoc 3.8.2 a table caption's `{#tbl:t}` is not the table's identifier, it stays in the caption as words
+CROSSREF_TEXT_RE = re.compile(r"^\{#(?:fig|eq|tbl|sec|lst):[-\w]+")
 
 
 def ast_features(document) -> tuple[bool, bool]:
@@ -6980,6 +7033,8 @@ def ast_features(document) -> tuple[bool, bool]:
                 for citation in content[0] if content else []:
                     if isinstance(citation, dict) and CROSSREF_ID_RE.match(str(citation.get("citationId", ""))):
                         crossref = True
+            if node.get("t") == "Str" and isinstance(node.get("c"), str) and CROSSREF_TEXT_RE.match(node["c"]):
+                crossref = True
             stack.extend(node.values())
         elif isinstance(node, list):
             # an Attr is [identifier, [classes], [[key, value]...]]
@@ -7034,6 +7089,17 @@ def contains_crossref(md_path: Path) -> bool:
     return bool(CROSSREF_RE.search(text))
 
 
+@lru_cache(maxsize=None)
+def crossref_built_for(executable: str) -> tuple[int, ...] | None:
+    """The Pandoc version a pandoc-crossref was built with (from its --version), or None when it does not say."""
+    try:
+        done = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"built with Pandoc v(\d+(?:\.\d+)+)", done.stdout + done.stderr)
+    return tuple(int(part) for part in found.group(1).split(".")) if found else None
+
+
 def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
                          no_auto: list[str] | None, label: str) -> list[str]:
     """``--filter pandoc-crossref``, added before --citeproc, when needed.
@@ -7061,6 +7127,15 @@ def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
               "{#fig:...}-style attribute) but pandoc-crossref isn't installed; the reference/"
               "numbering will not resolve. Install it (e.g. `brew install pandoc-crossref`), "
               "or rewrite without crossref syntax to silence this.", file=sys.stderr)
+        return []
+    executable = which("pandoc-crossref")
+    built, running = crossref_built_for(executable), pandoc_version()
+    if built and running != (0,) and built[:2] != running[:2]:
+        # pandoc-crossref "is not supported" through another Pandoc: it runs, and leaves ?? where the numbers go
+        print(f"WARN  {label}: uses pandoc-crossref syntax, but the installed pandoc-crossref was built for Pandoc "
+              f"{'.'.join(map(str, built))} and this is Pandoc {'.'.join(map(str, running))}; it would put ?? "
+              "where the numbers go, so it was not run. Install the pandoc-crossref release made for this Pandoc "
+              "(github.com/lierdakil/pandoc-crossref/releases), or a Pandoc to match.", file=sys.stderr)
         return []
     return ["--filter", "pandoc-crossref"]
 
@@ -8909,7 +8984,8 @@ def tables_command(args) -> int:
         try:
             if args.extract_tables:
                 result = tables.extract(text, base, pandoc=pandoc, names=names, directory=args.tables_dir,
-                                        inline=args.tables_inline, reader=reader)
+                                        inline=args.tables_inline, reader=reader,
+                                        pandoc_version=pandoc_version() if pandoc else None)
             else:
                 result = tables.expand(text, base)
             if result.changed and pandoc and args.extract_tables:
@@ -13187,6 +13263,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
     if not which("pandoc"):
         raise SystemExit(PANDOC_MISSING)
+    warn_old_pandoc()
 
     effective_from, reader_reason = (
         (from_format, None) if auto_disabled(no_auto, "reader")

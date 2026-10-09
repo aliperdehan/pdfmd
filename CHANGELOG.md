@@ -41,6 +41,47 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.11 — 2026-10-09
+
+Pre-edit state: commit `e3e1125` (v3.25.10).
+
+### Compatibility with Pandoc 3.1.3
+
+The claude.ai sandbox has Pandoc 3.1.3; the whole suite was run against it (a downloaded release binary) and what broke
+was fixed or, where Pandoc lacks the feature, recorded and skipped.
+
+- **Lua filters on a Pandoc without `pandoc.Caption`, `pandoc.TableBody`, `pandoc.log`** (all 3.2 or later): the CSV and
+  office filters define stand-ins (a caption is `{long, short}`, a body a plain table), so they, and a house style's
+  `office.lua` written for a newer Pandoc, run on 3.1.3. Before, every CSV block with a caption and every Word build with a
+  numbered equation stopped with "attempt to call a nil value".
+- **pandoc-crossref built for another Pandoc is not run.** It prints "not supported" and leaves `??` where the numbers go;
+  pdfmd now reads its `--version`, and when it was built for another Pandoc than the one running, says so once with the
+  release to get and does not run it.
+- **Cross-reference detection** (`@tbl:x`, `{#tbl:x}`) also finds a label that an older Pandoc leaves in a table caption as
+  words (it only reads it as the table's identifier from 3.8.2).
+- **`--extract-tables`** leaves a table whose caption has attributes when Pandoc is older than 3.8.2, with the reason,
+  instead of failing the check for the whole document.
+- **Known degradations** (`PANDOC_FEATURES`, listed by `--doctor`): Typst PDFs with a picture pdfmd drew (before 3.2), the
+  borderless style of a numbered equation in a Word file (before 3.4), caption attributes (before 3.8.2).
+- **`PANDOC_MIN` = 3.1.3.** The first compile with an older Pandoc warns once per version; `--doctor` says so too.
+
+### Added
+
+- **`scripts/build_zipapp.py` makes `dist/pdfmd.pyz`**, pdfmd and its packages with PyYAML and pypdf in one file (1.4 MB),
+  for a machine with no network. It unpacks itself once into `~/.cache/pdfmd/pyz/<hash>/` because Pandoc must open the Lua
+  filters and headers as real files. Run with `python3 -S` (no site-packages) in the tests: the bundled PyYAML and pypdf
+  are the ones used. README: the same with `pip download` and `--no-index --find-links`. (Not added to the release workflow:
+  that could not be tried here.)
+- README "Why": entries for CSV tables, code and images, finished files and the hybrid PDF, and history.
+
+### Tests
+
+- The suite passes on Pandoc 3.12 and on 3.1.3 (597 tests, 9 skipped for the three known differences). New:
+  `tests/pandoc_support.py` (`needs_pandoc(3, 4)`), version logic, the one-time warning, the crossref mismatch, the zipapp
+  built and run with `-S` and building a document with its filters.
+
+---
+
 ## v3.25.10 — 2026-10-09
 
 Pre-edit state: commit `4755334` (v3.25.9).
