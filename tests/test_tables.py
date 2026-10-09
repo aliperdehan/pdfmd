@@ -259,6 +259,98 @@ class CommandLine(unittest.TestCase):
         self.assertFalse((self.directory / ".backups").exists())
 
 
+MIXED = """---
+title: Mixed
+---
+
+# Mixed
+
+::: {.csv delimiter=semicolon caption="Inline one"}
+a;b;c
+1;2;3
+:::
+
+::: {.csv file="old.csv"}
+:::
+
+| Name | Qty |
+|------|----:|
+| Pen  |   3 |
+
++------+----------+
+| H1   | H2       |
++======+==========+
+| a    | - item 1 |
+|      | - item 2 |
++------+----------+
+
+-------  ------
+ 1        2
+ 3        4
+-------  ------
+
+| X | Y |
+|---|---|
+| 1 | 2 |
+"""
+
+
+class MixedDocument(unittest.TestCase):
+    """csv blocks and tables side by side; a table that cannot be CSV, or a check that fails."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-tables-mixed-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "doc.md").write_text(MIXED, encoding="utf-8")
+        (self.directory / "old.csv").write_text("p,q\n7,8\n", encoding="utf-8")
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+
+    def run_pdfmd(self, *args):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
+                              capture_output=True, text=True, env=self.env)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_extract_leaves_csv_blocks_and_unconvertible_tables_alone(self):
+        done = self.run_pdfmd("--extract-tables", "doc.md")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("SKIP  table 2: its cells hold more than one line", done.stdout)
+        self.assertIn("SKIP  table 3: it has no header row", done.stdout)      # the headerless simple table
+        after = (self.directory / "doc.md").read_text(encoding="utf-8")
+        self.assertIn('::: {.csv delimiter=semicolon caption="Inline one"}', after)
+        self.assertIn("a;b;c\n1;2;3", after)                                    # the inline block is untouched
+        self.assertIn('::: {.csv file="old.csv"}', after)
+        self.assertIn("| a    | - item 1 |", after)                             # the skipped grid table is as it was
+        self.assertEqual(after.count("::: {.csv"), 4)
+        back = self.run_pdfmd("--expand-tables", "doc.md")
+        self.assertEqual(back.returncode, 0, back.stderr)
+        self.assertEqual((self.directory / "old.csv").read_text(encoding="utf-8"), "p,q\n7,8\n")
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_a_document_read_as_gfm_has_pipe_tables_only(self):
+        gfm = MIXED.replace("---\ntitle: Mixed\n---\n\n", "", 1)          # no front matter: pdfmd reads it as gfm
+        (self.directory / "doc.md").write_text(gfm, encoding="utf-8")
+        done = self.run_pdfmd("--extract-tables", "doc.md")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("NOTE  2 grid/simple tables left as they are", done.stdout)
+        after = (self.directory / "doc.md").read_text(encoding="utf-8")
+        self.assertIn("| a    | - item 1 |", after)
+        self.assertIn(" 1        2", after)
+        self.assertEqual(after.count("::: {.csv"), 4)                         # 2 existing + the 2 pipe tables
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_a_failed_check_stops_the_document_and_writes_nothing(self):
+        from unittest import mock
+        with mock.patch.object(tables, "same_tables", return_value=["table 1 differs"]), \
+                mock.patch.object(sys, "argv", ["pdfmd", "--extract-tables", str(self.directory / "doc.md")]), \
+                mock.patch.dict(os.environ, self.env, clear=True):
+            with self.assertRaises(SystemExit) as raised:
+                pdfmd.main()
+        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual((self.directory / "doc.md").read_text(encoding="utf-8"), MIXED)
+        self.assertFalse((self.directory / "tables").exists())
+        self.assertFalse((self.directory / ".backups").exists())
+
+
 class BackupDirectory(unittest.TestCase):
     def test_default_legacy_and_explicit(self):
         with tempfile.TemporaryDirectory() as directory:

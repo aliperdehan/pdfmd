@@ -1104,7 +1104,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.4"
+PDFMD_VERSION = "3.25.5"
 import argparse
 import csv
 import filecmp
@@ -8113,10 +8113,14 @@ def tables_command(args) -> int:
     for document in documents:
         text = document.read_text(encoding="utf-8")
         base = document.parent
+        found = find_metadata(base.resolve(), args.metadata_file, document_stem=document.stem)
+        linked = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
+        reader = (args.from_format or "markdown") if auto_disabled(args.no_auto, "reader") \
+            else (resolve_from_format(document, args.from_format, linked)[0] or "markdown")
         try:
             if args.extract_tables:
                 result = tables.extract(text, base, pandoc=pandoc, names=names, directory=args.tables_dir,
-                                        inline=args.tables_inline)
+                                        inline=args.tables_inline, reader=reader)
             else:
                 result = tables.expand(text, base)
             if result.changed and pandoc and args.extract_tables:
@@ -8128,7 +8132,7 @@ def tables_command(args) -> int:
                             target.parent.mkdir(parents=True, exist_ok=True)
                             target.write_text(data, encoding="utf-8")
                             scratch_files.append(target)
-                    problems = tables.same_tables(pandoc, text, result.text, base, csv_filter)
+                    problems = tables.same_tables(pandoc, text, result.text, base, csv_filter, reader)
                     if not problems:
                         result.report.append("checked: Pandoc reads the same tables from the new document")
                 finally:

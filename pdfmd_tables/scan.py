@@ -251,6 +251,18 @@ def _simple_end(lines: list[str], index: int) -> int | None:
     return None
 
 
+def _headerless_end(lines: list[str], index: int) -> int | None:
+    """A simple table without a header: a rule of column dashes, rows, and the same kind of rule closing it."""
+    if not COLUMN_DASHES_RE.match(lines[index]):
+        return None
+    probe = index + 1
+    while probe < len(lines) and lines[probe].strip() and not COLUMN_DASHES_RE.match(lines[probe]):
+        probe += 1
+    if probe >= len(lines) or probe - index < 2 or not COLUMN_DASHES_RE.match(lines[probe]):
+        return None
+    return probe + 1
+
+
 def find_tables(text: str) -> list[FoundTable]:
     """Every table of `text`, in order, with its caption. Pipe tables are read; the others carry only their lines."""
     lines = text.split("\n")
@@ -262,7 +274,7 @@ def find_tables(text: str) -> list[FoundTable]:
         if line.startswith(("    ", "\t")) and (index == 0 or not lines[index - 1].strip() or index - 1 < skip_until):
             continue
         for kind, ender in (("pipe", _pipe_end), ("grid", _grid_end), ("multiline", _multiline_end),
-                            ("simple", _simple_end)):
+                            ("simple", _simple_end), ("simple", _headerless_end)):
             end = ender(lines, index)
             if end is None:
                 continue

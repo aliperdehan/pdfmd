@@ -28,12 +28,12 @@ def _normal(table: dict) -> dict:
             "widths": widths, "head": head, "bodies": bodies, "foot": foot}
 
 
-def pandoc_tables(pandoc: str, text: str, directory: Path, *filters: Path) -> list[dict]:
+def pandoc_tables(pandoc: str, text: str, directory: Path, *filters: Path, reader: str = "markdown") -> list[dict]:
     """The tables Pandoc reads from `text` (written beside the document, so a relative `file=` is found)."""
     scratch = directory / f".pdfmd-verify-{os.getpid()}.md"
     scratch.write_text(text, encoding="utf-8")
     try:
-        command = [pandoc, "-f", "markdown", "-t", "json"]
+        command = [pandoc, "-f", reader, "-t", "json"]
         for item in filters:
             command += ["--lua-filter", str(item)]
         done = subprocess.run(command + [scratch.name], capture_output=True, text=True, encoding="utf-8", cwd=directory)
@@ -46,10 +46,11 @@ def pandoc_tables(pandoc: str, text: str, directory: Path, *filters: Path) -> li
     return [_normal(table) for table in found]
 
 
-def same_tables(pandoc: str, before: str, after: str, directory: Path, csv_filter: Path | None) -> list[str]:
+def same_tables(pandoc: str, before: str, after: str, directory: Path, csv_filter: Path | None,
+                reader: str = "markdown") -> list[str]:
     """What differs between the tables of `before` and of `after` (read with the CSV filter): [] when nothing."""
-    old = pandoc_tables(pandoc, before, directory, *([csv_filter] if csv_filter else []))
-    new = pandoc_tables(pandoc, after, directory, *([csv_filter] if csv_filter else []))
+    old = pandoc_tables(pandoc, before, directory, *([csv_filter] if csv_filter else []), reader=reader)
+    new = pandoc_tables(pandoc, after, directory, *([csv_filter] if csv_filter else []), reader=reader)
     if len(old) != len(new):
         return [f"{len(old)} tables before, {len(new)} after"]
     problems = []

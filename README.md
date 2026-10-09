@@ -853,7 +853,10 @@ the captions (`Masses and prices` gives `tables/masses-and-prices.csv`), or `tab
 `--table-names a,b,c` names them, and a list that does not match the number of tables is an error that changes nothing.
 The caption, the alignment and the widths the document chose stay as attributes of the block, and before anything is
 written Pandoc reads the old and the new document and the tables must come out the same. A table Pandoc cannot write
-as CSV (a list inside a cell, a cell spanning rows) is left as it is, with the reason. `--tables-inline` puts the data
+as CSV (a list inside a cell, a cell spanning rows, no header row) is left as it is, with the reason; so is every
+`.csv` block already in the document, and if the check fails the whole document is left untouched and the command exits
+with an error. A document with no front matter is built as `gfm`, which reads pipe tables only, so only those are
+touched there. `--tables-inline` puts the data
 inside the document (in a fenced block) instead of in files, `--tables-dir DIR` picks the folder, and `--dry-run` shows
 the change without making it. `--expand-tables` is the reverse, every row included.
 

@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.5 — 2026-10-09
+
+Pre-edit state: commit `a84a912` (v3.25.4).
+
+### Fixed
+
+- **`--extract-tables` read every document as Pandoc's own `markdown`, whatever reader the build used.** A document
+  with no YAML front matter is built as `gfm`, where grid, simple and multiline tables are plain text; extracting them
+  would have turned text into tables. Both the extraction and the check now use the reader the build would use, and
+  under `gfm`/`commonmark` only pipe tables are touched, with a `NOTE` saying how many others were left (front matter
+  or `--from markdown` makes them tables).
+- **A simple table without a header** (a rule of dashes, rows, a closing rule) was not seen at all; it is now found
+  and reported as skipped, with the reason (a CSV block always has a header row).
+
+### Tests
+
+- A document mixing `.csv` blocks (inline and from a file) with pipe, grid, headerless and block-celled tables: the
+  blocks are left alone, the unconvertible tables are skipped with a reason, `--expand-tables` gives back the CSV
+  file untouched; a failed check exits 1 and writes nothing (no CSV, no backup); a `gfm` document gets pipe tables
+  only. The built PDF text of the mixed document is the same before and after extraction.
+
+---
+
 ## v3.25.4 — 2026-10-09
 
 Pre-edit state: commit `1a7b146` (v3.25.3).

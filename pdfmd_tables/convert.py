@@ -168,11 +168,21 @@ def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]
 
 
 def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] | None = None,
-            directory: str = "tables", inline: bool = False) -> Extracted:
+            directory: str = "tables", inline: bool = False, reader: str = "markdown") -> Extracted:
     """Every table of `text` as a `.csv` block: the data in `directory` beside the document (`file=`), or inside
-    the block with `inline`. Tables that cannot be written as CSV are left as they are, with the reason."""
+    the block with `inline`. Tables that cannot be written as CSV are left as they are, with the reason.
+    `reader` is the Pandoc reader the document is built with: gfm and commonmark read pipe tables only, so a grid
+    or simple table is plain text there and is not touched."""
     tables = find_tables(text)
+    plain_text = 0
+    if reader.casefold().startswith(("gfm", "commonmark")):
+        plain_text = sum(1 for table in tables if table.kind != "pipe")
+        tables = [table for table in tables if table.kind == "pipe"]
     result = Extracted(text)
+    if plain_text:
+        result.report.append(f"NOTE  {plain_text} grid/simple table{'' if plain_text == 1 else 's'} left as they are: "
+                             f"the reader this document is built with ({reader.split('+')[0]}) does not read them as tables "
+                             "(add YAML front matter, or --from markdown, to make them tables)")
     if not tables:
         result.report.append("no tables found")
         return result
