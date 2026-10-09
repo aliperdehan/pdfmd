@@ -876,6 +876,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
     picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
 
+    `pdfmd --init [TEMPLATE] [NAME]` (v3.26.17) starts a document from a template (pdfmd_templates: article, report, notes,
+    slides, book, and your own in the config folder's templates/); nothing that exists is overwritten.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1237,7 +1240,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.16"
+PDFMD_VERSION = "3.26.17"
 import argparse
 import csv
 import filecmp
@@ -5106,6 +5109,79 @@ def check_command(args) -> int:
         if errors or (warnings and strict):
             status = 1
     return status
+
+
+# --- pdfmd --init: a new document from a template (v3.26.17) -----------------------------------------------
+#
+# The templates are in the pdfmd_templates package (built in) and in `templates/` of the config folder (yours).
+
+def templates_module():
+    try:
+        import pdfmd_templates
+    except ImportError:
+        return None
+    return pdfmd_templates
+
+
+def git_user_name() -> str:
+    try:
+        done = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def init_command(args) -> int:
+    """`pdfmd --init [TEMPLATE] [NAME]`: list the templates, or copy one into a new folder (a new .md file for a template
+    that is one file). Nothing that exists is overwritten."""
+    module = templates_module()
+    if module is None:
+        print("--init needs the pdfmd_templates package next to pdfmd.py", file=sys.stderr)
+        return 1
+    folder = config_root() / "templates"
+    mine = module.user_templates(folder)
+    spec = args.init
+    if not spec:
+        print("Templates (pdfmd --init TEMPLATE [NAME]):")
+        for name, path in module.builtin().items():
+            print(f"  {name:<10} {module.describe(path)}")
+        for name, path in mine.items():
+            print(f"  {name:<10} {module.describe(path)}  (yours)")
+        print(f"\nYour own: a folder, or one .md file, in {display_path(folder)}; or name any folder or .md file by path.")
+        return 0
+    template = module.find(spec, folder)
+    if template is None:
+        names = ", ".join([*module.builtin(), *mine])
+        print(f"No template called '{spec}'. The templates are: {names}. A folder or .md file can be named by its path.",
+              file=sys.stderr)
+        return 1
+    given = args.path[0] if args.path else None
+    default = template.stem if template.is_file() else template.name
+    target = Path(given) if given is not None else Path(default)
+    if template.is_file() and target.suffix.lower() not in (".md", ".markdown"):
+        target = target.with_name(target.name + ".md")
+    name = re.sub(r"[^\w.-]+", "-", (target.stem if template.is_file() else target.name) or default).strip("-") or "document"
+    variables = {}
+    for variable in args.variable or []:
+        match = re.match(r"^([^:=]+)[:=](.*)$", variable)
+        if match:
+            variables[match.group(1)] = match.group(2)
+    now = datetime.now()
+    values = {"name": name, "title": variables.get("title") or re.sub(r"[-_]+", " ", name).strip().title(),
+              "author": variables.get("author") or git_user_name() or "Your Name",
+              "date": variables.get("date") or now.strftime("%Y-%m-%d"), "year": str(now.year)}
+    try:
+        written = module.create(template, target, values)
+    except module.TemplateError as error:
+        print(f"--init: {error}", file=sys.stderr)
+        return 1
+    for path in written:
+        print(f"CREATED  {display_path(path)}")
+    step = module.next_step(template, values)
+    if template.is_dir() and target.resolve() != Path.cwd().resolve():
+        step = step if step.startswith("cd ") else f"cd {target} && {step}"
+    print(f"NEXT     {step}")
+    return 0
 
 
 def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verbose: bool,
@@ -17892,6 +17968,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
+    parser.add_argument("--init", nargs="?", const="", metavar="TEMPLATE",
+                        help="start a new document from a template: `pdfmd --init article paper` makes the folder paper/ "
+                             "(a template that is one file makes paper.md) with the title, author and date filled in "
+                             "(-V title=... -V author=...); nothing that exists is overwritten. Alone it lists the "
+                             "templates: article, report, notes, slides, book, and yours (a folder or .md file in the "
+                             "config folder's templates/, or any path)")
     parser.add_argument("--check", action="store_true",
                         help="read FILE (a scaffold and its parts too) and report what would go wrong or print wrongly, "
                              "without building: a missing image or csv file, a link or #anchor to nowhere, a duplicate "
@@ -18405,6 +18487,8 @@ def main() -> None:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))
+    if args.init is not None:
+        raise SystemExit(init_command(args))
     if args.check_ignore and not args.check:
         raise SystemExit("--check-ignore goes with --check: pdfmd --check --check-ignore heading-jump")
     if args.check:

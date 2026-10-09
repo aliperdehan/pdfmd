@@ -1,0 +1,1 @@
+lecture or study notes: headings, math, a table, a code block; one file

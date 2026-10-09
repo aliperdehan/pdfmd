@@ -1,0 +1,1 @@
+a paper: title, abstract, sections, an equation, a table, a citation with its .bib

@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.17 — 2026-10-09
+
+Pre-edit state: commit `383e064` (v3.26.16).
+
+### Added
+
+- `pdfmd --init [TEMPLATE] [NAME]`: a new document from a template. Alone it lists them. Built in (new package
+  `pdfmd_templates`): `article` (abstract, equation, table, a citation and its `.bib`), `report` (contents, numbered
+  sections, a table from a CSV file), `notes`, `slides` (for `-p`) and `book` (a scaffold and `parts/`). Yours: a folder or
+  a `.md` file in `templates/` of the config folder, or any folder or `.md` file named by path. `{{name}}`, `{{title}}`,
+  `{{author}}` (`-V author=`, else `git config user.name`), `{{date}}`, `{{year}}` and `__name__` in file names are filled
+  in; unknown `{{...}}` stay. Nothing that exists is overwritten (the clashing files are named and nothing is written).
+  The plan said `--init --from TEMPLATE`, but `--from` is already the Pandoc reader, so the template is the argument of
+  `--init`. Every built-in template passes `--check --strict` and builds, in the tests.
+
 ## v3.26.16 — 2026-10-09
 
 Pre-edit state: commit `bf8870e` (v3.26.15).

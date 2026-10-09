@@ -109,6 +109,18 @@ pdfmd lecture -V fontsize=12pt -V colorlinks=true
 pdfmd lecture --citeproc --bibliography refs.bib
 ```
 
+### 1.8 Start a new document
+
+```sh
+pdfmd --init                       # list the templates: article, report, notes, slides, book (and yours)
+pdfmd --init article my-paper      # a folder with my-paper.md and refs.bib that builds as it is
+pdfmd --init slides talk && pdfmd talk/talk -p
+```
+
+Yours go in a `templates/` folder of the config folder (a folder, or one `.md` file), or are named by path
+(`pdfmd --init ~/templates/lab-sheet sheet-3`). `{{name}}`, `{{title}}`, `{{author}}`, `{{date}}` and `{{year}}` are
+filled in; nothing that exists is overwritten ([README](../README.md#start-from-a-template)).
+
 ---
 
 ## 2. A project with a house style
@@ -806,6 +818,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
 | check the source | `--check`, `--check-ignore`, `--strict` |
+| a new document | `--init` |
 | tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
 

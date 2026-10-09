@@ -404,6 +404,25 @@ tables (all, or chosen ones), file history, compare and restore, restore the sou
 command it runs is written to the *pdfmd* output panel. Install it with `npx @vscode/vsce package` and
 `code --install-extension pdfmd-vscode-*.vsix`.
 
+### Start from a template
+
+```sh
+pdfmd --init                          # the templates: article, report, notes, slides, book, and yours
+pdfmd --init article my-paper         # my-paper/my-paper.md + refs.bib, title, author and date filled in
+pdfmd --init report .                 # into this folder, if none of its files exist yet
+pdfmd --init notes week3 -V author="A. Author" -V title="Week 3"
+```
+
+Each template builds as it is (they are checked with `--check --strict` and built in the tests): an `article` with an
+abstract, an equation, a table and a citation with its `.bib`; a `report` with a contents page, numbered sections and a
+table read from a CSV file; `notes` (headings, math, a code block); `slides` (build with `-p`); and a `book`, a scaffold
+with its chapters in `parts/`. The title comes from the name, the author from `-V author=` or `git config user.name`.
+Nothing that exists is overwritten: pdfmd names the files in the way and writes nothing. Your own templates are a
+folder (or a single `.md` file) in the `templates/` folder of pdfmd's config folder (`pdfmd --init` shows where), or any
+folder or `.md` file named by its path. In their files and file names `{{name}}`, `{{title}}`, `{{author}}`, `{{date}}`
+and `{{year}}` are replaced (`__name__.md` becomes `my-paper.md`); any other `{{...}}` stays as written. A
+`description.txt` (one line, for the list) and a `next.txt` (what to type next) in a template folder are not copied.
+
 ### One section
 
 `pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"
