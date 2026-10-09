@@ -419,6 +419,33 @@ The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to 
 final: what the flattening removes (ids, cross-reference numbers become text, citations become text) is not recoverable
 from it.
 
+#### The flat file that carries its source: `--keep-source`
+
+Flattening cannot be undone (ids, cross-reference numbers, citations and scripts are text now). So a Markdown output
+can end with its whole source in one HTML comment, the same set of files `--attach-source` puts into a PDF (the
+assembled Markdown, a manifest of the layout, the `.csv` data), and `--restore` writes them back:
+
+```sh
+pdfmd report --to gfm --keep-source            # report.gfm.md ends with the source, compressed (packed)
+pdfmd report --to gfm --keep-source readable   # the same, as escaped text you can read and diff
+pdfmd --restore report.gfm.md --list           # what it carries
+pdfmd --restore report.gfm.md                  # writes report.gfm.restored/ (never overwrites anything)
+```
+
+```yaml
+pdfmd-options:
+  keep-source: true        # or readable; --no-keep-source turns it off for a run
+```
+
+Nothing in the source can close the comment early: `packed` is base64 of the compressed source (no `-`, `<` or `>`
+in it), `readable` escapes every `>` (so no `-->` or `--!>`), a backslash, a carriage return and a line-initial `<` or `=`,
+and undoes it exactly. A source with `<!-- a <!-- b --> c -->`, `-->` in a code block, CRLF line endings or the marker
+itself comes back byte for byte. The comment also stores a hash of the Markdown above it, so `--restore` can tell
+you the file was edited since. Comments are stripped from the kept copy unless `strip-comments` says otherwise (as for
+`--attach-source`); a whole build keeps its source, a part or a section built alone does not; a kept source over 1 MB
+gets a warning, since GitHub stops showing a Markdown file that large. It works for every Markdown output: `--to gfm`,
+`gfm+raw`, `markdown`, `commonmark`.
+
 ### Word and OpenDocument output
 
 Plain Pandoc ignores `papersize`, `geometry`, `mainfont` and `fontsize` when it writes `.docx`

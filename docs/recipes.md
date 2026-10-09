@@ -482,6 +482,10 @@ bibliography are all processed; a Typst piece or a PDF figure becomes an SVG in 
 the source under another name; a Markdown writer never replaces its own source (`pdfmd doc.md --to markdown` stops with an
 error unless `-o` names another file). Settings: `pdfmd-options: {gfm: {scripts: unicode, math: dollars, title: true}}`.
 
+`--keep-source` ends the file with its whole source in an HTML comment, `--restore FILE.md` writes it back, so the flat
+copy can go to a reader and the original is not lost: `pdfmd report --to gfm --keep-source`, then `pdfmd --restore
+report.gfm.md` makes `report.gfm.restored/` with `report.md`, the parts and the CSV data (details in the README).
+
 ---
 
 ## 8. The PDF that carries its source

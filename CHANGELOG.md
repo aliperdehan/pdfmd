@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.4 — 2026-10-09
+
+Pre-edit state: commit `dc41c97` (v3.26.3).
+
+### Added
+
+- `--keep-source [packed|readable]` (`pdfmd-options: {keep-source: true|packed|readable}`, `--no-keep-source`): a Markdown
+  output (`--to gfm`, `gfm+raw`, `markdown`, `commonmark` ...) ends with its whole source in one HTML comment: the files
+  `--attach-source` puts into a PDF (the assembled Markdown, comments stripped unless `strip-comments` says otherwise, a
+  manifest of the layout, the `.csv` data and any `--bundle` files). `packed` (default) is the entries as JSON, zlib, base64;
+  `readable` is the text with `\`, `>`, CR and a line-initial `<` or `=` escaped by a backslash. Neither can close the
+  comment early: base64 has no `-`, `<` or `>`, and the readable form has no bare `>` (so no `-->` or `--!>`) and no line
+  that could pass for the marker. A comment inside the source, `-->` in a code block, CRLF, binary data, a huge source
+  (tested at 1.4 MB) and a source that contains the marker come back byte for byte. The comment stores a hash of the
+  Markdown above it. A whole build only (a part or a section alone keeps nothing, like `--attach-source`); over 1 MB a
+  warning says GitHub stops showing such a file. The new module is `pdfmd_flat/keep.py`.
+- `pdfmd --restore FILE.md` writes the kept source back into `FILE.restored/` (or `-o DIR`), never over anything, with
+  `--list` to look first, and a `NOTE` when the Markdown was edited since (its hash differs). `--restore` of a PDF is as
+  before; both share one core (`restore_attachments`).
+
+### Changed
+
+- `attach_source_after_success` was split: `source_attachments` collects the entries (for a PDF or a Markdown file) and
+  `attachment_requirements` takes no PDF. Nothing changes for `--attach-source`.
+
 ## v3.26.3 — 2026-10-09
 
 Pre-edit state: commit `8472936` (v3.26.2).

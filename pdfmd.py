@@ -850,7 +850,8 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     pdfmd_lua/flat.lua runs last and writes the title block, captions as `**Table 1.** text`, Unicode sub/superscripts,
     GitHub anchors, section numbers in the headings, and counts what no Markdown can carry. The output is
     `<name>.gfm.md` beside its source; `--to gfm+raw` is Pandoc's own gfm writer. A Markdown writer never replaces its
-    own source.
+    own source. `--keep-source [packed|readable]` ends a Markdown output with its source in one HTML comment
+    (v3.26.4; pdfmd_flat/keep.py), `pdfmd --restore FILE.md` writes it back.
 
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
@@ -1213,7 +1214,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.3"
+PDFMD_VERSION = "3.26.4"
 import argparse
 import csv
 import filecmp
@@ -14866,13 +14867,13 @@ def front_matter_dict(text: str) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf_path: Path) -> dict:
+def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf_path: Path | None) -> dict:
     """What a rebuild needs that the PDF does not carry: the user's own TeX files (name,
     version, whether stored), the fonts the metadata names, the tools that made it."""
     front = front_matter_dict(merged)
     producer = None
     try:
-        info = pypdf.PdfReader(pdf_path).metadata
+        info = pypdf.PdfReader(pdf_path).metadata if pdf_path is not None and pypdf is not None else None
         producer = str(info.get("/Producer") or info.get("/Creator") or "") or None if info else None
     except Exception:  # noqa: BLE001 -- a hint only
         pass
@@ -14945,6 +14946,76 @@ def csv_block_files(merged: str, base: Path) -> dict[str, bytes]:
     return found
 
 
+def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
+                       preamble_files: list[Path] | None, no_auto: list[str] | None,
+                       report: bool = False, base: Path | None = None) -> tuple[dict[str, bytes], str, dict]:
+    """The files a build's source is kept as -- the assembled Markdown, a manifest of the layout, the data and
+    bundled files -- as {name: bytes}, with the merged text and the manifest. They go into a PDF (--attach-source)
+    or after a Markdown output (--keep-source); ``output`` is the file they will belong to."""
+    base = Path(os.path.abspath(base or md_path.parent))
+    is_pdf = output.suffix.lower() == ".pdf"
+    with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
+        merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
+                                           resolve_strip_comments(md_path, metadata_files, default=True),
+                                           resolve_bibliography_pruning(md_path, metadata_files),
+                                           report=report, base=base)
+    extras: dict[str, bytes] = {}
+    origins: dict[str, str] = {}
+    mode = resolve_bundle(md_path, metadata_files)
+    header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
+    deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base)
+    if mode:
+        represented = {Path(os.path.abspath(base / item["path"]))
+                       for item in [*manifest["chunks"], *manifest["layout"]]}
+        found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
+                                      manifest["data_files"], base)
+        packages = resolve_bundle_packages(md_path, metadata_files)
+        from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
+                     and not (base / dep["name"]).exists()]
+        limit = float(option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
+                      or BUNDLE_MAX_MB) * 1024 * 1024
+        total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
+        if total > limit:
+            print(f"WARN  bundle: {len(found) + len(from_tree)} files, {total / 1048576:.0f} MB, is over the "
+                  f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
+                  file=sys.stderr)
+        else:
+            stripping = "markdown" in manifest["comments_stripped"]
+            for item in found:
+                data = item.read_bytes()
+                if stripping and item.suffix.lower() in (".md", ".markdown"):
+                    try:
+                        data = strip_markdown_comments(data.decode("utf-8-sig")).encode("utf-8")
+                    except UnicodeDecodeError:
+                        pass
+                extras[relative_posix(base, item)] = data
+            for dep in from_tree:
+                if dep["name"] not in extras:
+                    extras[dep["name"]] = dep["path"].read_bytes()
+                    origins[dep["name"]] = "tex-tree"
+            manifest["bundle"] = mode
+            manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
+                                   **({"from": origins[name]} if name in origins else {})}
+                                  for name, data in extras.items()]
+            manifest["outside"] = sorted({Path(name).name for name in outside})
+    # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
+    # small: it is stored even when the rest of the folder is not bundled.
+    for name, data in csv_block_files(merged, base).items():
+        if name not in extras:
+            extras[name] = data
+    if extras and "extras" not in manifest:
+        manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                              for name, data in extras.items()]
+    if is_pdf:
+        match_images_to_pdf(output, [image for image in manifest["images"] if image["path"] not in extras], base)
+    manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, output if is_pdf else None)
+    attachments = {
+        ATTACH_SOURCE: merged.encode("utf-8"),
+        ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
+        **{EXTRA_PREFIX + name: data for name, data in extras.items()}}
+    return attachments, merged, manifest
+
+
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
@@ -14959,64 +15030,9 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         return
     base = Path(os.path.abspath(base or md_path.parent))
     try:
-        with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
-            merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
-                                               resolve_strip_comments(md_path, metadata_files, default=True),
-                                               resolve_bibliography_pruning(md_path, metadata_files),
-                                               report=report, base=base)
-        extras: dict[str, bytes] = {}
-        origins: dict[str, str] = {}
-        mode = resolve_bundle(md_path, metadata_files)
-        header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
-        deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base)
-        if mode:
-            represented = {Path(os.path.abspath(base / item["path"]))
-                           for item in [*manifest["chunks"], *manifest["layout"]]}
-            found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, pdf_path,
-                                          manifest["data_files"], base)
-            packages = resolve_bundle_packages(md_path, metadata_files)
-            from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
-                         and not (base / dep["name"]).exists()]
-            limit = float(option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
-                          or BUNDLE_MAX_MB) * 1024 * 1024
-            total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
-            if total > limit:
-                print(f"WARN  bundle: {len(found) + len(from_tree)} files, {total / 1048576:.0f} MB, is over the "
-                      f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
-                      file=sys.stderr)
-            else:
-                stripping = "markdown" in manifest["comments_stripped"]
-                for item in found:
-                    data = item.read_bytes()
-                    if stripping and item.suffix.lower() in (".md", ".markdown"):
-                        try:
-                            data = strip_markdown_comments(data.decode("utf-8-sig")).encode("utf-8")
-                        except UnicodeDecodeError:
-                            pass
-                    extras[relative_posix(base, item)] = data
-                for dep in from_tree:
-                    if dep["name"] not in extras:
-                        extras[dep["name"]] = dep["path"].read_bytes()
-                        origins[dep["name"]] = "tex-tree"
-                manifest["bundle"] = mode
-                manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
-                                       **({"from": origins[name]} if name in origins else {})}
-                                      for name, data in extras.items()]
-                manifest["outside"] = sorted({Path(name).name for name in outside})
-        # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
-        # small: it is stored even when the rest of the folder is not bundled.
-        for name, data in csv_block_files(merged, base).items():
-            if name not in extras:
-                extras[name] = data
-        if extras and "extras" not in manifest:
-            manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
-                                  for name, data in extras.items()]
-        match_images_to_pdf(pdf_path, [image for image in manifest["images"] if image["path"] not in extras], base)
-        manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, pdf_path)
-        write_pdf_attachments(pdf_path, {
-            ATTACH_SOURCE: merged.encode("utf-8"),
-            ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
-            **{EXTRA_PREFIX + name: data for name, data in extras.items()}})
+        attachments, merged, manifest = source_attachments(md_path, pdf_path, parts, metadata_files, preamble_files, no_auto,
+                                                           report, base)
+        write_pdf_attachments(pdf_path, attachments)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         print(f"WARN  attach-source: could not attach the source to {display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
@@ -15041,6 +15057,62 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
             print("NOTE  " + line[10:])
         elif verbose:
             print(line)
+
+
+# -- Markdown that carries its source (v3.26.4) -----------------------------------
+# `--keep-source [packed|readable]`, `pdfmd-options: {keep-source: true|packed|readable}`: a Markdown output (--to gfm,
+# gfm+raw, markdown, commonmark ...) ends with one HTML comment holding the same entries --attach-source puts into a PDF
+# (see pdfmd_flat/keep.py for the encodings and why nothing in the source can close the comment). `pdfmd --restore
+# FILE.md` writes them back into FILE.restored/. A whole build only (not a part or a section), like --attach-source.
+KEEP_SOURCE_CLI: str | bool | None = None
+MARKDOWN_TARGETS = frozenset({"gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict"})
+
+
+def resolve_keep_source(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """"packed", "readable" or None: the command line, else `pdfmd-options.keep-source`."""
+    value = KEEP_SOURCE_CLI if KEEP_SOURCE_CLI is not None else first_pdfmd_option(md_path, metadata_files, "keep-source")
+    if value in (None, False) or str(value).strip().casefold() in ("", "false", "no", "off", "0"):
+        return None
+    name = str(value).strip().casefold()
+    if value is True or name in ("true", "yes", "on", "1"):
+        return "packed"
+    if name not in ("packed", "readable"):
+        raise SystemExit(f"keep-source {value!r}: choose packed (the default), readable, or false")
+    return name
+
+
+def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
+                              preamble_files: list[Path] | None, no_auto: list[str] | None, mode: str,
+                              verbose: bool) -> None:
+    """--keep-source: end the Markdown just written with its source."""
+    try:
+        import pdfmd_flat.keep as keep
+    except ImportError:
+        print("WARN  keep-source: needs the pdfmd_flat package (install pdfmd-cli); the source was not kept",
+              file=sys.stderr)
+        return
+    if not output.is_file():
+        return
+    try:
+        entries, merged, manifest = source_attachments(md_path, output, parts, metadata_files, preamble_files, no_auto)
+        written = output.read_bytes().decode("utf-8")
+        body, old = keep.split(written)        # a file written by this run never has one; a stale one would be replaced
+        trailer = keep.pack(entries, body, mode, md_path.name, PDFMD_VERSION)
+        output.write_bytes(keep.append(body, trailer).encode("utf-8"))
+    except Exception as error:  # noqa: BLE001 -- the Markdown itself is fine; say so and carry on
+        print(f"WARN  keep-source: could not keep the source in {display_path(output)} ({error}); "
+              "the Markdown itself was written", file=sys.stderr)
+        return
+    kept = manifest.get("extras") or []
+    print(f"KEPT      {display_path(output)}: source of {display_path(md_path)}"
+          + (f" and {len(parts)} more" if parts else "")
+          + f" ({len(merged.splitlines())} lines, {comments_note(manifest)}"
+          + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}" if kept else "")
+          + f"; {mode}, {len(trailer) / 1024:.0f} KB); `pdfmd --restore {output.name}` writes it back")
+    if len(trailer.encode("utf-8")) > keep.WARN_BYTES:
+        print(f"WARN  keep-source: the kept source is {len(trailer) / 1048576:.1f} MB; GitHub and some editors stop "
+              "showing a Markdown file this large (--no-keep-source, or --attach-source on a PDF, keeps it out)",
+              file=sys.stderr)
 
 
 # -- The images the PDF itself carries (v3.22.6) --------------------------------
@@ -15653,10 +15725,18 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         names = ", ".join(sorted(attachments)) or "no attachments at all"
         raise SystemExit(f"{display_path(pdf_path)} carries no pdfmd source ({names}); "
                          "build it with --attach-source or pdfmd-options.attach-source")
+    return restore_attachments(pdf_path, attachments, out_dir, list_only, odf_name)
+
+
+def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: Path | None, list_only: bool,
+                        odf_name: str | None = None) -> int:
+    """The part of --restore that does not care where the source came from: a PDF's attachments or a Markdown file's
+    kept source (``pdf_path`` is that file)."""
     manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
     if manifest.get("format", 0) > ATTACH_FORMAT:
         raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (attachment format "
                          f"{manifest.get('format')}); upgrade pdfmd to restore it")
+    is_pdf = pdf_path.suffix.lower() == ".pdf"
     merged = attachments.get(manifest.get("source", ATTACH_SOURCE), b"").decode("utf-8")
     status = 0
     if sha256_text(merged) != manifest.get("sha256"):
@@ -15676,7 +15756,8 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
     for image in manifest.get("images") or []:
         if image["path"] not in stored:
             print(f"IMAGE     {image['path']}  ("
-                  + ("taken out of the PDF's own picture" if image.get("pdf") else "recorded, not in the PDF") + ")")
+                  + ("taken out of the PDF's own picture" if image.get("pdf") and is_pdf
+                     else "recorded, not in the PDF" if is_pdf else "recorded, not stored in the Markdown") + ")")
     for item in extras:
         print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
     if list_only:
@@ -15702,7 +15783,8 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         if odf_target not in files:
             files[odf_target] = attachments[odf_name]
             print(f"ODF       {odf_name}  (comes back as {odf_target}: the editable copy LibreOffice opens)")
-    pictures, renamed, failed = extract_pdf_images(pdf_path, manifest.get("images") or [], stored)
+    pictures, renamed, failed = (extract_pdf_images(pdf_path, manifest.get("images") or [], stored)
+                                 if is_pdf else ({}, {}, []))
     for name in failed:
         print(f"WARN  {name}: the PDF's picture could not be taken out; put the file back beside the document",
               file=sys.stderr)
@@ -15736,6 +15818,34 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         print(f"NOTE  {', '.join(filters)}: a Lua filter is code, and pdfmd runs one that sits beside a "
               "document when it builds -- read it first if the PDF is not from you")
     return status
+
+
+def restore_from_markdown(path: Path, out_dir: Path | None, list_only: bool = False) -> int:
+    """--restore FILE.md: write back the source a Markdown file keeps (--keep-source)."""
+    try:
+        import pdfmd_flat.keep as keep
+    except ImportError:
+        raise SystemExit("--restore of a Markdown file needs the pdfmd_flat package (install pdfmd-cli)")
+    if not path.is_file():
+        raise SystemExit(f"{path}: no such file")
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8-sig")
+        body, trailer = keep.split(text)
+        if trailer is None:
+            raise SystemExit(f"{display_path(path)} keeps no pdfmd source; build it with --keep-source "
+                             "or pdfmd-options.keep-source")
+        attachments = keep.unpack(trailer)
+    except keep.KeepError as error:
+        raise SystemExit(f"{display_path(path)}: {error}")
+    except UnicodeDecodeError:
+        raise SystemExit(f"{display_path(path)} is not a UTF-8 text file")
+    if ATTACH_MANIFEST not in attachments:
+        raise SystemExit(f"{display_path(path)}: the kept source has no manifest")
+    if trailer.body_hash and keep.digest(body) != trailer.body_hash:
+        print("NOTE  the Markdown was edited since pdfmd wrote it; the restored source is what it was made from, "
+              "not these edits", file=sys.stderr)
+    return restore_attachments(path, attachments, out_dir, list_only)
 
 
 def restore_front_matter(text: str, manifest: dict) -> str:
@@ -16416,6 +16526,15 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                                        else md_path.with_suffix(".pdf"))
             attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                         preamble_files, effective_no_auto(md_path, no_auto), verbose)
+        if (target_format in MARKDOWN_TARGETS and source_override is None and not partial
+                and md_path.suffix.lower() in (".md", ".markdown")):
+            keep_mode = resolve_keep_source(md_path, metadata_files)
+            if keep_mode:
+                suffix = output_extension_for(target_format, md_path)
+                produced = output_file or ((out_dir / f"{md_path.stem}{suffix}") if out_dir
+                                           else md_path.with_suffix(suffix))
+                keep_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
+                                          preamble_files, effective_no_auto(md_path, no_auto), keep_mode, verbose)
     return result
 
 
@@ -16876,6 +16995,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.attach-source (alias embed-source)")
     parser.add_argument("--no-attach-source", dest="attach_source", action="store_false",
                         help="attach nothing, even where a document's pdfmd-options.attach-source asks for it")
+    parser.add_argument("--keep-source", nargs="?", const="packed", choices=("packed", "readable"), default=None,
+                        metavar="MODE",
+                        help="end a Markdown output (--to gfm, gfm+raw, markdown ...) with its whole source in one "
+                             "HTML comment, so `pdfmd --restore FILE.md` can write the folder back. MODE packed "
+                             "(default: compressed, nothing in the source can close the comment) or readable (the "
+                             "text, `>` escaped). A document sets it with pdfmd-options.keep-source")
+    parser.add_argument("--no-keep-source", dest="keep_source", action="store_const", const=False,
+                        help="keep nothing, even where a document's pdfmd-options.keep-source asks for it")
     parser.add_argument("--bundle", nargs="?", const="referenced", choices=("referenced", "all"), default=None,
                         help="with the source, attach the files it cannot carry: 'referenced' (default) the "
                              "images and data the text and preamble point at, 'all' every file in the "
@@ -16922,10 +17049,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--extract", action="store_true",
                         help="a PDF input that carries its own pdfmd source is restored by default; "
                              "--extract reads its pages instead (through batchocr), as any other PDF is")
-    parser.add_argument("--restore", type=Path, default=None, metavar="PDF",
-                        help="write back the folder layout a PDF's attached source records (name.md, "
-                             "metadata/, parts/, ...) into PDF's NAME.restored/ folder (or -o DIR); never "
-                             "overwrites. With --list, only show what the PDF carries")
+    parser.add_argument("--restore", type=Path, default=None, metavar="FILE",
+                        help="write back the folder layout the source a PDF carries (--attach-source), or a Markdown "
+                             "file keeps (--keep-source), records (name.md, metadata/, parts/, ...) into "
+                             "FILE's NAME.restored/ folder (or -o DIR); never overwrites. With --list, only show "
+                             "what it carries")
     parser.add_argument("--list", dest="list_only", action="store_true",
                         help="with --restore: show what the PDF carries, write nothing")
     parser.add_argument("--self-contained", dest="self_contained", action="store_true", default=None,
@@ -17432,7 +17560,7 @@ def main() -> None:
         # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
         args.to = args.to.strip().casefold().lstrip(".")
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
-    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI
+    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
     global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
@@ -17440,6 +17568,7 @@ def main() -> None:
     KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
     BIB_ATTACH_CLI = args.attach_bibliography
     ATTACH_CLI = args.attach_source
+    KEEP_SOURCE_CLI = args.keep_source
     HYBRID_CLI = args.hybrid
     BUNDLE_CLI = args.bundle
     global PAPER_CLI
@@ -17467,8 +17596,9 @@ def main() -> None:
                       info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
                             for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
-        raise SystemExit(restore_from_pdf(args.restore, args.out.resolve() if args.out else None,
-                                          args.list_only))
+        restorer = (restore_from_markdown if args.restore.suffix.lower() in (".md", ".markdown")
+                    else restore_from_pdf)
+        raise SystemExit(restorer(args.restore, args.out.resolve() if args.out else None, args.list_only))
     # -v/--verbose already means "more detail than the quiet default," and a
     # full path is exactly that kind of detail -- so --verbose (or --debug,
     # which implies it just above) turns this on too, not just --full-paths
