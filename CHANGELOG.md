@@ -41,6 +41,15 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.6 — 2026-10-09
+
+Pre-edit state: commit `a9cf06d` (v3.26.5).
+
+### Added
+
+- `-o notes.gfm.md` is `--to gfm`: the name a flat file gets by default from `notes.md` now also asks for it. `-o notes.md`
+  alone is still Pandoc's Markdown.
+
 ## v3.26.5 — 2026-10-09
 
 Pre-edit state: commit `36cfdb2` (v3.26.4).

@@ -1214,7 +1214,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.5"
+PDFMD_VERSION = "3.26.6"
 import argparse
 import csv
 import filecmp
@@ -12355,10 +12355,19 @@ EXTENSION_FORMAT = {
 }
 
 
+# Two-part endings that name a target the plain suffix would not: `-o notes.gfm.md` is `--to gfm` (the name
+# `output_extension_for` gives a flat Markdown made from a .md file), where `-o notes.md` alone is Pandoc's Markdown.
+COMPOUND_EXTENSION_FORMAT = {".gfm.md": "gfm"}
+
+
 def format_from_output(path: Path | None) -> str | None:
     """Recognize a target format from an explicit output filename's suffix."""
     if path is None or not path.suffix:
         return None
+    name = path.name.lower()
+    for ending, target in COMPOUND_EXTENSION_FORMAT.items():
+        if name.endswith(ending) and len(name) > len(ending):
+            return target
     return EXTENSION_FORMAT.get(path.suffix.lower())
 
 

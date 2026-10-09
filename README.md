@@ -416,7 +416,7 @@ pdfmd-options:
   gfm: {scripts: unicode, math: dollars, title: true}
 ```
 
-`-o notes.md` alone still means Pandoc's Markdown; name the target (`--to gfm -o notes.md`) for the flat one. The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to change it). Image links stay as the document wrote them, relative to the document's folder (a `NOTE` says so when the output is written elsewhere). The result is meant to be
+`-o notes.gfm.md` is `--to gfm` (it is also the name a flat file gets by default from `notes.md`); `-o notes.md` alone still means Pandoc's Markdown, so name the target (`--to gfm -o notes.md`) to get the flat one under that name. The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to change it). Image links stay as the document wrote them, relative to the document's folder (a `NOTE` says so when the output is written elsewhere). The result is meant to be
 final: what the flattening removes (ids, cross-reference numbers become text, citations become text) is not recoverable
 from it.
 

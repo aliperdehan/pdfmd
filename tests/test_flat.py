@@ -199,6 +199,13 @@ class CommandLine(unittest.TestCase):
         self.assertIn("is the source itself", result.stdout + result.stderr)
         self.assertEqual(source.read_text(encoding="utf-8"), "# Hi\n\nText.\n")
 
+    def test_the_name_notes_gfm_md_is_flat_markdown_and_notes_md_alone_is_not(self):
+        self.write("doc.md", "---\ntitle: T\n---\n\nH~2~O.\n")
+        self.assertEqual(self.run_pdfmd("doc.md", "-o", "notes.gfm.md").returncode, 0)
+        self.assertIn("H₂O", (self.directory / "notes.gfm.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.run_pdfmd("doc.md", "-o", "notes.md").returncode, 0)
+        self.assertIn("H~2~O", (self.directory / "notes.md").read_text(encoding="utf-8"))
+
     def test_gfm_raw_is_pandocs_own_writer(self):
         self.write("doc.md", "---\ntitle: T\n---\n\nH~2~O.\n")
         result = self.run_pdfmd("doc.md", "--to", "gfm+raw", "-o", "own.md")
