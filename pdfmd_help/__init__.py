@@ -37,8 +37,8 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--global", "--merge-history", "--dry-run")),
     "code": ("code blocks", ("--line-numbers", "--no-code-wrap")),
     "raw": ("raw HTML, LaTeX, Typst and Word pieces inside Markdown", ("--raw", "--no-raw", "--raw-for")),
-    "markdown": ("plain Markdown and text output (--to gfm, --to txt), and Markdown that carries its source", (
-        "--gfm-scripts", "--gfm-math", "--keep-source", "--no-keep-source", "--restore", "--list")),
+    "markdown": ("plain Markdown, text and ASCII output (--to gfm, txt, ascii), and Markdown that carries its source", (
+        "--gfm-scripts", "--gfm-math", "--ascii-missing", "--keep-source", "--no-keep-source", "--restore", "--list")),
     "fonts": ("scripts, fonts, emoji, transliteration", (
         "--fallback", "--missing", "--check-fonts", "--translit", "--emoji-fallback", "-f")),
     "builtin": ("the built-in renderer used when there is no Pandoc or PDF engine", (
@@ -104,7 +104,8 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
     """The options that belong to no topic (a test keeps this empty)."""
     every = {name for _, names in TOPICS.values() for name in names}
     return [action.option_strings[-1] for action in _option_actions(parser)
-            if not _named(action, tuple(every)) and "-h" not in action.option_strings]
+            if not _named(action, tuple(every)) and "-h" not in action.option_strings
+            and action.help != argparse.SUPPRESS]          # an internal option (--ascii-stdio) has no page
 
 
 def _full(parser: argparse.ArgumentParser) -> str:

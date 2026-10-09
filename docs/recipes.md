@@ -495,6 +495,12 @@ and headings underlined, `Table 1. caption` above a table, `[Figure 1. caption]`
 link, and Unicode `H₂O`; `--columns=100` changes the wrapping. `--to plain` is Pandoc's own plain writer (no title, no
 links).
 
+And with not a byte above 127 (a terminal, an old mail gateway): `pdfmd report --to ascii` writes `report.ascii.txt`
+(`Cafe`, `"quotes"`, `H_2O`, `x^2`, `5 degC`, `alpha`, `Privet`); `--to ascii:gfm` does it for flat Markdown, and
+`-o report.ascii.txt` asks for the same by its name. A character nothing can spell is named in a `WARN` and written as `?`;
+`--ascii-missing escape` writes `\u65e5`, `drop` nothing, `fail` stops before writing. `pdfmd --install translit` adds
+Chinese and the other scripts.
+
 ---
 
 ## 8. The PDF that carries its source

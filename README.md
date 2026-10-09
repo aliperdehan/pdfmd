@@ -465,6 +465,30 @@ means `unicode` here); math as Pandoc's plain writer sets it (`E = mc²`). A pic
 for it, and a Typst or LaTeX picture piece is left out with a `WARN`. `pdfmd-options: {txt: {scripts: unicode, title:
 true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc's own plain writer; that is `--to plain`.
 
+### ASCII only: `--to ascii`
+
+```sh
+pdfmd report --to ascii               # report.ascii.txt: no byte above 127
+pdfmd report --to ascii:gfm           # report.ascii.gfm.md (also ascii:markdown, commonmark, rst, org, asciidoc, plain)
+pdfmd report -o notes.ascii.txt       # the name asks for it, as notes.gfm.md asks for --to gfm
+pdfmd report --to ascii --ascii-missing escape    # what has no ASCII form: \u65e5 instead of ?
+```
+
+For a terminal, an old mail gateway, a legacy system. The build is that of the format after the colon (`txt` when there
+is none), with the words mapped to ASCII before the writer sees them, so the writer escapes what the new spelling needs:
+a `−` at the start of a line that becomes `-` is written `\-`, not taken for a list; a table's columns are measured on the
+ASCII text. What is mapped, in this order: punctuation and spaces (curly quotes, `—` as `--`, `…` as `...`, no-break
+spaces, soft hyphens), symbols (`≤` `<=`, `±` `+/-`, `→` `->`, `°` `deg`, `½` `1/2`, `©` `(c)`), Greek letters by name
+(`α` `alpha`, `Δ` `Delta`, `μm` `um`; a Greek word is spelt: `Σοφία` `Sophia`), Cyrillic with its case (`Привет`
+`Privet`), accents (`é` `e`, `ß` `ss`, `ł` `l`), subscripts and superscripts (`H_2O`, `x^2`, `CO_3^(2-)`; `--gfm-scripts
+drop` writes `H2O`), then the romanization packs for Hebrew, Arabic, Armenian, Georgian, Korean and Japanese kana, and
+Chinese and the rest when `pypinyin` or `anyascii` is installed (`pdfmd --install translit`). Math stays TeX, with macros
+(`$\alpha \geq 2$`); a link's address is percent-encoded (`%C3%A9`), not spelt. A character with no ASCII form is
+counted and named in a `WARN`, and written as `?` (`--ascii-missing question`, the default), as `\uXXXX` (`escape`), as
+nothing (`drop`), or the file is not written at all (`fail`); `pdfmd-options: {ascii: {missing: escape}}` sets it per
+document. `--keep-source` on an ASCII file keeps the source packed (the readable form would be Unicode). It applies to text
+formats only: `--to ascii:docx` is refused.
+
 ### Word and OpenDocument output
 
 Plain Pandoc ignores `papersize`, `geometry`, `mainfont` and `fontsize` when it writes `.docx`

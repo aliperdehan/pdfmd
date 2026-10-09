@@ -853,7 +853,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     own source. `--keep-source [packed|readable]` ends a Markdown output with its source in one HTML comment
     (v3.26.4; pdfmd_flat/keep.py), `pdfmd --restore FILE.md` writes it back. `--to txt` (v3.26.7; also `-o x.txt`) is the
     same build written by Pandoc's plain writer: the title and the headings underlined, `text <url>` for a link,
-    `[Figure 1. Caption]` for a figure, no raw piece left; `--to plain` is Pandoc's own plain writer.
+    `[Figure 1. Caption]` for a figure, no raw piece left; `--to plain` is Pandoc's own plain writer. `--to ascii` and
+    `--to ascii:FORMAT` (v3.26.8; pdfmd_flat/asciify.py, pdfmd_lua/ascii.lua; `-o x.ascii.txt`, --ascii-missing) build a
+    text format with no byte above 127: the words are mapped before the writer, the written file once more.
 
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
@@ -1216,7 +1218,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.7"
+PDFMD_VERSION = "3.26.8"
 import argparse
 import csv
 import filecmp
@@ -2061,9 +2063,12 @@ def flat_settings(md_path: Path, metadata_files: list[Path], target: str = "gfm"
         raise SystemExit(f"--to {target} needs the pdfmd_flat package (install pdfmd-cli; a lone copy of pdfmd.py has "
                          f"only Pandoc's own writer: --to {'plain' if target == 'txt' else 'gfm+raw'})")
     try:
-        return pdfmd_flat.settings(cascaded_option(md_path, metadata_files, target), target=target, **GFM_CLI)
+        chosen = pdfmd_flat.settings(cascaded_option(md_path, metadata_files, target), target=target, **GFM_CLI)
     except pdfmd_flat.FlatError as error:
         raise SystemExit(f"{display_path(md_path)}: {error}")
+    if ASCII_CLI["on"] and chosen["scripts"] != "drop":       # --to ascii: H_2O, x^2 (`drop` is a choice of its own)
+        chosen["scripts"] = "ascii"
+    return chosen
 
 
 def flat_writer(target_format: str, settings: dict | None) -> str:
@@ -2095,6 +2100,89 @@ def flat_filter_args(settings: dict, target: str = "gfm") -> list[str]:
         map_file.parent.mkdir(parents=True, exist_ok=True)
         map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
     return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
+
+
+# -- ASCII text: --to ascii (v3.26.8) -----------------------------------------------
+# `--to ascii` (txt) and `--to ascii:FORMAT` (gfm, markdown, commonmark, rst, org, asciidoc ...) build that format with
+# no character above 127 in it: pdfmd_lua/ascii.lua maps the words before the writer sees them (pdfmd_flat/asciify.py, run
+# once as `pdfmd.py --ascii-stdio`), and the written file is mapped once more for what the writer made itself. The default
+# name is `<name>.ascii.txt` (`.ascii.gfm.md`, `.ascii.md`), which `-o` recognises as the target again.
+ASCII_CLI: dict = {"on": False, "missing": None}
+ASCII_FORMATS = frozenset({"txt", "gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict", "plain",
+                           "rst", "org", "asciidoc"})
+
+
+def split_ascii_target(name: str) -> tuple[str, bool]:
+    """(the format, True) for `ascii` and `ascii:FORMAT`; (name, False) for any other target."""
+    lowered = name.strip().casefold()
+    if lowered != "ascii" and not lowered.startswith("ascii:"):
+        return name, False
+    base = lowered.partition(":")[2].strip().lstrip(".") or "txt"
+    base = DEFAULT_OUTPUT_ALIASES.get(base, base)
+    if base not in ASCII_FORMATS:
+        raise SystemExit(f"--to {name}: ASCII applies to text formats ({', '.join(sorted(ASCII_FORMATS))}); "
+                         f"{base} is not one of them")
+    return base, True
+
+
+def ascii_missing(md_path: Path, metadata_files: list[Path]) -> str:
+    """What a character with no ASCII form becomes: --ascii-missing, else `pdfmd-options.ascii.missing`, else `question`."""
+    option = cascaded_option(md_path, metadata_files, "ascii")
+    value = ASCII_CLI["missing"] or (option.get("missing") if isinstance(option, dict) else None) or "question"
+    value = str(value).strip().casefold()
+    if value not in ("question", "escape", "drop", "fail"):
+        raise SystemExit(f"{display_path(md_path)}: ascii missing {value!r}: choose one of question, escape, drop, fail")
+    return value
+
+
+def ascii_filter_args(scratch: Path, missing: str, smart: bool = False) -> list[str]:
+    """The arguments that add pdfmd_lua/ascii.lua, which must run after every other filter."""
+    try:
+        import pdfmd_lua
+        filter_path = pdfmd_lua.path("ascii")
+        import pdfmd_flat.asciify  # noqa: F401 -- the helper process needs it; fail here, not in the middle of a build
+    except ImportError:
+        filter_path = None
+    if filter_path is None:
+        raise SystemExit("--to ascii needs pdfmd_lua/ascii.lua and pdfmd_flat (install pdfmd-cli; a lone copy of "
+                         "pdfmd.py cannot make ASCII text)")
+    config = {"pdfmd-ascii": {"command": sys.executable, "script": str(Path(__file__).resolve()), "missing": missing,
+                              "report": str(scratch / "report.json"), "smart": "keep" if smart else "all"}}
+    map_file = scratch / "ascii.yaml"
+    map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
+    return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
+
+
+def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> str | None:
+    """After the build: map what the writer made itself (math in the plain writer, say), count the characters that
+    have no ASCII form, and say so; with `fail` the output is removed and the reason returned (the file failed, and
+    a batch goes on with the next)."""
+    import pdfmd_flat.asciify as asciify
+    lost: dict[str, int] = {}
+    try:
+        lost = json.loads((scratch / "report.json").read_text(encoding="utf-8")).get("lost", {})
+    except (OSError, ValueError):
+        pass
+    if output.is_file():
+        data = output.read_bytes()
+        if not data.isascii():
+            asciifier = asciify.Asciifier(missing)
+            output.write_bytes(asciifier.text(data.decode("utf-8")).encode("ascii"))
+            lost = asciify.merge(lost, asciifier.lost)
+    if not lost:
+        return None
+    count = sum(lost.values())
+    shown = asciify.describe(lost)
+    if missing == "fail":
+        output.unlink(missing_ok=True)
+        return (f"{display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
+                f"({shown}); nothing was written. --ascii-missing question|escape|drop writes the file anyway; "
+                "`pdfmd --install translit` adds the scripts it can spell")
+    written = {"question": "?", "escape": "a \\u escape", "drop": "nothing"}[missing]
+    print(f"WARN  ascii: {display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
+          f"({shown}) {'was' if count == 1 else 'were'} written as {written}; `pdfmd --install translit` adds the "
+          "scripts it can spell, --ascii-missing escape|drop|fail changes this", file=sys.stderr)
+    return None
 
 
 # Engines are tried in this order only when the user did not request one.
@@ -10643,6 +10731,9 @@ def default_output_format(md_path: Path, metadata_files: list[Path]) -> str | No
         return None
     name = value.strip().casefold().lstrip(".")
     name = DEFAULT_OUTPUT_ALIASES.get(name, name)
+    if name == "ascii" or name.startswith("ascii:"):
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.default-output cannot be '{name}'; ASCII output is "
+                         "asked for on the command line (--to ascii) or by the output's name (-o x.ascii.txt)")
     if name == ASSEMBLED_FORMAT:
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.default-output cannot be "
                          f"'{ASSEMBLED_FORMAT}'; use --stop-at markdown")
@@ -12361,7 +12452,8 @@ EXTENSION_FORMAT = {
 
 # Two-part endings that name a target the plain suffix would not: `-o notes.gfm.md` is `--to gfm` (the name
 # `output_extension_for` gives a flat Markdown made from a .md file), where `-o notes.md` alone is Pandoc's Markdown.
-COMPOUND_EXTENSION_FORMAT = {".gfm.md": "gfm"}
+COMPOUND_EXTENSION_FORMAT = {".gfm.md": "gfm", ".ascii.txt": "ascii", ".ascii.md": "ascii:markdown",
+                             ".ascii.gfm.md": "ascii:gfm"}
 
 
 def format_from_output(path: Path | None) -> str | None:
@@ -12369,9 +12461,9 @@ def format_from_output(path: Path | None) -> str | None:
     if path is None or not path.suffix:
         return None
     name = path.name.lower()
-    for ending, target in COMPOUND_EXTENSION_FORMAT.items():
+    for ending in sorted(COMPOUND_EXTENSION_FORMAT, key=len, reverse=True):
         if name.endswith(ending) and len(name) > len(ending):
-            return target
+            return COMPOUND_EXTENSION_FORMAT[ending]
     return EXTENSION_FORMAT.get(path.suffix.lower())
 
 
@@ -12379,8 +12471,12 @@ def output_extension_for(target_format: str, source: Path | None = None) -> str:
     """The suffix an output gets by default. Flat Markdown (`gfm`, `gfm+raw`) made from a `.md` file is `.gfm.md`: beside
     its source, never over it."""
     if target_format in ("gfm", "gfm+raw") and source is not None and source.suffix.lower() == ".md":
-        return ".gfm.md"
-    return FORMAT_EXTENSION.get(target_format, f".{target_format}")
+        extension = ".gfm.md"
+    else:
+        extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
+    if ASCII_CLI["on"] and target_format in ASCII_FORMATS:       # --to ascii: another name, so the Unicode file stays
+        extension = ".ascii" + extension
+    return extension
 
 
 def default_output_path(path: Path, target_format: str) -> Path:
@@ -13888,6 +13984,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         preamble_files = [*(preamble_files or []), *label_scan.headers]
         part_markers = part_markers or bool(parts_inputs and label_scan.markers)
 
+    ascii_on = ASCII_CLI["on"] and target_format in ASCII_FORMATS     # --to ascii: no character above 127
     flat_markdown = target_format == "gfm"             # flat Markdown: pictures beside the output, relative links, one line a paragraph
     flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
     flat = flat_settings(md_path, metadata_files, target_format) if flat_target else None
@@ -14102,17 +14199,28 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += office_arguments.filter_arguments
                 if flat_target:
                     cmd += flat_filter_args(flat, target_format)       # last: it sees what every other filter made
-                if office_arguments.filter_arguments:
-                    result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
-                else:
-                    log_cmd(cmd, pandoc_cwd, verbose)
-                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
-                                            env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
+                ascii_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-ascii-") if ascii_on else None
+                try:
+                    ascii_missing_mode = ascii_missing(md_path, metadata_files) if ascii_on else None
+                    if ascii_scratch is not None:
+                        cmd += ascii_filter_args(Path(ascii_scratch.name), ascii_missing_mode,
+                                                 smart=target_format in ("markdown", "commonmark_x", "txt", "plain"))     # after those
+                    if office_arguments.filter_arguments:
+                        result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
+                    else:
+                        log_cmd(cmd, pandoc_cwd, verbose)
+                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
+                                                env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
+                    ascii_problem = (ascii_finish(output, Path(ascii_scratch.name), ascii_missing_mode, md_path)
+                                     if ascii_scratch is not None and result.returncode == 0 else None)
+                finally:
+                    if ascii_scratch is not None:
+                        ascii_scratch.cleanup()
                 office_finish(office_arguments, md_path, verbose)
-            if result.returncode == 0:
+            if result.returncode == 0 and not ascii_problem:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
-            return md_path, result.returncode == 0, result.stderr[-3000:]
+            return md_path, result.returncode == 0 and not ascii_problem, ascii_problem or result.stderr[-3000:]
 
         document_font = has_mainfont(md_path, variables)
         explicit_font = document_font or bool(font)
@@ -15111,8 +15219,9 @@ def resolve_keep_source(md_path: Path, metadata_files: list[Path]) -> str | None
 
 def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
                               preamble_files: list[Path] | None, no_auto: list[str] | None, mode: str,
-                              verbose: bool) -> None:
-    """--keep-source: end the Markdown just written with its source."""
+                              verbose: bool, ascii_only: bool = False) -> None:
+    """--keep-source: end the Markdown just written with its source. For an ASCII build the trailer is ASCII too: the
+    packed form, with the source's name spelt in ASCII (the readable form would carry the Unicode source as it is)."""
     try:
         import pdfmd_flat.keep as keep
     except ImportError:
@@ -15125,7 +15234,15 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
         entries, merged, manifest = source_attachments(md_path, output, parts, metadata_files, preamble_files, no_auto)
         written = output.read_bytes().decode("utf-8")
         body, old = keep.split(written)        # a file written by this run never has one; a stale one would be replaced
-        trailer = keep.pack(entries, body, mode, md_path.name, PDFMD_VERSION)
+        label = md_path.name
+        if ascii_only:
+            if mode == "readable":
+                print("NOTE  keep-source: an ASCII file keeps its source packed (the readable form would be Unicode)",
+                      file=sys.stderr)
+                mode = "packed"
+            import pdfmd_flat.asciify as asciify
+            label = asciify.Asciifier().text(label)
+        trailer = keep.pack(entries, body, mode, label, PDFMD_VERSION)
         output.write_bytes(keep.append(body, trailer).encode("utf-8"))
     except Exception as error:  # noqa: BLE001 -- the Markdown itself is fine; say so and carry on
         print(f"WARN  keep-source: could not keep the source in {display_path(output)} ({error}); "
@@ -16562,7 +16679,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 produced = output_file or ((out_dir / f"{md_path.stem}{suffix}") if out_dir
                                            else md_path.with_suffix(suffix))
                 keep_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
-                                          preamble_files, effective_no_auto(md_path, no_auto), keep_mode, verbose)
+                                          preamble_files, effective_no_auto(md_path, no_auto), keep_mode, verbose,
+                                          ascii_only=ASCII_CLI["on"] and target_format in ASCII_FORMATS)
     return result
 
 
@@ -17206,6 +17324,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "
                              "(<sub>/<sup>; unicode in a text file), drop (the plain text) or ascii (`_2`, `^(2+)`). Also "
                              "`pdfmd-options: {gfm: {scripts: ...}}` (`txt:` for text)")
+    parser.add_argument("--ascii-missing", choices=("question", "escape", "drop", "fail"), default=None, metavar="MODE",
+                        help="with --to ascii: what a character with no ASCII form becomes -- question (`?`, the "
+                             "default), escape (`\\u65e5`), drop (nothing) or fail (no file is written). Also "
+                             "`pdfmd-options: {ascii: {missing: ...}}`")
+    parser.add_argument("--ascii-stdio", nargs="+", metavar="ARG", help=argparse.SUPPRESS)
     parser.add_argument("--gfm-math", choices=("dollars", "fenced"), default=None, metavar="MODE",
                         help="with --to gfm: math as `$..$` / `$$..$$` (default; GitHub, VS Code and Obsidian read it) "
                              "or as ```math fences (GitHub's older form). Also `pdfmd-options: {gfm: {math: ...}}`")
@@ -17573,6 +17696,9 @@ def run_watch(source: Path, argv: list[str]) -> None:
 
 def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
+    if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
+        from pdfmd_flat import asciify
+        raise SystemExit(asciify.serve(*args.ascii_stdio))
     if args.path and all(path.suffix.lower() == ".pdf" for path in args.path):
         # Reading a PDF: the unknown flags are batchocr's, and an abbreviation must not
         # swallow one (`-c` is batchocr's --concat and an abbreviation of pdfmd's -cwd).
@@ -17587,6 +17713,8 @@ def main() -> None:
     if args.to:
         # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
         args.to = args.to.strip().casefold().lstrip(".")
+        args.to, ascii_asked = split_ascii_target(args.to)
+        ASCII_CLI["on"] = ascii_asked
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
     global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
@@ -17658,6 +17786,7 @@ def main() -> None:
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
+    ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:
         raise SystemExit(0 if init_reference(args.init_reference) else 1)
     if args.completion:
@@ -17835,6 +17964,8 @@ def main() -> None:
         or (format_from_output(args.out) if args.out and not args.batch else None)
         or "pdf"
     )
+    target_format, ascii_named = split_ascii_target(target_format)      # `-o notes.ascii.txt`
+    ASCII_CLI["on"] = ASCII_CLI["on"] or ascii_named
     if stop_at == "markdown":
         target_format = ASSEMBLED_FORMAT
     elif stop_at == "tex":
@@ -17998,7 +18129,7 @@ def main() -> None:
         )
         if report_reader_reason:
             report_note("READER", report_reader_reason)
-        output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
+        output_extension = output_extension_for(target_format)
         if args.out:
             # Check is-a-directory BEFORE adding a default suffix -- a dot-less
             # directory name (e.g. "out/") would otherwise get ".pdf" appended

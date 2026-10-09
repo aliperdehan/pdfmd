@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -39,6 +40,8 @@ class TieredHelp(unittest.TestCase):
     def test_all_lists_every_option_and_a_topic_only_its_own(self):
         everything = run("--help", "all").stdout
         for action in pdfmd.build_parser()._actions:
+            if action.help == argparse.SUPPRESS:
+                continue                       # internal: the ASCII filter's helper
             for option in action.option_strings:
                 self.assertIn(option, everything, option)
         tables = run("--help", "tables").stdout

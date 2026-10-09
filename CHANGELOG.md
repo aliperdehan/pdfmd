@@ -41,6 +41,38 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.8 — 2026-10-09
+
+Pre-edit state: commit `acce055` (v3.26.7).
+
+### Added
+
+- `--to ascii` and `--to ascii:FORMAT` (txt by default; gfm, gfm+raw, markdown, commonmark, commonmark_x, markdown_strict,
+  plain, rst, org, asciidoc): the format's build with no character above 127. `pdfmd_lua/ascii.lua` runs last and sends
+  the document's words, code, math, and link/image titles in one batch to `pdfmd.py --ascii-stdio`, which runs
+  `pdfmd_flat/asciify.py` (new) and returns them mapped; so the writer escapes what the ASCII spelling needs (`-`, `>=`,
+  `*` at a line's start) and measures table columns on the ASCII text. Pandoc's plain writer sets math in Unicode, and
+  a writer with smart typography writes its quotes and dashes itself, so pdfmd maps the written file once more
+  (`ascii_finish`). The mapping, in this order: spaces and invisible characters, quotes, dashes (`--`), `...`, symbols
+  (`<=`, `+/-`, `->`, `deg`, `1/2`, `(c)`), Greek by name (`mu` before a Latin letter is `u`, a Greek word is spelt),
+  Cyrillic with its case, Latin letters Unicode cannot take apart (`ss`, `ae`, `o`, `l`), accents and compatibility forms
+  by NFKD, sub/superscripts as `_2`, `^(2-)`, then `pdfmd_unicode.translit`'s packs (Hebrew, Arabic, Armenian, Georgian,
+  Korean, kana; Chinese and the rest with `pypinyin` or `anyascii`). TeX math keeps TeX (`\alpha`, `\geq`); a link's
+  address is percent-encoded. `--gfm-scripts` is `ascii` for these builds unless `drop`.
+- `--ascii-missing question|escape|drop|fail` (and `pdfmd-options: {ascii: {missing: ...}}`): a character with no ASCII form
+  is counted in a `WARN` that names the first ones, and written as `?` (default), `\uXXXX`, nothing, or the output is
+  removed (`fail`).
+- Default names are `<name>.ascii.txt` / `.ascii.gfm.md` / `.ascii.md`, which `-o` recognises as the target again; a
+  Unicode output of the same document is never overwritten.
+- `--keep-source readable` on an ASCII file writes the trailer packed (a NOTE says so), with the source's name spelt in ASCII.
+- `--ascii-missing fail` fails only the file (a batch goes on with the next); `pdfmd-options.default-output: ascii` is refused
+  with a pointer to `--to ascii`.
+
+### Changed
+
+- Since 3.26.7 the Python API's `to="txt"` (and an `outputfile` named `.txt`) gives flat text; `to="plain"` is still
+  Pandoc's own plain writer.
+
 ## v3.26.7 — 2026-10-09
 
 Pre-edit state: commit `8f8a3bf` (v3.26.6).
