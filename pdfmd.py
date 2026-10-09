@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.23"
+PDFMD_VERSION = "3.24.24"
 import argparse
 import csv
 import filecmp
@@ -6934,10 +6934,72 @@ def missing_glyph_warning(output: str) -> bool:
     return False
 
 
+# What a Markdown document really contains, asked of Pandoc's own reader: a `@key` in a code span, an e-mail
+# address or an escaped `\\@` is no citation, and the reader is the judge of that, not a pattern (the README of
+# pdfmd itself, which writes `@fig:` in backticks, was read as using pandoc-crossref). One parse per file state.
+_MARKDOWN_FEATURES: dict[tuple, tuple[bool, bool] | None] = {}
+
+
+def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
+    """(has citations, uses pandoc-crossref) of a Markdown file, from its Pandoc AST; None when Pandoc is not
+    there to say (the callers then fall back to a pattern)."""
+    try:
+        stat = md_path.stat()
+        key = (str(md_path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
+    if key in _MARKDOWN_FEATURES:
+        return _MARKDOWN_FEATURES[key]
+    found = None
+    pandoc = which("pandoc")
+    if pandoc:
+        try:
+            text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
+            done = subprocess.run([pandoc, "-f", "markdown", "-t", "json"], input=text, capture_output=True,
+                                  text=True, encoding="utf-8", timeout=120)
+            if done.returncode == 0:
+                found = ast_features(json.loads(done.stdout))
+        except (OSError, ValueError, subprocess.SubprocessError, UnicodeDecodeError):
+            found = None
+    _MARKDOWN_FEATURES[key] = found
+    return found
+
+
+CROSSREF_ID_RE = re.compile(r"^(?:" + "|".join(("fig", "eq", "tbl", "sec", "lst")) + r"):[-\w]+")
+
+
+def ast_features(document) -> tuple[bool, bool]:
+    """(any citation, any pandoc-crossref label or reference) in a Pandoc JSON document."""
+    cited = crossref = False
+    stack = [document]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if node.get("t") == "Cite":
+                cited = True
+                content = node.get("c") or [[]]
+                for citation in content[0] if content else []:
+                    if isinstance(citation, dict) and CROSSREF_ID_RE.match(str(citation.get("citationId", ""))):
+                        crossref = True
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            # an Attr is [identifier, [classes], [[key, value]...]]
+            if (len(node) == 3 and isinstance(node[0], str) and isinstance(node[1], list)
+                    and isinstance(node[2], list) and CROSSREF_ID_RE.match(node[0])):
+                crossref = True
+            stack.extend(node)
+        if cited and crossref:
+            break
+    return cited, crossref
+
+
 def contains_citations(md_path: Path) -> bool:
-    """Detect bracketed, bare, and suppress-citation Pandoc syntax."""
+    """Whether the document has Pandoc citations (`[@key]`, `@key`, `-@key`)."""
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         return False
+    features = markdown_features(md_path)
+    if features is not None:
+        return features[0]
     text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
@@ -6966,6 +7028,9 @@ def contains_crossref(md_path: Path) -> bool:
     """
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         return False
+    features = markdown_features(md_path)
+    if features is not None:
+        return features[1]
     text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
     return bool(CROSSREF_RE.search(text))
 

@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.24 — 2026-10-09
+
+Pre-edit state: commit `8f4a027` (v3.24.23).
+
+### Fixed
+
+- **Syntax a document writes *about* was taken for syntax it uses.** Whether a Markdown file has citations, or uses
+  pandoc-crossref, was decided by a pattern over the raw text, so `@fig:setup` in backticks or a code block (as in
+  pdfmd's own README), an e-mail address or an escaped `\@` switched on `--citeproc`, the `pandoc-crossref` filter and the
+  full `markdown` reader (which sizes every pipe-table column equally) for a document that used none of it. pdfmd now asks
+  Pandoc's own Markdown reader once per file state (one `-t json` parse, remembered while the file is unchanged) and looks
+  for citations, crossref references and crossref labels (`{#fig:..}`, `{#tbl:..}`, `{#eq:..}`, `{#sec:..}`, `{#lst:..}`)
+  in what it read. With no Pandoc the old pattern is the fallback, as before. The README now builds as `gfm`
+  without a crossref warning.
+
+---
+
 ## v3.24.23 — 2026-10-09
 
 Pre-edit state: commit `c54ad1c` (v3.24.22).
