@@ -179,6 +179,33 @@ class AttachAndRestore(unittest.TestCase):
         out = self.restore(self.attach(document))
         self.assertIn("<!-- note -->", (out / "keep.md").read_text(encoding="utf-8"))
 
+    def test_with_comments_kept_the_yaml_files_come_back_byte_for_byte(self):
+        (self.root / "metadata").mkdir()
+        metadata = "# Shared house settings.\nfontsize: 12pt   # body\npdfmd-options:\n  # parts, then the rest\n  parts: auto\n  strip-comments: false\n"
+        (self.root / "metadata" / "metadata.yaml").write_text(metadata, encoding="utf-8")
+        document = self.root / "report.md"
+        front = '---\ntitle: "Quoted: title"   # kept\nauthor: "A. Author"\n---\n'
+        document.write_text(front + "\nBody.\n", encoding="utf-8")
+        out = self.restore(self.attach(document, metadata=[self.root / "metadata" / "metadata.yaml"]))
+        self.assertEqual((out / "metadata" / "metadata.yaml").read_text(encoding="utf-8"), metadata)
+        self.assertEqual((out / "report.md").read_text(encoding="utf-8"), front + "\nBody.\n")
+
+    def test_stripping_the_yaml_comments_gives_the_rewritten_file_as_before(self):
+        (self.root / "metadata").mkdir()
+        (self.root / "metadata" / "metadata.yaml").write_text("# gone\nfontsize: 12pt\n", encoding="utf-8")
+        document = self.root / "report.md"
+        document.write_text("---\ntitle: T\n---\n\nBody.\n", encoding="utf-8")
+        out = self.restore(self.attach(document, metadata=[self.root / "metadata" / "metadata.yaml"]))
+        self.assertEqual((out / "metadata" / "metadata.yaml").read_text(encoding="utf-8"), "fontsize: 12pt\n")
+
+    def test_the_data_of_csv_blocks_is_stored_without_a_bundle(self):
+        (self.root / "tables").mkdir()
+        (self.root / "tables" / "t.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        document = self.root / "report.md"
+        document.write_text('---\ntitle: T\n---\n\n::: {.csv file="tables/t.csv"}\n:::\n', encoding="utf-8")
+        out = self.restore(self.attach(document))
+        self.assertEqual((out / "tables" / "t.csv").read_text(encoding="utf-8"), "a,b\n1,2\n")
+
     def test_parts_come_back_with_their_boundaries_and_front_matter(self):
         (self.root / "parts").mkdir()
         scaffold = self.root / "report.md"
@@ -400,7 +427,7 @@ class CommentKinds(unittest.TestCase):
         policy = pdfmd.parse_comment_policy
         self.assertEqual(policy(None, True).kinds(), frozenset(pdfmd.COMMENT_KINDS))
         self.assertEqual(policy("tex, bib", True).kinds(), {"preamble", "bibliography"})
-        self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(), {"csl", "preamble"})
+        self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(), {"csl", "metadata", "preamble"})
         self.assertEqual(policy({"preamble": True}, False).kinds(), {"preamble"})
         self.assertEqual(policy(False, True).kinds(), frozenset())
 

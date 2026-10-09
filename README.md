@@ -578,12 +578,16 @@ style, a compound library, a shared bibliography and parts.
   The TeX distribution's own packages, fonts and Pandoc are not carried.
 - **Comments.** Notes to yourself do not travel: the attached source loses its
   `<!-- -->` comments, the LaTeX preamble's `%` comments, the text between a
-  `.bib`'s entries and a CSL file's XML comments. Choose per kind:
-  `strip-comments: [preamble, bibliography]` or `{markdown: false}`
-  (`--strip-comments-in`, `--keep-comments-in`). Code blocks, `\verb`, `\url` and
-  verbatim environments are never touched, and a `%` that closes a line keeps a
-  bare `%`, because it swallows the line break. YAML metadata is merged and
-  written again, so its `#` comments are always gone.
+  `.bib`'s entries, a CSL file's XML comments and the `#` comments of YAML
+  files. Choose per kind: `strip-comments: [preamble, bibliography]` or
+  `{markdown: false}` (`--strip-comments-in`, `--keep-comments-in`). Code
+  blocks, `\verb`, `\url` and verbatim environments are never touched, and a
+  `%` that closes a line keeps a bare `%`, because it swallows the line break.
+  With `strip-comments: false` (or `metadata` kept) the attached source gives
+  back your metadata files and the document's front matter byte for byte,
+  comments and quoting included; `--restore` of such a PDF is a full source
+  copy. The data files of `.csv` blocks (`tables/*.csv`) are always stored
+  with the source.
 - **Only the bibliography entries you cite** are attached (and what they
   cross-reference), not a shared file of hundreds; `attach-bibliography: all`
   keeps it whole, and `nocite: '@*'` keeps every entry.
@@ -883,6 +887,9 @@ pdfmd --expand-tables report.md       # and back to ordinary tables
 simple, multiline and grid tables are all read (the ones inside code blocks are not tables). The files are named after
 the captions (`Masses and prices` gives `tables/masses-and-prices.csv`), or `table1`, `table2` by position;
 `--table-names a,b,c` names them, and a list that does not match the number of tables is an error that changes nothing.
+`--table-numbers 1,3-4` extracts just those tables (by position in the document) and leaves the rest; the names then go to
+the chosen ones. In a document in parts the data goes to the report's `tables/` folder and an unnamed table is named after
+its part (`discussion-table1.csv`).
 The caption, the alignment and the widths the document chose stay as attributes of the block, and before anything is
 written Pandoc reads the old and the new document and the tables must come out the same. A table Pandoc cannot write
 as CSV (a list inside a cell, a cell spanning rows, no header row) is left as it is, with the reason; so is every

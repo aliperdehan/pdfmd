@@ -41,6 +41,34 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.13 — 2026-10-09
+
+Pre-edit state: commit `2dbf316` (v3.25.12).
+
+### Added
+
+- **A PDF can carry its source with nothing lost (source parity).** The `metadata` comment kind (new in
+  `strip-comments`, `--strip-comments-in`, `--keep-comments-in`): where it is kept (`strip-comments: false`, or
+  `{metadata: false}`), the attachment stores each metadata YAML file and the document's front matter as written, and
+  `--restore` writes them back byte for byte when they still read as the same data (else the rewritten file, as
+  before). Until now a YAML file lost its `#` comments and its quoting in the merge. Tested on a real split-file report:
+  every file of the restored folder, `report.md` included, is identical to the original.
+- **The data of `.csv` blocks travels with every attached source** (`tables/*.csv`, up to 5 MB each), bundle or not: the
+  merged text names those files and cannot build without them. `--restore` puts them back.
+- `--table-numbers 1,3-4` with `--extract-tables`: only those tables, by their position in the document; `--table-names`
+  then names just the chosen ones.
+
+### Fixed
+
+- `--extract-tables` on a document in parts: the files went to `parts/tables/` and the check read the part as a document of
+  its own (`gfm`, no front matter), so a part's `file="tables/x.csv"` was checked against a folder the build never uses.
+  The report's folder and the report's reader are used now, and a table without a caption is named after its part
+  (`discussion-table1.csv`), so the parts no longer fight over `table1.csv`. `--table-names` works on one part.
+- `--extract-tables` refused a pipe table whose separator had equal dashes and whose rows were too wide for the page
+  ("widths differs"): Pandoc gives such a table equal column shares, which the table-width filter reads as "not
+  chosen", the same as none. The check treats them alike, and no `widths=` is written (it would have turned a balanced
+  table into a fixed 20%-per-column one).
+
 ## v3.25.12 — 2026-10-09
 
 Pre-edit state: commit `382f589` (v3.25.11).

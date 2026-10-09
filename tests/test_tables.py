@@ -119,6 +119,25 @@ class RoundTrip(unittest.TestCase):
             (self.directory / name).write_text(data, encoding="utf-8")
         return result
 
+    def test_only_the_chosen_tables_are_extracted_and_named(self):
+        text = ("| a | b |\n|--|--|\n| 1 | 2 |\n\nbetween\n\n| c | d |\n|--|--|\n| 3 | 4 |\n\nand\n\n"
+                "| e | f |\n|--|--|\n| 5 | 6 |\n")
+        result = self.extract(text, only={2, 3}, names=["second", "third"])
+        self.assertEqual(result.changed, 2)
+        self.assertIn("| a | b |", result.text)                      # the first stays a table
+        self.assertEqual(sorted(result.files), ["tables/second.csv", "tables/third.csv"])
+        again = self.extract(text, only={3})
+        self.assertEqual(sorted(again.files), ["tables/table3.csv"])   # the position in the document names it
+
+    def test_a_wide_table_with_equal_dashes_is_extracted_without_widths(self):
+        # Pandoc gives its columns equal shares once a line is too long, and the table-width filter reads equal
+        # shares as "not chosen"; a widths= attribute would make them chosen, so none is written and the check agrees
+        text = ("| A | B | C |\n|:-:|:-:|:--|\n| " + "word " * 25 + " | 2 | 3 |\n: Wide one\n")
+        result = self.extract(text)
+        self.assertEqual(result.changed, 1)
+        self.assertNotIn("widths=", result.text)
+        self.assertEqual(tables.same_tables(PANDOC, text, result.text, self.directory, FILTER), [])
+
     def test_pandoc_reads_the_same_tables_after_extracting_every_kind(self):
         result = self.extract()
         self.assertEqual(result.changed, 4)

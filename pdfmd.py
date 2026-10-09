@@ -480,10 +480,13 @@ Stopping early (--stop-at, v3.19.0):
     an attached source and none for --assemble-only). Kinds: markdown, preamble
     (LaTeX `%`: a `%` closing a line stays bare, since it swallows the break;
     `\\verb`, `\\url`, verbatim environments and `% !TEX` lines are text),
-    bibliography (the text between a .bib's entries), csl (XML comments).
-    --strip-comments-in KINDS / --keep-comments-in KINDS do the same per run.
-    YAML metadata always loses its `#` comments when embedded (it is merged and
-    written again); Lua filters are never touched.
+    bibliography (the text between a .bib's entries), csl (XML comments),
+    metadata (YAML `#` comments and the file's own quoting and layout: the merged
+    text cannot hold them, so the attachment stores each metadata file and the
+    document's front matter as written and --restore writes them back byte for
+    byte; v3.25.13). --strip-comments-in KINDS / --keep-comments-in KINDS do the
+    same per run. Lua filters are never touched. The data files of `.csv`
+    blocks are stored with every attached source (small, and the text needs them).
 
     --attach-source / --no-attach-source, `pdfmd-options: {attach-source: true}`
     (alias `embed-source`) (v3.22.1): after a PDF build, attach the document's
@@ -1193,7 +1196,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.12"
+PDFMD_VERSION = "3.25.13"
 import argparse
 import csv
 import filecmp
@@ -8995,6 +8998,15 @@ def tables_command(args) -> int:
         return 1
     pandoc = which("pandoc")
     names = [name for name in re.split(r"[,\s]+", args.table_names or "") if name] or None
+    only_tables: set[int] | None = None
+    if args.table_numbers:
+        only_tables = set()
+        for piece in re.split(r"[,\s]+", args.table_numbers.strip()):
+            span = re.fullmatch(r"(\d+)(?:-(\d+))?", piece)
+            if not span or int(span.group(1)) < 1:
+                print(f"ERROR  --table-numbers: {piece!r} is not a table number (1, 3 or 2-4)", file=sys.stderr)
+                return 1
+            only_tables.update(range(int(span.group(1)), int(span.group(2) or span.group(1)) + 1))
     csv_filter = None
     try:
         import pdfmd_lua
@@ -9002,6 +9014,7 @@ def tables_command(args) -> int:
     except ImportError:
         pass
     documents: list[Path] = []
+    scaffolds: dict[Path, Path] = {}        # a part -> the report it belongs to: its paths are relative to the report's folder
     for target in (args.path or [Path.cwd()]):
         try:
             document = find_markdown(target)
@@ -9013,23 +9026,34 @@ def tables_command(args) -> int:
         for item in (plan.files if plan else [document]):
             if item not in documents:
                 documents.append(item)
-    if names and len(documents) > 1:
-        print("ERROR  --table-names names the tables of one document; this is a document in parts.", file=sys.stderr)
-        return 1
+            if plan:
+                scaffolds[item] = plan.scaffold
+    if names and len(documents) > 1:       # a part given by name: the report's own file has no tables to name
+        holding = [item for item in documents if tables.find_tables(item.read_text(encoding="utf-8"))]
+        if len(holding) != 1:
+            print("ERROR  --table-names names the tables of one document; this is a document in parts "
+                  f"with tables in {len(holding)} of its files (give the one part: pdfmd parts/NAME.md ...).",
+                  file=sys.stderr)
+            return 1
+        names_for = holding[0]
+    else:
+        names_for = documents[0] if documents else None
     status = 0
     for document in documents:
         text = document.read_text(encoding="utf-8")
-        base = document.parent
-        found = find_metadata(base.resolve(), args.metadata_file, document_stem=document.stem)
+        owner = scaffolds.get(document, document)       # the report a part is built into: its folder and reader
+        base = owner.parent
+        found = find_metadata(base.resolve(), args.metadata_file, document_stem=owner.stem)
         linked = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
         reader = (args.from_format or "markdown") if auto_disabled(args.no_auto, "reader") \
-            else (resolve_from_format(document, args.from_format, linked)[0] or "markdown")
+            else (resolve_from_format(owner, args.from_format, linked)[0] or "markdown")
+        prefix = re.sub(r"^[\d._ -]+", "", document.stem) + "-" if document != owner else ""
         try:
             if args.extract_tables:
-                result = tables.extract(text, base, pandoc=pandoc, names=names, directory=args.tables_dir,
+                result = tables.extract(text, base, pandoc=pandoc, names=names if document == names_for else None, directory=args.tables_dir,
                                         inline=args.tables_inline, reader=reader,
                                         pandoc_version=pandoc_version() if pandoc else None,
-                                        inline_csv=args.extract_inline_csv)
+                                        inline_csv=args.extract_inline_csv, prefix=prefix, only=only_tables)
             else:
                 result = tables.expand(text, base)
             if result.changed and pandoc and args.extract_tables:
@@ -10645,13 +10669,15 @@ def strip_markdown_comments(text: str) -> str:
 # and false per kind (the rest follow the default: all where a PDF is being
 # attached, none for --assemble-only). Kinds: markdown (<!-- -->), preamble
 # (LaTeX `%`), bibliography (what a .bib holds outside its entries), csl (XML
-# comments). The YAML metadata is merged and written again whenever it is
-# embedded, so its `#` comments are always gone; a Lua filter is code and is never
-# touched. A LaTeX comment is cut with care: a `%` after a command that ends a
+# comments), metadata (a YAML file's `#` comments, v3.25.13). The YAML metadata is
+# merged and written again whenever it is embedded, so the merged text never has
+# them; with the metadata kind kept, an attached source also stores each metadata
+# file's own text, and --restore writes that back byte for byte (when it still reads
+# as the same data). A Lua filter is code and is never touched. A LaTeX comment is cut with care: a `%` after a command that ends a
 # line keeps its bare `%` (it swallows the line break, which is meaning), a `%`
 # in `\verb`, `\url` or a verbatim environment is text, and `% !TEX` magic
 # comments stay.
-COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl")
+COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata")
 COMMENT_KIND_NAMES = {
     "markdown": "markdown", "md": "markdown", "text": "markdown", "document": "markdown",
     "preamble": "preamble", "tex": "preamble", "latex": "preamble",
@@ -14202,6 +14228,21 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
                      "size": image.stat().st_size}
             if entry not in images:
                 images.append(entry)
+    metadata_texts: dict[str, str] = {}
+    if plan is not None and "metadata" in plan.kinds and "metadata" not in stripped:
+        for item in plan.metadata_files:
+            try:
+                metadata_texts[layout_path(base, item)] = item.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError):
+                pass
+    front_text = None
+    if "metadata" not in stripped:             # the document's own front matter, as written (comments, quoting)
+        try:
+            found_front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)",
+                                   md_path.read_text(encoding="utf-8-sig"), re.DOTALL)
+            front_text = found_front.group(0) if found_front else None
+        except (OSError, UnicodeDecodeError):
+            pass
     return {"format": ATTACH_FORMAT, "pdfmd": PDFMD_VERSION, "kind": "source",
             "mode": "report" if report else "document",
             "parts": (parts_setting(md_path, list(plan.metadata_files) if plan else []) if parts and not report else None),
@@ -14210,7 +14251,8 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
             "bibliography": list(plan.bib_report) if plan else [],
             "layout": layout, "data_files": [block["path"] or block["name"] for block in parse_embedded_blocks(merged)
                                              if block["type"] in ("bibliography", "csl")],
-            "images": images}
+            "images": images, **({"metadata_texts": metadata_texts} if metadata_texts else {}),
+            **({"front_matter_text": front_text} if front_text else {})}
 
 
 def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
@@ -14383,6 +14425,28 @@ def report_common_folder(files: list[Path]) -> Path:
         return files[0].parent.resolve()
 
 
+def csv_block_files(merged: str, base: Path) -> dict[str, bytes]:
+    """The files the `.csv` blocks of the attached text read (`file="tables/x.csv"`), as {path relative to the
+    document's folder: bytes}: the ones that exist inside the folder and are small."""
+    try:
+        import pdfmd_tables
+    except ImportError:
+        return {}
+    found: dict[str, bytes] = {}
+    for block in pdfmd_tables.find_csv_blocks(merged):
+        name = block.attributes.get("file")
+        if not name or "://" in name or Path(name).is_absolute():
+            continue
+        path = Path(os.path.abspath(base / name))
+        try:
+            path.relative_to(Path(os.path.abspath(base)))
+        except ValueError:
+            continue
+        if path.is_file() and path.stat().st_size <= 5 * 1024 * 1024:
+            found[relative_posix(base, path)] = path.read_bytes()
+    return found
+
+
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
@@ -14441,6 +14505,14 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                                        **({"from": origins[name]} if name in origins else {})}
                                       for name, data in extras.items()]
                 manifest["outside"] = sorted({Path(name).name for name in outside})
+        # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
+        # small: it is stored even when the rest of the folder is not bundled.
+        for name, data in csv_block_files(merged, base).items():
+            if name not in extras:
+                extras[name] = data
+        if extras and "extras" not in manifest:
+            manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                                  for name, data in extras.items()]
         match_images_to_pdf(pdf_path, [image for image in manifest["images"] if image["path"] not in extras], base)
         manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, pdf_path)
         write_pdf_attachments(pdf_path, {
@@ -15185,7 +15257,7 @@ def restore_front_matter(text: str, manifest: dict) -> str:
     if not isinstance(options, dict):
         options = data["pdfmd-options"] = {}
     options.pop("embedded", None)
-    if manifest.get("parts") and "parts" not in options:
+    if manifest.get("parts") and "parts" not in options and not metadata_texts_hold_parts(manifest):
         options["parts"] = manifest["parts"]    # it came from a metadata file, which is not carried
     if "no-auto" in options:
         original = manifest.get("no_auto")
@@ -15197,9 +15269,49 @@ def restore_front_matter(text: str, manifest: dict) -> str:
         data.pop("pdfmd-options")
     if not data:
         return text[front.end():].lstrip("\n")
+    original = manifest.get("front_matter_text")
+    if original:
+        try:
+            if yaml.safe_load(re.sub(r"^---[ \t]*\n|(?:---|\.\.\.)[ \t]*\n?$", "", original)) == data:
+                return original.rstrip("\n") + "\n" + text[front.end():]
+        except yaml.YAMLError:
+            pass
     dumped = yaml.dump(data, Dumper=_EmbedDumper, sort_keys=False, allow_unicode=True,
                        default_flow_style=False, width=10**6)
     return f"---\n{dumped}---\n" + text[front.end():]
+
+
+def original_metadata_text(manifest: dict, entry: dict, rebuilt: str) -> str:
+    """A metadata file as it was written, with its comments, when the attachment kept its text and the rebuilt
+    file reads as the same data (else the rebuilt one: the text of a file that has changed meaning is not it)."""
+    original = (manifest.get("metadata_texts") or {}).get(entry["path"])
+    if original is None or yaml is None or entry.get("kind") != "metadata":
+        return rebuilt
+    try:
+        return original if without_parts(yaml.safe_load(original)) == without_parts(yaml.safe_load(rebuilt)) else rebuilt
+    except yaml.YAMLError:
+        return rebuilt
+
+
+def without_parts(data):
+    """A metadata file's data minus pdfmd-options.parts, which a restore may have moved into the document."""
+    if not isinstance(data, dict) or not isinstance(data.get("pdfmd-options"), dict):
+        return data
+    return {**data, "pdfmd-options": {key: value for key, value in data["pdfmd-options"].items() if key != "parts"}}
+
+
+def metadata_texts_hold_parts(manifest: dict) -> bool:
+    """Whether a stored metadata file already says `pdfmd-options.parts` (so the restored document need not)."""
+    if yaml is None:
+        return False
+    for text in (manifest.get("metadata_texts") or {}).values():
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            continue
+        if isinstance(data, dict) and isinstance(data.get("pdfmd-options"), dict) and "parts" in data["pdfmd-options"]:
+            return True
+    return False
 
 
 def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) -> dict[str, str]:
@@ -15256,6 +15368,7 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
         if match is not None:
             match["used"] = True
             where = restore_target_name(match["path"])
+            content = original_metadata_text(manifest, match, content)
         elif name in (manifest.get("data_files") or []):
             # A bibliography or CSL file: the metadata names it, and pdfmd looks for it beside
             # the first metadata file (then the document), so it goes there.
@@ -16193,8 +16306,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "strip them")
     parser.add_argument("--strip-comments-in", default="", metavar="KINDS",
                         help="strip comments from just these kinds of source (comma-separated: markdown, "
-                             "preamble, bibliography, csl), whatever the rest do. The YAML metadata always "
-                             "loses its comments when embedded; Lua filters are never touched")
+                             "preamble, bibliography, csl, metadata), whatever the rest do. Kept, the YAML "
+                             "files come back as written; Lua filters are never touched")
     parser.add_argument("--keep-comments-in", default="", metavar="KINDS",
                         help="keep the comments of these kinds of source (comma-separated, as "
                              "--strip-comments-in), where the rest are stripped")
@@ -16378,6 +16491,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expand-tables", action="store_true",
                         help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
                              "(all its rows), its caption= the line under it. The CSV files are left where they are")
+    parser.add_argument("--table-numbers", metavar="1,3-4",
+                        help="with --extract-tables: only these tables, by their position in the document "
+                             "(1 is the first; ranges allowed); the others stay as they are, and --table-names "
+                             "names just the chosen ones. In a document in parts it applies to each part")
     parser.add_argument("--table-names", metavar="A,B,C",
                         help="with --extract-tables: the file names for the tables, in the order they appear")
     parser.add_argument("--tables-dir", default="tables", metavar="DIR",

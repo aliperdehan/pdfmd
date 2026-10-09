@@ -24,6 +24,8 @@ def _tables(node, found: list) -> None:
 def _normal(table: dict) -> dict:
     attr, caption, colspecs, head, bodies, foot = table["c"]
     widths = [round(spec[1]["c"], 3) if spec[1]["t"] == "ColWidth" else None for spec in colspecs]
+    if len(widths) > 1 and len(set(widths)) == 1:
+        widths = [None] * len(widths)        # equal shares are what a pipe table's equal dashes give: nobody chose them
     return {"id": attr[0], "classes": attr[1], "caption": caption, "aligns": [spec[0]["t"] for spec in colspecs],
             "widths": widths, "head": head, "bodies": bodies, "foot": foot}
 

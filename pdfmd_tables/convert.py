@@ -145,7 +145,8 @@ def block_lines(table: FoundTable, data: str, file_name: str | None, indent: str
     return lines
 
 
-def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]:
+def choose_names(tables: list[FoundTable], given: list[str] | None, prefix: str = "",
+                 numbers: list[int] | None = None) -> list[str]:
     if given is not None:
         if len(given) != len(tables):
             raise TablesError(f"{len(given)} name{'' if len(given) == 1 else 's'} given for {len(tables)} "
@@ -158,8 +159,8 @@ def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]
             raise TablesError("two tables were given the same name")
         return clean
     names: list[str] = []
-    for position, table in enumerate(tables, 1):
-        name = slug(table.caption) or f"table{position}"
+    for position, table in zip(numbers or range(1, len(tables) + 1), tables):
+        name = slug(table.caption) or f"{prefix}table{position}"
         base, counter = name, 2
         while name in names:
             name, counter = f"{base}-{counter}", counter + 1
@@ -169,12 +170,15 @@ def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]
 
 def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] | None = None,
             directory: str = "tables", inline: bool = False, reader: str = "markdown",
-            pandoc_version: tuple | None = None, inline_csv: bool = False) -> Extracted:
+            pandoc_version: tuple | None = None, inline_csv: bool = False, prefix: str = "",
+            only: set[int] | None = None) -> Extracted:
     """Every table of `text` as a `.csv` block: the data in `directory` beside the document (`file=`), or inside
     the block with `inline`. Tables that cannot be written as CSV are left as they are, with the reason.
     `reader` is the Pandoc reader the document is built with: gfm and commonmark read pipe tables only, so a grid
     or simple table is plain text there and is not touched. A table with `<!-- pdfmd: ignore -->` above it or under its
-    caption is left as it is. With `inline_csv` the `.csv` blocks that hold their data inside get it moved to a file too."""
+    caption is left as it is. With `inline_csv` the `.csv` blocks that hold their data inside get it moved to a file too.
+    `only` (1-based positions among the document's tables) leaves every other table as it is; `names` then name
+    just the chosen ones."""
     tables = find_tables(text)
     plain_text = 0
     if reader.casefold().startswith(("gfm", "commonmark")):
@@ -188,11 +192,18 @@ def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] |
     if not tables and not inline_csv:
         result.report.append("no tables found")
         return result
-    chosen = choose_names(tables, names) if tables else []
+    wanted = [index for index in range(len(tables)) if only is None or index + 1 in only]
+    if only and max(only) > len(tables):
+        result.report.append(f"NOTE  table {max(only)} was asked for, but the document has {len(tables)}")
+    names_by_index = dict(zip(wanted, choose_names([tables[index] for index in wanted], names, prefix,
+                                                   [index + 1 for index in wanted]))) if tables else {}
+    chosen = [names_by_index.get(index, "") for index in range(len(tables))]
     lines = text.split("\n")
     used: dict[str, str] = {}
     for position in range(len(tables) - 1, -1, -1):
         table, name = tables[position], chosen[position]
+        if position not in names_by_index:
+            continue
         if table.ignored:
             table.problem = "marked <!-- pdfmd: ignore -->"
         label = f"table {position + 1}" + (f" ({name})" if names or table.caption else "")
