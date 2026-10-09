@@ -975,6 +975,46 @@ folds in the images, CSV tables and included files the text points at (text as i
 file builds on its own, in an empty folder; `pdfmd --unpack` writes them back byte for byte. It is left out of the default
 kinds because it can be big (`bundle-max-mb` caps it); for a PDF, `--bundle` stores the same files beside the source.
 
+### HTML, LaTeX, Typst and Word pieces inside Markdown
+
+Markdown can carry raw pieces: `<img>`, `<table>`, `<b>` and `<div>` (HTML), `\ce{...}` or a tikz picture (LaTeX), a
+`` ```{=typst} `` block, Word or OpenDocument XML. Pandoc keeps the ones written in the format it is writing and drops
+every other, silently, so a document that mixes them loses pieces in every build. `pdfmd-options.raw` (or `--raw`) says
+which syntaxes take part in each output family, and carries the foreign ones over:
+
+```yaml
+pdfmd-options:
+  raw:
+    tex:    [tex, html, typst]   # LaTeX builds: PDF through lualatex, xelatex ...
+    typst:  [typst, html, tex]   # Typst builds
+    html:   [html, tex, typst]   # HTML, EPUB, PDF through weasyprint and the other HTML engines (-e html)
+    office: [office, html]       # Word and OpenDocument, and PDF through soffice
+```
+
+```sh
+pdfmd report --raw               # everything for every family
+pdfmd report --raw-for html=tex,typst --raw-for tex=html      # or per family, on the command line
+```
+
+A family takes the syntaxes it lists, in this way: its own syntax stays as written; **HTML** is read by Pandoc's HTML
+reader, so an `<img>` becomes the target's image (an SVG then goes through the image conversion below), a `<table>` a
+real table, `<b>...</b>` bold text and a `<div>` around Markdown a division, even when the opening and the closing tag
+sit in separate pieces; **LaTeX** is read by Pandoc's LaTeX reader (what it does not know, a custom macro, stays LaTeX
+and is lost outside LaTeX; Word builds keep their own LaTeX route, see
+[Word and OpenDocument output](#word-and-opendocument-output)); **Typst** is drawn by `typst compile` as a cropped
+vector picture, a PDF for LaTeX, Typst and Word, an SVG for HTML. A syntax a family does not list is dropped, its own
+included, which is odd but a clear way to say "this output has no HTML in it". A family not mentioned is left to Pandoc
+as it always was, `raw: all` lists everything, and `--no-raw` turns it off for a run. Pictures are kept in pdfmd's cache by
+their content. (An HTML file that is not self-contained points at the cache; use `--self-contained` to carry them.)
+Not yet: LaTeX pieces Pandoc cannot read (tikz, chemfig) as pictures in HTML, HTML drawn as a picture, Word XML as
+anything but Word XML.
+
+**PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
+EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
+an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the
+SVG is kept by the PDF's content. It is on by default, since it only changes what would not have shown; `--no-auto
+pdfimages` turns it off. LaTeX and Typst read PDFs themselves, and Word has its own route.
+
 ### Not just Markdown
 
 ```sh

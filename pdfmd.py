@@ -922,7 +922,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     also under "Input formats" -- disabling it on a .docx/.odt is an
     error in this version, not a route back through Pandoc; see that
     section for why), typstdirect and htmldirect (the same for a .typ and an
-    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), crossref (the auto-detected `--filter pandoc-
+    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), crossref (the auto-detected `--filter pandoc-
     crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
     `{#fig:...}`-style attribute -- see crossref_filter_args()),
     citationengine (a document's own `pdfmd-options.citation-engine`
@@ -1196,7 +1196,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.16"
+PDFMD_VERSION = "3.25.17"
 import argparse
 import csv
 import filecmp
@@ -1432,7 +1432,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -1941,6 +1941,63 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
     if not any(contains_csv_table(file) for file in files):
         return []
     return ["--lua-filter", str(csv_filter_path)]
+
+
+# --raw / --no-raw / --raw-for FAMILY=SYNTAXES (filled in by main()); `pdfmd-options.raw` is the document's way.
+RAW_CLI: dict = {"all": False, "off": False, "for": []}
+PDF_IMAGE_RE = re.compile(r"""!\[[^\]]*\]\([^)\s]*\.pdf(?:[?#][^)\s]*)?(?:\s+(?:"[^"]*"|'[^']*'))?\)|<img\b[^>]*\bsrc\s*=\s*["'][^"']*\.pdf[?#"']""",
+                          re.IGNORECASE)
+
+
+def resolve_raw(md_path: Path, metadata_files: list[Path]) -> dict[str, list[str]] | None:
+    """The raw-syntax table of this build (see pdfmd_raw), or None: `--no-raw`, else the command line, else the
+    document's `pdfmd-options.raw`."""
+    if RAW_CLI["off"]:
+        return None
+    try:
+        import pdfmd_raw
+        table = pdfmd_raw.parse(True if RAW_CLI["all"] else first_pdfmd_option(md_path, metadata_files, "raw"))
+        for spec in RAW_CLI["for"]:
+            family, _, listing = spec.partition("=")
+            table = pdfmd_raw.merge(table, family, pdfmd_raw.syntaxes(listing))
+    except ImportError:
+        return None
+    except ValueError as error:
+        print(f"WARN  raw: {error}; the raw option was ignored", file=sys.stderr)
+        return None
+    return table
+
+
+def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path]) -> list[str]:
+    """The filters of pdfmd_lua for non-Markdown pieces: raw.lua when `raw` asks for it (any writer), pdf_images.lua
+    when a document names a PDF image (it acts for HTML writers only: a browser cannot show a PDF). Both read the
+    picture cache folder and the table from one metadata file written here."""
+    try:
+        import pdfmd_lua
+        raw_filter, pdf_filter = pdfmd_lua.path("raw"), pdfmd_lua.path("pdf_images")
+    except ImportError:
+        return []
+    files = sources if isinstance(sources, list) else [sources]
+    table = resolve_raw(files[0], metadata_files) if raw_filter is not None and files else None
+    pdf_images = (pdf_filter is not None and not auto_disabled(no_auto, "pdfimages")
+                  and any(PDF_IMAGE_RE.search(read_text_best_effort(file)) for file in files))
+    if table is None and not pdf_images:
+        return []
+    folder = cache_root() / "raw"
+    config: dict = {"pdfmd-raw-cache": str(folder / "pictures")}
+    if table is not None:
+        config["pdfmd-raw"] = table
+    digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    map_file = folder / "maps" / f"{digest}.yaml"
+    if not map_file.is_file():
+        map_file.parent.mkdir(parents=True, exist_ok=True)
+        map_file.write_text(json.dumps(config, ensure_ascii=False) + "\n", encoding="utf-8")
+    args = ["--metadata-file", str(map_file)]
+    if table is not None:
+        args += ["--lua-filter", str(raw_filter)]
+    if pdf_images:
+        args += ["--lua-filter", str(pdf_filter)]
+    return args
 
 
 # Engines are tried in this order only when the user did not request one.
@@ -4331,6 +4388,8 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         module = office_module()
         options = office_options(md_path, metadata_files, no_auto)
         latex = str(options.get("latex", "auto" if target in ("docx", "odt") else "")).casefold()
+        if not latex and target in ("typst", "html") and raw_takes(md_path, metadata_files, target, "tex"):
+            latex = "auto"                  # the raw option has this output take LaTeX: the route that draws what it can
         # Word and ODF always; Typst and HTML only when the document asks (`office: {latex: auto}`) or LaTeX failed
         wanted = target in ("docx", "odt") or force_filter or latex in ("auto", "images")
         if (module is not None and target in ("docx", "odt", "typst", "html") and wanted
@@ -4445,12 +4504,21 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         yield ["--reference-doc", str(path)]
 
 
-def office_fallback_wanted(md_path: Path, metadata_files: list[Path], failed_families: set) -> bool:
+def raw_takes(md_path: Path, metadata_files: list[Path], family: str, syntax: str) -> bool:
+    """Whether the `raw` option has output family `family` take the raw `syntax` (see pdfmd_raw)."""
+    table = resolve_raw(md_path, metadata_files)
+    return bool(table and syntax in table.get(family, []))
+
+
+def office_fallback_wanted(md_path: Path, metadata_files: list[Path], failed_families: set,
+                           family: str = "") -> bool:
     """Whether a Typst/WeasyPrint run should go through the LaTeX filter: a LaTeX engine has failed already, or the
-    document says `office: {latex: auto}` for it."""
-    if any(family in ("lualatex", "xelatex", "pdflatex", "tex", "latexmk", "tectonic") for family in failed_families):
+    document says `office: {latex: auto}` for it, or its `raw` option has this family (`typst`, `html`) take LaTeX."""
+    if any(family_name in ("lualatex", "xelatex", "pdflatex", "tex", "latexmk", "tectonic") for family_name in failed_families):
         return True
-    return str(office_options(md_path, metadata_files).get("latex", "")).casefold() in ("auto", "images")
+    if str(office_options(md_path, metadata_files).get("latex", "")).casefold() in ("auto", "images"):
+        return True
+    return bool(family) and raw_takes(md_path, metadata_files, family, "tex")
 
 
 def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
@@ -13084,6 +13152,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             for variable in variables:
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                 cmd.append("--citeproc")
@@ -13227,6 +13296,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
@@ -13639,6 +13709,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                 cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
@@ -13843,6 +13914,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                    cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
@@ -13870,7 +13942,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
-                            md_path, metadata_files, failed_families):
+                            md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html"):
                         # LaTeX failed (or the document asks): what the document says in LaTeX becomes native or
                         # a picture instead of nothing
                         with office_reference(md_path, metadata_files, variables, "typst" if engine == "typst" else "html",
@@ -16579,6 +16651,17 @@ def build_parser() -> argparse.ArgumentParser:
                         help="edit FILE (default: the Markdown file of this folder) in a small full-screen editor "
                              "with the build one key away (Ctrl-B; F1 lists the keys). Alpha. Needs "
                              "prompt_toolkit: pdfmd --install tui. Other options given beside it are used for the build")
+    parser.add_argument("--raw", action="store_true",
+                        help="carry the non-Markdown pieces of a document into every output: raw HTML (<img>, "
+                             "<table>, <b>...) and raw LaTeX are read by Pandoc into the target's own elements, raw "
+                             "Typst is drawn as a vector picture, and nothing is silently dropped for being written in "
+                             "another syntax. Per family and syntax: pdfmd-options.raw (or --raw-for)")
+    parser.add_argument("--no-raw", action="store_true",
+                        help="switch the raw option off for this run, whatever a document's pdfmd-options.raw says")
+    parser.add_argument("--raw-for", action="append", metavar="FAMILY=SYNTAXES",
+                        help="with --raw or alone: the raw syntaxes one output family takes, e.g. html=tex,typst "
+                             "(families: tex, typst, html, office; syntaxes: tex, html, typst, office; a syntax "
+                             "left out is dropped, the family's own included). Repeat for more families")
     parser.add_argument("--init-vscode", action="store_true",
                         help="write .vscode/tasks.json here with pdfmd tasks (build, build and open, watch, extract "
                              "tables) for VS Code; never overwrites one")
@@ -16698,7 +16781,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -17017,6 +17100,7 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
+    RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
     if args.init_reference:
         raise SystemExit(0 if init_reference(args.init_reference) else 1)
     if args.completion:
@@ -17508,6 +17592,7 @@ def main() -> None:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
+                    cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
@@ -17625,6 +17710,7 @@ def main() -> None:
                         if report_fonts_header or report_fonts_css:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
+                        cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)
                                 and "--citeproc" not in pandoc_options

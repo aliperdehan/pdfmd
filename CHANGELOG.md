@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.17 — 2026-10-09
+
+Pre-edit state: commit `86d71a7` (v3.25.16).
+
+### Added
+
+- **Raw passthrough: `pdfmd-options: {raw: ...}`, `--raw`, `--no-raw`, `--raw-for FAMILY=SYNTAXES`.** Pandoc keeps raw pieces
+  written in the format it writes and silently drops the others. `raw` is a table per output family (`tex`, `typst`,
+  `html`, `office`) of the syntaxes (`tex`, `html`, `typst`, `office`) that take part: the family's own stay, the foreign
+  ones are carried over by the new `pdfmd_lua/raw.lua` -- HTML read by Pandoc's HTML reader into the target's own
+  elements (`<img>`, tables, `<b>...</b>`, and a `<div>` around Markdown, with an opening and a closing tag in separate
+  pieces matched), LaTeX read by the LaTeX reader, Typst drawn by `typst compile` as a cropped vector picture (PDF; SVG
+  for HTML), kept in the cache by content -- and a syntax not listed is dropped, the family's own included. A family not
+  mentioned is left to Pandoc as before; `raw: all`, a list, or a mapping (with `default:`) are accepted; a bad value is a
+  warning. The new `pdfmd_raw` package parses it. `--setup` has an on/off entry. Tested through Pandoc 3.12 and 3.1.3 and
+  through the command line (`tests/test_raw.py`).
+- **PDF images in HTML builds, on by default** (`pdfmd_lua/pdf_images.lua`): a Markdown image or an `<img>` whose file is a
+  PDF becomes an SVG (first page; poppler's `pdftocairo`, `mutool`, `pdf2svg` or `inkscape`) for an HTML writer -- a web
+  page, an EPUB, a PDF through WeasyPrint -- kept in the cache by content; other writers are untouched. `--no-auto
+  pdfimages` turns it off.
+
 ## v3.25.16 — 2026-10-09
 
 Pre-edit state: commit `0516860` (v3.25.15).
