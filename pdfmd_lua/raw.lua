@@ -22,6 +22,7 @@ local FAMILY = {
   html = "html", html4 = "html", html5 = "html", epub = "html", epub2 = "html", epub3 = "html", slidy = "html",
   slideous = "html", revealjs = "html", s5 = "html", dzslides = "html", chunkedhtml = "html",
   docx = "office", odt = "office", opendocument = "office", pptx = "office", openxml = "office",
+  gfm = "md",          -- flat Markdown (--to gfm), only when pdfmd marks the build (`pdfmd-flat` in the metadata)
 }
 local SYNTAX = {
   html = "html", html4 = "html", html5 = "html",
@@ -38,6 +39,7 @@ local family_syntax = family and NATIVE_SYNTAX[family] or nil
 local included = nil      -- set of syntaxes this family takes; nil = the filter is off
 local office_reads_tex = false   -- pdfmd's LaTeX route (office.lua, which runs after this filter) is on: it takes the LaTeX
 local cache_dir = nil
+local cache_rel = nil      -- flat Markdown: the folder's name beside the output, which the pictures' links use
 local warned = {}
 
 local function warn(key, message)
@@ -49,6 +51,7 @@ end
 
 local function read_config(meta)
   local raw = meta["pdfmd-raw"]
+  if family == "md" and meta["pdfmd-flat"] == nil then return end
   if type(raw) ~= "table" or family == nil then return end
   local list = raw[family]
   if list == nil then return end
@@ -59,6 +62,7 @@ local function read_config(meta)
     included[pandoc.utils.stringify(list)] = true
   end
   if meta["pdfmd-raw-cache"] then cache_dir = pandoc.utils.stringify(meta["pdfmd-raw-cache"]) end
+  if meta["pdfmd-raw-rel"] then cache_rel = pandoc.utils.stringify(meta["pdfmd-raw-rel"]) end
   office_reads_tex = meta["pdfmd-office-latex"] ~= nil
 end
 
@@ -91,7 +95,7 @@ local function typst_picture(text)
     handle:write(data)
     handle:close()
   end
-  if family ~= "html" then return pdf end
+  if family ~= "html" and family ~= "md" then return pdf end
   local svg = cache_dir .. "/" .. key .. ".svg"
   if not file_exists(svg) then
     local done = false
@@ -107,10 +111,15 @@ local function typst_picture(text)
   return svg
 end
 
+local function link_to(path)
+  if cache_rel then return cache_rel .. "/" .. path:match("[^/\\]+$") end
+  return path
+end
+
 local function picture(text)
   local source = typst_picture(text)
   if not source then return nil end
-  return pandoc.Image({}, source, "", pandoc.Attr("", {"pdfmd-raw"}))
+  return pandoc.Image({}, link_to(source), "", pandoc.Attr("", {"pdfmd-raw"}))
 end
 
 -- reading -----------------------------------------------------------------------------------------------------------
@@ -282,6 +291,9 @@ local function process(list, kind, convert)
       index = index + 1
     elseif not included[syntax] then
       changed, index = true, index + 1                              -- not a syntax this family takes
+    elseif family == "md" and syntax == "office" then
+      out[#out + 1] = item          -- flat Markdown: nothing reads Word XML; flat.lua counts it and says so
+      index = index + 1
     elseif syntax == family_syntax or (syntax == "tex" and office_reads_tex) then
       out[#out + 1] = item                   -- its own syntax, or LaTeX that the office route turns into the target's own
       index = index + 1

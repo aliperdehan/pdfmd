@@ -383,6 +383,42 @@ pdfmd lecture --to typst -o lecture.typ
 pdfmd lecture -o lecture.tex      # a complete, compilable .tex, not a fragment
 ```
 
+### Plain Markdown: `--to gfm`
+
+```sh
+pdfmd report --to gfm                # report.gfm.md, beside report.md, never over it
+pdfmd report --to gfm -o README.md
+pdfmd report --to gfm+raw            # Pandoc's own gfm writer, with its HTML, as it was
+```
+
+`--to gfm` writes Markdown that any viewer shows as it is (GitHub, VS Code, Obsidian, a chat window): no HTML, no
+`{#id .class}` braces, no Pandoc-only syntax. pdfmd runs everything it runs for any other target first (includes, parts,
+`::: {.csv}` tables, pandoc-crossref, citations, your filters), then flattens what is left:
+
+- the title block is written (`# Title`, an `*Author, Author — date*` line, the abstract), since the front matter is not;
+- a table caption becomes `**Table 1.** text` above the table, a figure caption the same below the figure (the label
+  is split at the number pandoc-crossref wrote, in any language); `{#tbl:x}` and `{#fig:x}` are gone;
+- `<div>`, `<span>`, `<figure>` and the bibliography's wrappers are unwrapped; section numbers (`number-sections`) are
+  written into the headings; a link to a heading points at the anchor GitHub gives it, a link to a vanished id is text;
+- subscripts and superscripts are Unicode where every character has one (`H₂O`, `x²`, `CO₃²⁻`) and `_(..)` / `^(..)`
+  where not (`--gfm-scripts unicode`, the default; `html` keeps `<sub>`, `drop` writes the plain text, `ascii` always
+  writes `_2`, `^(q+z)`); math stays `$..$` and `$$..$$` (`--gfm-math fenced` writes ```` ```math ````);
+- raw HTML and raw LaTeX are read into Markdown (`<b>x</b>` becomes `**x**`, `\textbf{x}` too); a raw Typst piece, a PDF
+  image and an `<img src="x.pdf">` become SVG files in `<name>_files/` beside the output, linked relatively;
+- definition lists become a bold term and a paragraph; a table Markdown cannot hold (spans, several header rows, block
+  cells) is written as an HTML table, the one piece of HTML that stays, and counted in a `NOTE`;
+- what no Markdown can carry (Word XML, a LaTeX macro nothing read) is left out, and a `WARN` counts it and shows the
+  first.
+
+```yaml
+pdfmd-options:
+  gfm: {scripts: unicode, math: dollars, title: true}
+```
+
+The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to change it). The result is meant to be
+final: what the flattening removes (ids, cross-reference numbers become text, citations become text) is not recoverable
+from it.
+
 ### Word and OpenDocument output
 
 Plain Pandoc ignores `papersize`, `geometry`, `mainfont` and `fontsize` when it writes `.docx`

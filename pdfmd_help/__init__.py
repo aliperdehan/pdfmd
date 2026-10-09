@@ -37,6 +37,8 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--global", "--merge-history", "--dry-run")),
     "code": ("code blocks", ("--line-numbers", "--no-code-wrap")),
     "raw": ("raw HTML, LaTeX, Typst and Word pieces inside Markdown", ("--raw", "--no-raw", "--raw-for")),
+    "markdown": ("plain Markdown output (--to gfm), and Markdown that carries its source", (
+        "--gfm-scripts", "--gfm-math")),
     "fonts": ("scripts, fonts, emoji, transliteration", (
         "--fallback", "--missing", "--check-fonts", "--translit", "--emoji-fallback", "-f")),
     "builtin": ("the built-in renderer used when there is no Pandoc or PDF engine", (

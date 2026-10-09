@@ -9,6 +9,7 @@ format it is writing and drops the rest. This turns the choice into a table, per
         typst:  [typst, html, tex]     # Typst builds
         html:   [html, tex, typst]     # HTML, EPUB, PDF through weasyprint and the other HTML engines
         office: [office, html]         # Word and OpenDocument (and PDF through soffice)
+        md:     [html, tex, typst]     # flat Markdown (--to gfm); it takes every syntax unless this says otherwise
 
 A family takes the syntaxes it lists: its own stay as they are, the others are carried over by pdfmd_lua/raw.lua (HTML and
 LaTeX read by Pandoc into the target's own elements, Typst drawn as a vector picture); a syntax left out is dropped,
@@ -18,10 +19,11 @@ that is not mentioned is left to Pandoc (its own syntax kept, the rest dropped),
 
 from __future__ import annotations
 
-FAMILIES = ("tex", "typst", "html", "office")
+FAMILIES = ("tex", "typst", "html", "office", "md")
 SYNTAXES = ("tex", "html", "typst", "office")
 FAMILY_ALIASES = {"latex": "tex", "pdf-tex": "tex", "web": "html", "epub": "html", "word": "office", "docx": "office",
-                  "odt": "office", "opendocument": "office"}
+                  "odt": "office", "opendocument": "office", "markdown": "md", "gfm": "md", "flat": "md",
+                  "commonmark": "md"}
 SYNTAX_ALIASES = {"latex": "tex", "word": "office", "docx": "office", "odt": "office", "openxml": "office",
                   "opendocument": "office", "xml": "office"}
 ON = {"all", "on", "yes", "true", "everything"}
@@ -70,7 +72,7 @@ def parse(value) -> dict[str, list[str]] | None:
                 continue
             family = FAMILY_ALIASES.get(name, name)
             if family not in FAMILIES:
-                raise RawError(f"{key!r} is not an output family (tex, typst, html, office)")
+                raise RawError(f"{key!r} is not an output family (tex, typst, html, office, md)")
             table[family] = syntaxes(listing)
         if default is not None:
             for family in FAMILIES:
@@ -86,5 +88,5 @@ def merge(table: dict[str, list[str]] | None, family: str, listing: list[str]) -
     out[FAMILY_ALIASES.get(family.strip().casefold(), family.strip().casefold())] = listing
     for name in out:
         if name not in FAMILIES:
-            raise RawError(f"{name!r} is not an output family (tex, typst, html, office)")
+            raise RawError(f"{name!r} is not an output family (tex, typst, html, office, md)")
     return out

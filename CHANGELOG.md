@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.3 — 2026-10-09
+
+Pre-edit state: commit `8472936` (v3.26.2).
+
+### Added
+
+- `--to gfm` is now FLAT Markdown: plain GitHub-flavoured Markdown that any viewer shows as it is, made after everything
+  pdfmd runs for any other target (includes, parts, `::: {.csv}` tables, pandoc-crossref, citeproc, the raw pieces and
+  the document's filters). The new `pdfmd_lua/flat.lua` runs last and writes the title block (`# Title`, an author and
+  date line, the abstract); bakes section numbers into the headings when the document numbers them; turns captions
+  into `**Table 1.** text` above a table and under a figure (split at pandoc-crossref's number, any language) with no
+  `{#tbl:x}` left; unwraps divisions, spans, figures and the bibliography's wrappers; points links to headings at
+  GitHub's anchors and turns links to vanished ids into text; writes sub/superscripts as Unicode where every character
+  has one and `_(..)`/`^(..)` where not (`--gfm-scripts unicode|html|drop|ascii`); keeps math as `$..$` (`--gfm-math
+  dollars|fenced`); turns definition lists, line blocks, small capitals and underline into plain Markdown; and writes
+  a table Markdown cannot hold (spans, several header rows, block cells) as an HTML table, counted in a `NOTE`. What no
+  Markdown can carry (Word XML, a LaTeX macro nothing read) is left out with a `WARN` that counts it and shows the first.
+  Settings also come from `pdfmd-options: {gfm: {scripts, math, title}}`. The new package `pdfmd_flat` holds them.
+- `--to gfm+raw` is Pandoc's own gfm writer, as `--to gfm` was until now.
+- The raw option has a fifth family, `md` (flat Markdown): it takes every syntax unless `raw: {md: [...]}` says otherwise,
+  so raw HTML and LaTeX are READ into Markdown (`<b>x</b>` -> `**x**`, `\textbf{x}` -> `**x**`), a raw Typst piece and a
+  PDF image (`![](plot.pdf)`, `<img src="plot.pdf">`) become SVG files in `<output stem>_files/` beside the output, linked
+  by a relative path. `raw.lua` and `pdf_images.lua` learned the new family; they are inactive for a plain gfm writer.
+- A flat output made from `doc.md` is named `doc.gfm.md` (a part build `report#two.gfm.md`...), beside its source.
+
+### Fixed
+
+- A Markdown writer could replace its own source: `pdfmd doc.md --to markdown` wrote `doc.md` over `doc.md` (with a
+  leading `# Title` promoted to metadata and gone from the text). pdfmd now stops with "is the source itself" when the
+  output would be the source (or one of its parts), whatever the format.
+- A front-matter-less document is read as gfm (as before); a flat build of one therefore leaves `H~2~O` literal. Give the
+  document a front matter (or `--from markdown`) to read it as Pandoc Markdown. (Documented, not changed.)
+
 ## v3.26.2 — 2026-10-09
 
 Pre-edit state: commit `5479ffa` (v3.26.1).

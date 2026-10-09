@@ -62,7 +62,7 @@ class Parsing(unittest.TestCase):
 
     def test_all_lists_everything_for_every_family(self):
         table = pdfmd_raw.parse("all")
-        self.assertEqual(sorted(table), ["html", "office", "tex", "typst"])
+        self.assertEqual(sorted(table), ["html", "md", "office", "tex", "typst"])
         self.assertEqual(table["tex"], ["tex", "html", "typst", "office"])
         self.assertEqual(pdfmd_raw.parse(True), table)
 

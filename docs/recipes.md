@@ -469,6 +469,19 @@ pdfmd lecture -t typst -o lecture.typ ; typst compile lecture.typ
 pdfmd slides -p --slide-level 2          # Beamer; level 2 headings start slides
 ```
 
+### 7.5 Plain Markdown that any viewer shows
+
+```sh
+pdfmd report --to gfm                 # report.gfm.md: title, numbers, captions, citations, tables, all in plain Markdown
+pdfmd report --to gfm --gfm-scripts ascii -o report.txt.md      # H_2O, x^2, CO_3^(2-) for a viewer with no Unicode scripts
+pdfmd report --to gfm+raw             # Pandoc's own gfm writer (HTML left in) instead
+```
+
+`::: {.csv}` tables, included files, parts, raw HTML and LaTeX (`<b>x</b>`, `\textbf{x}`), citations and the
+bibliography are all processed; a Typst piece or a PDF figure becomes an SVG in `report.gfm_files/`. The output sits beside
+the source under another name; a Markdown writer never replaces its own source (`pdfmd doc.md --to markdown` stops with an
+error unless `-o` names another file). Settings: `pdfmd-options: {gfm: {scripts: unicode, math: dollars, title: true}}`.
+
 ---
 
 ## 8. The PDF that carries its source

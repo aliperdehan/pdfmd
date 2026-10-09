@@ -844,6 +844,14 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     before it). Order: the part's own labels, the last full build's .aux (exact; cache on), the scan. Approximate for
     whatever the document defines itself; \\pageref stays `??`. auto (default) | aux | scan | draft | off.
 
+    Flat Markdown (v3.26.3; `--to gfm`, `pdfmd-options: {gfm: {scripts, math, title}}`, --gfm-scripts, --gfm-math):
+    plain GitHub-flavoured Markdown that any viewer shows as it is. The build is the one of any other target
+    (includes, parts, `.csv` tables, pandoc-crossref, citeproc, the raw option's `md` family, the document's filters);
+    pdfmd_lua/flat.lua runs last and writes the title block, captions as `**Table 1.** text`, Unicode sub/superscripts,
+    GitHub anchors, section numbers in the headings, and counts what no Markdown can carry. The output is
+    `<name>.gfm.md` beside its source; `--to gfm+raw` is Pandoc's own gfm writer. A Markdown writer never replaces its
+    own source.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1205,7 +1213,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.2"
+PDFMD_VERSION = "3.26.3"
 import argparse
 import csv
 import filecmp
@@ -1958,9 +1966,10 @@ PDF_IMAGE_RE = re.compile(r"""!\[[^\]]*\]\([^)\s]*\.pdf(?:[?#][^)\s]*)?(?:\s+(?:
                           re.IGNORECASE)
 
 
-def resolve_raw(md_path: Path, metadata_files: list[Path]) -> dict[str, list[str]] | None:
+def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -> dict[str, list[str]] | None:
     """The raw-syntax table of this build (see pdfmd_raw), or None: `--no-raw`, else the command line, else the
-    document's `pdfmd-options.raw`."""
+    document's `pdfmd-options.raw`. A flat Markdown build (`--to gfm`) takes every syntax unless `raw: {md: ...}` says
+    otherwise: the pieces are carried over, since the output has no HTML or LaTeX of its own to keep them in."""
     if RAW_CLI["off"]:
         return None
     try:
@@ -1969,6 +1978,9 @@ def resolve_raw(md_path: Path, metadata_files: list[Path]) -> dict[str, list[str
         for spec in RAW_CLI["for"]:
             family, _, listing = spec.partition("=")
             table = pdfmd_raw.merge(table, family, pdfmd_raw.syntaxes(listing))
+        if flat:
+            table = {**(table or {})}
+            table.setdefault("md", list(pdfmd_raw.SYNTAXES))
     except ImportError:
         return None
     except ValueError as error:
@@ -1977,7 +1989,8 @@ def resolve_raw(md_path: Path, metadata_files: list[Path]) -> dict[str, list[str
     return table
 
 
-def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path]) -> list[str]:
+def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
+                    flat_pictures: Path | None = None) -> list[str]:
     """The filters of pdfmd_lua for non-Markdown pieces: raw.lua when `raw` asks for it (any writer), pdf_images.lua
     when a document names a PDF image (it acts for HTML writers only: a browser cannot show a PDF). Both read the
     picture cache folder and the table from one metadata file written here."""
@@ -1987,13 +2000,16 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     except ImportError:
         return []
     files = sources if isinstance(sources, list) else [sources]
-    table = resolve_raw(files[0], metadata_files) if raw_filter is not None and files else None
+    table = (resolve_raw(files[0], metadata_files, flat=flat_pictures is not None)
+             if raw_filter is not None and files else None)
     pdf_images = (pdf_filter is not None and not auto_disabled(no_auto, "pdfimages")
                   and any(PDF_IMAGE_RE.search(read_text_best_effort(file)) for file in files))
     if table is None and not pdf_images:
         return []
     folder = cache_root() / "raw"
     config: dict = {"pdfmd-raw-cache": str(folder / "pictures")}
+    if flat_pictures is not None:       # flat Markdown: the pictures it needs sit beside the output, linked by a relative path
+        config = {"pdfmd-raw-cache": str(flat_pictures), "pdfmd-raw-rel": flat_pictures.name}
     if table is not None:
         config["pdfmd-raw"] = table
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
@@ -2007,6 +2023,67 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     if pdf_images:
         args += ["--lua-filter", str(pdf_filter)]
     return args
+
+
+# -- Flat Markdown: --to gfm (v3.26.3) ----------------------------------------------
+# `--to gfm` is plain GitHub-flavoured Markdown, nothing a viewer has to know about Pandoc (see pdfmd_flat and
+# pdfmd_lua/flat.lua); `--to gfm+raw` is Pandoc's own gfm writer. --gfm-scripts / --gfm-math fill GFM_CLI in main();
+# `pdfmd-options.gfm` is the document's way ({scripts: unicode|html|drop|ascii, math: dollars|fenced, title: true}).
+GFM_CLI: dict = {"scripts": None, "math": None, "title": None}
+_PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
+
+
+def pandoc_extensions(name: str) -> frozenset[str]:
+    """The extensions this Pandoc knows for format `name` (on or off), for building a writer string it will accept."""
+    if name not in _PANDOC_EXTENSIONS:
+        try:
+            listing = subprocess.run(["pandoc", f"--list-extensions={name}"], capture_output=True, text=True).stdout
+        except OSError:
+            listing = ""
+        _PANDOC_EXTENSIONS[name] = frozenset(line.strip().lstrip("+-") for line in listing.splitlines() if line.strip())
+    return _PANDOC_EXTENSIONS[name]
+
+
+def flat_settings(md_path: Path, metadata_files: list[Path]) -> dict:
+    try:
+        import pdfmd_flat
+    except ImportError:
+        raise SystemExit("--to gfm needs the pdfmd_flat package (install pdfmd-cli; a lone copy of pdfmd.py has "
+                         "only Pandoc's own writer: --to gfm+raw)")
+    try:
+        return pdfmd_flat.settings(cascaded_option(md_path, metadata_files, "gfm"), **GFM_CLI)
+    except pdfmd_flat.FlatError as error:
+        raise SystemExit(f"{display_path(md_path)}: {error}")
+
+
+def flat_writer(target_format: str, settings: dict | None) -> str:
+    """The Pandoc writer of a target: the flat writer for `gfm`, plain `gfm` for `gfm+raw`, else the target itself."""
+    try:
+        import pdfmd_flat
+    except ImportError:
+        return "gfm" if target_format == "gfm+raw" else target_format
+    if not pdfmd_flat.is_family(target_format):
+        return target_format
+    return pdfmd_flat.writer(target_format, (settings or pdfmd_flat.DEFAULTS)["math"], pandoc_extensions("gfm"))
+
+
+def flat_filter_args(settings: dict) -> list[str]:
+    """The arguments that make a build flat: its settings (a metadata file) and pdfmd_lua/flat.lua, which must be last."""
+    try:
+        import pdfmd_lua
+        filter_path = pdfmd_lua.path("flat")
+    except ImportError:
+        filter_path = None
+    if filter_path is None:
+        raise SystemExit("--to gfm needs pdfmd_lua/flat.lua (install pdfmd-cli; a lone copy of pdfmd.py has only "
+                         "Pandoc's own writer: --to gfm+raw)")
+    config = {"pdfmd-flat": {"scripts": settings["scripts"], "title": bool(settings["title"])}}
+    digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    map_file = cache_root() / "flat" / f"{digest}.yaml"
+    if not map_file.is_file():
+        map_file.parent.mkdir(parents=True, exist_ok=True)
+        map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
+    return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
 
 
 # Engines are tried in this order only when the user did not request one.
@@ -12240,7 +12317,7 @@ FORMAT_EXTENSION = {
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
     "plain": ".txt",
-    "markdown": ".md", "gfm": ".md", "commonmark": ".md", "commonmark_x": ".md",
+    "markdown": ".md", "gfm": ".md", "gfm+raw": ".md", "commonmark": ".md", "commonmark_x": ".md",
     "docx": ".docx", "odt": ".odt", "pptx": ".pptx",
     "epub": ".epub", "epub2": ".epub", "epub3": ".epub",
     "rst": ".rst", "org": ".org", "rtf": ".rtf",
@@ -12276,6 +12353,14 @@ def format_from_output(path: Path | None) -> str | None:
     if path is None or not path.suffix:
         return None
     return EXTENSION_FORMAT.get(path.suffix.lower())
+
+
+def output_extension_for(target_format: str, source: Path | None = None) -> str:
+    """The suffix an output gets by default. Flat Markdown (`gfm`, `gfm+raw`) made from a `.md` file is `.gfm.md`: beside
+    its source, never over it."""
+    if target_format in ("gfm", "gfm+raw") and source is not None and source.suffix.lower() == ".md":
+        return ".gfm.md"
+    return FORMAT_EXTENSION.get(target_format, f".{target_format}")
 
 
 def default_output_path(path: Path, target_format: str) -> Path:
@@ -13610,10 +13695,18 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     cli_no_auto = no_auto
     no_auto = effective_no_auto(md_path, no_auto)
-    output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
+    output_extension = output_extension_for(target_format, md_path)
     output = output_file or (
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
     )
+    for source_file in (md_path, *parts_inputs):
+        try:
+            clash = output.exists() and source_file.exists() and output.samefile(source_file)
+        except OSError:
+            clash = False
+        if clash:
+            raise SystemExit(f"{display_path(output)} is the source itself; the {target_format} output would replace it. "
+                             "Give another name with -o, or another folder.")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     if source_override is not None and target_format == ASSEMBLED_FORMAT:
@@ -13775,7 +13868,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         preamble_files = [*(preamble_files or []), *label_scan.headers]
         part_markers = part_markers or bool(parts_inputs and label_scan.markers)
 
-    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title"),
+    flat_target = target_format == "gfm"
+    flat = flat_settings(md_path, metadata_files) if flat_target else None
+    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title") or flat_target,
                                override=source_override) \
             as (title_source, title_shifted), \
             embedded_lua_filters(md_path, not auto_disabled(cli_no_auto, "lua"), trust_embedded) \
@@ -13870,7 +13965,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     office_reference(md_path, metadata_files, variables, target_format, output, pandoc_options,
                                      no_auto, note) as office_arguments:
                 source, *prepared_metadata = prepared
-                cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", target_format]
+                writer = flat_writer(target_format, flat) if target_format in ("gfm", "gfm+raw") else target_format
+                cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", writer]
+                if flat_target and not any(option.startswith("--wrap") for option in pandoc_options):
+                    cmd.append("--wrap=none")      # a paragraph is one line: a viewer wraps it, a diff shows what changed
                 if is_tex_target and standalone_auto:
                     note("STANDALONE", f"{md_path}: --to {target_format} needs a complete, "
                                        "independently compilable document; adding --standalone")
@@ -13942,7 +14040,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
-                cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
+                cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
+                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_target else None)
                 cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                 cmd += select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
@@ -13973,6 +14072,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
+                if flat_target:
+                    cmd += flat_filter_args(flat)       # last: it sees what every other filter made
                 if office_arguments.filter_arguments:
                     result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                 else:
@@ -16942,8 +17043,16 @@ def build_parser() -> argparse.ArgumentParser:
                         help="switch the raw option off for this run, whatever a document's pdfmd-options.raw says")
     parser.add_argument("--raw-for", action="append", metavar="FAMILY=SYNTAXES",
                         help="with --raw or alone: the raw syntaxes one output family takes, e.g. html=tex,typst "
-                             "(families: tex, typst, html, office; syntaxes: tex, html, typst, office; a syntax "
+                             "(families: tex, typst, html, office, md; syntaxes: tex, html, typst, office; a syntax "
                              "left out is dropped, the family's own included). Repeat for more families")
+    parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
+                        help="with --to gfm (flat Markdown): how subscripts and superscripts are written -- unicode "
+                             "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "
+                             "(<sub>/<sup>), drop (the plain text) or ascii (`_2`, `^(2+)`). Also "
+                             "`pdfmd-options: {gfm: {scripts: ...}}`")
+    parser.add_argument("--gfm-math", choices=("dollars", "fenced"), default=None, metavar="MODE",
+                        help="with --to gfm: math as `$..$` / `$$..$$` (default; GitHub, VS Code and Obsidian read it) "
+                             "or as ```math fences (GitHub's older form). Also `pdfmd-options: {gfm: {math: ...}}`")
     parser.add_argument("--init-vscode", action="store_true",
                         help="write .vscode/tasks.json here with pdfmd tasks (build, build and open, watch, extract "
                              "tables) for VS Code; never overwrites one")
@@ -17390,6 +17499,7 @@ def main() -> None:
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
+    GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     if args.init_reference:
         raise SystemExit(0 if init_reference(args.init_reference) else 1)
     if args.completion:
@@ -18184,7 +18294,7 @@ def main() -> None:
                        if scaffold_plan is None and section_plan is None and not args.presentation else None)
         if direct_kind is None:
             need_engines(target_format)
-        output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
+        output_extension = output_extension_for(target_format, source)
         out_dir = None
         output_file = None
         if args.out and not args.destination_cwd and args.out.is_dir():

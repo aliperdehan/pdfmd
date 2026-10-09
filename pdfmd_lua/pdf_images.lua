@@ -6,9 +6,12 @@
 -- folder for the SVGs; without it, or without a tool, the image is left as written and a warning says why.
 
 local html = FORMAT:match("^html") or FORMAT:match("^epub") or FORMAT == "chunkedhtml"
-if not html then return {} end
+local markdown = FORMAT == "gfm"        -- flat Markdown (--to gfm): a viewer cannot show a PDF in an image either
+if not html and not markdown then return {} end
 
+local active = html
 local cache_dir = nil
+local cache_rel = nil
 local warned = {}
 
 local function warn(key, message)
@@ -38,17 +41,18 @@ local function locate(src)
 end
 
 local function to_svg(src)
-  if not cache_dir then return nil end
+  if not active or not cache_dir then return nil end
   local path = locate(src)
   if not path then return nil end
   local data = file_bytes(path)
   local key = pandoc.sha1(data)
   pcall(pandoc.system.make_directory, cache_dir, true)
   local svg = cache_dir .. "/" .. key .. ".svg"
-  if file_bytes(svg) then return svg end
+  local public = cache_rel and (cache_rel .. "/" .. key .. ".svg") or svg
+  if file_bytes(svg) then return public end
   for _, tool in ipairs({{"pdftocairo", {"-svg", "-f", "1", "-l", "1", path, svg}}, {"mutool", {"draw", "-o", svg, path, "1"}},
                          {"pdf2svg", {path, svg}}, {"inkscape", {path, "--export-type=svg", "--export-filename=" .. svg}}}) do
-    if pcall(pandoc.pipe, tool[1], tool[2], "") and file_bytes(svg) then return svg end
+    if pcall(pandoc.pipe, tool[1], tool[2], "") and file_bytes(svg) then return public end
   end
   warn("tool", "no tool to turn a PDF into an SVG (install poppler's pdftocairo, mutool, pdf2svg or inkscape); "
        .. "PDF images are left as written")
@@ -60,7 +64,9 @@ local function is_pdf(src)
 end
 
 local function Meta(meta)
+  active = html or (markdown and meta["pdfmd-flat"] ~= nil)
   if meta["pdfmd-raw-cache"] then cache_dir = pandoc.utils.stringify(meta["pdfmd-raw-cache"]) end
+  if meta["pdfmd-raw-rel"] then cache_rel = pandoc.utils.stringify(meta["pdfmd-raw-rel"]) end
 end
 
 local function Image(el)
