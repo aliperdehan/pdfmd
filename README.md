@@ -833,7 +833,15 @@ below) is exact and is used first; the scan fills in what it does not know.
 the source (`draft` runs LaTeX once over the whole document without output, for
 exact numbers at about half a compile's cost); `off` brings back the `??`. A section of an ordinary document
 (`doc#results`) gets the same for the references it makes, but keeps numbering
-its own headings from 1. See
+its own headings from 1.
+
+For HTML, EPUB, Word, OpenDocument, Typst and PDF through an engine that is not LaTeX the
+same idea works differently: pdfmd hands Pandoc the whole document with each part in a
+marked div, lets pandoc-crossref number and resolve everything, and then keeps only the
+part you asked for (`select.lua`). Its headings, figures, tables and equations keep the
+full document's numbers, and `[@sec:x]`, `[@fig:y]` to the rest resolve (as links that
+lead nowhere). Raw LaTeX `\ref{..}` is a LaTeX-only reference: use pandoc-crossref's
+syntax for those writers. See
 [`examples/parts/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/parts/).
 
 #### Faster rebuilds: the cache

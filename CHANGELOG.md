@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.2 — 2026-10-09
+
+Pre-edit state: commit `5479ffa` (v3.26.1).
+
+### Added
+
+- A part (`report#methods`) or a section (`doc#results`) built for HTML, EPUB, Word, OpenDocument, Typst, or PDF through
+  an engine that is not LaTeX, now shows the numbers of the WHOLE document, and its references to the rest resolve. The
+  inputs are all the parts (the whole text of a plain document), each wrapped in a fenced div
+  `{.pdfmd-part pdfmd-keep="yes|no"}`, so pandoc-crossref numbers and resolves everything; the new
+  `pdfmd_lua/select.lua`, placed right after pandoc-crossref and before citeproc (the bibliography lists only what the
+  kept part cites), drops the parts marked no and unwraps the others. A reference to a dropped item has its number
+  already, as a link that leads nowhere. Headings are numbered by the filter over the whole document and keep the number
+  as the `number` attribute the HTML, Word and OpenDocument writers print (`--number-sections`); for Typst it sets
+  `#counter(heading)` before each kept heading. A part's sections inside a cut (`report#sampling`) are marked the same
+  way line by line. Not for `--to latex` (a `.tex` stays plain), the built-in renderers, `--seed-labels aux|off`.
+- The soffice route (Pandoc to .docx, LibreOffice to PDF) looks for pandoc-crossref syntax in the parts too, not only in the scaffold, so `[@sec:x]` in a part resolves there (it ran no crossref when only a part used it).
+- The closing NOTE says which way the numbers of the rest were found. A raw LaTeX `\ref` is not resolved outside LaTeX
+  (Pandoc passes it on to nobody): write `[@sec:x]` with pandoc-crossref.
+
 ## v3.26.1 — 2026-10-09
 
 Pre-edit state: commit `f7f1882` (v3.26.0).

@@ -158,6 +158,36 @@ class Wanted(unittest.TestCase):
         self.assertFalse(self.ask(target="latex", parts=True))        # a .tex handed over stays plain
 
 
+class Wrapping(unittest.TestCase):
+    def test_a_part_is_a_fenced_div_marked_yes_or_no(self):
+        text = pdfmd.wrap_part("# A\n\ntext\n", True)
+        self.assertTrue(text.startswith(':::::::'))
+        self.assertIn('pdfmd-keep="yes"', text)
+        self.assertIn('pdfmd-keep="no"', pdfmd.wrap_part("x", False))
+
+    def test_runs_mark_only_the_kept_lines(self):
+        text = pdfmd.wrap_runs("# A\na\n# B\nb\n# C\nc", [(2, 4)])
+        self.assertEqual(text.count("pdfmd-part"), 3)
+        order = re.findall(r'pdfmd-keep="(yes|no)"', text)
+        self.assertEqual(order, ["no", "yes", "no"])
+        kept = text.split('pdfmd-keep="yes"}')[1].split(":::::::")[0]
+        self.assertIn("# B", kept)
+        self.assertNotIn("# A", kept)
+        self.assertNotIn("# C", kept)
+
+    def test_select_wanted_is_for_the_writers_that_are_not_latex(self):
+        ask = lambda target, engines=("lualatex",): pdfmd.select_wanted("auto", target, list(engines), False, Path("d.md"))
+        self.assertTrue(ask("html"))
+        self.assertTrue(ask("docx"))
+        self.assertTrue(ask("typst"))
+        self.assertTrue(ask("pdf", ("weasyprint",)))
+        self.assertFalse(ask("pdf", ("lualatex",)))
+        self.assertFalse(ask("pdf", ("inkmd",)))
+        self.assertFalse(ask("latex"))
+        self.assertFalse(pdfmd.select_wanted("off", "html", [], False, Path("d.md")))
+        self.assertFalse(pdfmd.select_wanted("aux", "html", [], False, Path("d.md")))
+
+
 NEEDS = unittest.skipUnless(shutil.which("pandoc") and shutil.which("lualatex") and shutil.which("pdftotext"),
                             "needs Pandoc, LuaLaTeX and pdftotext")
 
@@ -249,6 +279,64 @@ class SectionBuild(unittest.TestCase):
             text = subprocess.run(["pdftotext", str(root / "doc.results.pdf"), "-"], capture_output=True, text=True).stdout
             self.assertIn("Back to Section 1", text)
             self.assertNotIn("??", text)
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("pandoc-crossref"), "needs Pandoc and pandoc-crossref")
+class WholeNumbering(unittest.TestCase):
+    """HTML, Word, Typst: the whole document is numbered by pandoc-crossref and the part kept (select.lua)."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name).resolve()
+        (self.root / "parts").mkdir()
+        (self.root / "report.md").write_text("---\ntitle: Demo\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")
+        (self.root / "parts" / "10-intro.md").write_text("# Intro {#sec:intro}\n\nSee [@sec:method].\n", encoding="utf-8")
+        (self.root / "parts" / "20-method.md").write_text(
+            "# Method {#sec:method}\n\nBack to [@sec:intro] and [@sec:end].\n\n## Sub {#sec:sub}\n\nText.\n",
+            encoding="utf-8")
+        (self.root / "parts" / "30-end.md").write_text("# End {#sec:end}\n\nLast [@sec:method].\n", encoding="utf-8")
+
+    def build(self, *arguments):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments, "--number-sections"],
+                              cwd=self.root, capture_output=True, text=True)
+
+    def test_a_part_keeps_the_numbers_and_references_of_the_whole_document(self):
+        result = self.build("report#method", "-t", "html", "-o", "m.html")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = (self.root / "m.html").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r'data-number="([^"]*)" id="([^"]*)"', html),
+                         [("2", "sec:method"), ("2.1", "sec:sub")])
+        text = re.sub(r"<[^>]*>", "", html).replace("\xa0", " ")
+        self.assertIn("Back to sec. 1 and sec. 3.", text)
+        self.assertNotIn("Intro", text)
+        self.assertNotIn("pdfmd-part", html)
+
+    def test_several_parts_in_the_documents_order(self):
+        result = self.build("report#end+method", "-t", "html", "-o", "m.html")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = (self.root / "m.html").read_text(encoding="utf-8")
+        self.assertEqual([number for number, _ in re.findall(r'data-number="([^"]*)" id="([^"]*)"', html)],
+                         ["2", "2.1", "3"])
+
+    def test_typst_gets_a_heading_counter_before_a_kept_heading(self):
+        result = self.build("report#end", "-t", "typst", "-o", "e.typ")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("#counter(heading).update((2,))", (self.root / "e.typ").read_text(encoding="utf-8"))
+
+    def test_a_full_build_is_untouched(self):
+        result = self.build("report", "-t", "html", "-o", "f.html")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("pdfmd-part", (self.root / "f.html").read_text(encoding="utf-8"))
+
+    def test_a_section_of_an_ordinary_document(self):
+        (self.root / "doc.md").write_text(
+            "---\ntitle: D\n---\n\n# One {#sec:one}\n\nText.\n\n# Two {#sec:two}\n\nBack to [@sec:one].\n\n# Three\n\nBye.\n", encoding="utf-8")
+        result = self.build("doc#two", "-t", "html", "-o", "d.html")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = (self.root / "d.html").read_text(encoding="utf-8")
+        self.assertIn('data-number="2"', html)
+        self.assertIn("sec. 1", re.sub(r"<[^>]*>", "", html).replace("\xa0", " "))
 
 
 if __name__ == "__main__":

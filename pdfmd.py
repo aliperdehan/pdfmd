@@ -1205,7 +1205,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.1"
+PDFMD_VERSION = "3.26.2"
 import argparse
 import csv
 import filecmp
@@ -9966,9 +9966,48 @@ def strip_part_front_matter(text: str) -> str:
     return "\n".join(lines[count:]) if count else stripped
 
 
+PART_FENCE = ":::::::"
+
+
+def wrap_part(text: str, keep: bool) -> str:
+    """``text`` as a fenced div that pdfmd_lua/select.lua keeps or drops once pandoc-crossref has numbered the whole."""
+    return '%s {.pdfmd-part pdfmd-keep="%s"}\n\n%s\n\n%s\n' % (PART_FENCE, "yes" if keep else "no",
+                                                                text.strip("\n"), PART_FENCE)
+
+
+def wrap_runs(text: str, kept: list[tuple[int, int]]) -> str:
+    """``text`` as consecutive part divs: the lines inside the (start, end) ranges ``kept`` marked yes, the rest no."""
+    lines = text.split("\n")
+    flags = [False] * len(lines)
+    for start, end in kept:
+        for index in range(start, min(end, len(lines))):
+            flags[index] = True
+    pieces, begin = [], 0
+    for index in range(1, len(lines) + 1):
+        if index == len(lines) or flags[index] != flags[begin]:
+            chunk = "\n".join(lines[begin:index])
+            if chunk.strip():
+                pieces.append(wrap_part(chunk, flags[begin]))
+            begin = index
+    return "\n".join(pieces)
+
+
+def select_filter_args(selection) -> list[str]:
+    """``--lua-filter select.lua`` when the inputs are wrapped in part divs (see ``wrap_part``)."""
+    if selection is None or selection is False:
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("select")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
 @contextmanager
 def scaffold_inputs(files: list[Path], active: bool,
-                    markers: dict[Path, str] | None = None) -> Iterator[list[Path]]:
+                    markers: dict[Path, str] | None = None,
+                    select: "set[Path] | None" = None) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
     a part with nothing to remove is passed through untouched). ``markers``
@@ -9985,7 +10024,13 @@ def scaffold_inputs(files: list[Path], active: bool,
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             cleaned = strip_part_front_matter(text)
-            if part in PART_CUTS:
+            if select is not None:
+                # every part goes in, wrapped; select.lua drops the ones (or the sections) not asked for
+                if part in select and part in PART_CUTS:
+                    cleaned = wrap_runs(cleaned, [(heading.line, heading.end) for heading in PART_CUTS[part]])
+                else:
+                    cleaned = wrap_part(cleaned, part in select)
+            elif part in PART_CUTS:
                 # Only some sections of this part (a `#name` that is no part's
                 # name): no counter marker -- it would restore the counters of
                 # the part's start, not of the section's.
@@ -10311,6 +10356,7 @@ class SectionPlan:
         self.text = text            # the document pdfmd hands Pandoc instead of the file
         self.shifted = shifted      # the document's leading `# Title` became its title
         self.selected = selected
+        self.full_text = text       # the whole document, the selection in part divs (set by plan_sections)
 
     @property
     def output_stem(self) -> str:
@@ -10349,7 +10395,11 @@ def plan_sections(source: Path, requests: list[str], cli_no_auto: list[str] | No
     lead = "\n".join(lines[:first_heading]).strip("\n") if with_lead else ""
     blocks = ([lead] if lead else []) + ["\n".join(lines[item.line:item.end]).rstrip("\n")
                                          for item in selected if not (lead and item.end <= first_heading)]
-    return SectionPlan(source, head + "\n\n".join(blocks) + "\n", shifted, selected)
+    plan = SectionPlan(source, head + "\n\n".join(blocks) + "\n", shifted, selected)
+    # the whole document with the selection marked, for the writers that number it whole (see wrap_part)
+    kept = [(item.line, item.end) for item in selected] + ([(0, first_heading)] if lead else [])
+    plan.full_text = head + wrap_runs("\n".join(lines), kept) + "\n"
+    return plan
 
 
 def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metadata: list[str] | None) -> None:
@@ -12784,6 +12834,7 @@ def safe_stem(name: str) -> str:
 SEED_LABELS_CLI: str | None = None         # --seed-labels (set in main)
 LAST_SCANNED = 0                           # labels the last build took from the scan (for the closing NOTE)
 LAST_EXACT = False                         # ... and whether they came from a draft pass
+LAST_WHOLE = False                         # the last build numbered the whole document and kept the part (select.lua)
 REF_USE_RE = re.compile(r"\\(?:auto|eq|page|name|vpage|[cCvV])?ref\*?\s*\{|(?<![\w@])@(?:sec|fig|tbl|eq|lst):")
 
 
@@ -12842,6 +12893,18 @@ def label_scan_wanted(mode: str, target_format: str, engines: list[str], present
                                           for engine in engines):
         return False
     return parts_mode or any(REF_USE_RE.search(text) for text in texts)
+
+
+def select_wanted(mode: str, target_format: str, engines: list[str], presentation: bool, md_path: Path) -> bool:
+    """Whether a partial build for a writer other than LaTeX numbers the whole document and keeps the part: HTML, Word,
+    OpenDocument, Typst, EPUB, and PDF through an engine that is not LaTeX or a built-in renderer."""
+    if mode not in ("auto", "scan", "draft") or presentation or md_path.suffix.lower() != ".md":
+        return False
+    if target_format in TEX_STANDALONE_FORMATS or target_format == ASSEMBLED_FORMAT:
+        return False
+    if target_format == "pdf":
+        return not any(engine in LATEX_ENGINES or engine in NATIVE_ENGINES for engine in engines)
+    return True
 
 
 def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str], variables: list[str],
@@ -13272,7 +13335,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                pandoc_options: list[str], lua_filters: list[Path],
                                csv_filter: Path, no_auto: list[str] | None,
                                verbose: bool, labels: str = "off", title_source: Path | None = None,
-                               part_files: list[Path] | tuple = (), partial: bool = False) -> tuple[bool, str]:
+                               part_files: list[Path] | tuple = (), partial: bool = False,
+                               selection=None) -> tuple[bool, str]:
     """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
     LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
     for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
@@ -13307,7 +13371,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
-            cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+            cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
+            cmd += select_filter_args(selection)
             if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                 cmd.append("--citeproc")
             # pandoc_options after --citeproc: any --lua-filter/--filter a caller
@@ -13511,7 +13576,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 trust_embedded: bool = False,
                 self_contained: bool | None = None,
                 source_override: tuple[str, bool] | None = None,
-                label_scan: "LabelScan | None" = None) -> tuple[Path, bool, str]:
+                label_scan: "LabelScan | None" = None,
+                selection: "set[Path] | bool | None" = None) -> tuple[Path, bool, str]:
+    # selection: the inputs are ALL the parts (a set: those to keep) or the whole document (True), each wrapped in a part
+    # div, and select.lua drops the rest after pandoc-crossref has numbered everything (see wrap_part).
     # label_scan: the headers that replay the whole document's labels (see build_label_scan).
     # source_override: (text, shifted) of the document cut down to some of its
     # sections -- see SectionPlan. Always a partial build.
@@ -13716,7 +13784,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             csv_table_filter() as csv_filter, \
             scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs),
                             {part: part_key(part, parts_root) for part in parts_inputs}
-                            if part_markers and parts_root else None) as scaffold_files:
+                            if part_markers and parts_root else None,
+                            selection if isinstance(selection, (set, frozenset)) else None) as scaffold_files:
         part_files = scaffold_files[1:]
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
@@ -13724,8 +13793,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         any_code_spans = any(has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
-            note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
-                          f"joined after it" + (" (partial build)" if partial else ""))
+            shown = len(selection) if isinstance(selection, (set, frozenset)) else len(parts_inputs)
+            note("PARTS", f"{md_path}: {shown} part{'s' if shown != 1 else ''} "
+                          f"joined after it" + (" (partial build; numbered with the whole document)"
+                                                if isinstance(selection, (set, frozenset)) else
+                                                " (partial build)" if partial else ""))
             if (target_format == "pdf"
                     and frontmatter_citation_engine(md_path, metadata_files) in ("natbib", "biblatex")
                     and not auto_disabled(no_auto, "citationengine")):
@@ -13872,6 +13944,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                 cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                cmd += select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
                             and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
@@ -13983,7 +14056,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                         no_auto, verbose,
                                                         labels="auto" if engines == ["soffice"] else "off",
                                                         title_source=title_source, part_files=part_files,
-                                                        partial=partial)
+                                                        partial=partial, selection=selection)
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
@@ -14077,6 +14150,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                    cmd += select_filter_args(selection)
                     if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
                     # pandoc_options after --citeproc, same reason as below: a
@@ -16173,17 +16247,20 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                 trust_embedded: bool = False,
                 self_contained: bool | None = None,
                 source_override: tuple[str, bool] | None = None,
-                all_parts: list[Path] | None = None) -> tuple[Path, bool, str]:
+                all_parts: list[Path] | None = None,
+                full_override: str | None = None) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
     gets it, including any added later.
     """
-    global LAST_SCANNED, LAST_EXACT
-    LAST_SCANNED, LAST_EXACT = 0, False
+    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE
+    LAST_SCANNED, LAST_EXACT, LAST_WHOLE = 0, False, False
     metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     scratch = None
     label_scan = None
+    selection = None
+    pandoc_inputs = extra_inputs
     if partial or source_override is not None:
         seed_mode = seed_labels_mode(md_path, metadata_list)
         if label_scan_wanted(seed_mode, target_format, engines, presentation, md_path, True, parts_root is not None,
@@ -16195,16 +16272,26 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
                                           verbose, draft=(seed_mode == "draft"))
             LAST_SCANNED = label_scan.labels if label_scan is not None else 0
             LAST_EXACT = bool(label_scan is not None and label_scan.exact)
+        elif select_wanted(seed_mode, target_format, engines, presentation, md_path):
+            # HTML, Word, OpenDocument, Typst: no LaTeX to seed. Number the whole document, then keep the part(s) asked for.
+            if parts_root is not None and all_parts and extra_inputs:
+                selection = set(extra_inputs)
+                pandoc_inputs = list(all_parts)
+                LAST_WHOLE = True
+            elif source_override is not None and full_override is not None:
+                selection = True
+                source_override = (full_override, source_override[1])
+                LAST_WHOLE = True
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
                               target_format=target_format, from_format=from_format, no_auto=no_auto,
                               verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
-                              keep_aux=keep_aux, extra_inputs=extra_inputs, partial=partial,
+                              keep_aux=keep_aux, extra_inputs=pandoc_inputs, partial=partial,
                               cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
                               parts_root=parts_root, embed=embed, trust_embedded=trust_embedded,
                               self_contained=self_contained, source_override=source_override,
-                              label_scan=label_scan)
+                              label_scan=label_scan, selection=selection)
     finally:
         if scratch is not None:
             scratch.cleanup()
@@ -18175,9 +18262,14 @@ def main() -> None:
                                    partial=((scaffold_plan is not None and scaffold_plan.selected is not None)
                                             or section_plan is not None),
                                    source_override=((section_plan.text, section_plan.shifted)
-                                                    if section_plan is not None else None))]
+                                                    if section_plan is not None else None),
+                                   full_override=(section_plan.full_text if section_plan is not None else None))]
             if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
-                if LAST_SEEDED:
+                if LAST_WHOLE:
+                    print("NOTE  section build: the whole document was numbered and this section kept, so its "
+                          "numbers and the references to the rest are the full document's (a reference written "
+                          "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
+                elif LAST_SEEDED:
                     print("NOTE  section build: references to other sections come from the last full build "
                           "(cache); they are stale if you have since changed the document. This section's "
                           "own heading, figure, table and equation numbers restart at its first one")
@@ -18197,7 +18289,11 @@ def main() -> None:
                           "first lets later section builds fill the references in)")
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
                     and target_format != ASSEMBLED_FORMAT):
-                if LAST_SEEDED:
+                if LAST_WHOLE:
+                    print("NOTE  partial build: the whole document was numbered and these parts kept, so their "
+                          "numbers and the references to the rest are the full document's (a reference written "
+                          "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
+                elif LAST_SEEDED:
                     print("NOTE  partial build: numbers of parts left out come from the last full build "
                           "(--cache); they are stale if you have since added or moved a figure or table there"
                           + (f" (and {LAST_SCANNED} labels counted from the sources fill in what it lacks)"
