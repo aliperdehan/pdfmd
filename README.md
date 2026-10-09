@@ -1206,7 +1206,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
-| `READER` | a Markdown file with no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules) |
+| `READER` | a Markdown file with no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). If the file uses what only Pandoc's Markdown reads (`H~2~O`, `x^2^`, `{#id}` attributes, raw LaTeX, fenced divs), a `NOTE` says gfm leaves it as text; `--from markdown`, a front-matter block, or `reader:` below changes it |
 | `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
@@ -1368,6 +1368,10 @@ pdfmd-options:
   pdf-engine: tex        # only TeX engines; never fall back to HTML ones
 ---
 ```
+
+`reader:` fixes the Pandoc reader of a Markdown file (`markdown`, `gfm`, `commonmark_x`, ...; `auto` is the default
+choice described under *What it does automatically*). It is `--from` for one document, or for a whole folder or all your
+documents when it sits in `metadata.yaml` or the config file's `options:`.
 
 `pdf-engine:` takes an engine name (`lualatex`, `typst`, ...) or a family:
 `tex`, `typst`, `html` or `office`. A family limits the fallback chain to

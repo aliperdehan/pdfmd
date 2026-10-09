@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.13 — 2026-10-09
+
+Pre-edit state: commit `b665ade` (v3.26.12).
+
+### Added
+
+- `pdfmd-options: {reader: markdown|gfm|commonmark_x|...}` (a document, a metadata file or the config's `options:`; `auto`
+  keeps the default choice): the Pandoc reader of a Markdown file, as `--from` per document or per folder.
+- A file with no front matter is read as gfm, which leaves Pandoc-only syntax as text. When the file uses any of
+  `H~2~O`, `x^2^`, `^[inline footnotes]`, `{#id .class}` attributes, raw LaTeX (`\begin`, `\newcommand`, `\ce`) or
+  fenced divs (outside code), a `NOTE` now says so outright (it used to be an `AUTO READER` line, hidden unless `-v`),
+  with the three ways to read it as Pandoc's Markdown. A plain file prints nothing new.
+
 ## v3.26.12 — 2026-10-09
 
 Pre-edit state: commit `7542c5c` (v3.26.11).

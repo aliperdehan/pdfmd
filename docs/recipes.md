@@ -763,6 +763,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | `??` in a part built alone | a label the scan cannot count (the document's own macro), `\pageref`, or `--seed-labels off` | `--cache`, then one full build; `--seed-labels draft` |
 | `--extract-tables` refuses | Pandoc would read the tables differently after the change | read the reason it prints; `<!-- pdfmd: ignore -->` that table |
 | boxes instead of letters | no installed font draws them | `pdfmd --check-fonts doc.md`, `pdfmd --install fonts` |
+| `H~2~O` or `x^2^` printed as typed | the file has no front matter, so it is read as gfm (a `NOTE` says so) | add a front-matter block, `--from markdown`, or `pdfmd-options: {reader: markdown}` |
 | LaTeX fails, Typst output differs | an engine failed and the chain went on (the closing line names it) | `-v`, `--debug`, `--strict`, or pin the engine |
 
 ---

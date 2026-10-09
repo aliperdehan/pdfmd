@@ -1227,7 +1227,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.12"
+PDFMD_VERSION = "3.26.13"
 import argparse
 import csv
 import filecmp
@@ -7689,6 +7689,9 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
                         else f"{md_path}: Pandoc does not know the {suffix} extension; reading as {reader}")
     if suffix not in (".md", ".markdown"):
         return None, None
+    chosen = first_pdfmd_option(md_path, list(metadata_files), "reader")
+    if isinstance(chosen, str) and chosen.strip().casefold() not in ("", "auto"):
+        return chosen.strip(), None       # `pdfmd-options: {reader: markdown}` (document, metadata file or config): --from, per document
     text = md_path.read_text(encoding="utf-8-sig")
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
@@ -7716,6 +7719,39 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
         # smart-quoted, instead of a table at all).
         reader += "+fenced_divs"
     return reader, f"{md_path}: no YAML front matter; reading as {reader}"
+
+
+# What Pandoc's own Markdown reads that gfm (the reader a front-matter-less file gets) leaves as literal text.
+GFM_BLIND_SPOTS = (
+    ("subscripts (H~2~O)", re.compile(r"(?<![~\\])~(?!~)[^\s~]+~(?!~)")),
+    ("superscripts (x^2^)", re.compile(r"(?<![\^\\])\^[^\s^\[]+\^")),
+    ("inline footnotes (^[...])", re.compile(r"\^\[")),
+    ("{#id .class} attributes", re.compile(r"(?m)^#{1,6} .*\{[#.][^}]*\}[ \t]*$|\]\{[#.][^}]*\}|!\[[^\]]*\]\([^)]*\)\{[^}]*\}")),
+    ("raw LaTeX (\\begin{...}, \\newcommand, \\ce{...})", re.compile(r"\\(?:begin|newcommand|usepackage|ce|cite)\b")),
+    ("fenced divs (:::)", re.compile(r"(?m)^:{3,}[ \t]*\{?[.\w#]")),
+)
+
+
+def gfm_blind_spots(text: str) -> list[str]:
+    """What ``text`` uses that Pandoc's Markdown reads and gfm would print as it is (code is not looked at)."""
+    prose = re.sub(r"(?ms)^(`{3,}|~{3,}).*?^\1[ \t]*$", "", text)
+    prose = re.sub(r"`[^`\n]*`", "", prose)
+    return [name for name, pattern in GFM_BLIND_SPOTS if pattern.search(prose)]
+
+
+def reader_notice(md_path: Path, reason: str | None) -> None:
+    """Said outright (not only under -v): a file with no front matter is read as gfm, and it uses something gfm does
+    not know. The same text with a front-matter block (even an empty one) is read as Pandoc's Markdown."""
+    if not reason or "reading as gfm" not in reason:
+        return
+    try:
+        found = gfm_blind_spots(md_path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError):
+        return
+    if found:
+        print(f"NOTE  {display_path(md_path)}: no YAML front matter, so it is read as gfm, which leaves "
+              f"{', '.join(found)} as plain text. Pandoc's Markdown reads them: add a front-matter block, "
+              "or --from markdown, or `pdfmd-options: {reader: markdown}` in metadata.yaml")
 
 
 ATX_H1_RE = re.compile(r"^#[ \t]+(?P<title>.+?)[ \t]*#*[ \t]*$")
@@ -14201,6 +14237,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     )
     if reader_reason:
         note("READER", reader_reason)
+        reader_notice(md_path, reader_reason)
     lua_filters = [] if auto_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
     if not auto_disabled(no_auto, "lua"):
         for extra_filter in frontmatter_extra_lua_filters(md_path):
@@ -18447,6 +18484,7 @@ def main() -> None:
         )
         if report_reader_reason:
             report_note("READER", report_reader_reason)
+            reader_notice(files[0], report_reader_reason)
         output_extension = output_extension_for(target_format)
         if args.out:
             # Check is-a-directory BEFORE adding a default suffix -- a dot-less
