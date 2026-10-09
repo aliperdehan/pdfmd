@@ -38,7 +38,7 @@ CODES: dict[str, tuple[str, str]] = {
     "heading-jump": ("warning", "a heading level that skips one (# then ###)"),
     "heading-space": ("warning", "#Heading without a space after the # (it is a paragraph)"),
     "heading-empty": ("warning", "a heading with no text"),
-    "asset-large": ("warning", "an image or file bigger than the size budget"),
+    "asset-large": ("warning", "an image or data file bigger than the size budget (--max-asset-mb)"),
 }
 
 
@@ -238,10 +238,19 @@ def heading_identifiers(text: str) -> set[str]:
     return found
 
 
-def locate(name: str, folders: list[Path], extensions: tuple[str, ...] = ("",)) -> bool:
+def find_file(name: str, folders: list[Path], extensions: tuple[str, ...] = ("",)) -> Path | None:
     path = Path(name)
     places = [path] if path.is_absolute() else [folder / path for folder in folders]
-    return any(Path(str(place) + extension).exists() for place in places for extension in extensions)
+    return next((Path(str(place) + extension) for place in places for extension in extensions
+                 if Path(str(place) + extension).exists()), None)
+
+
+def locate(name: str, folders: list[Path], extensions: tuple[str, ...] = ("",)) -> bool:
+    return find_file(name, folders, extensions) is not None
+
+
+def megabytes(size: int) -> str:
+    return f"{size / 1048576:.1f} MB"
 
 
 def local_target(target: str) -> str | None:
@@ -306,9 +315,10 @@ def suggestion(word: str, known) -> str:
 
 
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
-         folders: list[Path] | None = None) -> list[Problem]:
+         folders: list[Path] | None = None, asset_limit: int | None = None) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
-    ``folders`` are searched for files after the source's own folder."""
+    ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
+    image or data file."""
     analyses = [Analysis(source) for source in sources]
     findings = Findings()
     for analysis in analyses:
@@ -322,7 +332,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
     for analysis in analyses:
         places = [analysis.source.path] if analysis.source.path else [Path.cwd()]
         places += list(folders or [])
-        images_and_files(analysis, findings, places)
+        images_and_files(analysis, findings, places, asset_limit)
         links(analysis, findings, places, ids)
         structure(analysis, findings)
     cross_references(analyses, findings, ids)
@@ -420,22 +430,51 @@ def headings(analyses: list[Analysis], findings: Findings, ids: set[str]) -> Non
                 ids.add(identifier if count == 0 else f"{identifier}-{count}")
 
 
-def images_and_files(analysis: Analysis, findings: Findings, folders: list[Path]) -> None:
+def images_and_files(analysis: Analysis, findings: Findings, folders: list[Path], limit: int | None = None) -> None:
     text = analysis.plain
+
+    def too_big(path: Path, line: int, target: str) -> None:
+        if limit is None:
+            return
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return
+        if size > limit and path.is_file():
+            findings.add(analysis, line, "asset-large", f"{target} is {megabytes(size)}, over the {megabytes(limit)} budget")
+
     for found in IMAGE_RE.finditer(text):
         target = local_target(found.group(1) or found.group(2) or "")
-        if target and not locate(target, folders, IMAGE_EXTENSIONS):
-            findings.add(analysis, analysis.line(found.start()), "image-missing", f"image not found: {target}")
+        if not target:
+            continue
+        line = analysis.line(found.start())
+        path = find_file(target, folders, IMAGE_EXTENSIONS)
+        if path is None:
+            findings.add(analysis, line, "image-missing", f"image not found: {target}")
+        else:
+            too_big(path, line, target)
     for found in GRAPHICS_RE.finditer(analysis.masked):
         target = local_target(found.group(1).strip())
-        if target and not locate(target, folders, IMAGE_EXTENSIONS):
-            findings.add(analysis, analysis.line(found.start()), "image-missing", f"image not found: {target}")
+        if not target:
+            continue
+        line = analysis.line(found.start())
+        path = find_file(target, folders, IMAGE_EXTENSIONS)
+        if path is None:
+            findings.add(analysis, line, "image-missing", f"image not found: {target}")
+        else:
+            too_big(path, line, target)
     for found in CSV_FILE_RE.finditer(analysis.masked):
         attribute = FILE_ATTRIBUTE_RE.search(found.group(0))
         name = next((item for item in attribute.groups() if item), "") if attribute else ""
         target = local_target(name)
-        if target and not locate(target, folders):
-            findings.add(analysis, analysis.line(found.start()), "file-missing", f"data file not found: {target}")
+        if not target:
+            continue
+        line = analysis.line(found.start())
+        path = find_file(target, folders)
+        if path is None:
+            findings.add(analysis, line, "file-missing", f"data file not found: {target}")
+        else:
+            too_big(path, line, target)
 
 
 def links(analysis: Analysis, findings: Findings, folders: list[Path], ids: set[str]) -> None:

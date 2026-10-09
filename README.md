@@ -404,6 +404,24 @@ tables (all, or chosen ones), file history, compare and restore, restore the sou
 command it runs is written to the *pdfmd* output panel. Install it with `npx @vscode/vsce package` and
 `code --install-extension pdfmd-vscode-*.vsix`.
 
+### A size budget for images and output
+
+```sh
+pdfmd report --max-asset-mb 5 --max-output-mb 20     # warn about an image over 5 MB and an output over 20 MB
+pdfmd report --check --max-asset-mb 5                # list the images over 5 MB (asset-large), nothing is built
+```
+
+```yaml
+pdfmd-options:
+  max-asset-mb: 5        # one image or data file
+  max-output-mb: 20      # the file that is made (a mail server's limit, a course site's upload limit)
+```
+
+There is no budget unless one is set. With one, a build says which image is over it before it starts
+(`WARN  report.md: figs/scan.png is 14.2 MB, over the 5 MB asset budget`) and, when the file made is over the output
+budget, names it and the three largest images behind it. They are `WARN` lines, so `--strict` fails them. `--max-asset-mb 0`
+switches a document's budget off for one run.
+
 ### Start from a template
 
 ```sh

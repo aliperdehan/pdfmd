@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.18 — 2026-10-09
+
+Pre-edit state: commit `7b2dd70` (v3.26.17).
+
+### Added
+
+- Size budgets. `--max-asset-mb N` / `pdfmd-options: {max-asset-mb: N}` for one image or data file, `--max-output-mb N` /
+  `max-output-mb` for the file that is made. With a budget set a build prints a `WARN` for each image over it before it
+  starts, and for an output over its budget names it with the three largest images behind it; `--check` reports the
+  images as `asset-large`. Warnings, so `--strict` fails them. Off unless set; 0 on the command line turns a document's
+  budget off. Single documents, parts and `-r` reports; the command line reaches `-j` workers through
+  `PDFMD_MAX_ASSET_MB` / `PDFMD_MAX_OUTPUT_MB`.
+
 ## v3.26.17 — 2026-10-09
 
 Pre-edit state: commit `383e064` (v3.26.16).

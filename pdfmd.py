@@ -879,6 +879,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `pdfmd --init [TEMPLATE] [NAME]` (v3.26.17) starts a document from a template (pdfmd_templates: article, report, notes,
     slides, book, and your own in the config folder's templates/); nothing that exists is overwritten.
 
+    Size budgets (v3.26.18): `--max-asset-mb` / `--max-output-mb` (or `pdfmd-options: {max-asset-mb, max-output-mb}`) make a
+    build warn about an image, or an output, over the budget; `--check` lists the images (asset-large). Off unless set.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1240,7 +1243,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.17"
+PDFMD_VERSION = "3.26.18"
 import argparse
 import csv
 import filecmp
@@ -5082,7 +5085,8 @@ def check_command(args) -> int:
                 print(f"{display_path(path)}: cannot read it ({error})", file=sys.stderr)
                 status = 1
         folders = [folder for folder in accessory_directories(document.parent, document.stem)[1:]]
-        problems = check.lint(sources, bibliography, ignore, folders)
+        limit = resolve_budget(document, metadata_files)[0]
+        problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None)
         for name in missing:
             if "bibliography-missing" in ignore:
                 continue
@@ -13568,7 +13572,7 @@ def safe_stem(name: str) -> str:
 # not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
 # about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-BUILD: dict = {"engine": None, "failed": []}     # what built the file convert_one is working on
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": []}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -13635,6 +13639,72 @@ def resolve_strict(md_path: Path, metadata_files: list[Path]) -> bool:
     if md_path.suffix.lower() not in (".md", ".markdown"):
         return False
     return bool(option_flag(first_pdfmd_option(md_path, metadata_files, "strict")))
+
+
+# -- Size budgets: --max-asset-mb, --max-output-mb (v3.26.18) -----------------------------------------------------
+# A picture of 30 MB or a PDF that no mail server takes is found out late. With a budget set (the command line, else
+# `pdfmd-options: {max-asset-mb: 5, max-output-mb: 20}`), a build says which image is over it before it starts and
+# which file is over after it, as WARN lines (so --strict fails them); `--check` reports the images (asset-large).
+# The command line reaches -j workers as PDFMD_MAX_ASSET_MB / PDFMD_MAX_OUTPUT_MB, as --strict does.
+
+def resolve_budget(md_path: Path, metadata_files: list[Path]) -> tuple[float | None, float | None]:
+    """(MB for one image or data file, MB for the output), None for no budget; 0 on the command line turns it off."""
+    found = []
+    for variable, key in (("PDFMD_MAX_ASSET_MB", "max-asset-mb"), ("PDFMD_MAX_OUTPUT_MB", "max-output-mb")):
+        value = option_flag_number(os.environ.get(variable))
+        if value is None and md_path.suffix.lower() in (".md", ".markdown"):
+            value = option_flag_number(first_pdfmd_option(md_path, metadata_files, key))
+        found.append(value if value and value > 0 else None)
+    return found[0], found[1]
+
+
+def size_text(size: int) -> str:
+    return f"{size / 1048576:.1f} MB"
+
+
+def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[Path]) -> None:
+    """WARN for each image the sources point at that is over the asset budget (before the build)."""
+    limit, _ = resolve_budget(md_path, metadata_files)
+    if limit is None:
+        return
+    seen: set[Path] = set()
+    for source in sources:
+        for image in referenced_images(read_text_best_effort(source), source.parent):
+            if image in seen:
+                continue
+            seen.add(image)
+            try:
+                size = image.stat().st_size
+            except OSError:
+                continue
+            if size > limit * 1048576:
+                print(f"WARN  {display_path(md_path)}: {display_path(image)} is {size_text(size)}, over the "
+                      f"{limit:g} MB asset budget (--max-asset-mb, pdfmd-options.max-asset-mb)", file=sys.stderr)
+
+
+def check_output_budget(output: Path | None, sources: list[Path], md_path: Path, metadata_files: list[Path]) -> None:
+    """WARN when the output is over the output budget, with the largest images behind it."""
+    _, limit = resolve_budget(md_path, metadata_files)
+    if limit is None or output is None:
+        return
+    try:
+        size = output.stat().st_size
+    except OSError:
+        return
+    if size <= limit * 1048576:
+        return
+    images = {}
+    for source in sources:
+        for image in referenced_images(read_text_best_effort(source), source.parent):
+            try:
+                images[image] = image.stat().st_size
+            except OSError:
+                pass
+    biggest = sorted(images.items(), key=lambda item: -item[1])[:3]
+    behind = ("; the largest images: " + ", ".join(f"{display_path(path)} {size_text(value)}" for path, value in biggest)) \
+        if biggest and biggest[0][1] > 1048576 else ""
+    print(f"WARN  {display_path(md_path)}: {display_path(output)} is {size_text(size)}, over the {limit:g} MB output budget "
+          f"(--max-output-mb, pdfmd-options.max-output-mb){behind}", file=sys.stderr)
 
 
 def strict_message(lines: list[str]) -> str:
@@ -14437,6 +14507,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     output = output_file or (
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
     )
+    BUILD["output"], BUILD["sources"] = output, [md_path, *parts_inputs]
+    if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
+        check_asset_budget(BUILD["sources"], md_path, metadata_files)
     for source_file in (md_path, *parts_inputs):
         try:
             clash = output.exists() and source_file.exists() and output.samefile(source_file)
@@ -15116,12 +15189,14 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
 
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
-    BUILD["engine"], BUILD["failed"] = None, []
+    BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"] = None, [], None, []
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
     with warning_capture() as seen:
         result = _convert_one_recorded(md_path, *args, **kwargs)
+        if result[1]:
+            check_output_budget(BUILD["output"], BUILD["sources"] or [md_path], md_path, metadata_files)
     return finish_build(result, seen, md_path, metadata_files)
 
 
@@ -17748,6 +17823,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
                              "a Pandoc [WARNING]...) counts as failed: the output is kept, the exit code is 1 "
                              "(also `pdfmd-options: {strict: true}`); --no-strict overrides the document")
+    parser.add_argument("--max-asset-mb", type=float, metavar="MB",
+                        help="a size budget for one image or data file: the build warns about each one over it before it "
+                             "starts, --check reports it (asset-large). Also `pdfmd-options: {max-asset-mb: 5}`; 0 turns "
+                             "a document's budget off")
+    parser.add_argument("--max-output-mb", type=float, metavar="MB",
+                        help="a size budget for the file that is made: the build warns when it is over, and names the "
+                             "largest images behind it. Also `pdfmd-options: {max-output-mb: 20}`; 0 turns it off")
     parser.add_argument("--stop-at", choices=STOP_STAGES, default=None, metavar="STAGE",
                         help="stop the build early, after STAGE: 'markdown' -- the assembled Markdown "
                              "(the parts joined into one file, NAME.assembled.md); 'tex' -- the "
@@ -18456,6 +18538,9 @@ def main() -> None:
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
+    for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
+        if value is not None:
+            os.environ[variable] = str(value)
     configured = load_config().get("translit")
     if isinstance(configured, list):
         configured = ",".join(str(item) for item in configured)
@@ -19127,6 +19212,9 @@ def main() -> None:
                     remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                     report_engine_failure("REPORT", engine, result, remaining, args.debug)
         assert result is not None
+        if result.returncode == 0:
+            check_asset_budget(list(files), files[0], metadata_files)
+            check_output_budget(output, list(files), files[0], metadata_files)
         report_capture.__exit__(None, None, None)
         report_problems = list(report_seen) + (re.findall(r"(?m)^\[WARNING\].*$", result.stderr or "")
                                                if result.returncode == 0 else [])

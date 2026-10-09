@@ -51,7 +51,8 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--setup", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
-        "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict", "--check", "--check-ignore")),
+        "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict", "--check", "--check-ignore",
+        "--max-asset-mb", "--max-output-mb")),
 }
 
 COMMON = {

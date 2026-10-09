@@ -369,6 +369,16 @@ Per block: `{.numberLines startFrom=10 step=5}`, `{.noNumberLines}`, `{wrap=fals
   `pdftocairo`, `mutool`, `pdf2svg` or `inkscape`), so it stays vector; `--no-auto pdfimages` stops it;
 - a raw `\includegraphics` also gets `graphicx` in a LaTeX build.
 
+### 5.2b Keep images and the result small
+
+```sh
+pdfmd report --max-asset-mb 5 --max-output-mb 20       # warns about the big image, and when the PDF is over 20 MB
+pdfmd report --check --max-asset-mb 5                  # only list the images over 5 MB
+```
+
+Or once for the document: `pdfmd-options: {max-asset-mb: 5, max-output-mb: 20}`. With `--strict` the warnings fail the
+build ([README](../README.md#a-size-budget-for-images-and-output)).
+
 ### 5.2a Diagrams as code
 
 ````markdown
@@ -817,7 +827,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
-| check the source | `--check`, `--check-ignore`, `--strict` |
+| check the source | `--check`, `--check-ignore`, `--strict`, `--max-asset-mb`, `--max-output-mb` |
 | a new document | `--init` |
 | tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
