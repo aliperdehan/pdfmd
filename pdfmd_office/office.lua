@@ -1090,9 +1090,43 @@ elseif FORMAT:match("^html") then PAGE_BREAK = pandoc.RawBlock("html", '<div sty
 elseif FORMAT == "typst" then PAGE_BREAK = pandoc.RawBlock("typst", "#pagebreak()")
 else PAGE_BREAK = {} end
 
+-- A raw block that is several top-level environments in a row (`\begin{equation}..\end{equation}` blank line
+-- `\begin{equation}..`): the pieces, or nil when it is one environment or something else.
+local function split_environments(raw)
+  local pieces, position = {}, 1
+  while true do
+    local start, after, name = raw:find("^%s*\\begin{([%a]+%*?)}", position)
+    if not start then break end
+    local escaped = name:gsub("%*", "%%*")
+    local depth, cursor, finish = 1, after + 1, nil
+    while depth > 0 do
+      local from, to, word = raw:find("\\(%a+){" .. escaped .. "}", cursor)
+      if not from then return nil end
+      if word == "begin" then depth = depth + 1 elseif word == "end" then depth = depth - 1 end
+      cursor, finish = to + 1, to
+    end
+    pieces[#pieces + 1] = trim(raw:sub(start, finish))
+    position = finish + 1
+  end
+  if #pieces < 2 or trim(raw:sub(position)) ~= "" then return nil end
+  return pieces
+end
+
 function RawBlock(el)
   if off() or el.format ~= "latex" and el.format ~= "tex" then return nil end
   local raw = trim(el.text)
+  local pieces = split_environments(raw)
+  if pieces then
+    local blocks = {}
+    for _, piece in ipairs(pieces) do
+      local original = pandoc.RawBlock("latex", piece)
+      local done = RawBlock(original)
+      if done == nil then blocks[#blocks + 1] = original
+      elseif done.t then blocks[#blocks + 1] = done
+      else for _, block in ipairs(done) do blocks[#blocks + 1] = block end end
+    end
+    return blocks
+  end
   -- layout commands a house-style filter wrapped around a block (\par\nointerlineskip ...)
   for _ = 1, 3 do
     raw = trim(raw:gsub("^\\par%s*", ""):gsub("^\\nointerlineskip%s*", ""):gsub("%s*\\par%s*$", ""):gsub("%s*\\nointerlineskip%s*$", ""))

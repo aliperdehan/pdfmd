@@ -349,6 +349,42 @@ class CheckDocx(unittest.TestCase):
             self.assertNotIn("usepackage", done.stdout + done.stderr)
 
 
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class SeveralEquations(unittest.TestCase):
+    def test_a_raw_block_of_equations_is_one_equation_each(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "d.md").write_text("---\ntitle: T\n---\n\n```{=latex}\n\\begin{equation}\\label{eq:a}\n  a = b\n\\end{equation}\n\n"
+                                       "\\begin{equation}\\label{eq:b}\n  s = \\sqrt{\\frac{x}{n-1}}\n\\end{equation}\n```\n",
+                                       encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "docx"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
+                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertNotIn("eqno", done.stdout + done.stderr)
+            xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
+            self.assertEqual(xml.count("<m:oMath>"), 2)
+
+
+@unittest.skipUnless(PANDOC and shutil.which("lualatex"), "needs Pandoc and LuaLaTeX")
+class PartsReferences(unittest.TestCase):
+    def test_a_reference_in_a_part_to_an_equation_in_another_has_its_number(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "parts").mkdir()
+            (root / "report.md").write_text("---\ntitle: T\npdfmd-options:\n  parts: auto\n---\n\nLead.\n", encoding="utf-8")
+            (root / "parts" / "10-theory.md").write_text("# Theory\n\n```{=latex}\n\\begin{equation}\\label{eq:a}\n  a = b\n"
+                                                          "\\end{equation}\n```\n", encoding="utf-8")
+            (root / "parts" / "20-results.md").write_text("# Results\n\nBy \\ref{eq:a} it follows.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "--to", "docx"], cwd=root,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
+                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            xml = zipfile.ZipFile(root / "report.docx").read("word/document.xml").decode()
+            self.assertNotIn("??", xml)
+            self.assertIn('>1</w:t></w:r></w:hyperlink>', xml)
+
+
 @unittest.skipUnless(PANDOC and shutil.which("pdftocairo") and (shutil.which("lualatex") or shutil.which("xelatex")),
                      "needs Pandoc, a LaTeX engine and pdftocairo")
 class PicturesMode(unittest.TestCase):

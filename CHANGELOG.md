@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.26 — 2026-10-09
+
+Pre-edit state: commit `7b111ba` (v3.24.25).
+
+### Fixed
+
+- **Several equations in one raw LaTeX block were drawn as one broken picture in Word files.** A
+  ```` ```{=latex} ```` block holding `\begin{equation}..\end{equation}` three or six times in a row was matched from the
+  first `\begin` to the last `\end`, which LaTeX rejected ("You can't use \eqno in math mode") and the whole group was
+  lost. The filter now splits such a block into its environments, and each is a native Word equation with its own number.
+- **References to labels in a split document stayed `??` in Word files.** The numbers LaTeX gave the labels are read from
+  one PDF build of the document, but that build was only started when the main file itself mentioned a label, and a
+  document whose equations and references live in its parts never did. The parts are read (and watched for changes) too.
+
+---
+
 ## v3.24.25 — 2026-10-09
 
 Pre-edit state: commit `527e61c` (v3.24.24).

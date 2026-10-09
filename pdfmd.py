@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.25"
+PDFMD_VERSION = "3.24.26"
 import argparse
 import csv
 import filecmp
@@ -4186,6 +4186,16 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
         text = md_path.read_text(encoding="utf-8-sig")
     except (OSError, UnicodeDecodeError):
         return None
+    # a split document refers to its labels from its parts: they are read, and watched for changes, with it
+    parts: list[Path] = []
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            plan = plan_scaffold(md_path, [], no_auto, None)
+        parts = [part for part in plan.parts if part != md_path] if plan is not None else []
+        for part in parts:
+            text += "\n" + part.read_text(encoding="utf-8-sig")
+    except (SystemExit, OSError, UnicodeDecodeError):
+        parts = []
     preambles = find_preambles(md_path.parent, md_path.stem, []) if not auto_disabled(no_auto, "preamble") else []
     texts = []
     for item in preambles:
@@ -4209,7 +4219,7 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
     if wanted:
         base = cache_directory(md_path, document_cache_root(md_path, metadata_files))
         aux = base / f"{safe_stem(md_path.stem)}.aux"
-        sources = [md_path, *metadata_files, *preambles]
+        sources = [md_path, *parts, *metadata_files, *preambles]
         newest = max((item.stat().st_mtime for item in sources if item.is_file()), default=0)
         if not (aux.is_file() and aux.stat().st_mtime >= newest):
             note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
