@@ -41,6 +41,40 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.10 — 2026-10-09
+
+Pre-edit state: commit `4755334` (v3.25.9).
+
+### Added
+
+- **`--hybrid`: the PDF opens in LibreOffice as an editable document.** LibreOffice's "hybrid PDF" is a PDF with the
+  document it was made from attached as `Original.odt` (`.odp`, `.ods`), described "Embedded original document of this PDF
+  file", with the ODF mime type as the attachment's subtype. Checked by experiment: LibreOffice goes by that attachment, not
+  by the pages (a LaTeX-built PDF with an unrelated `.odt` attached opened as the `.odt`), so any engine's PDF can carry
+  one. An Office file is converted by LibreOffice (`.docx` to `.odt`, `.pptx` to `.odp`, `.xlsx` to `.ods`); anything else
+  is built to `.odt` by pdfmd itself with the same metadata. A PDF that already has one is left alone, other attachments
+  are kept. `--no-hybrid`, `pdfmd-options.hybrid`, and an entry in `--setup`. `--restore` writes the ODF file back, for a PDF
+  made by LibreOffice's own export as well as pdfmd's.
+- **`--embed-metadata files` / `all`: an assembled file carries the files the text points at.** The images (Markdown and
+  raw LaTeX), CSV data (`.csv` blocks, pgfplots), and `\input`ed files become `type: file` blocks (text as it is, anything
+  else base64 with a hash), are written to a scratch folder for the build and found like the document's own folder, and
+  `--unpack` writes them back byte for byte (`--slim` leaves a clean document). The result builds alone in an empty folder
+  with its table and both kinds of image. Not in the default kinds (size; `bundle-max-mb` caps it); `embed: all` now means
+  every kind, `embed: true` the default ones.
+
+### Fixed
+
+- **`TEXINPUTS`** for a build with embedded files had no separator after `.` (the embedded folder was glued to it);
+  raw LaTeX images are found now.
+
+### Tests
+
+- The attachment's structure against what LibreOffice writes, no second one, other attachments kept, restore; a Markdown
+  PDF and a `.docx` built with `--hybrid` (LibreOffice opens the first as its source); the block round trip for text, binary,
+  empty; unpack byte for byte; and the single file built alone.
+
+---
+
 ## v3.25.9 — 2026-10-09
 
 Pre-edit state: commit `dc02d9d` (v3.25.8).

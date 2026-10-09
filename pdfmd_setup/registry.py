@@ -149,6 +149,8 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
              "one: .backups, a hidden folder, or a backup/ folder that is already there.", "The source file"),
         choice("options.strip-comments", "Drop <!-- comments --> from what is assembled or attached", on_off, "", "",
                "The source file"),
+        choice("options.hybrid", "Make the PDF editable in LibreOffice (hybrid PDF)", on_off, "",
+               "Attaches an OpenDocument copy as Original.odt; LibreOffice then opens the PDF as that document.", "The source file"),
         choice("options.attach-source", "Attach the source to the PDF", on_off, "",
                "Anyone can read it back from the PDF (pdfmd --restore).", "The source file"),
         choice("options.bundle", "Attach the images and files too", (("true", "what the text points at"), ("all", "everything")),

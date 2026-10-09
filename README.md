@@ -889,6 +889,20 @@ badge works, and a Pandoc built without HTTP support (Homebrew's is) no longer d
 warning and the image's description stays. `--no-auto svg` and `--no-auto remoteimages` turn the two off, and
 `pdfmd --doctor` says which converter will be used.
 
+### Editable in LibreOffice, and one file that carries its data
+
+`--hybrid` makes the PDF a LibreOffice *hybrid PDF*: besides its pages it carries an OpenDocument copy of the document
+(`Original.odt`, or `.odp`, `.ods`), and when LibreOffice opens the PDF it opens that copy as a document you can edit,
+instead of the pages in Draw. An Office file (`pdfmd minutes.docx --hybrid`) is converted by LibreOffice, so the copy is
+the file itself; a Markdown file gets an `.odt` built by pdfmd with its metadata, so what LibreOffice shows is the
+Word-route rendering of the source (not the LaTeX pages). `pdfmd --restore report.pdf` writes the ODF file back out.
+`pdfmd-options: {hybrid: true}` or `pdfmd --setup` makes it the default.
+
+A single Markdown file can carry its data too: `pdfmd report.md --assemble-only --embed-metadata files -o report.one.md`
+folds in the images, CSV tables and included files the text points at (text as it is, anything else as base64), and the
+file builds on its own, in an empty folder; `pdfmd --unpack` writes them back byte for byte. It is left out of the default
+kinds because it can be big (`bundle-max-mb` caps it); for a PDF, `--bundle` stores the same files beside the source.
+
 ### Not just Markdown
 
 ```sh

@@ -990,6 +990,20 @@ The history file (v3.25.8; the package pdfmd_history):
     `hst` embed kind: `--embed-metadata` folds it into the assembled file (`type: hst`), `--unpack` writes it out,
     `--attach-source` stores it in the PDF and `--restore` puts it back beside the backups.
 
+The hybrid PDF and single files that carry their data (v3.25.10):
+    `--hybrid` (or `pdfmd-options: {hybrid: true}`, or --setup) makes the PDF a LibreOffice "hybrid PDF": it carries an
+    OpenDocument copy of the document as an attachment named Original.odt (.odp, .ods), described as "Embedded original
+    document of this PDF file", and LibreOffice then opens the PDF as that editable document, not the pages in Draw
+    (checked: LibreOffice goes by the attachment, not by what the pages show, so any engine's PDF can carry one). An
+    Office file is converted by LibreOffice (.docx to .odt, .pptx to .odp, .xlsx to .ods; an ODF file is taken as it is);
+    anything else is built to .odt by pdfmd itself with the same metadata, so what LibreOffice shows is the Word-route
+    rendering of the source, not the LaTeX pages. `pdfmd --restore FILE.pdf` writes the ODF file back (with the source
+    too, when `--attach-source` was also on). `--embed-metadata files` (or `all`, or `embed: {files: true}`) adds the
+    `files` kind to an assembled file: the images, CSV data and included files the text and preamble point at, as
+    `type: file` blocks (text as it is, anything else base64), written to a scratch folder for a build and searched like
+    the document's own folder (resource path, TEXINPUTS), and written back byte for byte by `--unpack`. It is not in the
+    default kinds because it can be big (`pdfmd-options.bundle-max-mb`, 100 by default, caps it).
+
 Versions: --history, --history-diff, --history-restore, --init-backups (v3.25.9):
     `pdfmd --history FILE` lists the versions of a file, newest first, as one numbered list: its backups -- in the
     configured folder and in every folder of the spellings pdfmd and its author have used beside it (`.backups`,
@@ -1168,13 +1182,15 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.9"
+PDFMD_VERSION = "3.25.10"
 import argparse
 import csv
 import filecmp
 from glob import glob as expand_glob
 import contextlib
 import difflib
+import base64
+import binascii
 import hashlib
 import importlib.metadata
 import io
@@ -1550,6 +1566,8 @@ def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str]
         # (a trailing separator keeps the default search path after these)
         env["BIBINPUTS"] = (os.pathsep.join(str(item) for item in EMBEDDED_RESOURCE_DIRS)
                             + os.pathsep + env.get("BIBINPUTS", ""))
+        env["TEXINPUTS"] = (((env.get("TEXINPUTS") or ".").rstrip(os.pathsep)) + os.pathsep
+                            + os.pathsep.join(str(item) for item in EMBEDDED_RESOURCE_DIRS) + os.pathsep)
     return env
 
 
@@ -10762,6 +10780,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
              frozenset() if not strip_comments else frozenset(strip_comments))
     if plan is not None:
         plan.strip_kinds = kinds
+        plan.sources = list(sources)
     chunks = []
     for index, source in enumerate(sources):
         text = source.read_text(encoding="utf-8-sig")
@@ -10819,6 +10838,10 @@ def write_assembled_markdown(sources: list[Path], output: Path,
 # The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
 # the discovery that would find them a second time stays off.
 EMBED_KINDS = ("metadata", "preamble", "lua", "bibliography", "hst")
+# `files` (v3.25.10) is not in the default: it can be big. `--embed-metadata files` or `all` asks for it: the images, CSV
+# data and included files the text and the preamble point at, as `type: file` blocks (text as it is, anything else as base64).
+EMBED_OPTIONAL = ("files",)
+EMBED_ALL = EMBED_KINDS + EMBED_OPTIONAL
 # A LaTeX comment line closing the embedded preamble inside `header-includes`:
 # document_header_file puts the front-matter macro definitions there, after
 # the preamble that defines them and before the document's own additions,
@@ -10885,15 +10908,19 @@ def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
     if value is None or value is False:
         return None
     text = str(value).strip().casefold()
-    if value is True or text in {"true", "yes", "on", "all"}:
+    if text == "all":
+        return frozenset(EMBED_ALL), None
+    if value is True or text in {"true", "yes", "on"}:
         return frozenset(EMBED_KINDS), None
     if text in {"false", "no", "off", "none"}:
         return None
     if isinstance(value, list):
-        return frozenset(str(item) for item in value if str(item) in EMBED_KINDS), None
+        return frozenset(str(item) for item in value if str(item) in EMBED_ALL), None
     if isinstance(value, dict):
         kinds = {kind for kind in ("metadata", "preamble", "bibliography", "hst")
                  if value.get(kind, True) not in (False, "false", "no", "off")}
+        if value.get("files") not in (None, False, "false", "no", "off"):
+            kinds.add("files")
         lua = value.get("lua", True)
         mode = None
         if lua is False or str(lua).casefold() in {"false", "no", "off"}:
@@ -10947,6 +10974,7 @@ class EmbedPlan:
         self.lua_filters = lua_filters
         self.output: Path | None = None
         self.hst_file: Path | None = None                 # the document's NAME.hst, when it has one
+        self.sources: list[Path] = []                     # the files assembled (the `files` kind looks for what they point at)
         self.strip_kinds: frozenset[str] = frozenset()    # comment kinds cut from what is embedded
         self.bib_prune = False                            # keep only the bibliography entries the text cites
         self.bib_report: list[str] = []                   # "name (kept of total)" for the summary
@@ -10982,6 +11010,26 @@ def render_embedded_block(kind: str, name: str, source: str, path: str | None = 
             f"{source.rstrip(chr(10))}\n{fence}\n")
 
 
+def render_embedded_file(name: str, path: str, data: bytes) -> str:
+    """One referenced file as a `type: file` block: text as it is, anything else base64 (76 columns). ``path`` is where
+    the document names it, which is where it is written back to."""
+    try:
+        text = data.decode("utf-8")
+        printable = "\x00" not in text and "```" not in text
+    except UnicodeDecodeError:
+        text, printable = "", False
+    name = re.sub(r"[\r\n]", " ", name)
+    clean_path = re.sub(r"[\r\n]", " ", path)
+    digest = hashlib.sha256(data).hexdigest()
+    if printable and (not text or text.endswith("\n")) and "\r" not in text:
+        return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\nsha256: {digest}\n\n"
+                f"{text.rstrip(chr(10))}\n```\n")
+    encoded = base64.b64encode(data).decode("ascii")
+    wrapped = "\n".join(encoded[index:index + 76] for index in range(0, len(encoded), 76))
+    return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\nencoding: base64\nsha256: {digest}\n\n"
+            f"{wrapped}\n```\n")
+
+
 def safe_relative_path(name: str) -> str:
     """A relative path for writing an embedded file back: as the metadata
     names it, unless that is absolute or climbs out (then just the file name)."""
@@ -11002,10 +11050,22 @@ def parse_embedded_blocks(text: str) -> list[dict]:
             key, _, value = line.partition(":")
             fields[key.strip()] = value.strip()
         source = rest + "\n"
+        data = None
+        digest = sha256_text(source)
+        if fields.get("encoding") == "base64":
+            try:
+                data = base64.b64decode("".join(rest.split()))
+                digest = hashlib.sha256(data).hexdigest()
+                source = ""
+            except (ValueError, binascii.Error):
+                data = b""
+        elif fields.get("type") == "file":
+            data = source.rstrip("\n").encode("utf-8") + (b"\n" if rest.strip() else b"")
+            digest = hashlib.sha256(data).hexdigest()
         blocks.append({"type": fields.get("type", ""), "name": fields.get("name") or "filter.lua",
                        "path": fields.get("path"),
-                       "declared": fields.get("sha256"), "source": source,
-                       "sha256": sha256_text(source)})
+                       "declared": fields.get("sha256"), "source": source, "bytes": data,
+                       "sha256": digest})
     return blocks
 
 
@@ -11110,7 +11170,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
         raise SystemExit(f"{display_path(path)} is not an assembled file (no {ASSEMBLED_KEY} marker)")
     default_target = path.with_name(f"{path.stem}{UNPACKED_SUFFIX}")
     target = out_dir or default_target
-    files: dict[str, str] = {}
+    files: dict[str, str | bytes] = {}
     notes: list[str] = []
     mismatch = False
     known = trusted_hashes()
@@ -11129,6 +11189,16 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     blocks = [block for block in all_blocks if block["type"] == "lua-filter"]
     data_blocks = [block for block in all_blocks if block["type"] in ("bibliography", "csl")]
     history_blocks = [block for block in all_blocks if block["type"] == "hst"]
+    file_blocks = [block for block in all_blocks if block["type"] == "file"]
+    for block in file_blocks:
+        name = unique(safe_relative_path(block["path"] or block["name"]))
+        files[name] = block["bytes"] if block.get("bytes") is not None else block["source"]
+        if block["declared"] == block["sha256"]:
+            state = "hash matches what was written"
+        else:
+            mismatch = True
+            state = "HASH MISMATCH: edited since it was written" if block["declared"] else "no hash recorded"
+        notes.append(f"FILE      {name}  ({state})")
     for block in history_blocks:
         name = unique(Path(block["name"]).name or f"{path.stem}.hst")
         files[name] = block["source"]
@@ -11230,6 +11300,8 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
         return 1
     def same_on_disk(name: str) -> bool:
         try:
+            if isinstance(files[name], bytes):
+                return (target / name).read_bytes() == files[name]
             return (target / name).read_text(encoding="utf-8") == files[name]
         except (OSError, UnicodeDecodeError):
             return False
@@ -11244,7 +11316,10 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     fresh = [name for name in files if not (target / name).exists()]
     for name in fresh:
         (target / name).parent.mkdir(parents=True, exist_ok=True)
-        write_text_lf((target / name), files[name])
+        if isinstance(files[name], bytes):
+            (target / name).write_bytes(files[name])
+        else:
+            write_text_lf((target / name), files[name])
     for note in notes:
         print(note)
     kept = len(files) - len(fresh)
@@ -11255,13 +11330,15 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
                   f"{display_path(target)} it will not, unless you move it there", file=sys.stderr)
         slim_assembled(path, text, front, data, options, kept_header, blocks,
-                       preamble_unpacked, metadata_unpacked, origin, bool(data_blocks), bool(history_blocks))
+                       preamble_unpacked, metadata_unpacked, origin, bool(data_blocks), bool(history_blocks),
+                       bool(file_blocks))
     return 1 if mismatch else 0
 
 
 def slim_assembled(path: Path, text: str, front, data: dict | None, options: dict, kept_header: str,
                    blocks: list, preamble_unpacked: bool, metadata_unpacked: bool, origin,
-                   bibliography_unpacked: bool = False, history_unpacked: bool = False) -> None:
+                   bibliography_unpacked: bool = False, history_unpacked: bool = False,
+                   files_unpacked: bool = False) -> None:
     """Rewrite ``path`` without what --unpack just wrote out (the embedded
     filter blocks, the preamble in header-includes, the keys that came from
     metadata files -- the last only where the file records their origin).
@@ -11298,6 +11375,8 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
         removed.append("bibliography")
     if history_unpacked:
         removed.append("hst")
+    if files_unpacked:
+        removed.append("files")
     gone = [kind for kind in removed if kind in (options.get("embedded") or [])]
     if isinstance(options.get("no-auto"), list):
         options["no-auto"] = [kind for kind in options["no-auto"] if kind not in gone]
@@ -11343,7 +11422,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
     added: list[Path] = []
     try:
         blocks = [block for block in parse_embedded_blocks(md_path.read_text(encoding="utf-8-sig"))
-                  if block["type"] in ("bibliography", "csl")]
+                  if block["type"] in ("bibliography", "csl", "file")]
     except (OSError, UnicodeDecodeError):
         blocks = []
     if blocks:
@@ -11351,7 +11430,10 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
         for block in blocks:
             target = folder / safe_relative_path(block["path"] or block["name"])
             target.parent.mkdir(parents=True, exist_ok=True)
-            write_text_lf(target, block["source"])
+            if block.get("bytes") is not None:
+                target.write_bytes(block["bytes"])
+            else:
+                write_text_lf(target, block["source"])
         added.append(folder)
     unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
     if unpacked.is_dir():
@@ -11530,7 +11612,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         kinds = kinds - {"preamble"}
         left_out.append("preamble " + ", ".join(item.name for item in plan.preamble_files) + " (left out)")
     no_auto = [kind for kind in EMBED_KINDS
-               if kind in kinds and kind not in ("bibliography", "hst")  # nothing discovers a bibliography: it is named
+               if kind in kinds and kind not in ("bibliography", "hst", "files")  # nothing discovers a bibliography: it is named
                and not (kind == "lua" and plan.lua_mode in ("ref", "off"))]
     if plan.lua_mode == "off":
         no_auto = [kind for kind in no_auto if kind != "lua"]
@@ -11544,6 +11626,25 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             entries.append((sha256_text(normalized_source(source)), lua_filter.name))
         if plan.lua_mode == "ref":
             lua_refs = [relative_filter_path(item, plan.output) for item in plan.lua_filters]
+    file_names: list[str] = []
+    if "files" in kinds and plan.sources:
+        base = Path(os.path.abspath(first.parent))
+        represented = {Path(os.path.abspath(item)) for item in [*plan.sources, *plan.metadata_files,
+                                                                   *plan.preamble_files, *plan.lua_filters]}
+        found, outside_files = bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
+                                            plan.output or (base / "_assembled.md"), [], base)
+        limit = float(option_flag_number(first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
+                      or BUNDLE_MAX_MB) * 1024 * 1024
+        if sum(item.stat().st_size for item in found) > limit:
+            print(f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
+                  f"over the {limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); none was embedded", file=sys.stderr)
+            found = []
+        for item in found:
+            blocks_text = render_embedded_file(item.name, relative_posix(base, item), item.read_bytes())
+            blocks += "\n" + blocks_text
+            file_names.append(relative_posix(base, item))
+        for name in outside_files:
+            print(f"WARN  embed files: {name} is outside the document's folder; not embedded", file=sys.stderr)
     history_text = None
     if "hst" in kinds and plan.hst_file is not None:
         try:
@@ -11670,6 +11771,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
         (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files)
         or (kind == "bibliography" and not bib_embedded) or (kind == "hst" and history_text is None))]
+    if file_names:
+        embedded_now.append("files")
     if embedded_now:
         options["embedded"] = embedded_now
     if applied:
@@ -11726,6 +11829,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         summary.append("preamble " + ", ".join(item.name for item in plan.preamble_files))
     if history_text is not None:
         summary.append(f"history {plan.hst_file.name}")
+    if file_names:
+        summary.append("files " + ", ".join(file_names))
     if "lua" in kinds and plan.lua_filters and plan.lua_mode != "off":
         if plan.lua_mode == "apply":
             if applied:
@@ -11748,9 +11853,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         names = [name for kind, name in references if kind == key and name not in bib_embedded]
         if names:
             outside.append(f"{key} {', '.join(names)}")
-    if re.search(r"\\(?:input|include|includegraphics)\b", header_text):
+    if re.search(r"\\(?:input|include|includegraphics)\b", header_text) and not file_names:
         outside.append("files the preamble reads (\\input, \\includegraphics)")
-    if re.search(r"!\[[^\]\n]*\]\(", body):
+    if re.search(r"!\[[^\]\n]*\]\(", body) and not file_names:
         outside.append("the images in the text")
     if outside:
         print("NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
@@ -14833,7 +14938,23 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         attachments = read_pdf_attachments(pdf_path)
     except Exception as error:  # noqa: BLE001
         raise SystemExit(f"{display_path(pdf_path)}: not readable as a PDF ({error})")
+    odf_name = next((name for name in sorted(attachments)
+                     if name.startswith("Original.") and name[9:] in HYBRID_MIME), None)
     if ATTACH_MANIFEST not in attachments:
+        if odf_name is not None:
+            # a hybrid PDF (LibreOffice's, or pdfmd --hybrid) with no pdfmd source: the editable copy is what it holds
+            target = (out_dir or pdf_path.with_name(f"{pdf_path.stem}{RESTORED_SUFFIX}")).resolve()
+            destination = target / f"{pdf_path.stem}.{odf_name[9:]}"
+            print(f"ODF       {odf_name}  ({len(attachments[odf_name])} bytes; LibreOffice opens this PDF as it)")
+            if list_only:
+                return 0
+            if destination.exists():
+                raise SystemExit(f"{display_path(destination)} already exists; nothing was written "
+                                 "(remove it, or give another -o folder)")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(attachments[odf_name])
+            print(f"RESTORED  {destination.name}  (the OpenDocument file the PDF carries)")
+            return 0
         names = ", ".join(sorted(attachments)) or "no attachments at all"
         raise SystemExit(f"{display_path(pdf_path)} carries no pdfmd source ({names}); "
                          "build it with --attach-source or pdfmd-options.attach-source")
@@ -14881,6 +15002,11 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
                   file=sys.stderr)
             status = 1
         files[str(where)] = data
+    if odf_name is not None:
+        odf_target = str(name.with_suffix("." + odf_name[9:]))
+        if odf_target not in files:
+            files[odf_target] = attachments[odf_name]
+            print(f"ODF       {odf_name}  (comes back as {odf_target}: the editable copy LibreOffice opens)")
     pictures, renamed, failed = extract_pdf_images(pdf_path, manifest.get("images") or [], stored)
     for name in failed:
         print(f"WARN  {name}: the PDF's picture could not be taken out; put the file back beside the document",
@@ -15507,6 +15633,11 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
         if target_format == "pdf" and source_override is None and not partial:
             polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
                        [md_path, *(extra_inputs or [])], verbose)
+        if (target_format == "pdf" and source_override is None and not partial and not presentation
+                and resolve_hybrid(md_path, metadata_files)):
+            hybrid_after_success(md_path, output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir
+                                                           else md_path.with_suffix(".pdf")),
+                                 metadata_files, variables, effective_no_auto(md_path, no_auto), verbose)
         if (target_format == "pdf" and source_override is None and not partial
                 and md_path.suffix.lower() in (".md", ".markdown")
                 and resolve_attach(md_path, metadata_files)):
@@ -15515,6 +15646,114 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                         preamble_files, effective_no_auto(md_path, no_auto), verbose)
     return result
+
+
+# --- The hybrid PDF (v3.25.10) -----------------------------------------------------------------------------
+# LibreOffice's "hybrid PDF" (Export as PDF > Embed OpenDocument file): the PDF carries the document it was made from
+# as an attachment named Original.odt (.odp, .ods), described as "Embedded original document of this PDF file" with the
+# ODF mime type as its subtype; opening such a PDF in LibreOffice opens the attachment as a document you can edit, not the
+# pages in Draw. Checked: LibreOffice goes by that attachment, not by what the pages show, so any PDF can carry one.
+HYBRID_CLI: bool | None = None
+HYBRID_MIME = {"odt": "application/vnd.oasis.opendocument.text", "odp": "application/vnd.oasis.opendocument.presentation",
+               "ods": "application/vnd.oasis.opendocument.spreadsheet"}
+HYBRID_FAMILY = {".docx": "odt", ".doc": "odt", ".odt": "odt", ".ott": "odt", ".rtf": "odt",
+                 ".pptx": "odp", ".ppt": "odp", ".odp": "odp", ".xlsx": "ods", ".xls": "ods", ".ods": "ods"}
+HYBRID_DESCRIPTION = "Embedded original document of this PDF file"
+
+
+def resolve_hybrid(path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the PDF built from ``path`` carries an editable ODF copy: --hybrid / --no-hybrid, else the document's
+    `pdfmd-options.hybrid` (then its metadata files', then the config's). An office file has no front matter to ask."""
+    if HYBRID_CLI is not None:
+        return HYBRID_CLI
+    if path.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
+        return bool(option_flag(config_options().get("hybrid")))
+    return bool(option_flag(first_pdfmd_option(path, metadata_files, "hybrid")))
+
+
+def odf_source_for(path: Path, metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
+                   verbose: bool) -> tuple[bytes, str] | None:
+    """(the bytes of an ODF file for ``path``, its extension), or None. An office document is converted by LibreOffice
+    (an .odt/.odp/.ods is taken as it is); anything else is built to .odt by pdfmd itself, with the same metadata."""
+    family = HYBRID_FAMILY.get(path.suffix.lower())
+    with tempfile.TemporaryDirectory(prefix="pdfmd-hybrid-") as scratch:
+        scratch_dir = Path(scratch)
+        if family is not None:
+            if path.suffix.lower() == f".{family}":
+                return path.read_bytes(), family
+            binary = resolve_soffice()
+            if binary is None:
+                return None
+            command = [binary, "--headless", "--norestore", f"-env:UserInstallation=file://{scratch_dir / 'profile'}",
+                       "--convert-to", family, "--outdir", str(scratch_dir), str(path)]
+            log_cmd(command, path.parent, verbose)
+            subprocess.run(command, capture_output=True, text=True, cwd=path.parent)
+            made = scratch_dir / f"{path.stem}.{family}"
+            return (made.read_bytes(), family) if made.is_file() else None
+        target = scratch_dir / f"{path.stem}.odt"
+        command = office_pdfmd_command(path, metadata_files, variables, no_auto, "-o", str(target), "--no-hybrid",
+                                       "--no-attach-source")
+        log_cmd(command, path.parent, verbose)
+        done = subprocess.run(command, capture_output=True, text=True, cwd=path.parent,
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+        return (target.read_bytes(), "odt") if done.returncode == 0 and target.is_file() else None
+
+
+def attach_hybrid(pdf_path: Path, data: bytes, extension: str) -> bool:
+    """Put ``data`` (an ODF file) into the PDF as LibreOffice's hybrid PDF has it. False when the PDF already has one."""
+    from pypdf.generic import NameObject, NumberObject, DictionaryObject, TextStringObject
+    name = f"Original.{extension}"
+    pypdf_logger = logging.getLogger("pypdf")
+    previous_level = pypdf_logger.level
+    pypdf_logger.setLevel(logging.ERROR)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            writer = pypdf.PdfWriter(clone_from=pdf_path)
+            if any(existing.startswith("Original.") and existing[9:] in HYBRID_MIME for existing in writer.attachments):
+                return False
+            attachment = writer.add_attachment(name, data)
+            embedded = attachment._embedded_file
+            embedded[NameObject("/Subtype")] = NameObject("/" + HYBRID_MIME[extension])
+            embedded.set_data(zlib.compress(data, 9))
+            embedded[NameObject("/Filter")] = NameObject("/FlateDecode")
+            embedded[NameObject("/Params")] = DictionaryObject({NameObject("/Size"): NumberObject(len(data))})
+            filespec = attachment.pdf_object
+            filespec[NameObject("/UF")] = TextStringObject(name)
+            filespec[NameObject("/Desc")] = TextStringObject(HYBRID_DESCRIPTION)
+            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
+                writer.write(temporary)
+                temporary_path = Path(temporary.name)
+    finally:
+        pypdf_logger.setLevel(previous_level)
+    temporary_path.replace(pdf_path)
+    return True
+
+
+def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path], variables: list[str],
+                         no_auto: list[str] | None, verbose: bool) -> None:
+    """--hybrid: make the PDF just built open as an editable document in LibreOffice."""
+    if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
+        return
+    if pypdf is None:
+        print("WARN  hybrid: pypdf is not installed (pip install pypdf); nothing was attached", file=sys.stderr)
+        return
+    try:
+        found = odf_source_for(path, metadata_files, variables, no_auto, verbose)
+        if found is None:
+            print(f"WARN  hybrid: could not make an OpenDocument copy of {display_path(path)}"
+                  + ("" if path.suffix.lower() not in OFFICE_INPUT_EXTENSIONS else " (LibreOffice was not found)")
+                  + "; the PDF itself was built", file=sys.stderr)
+            return
+        data, extension = found
+        if attach_hybrid(pdf_path, data, extension):
+            print(f"HYBRID    {display_path(pdf_path)}: carries {display_path(path)} as Original.{extension} "
+                  f"({len(data) // 1024 or 1} KB); LibreOffice opens the PDF as an editable document")
+        elif verbose:
+            print(f"HYBRID    {display_path(pdf_path)}: already carries its OpenDocument source")
+    except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
+        print(f"WARN  hybrid: could not attach the OpenDocument copy to {display_path(pdf_path)} ({error}); "
+              "the PDF itself was built", file=sys.stderr)
 
 
 def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: list[str],
@@ -15804,7 +16043,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "metadata (the YAML files, merged with the front matter), preamble (the "
                              "LaTeX preamble, into header-includes), lua (the Lua filters, see "
                              "--lua-mode) or bibliography (the bibliography and CSL files the metadata "
-                             "names); none given means all four")
+                             "names), hst (the NAME.hst history file) or files (the images, CSV data and "
+                             "included files the text and preamble point at; text as it is, the rest base64: "
+                             "not in the default as it can be big); none given means all but files, `all` "
+                             "means every kind")
     parser.add_argument("--no-embed-metadata", action="store_true",
                         help="turn off embedding for this run, even where a document's "
                              "pdfmd-options.embed asks for it")
@@ -16027,6 +16269,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "the title, author, date, language, font, font size, paper and margin of its metadata "
                              "files, ahead of its own settings, so those win. `pdfmd-options: {apply-defaults: true}` "
                              "in the config, or --setup, makes it the default; --no-apply-defaults turns it off")
+    parser.add_argument("--hybrid", action=argparse.BooleanOptionalAction, default=None,
+                        help="make the PDF a LibreOffice 'hybrid PDF': it carries an OpenDocument copy of the document as "
+                             "Original.odt (.odp, .ods), and LibreOffice opens the PDF as that editable document. An "
+                             "Office file is converted by LibreOffice; anything else is built to .odt by pdfmd. "
+                             "`pdfmd-options: {hybrid: true}` or --setup makes it the default")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
@@ -16356,13 +16603,14 @@ def main() -> None:
         args.to = args.to.strip().casefold().lstrip(".")
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI
-    global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI
+    global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
     STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
     KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
     BIB_ATTACH_CLI = args.attach_bibliography
     ATTACH_CLI = args.attach_source
+    HYBRID_CLI = args.hybrid
     BUNDLE_CLI = args.bundle
     global PAPER_CLI
     PAPER_CLI = args.paper
@@ -16558,14 +16806,14 @@ def main() -> None:
     if args.lua_mode is not None and args.embed_metadata is None and stop_at != "markdown":
         raise SystemExit("--lua-mode applies to --stop-at markdown (--assemble-only) only")
     if args.embed_metadata is not None:
-        unknown_kinds = sorted(set(args.embed_metadata) - {*EMBED_KINDS, "all"})
+        unknown_kinds = sorted(set(args.embed_metadata) - {*EMBED_ALL, "all"})
         if unknown_kinds:
             raise SystemExit(f"Unknown --embed-metadata kind(s): {', '.join(unknown_kinds)}. "
-                             f"Valid: {', '.join(EMBED_KINDS)}")
+                             f"Valid: {', '.join(EMBED_ALL)}, all")
         if stop_at != "markdown":
             raise SystemExit("--embed-metadata applies to --stop-at markdown (--assemble-only) only")
-        wanted = (set(EMBED_KINDS) if not args.embed_metadata or "all" in args.embed_metadata
-                  else set(args.embed_metadata))
+        wanted = (set(EMBED_KINDS) if not args.embed_metadata
+                  else set(EMBED_ALL) if "all" in args.embed_metadata else set(args.embed_metadata))
         embed_request = EmbedRequest(frozenset(wanted), args.lua_mode, False)
     elif stop_at == "markdown":
         # No kinds named: each document's own pdfmd-options.embed decides.
