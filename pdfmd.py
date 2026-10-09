@@ -1243,7 +1243,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.18"
+PDFMD_VERSION = "3.26.19"
 import argparse
 import csv
 import filecmp
@@ -13665,7 +13665,7 @@ def size_text(size: int) -> str:
 def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[Path]) -> None:
     """WARN for each image the sources point at that is over the asset budget (before the build)."""
     limit, _ = resolve_budget(md_path, metadata_files)
-    if limit is None:
+    if limit is None or BUILD.get("scanning"):          # the label scan builds the same document again: say it once
         return
     seen: set[Path] = set()
     for source in sources:
@@ -13816,6 +13816,8 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         print("LABELS    no engine here can run a draft pass (lualatex, xelatex, pdflatex); the scan alone is used")
     cheap = ["svg", "remoteimages", "pdfimages"]
     scan_no_auto = no_auto if (no_auto is not None and not no_auto) else [*(no_auto or []), *cheap]
+    saved_build = dict(BUILD)
+    BUILD["scanning"] = True
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             built = _convert_one(md_path, None, False, font, engines, variables, slide_level, pandoc_options,
@@ -13830,6 +13832,9 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         if verbose:
             print(f"LABELS    the whole-document scan failed ({error}); references to parts left out stay ??")
         return None
+    finally:
+        BUILD.clear()
+        BUILD.update(saved_build)                  # what the scan recorded (its scratch .tex) is not the build's
     if not built[1] or not tex_path.is_file():
         if verbose:
             print("LABELS    the whole-document scan failed; references to parts left out stay ??")
@@ -19216,8 +19221,11 @@ def main() -> None:
             check_asset_budget(list(files), files[0], metadata_files)
             check_output_budget(output, list(files), files[0], metadata_files)
         report_capture.__exit__(None, None, None)
-        report_problems = list(report_seen) + (re.findall(r"(?m)^\[WARNING\].*$", result.stderr or "")
-                                               if result.returncode == 0 else [])
+        report_problems = list(report_seen)
+        if result.returncode == 0:             # what Pandoc and its filters wrote (a filter's WARN lines too), once each
+            known = {line.strip() for line in report_problems}
+            report_problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result.stderr or "")
+                                if line.strip() not in known]
         report_strict_failed = bool(result.returncode == 0 and report_problems and resolve_strict(files[0], metadata_files))
         if result.returncode == 0:
             for file in files:

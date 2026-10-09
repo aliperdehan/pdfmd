@@ -10,6 +10,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import struct
+import zlib
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
@@ -19,7 +22,18 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
-from pandoc_support import needs_pandoc  # noqa: E402
+from pandoc_support import PANDOC_VERSION, needs_pandoc  # noqa: E402
+
+PANDOC_OK = PANDOC_VERSION >= (3, 1, 3)
+
+
+def big_png(size: int = 1000) -> bytes:
+    """A valid PNG of about 3 MB (uncompressed random pixels), which LaTeX reads too."""
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    rows = b"".join(b"\x00" + os.urandom(size * 3) for _ in range(size))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows, 0)) + chunk(b"IEND", b""))
 
 
 class Resolution(unittest.TestCase):
@@ -46,7 +60,7 @@ class CommandLine(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-budget-"))
         self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
-        (self.directory / "big.png").write_bytes(b"\x89PNG\r\n\x1a\n" + os.urandom(3 * 1024 * 1024))
+        (self.directory / "big.png").write_bytes(big_png())
         (self.directory / "small.png").write_bytes(bytes.fromhex(
             "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c63f8ffff3f0005fe02fe"
             "a735810000000049454e44ae426082"))
@@ -65,7 +79,7 @@ class CommandLine(unittest.TestCase):
         self.write("a.md", "---\ntitle: T\n---\n\n![big](big.png) ![small](small.png)\n")
         self.assertIn("no problems", self.run_pdfmd("a.md", "--check").stdout)
         done = self.run_pdfmd("a.md", "--check", "--max-asset-mb", "1")
-        self.assertIn("a.md:5: warning: big.png is 3.0 MB, over the 1.0 MB budget  [asset-large]", done.stdout)
+        self.assertIn("a.md:5: warning: big.png is 2.9 MB, over the 1.0 MB budget  [asset-large]", done.stdout)
         self.assertNotIn("small.png", done.stdout)
         self.assertEqual(self.run_pdfmd("a.md", "--check", "--max-asset-mb", "1", "--strict").returncode, 1)
 
@@ -76,7 +90,7 @@ class CommandLine(unittest.TestCase):
         self.assertNotIn("budget", plain.stdout + plain.stderr)
         done = self.run_pdfmd("a.md", "-t", "html", "--max-asset-mb", "1")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("big.png is 3.0 MB, over the 1 MB asset budget", done.stdout + done.stderr)
+        self.assertIn("big.png is 2.9 MB, over the 1 MB asset budget", done.stdout + done.stderr)
         strict = self.run_pdfmd("a.md", "-t", "html", "--max-asset-mb", "1", "--strict")
         self.assertEqual(strict.returncode, 1)
         self.assertTrue((self.directory / "a.html").is_file())              # the output is kept
@@ -96,7 +110,7 @@ class CommandLine(unittest.TestCase):
         self.assertNotIn("output budget", small.stdout + small.stderr)         # the HTML only points at the image
         done = self.run_pdfmd("a.md", "-t", "html", "--self-contained", "--max-output-mb", "1")
         self.assertRegex(done.stdout + done.stderr,
-                         r"a\.html is \d+\.\d MB, over the 1 MB output budget.*largest images: big\.png 3\.0 MB")
+                         r"a\.html is \d+\.\d MB, over the 1 MB output budget.*largest images: big\.png 2\.9 MB")
 
     @needs_pandoc(3, 1, 3)
     def test_a_batch_with_workers_gets_the_budget(self):
@@ -109,6 +123,34 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertRegex(done.stdout, r"(?m)^FAIL  batch[\\/]one\.md")
         self.assertRegex(done.stdout, r"(?m)^OK    batch[\\/]two\.md")
+
+    @unittest.skipUnless(shutil.which("lualatex") and PANDOC_OK, "needs Pandoc and lualatex")
+    def test_a_section_of_parts_and_a_report_say_it_once(self):
+        scaffold = self.directory / "book"
+        (scaffold / "parts").mkdir(parents=True)
+        shutil.copy(self.directory / "big.png", scaffold / "big.png")
+        (scaffold / "book.md").write_text("---\ntitle: B\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")
+        (scaffold / "parts" / "10-intro.md").write_text("# Intro\n\nSee [methods](#methods).\n", encoding="utf-8")
+        (scaffold / "parts" / "20-methods.md").write_text("# Methods\n\n![big](../big.png)\n", encoding="utf-8")
+        for arguments in (("book/book", "-e", "lualatex"), ("book/book", "--section", "methods", "-e", "lualatex")):
+            done = self.run_pdfmd(*arguments, "--max-asset-mb", "1", "--max-output-mb", "0.001")
+            text = done.stdout + done.stderr
+            self.assertEqual(done.returncode, 0, text)
+            self.assertEqual(text.count("asset budget"), 1, (arguments, text))      # the label scan builds it again, silently
+            self.assertRegex(text, r"book(\.methods)?\.pdf is \d+\.\d MB, over the 0\.001 MB output budget")
+        folder = self.directory / "rr"
+        folder.mkdir()
+        shutil.copy(self.directory / "big.png", folder / "big.png")
+        (folder / "a.md").write_text("---\ntitle: A\nchapter: 1\n---\n\n# A\n\n![big](big.png)\n", encoding="utf-8")
+        (folder / "b.md").write_text("---\ntitle: B\nchapter: 2\n---\n\n# B\n\nText\n", encoding="utf-8")
+        done = self.run_pdfmd("rr", "-r", "-o", "r.pdf", "-e", "lualatex", "--max-asset-mb", "1", "--max-output-mb", "0.001")
+        text = done.stdout + done.stderr
+        self.assertEqual(done.returncode, 0, text)
+        self.assertEqual(text.count("asset budget"), 1, text)
+        self.assertIn("r.pdf is", text)
+        strict = self.run_pdfmd("rr", "-r", "-o", "r.pdf", "-e", "lualatex", "--max-asset-mb", "1", "--strict")
+        self.assertEqual(strict.returncode, 1, strict.stdout + strict.stderr)
+        self.assertRegex(strict.stdout, r"FAIL  REPORT")
 
 
 if __name__ == "__main__":

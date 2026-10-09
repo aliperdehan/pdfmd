@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.19 — 2026-10-09
+
+Pre-edit state: commit `da231ff` (v3.26.18).
+
+### Fixed
+
+- The size budget said an image's size twice in a build of one section (the label scan builds the document again and
+  printed the same warning), and the scan overwrote the record of the output file. The scan is now silent about budgets and
+  restores what it recorded. A `-r` report and a section of a document in parts are tested (one warning each).
+- `--strict` of a `-r` report counts a filter's `WARN` lines too (as a single document's build has since 3.26.16).
+- `pdfmd --init` wrote its files with `Path.write_text(newline=...)`, which Python 3.9 does not have.
+- `diagram.lua` gives `Figure` the caption as a plain table, which every Pandoc 3 takes (it had `pandoc.Caption`).
+- A diagram built through a real LaTeX engine and through Typst was looked at and tested: the figure and its caption are
+  on the page (the tests use a stand-in `dot` whose PDF comes from `rsvg-convert`, and skip without it). The diagram tests
+  are skipped on Windows (they write shell scripts as stand-in tools). The tests were also run on Python 3.9.
+- The 3.26.15 note no longer says whose notes it was run on.
+
 ## v3.26.18 — 2026-10-09
 
 Pre-edit state: commit `7b2dd70` (v3.26.17).
@@ -109,8 +126,8 @@ Pre-edit state: commit `af34059` (v3.26.14).
   `--check-ignore CODE[,CODE]`, `pdfmd-options: {check-ignore: [...]}` and `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 - `pdfmd --init-vscode` adds a "pdfmd: check" task whose problem matcher puts the findings in VS Code's Problems panel.
 - New package `pdfmd_check` (plain text analysis; `pdfmd.py` finds the files and the bibliography keys).
-- Run over the author's course notes and the nulabreport snippets it found a real typo (`notes_l2.jpf`) and no false alarm
-  in the docs of this repository.
+- Run over real lecture notes and the docs of this repository it found a real typo (an image with a misspelt extension) and
+  no false alarm in the docs.
 
 ## v3.26.14 — 2026-10-09
 

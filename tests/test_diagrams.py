@@ -35,13 +35,14 @@ PDF = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Page
       "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 40 20]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
 
 # Each stand-in writes what the real tool would, in the format it is asked for, and appends its name to ran.log.
-GRAPHVIZ = f"""#!/bin/sh
+PDF_LINE = PDF.replace("\n", "\\n")                              # one line for printf (it turns \n back into a newline)
+GRAPHVIZ = """#!/bin/sh
 echo "$0 $*" >> "$STUB_LOG"
 while read -r _; do :; done
 case "$1" in
-  -Tsvg) printf '%s' '{SVG}' ;;
-  -Tpng) printf '{PNG}' ;;
-  -Tpdf) printf '%s' '{PDF.replace(chr(10), "\\n")}' ;;
+  -Tsvg) printf '%s' '@SVG@' ;;
+  -Tpng) printf '@PNG@' ;;
+  -Tpdf) printf '%s' '@PDF@' ;;
   *) exit 1 ;;
 esac
 """
@@ -51,10 +52,10 @@ while read -r _; do :; done
 echo "Error: syntax error in line 1" >&2
 exit 1
 """
-D2 = f"""#!/bin/sh
+D2 = """#!/bin/sh
 echo "d2 $*" >> "$STUB_LOG"
 for last; do :; done
-printf '%s' '{SVG}' > "$last"
+printf '%s' '@SVG@' > "$last"
 """
 MERMAID = """#!/bin/sh
 echo "mmdc $*" >> "$STUB_LOG"
@@ -63,29 +64,43 @@ while [ $# -gt 0 ]; do
   shift
 done
 case "$out" in
-  *.png) printf '""" + PNG + """' > "$out" ;;
-  *.svg) printf '%s' '""" + SVG + """' > "$out" ;;
-  *.pdf) printf '%s' '""" + PDF.replace("\n", "\\n") + """' > "$out" ;;
+  *.png) printf '@PNG@' > "$out" ;;
+  *.svg) printf '%s' '@SVG@' > "$out" ;;
+  *.pdf) printf '%s' '@PDF@' > "$out" ;;
 esac
 """
-RSVG = f"""#!/bin/sh
+RSVG = """#!/bin/sh
 echo "rsvg-convert $*" >> "$STUB_LOG"
 while [ $# -gt 0 ]; do
   if [ "$1" = "-o" ]; then out="$2"; fi
   shift
 done
 case "$out" in
-  *.png) printf '{PNG}' > "$out" ;;
-  *) printf '%s' '{PDF.replace(chr(10), "\\n")}' > "$out" ;;
+  *.png) printf '@PNG@' > "$out" ;;
+  *) printf '%s' '@PDF@' > "$out" ;;
 esac
 """
+GRAPHVIZ, D2, MERMAID, RSVG = (script.replace("@SVG@", SVG).replace("@PNG@", PNG).replace("@PDF@", PDF_LINE)
+                               for script in (GRAPHVIZ, D2, MERMAID, RSVG))
+
+
+# A stand-in whose PDF is a real one (the SVG through rsvg-convert), for a build that LaTeX or Typst really typesets.
+REAL_GRAPHVIZ = """#!/bin/sh
+echo "$0 $*" >> "$STUB_LOG"
+while read -r _; do :; done
+case "$1" in
+  -Tsvg) printf '%s' '@SVG@' ;;
+  -Tpdf) printf '%s' '@SVG@' | rsvg-convert -f pdf ;;
+  *) exit 1 ;;
+esac
+""".replace("@SVG@", SVG)
 
 
 def has(program: str) -> bool:
     return shutil.which(program) is not None
 
 
-@unittest.skipUnless(has("pandoc"), "needs pandoc")
+@unittest.skipUnless(has("pandoc") and sys.platform != "win32", "needs pandoc, and shell scripts as stand-ins for the tools")
 class Diagrams(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-diagram-"))
@@ -105,6 +120,13 @@ class Diagrams(unittest.TestCase):
             path = self.stubs / name
             path.write_text(script)
             path.chmod(path.stat().st_mode | stat.S_IEXEC)
+
+    def provide(self, *programs: str) -> None:
+        """Let the build see these real programs (the bare PATH has Pandoc only)."""
+        for program in programs:
+            link = self.bare / program
+            if not link.exists():
+                link.symlink_to(shutil.which(program))
 
     def run_pdfmd(self, *arguments: str, stubs: bool = True) -> subprocess.CompletedProcess:
         path = os.pathsep.join([str(self.stubs)] * stubs + [str(self.bare), os.path.dirname(sys.executable)])
@@ -166,6 +188,24 @@ class Diagrams(unittest.TestCase):
         self.assertIn("dot -Tsvg", calls)
         self.assertIn("-o out.png", calls)                                       # Mermaid's SVG is not drawn by Typst
         self.assertRegex((self.directory / "doc.typ").read_text(encoding="utf-8"), r"image\(\"[^\"]+\.svg\"")
+
+    @unittest.skipUnless(has("rsvg-convert") and (has("lualatex") or has("typst")), "needs rsvg-convert and lualatex or typst")
+    def test_a_pdf_that_is_really_typeset_carries_the_drawing(self):
+        self.install(dot=REAL_GRAPHVIZ)
+        self.provide("rsvg-convert", "lualatex", "typst", "kpsewhich")
+        self.write('---\ntitle: T\n---\n\n# D\n\n```{.dot caption="A to B"}\ndigraph { a -> b }\n```\n')
+        for engine in [name for name in ("lualatex", "typst") if has(name)]:
+            done = self.run_pdfmd("doc.md", "-e", engine, "-o", f"{engine}.pdf")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertRegex(done.stdout, rf"OK    doc\.md  \({engine}\)")
+            data = (self.directory / f"{engine}.pdf").read_bytes()
+            self.assertTrue(data.startswith(b"%PDF-"))
+            try:
+                import pypdf
+            except ImportError:
+                continue
+            text = pypdf.PdfReader(str(self.directory / f"{engine}.pdf")).pages[0].extract_text()
+            self.assertIn("A to B", text)                                              # the figure and its caption are on the page
 
     def test_word_gets_png_pictures(self):
         self.install(dot=GRAPHVIZ)

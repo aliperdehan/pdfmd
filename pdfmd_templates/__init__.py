@@ -100,7 +100,9 @@ def create(template: Path, target: Path, values: dict[str, str]) -> list[Path]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         if source.suffix.lower() in TEXT_SUFFIXES:
             try:
-                destination.write_text(fill(source.read_text(encoding="utf-8"), values), encoding="utf-8", newline="\n")
+                text = fill(source.read_text(encoding="utf-8"), values)
+                with open(destination, "w", encoding="utf-8", newline="\n") as handle:       # (Path.write_text has no newline= before 3.10)
+                    handle.write(text)
                 written.append(destination)
                 continue
             except UnicodeDecodeError:

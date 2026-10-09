@@ -198,7 +198,7 @@ local function diagram(block)
   local caption = attributes.caption
   if caption and caption ~= "" then
     local text = pandoc.utils.blocks_to_inlines(pandoc.read(caption, "markdown").blocks)
-    return pandoc.Figure({pandoc.Plain({image})}, pandoc.Caption({pandoc.Plain(text)}), pandoc.Attr(block.identifier or ""))
+    return pandoc.Figure({pandoc.Plain({image})}, {long = {pandoc.Plain(text)}}, pandoc.Attr(block.identifier or ""))
   end
   return pandoc.Para({image})
 end
