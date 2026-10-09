@@ -873,6 +873,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
     `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
+    A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
+    picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -960,7 +963,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     also under "Input formats" -- disabling it on a .docx/.odt is an
     error in this version, not a route back through Pandoc; see that
     section for why), typstdirect and htmldirect (the same for a .typ and an
-    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), crossref (the auto-detected `--filter pandoc-
+    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), diagrams (fenced mermaid/d2/dot blocks drawn by mmdc/d2/dot), crossref (the auto-detected `--filter pandoc-
     crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
     `{#fig:...}`-style attribute -- see crossref_filter_args()),
     citationengine (a document's own `pdfmd-options.citation-engine`
@@ -1234,7 +1237,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.15"
+PDFMD_VERSION = "3.26.16"
 import argparse
 import csv
 import filecmp
@@ -1471,7 +1474,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -2027,7 +2030,10 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
              if raw_filter is not None and files else None)
     pdf_images = (pdf_filter is not None and not auto_disabled(no_auto, "pdfimages")
                   and any(PDF_IMAGE_RE.search(read_text_best_effort(file)) for file in files))
-    if table is None and not pdf_images:
+    diagram_filter = pdfmd_lua.path("diagram")
+    diagrams = (diagram_filter is not None and not auto_disabled(no_auto, "diagrams")
+                and any(DIAGRAM_BLOCK_RE.search(read_text_best_effort(file)) for file in files))
+    if table is None and not pdf_images and not diagrams:
         return []
     folder = cache_root() / "raw"
     config: dict = {"pdfmd-raw-cache": str(folder / "pictures")}
@@ -2038,6 +2044,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         config["pdfmd-raw-preamble"] = [str(item) for item in preamble]
     if table is not None:
         config["pdfmd-raw"] = table
+    if diagrams:
+        config["pdfmd-diagram-tools"] = [tool for tool, _, _ in DIAGRAM_TOOLS if which(tool)]
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     map_file = folder / "maps" / f"{digest}.yaml"
     if not map_file.is_file():
@@ -2048,7 +2056,16 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         args += ["--lua-filter", str(raw_filter)]
     if pdf_images:
         args += ["--lua-filter", str(pdf_filter)]
+    if diagrams:
+        args += ["--lua-filter", str(diagram_filter)]
     return args
+
+
+# A fenced block written in a diagram language (pdfmd_lua/diagram.lua draws it): ```mermaid, ```{.d2 caption="..."}, ```dot
+DIAGRAM_BLOCK_RE = re.compile(r"(?mi)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{?[ \t]*\.?(?:mermaid|d2|dot|graphviz)\b")
+DIAGRAM_TOOLS = (("dot", "Graphviz", "brew install graphviz  |  apt install graphviz"),
+                 ("d2", "D2", "brew install d2  |  https://d2lang.com/tour/install"),
+                 ("mmdc", "Mermaid", "npm install -g @mermaid-js/mermaid-cli"))
 
 
 RELATIVE_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((?!https?:|data:|/|<)[^)\s]+\)")
@@ -4064,6 +4081,10 @@ def doctor_report(deep: bool = False) -> bool:
              "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
+    drawn_by = [f"{name} ({tool})" for tool, name, _ in DIAGRAM_TOOLS if which(tool)]
+    line(None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
+         + (", ".join(drawn_by) if drawn_by else "nothing installed ("
+            + "; ".join(f"{name}: {hint.split('  |')[0]}" for _, name, hint in DIAGRAM_TOOLS) + ")"))
     for module in ("yaml", "pypdf"):
         found = importlib.util.find_spec(module) is not None
         line(found, f"python package {module}", "pip install pyyaml pypdf",
@@ -15010,7 +15031,8 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
     warned) fails, its output kept."""
     problems = list(seen)
     if result[1] and len(result) > 2 and isinstance(result[2], str):
-        problems += re.findall(r"(?m)^\[WARNING\].*$", result[2])
+        known = {line.strip() for line in problems}
+        problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
     if result[1] and problems and resolve_strict(md_path, metadata_files):
         result = (result[0], False, strict_message(problems))
     return Built(result, BUILD["engine"], BUILD["failed"])
@@ -18038,7 +18060,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "

@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.16 — 2026-10-09
+
+Pre-edit state: commit `bf8870e` (v3.26.15).
+
+### Added
+
+- Diagrams written as code. A fenced block of class `mermaid`, `d2`, `dot` or `graphviz` is drawn by `mmdc`, `d2` or `dot`
+  when it is installed, and the picture replaces the block, in the format of the output (`pdfmd_lua/diagram.lua`, reached
+  through `raw_filter_args`, so every route gets it): PDF for LaTeX (D2 through `rsvg-convert`/`inkscape`), SVG for HTML
+  (inside the file as a data URI) and for Typst (PNG for Mermaid), PNG for Word and OpenDocument, an SVG in `<name>_files/`
+  for `--to gfm` (a Mermaid block stays, GitHub draws it), the source kept for `--to txt`. Kept in the cache by content.
+  `caption=`, `{#fig:id}`, `width=`, `engine=` (Graphviz layouts), `theme=` (Mermaid), `layout=` (D2). A tool that is not
+  installed or a diagram that does not parse leaves the block as code with one warning that says how to install it.
+  `--no-auto diagrams`; `pdfmd --doctor` lists the tools. The tests use stand-in tools (no Graphviz, D2 or Mermaid is
+  needed to run them); one runs a real `dot` when there is one. **Not yet run against a real `d2` or `mmdc`** (neither was
+  installed where this was written; `dot` neither).
+
+### Fixed
+
+- `--strict` now also counts the `WARN` lines that Lua filters write (a filter's stderr was only read for Pandoc's own
+  `[WARNING]`), so a picture a filter could not draw fails a strict build.
+
 ## v3.26.15 — 2026-10-09
 
 Pre-edit state: commit `af34059` (v3.26.14).

@@ -170,7 +170,7 @@ pdfmd lecture -v                            # shows each AUTO decision with its 
 ```
 
 Kinds: `reader title margin mainfont monofont tablewidth unicode lookup yaml tex lua crossref citationengine
-csvtable codewrap svg remoteimages pdfimages typstdirect htmldirect officeref officestyle officelatex ...`
+csvtable codewrap svg remoteimages pdfimages diagrams typstdirect htmldirect officeref officestyle officelatex ...`
 (`pdfmd --help debug`).
 
 ### 2.4 Citations
@@ -356,6 +356,20 @@ Per block: `{.numberLines startFrom=10 step=5}`, `{.noNumberLines}`, `{wrap=fals
 - a **PDF image in an HTML build** (a web page, an EPUB, a PDF through WeasyPrint) becomes an SVG (poppler's
   `pdftocairo`, `mutool`, `pdf2svg` or `inkscape`), so it stays vector; `--no-auto pdfimages` stops it;
 - a raw `\includegraphics` also gets `graphicx` in a LaTeX build.
+
+### 5.2a Diagrams as code
+
+````markdown
+```{.dot caption="The flow" width=60%}
+digraph { sample -> reaction -> product }
+```
+````
+
+`dot` (Graphviz), `d2` and `mermaid` blocks are drawn when the tool is installed (`brew install graphviz d2`,
+`npm install -g @mermaid-js/mermaid-cli`) in the format of the output: PDF for LaTeX, SVG inside an HTML file, PNG in Word.
+`--to gfm` links an SVG, but leaves a Mermaid block for GitHub to draw. No tool installed: the block stays as code with
+one warning. `caption=`, `width=`, `engine=` (Graphviz), `theme=` (Mermaid), `layout=` (D2); `--no-auto diagrams` stops it
+([README](../README.md#diagrams-written-as-code)).
 
 ### 5.3 Raw HTML, LaTeX, Typst and Word inside Markdown
 

@@ -1141,6 +1141,37 @@ badge works, and a Pandoc built without HTTP support (Homebrew's is) no longer d
 warning and the image's description stays. `--no-auto svg` and `--no-auto remoteimages` turn the two off, and
 `pdfmd --doctor` says which converter will be used.
 
+### Diagrams written as code
+
+````markdown
+```mermaid
+graph LR; Sample --> Reaction --> Product
+```
+
+```{.dot #fig:flow caption="The *flow* of the experiment" width=60% engine=neato}
+digraph { sample -> reaction -> product }
+```
+
+```d2
+sample -> reaction -> product
+```
+````
+
+A fenced block whose class is `mermaid`, `d2`, `dot` or `graphviz` is drawn by the tool that reads that language and the
+picture takes its place: [Graphviz](https://graphviz.org) (`dot`), [D2](https://d2lang.com) (`d2`) and
+[Mermaid](https://github.com/mermaid-js/mermaid-cli) (`mmdc`). pdfmd asks each for the format the output takes: a PDF
+for LaTeX, an SVG for HTML (inside the file, so it can be sent on its own) and Typst (a PNG for Mermaid, whose SVG
+Typst cannot show), a PNG for Word and OpenDocument, and for flat Markdown (`--to gfm`) an SVG in the `_files/` folder
+beside the output, except a Mermaid block, which stays as it is because GitHub draws it. A text output keeps the source.
+Drawings are kept in the cache by their content, so a rebuild does not draw them again. `caption="..."` makes a figure
+(`{#fig:id}` with pandoc-crossref numbers it), `width=` sizes it, `engine=` picks the Graphviz layout (`dot`, `neato`,
+`fdp`, `sfdp`, `circo`, `twopi`), `theme=` the Mermaid theme, `layout=` the D2 layout (`dagre`, `elk`). A tool that is
+not installed leaves the block as code with one warning (`--strict` makes it an error) and says how to install it;
+a diagram the tool cannot parse stays as code too. `pdfmd --doctor` shows which tools are there, and
+`--no-auto diagrams` turns the whole thing off. The attributes need Pandoc's Markdown (a file with front matter); a file
+read as gfm takes the plain ```` ```dot ```` form. Mermaid needs Chrome (mermaid-cli downloads one); in a sandbox
+`PDFMD_MMDC_CONFIG=puppeteer.json` is handed to `mmdc -p`.
+
 ### Editable in LibreOffice, and one file that carries its data
 
 `--hybrid` makes the PDF a LibreOffice *hybrid PDF*: besides its pages it carries an OpenDocument copy of the document
