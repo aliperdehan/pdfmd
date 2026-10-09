@@ -497,7 +497,7 @@ links).
 
 And with not a byte above 127 (a terminal, an old mail gateway): `pdfmd report --to ascii` writes `report.ascii.txt`
 (`Cafe`, `"quotes"`, `H_2O`, `x^2`, `5 degC`, `alpha`, `Privet`); `--to ascii:gfm` does it for flat Markdown, and
-`-o report.ascii.txt` asks for the same by its name. A character nothing can spell is named in a `WARN` and written as `?`;
+`-o report.ascii.txt` asks for the same by its name (so do `.ascii.gfm.md`, `.ascii.md`, `.ascii.rst`, `.ascii.org`, `.ascii.adoc`). A character nothing can spell is named in a `WARN` and written as `?`;
 `--ascii-missing escape` writes `\u65e5`, `drop` nothing, `fail` stops before writing. `pdfmd --install translit` adds
 Chinese and the other scripts.
 

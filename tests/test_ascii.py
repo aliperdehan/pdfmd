@@ -198,6 +198,13 @@ class CommandLine(unittest.TestCase):
         self.assertIn("Cafe.", self.read("x.ascii.txt"))
         self.assertEqual(self.run_pdfmd("doc.md", "-o", "y.ascii.gfm.md").returncode, 0)
         self.assertIn("# T", self.read("y.ascii.gfm.md"))
+        for name in ("z.ascii.rst", "z.ascii.org", "z.ascii.adoc", "z.ascii.md"):      # any text format, by its ending
+            with self.subTest(name=name):
+                self.assertEqual(self.run_pdfmd("doc.md", "-o", name).returncode, 0)
+                self.assertIn("Cafe.", self.read(name))
+        bad = self.run_pdfmd("doc.md", "-o", "w.ascii.html")
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("text formats", bad.stdout + bad.stderr)
         bad = self.run_pdfmd("doc.md", "--to", "ascii:docx")
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn("text formats", bad.stdout + bad.stderr)

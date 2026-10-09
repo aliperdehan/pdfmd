@@ -1218,7 +1218,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.8"
+PDFMD_VERSION = "3.26.9"
 import argparse
 import csv
 import filecmp
@@ -12445,22 +12445,30 @@ EXTENSION_FORMAT = {
     ".txt": "txt",
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
-    ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf",
+    ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
     ".json": "json", ".pdf": "pdf",
 }
 
 
 # Two-part endings that name a target the plain suffix would not: `-o notes.gfm.md` is `--to gfm` (the name
 # `output_extension_for` gives a flat Markdown made from a .md file), where `-o notes.md` alone is Pandoc's Markdown.
-COMPOUND_EXTENSION_FORMAT = {".gfm.md": "gfm", ".ascii.txt": "ascii", ".ascii.md": "ascii:markdown",
-                             ".ascii.gfm.md": "ascii:gfm"}
+COMPOUND_EXTENSION_FORMAT = {".gfm.md": "gfm"}
 
 
 def format_from_output(path: Path | None) -> str | None:
-    """Recognize a target format from an explicit output filename's suffix."""
+    """Recognize a target format from an explicit output filename's suffix. An `.ascii` before the ending
+    (`notes.ascii.txt`, `notes.ascii.gfm.md`, `notes.ascii.rst`) asks for that format with no byte above 127: `ascii`
+    for text, else `ascii:FORMAT`."""
     if path is None or not path.suffix:
         return None
     name = path.name.lower()
+    parts = name.split(".")
+    for index in range(1, len(parts) - 1):
+        if parts[index] == "ascii":
+            base = format_from_output(Path("x." + ".".join(parts[index + 1:])))
+            if base is None or base == "ascii" or base.startswith("ascii:"):
+                return None
+            return "ascii" if base == "txt" else f"ascii:{base}"
     for ending in sorted(COMPOUND_EXTENSION_FORMAT, key=len, reverse=True):
         if name.endswith(ending) and len(name) > len(ending):
             return COMPOUND_EXTENSION_FORMAT[ending]

@@ -471,6 +471,7 @@ true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc'
 pdfmd report --to ascii               # report.ascii.txt: no byte above 127
 pdfmd report --to ascii:gfm           # report.ascii.gfm.md (also ascii:markdown, commonmark, rst, org, asciidoc, plain)
 pdfmd report -o notes.ascii.txt       # the name asks for it, as notes.gfm.md asks for --to gfm
+pdfmd report -o notes.ascii.rst       # any text ending after .ascii: .gfm.md, .md, .rst, .org, .adoc
 pdfmd report --to ascii --ascii-missing escape    # what has no ASCII form: \u65e5 instead of ?
 ```
 

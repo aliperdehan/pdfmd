@@ -41,6 +41,17 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.9 — 2026-10-09
+
+Pre-edit state: commit `dc15f10` (v3.26.8).
+
+### Changed
+
+- `.ascii` in an output name asks for the ASCII build of whatever ending follows it, as `.gfm.md` asks for `--to gfm`:
+  `-o notes.ascii.txt`, `.ascii.gfm.md`, `.ascii.md`, and now `.ascii.rst`, `.ascii.org`, `.ascii.adoc` (were: only the
+  first three; the others wrote the Unicode text under an ASCII-looking name). `notes.ascii.html` or `.ascii.pdf` is
+  refused with the list of text formats. `-o x.adoc` alone now means `--to asciidoc`.
+
 ## v3.26.8 — 2026-10-09
 
 Pre-edit state: commit `acce055` (v3.26.7).
