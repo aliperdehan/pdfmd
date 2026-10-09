@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.20 — 2026-10-09
+
+Pre-edit state: commit `5900c3b` (v3.24.19).
+
+### Fixed
+
+- **Tables narrower than the page sat at the left margin in the LibreOffice route.** pdfmd's table styles say
+  `centre`, but LibreOffice ignores a table style's alignment (Word honours it), so `pdfmd -e soffice` and anything
+  else drawn by LibreOffice showed Table 4, 5, 6 and the like flush left while LaTeX centres them. The alignment is now
+  written into each table of pdfmd's own styles in the `.docx` itself, after every Word build (the soffice route's
+  intermediate file included). A table that already says where it sits, a template's own table style and a house
+  style's form table are left alone.
+
+---
+
 ## v3.24.19 — 2026-10-08
 
 Pre-edit state: commit `faabca0` (v3.24.18).

@@ -32,6 +32,55 @@ def text_width_emu(document: str) -> int | None:
     return (int(size.group(1)) - sum(left_right)) * 635
 
 
+PDFMD_TABLE_STYLES = ("PdfmdGrid", "PdfmdBooktabs")
+TABLE = re.compile(r"<w:tbl>.*?</w:tbl>", re.S)
+TABLE_PROPERTIES = re.compile(r"<w:tblPr>(.*?)</w:tblPr>", re.S)
+
+
+def centre_table(match: re.Match) -> str:
+    """One `<w:tbl>`: pdfmd's own table styles say `jc center`, but LibreOffice ignores a table style's
+    alignment, so a table narrower than the text sat at the left margin there. The alignment is written
+    into the table itself (a table that already says where it sits, or uses another style, is left alone)."""
+    table = match.group(0)
+    found = TABLE_PROPERTIES.search(table)
+    if found is None or "<w:jc " in found.group(1) or not any(
+            f'w:val="{name}"' in found.group(1) for name in PDFMD_TABLE_STYLES):
+        return table
+    inner = found.group(1)
+    width = re.search(r"<w:tblW\b[^>]*/>", inner)
+    anchor = width or re.search(r"<w:tblStyle\b[^>]*/>", inner)
+    if anchor is None:
+        return table
+    inner = inner[:anchor.end()] + '<w:jc w:val="center"/>' + inner[anchor.end():]
+    return table[:found.start(1)] + inner + table[found.end(1):]
+
+
+def centre_tables(path: Path) -> int:
+    """Write the centring into every table of pdfmd's own styles (see centre_table); returns how many changed."""
+    with zipfile.ZipFile(path) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+        infos = {item.filename: item for item in archive.infolist()}
+    document = entries["word/document.xml"].decode("utf-8")
+    changed = 0
+
+    def count(match: re.Match) -> str:
+        nonlocal changed
+        result = centre_table(match)
+        changed += result != match.group(0)
+        return result
+
+    document = TABLE.sub(count, document)
+    if not changed:
+        return 0
+    entries["word/document.xml"] = document.encode("utf-8")
+    temporary = path.with_suffix(path.suffix + ".part")
+    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as target:
+        for name, data in entries.items():
+            target.writestr(infos[name] if name in infos else name, data)
+    temporary.replace(path)
+    return changed
+
+
 def finish_docx(path: Path) -> int:
     """Patch the file in place; returns the number of pictures finished."""
     with zipfile.ZipFile(path) as archive:

@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.19"
+PDFMD_VERSION = "3.24.20"
 import argparse
 import csv
 import filecmp
@@ -4398,6 +4398,22 @@ def office_fallback_wanted(md_path: Path, metadata_files: list[Path], failed_fam
 
 
 def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
+    """The Pandoc command of a docx/odt build (see build_office_pandoc), and then the one finishing every Word
+    file it writes, the soffice route's included: the tables pdfmd styles are centred in the file itself."""
+    result = build_office_pandoc(cmd, output, arguments, pandoc_cwd, verbose, debug)
+    target = Path(cmd[cmd.index("-o") + 1]) if "-o" in cmd else None
+    module = office_module()
+    if result.returncode == 0 and module is not None and target is not None and target.suffix.lower() == ".docx":
+        path = target if target.is_absolute() else pandoc_cwd / target
+        if path.is_file():
+            try:
+                module.centre_tables(path)
+            except (OSError, zipfile.BadZipFile, KeyError) as error:
+                print(f"WARN  could not centre the tables of {path.name} ({error})", file=sys.stderr)
+    return result
+
+
+def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
     """Run the Pandoc command of a docx/odt build. With the LaTeX filter on it runs twice: once to list the
     fragments LaTeX must draw (compiled in the document's own preamble, cached), once to put their
     pictures in; a `.docx` is then finished (SVG beside the PNG, baselines, widths)."""
