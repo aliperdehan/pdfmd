@@ -1427,6 +1427,14 @@ With a `metadata/` folder, a report's own folder can hold nothing but
 `bibliography: refs.bib`) resolve from `metadata/`, and image paths in the
 document still resolve from the document's own folder.
 
+**A Lua filter can run any command**, so pdfmd tells you about the ones it picks up by itself. The first build with a
+`<name>.lua` (or `nulabreport.lua`) it has not run before prints one `NOTE`, and so does the first build after the file
+changed; the filter runs all the same, and there is never a prompt, so a filter you edit every day, `-j`, `-w`, CI and the
+Python API are not held up. `pdfmd --trust-lua ~/work/reports` marks a folder you work in (or one filter, as it is now):
+nothing under it is noted again. Only `--strict` skips a new or edited filter outside such a folder. pdfmd remembers
+each filter's path and SHA-256 in `known-lua.txt` beside its config. This is a notice, not a lock: it does not protect
+the first build of a folder you have just downloaded, so read its `.lua` first.
+
 One shared metadata file can also be **symlinked** into many folders. A
 relative `bibliography: refs.bib` inside it then finds the `refs.bib`
 next to the file's real copy, so you never need an absolute path.

@@ -126,6 +126,11 @@ pdfmd looks beside the document, and in a `metadata/` folder beside it, for **on
 An unrelated `.tex` or `.lua` lying in the folder never changes a render. `-v` says which files were taken;
 `-y FILE` names a metadata file explicitly (a bare `-y` turns discovery off).
 
+A Lua filter can run any command, so the first build with a `<name>.lua` pdfmd has not run before, and the first build
+after you edit it, print one `NOTE` (the filter still runs; nothing ever prompts). `pdfmd --trust-lua FOLDER` marks the
+folder you work in, and nothing under it is noted again; `--strict` skips a new or edited filter outside such a folder.
+Read a downloaded folder's `.lua` before its first build: this is a notice, not a lock.
+
 ### 2.1 One style for a whole course folder
 
 ```text

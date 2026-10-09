@@ -862,6 +862,10 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `--no-strict` overrides) turns a build that printed a WARN line, or about which Pandoc warned (a missing image or
     citation, a LaTeX undefined reference), into a failed file: the output is kept, the exit code is 1.
 
+    A Lua filter pdfmd finds by itself is noted (v3.26.11): a NOTE the first time this machine runs it and the first
+    time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;
+    only `--strict` skips a new or edited filter outside a trusted folder.
+
     Where it lives (v3.23.12): `cache: {location: global | document}`, --cache-location,
     the config file's `options:`. global (default) is ~/.cache/pdfmd; each folder
     records its document (.pdfmd-source.json: path, stem, folder name, SHA-256),
@@ -1223,7 +1227,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.10"
+PDFMD_VERSION = "3.26.11"
 import argparse
 import csv
 import filecmp
@@ -5879,6 +5883,110 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
                 seen.add(candidate.resolve())
                 found.append(candidate.resolve())
     return found
+
+
+# -- Discovered Lua filters: noticed, not blocked (v3.26.11) -----------------------------------------------------
+# A Lua filter can run any command, and pdfmd runs `<name>.lua` and `nulabreport.lua` beside a document (and the files
+# a document names in `pdfmd-options.lua-filter`) without being asked. So the first build with a filter pdfmd has not run
+# before prints a NOTE, and so does the first build after the file changed (path and SHA-256 are kept in
+# ~/.config/pdfmd/known-lua.txt); the filter still runs, so a filter you edit every day never gets in the way, and
+# there is never a prompt (CI, `-j`, `-w` and the Python API have no one to ask). `pdfmd --trust-lua FOLDER` marks a
+# folder you work in: nothing in it is noted again. Only `--strict` skips a new or edited filter outside such a folder
+# (with a WARN). This does not protect the FIRST run of a folder you have just downloaded: read its .lua first.
+def lua_known_path() -> Path:
+    return config_root() / "known-lua.txt"
+
+
+def lua_folders_path() -> Path:
+    return config_root() / "trusted-lua-folders.txt"
+
+
+def lua_digest(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def known_lua() -> dict[str, str]:
+    """{resolved path: SHA-256 it last ran with}; a later line for a path replaces an earlier one."""
+    known: dict[str, str] = {}
+    try:
+        for line in lua_known_path().read_text(encoding="utf-8").splitlines():
+            digest, _, name = line.strip().partition(" ")
+            if digest and name:
+                known[name] = digest
+    except OSError:
+        pass
+    return known
+
+
+def remember_lua(entries: list[tuple[str, str]]) -> None:
+    if not entries:
+        return
+    try:
+        lua_known_path().parent.mkdir(parents=True, exist_ok=True)
+        with lua_known_path().open("a", encoding="utf-8") as handle:
+            for digest, name in entries:
+                handle.write(f"{digest} {name}\n")
+    except OSError:
+        pass
+
+
+def trusted_lua_folders() -> list[Path]:
+    try:
+        return [Path(line.strip()) for line in lua_folders_path().read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")]
+    except OSError:
+        return []
+
+
+def check_lua_filters(md_path: Path, filters: list[Path], strict: bool) -> list[Path]:
+    """The filters that run: all of them, with a NOTE for each one new here or edited since it last ran; with
+    ``strict`` a new or edited one outside a trusted folder is skipped, with a WARN."""
+    if not filters:
+        return filters
+    known, folders = known_lua(), trusted_lua_folders()
+    keep: list[Path] = []
+    fresh: list[tuple[str, str]] = []
+    for path in filters:
+        key = str(path.resolve())
+        digest = lua_digest(path)
+        if digest is None or known.get(key) == digest or any(path.resolve().is_relative_to(folder) for folder in folders):
+            keep.append(path)
+            continue
+        what = "is new here" if key not in known else "has changed since it last ran here"
+        advice = ("A Lua filter can run any command: read it, or mark a folder you work in with "
+                  "`pdfmd --trust-lua FOLDER` to stop this note")
+        if strict:
+            print(f"WARN  {display_path(md_path)}: the Lua filter {path.name} {what} and was not run (--strict). {advice}",
+                  file=sys.stderr)
+            continue
+        print(f"NOTE  {display_path(md_path)}: the Lua filter {path.name} {what}; it runs. {advice}")
+        keep.append(path)
+        fresh.append((digest, key))
+    remember_lua(fresh)
+    return keep
+
+
+def trust_lua(paths: list[Path]) -> bool:
+    """--trust-lua PATH...: a folder is trusted for good, a file as it is now. True when every path was found."""
+    complete = True
+    for path in paths:
+        path = path.expanduser().resolve()
+        if path.is_dir():
+            if path not in trusted_lua_folders():
+                lua_folders_path().parent.mkdir(parents=True, exist_ok=True)
+                with lua_folders_path().open("a", encoding="utf-8") as handle:
+                    handle.write(f"{path}\n")
+            print(f"OK    Lua filters under {display_path(path)} run without a note")
+        elif path.is_file() and lua_digest(path):
+            remember_lua([(lua_digest(path), str(path))])
+            print(f"OK    {display_path(path)} is trusted as it is now (an edit is noted again; trust its folder to stop that)")
+        else:
+            print(f"FAIL  {display_path(path)}: no such file or folder", file=sys.stderr)
+            complete = False
+    return complete
 
 
 @contextmanager
@@ -14044,6 +14152,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in lua_filters:
                 lua_filters.append(extra_filter)
+    lua_filters = check_lua_filters(md_path, lua_filters, resolve_strict(md_path, metadata_files))
     for lua_filter in lua_filters:
         note("LUA", str(lua_filter))
 
@@ -17360,6 +17469,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="run Lua filters embedded in a document even if this pdfmd did not "
                              "write them (a filter can run any command; by default only ones this "
                              "machine's pdfmd embedded itself run)")
+    parser.add_argument("--trust-lua", type=Path, nargs="+", metavar="PATH",
+                        help="mark a folder (or one Lua filter as it is now) as yours: a discovered or named Lua filter "
+                             "there is no longer noted as new or edited, and --strict does not skip it")
     parser.add_argument("-d", "-cwd", "--cwd", "--destination-cwd", action="store_true",
                         dest="destination_cwd",
                         help="save PDFs in the current working directory")
@@ -17839,6 +17951,8 @@ def main() -> None:
     if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
         from pdfmd_flat import asciify
         raise SystemExit(asciify.serve(*args.ascii_stdio))
+    if args.trust_lua:
+        raise SystemExit(0 if trust_lua(args.trust_lua) else 1)
     if args.path and all(path.suffix.lower() == ".pdf" for path in args.path):
         # Reading a PDF: the unknown flags are batchocr's, and an abbreviation must not
         # swallow one (`-c` is batchocr's --concat and an abbreviation of pdfmd's -cwd).

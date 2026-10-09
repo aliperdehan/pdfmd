@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.11 — 2026-10-09
+
+Pre-edit state: commit `5d4533e` (v3.26.10).
+
+### Added
+
+- A Lua filter pdfmd finds by itself (`<name>.lua`, `nulabreport.lua`, the files in `NAME.unpacked/` and the ones
+  `pdfmd-options.lua-filter` names) is noted: the first build with one this machine has not run, and the first build
+  after its content changed, print a `NOTE`; the filter runs, nothing prompts, and the next build is quiet (path and
+  SHA-256 are kept in `known-lua.txt` beside the config). `pdfmd --trust-lua FOLDER|FILE` marks a folder (for good) or a
+  file (as it is now) so nothing there is noted; with `--strict`, a new or edited filter outside a trusted folder is
+  skipped with a `WARN` (and so the build fails). Not a defence for the first build of a downloaded folder; the
+  README says so.
+
 ## v3.26.10 — 2026-10-09
 
 Pre-edit state: commit `7e050f8` (v3.26.9).
