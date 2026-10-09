@@ -991,8 +991,9 @@ The history file (v3.25.8; the package pdfmd_history):
     a build. `both` does both. A .hst is one entry per line, newest first -- `WHEN | KIND | TEXT | key=value ...`,
     KIND being compiled, restored or note, the key=value words holding the hash of the source at that moment (`sha`) and
     the output (`out`) -- so two files join with `cat`, diff cleanly, and `--merge-history A.hst B.hst [-o OUT]` keeps
-    every entry once. `--history-to-file FILE` moves pdfmd's own lines (the "Compiled ..." line and the "Compile
-    History:" list) out of the BUILD NOTES block(s) into the .hst, and `--history-to-notes FILE` moves the compiles back;
+    every entry once. `--history-to-file FILE` moves the whole BUILD NOTES block(s) pdfmd owns (the "Compiled ..." line, the "Compile
+    History:" list, and any text written by hand inside, as one `note` entry with `block=1`) into the .hst, and
+    `--history-to-notes FILE` builds the block again from it;
     both back the document up first, `--dry-run` only shows. A document may carry several BUILD NOTES blocks (the
     author's, an AI agent's): pdfmd writes into the one that already holds its lines, else the only block there is
     (the hand-kept convention it automates), else -- several, none its own -- into a block of its own; everything else
@@ -1192,7 +1193,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.11"
+PDFMD_VERSION = "3.25.12"
 import argparse
 import csv
 import filecmp
@@ -1883,6 +1884,19 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
     if raw_graphics and graphicx.is_file():
         args += ["--include-in-header", str(graphicx)]
     return args
+
+
+def hoist_code_header(cmd: list[str]) -> None:
+    """Put the code-wrapping header (code_wrap.tex) before every other --include-in-header of ``cmd``. fvextra loads lineno,
+    which patches the display-math environments; a class or package that patches them too (nulabreport's preamble) must
+    come after it to patch on top, not before it to be patched over (\\begin{linenomath} ended by \\end{equation*})."""
+    positions = [index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"]
+    mine = [index for index in positions if cmd[index + 1].endswith("code_wrap.tex")]
+    if not mine or mine[0] == positions[0]:
+        return
+    pair = cmd[mine[0]:mine[0] + 2]
+    del cmd[mine[0]:mine[0] + 2]
+    cmd[positions[0]:positions[0]] = pair
 
 
 def read_text_best_effort(path: Path) -> str:
@@ -8046,10 +8060,11 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
     return True
 
 
-def notes_to_entries(text: str) -> tuple[str, list]:
+def notes_to_entries(text: str, whole: bool = False) -> tuple[str, list]:
     """(the text without pdfmd's own lines in its BUILD NOTES blocks, those lines as .hst entries). What anybody
     else wrote in the block stays; a block left with nothing but its heading goes. A block marked `pdfmd: ignore`
-    is not looked at."""
+    is not looked at. With ``whole`` the block pdfmd owns goes entirely -- the free text in it too, as one `note`
+    entry (`block=1`) whose text is those lines -- while a block that is not pdfmd's is still left alone."""
     entries: list = []
     for match in reversed(build_notes_blocks(text)):
         indent, body = match.group("indent"), match.group("body")
@@ -8073,6 +8088,18 @@ def notes_to_entries(text: str) -> tuple[str, list]:
         if heading_at is not None and not any(re.match(rf"^{re.escape(indent)}  - ", line) for line in kept[heading_at + 1:]):
             del kept[heading_at]
         remainder = "\n".join(kept)
+        if whole:
+            free = [line[len(indent):] if line.startswith(indent) else line.strip() for line in kept]
+            if heading_at is not None and heading_at < len(free) and free[heading_at].strip() == "Compile History:":
+                del free[heading_at]
+            while free and not free[0].strip():
+                free.pop(0)
+            while free and not free[-1].strip():
+                free.pop()
+            if free:
+                entries.append(history_module().Entry(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "note",
+                                                      "\n".join(free), (("block", "1"),)))
+            remainder = ""
         if not remainder.strip().strip("\n"):
             end = match.end()
             while text[end:end + 1] == "\n":
@@ -8085,33 +8112,45 @@ def notes_to_entries(text: str) -> tuple[str, list]:
 
 
 def entries_to_notes(text: str, entries: list) -> str:
-    """BUILD NOTES with `entries` (compiled and restored) in it, together with what was already there: the newest
-    compile as the live line, the rest newest first as the "Compile History:" list."""
+    """BUILD NOTES with `entries` in it, together with what was already there: the newest compile as the live line,
+    then the free text of a block moved out whole (`note` entries with `block=`), then the rest newest first as the
+    "Compile History:" list."""
     history = history_module()
     text, existing = notes_to_entries(text)
-    merged = history.merge(existing, entries)
-    if not merged:
+    free = [entry.text for entry in entries if entry.meta_dict().get("block")]
+    merged = history.merge(existing, [entry for entry in entries if not entry.meta_dict().get("block")])
+    if not merged and not free:
         return text
     live = next((entry for entry in merged if entry.kind == "compiled"), None)
     bullets = [entry for entry in merged if entry is not live]
+    indent = "     "
     if live is not None:
         text, _ = update_build_notes(text, entry_line(live), "replace")
-    if not bullets:
-        return text
     match = pdfmd_build_notes(text) if live is not None else None
     if match is None:
-        indent = "     "
-        block = (f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}Compile History:\n"
-                 + "".join(f"{indent}  - {entry_line(entry)}\n" for entry in bullets) + f"{indent}{'=' * 60} -->\n")
+        lines = [f"<!-- {'=' * 60}", f"{indent}BUILD NOTES", ""]
+        for chunk in free:
+            lines += [(indent + line) if line else "" for line in chunk.split("\n")] + [""]
+        if bullets:
+            lines += [f"{indent}Compile History:", *(f"{indent}  - {entry_line(entry)}" for entry in bullets)]
+        lines += [f"{indent}{'=' * 60} -->"]
+        block = "\n".join(lines) + "\n"
         embedded = EMBED_BLOCK_RE.search(text)
         if embedded:
             return text[:embedded.start()].rstrip("\n") + "\n\n" + block + "\n" + text[embedded.start():]
         return text.rstrip("\n") + "\n\n" + block
     indent, body = match.group("indent"), match.group("body")
-    trimmed = body.rstrip(" \t").rstrip("\n")
-    new_body = (trimmed + "\n\n" + f"{indent}Compile History:\n"
+    if free:
+        live_at = stamp_line_pattern(indent).search(body)
+        chunk = "".join(("\n".join((indent + line) if line else "" for line in text_.split("\n"))) + "\n\n" for text_ in free)
+        if live_at is not None:
+            position = live_at.end() + (2 if body[live_at.end():live_at.end() + 2] == "\n\n" else 1)
+            body = body[:position] + chunk + body[position:]
+    if bullets:
+        trimmed = body.rstrip(" \t").rstrip("\n")
+        body = (trimmed + "\n\n" + f"{indent}Compile History:\n"
                 + "".join(f"{indent}  - {entry_line(entry)}\n" for entry in bullets) + indent)
-    return text[:match.start("body")] + new_body + text[match.end("body"):]
+    return text[:match.start("body")] + body + text[match.end("body"):]
 
 
 # --- --history, --history-diff, --history-restore, --init-backups --------------------------------------------
@@ -8499,11 +8538,13 @@ def history_command(args) -> int:
         linked = [] if metadata is AUTO_METADATA_DISABLED or metadata is None else (metadata if isinstance(metadata, list) else [metadata])
         path = history_file(document, linked, existing=args.history_to_notes)
         if args.history_to_file:
-            stripped, entries = notes_to_entries(text)
+            stripped, entries = notes_to_entries(text, whole=True)
             if not entries:
-                print(f"{display_path(document)}: no pdfmd lines in its BUILD NOTES to move")
+                print(f"{display_path(document)}: no pdfmd BUILD NOTES block to move")
                 continue
             old, other = history.read_file(path)
+            known = {entry.text for entry in old if entry.meta_dict().get("block")}
+            entries = [entry for entry in entries if not (entry.meta_dict().get("block") and entry.text in known)]
             merged = history.merge(old, entries)
             print(f"{display_path(document)}: {len(entries)} compile{'s' if len(entries) != 1 else ''} -> "
                   f"{display_path(path)} ({len(merged)} entries there now)")
@@ -8519,11 +8560,11 @@ def history_command(args) -> int:
         else:
             entries, other = history.read_file(path)
             other = [line for line in other if not line.startswith("# pdfmd history of")]
-            compiled = [entry for entry in entries if entry.kind == "compiled"]
+            compiled = [entry for entry in entries if entry.kind == "compiled" or entry.meta_dict().get("block")]
             if not compiled:
                 print(f"{display_path(document)}: no compiles in {display_path(path)} to move")
                 continue
-            print(f"{display_path(document)}: {len(compiled)} compile{'s' if len(compiled) != 1 else ''} -> BUILD NOTES"
+            print(f"{display_path(document)}: {len(compiled)} entr{'ies' if len(compiled) != 1 else 'y'} -> BUILD NOTES"
                   + (f"; {len(entries) - len(compiled)} other entr{'y stays' if len(entries) - len(compiled) == 1 else 'ies stay'} in the file"
                      if len(entries) != len(compiled) else ""))
             if args.dry_run:
@@ -8533,7 +8574,7 @@ def history_command(args) -> int:
                 status = 1
                 continue
             document.write_text(entries_to_notes(text, compiled), encoding="utf-8")
-            left = [entry for entry in entries if entry.kind != "compiled"]
+            left = [entry for entry in entries if entry not in compiled]
             if left or other:
                 history.write_file(path, left, document.name, other)
             else:
@@ -8947,6 +8988,8 @@ def tables_command(args) -> int:
     except ImportError:
         print("ERROR  --extract-tables needs the pdfmd_tables package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
+    if args.extract_inline_csv and not args.expand_tables:
+        args.extract_tables = True
     if args.extract_tables and args.expand_tables:
         print("ERROR  --extract-tables and --expand-tables are opposites; pick one.", file=sys.stderr)
         return 1
@@ -8985,7 +9028,8 @@ def tables_command(args) -> int:
             if args.extract_tables:
                 result = tables.extract(text, base, pandoc=pandoc, names=names, directory=args.tables_dir,
                                         inline=args.tables_inline, reader=reader,
-                                        pandoc_version=pandoc_version() if pandoc else None)
+                                        pandoc_version=pandoc_version() if pandoc else None,
+                                        inline_csv=args.extract_inline_csv)
             else:
                 result = tables.expand(text, base)
             if result.changed and pandoc and args.extract_tables:
@@ -11936,9 +11980,10 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     if outside:
         print("NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
               "finds them (relative to the assembled file's folder)")
-    if summary:
-        print("NOTE  never embedded, and not detected: data a macro in the text reads (CSV tables "
-              "for plots, images in raw LaTeX) -- they stay beside the document")
+    if summary and not file_names:
+        print("NOTE  not embedded, and not detected: data a macro in the text reads (CSV tables "
+              "for plots, images in raw LaTeX) -- they stay beside the document; `--embed-metadata files` embeds "
+              "what the text and the preamble name")
     return result
 
 
@@ -13074,6 +13119,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
             cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
+            hoist_code_header(cmd)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -13502,6 +13548,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += width_filter_args(width_filter)
                 if is_tex_target:
                     cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
+                    hoist_code_header(cmd)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -13703,6 +13750,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += width_filter_args(width_filter)
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
+                        hoist_code_header(cmd)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
@@ -16323,6 +16371,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "caption and alignment kept as block attributes, after checking that Pandoc reads the same "
                              "tables back. Names come from the captions, else table1, table2... (--table-names a,b,c "
                              "gives them; the count must match). The old file is backed up first; --dry-run only shows")
+    parser.add_argument("--extract-inline-csv", action="store_true",
+                        help="with --extract-tables (implied): also move the data of `.csv` blocks that hold it inside "
+                             "the document into tables/<name>.csv files. Off by default. A table, or a block, with "
+                             "`<!-- pdfmd: ignore -->` on the line above it (or under its caption) is left as it is")
     parser.add_argument("--expand-tables", action="store_true",
                         help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
                              "(all its rows), its caption= the line under it. The CSV files are left where they are")
@@ -16755,7 +16807,7 @@ def main() -> None:
         raise SystemExit(check_docx_command(args, pandoc_options))
     if args.check_dependencies:
         raise SystemExit(0 if dependency_report() else 1)
-    if args.extract_tables or args.expand_tables:
+    if args.extract_tables or args.expand_tables or args.extract_inline_csv:
         raise SystemExit(tables_command(args))
     if args.history or args.history_diff or args.history_restore:
         if args.history_diff and args.history_restore:
@@ -17246,6 +17298,7 @@ def main() -> None:
                         cmd += width_filter_args(width_filter)
                     if is_tex_target:
                         cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
+                        hoist_code_header(cmd)
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -17361,6 +17414,7 @@ def main() -> None:
                             cmd += width_filter_args(width_filter)
                         if engine in LATEX_ENGINES:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
+                            hoist_code_header(cmd)
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

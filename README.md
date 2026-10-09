@@ -892,6 +892,12 @@ touched there. `--tables-inline` puts the data
 inside the document (in a fenced block) instead of in files, `--tables-dir DIR` picks the folder, and `--dry-run` shows
 the change without making it. `--expand-tables` is the reverse, every row included.
 
+A `.csv` block that holds its data inside the document stays as it is, unless you pass `--extract-inline-csv`, which moves
+that data to a file as well. To keep one table or block as it is whatever you run, put `<!-- pdfmd: ignore -->` on the
+line above it (or under its caption); the comment survives comment stripping, because pdfmd's own comments are kept.
+A comment between a table and its caption would stop Pandoc from reading the caption as one, so there is no such
+position.
+
 ### Code: wrapping and line numbers
 
 With a LaTeX engine a long line of code wraps at the margin instead of running off the page (a long path or option list
@@ -1232,8 +1238,9 @@ keeps every entry once:
 2026-10-09 11:22:01 | compiled | with nulabreport v1.27.7, pdfmd v3.25.7 | sha=3fa91c0d4b21 out=report.pdf
 ```
 
-`pdfmd --history-to-file report.md` moves what pdfmd wrote in the document's `BUILD NOTES` into that file, and
-`--history-to-notes` moves it back (both back the document up first, `--dry-run` shows). A document may carry several
+`pdfmd --history-to-file report.md` moves the whole `BUILD NOTES` block that pdfmd owns into that file (the compiles as
+entries, anything written by hand inside it as one `note` entry), and `--history-to-notes` builds the block again (both
+back the document up first, `--dry-run` shows). A document may carry several
 `BUILD NOTES` blocks (yours, an AI agent's): pdfmd writes only into the one that already holds its own lines, or the
 only one there is, or starts one of its own when there are several and none is its; the rest is never touched, and a
 line `pdfmd: ignore` in a block keeps pdfmd out of it. The file travels with the document: `--embed-metadata` folds it

@@ -169,11 +169,12 @@ def choose_names(tables: list[FoundTable], given: list[str] | None) -> list[str]
 
 def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] | None = None,
             directory: str = "tables", inline: bool = False, reader: str = "markdown",
-            pandoc_version: tuple | None = None) -> Extracted:
+            pandoc_version: tuple | None = None, inline_csv: bool = False) -> Extracted:
     """Every table of `text` as a `.csv` block: the data in `directory` beside the document (`file=`), or inside
     the block with `inline`. Tables that cannot be written as CSV are left as they are, with the reason.
     `reader` is the Pandoc reader the document is built with: gfm and commonmark read pipe tables only, so a grid
-    or simple table is plain text there and is not touched."""
+    or simple table is plain text there and is not touched. A table with `<!-- pdfmd: ignore -->` above it or under its
+    caption is left as it is. With `inline_csv` the `.csv` blocks that hold their data inside get it moved to a file too."""
     tables = find_tables(text)
     plain_text = 0
     if reader.casefold().startswith(("gfm", "commonmark")):
@@ -184,14 +185,16 @@ def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] |
         result.report.append(f"NOTE  {plain_text} grid/simple table{'' if plain_text == 1 else 's'} left as they are: "
                              f"the reader this document is built with ({reader.split('+')[0]}) does not read them as tables "
                              "(add YAML front matter, or --from markdown, to make them tables)")
-    if not tables:
+    if not tables and not inline_csv:
         result.report.append("no tables found")
         return result
-    chosen = choose_names(tables, names)
+    chosen = choose_names(tables, names) if tables else []
     lines = text.split("\n")
     used: dict[str, str] = {}
     for position in range(len(tables) - 1, -1, -1):
         table, name = tables[position], chosen[position]
+        if table.ignored:
+            table.problem = "marked <!-- pdfmd: ignore -->"
         label = f"table {position + 1}" + (f" ({name})" if names or table.caption else "")
         if table.kind != "pipe":
             if pandoc is None:
@@ -230,7 +233,46 @@ def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] |
         result.changed += 1
     result.text = "\n".join(lines)
     result.files = dict(reversed(list(result.files.items())))     # in the order of the tables
+    if inline_csv:
+        _extract_inline_csv(result, base_dir, directory, used)
     return result
+
+
+def _extract_inline_csv(result: Extracted, base_dir: Path, directory: str, used: dict[str, str]) -> None:
+    """The `.csv` blocks of result.text that hold their data inside: the data goes to `directory/NAME.csv` (NAME from the
+    block's caption or identifier, else csv<position>) and the block names the file. Its other attributes stay."""
+    blocks = [block for block in find_csv_blocks(result.text) if block.data is not None]
+    if not blocks:
+        result.report.append("no inline .csv blocks found")
+        return
+    lines = result.text.split("\n")
+    taken = set(used)
+    plan = []
+    for position, block in enumerate(blocks, 1):
+        base = (slug(block.attributes.get("caption", "")) or slug(block.identifier.split(":")[-1])
+                or f"csv{position}")
+        plan.append(base)
+    for position in range(len(blocks) - 1, -1, -1):
+        block, base = blocks[position], plan[position]
+        label = f"csv block {position + 1}" + (f" ({base})" if not base.startswith("csv") else "")
+        if block.ignored:
+            result.report.insert(0, f"SKIP  {label}: marked <!-- pdfmd: ignore -->")
+            continue
+        data = block.data.rstrip("\n") + "\n"
+        name, counter = base, 2
+        file_name = f"{directory.rstrip('/')}/{name}.csv"
+        while (file_name in taken and used.get(file_name) != data) or \
+                ((base_dir / file_name).exists() and (base_dir / file_name).read_text(encoding="utf-8") != data):
+            name, counter = f"{base}-{counter}", counter + 1
+            file_name = f"{directory.rstrip('/')}/{name}.csv"
+        taken.add(file_name)
+        used[file_name] = data
+        result.files[file_name] = data
+        opener = f"{block.indent}::: {{{block.attribute_text} file=\"{file_name}\"}}"
+        lines[block.start:block.end] = [opener, f"{block.indent}:::"]
+        result.report.insert(0, f"EXTRACT  {label}: {file_name}")
+        result.changed += 1
+    result.text = "\n".join(lines)
 
 
 # ---- expand ----------------------------------------------------------------------------------------------------
@@ -345,6 +387,9 @@ def expand(text: str, base_dir: Path) -> Extracted:
     for position in range(len(blocks) - 1, -1, -1):
         block = blocks[position]
         label = f"block {position + 1}"
+        if block.ignored:
+            result.report.insert(0, f"SKIP  {label}: marked <!-- pdfmd: ignore -->")
+            continue
         try:
             header, rows, aligns, widths = block_table(block, base_dir)
         except TablesError as error:

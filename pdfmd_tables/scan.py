@@ -22,6 +22,7 @@ CAPTION_ATTRIBUTES_RE = re.compile(r"\s*\{([^{}]*)\}\s*$")
 ATTRIBUTE_TEXT = r'(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*'            # inside {...}: a quoted value may hold braces
 CSV_OPEN_RE = re.compile(r"^(\s*)(:{3,})\s*\{(" + ATTRIBUTE_TEXT + r"\.csv\b" + ATTRIBUTE_TEXT + r")\}\s*$")
 DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
+IGNORE_RE = re.compile(r"^\s*<!--\s*pdfmd:\s*ignore\s*-->\s*$", re.IGNORECASE)
 ATTRIBUTE_RE = re.compile(r"""([\w:.-]+)=(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^\s"']+))""")
 PANDOC_COLUMNS = 72                       # Pandoc's default line width: longer pipe-table lines make it use the dashes
 
@@ -39,6 +40,7 @@ class FoundTable:
     aligns: list[str] = field(default_factory=list)        # left | center | right | default, one per column
     widths: list[float] | None = None                       # relative, only when the document chose them
     problem: str = ""                                       # why it cannot become CSV ("" when it can)
+    ignored: bool = False                                   # a `<!-- pdfmd: ignore -->` above it or under its caption
 
     @property
     def identifier(self) -> str:
@@ -54,6 +56,27 @@ class CsvBlock:
     classes: list[str]
     data: str | None                      # the data written inside the block (None: it names a file)
     indent: str = ""
+    attribute_text: str = ""              # what is inside the braces of the opening line, as written
+    ignored: bool = False                 # a `<!-- pdfmd: ignore -->` above it or under it
+
+
+def is_ignored(lines: list[str], first: int, last: int, starts: set[int]) -> bool:
+    """Whether an `<!-- pdfmd: ignore -->` line marks the thing on lines first..last: the nearest non-blank line above
+    it, or the nearest under it -- unless that one sits right above the next thing (`starts`), which it then marks."""
+    above = first - 1
+    while above >= 0 and not lines[above].strip():
+        above -= 1
+    if above >= 0 and IGNORE_RE.match(lines[above]):
+        return True
+    below = last
+    while below < len(lines) and not lines[below].strip():
+        below += 1
+    if below < len(lines) and IGNORE_RE.match(lines[below]):
+        after = below + 1
+        while after < len(lines) and not lines[after].strip():
+            after += 1
+        return after not in starts
+    return False
 
 
 def caption_parts(caption: str | None) -> tuple[str, str, str]:
@@ -263,7 +286,7 @@ def _headerless_end(lines: list[str], index: int) -> int | None:
     return probe + 1
 
 
-def find_tables(text: str) -> list[FoundTable]:
+def _scan_tables(text: str) -> list[FoundTable]:
     """Every table of `text`, in order, with its caption. Pipe tables are read; the others carry only their lines."""
     lines = text.split("\n")
     found: list[FoundTable] = []
@@ -294,7 +317,7 @@ def find_tables(text: str) -> list[FoundTable]:
     return found
 
 
-def find_csv_blocks(text: str) -> list[CsvBlock]:
+def _scan_csv_blocks(text: str) -> list[CsvBlock]:
     """The `::: {.csv ...}` divs of `text`, with their data when it is written inside."""
     lines = text.split("\n")
     blocks: list[CsvBlock] = []
@@ -329,6 +352,31 @@ def find_csv_blocks(text: str) -> list[CsvBlock]:
             if body and FENCE_RE.match(body[0].strip()):
                 body = body[1:-1] if len(body) > 1 and FENCE_RE.match(body[-1].strip()) else body[1:]
             data = "\n".join(body)
-        blocks.append(CsvBlock(index, end + 1, pairs, identifier, classes, data, match.group(1)))
+        blocks.append(CsvBlock(index, end + 1, pairs, identifier, classes, data, match.group(1), match.group(3)))
         skip_until = end + 1
+    return blocks
+
+
+def _mark_ignored(text: str, tables: list[FoundTable], blocks: list[CsvBlock]) -> None:
+    lines = text.split("\n")
+    starts = {min(table.start, table.span[0]) for table in tables} | {block.start for block in blocks}
+    for table in tables:
+        table.ignored = is_ignored(lines, min(table.start, table.span[0]), max(table.end, table.span[1]), starts)
+    for block in blocks:
+        block.ignored = is_ignored(lines, block.start, block.end, starts)
+
+
+def find_tables(text: str) -> list[FoundTable]:
+    """Every table of `text`, in order, with its caption (and whether `<!-- pdfmd: ignore -->` marks it)."""
+    tables = _scan_tables(text)
+    if "pdfmd" in text:
+        _mark_ignored(text, tables, _scan_csv_blocks(text))
+    return tables
+
+
+def find_csv_blocks(text: str) -> list[CsvBlock]:
+    """The `::: {.csv ...}` divs of `text`, with their data when it is written inside (and whether they are marked)."""
+    blocks = _scan_csv_blocks(text)
+    if "pdfmd" in text:
+        _mark_ignored(text, _scan_tables(text), blocks)
     return blocks

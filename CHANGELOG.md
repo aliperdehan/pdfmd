@@ -41,6 +41,48 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.12 — 2026-10-09
+
+Pre-edit state: commit `382f589` (v3.25.11).
+
+### Fixed
+
+- **A document using nulabreport (or anything that rewrites `\[`) no longer fails in LaTeX when it has code.** Found
+  building a real report (`LR1-2`): from 3.25.3 the code-wrapping header loaded `fvextra`, which loads `lineno`, which
+  rewrites `\[`, `\]` and the `equation` environments to number the lines of displays; nulabreport copies and replaces
+  `\[` afterwards, and the copy broke (`\begin{linenomath} on input line 484 ended by \end{equation*}`). All three LaTeX
+  engines failed and the PDF came from the Typst fallback, without a word of the LaTeX the report needs. 3.24.19 built it
+  in 24 pages; so does this version. `code_wrap.tex` now defines `\mathindent` while `fvextra` loads (lineno then leaves
+  those environments alone), takes lineno's amsmath hook out, and pdfmd puts the file before the document's own preamble.
+  A regression test mimics the `\[` override. (The nulabreport smoke build was due at the end of the line and had been
+  postponed; it passes on this version.)
+- The note after `--assemble-only` that CSV data and raw-LaTeX images are "never embedded" is not printed when the `files`
+  kind was used, and names the kind when it was not.
+
+### Changed
+
+- **`--history-to-file` moves the whole BUILD NOTES block pdfmd owns**, not only its "Compiled" lines: anything written by
+  hand inside it travels as one `note` entry (`block=1`) and `--history-to-notes` builds the block again. A block that is
+  not pdfmd's is still left alone, and a second move does not copy the text again.
+
+### Added
+
+- **`<!-- pdfmd: ignore -->`** on the line above a table or a `.csv` block, or under a table's caption, keeps
+  `--extract-tables` and `--expand-tables` away from it (reported as `SKIP ... marked`). Like every comment that starts
+  with `pdfmd`, it survives comment stripping; the BUILD NOTES block does not (it is stripped from assembled and attached
+  copies, and Between a table and its caption is not supported: Pandoc
+  would no longer read the caption as one.
+- **`--extract-inline-csv`** (implies `--extract-tables`): also moves the data of `.csv` blocks that hold it inside the
+  document to `tables/<caption or identifier or csvN>.csv`, keeping the block's other attributes.
+
+### Tests
+
+- The `\[` override with code; the whole block out and back (no duplicate text, another author's block untouched);
+  marks above/below/after the last thing, the comment under a caption going to the next table; extract, inline extract and
+  expand honouring them; stripping keeps the mark and drops the BUILD NOTES.
+
+---
+
 ## v3.25.11 — 2026-10-09
 
 Pre-edit state: commit `e3e1125` (v3.25.10).

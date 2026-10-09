@@ -199,6 +199,115 @@ class RoundTrip(unittest.TestCase):
         self.assertTrue((self.directory / "data" / "csv").is_dir())
 
 
+IGNORING = """---
+title: Ignore
+---
+
+<!-- pdfmd: ignore -->
+| A | B |
+|---|---|
+| 1 | 2 |
+
+| C | D |
+|---|---|
+| 3 | 4 |
+
+: Kept
+
+<!-- pdfmd: ignore -->
+
+| E | F |
+|---|---|
+| 5 | 6 |
+
+: Under caption
+
+::: {.csv delimiter=semicolon caption="Fruit"}
+name;qty
+Pen;3
+:::
+
+<!-- pdfmd: ignore -->
+::: {.csv}
+x,y
+1,2
+:::
+
+::: {.csv}
+p,q
+9,8
+:::
+"""
+
+
+class Ignoring(unittest.TestCase):
+    def test_a_comment_above_a_table_or_under_its_caption_marks_it(self):
+        found = tables.find_tables(IGNORING)
+        self.assertEqual([table.ignored for table in found], [True, False, True])
+        blocks = tables.find_csv_blocks(IGNORING)
+        self.assertEqual([block.ignored for block in blocks], [False, True, False])
+
+    def test_the_comment_under_a_caption_belongs_to_the_next_table_not_the_one_before(self):
+        text = "| a |\n|---|\n| 1 |\n\n: One\n\n<!-- pdfmd: ignore -->\n\n| b |\n|---|\n| 2 |\n"
+        self.assertEqual([table.ignored for table in tables.find_tables(text)], [False, True])
+
+    def test_a_comment_after_the_last_thing_marks_it(self):
+        text = "| a |\n|---|\n| 1 |\n\n: One\n\n<!-- pdfmd: ignore -->\n"
+        self.assertEqual([table.ignored for table in tables.find_tables(text)], [True])
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_extract_and_expand_leave_marked_things_alone_and_say_so(self):
+        done = tables.extract(IGNORING, Path("."), pandoc=PANDOC, inline_csv=True)
+        self.assertEqual(sum("marked <!-- pdfmd: ignore -->" in line for line in done.report), 3)
+        self.assertIn("| A | B |", done.text)                          # marked: still a table
+        self.assertIn("| E | F |", done.text)
+        self.assertIn("1,2", done.text)                               # marked: its data is still inside
+        self.assertNotIn("| C | D |", done.text)
+        self.assertIn("<!-- pdfmd: ignore -->", done.text)            # the comments stay
+        self.assertEqual(sorted(done.files), ["tables/csv3.csv", "tables/fruit.csv", "tables/kept.csv"])
+        back = tables.expand(done.text, Path("."))
+        self.assertIn("SKIP", " ".join(back.report))
+
+    def test_comments_that_start_with_pdfmd_survive_stripping_and_the_build_notes_do_not(self):
+        text = ("Text\n\n<!-- pdfmd: ignore -->\n| a |\n|---|\n| 1 |\n\n<!-- a remark -->\n\n"
+                "<!-- ====\n     BUILD NOTES\n\n     Compiled with pdfmd v1 -- 2026-10-09 10:00:00\n     ==== -->\n")
+        stripped = pdfmd.strip_markdown_comments(text)
+        self.assertIn("<!-- pdfmd: ignore -->", stripped)
+        self.assertNotIn("a remark", stripped)
+        self.assertNotIn("BUILD NOTES", stripped)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class InlineCsv(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-inline-csv-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        (self.directory / "doc.md").write_text(IGNORING, encoding="utf-8")
+
+    def run_pdfmd(self, *args):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
+                              capture_output=True, text=True, env=self.env)
+
+    def test_inline_blocks_stay_inside_unless_asked(self):
+        done = self.run_pdfmd("--extract-tables", "doc.md")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("name;qty", (self.directory / "doc.md").read_text(encoding="utf-8"))
+        self.assertFalse((self.directory / "tables" / "fruit.csv").exists())
+
+    def test_the_flag_moves_their_data_to_files_with_their_attributes_kept(self):
+        done = self.run_pdfmd("--extract-inline-csv", "doc.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("checked: Pandoc reads the same tables", done.stdout)
+        text = (self.directory / "doc.md").read_text(encoding="utf-8")
+        self.assertIn('::: {.csv delimiter=semicolon caption="Fruit" file="tables/fruit.csv"}', text)
+        self.assertEqual((self.directory / "tables" / "fruit.csv").read_text(encoding="utf-8"), "name;qty\nPen;3\n")
+        self.assertIn("x,y\n1,2", text)                              # the marked block kept its data
+        again = self.run_pdfmd("--extract-inline-csv", "doc.md")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertIn("SKIP  csv block 1: marked", again.stdout)      # only the marked block still holds data
+
+
 class OldPandoc(unittest.TestCase):
     def test_a_caption_with_attributes_is_left_when_pandoc_would_read_them_as_words(self):
         text = "| a | b |\n|---|---|\n| 1 | 2 |\n\n: Stock {#tbl:stock}\n"

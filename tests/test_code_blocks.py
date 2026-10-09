@@ -132,5 +132,33 @@ class Built(unittest.TestCase):
         self.assertGreater(edge, page - 60)
 
 
+# A class or package that replaces \\[ itself, as nulabreport does after copying it at \\begin{document}: fvextra's lineno
+# had rewritten \\[ to open a linenomath environment, and the copy then broke ("\\begin{linenomath} ended by \\end{equation*}").
+OVERRIDING_PREAMBLE = r"""\usepackage{amsmath}
+\makeatletter
+\AtBeginDocument{%
+  \NewCommandCopy\Lab@lbrack\[%
+  \NewCommandCopy\Lab@rbrack\]%
+  \DeclareRobustCommand\[{\Lab@display}}
+\def\Lab@display#1\]{\Lab@lbrack #1\Lab@rbrack}
+\makeatother
+"""
+
+
+class WithAClassThatOverridesDisplayMath(unittest.TestCase):
+    def test_code_wrapping_does_not_break_a_documents_own_display_math(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-code-math-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "preamble.tex").write_text(OVERRIDING_PREAMBLE, encoding="utf-8")
+        (directory / "m.md").write_text(
+            f"---\ntitle: T\n---\n\n```\n{LONG}\n```\n\n$$ n = \\frac{{m}}{{M}} $$\n\n$$ x = 1 $$\n\n"
+            "\\begin{equation}\ny = 2\n\\end{equation}\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "m.md", "-e", "lualatex", "--no-stamp", "--no-backup"],
+                              cwd=directory, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg")})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("failed", done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

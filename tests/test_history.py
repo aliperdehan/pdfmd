@@ -141,18 +141,31 @@ class CommandLine(unittest.TestCase):
         done = self.run_pdfmd("doc.md", "--history-to-file")
         self.assertEqual(done.returncode, 0, done.stderr)
         file = self.directory / ".backups" / "doc.hst"
-        self.assertEqual(len(history.read_file(file)[0]), 3)
-        self.assertNotIn("Compiled", self.document.read_text(encoding="utf-8"))
+        entries, _ = history.read_file(file)
+        self.assertEqual(len(entries), 4)                                  # three compiles and the block's own text
+        [block] = [entry for entry in entries if entry.meta_dict().get("block")]
+        self.assertIn("My own remark: figure 2 needs a re-run of the fit.", block.text)
+        after = self.document.read_text(encoding="utf-8")
+        self.assertNotIn("Compiled", after)
+        self.assertNotIn("My own remark", after)                           # the whole block went, its text too
+        self.assertIn("(an agent wrote this)", after)                      # another author's block did not
         self.assertEqual(len([p for p in (self.directory / ".backups").iterdir() if p.name.startswith("doc.md.bak")]), 1)
         again = self.run_pdfmd("doc.md", "--history-to-file")
-        self.assertIn("no pdfmd lines", again.stdout)
+        self.assertIn("no pdfmd BUILD NOTES block", again.stdout)
         back = self.run_pdfmd("doc.md", "--history-to-notes")
         self.assertEqual(back.returncode, 0, back.stderr)
         text = self.document.read_text(encoding="utf-8")
         self.assertIn("Compiled with nulabreport v1.27.7, pdfmd v3.25.6 -- 2026-10-09 10:00:00", text)
         self.assertIn("  - Compiled with pdfmd v3.25.5 -- 2026-10-08 09:00:00", text)
         self.assertIn("(an agent wrote this)", text)
+        self.assertIn("My own remark: figure 2 needs a re-run of the fit.", text)     # the block is whole again
+        self.assertEqual(text.count("My own remark"), 1)
         self.assertFalse(file.exists())                                  # nothing left in it
+        again = self.run_pdfmd("doc.md", "--history-to-file")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.run_pdfmd("doc.md", "--history-to-notes")
+        self.run_pdfmd("doc.md", "--history-to-file")
+        self.assertEqual(len([e for e in history.read_file(file)[0] if e.meta_dict().get("block")]), 1)   # no copy of the text added
 
     def test_a_note_in_the_file_stays_when_the_compiles_go_back(self):
         self.run_pdfmd("doc.md", "--history-to-file")
@@ -200,7 +213,7 @@ class CommandLine(unittest.TestCase):
         done = self.run_pdfmd("--unpack", "one.md", "--slim")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotIn("{=pdfmd}", (self.directory / "one.md").read_text(encoding="utf-8"))
-        self.assertEqual(len(history.read_file(self.directory / "one.unpacked" / "doc.hst")[0]), 3)
+        self.assertEqual(len(history.read_file(self.directory / "one.unpacked" / "doc.hst")[0]), 4)
         document = self.directory / "one.md"
         found = pdfmd.history_file(document, existing=True)
         self.assertEqual(found, self.directory / "one.unpacked" / "doc.hst")

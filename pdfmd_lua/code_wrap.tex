@@ -1,2 +1,15 @@
-% pdfmd: long code lines wrap at the margin (fvextra); a TeX without it builds, unwrapped
-\IfFileExists{fvextra.sty}{\usepackage{fvextra}\fvset{breaklines,breakanywhere,breaksymbolleft={},breaksymbolright={}}}{\usepackage{fancyvrb}}
+% pdfmd: long code lines wrap at the margin (fvextra); a TeX without it builds, unwrapped.
+% fvextra loads lineno, and lineno rewrites \[, \] and the equation environments to number the lines of displays -- which
+% nothing here wants, and which breaks a class or package that rewrites \[ itself (nulabreport: "\begin{linenomath} ended
+% by \end{equation*}"). lineno leaves them alone when \mathindent exists (the fleqn register), so it exists while fvextra
+% loads and is gone again after; and the hook by which lineno patches amsmath is taken out (pdfmd puts this file before the
+% document's own preamble, so amsmath is not loaded yet; if it is, nothing is touched).
+\makeatletter
+\IfFileExists{fvextra.sty}{%
+  \@ifundefined{mathindent}{\def\mathindent{0pt}\def\pdfmd@mathindent{1}}{}%
+  \usepackage{fvextra}%
+  \ifdefined\pdfmd@mathindent\let\mathindent\@undefined\fi
+  \fvset{breaklines,breakanywhere,breaksymbolleft={},breaksymbolright={}}%
+  \@ifpackageloaded{amsmath}{}{\ifdefined\RemoveFromHook\RemoveFromHook{package/amsmath/after}[lineno]\fi}%
+}{\usepackage{fancyvrb}}
+\makeatother
