@@ -1155,9 +1155,9 @@ One shared metadata file can also be **symlinked** into many folders. A
 relative `bibliography: refs.bib` inside it then finds the `refs.bib`
 next to the file's real copy, so you never need an absolute path.
 
-## Build stamps and snapshots
+## Build stamps, history and snapshots
 
-Both are off by default.
+All are off by default.
 
 - **`--stamp`** keeps a `BUILD NOTES` HTML comment at the end of the `.md`
   up to date. It records when the document was compiled and with which
@@ -1175,6 +1175,23 @@ pdfmd-options:
   stamp: true
   backup: { dir: .backups, keep: 30 }
 ```
+
+**History in a file instead of in the document.** `--stamp-store file` (or `stamp: {store: file}`) writes each compile
+to `NAME.hst` in the backup folder, and the document itself is not edited by a build. The file is one line per entry,
+newest first, so it reads in any editor, two of them join with `cat`, and `pdfmd --merge-history a.hst b.hst -o all.hst`
+keeps every entry once:
+
+```
+# pdfmd history of report.md -- one entry per line, newest first: WHEN | KIND | TEXT [| key=value ...]
+2026-10-09 11:22:01 | compiled | with nulabreport v1.27.7, pdfmd v3.25.7 | sha=3fa91c0d4b21 out=report.pdf
+```
+
+`pdfmd --history-to-file report.md` moves what pdfmd wrote in the document's `BUILD NOTES` into that file, and
+`--history-to-notes` moves it back (both back the document up first, `--dry-run` shows). A document may carry several
+`BUILD NOTES` blocks (yours, an AI agent's): pdfmd writes only into the one that already holds its own lines, or the
+only one there is, or starts one of its own when there are several and none is its; the rest is never touched, and a
+line `pdfmd: ignore` in a block keeps pdfmd out of it. The file travels with the document: `--embed-metadata` folds it
+in (`hst`), `--unpack` writes it out, and `--attach-source` stores it in the PDF for `--restore`.
 
 Separately, when `pypdf` is installed, every PDF built by `pdfmd` gets two
 hidden metadata keys, `PdfmdVersions` and `PdfmdBuildDate`, which you can

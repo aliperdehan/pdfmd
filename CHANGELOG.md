@@ -41,6 +41,37 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.8 — 2026-10-09
+
+Pre-edit state: commit `738426a` (v3.25.7).
+
+### Added
+
+- **The build history can live in a file, `NAME.hst`, instead of in the document** (new package `pdfmd_history`). The
+  format is one entry per line, newest first: `WHEN | KIND | TEXT | key=value ...` (compiled, restored or note; the
+  hash of the source and the output name as extra words), so two files join with `cat`, diff cleanly and merge line by
+  line; anything in the file that is not an entry is kept as a comment. It lives in the document's backup folder.
+  `--stamp-store notes|file|both` (`pdfmd-options.stamp.store`, in `--setup`) says where a compile is written;
+  `file` leaves the document untouched by a build. `--merge-history A B [-o OUT]` joins files, each entry once.
+- **`--history-to-file` / `--history-to-notes`** move pdfmd's own lines (the "Compiled ..." line and the "Compile
+  History:" list) between a document's BUILD NOTES and its `.hst`; the document is backed up first, `--dry-run` shows
+  what would move, the file is written before the document is changed, and what else is in the block stays.
+- **BUILD NOTES blocks that are not pdfmd's are left alone.** A document can carry several (the author's, an AI agent's):
+  pdfmd now writes into the block that already holds its lines, else into the only block there is (the convention it has
+  always automated), else -- several, none its own -- into a block of its own. A line `pdfmd: ignore` in a block keeps
+  pdfmd out of it. Before, it wrote into whichever came first.
+- **`hst` is an embed kind**: `--embed-metadata` folds the `.hst` into the assembled file (a `type: hst` block), `--unpack`
+  writes it out (`--slim` takes the block away), `--attach-source` stores it in the PDF and `--restore` writes it back
+  into the backup folder.
+
+### Tests
+
+- The format (escapes, merge, comments), which block is chosen, moving lines out and back with other people's text
+  untouched, the commands with a real document, a compile written to the file only and to both, merge from the command
+  line, and the history through an assembled file, `--unpack --slim`.
+
+---
+
 ## v3.25.7 — 2026-10-09
 
 Pre-edit state: commit `8044f2c` (v3.25.6).

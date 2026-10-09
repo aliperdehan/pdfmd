@@ -358,7 +358,7 @@ Stopping early (--stop-at, v3.19.0):
     merges them -- a later file over an earlier one, the document over both,
     per top-level key -- with the document's front matter, into one block;
     `pdfmd-options` merged by pdfmd's own cascade, a file's `no-auto`/
-    `parts` not carried), `preamble` (the preamble file(s), at the head of
+    `parts` not carried), `hst` (the document's NAME.hst history file, v3.25.8), `preamble` (the preamble file(s), at the head of
     `header-includes`), `lua` (the Lua filters, see --lua-mode), `bibliography`
     (the bibliography and CSL files the metadata names, v3.19.7 -- a CSL style
     is also looked for in Pandoc's own user data folder, csl/, and a file not
@@ -975,6 +975,21 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     three keys require PyYAML and a document that already has a `---`
     block; silently ignored (not an error) if PyYAML isn't installed.
 
+The history file (v3.25.8; the package pdfmd_history):
+    `--stamp-store file` (or `pdfmd-options: {stamp: {store: file}}`) writes each compile to NAME.hst, in the
+    document's backup folder (see Backups), instead of into the document's BUILD NOTES: the document is not edited by
+    a build. `both` does both. A .hst is one entry per line, newest first -- `WHEN | KIND | TEXT | key=value ...`,
+    KIND being compiled, restored or note, the key=value words holding the hash of the source at that moment (`sha`) and
+    the output (`out`) -- so two files join with `cat`, diff cleanly, and `--merge-history A.hst B.hst [-o OUT]` keeps
+    every entry once. `--history-to-file FILE` moves pdfmd's own lines (the "Compiled ..." line and the "Compile
+    History:" list) out of the BUILD NOTES block(s) into the .hst, and `--history-to-notes FILE` moves the compiles back;
+    both back the document up first, `--dry-run` only shows. A document may carry several BUILD NOTES blocks (the
+    author's, an AI agent's): pdfmd writes into the one that already holds its lines, else the only block there is
+    (the hand-kept convention it automates), else -- several, none its own -- into a block of its own; everything else
+    in any block is left as it is, and a block with a line `pdfmd: ignore` is never touched. The .hst is the
+    `hst` embed kind: `--embed-metadata` folds it into the assembled file (`type: hst`), `--unpack` writes it out,
+    `--attach-source` stores it in the PDF and `--restore` puts it back beside the backups.
+
 Build-provenance stamping (--stamp):
     Off by default. On a successful compile, appends or updates a
     `<!-- ===... BUILD NOTES ...=== -->` HTML comment near the end of the
@@ -1131,7 +1146,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.7"
+PDFMD_VERSION = "3.25.8"
 import argparse
 import csv
 import filecmp
@@ -7504,9 +7519,13 @@ def frontmatter_extra_lua_filters(md_path: Path) -> list[Path]:
 # by default. See resolve_stamp_options, build_stamp_line and apply_stamp.
 STAMP_MODES = frozenset({"replace", "history"})
 STAMP_SCOPES = frozenset({"always", "report", "standalone"})
+STAMP_STORES = frozenset({"notes", "file", "both"})
 DEFAULT_STAMP_OPTIONS = {
     "enabled": False,
     "mode": "replace",
+    # Where a compile is written: the document's BUILD NOTES block (notes, the default), a NAME.hst file beside the
+    # backups that leaves the document alone (file), or both.
+    "store": "notes",
     "packages": [],
     "scope": "always",
     "include_output": False,
@@ -7550,6 +7569,8 @@ def normalize_stamp_value(value) -> dict:
         options["enabled"] = bool(value.get("enabled", True))
         if "mode" in value:
             options["mode"] = str(value["mode"])
+        if "store" in value:
+            options["store"] = str(value["store"])
         if "packages" in value:
             packages = value["packages"]
             options["packages"] = ([str(item) for item in packages] if isinstance(packages, list)
@@ -7599,6 +7620,9 @@ def resolve_stamp_options(md_path: Path, metadata_files: list[Path], cli_overrid
     if options["mode"] not in STAMP_MODES:
         raise SystemExit(f"{md_path}: unknown --stamp mode '{options['mode']}'. "
                          f"Valid: {', '.join(sorted(STAMP_MODES))}")
+    if options["store"] not in STAMP_STORES:
+        raise SystemExit(f"{md_path}: unknown --stamp-store '{options['store']}'. "
+                         f"Valid: {', '.join(sorted(STAMP_STORES))}")
     if options["scope"] not in STAMP_SCOPES:
         raise SystemExit(f"{md_path}: unknown --stamp scope '{options['scope']}'. "
                          f"Valid: {', '.join(sorted(STAMP_SCOPES))}")
@@ -7702,6 +7726,33 @@ def history_heading_pattern(indent: str) -> re.Pattern:
     return re.compile(rf"^{re.escape(indent)}Compile History:[ \t]*\n", re.MULTILINE)
 
 
+IGNORE_MARK_RE = re.compile(r"(?mi)^[ \t]*pdfmd:[ \t]*(?:ignore|skip|hands[ -]off)[ \t]*$")
+
+
+def is_pdfmd_notes(body: str, indent: str) -> bool:
+    """A BUILD NOTES block pdfmd has written into: it holds its stamp line or its "Compile History:" list."""
+    return bool(stamp_line_pattern(indent).search(body) or history_heading_pattern(indent).search(body))
+
+
+def build_notes_blocks(text: str) -> list[re.Match]:
+    """Every BUILD NOTES comment of the document (not the text of an embedded file)."""
+    return list(BUILD_NOTES_RE.finditer(mask_embedded_blocks(text)))
+
+
+def pdfmd_build_notes(text: str) -> re.Match | None:
+    """The BUILD NOTES block pdfmd writes into, or None when it has to make one. A document may carry several (the
+    author's, an AI agent's, a section's own): pdfmd uses the one it has written into before; failing that, the
+    only one there is (the convention it automates, kept by hand in real reports); failing that -- several, none
+    pdfmd's -- none, so that it starts its own and leaves the others as they are. A block with a line
+    `pdfmd: ignore` in it is never touched."""
+    blocks = [match for match in build_notes_blocks(text) if not IGNORE_MARK_RE.search(match.group("body"))]
+    for match in blocks:
+        if is_pdfmd_notes(match.group("body"), match.group("indent")):
+            return match
+    every = build_notes_blocks(text)
+    return blocks[0] if len(every) == 1 and blocks else None
+
+
 def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | None]:
     """Insert/replace pdfmd's own stamp line inside a document's BUILD NOTES
     comment, wherever that comment sits in the file (found by BUILD_NOTES_RE
@@ -7729,7 +7780,7 @@ def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | 
     whole comment reads newest-to-oldest top to bottom. The heading is
     created there the first time a demotion has nowhere to go.
     """
-    match = BUILD_NOTES_RE.search(mask_embedded_blocks(text))
+    match = pdfmd_build_notes(text)
     if not match:
         indent = "     "
         block = f"<!-- {'=' * 60}\n{indent}BUILD NOTES\n\n{indent}{new_line}\n{indent}{'=' * 60} -->\n"
@@ -7803,6 +7854,197 @@ def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
         print(f"AUTO STAMP  {md_path}: {new_line}")
 
 
+HISTORY_TIME_RE = re.compile(r"^(?P<text>.*?)\s+--\s+(?P<when>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$")
+
+
+def history_module():
+    """pdfmd_history, or None in a lone pdfmd.py."""
+    try:
+        import pdfmd_history
+        return pdfmd_history
+    except ImportError:
+        return None
+
+
+def compile_entry(line: str, meta: tuple = ()):
+    """The .hst entry of a "Compiled ... -- WHEN" line of BUILD NOTES (a bullet's dash is allowed), or None."""
+    history = history_module()
+    found = HISTORY_TIME_RE.match(line.strip().removeprefix("- ").strip())
+    if history is None or not found or not found.group("text").startswith("Compiled"):
+        return None
+    return history.Entry(found.group("when"), "compiled", found.group("text")[len("Compiled"):].strip(), meta)
+
+
+def entry_line(entry) -> str:
+    return f"Compiled {entry.text} -- {entry.when}"
+
+
+def history_file(md_path: Path, metadata_files: list[Path] = (), existing: bool = False) -> Path:
+    """Where md_path's NAME.hst is: in its backup folder (see backup_directory), or -- reading only -- in the
+    NAME.unpacked/ folder --unpack made, when there is none in the backup folder."""
+    options = resolve_backup_options(md_path, list(metadata_files), None)
+    path = backup_directory(md_path, options) / f"{md_path.stem}.hst"
+    if existing and not path.is_file():
+        folder = md_path.with_name(f"{md_path.stem}{UNPACKED_SUFFIX}")
+        found = [item for item in sorted(folder.glob("*.hst"))] if folder.is_dir() else []
+        if (folder / path.name).is_file():
+            return folder / path.name
+        if len(found) == 1:
+            return found[0]
+    return path
+
+
+def record_history(md_path: Path, metadata_files: list[Path], line: str, output: Path, verbose: bool) -> bool:
+    """Add a compile to NAME.hst; False when this pdfmd cannot (no pdfmd_history package)."""
+    history = history_module()
+    entry = compile_entry(line)
+    if history is None or entry is None:
+        return history is not None
+    try:
+        digest = sha256_text(normalized_source(md_path.read_text(encoding="utf-8-sig")))[:12]
+    except (OSError, UnicodeDecodeError):
+        digest = ""
+    entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (("sha", digest),
+                                                                                      ("out", output.name)) if item[1]))
+    path = history_file(md_path, metadata_files)
+    try:
+        history.add_entry(path, entry, md_path.name)
+    except OSError as error:
+        print(f"WARN  {display_path(md_path)}: cannot write {display_path(path)} ({error.strerror or error})", file=sys.stderr)
+        return True
+    backup_notice(path.parent, resolve_backup_options(md_path, list(metadata_files), None))
+    if verbose:
+        print(f"AUTO HISTORY  {display_path(path)}: {entry.when} compiled")
+    return True
+
+
+def notes_to_entries(text: str) -> tuple[str, list]:
+    """(the text without pdfmd's own lines in its BUILD NOTES blocks, those lines as .hst entries). What anybody
+    else wrote in the block stays; a block left with nothing but its heading goes. A block marked `pdfmd: ignore`
+    is not looked at."""
+    entries: list = []
+    for match in reversed(build_notes_blocks(text)):
+        indent, body = match.group("indent"), match.group("body")
+        if IGNORE_MARK_RE.search(body) or not is_pdfmd_notes(body, indent):
+            continue
+        kept: list[str] = []
+        heading_at: int | None = None
+        for raw in body.split("\n"):
+            probe = raw[len(indent):] if raw.startswith(indent) else raw
+            own = (stamp_line_pattern(indent).match(raw) or re.match(rf"^{re.escape(indent)}  - Compiled\b", raw))
+            entry = compile_entry(raw) if own else None
+            if entry is not None:
+                entries.append(entry)
+                continue
+            if history_heading_pattern(indent).match(raw + "\n"):
+                heading_at = len(kept)
+            if raw == "" and kept and kept[-1] == "":
+                continue                                   # the blank line a removed line leaves behind
+            kept.append(raw)
+        if heading_at is not None and not any(re.match(rf"^{re.escape(indent)}  - ", line) for line in kept[heading_at + 1:]):
+            del kept[heading_at]
+        remainder = "\n".join(kept)
+        if not remainder.strip().strip("\n"):
+            end = match.end()
+            while text[end:end + 1] == "\n":
+                end += 1
+            start = match.start()
+            text = text[:start].rstrip("\n") + ("\n\n" if text[end:].strip() else "\n") + text[end:]
+        else:
+            text = text[:match.start("body")] + remainder + text[match.end("body"):]
+    return text, entries
+
+
+def entries_to_notes(text: str, entries: list) -> str:
+    """BUILD NOTES with `entries` (compiled ones) in it, newest on top and the rest as the history list, together
+    with what was already there."""
+    history = history_module()
+    text, existing = notes_to_entries(text)
+    for entry in reversed(history.merge(existing, entries)):
+        text, _ = update_build_notes(text, entry_line(entry), "history")
+    return text
+
+
+def history_command(args) -> int:
+    """--history-to-file / --history-to-notes / --merge-history. Returns the exit status."""
+    history = history_module()
+    if history is None:
+        print("ERROR  the history commands need the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
+        return 1
+    if args.merge_history:
+        sources = [Path(item) for item in args.merge_history]
+        missing = [str(item) for item in sources if not item.is_file()]
+        if missing:
+            print(f"ERROR  not a file: {', '.join(missing)}", file=sys.stderr)
+            return 1
+        lists, other = [], []
+        for source in sources:
+            entries, comments = history.read_file(source)
+            lists.append(entries)
+            other += [line for line in comments if line not in other]
+        name = sources[0].stem + ".md"
+        merged = history.render(history.merge(*lists), name, other)
+        if args.out:
+            history.write_file(args.out, history.merge(*lists), name, other)
+            print(f"WROTE  {display_path(args.out)}  ({sum(len(item) for item in lists)} entries in, "
+                  f"{len(history.merge(*lists))} out)")
+        else:
+            sys.stdout.write(merged)
+        return 0
+    status = 0
+    for target in (args.path or [Path.cwd()]):
+        try:
+            document = find_markdown(target)
+        except FileNotFoundError as error:
+            print(f"ERROR  {error}", file=sys.stderr)
+            return 1
+        text = document.read_text(encoding="utf-8-sig")
+        metadata = find_metadata(document.parent.resolve(), args.metadata_file, document_stem=document.stem)
+        linked = [] if metadata is AUTO_METADATA_DISABLED or metadata is None else (metadata if isinstance(metadata, list) else [metadata])
+        path = history_file(document, linked, existing=args.history_to_notes)
+        if args.history_to_file:
+            stripped, entries = notes_to_entries(text)
+            if not entries:
+                print(f"{display_path(document)}: no pdfmd lines in its BUILD NOTES to move")
+                continue
+            old, other = history.read_file(path)
+            merged = history.merge(old, entries)
+            print(f"{display_path(document)}: {len(entries)} compile{'s' if len(entries) != 1 else ''} -> "
+                  f"{display_path(path)} ({len(merged)} entries there now)")
+            if args.dry_run:
+                continue
+            if backup_before_edit(document) is None:
+                print(f"ERROR  {display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+                status = 1
+                continue
+            history.write_file(path, merged, document.name, other)       # the file first: nothing is lost if this stops
+            document.write_text(stripped, encoding="utf-8")
+            backup_notice(path.parent, resolve_backup_options(document, linked, None))
+        else:
+            entries, other = history.read_file(path)
+            other = [line for line in other if not line.startswith("# pdfmd history of")]
+            compiled = [entry for entry in entries if entry.kind == "compiled"]
+            if not compiled:
+                print(f"{display_path(document)}: no compiles in {display_path(path)} to move")
+                continue
+            print(f"{display_path(document)}: {len(compiled)} compile{'s' if len(compiled) != 1 else ''} -> BUILD NOTES"
+                  + (f"; {len(entries) - len(compiled)} other entr{'y stays' if len(entries) - len(compiled) == 1 else 'ies stay'} in the file"
+                     if len(entries) != len(compiled) else ""))
+            if args.dry_run:
+                continue
+            if backup_before_edit(document) is None:
+                print(f"ERROR  {display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+                status = 1
+                continue
+            document.write_text(entries_to_notes(text, compiled), encoding="utf-8")
+            left = [entry for entry in entries if entry.kind != "compiled"]
+            if left or other:
+                history.write_file(path, left, document.name, other)
+            else:
+                path.unlink(missing_ok=True)
+    return status
+
+
 def gather_stamp_texts(md_path: Path, preamble_files: list[Path]) -> list[str]:
     """Raw LaTeX text stamp_summary checks for \\usepackage{...}: a
     document's discovered preambles plus its own header-includes block.
@@ -7851,7 +8093,11 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     if not options["enabled"]:
         return
     line = build_stamp_line(options, texts, output, report_output, verbose)
-    apply_stamp(md_path, line, options["mode"], verbose)
+    store = options["store"]
+    if store in ("file", "both") and not record_history(md_path, metadata_files, line, output, verbose):
+        store = "notes"                                   # no pdfmd_history here: the document keeps it, as before
+    if store in ("notes", "both"):
+        apply_stamp(md_path, line, options["mode"], verbose)
 
 
 # --backup / pdfmd-options.backup: after a successful compile, copy the
@@ -10169,7 +10415,7 @@ def write_assembled_markdown(sources: list[Path], output: Path,
 #     ref, as a path in `pdfmd-options.lua-filter`.
 # The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
 # the discovery that would find them a second time stays off.
-EMBED_KINDS = ("metadata", "preamble", "lua", "bibliography")
+EMBED_KINDS = ("metadata", "preamble", "lua", "bibliography", "hst")
 # A LaTeX comment line closing the embedded preamble inside `header-includes`:
 # document_header_file puts the front-matter macro definitions there, after
 # the preamble that defines them and before the document's own additions,
@@ -10243,7 +10489,7 @@ def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
     if isinstance(value, list):
         return frozenset(str(item) for item in value if str(item) in EMBED_KINDS), None
     if isinstance(value, dict):
-        kinds = {kind for kind in ("metadata", "preamble", "bibliography")
+        kinds = {kind for kind in ("metadata", "preamble", "bibliography", "hst")
                  if value.get(kind, True) not in (False, "false", "no", "off")}
         lua = value.get("lua", True)
         mode = None
@@ -10297,6 +10543,7 @@ class EmbedPlan:
         self.preamble_files = preamble_files
         self.lua_filters = lua_filters
         self.output: Path | None = None
+        self.hst_file: Path | None = None                 # the document's NAME.hst, when it has one
         self.strip_kinds: frozenset[str] = frozenset()    # comment kinds cut from what is embedded
         self.bib_prune = False                            # keep only the bibliography entries the text cites
         self.bib_report: list[str] = []                   # "name (kept of total)" for the summary
@@ -10478,6 +10725,16 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     all_blocks = parse_embedded_blocks(text)
     blocks = [block for block in all_blocks if block["type"] == "lua-filter"]
     data_blocks = [block for block in all_blocks if block["type"] in ("bibliography", "csl")]
+    history_blocks = [block for block in all_blocks if block["type"] == "hst"]
+    for block in history_blocks:
+        name = unique(Path(block["name"]).name or f"{path.stem}.hst")
+        files[name] = block["source"]
+        if block["declared"] == block["sha256"]:
+            state = "hash matches what was written"
+        else:
+            mismatch = True
+            state = "HASH MISMATCH: edited since it was written" if block["declared"] else "no hash recorded"
+        notes.append(f"HISTORY   {name}  ({state})")
     for block in data_blocks:
         name = unique(safe_relative_path(block["path"] or block["name"]))
         files[name] = block["source"]
@@ -10595,13 +10852,13 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
                   f"{display_path(target)} it will not, unless you move it there", file=sys.stderr)
         slim_assembled(path, text, front, data, options, kept_header, blocks,
-                       preamble_unpacked, metadata_unpacked, origin, bool(data_blocks))
+                       preamble_unpacked, metadata_unpacked, origin, bool(data_blocks), bool(history_blocks))
     return 1 if mismatch else 0
 
 
 def slim_assembled(path: Path, text: str, front, data: dict | None, options: dict, kept_header: str,
                    blocks: list, preamble_unpacked: bool, metadata_unpacked: bool, origin,
-                   bibliography_unpacked: bool = False) -> None:
+                   bibliography_unpacked: bool = False, history_unpacked: bool = False) -> None:
     """Rewrite ``path`` without what --unpack just wrote out (the embedded
     filter blocks, the preamble in header-includes, the keys that came from
     metadata files -- the last only where the file records their origin).
@@ -10636,6 +10893,8 @@ def slim_assembled(path: Path, text: str, front, data: dict | None, options: dic
         removed.append("lua")
     if bibliography_unpacked:
         removed.append("bibliography")
+    if history_unpacked:
+        removed.append("hst")
     gone = [kind for kind in removed if kind in (options.get("embedded") or [])]
     if isinstance(options.get("no-auto"), list):
         options["no-auto"] = [kind for kind in options["no-auto"] if kind not in gone]
@@ -10868,7 +11127,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         kinds = kinds - {"preamble"}
         left_out.append("preamble " + ", ".join(item.name for item in plan.preamble_files) + " (left out)")
     no_auto = [kind for kind in EMBED_KINDS
-               if kind in kinds and kind != "bibliography"  # nothing discovers a bibliography: it is named
+               if kind in kinds and kind not in ("bibliography", "hst")  # nothing discovers a bibliography: it is named
                and not (kind == "lua" and plan.lua_mode in ("ref", "off"))]
     if plan.lua_mode == "off":
         no_auto = [kind for kind in no_auto if kind != "lua"]
@@ -10882,6 +11141,16 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             entries.append((sha256_text(normalized_source(source)), lua_filter.name))
         if plan.lua_mode == "ref":
             lua_refs = [relative_filter_path(item, plan.output) for item in plan.lua_filters]
+    history_text = None
+    if "hst" in kinds and plan.hst_file is not None:
+        try:
+            history_text = plan.hst_file.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            history_text = None
+        if history_text and history_text.strip():
+            blocks += "\n" + render_embedded_block("hst", plan.hst_file.name, history_text)
+        else:
+            history_text = None
     # ---- metadata: files lowest, the document over them
     merged: dict = {}
     file_options: list[dict] = []
@@ -10997,7 +11266,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         options["origin"] = origin
     embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
         (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files)
-        or (kind == "bibliography" and not bib_embedded))]
+        or (kind == "bibliography" and not bib_embedded) or (kind == "hst" and history_text is None))]
     if embedded_now:
         options["embedded"] = embedded_now
     if applied:
@@ -11052,6 +11321,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         summary.append("metadata " + ", ".join(item.name for item in plan.metadata_files))
     if "preamble" in kinds and plan.preamble_files:
         summary.append("preamble " + ", ".join(item.name for item in plan.preamble_files))
+    if history_text is not None:
+        summary.append(f"history {plan.hst_file.name}")
     if "lua" in kinds and plan.lua_filters and plan.lua_mode != "off":
         if plan.lua_mode == "apply":
             if applied:
@@ -12919,7 +13190,11 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in discovered_lua:
                 discovered_lua.append(extra_filter)
-    return EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []), discovered_lua)
+    plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []), discovered_lua)
+    if "hst" in kinds:
+        found = history_file(md_path, metadata_files, existing=True)
+        plan.hst_file = found if found.is_file() else None
+    return plan
 
 
 # -- Source attached to the PDF (v3.22.1) ---------------------------------------
@@ -13283,6 +13558,8 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
                             ("lua", plan.lua_filters)):
             if kind in plan.kinds:
                 layout.extend({"kind": kind, "path": layout_path(base, item)} for item in paths)
+        if "hst" in plan.kinds and plan.hst_file is not None:
+            layout.append({"kind": "hst", "path": relative_posix(base, plan.hst_file)})
     images = []
     for source, latex in [(item, False) for item in (md_path, *parts)] + [
             (item, True) for item in (plan.preamble_files if plan else [])]:
@@ -15334,7 +15611,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tables-inline", action="store_true",
                         help="with --extract-tables: write each table's data inside its `.csv` block, no files")
     parser.add_argument("--dry-run", action="store_true",
-                        help="with --extract-tables or --expand-tables: show what would change and write nothing")
+                        help="with --extract-tables, --expand-tables, --history-to-file or --history-to-notes: show what would "
+                             "change and write nothing")
     parser.add_argument("--line-numbers", nargs="?", const="1", metavar="STEP",
                         help="number the lines of every code block (LaTeX builds); STEP numbers every STEP-th line. "
                              "Per block: {.numberLines startFrom=10 step=5}, {.noNumberLines}. Off unless asked; "
@@ -15501,6 +15779,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "the end of the comment, newest-demoted-first -- both leave any other "
                              "hand-written notes in the block untouched. Switching back to 'replace' "
                              "later freezes rather than deletes an existing history list (warns)")
+    parser.add_argument("--stamp-store", choices=sorted(STAMP_STORES), default=None,
+                        help="where --stamp writes a compile: 'notes' (default) the document's BUILD NOTES block, 'file' "
+                             "a NAME.hst history file beside the backups (the document is left alone), or 'both'")
+    parser.add_argument("--history-to-file", action="store_true",
+                        help="move pdfmd's own lines out of FILE's BUILD NOTES block(s) into NAME.hst (merged with what is "
+                             "there); what anybody else wrote in the block stays. Backed up first; --dry-run only shows")
+    parser.add_argument("--history-to-notes", action="store_true",
+                        help="the reverse: the compiles in NAME.hst go into FILE's BUILD NOTES (newest on top, the rest as "
+                             "the history list) and leave the file")
+    parser.add_argument("--merge-history", nargs="+", metavar="HST",
+                        help="join NAME.hst files: every entry once, newest first (to -o FILE, else printed)")
     parser.add_argument("--stamp-packages", nargs="+", default=None, metavar="PKG",
                         help="LaTeX package name(s) (e.g. nulabreport) whose version to include in "
                              "the stamp line, found via 'kpsewhich PKG.sty' and that file's own "
@@ -15717,6 +16006,10 @@ def main() -> None:
         raise SystemExit(0 if dependency_report() else 1)
     if args.extract_tables or args.expand_tables:
         raise SystemExit(tables_command(args))
+    if args.history_to_file or args.history_to_notes or args.merge_history:
+        if args.history_to_file and args.history_to_notes:
+            raise SystemExit("--history-to-file and --history-to-notes are opposites; pick one.")
+        raise SystemExit(history_command(args))
     if args.check_fonts:
         ok = True
         for target in (args.path or [Path.cwd()]):
@@ -15795,6 +16088,8 @@ def main() -> None:
         stamp_overrides["packages"] = args.stamp_packages
     if args.stamp_scope:
         stamp_overrides["scope"] = args.stamp_scope
+    if args.stamp_store:
+        stamp_overrides["store"] = args.stamp_store
     if args.stamp_output:
         stamp_overrides["include_output"] = True
     if args.no_stamp_output:
