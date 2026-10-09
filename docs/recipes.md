@@ -233,7 +233,8 @@ section, figure, table or equation (`\ref`, `\cref`, `[@fig:a]`) prints its numb
 part's own numbers continue from the parts before it. It is approximate for whatever the document defines itself (a
 macro that opens a figure): that label stays `??`, and the build says so. The cache's `.aux` from the last full build is
 exact and wins when there is one ([12.1](#121-faster-rebuilds)). `--seed-labels auto|aux|scan|draft|off` or
-`pdfmd-options: {seed-labels: scan}` picks the source; `off` gives the `??` back.
+`pdfmd-options: {seed-labels: scan}` picks the source; `draft` runs LaTeX once over the whole document without output
+(exact, about half a compile's cost each time); `off` gives the `??` back.
 
 ### 3.3 Cut a single file into parts, or join parts back
 

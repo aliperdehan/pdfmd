@@ -207,6 +207,14 @@ class PartsBuild(unittest.TestCase):
         self.assertRegex(part, r"2 Method")                    # its own number continues from the part before it
         self.assertRegex(part, r"\(2\)")                       # and so does the equation
 
+    def test_the_draft_pass_gives_the_exact_numbers(self):
+        result = self.build("report#method", "--seed-labels", "draft")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("draft pass", result.stdout)
+        part = self.text("report.method.pdf")
+        self.assertIn("Back to Section 1, Equation 1, Subsection 2.1 and Section 3", part)
+        self.assertNotIn("??", part)
+
     def test_off_leaves_the_question_marks(self):
         result = self.build("report#method", "--seed-labels", "off")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.1 — 2026-10-09
+
+Pre-edit state: commit `f7f1882` (v3.26.0).
+
+### Added
+
+- `--seed-labels draft` (`pdfmd-options: {seed-labels: draft}`): the labels of the rest of the document come from a
+  LaTeX pass over the WHOLE document without output (`-draftmode` for LuaLaTeX and pdfLaTeX, `-no-pdf` for XeLaTeX), run
+  on the LaTeX Pandoc wrote for the scan, with the parts' markers in it. Its `.aux` is read exactly as a cached full
+  build's is, so the numbers, the house number style and the parts' counters are exact, not counted; the scan still fills
+  in what that pass does not know. It costs about half a compile of the whole document, on every part build (the cache's
+  `.aux` is free but has to exist), which is why it is not the default.
+
 ## v3.26.0 — 2026-10-09
 
 Pre-edit state: commit `8257ff7` (v3.25.20).
@@ -59,8 +72,7 @@ Pre-edit state: commit `8257ff7` (v3.25.20).
   `.aux` (cache on; exact), then the scan. Approximate where the document defines its own macros (that label stays `??`);
   `\pageref` stays `??`. The build says "N labels counted from the sources".
 - `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` and `--seed-labels MODE`. `auto` is the default (`.aux`, then
-  the scan), `aux` the old behaviour, `scan` the scan alone, `off` the old `??`. (`draft` is accepted and behaves as
-  `auto` until the whole-document draft pass lands.)
+  the scan), `aux` the old behaviour, `scan` the scan alone, `off` the old `??`. (`draft`: see v3.26.1.)
 - `test_sections.py`: the no-full-build test builds with `--seed-labels off` (the default now counts the labels).
 - `tests/test_labels.py`: the scanner and the rendered TeX on fixed LaTeX (no Pandoc), a mode/trigger table, and builds
   of a part and of a section compared with the full build (Pandoc, LuaLaTeX, pdftotext).

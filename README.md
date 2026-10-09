@@ -830,7 +830,8 @@ a figure, say): that label stays `??`, and the build says the numbers are
 approximate. `\pageref` is always `??`. The last full build's `.aux` (cache on,
 below) is exact and is used first; the scan fills in what it does not know.
 `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` or `--seed-labels` picks
-the source; `off` brings back the `??`. A section of an ordinary document
+the source (`draft` runs LaTeX once over the whole document without output, for
+exact numbers at about half a compile's cost); `off` brings back the `??`. A section of an ordinary document
 (`doc#results`) gets the same for the references it makes, but keeps numbering
 its own headings from 1. See
 [`examples/parts/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/parts/).

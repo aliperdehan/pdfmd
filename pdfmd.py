@@ -1205,7 +1205,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.0"
+PDFMD_VERSION = "3.26.1"
 import argparse
 import csv
 import filecmp
@@ -12722,6 +12722,7 @@ PARTS_MARKER_DEFS = r"""\makeatletter
   \ifcsname pdfmd@st@#1\endcsname\csname pdfmd@st@#1\endcsname\fi}
 \makeatother
 """
+DRAFT_FLAGS = {"lualatex": "-draftmode", "pdflatex": "-draftmode", "xelatex": "-no-pdf"}   # a pass without output
 PART_COUNTER_RE = re.compile(r"^\\pdfmd@part\{([^{}]*)\}\{([^{}]*)\}\s*$")
 SEED_LABEL_RE = re.compile(r"^\\newlabel\{([^{}]*)\}(\{.*\})\s*$")
 
@@ -12782,6 +12783,7 @@ def safe_stem(name: str) -> str:
 # the document's own number style applies. The .aux, when there is one, still comes first.
 SEED_LABELS_CLI: str | None = None         # --seed-labels (set in main)
 LAST_SCANNED = 0                           # labels the last build took from the scan (for the closing NOTE)
+LAST_EXACT = False                         # ... and whether they came from a draft pass
 REF_USE_RE = re.compile(r"\\(?:auto|eq|page|name|vpage|[cCvV])?ref\*?\s*\{|(?<![\w@])@(?:sec|fig|tbl|eq|lst):")
 
 
@@ -12821,8 +12823,9 @@ def seed_labels_mode(md_path: Path, metadata_files: list[Path]) -> str:
 class LabelScan:
     """The header files that make a partial build know the labels of the whole document (see above)."""
 
-    def __init__(self, headers: list[Path], labels: int, steps: int, markers: bool):
+    def __init__(self, headers: list[Path], labels: int, steps: int, markers: bool, exact: bool = False):
         self.headers, self.labels, self.steps = headers, labels, steps
+        self.exact = exact             # the numbers come from a LaTeX pass over the whole document (draft), not a count
         self.markers = markers         # whether the headers define \pdfmdpart (PARTS_MARKER_DEFS) too
 
 
@@ -12845,17 +12848,27 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                      slide_level: int | None, pandoc_options: list[str], metadata_file, preamble_files,
                      from_format: str | None, no_auto: list[str] | None, stamp_overrides: dict,
                      trust_embedded: bool, all_parts: list[Path], parts_root: Path | None,
-                     verbose: bool) -> "LabelScan | None":
-    """Pandoc's LaTeX of the whole document, scanned. None when it cannot be made (the build goes on without)."""
+                     verbose: bool, draft: bool = False) -> "LabelScan | None":
+    """Pandoc's LaTeX of the whole document, scanned (and, with ``draft``, run through the LaTeX engine once without
+    output, whose .aux then gives the exact numbers). None when it cannot be made (the build goes on without)."""
     import pdfmd_labels
     started = time.time()
     tex_path = scratch / "labels-scan.tex"
+    defs = scratch / "labels-defs.tex"
+    markers = bool(all_parts and parts_root is not None)
+    if markers:
+        defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
+    draft_engine = next((engine for engine in engines if engine in DRAFT_FLAGS), None) if draft else None
+    if draft and draft_engine is None and verbose:
+        print("LABELS    no engine here can run a draft pass (lualatex, xelatex, pdflatex); the scan alone is used")
     cheap = ["svg", "remoteimages", "pdfimages"]
     scan_no_auto = no_auto if (no_auto is not None and not no_auto) else [*(no_auto or []), *cheap]
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             built = _convert_one(md_path, None, False, font, engines, variables, slide_level, pandoc_options,
-                                 metadata_file, tex_path, list(preamble_files or []), target_format="latex",
+                                 metadata_file, tex_path,
+                                 [*(preamble_files or []), *([defs] if markers and draft_engine else [])],
+                                 target_format="latex",
                                  from_format=from_format, no_auto=scan_no_auto, verbose=False, debug=False,
                                  stamp_overrides=stamp_overrides, keep_aux=False, extra_inputs=list(all_parts) or None,
                                  partial=False, cache_cli=False, skip_stamp=True, parts_root=parts_root,
@@ -12877,12 +12890,33 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         print(f"LABELS    scanned the whole document in {time.time() - started:.1f} s: {result.labels} labels, "
               f"{result.steps} numbered items, {result.parts()} parts")
     headers = [seed]
-    markers = bool(all_parts and parts_root is not None)
+    exact = False
+    if draft_engine is not None:
+        metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
+        pandoc_cwd = metadata_list[0].parent if metadata_list else md_path.parent
+        began = time.time()
+        command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
+                   str(scratch), str(tex_path)]
+        try:
+            subprocess.run(command, cwd=pandoc_cwd, env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
+                           capture_output=True, text=True, timeout=1800)
+        except (OSError, subprocess.SubprocessError) as error:
+            if verbose:
+                print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
+        aux_seed = scratch / "labels-aux-seed.tex"
+        found = seed_labels_file(scratch / "labels-scan.aux", aux_seed)
+        if found:
+            hook = scratch / "labels-aux-hook.tex"
+            hook.write_text("\\AtBeginDocument{\\InputIfFileExists{\"%s\"}{}{}}\n" % aux_seed.as_posix(), encoding="utf-8")
+            headers.insert(0, hook)
+            exact = True
+            if verbose:
+                print(f"LABELS    draft pass over the whole document: {found} labels in {time.time() - began:.1f} s")
+        elif verbose:
+            print("LABELS    the draft pass left no .aux; the scan alone is used")
     if markers:
-        defs = scratch / "labels-defs.tex"
-        defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
         headers.insert(0, defs)
-    return LabelScan(headers, result.labels, result.steps, markers)
+    return LabelScan(headers, result.labels, result.steps, markers, exact)
 
 
 # -- Plot cache (pdfmd-options: {cache: {plots: true}}, --cache-plots) --------
@@ -16145,8 +16179,8 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
     gets it, including any added later.
     """
-    global LAST_SCANNED
-    LAST_SCANNED = 0
+    global LAST_SCANNED, LAST_EXACT
+    LAST_SCANNED, LAST_EXACT = 0, False
     metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     scratch = None
     label_scan = None
@@ -16158,8 +16192,9 @@ def convert_one(md_path: Path, out_dir: Path | None, presentation: bool, font: s
             label_scan = build_label_scan(md_path, Path(scratch.name), font, engines, variables, slide_level,
                                           pandoc_options, metadata_file, preamble_files, from_format, no_auto,
                                           stamp_overrides or {}, trust_embedded, list(all_parts or []), parts_root,
-                                          verbose)
+                                          verbose, draft=(seed_mode == "draft"))
             LAST_SCANNED = label_scan.labels if label_scan is not None else 0
+            LAST_EXACT = bool(label_scan is not None and label_scan.exact)
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
@@ -16347,7 +16382,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
     # ordinary document (source_override), which has no parts and so no counter markers.
     seed_from = full_scaffold if parts_root is not None else (md_path if source_override is not None else None)
     if (persistent and partial and seed_from is not None and stem != safe_stem(seed_from.stem)
-            and seed_mode in ("auto", "aux", "draft")):
+            and seed_mode in ("auto", "aux", "draft") and not (label_scan is not None and label_scan.exact)):
         # (Not when the build is named like the full one: it would overwrite the .aux it reads.)
         full_aux = base / f"{safe_stem(seed_from.stem)}.aux"
         seed = base / f"{stem}.seed.tex"
@@ -16364,9 +16399,12 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                              else "references to parts left out"))
     if label_scan is not None:
         headers.extend(label_scan.headers)          # after the .aux seed: what the last full build knew wins
-        note("LABELS", f"{md_path}: {label_scan.labels} labels counted from the sources fill in what the "
-                       f"{'last full build does not know' if seeded else 'references to parts left out need'} "
-                       "(approximate: a macro the document defines itself is not counted)")
+        if label_scan.exact:
+            note("LABELS", f"{md_path}: labels from a draft pass over the whole document (exact), the scan fills in the rest")
+        else:
+            note("LABELS", f"{md_path}: {label_scan.labels} labels counted from the sources fill in what the "
+                           f"{'last full build does not know' if seeded else 'references to parts left out need'} "
+                           "(approximate: a macro the document defines itself is not counted)")
     try:
         built = _convert_one(md_path, out_dir, False, font, engines, variables, slide_level,
                              pandoc_options, metadata_file, tex_path, headers, target_format="latex",
@@ -18143,6 +18181,10 @@ def main() -> None:
                     print("NOTE  section build: references to other sections come from the last full build "
                           "(cache); they are stale if you have since changed the document. This section's "
                           "own heading, figure, table and equation numbers restart at its first one")
+                elif LAST_SCANNED and LAST_EXACT:
+                    print(f"NOTE  section build: references to other sections ({LAST_SCANNED} labels) come from a draft "
+                          "pass over the whole document, so they are exact. This section's own heading, figure, "
+                          "table and equation numbers restart at its first one")
                 elif LAST_SCANNED:
                     print(f"NOTE  section build: references to other sections ({LAST_SCANNED} labels) are counted "
                           "from the document's sources: approximate where it defines its own macros; a full build "
@@ -18160,6 +18202,9 @@ def main() -> None:
                           "(--cache); they are stale if you have since added or moved a figure or table there"
                           + (f" (and {LAST_SCANNED} labels counted from the sources fill in what it lacks)"
                              if LAST_SCANNED else ""))
+                elif LAST_SCANNED and LAST_EXACT:
+                    print(f"NOTE  partial build: numbers of parts left out ({LAST_SCANNED} labels) come from a draft "
+                          "pass over the whole document, so they are exact")
                 elif LAST_SCANNED:
                     print(f"NOTE  partial build: numbers of parts left out are counted from the sources "
                           f"({LAST_SCANNED} labels); approximate where the document defines its own macros -- "
