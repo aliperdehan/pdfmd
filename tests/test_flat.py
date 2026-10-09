@@ -151,6 +151,15 @@ class Filter(unittest.TestCase):
         self.assertRegex(err, r"WARN  gfm: 1 raw Word XML piece \(e\.g\. <w:p/>\) has no plain-Markdown form")
         self.assertRegex(err, r"1 raw LaTeX piece \(e\.g\. \\labsetup\)")
 
+    def test_numbered_equation_environments_are_unwrapped(self):
+        out, _ = self.flatten("---\ntitle: T\n---\n\n$$\\begin{equation}\n\\label{eq:a}\nx = 1\n\\end{equation}$$\n\n"
+                              "$$\\begin{align}\na &= b \\nonumber\\\\\nc &= d\n\\end{align}$$\n", title=False)
+        self.assertNotIn("\\label", out)
+        self.assertNotIn("\\begin{equation}", out)
+        self.assertIn("x = 1", out)
+        self.assertIn("\\begin{aligned}", out)
+        self.assertNotIn("\\nonumber", out)
+
     def test_math_stays_math(self):
         out, _ = self.flatten("Inline $a_1^2$ and\n\n$$E = mc^2$$\n", title=False)
         self.assertIn("$a_1^2$", out)
@@ -219,6 +228,14 @@ Raw <b>html</b> and \\textbf{tex}.
         self.assertNotIn(":::", flat)
         self.assertNotIn("<div", flat)
 
+    def test_images_written_elsewhere_get_a_note(self):
+        self.write("doc.md", "---\ntitle: T\n---\n\n![a](fig.png)\n")
+        (self.directory / "out").mkdir()
+        elsewhere = self.run_pdfmd("doc.md", "--to", "gfm", "-o", "out/doc.md", "--verbose")
+        self.assertIn("relative to ITS folder", elsewhere.stdout + elsewhere.stderr)
+        beside = self.run_pdfmd("doc.md", "--to", "gfm", "--verbose")
+        self.assertNotIn("relative to ITS folder", beside.stdout + beside.stderr)
+
     def test_scripts_option_and_document_option(self):
         self.write("doc.md", "---\ntitle: T\n---\n\nH~2~O.\n")
         self.assertEqual(self.run_pdfmd("doc.md", "--to", "gfm", "--gfm-scripts", "ascii", "-o", "a.md").returncode, 0)
@@ -239,6 +256,59 @@ Raw <b>html</b> and \\textbf{tex}.
         self.assertEqual(result.returncode, 0, result.stderr)
         flat = (self.directory / "report.gfm.md").read_text(encoding="utf-8")
         self.assertLess(flat.index("# One"), flat.index("# Two"))
+
+
+def _can_draw_latex() -> bool:
+    if not (shutil.which("lualatex") and shutil.which("pdftocairo") and shutil.which("kpsewhich")):
+        return False
+    found = subprocess.run(["kpsewhich", "standalone.cls", "tikz.sty"], capture_output=True, text=True).stdout.split()
+    return len(found) == 2
+
+
+@needs_pandoc(3, 1, 3)
+@unittest.skipUnless(_can_draw_latex(), "needs lualatex with standalone and tikz, and poppler's pdftocairo")
+class Pictures(unittest.TestCase):
+    """Raw LaTeX pictures become SVG files beside the output, drawn with the document's own preamble."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-flat-pic-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+        (self.directory / "doc.md").write_text("""---
+title: Pics
+header-includes: |
+  \\usepackage{xcolor}
+  \\newcommand{\\mydot}{\\textcolor{red}{$\\bullet$}}
+---
+
+Before.
+
+\\begin{tikzpicture}
+\\draw (0,0) circle (1cm);
+\\node at (0,0) {\\mydot};
+\\end{tikzpicture}
+
+then a broken one:
+
+\\begin{tikzpicture}
+\\draw \\undefinedmacro;
+\\end{tikzpicture}
+
+After.
+""", encoding="utf-8")
+
+    def test_a_tikz_picture_becomes_an_svg_and_a_broken_one_is_reported(self):
+        env = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+        result = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "gfm"], capture_output=True,
+                                text=True, encoding="utf-8", cwd=self.directory, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        flat = (self.directory / "doc.gfm.md").read_text(encoding="utf-8")
+        files = sorted(path.name for path in (self.directory / "doc.gfm_files").iterdir())
+        self.assertEqual(len(files), 1, files)
+        self.assertTrue(files[0].endswith(".svg"))
+        self.assertIn(f"![](doc.gfm_files/{files[0]})", flat)
+        self.assertIn("then a broken one:", flat)
+        self.assertIn("After.", flat)
+        self.assertRegex(result.stdout + result.stderr, r"WARN  raw: a LaTeX picture could not be drawn \(! Undefined control sequence")
 
 
 if __name__ == "__main__":

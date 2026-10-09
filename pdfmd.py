@@ -1214,7 +1214,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.4"
+PDFMD_VERSION = "3.26.5"
 import argparse
 import csv
 import filecmp
@@ -1991,7 +1991,7 @@ def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
-                    flat_pictures: Path | None = None) -> list[str]:
+                    flat_pictures: Path | None = None, preamble: list[Path] | None = None) -> list[str]:
     """The filters of pdfmd_lua for non-Markdown pieces: raw.lua when `raw` asks for it (any writer), pdf_images.lua
     when a document names a PDF image (it acts for HTML writers only: a browser cannot show a PDF). Both read the
     picture cache folder and the table from one metadata file written here."""
@@ -2010,7 +2010,10 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     folder = cache_root() / "raw"
     config: dict = {"pdfmd-raw-cache": str(folder / "pictures")}
     if flat_pictures is not None:       # flat Markdown: the pictures it needs sit beside the output, linked by a relative path
-        config = {"pdfmd-raw-cache": str(flat_pictures), "pdfmd-raw-rel": flat_pictures.name}
+        config = {"pdfmd-raw-cache": str(flat_pictures), "pdfmd-raw-rel": flat_pictures.name,
+                  "pdfmd-raw-work": str(folder / "pictures")}       # the SVGs go beside the output, the drawn PDFs stay in the cache
+    if preamble:            # a LaTeX picture is drawn with the document's own preamble
+        config["pdfmd-raw-preamble"] = [str(item) for item in preamble]
     if table is not None:
         config["pdfmd-raw"] = table
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
@@ -2024,6 +2027,9 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     if pdf_images:
         args += ["--lua-filter", str(pdf_filter)]
     return args
+
+
+RELATIVE_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((?!https?:|data:|/|<)[^)\s]+\)")
 
 
 # -- Flat Markdown: --to gfm (v3.26.3) ----------------------------------------------
@@ -13970,6 +13976,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", writer]
                 if flat_target and not any(option.startswith("--wrap") for option in pandoc_options):
                     cmd.append("--wrap=none")      # a paragraph is one line: a viewer wraps it, a diff shows what changed
+                if (flat_target and output.parent.resolve() != md_path.parent.resolve()
+                        and any(RELATIVE_IMAGE_RE.search(read_text_best_effort(item)) for item in [md_path, *parts_inputs])):
+                    note("FLAT", f"{md_path}: the images keep the paths the document wrote, relative to ITS folder; the "
+                                 f"output is in {display_path(output.parent)}, so those links point from there "
+                                 "(put the output beside the images, or copy them)")
                 if is_tex_target and standalone_auto:
                     note("STANDALONE", f"{md_path}: --to {target_format} needs a complete, "
                                        "independently compilable document; adding --standalone")
@@ -14042,7 +14053,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
-                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_target else None)
+                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_target else None,
+                                       preamble=list(preamble_files or []) if flat_target else None)
                 cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                 cmd += select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
@@ -14079,7 +14091,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                 else:
                     log_cmd(cmd, pandoc_cwd, verbose)
-                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
+                                            env=tex_search_env(md_path.parent, pandoc_cwd) if flat_target else None)
                 office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)

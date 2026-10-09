@@ -9,6 +9,7 @@
 --     its number, whatever the language), and no `{#tbl:x}` left behind;
 --   * `<div>`, `<span>`, `<figure>` and the bibliography's divisions: unwrapped; links to ids that no longer exist become
 --     plain text, links to a heading point at the slug GitHub gives that heading;
+--   * display math: the numbering environment is unwrapped (\begin{equation}, \label, \nonumber), align -> aligned;
 --   * subscripts and superscripts: Unicode (H2O -> H₂O) where every character has one, else `_(..)` / `^(..)`;
 --     `html` keeps <sub>/<sup>, `drop` writes the plain text, `ascii` always writes `_(..)` / `^(..)`;
 --   * definition lists (a bold term, then the definition), line blocks, small capitals, underline;
@@ -98,6 +99,30 @@ local function script(element, marker, table_, tag)
     return pandoc.RawInline("markdown", marker .. "(" .. text .. ")")
   end
   return content            -- emphasis or math inside a script: the plain content
+end
+
+-- math -------------------------------------------------------------------------------------------------------------------
+-- A viewer's math (GitHub, VS Code, Obsidian: MathJax or KaTeX) has no equation numbers or labels, and knows `aligned`,
+-- not `align`: the numbering environment is unwrapped, \label and \nonumber go, align/gather become aligned/gathered.
+local function display_math(element)
+  if element.mathtype ~= "DisplayMath" then return nil end
+  local text = element.text
+  local changed = false
+  local function replace(pattern, with)
+    local result, count = text:gsub(pattern, with)
+    if count > 0 then text, changed = result, true end
+  end
+  replace("\\label%s*{[^}]*}", "")
+  replace("\\nonumber", "")
+  replace("\\notag", "")
+  local inner = text:match("^%s*\\begin%s*{equation%*?}(.-)\\end%s*{equation%*?}%s*$")
+  if inner then text, changed = inner, true end
+  for from, to in pairs({align = "aligned", gather = "gathered"}) do
+    local body = text:match("^%s*\\begin%s*{" .. from .. "%*?}(.-)\\end%s*{" .. from .. "%*?}%s*$")
+    if body then text, changed = "\\begin{" .. to .. "}" .. body .. "\\end{" .. to .. "}", true end
+  end
+  if changed then return pandoc.Math("DisplayMath", (text:gsub("^%s+", ""):gsub("%s+$", ""))) end
+  return nil
 end
 
 -- headings, slugs, links ---------------------------------------------------------------------------------------------
@@ -360,6 +385,7 @@ local inline_pass = {
   Subscript = function(item) return script(item, "_", SUB, "sub") end,
   Superscript = function(item) return script(item, "^", SUPER, "sup") end,
   Link = link,
+  Math = display_math,
   Image = remove_title_attr,
   Code = remove_title_attr,
   RawInline = note_raw,

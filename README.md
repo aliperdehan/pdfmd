@@ -403,8 +403,9 @@ pdfmd report --to gfm+raw            # Pandoc's own gfm writer, with its HTML, a
 - subscripts and superscripts are Unicode where every character has one (`H₂O`, `x²`, `CO₃²⁻`) and `_(..)` / `^(..)`
   where not (`--gfm-scripts unicode`, the default; `html` keeps `<sub>`, `drop` writes the plain text, `ascii` always
   writes `_2`, `^(q+z)`); math stays `$..$` and `$$..$$` (`--gfm-math fenced` writes ```` ```math ````);
-- raw HTML and raw LaTeX are read into Markdown (`<b>x</b>` becomes `**x**`, `\textbf{x}` too); a raw Typst piece, a PDF
-  image and an `<img src="x.pdf">` become SVG files in `<name>_files/` beside the output, linked relatively;
+- raw HTML and raw LaTeX are read into Markdown (`<b>x</b>` becomes `**x**`, `\textbf{x}` too); a raw Typst piece, a LaTeX
+  picture (`tikzpicture`, `\chemfig`, drawn with your preamble), a PDF image and an `<img src="x.pdf">` become SVG files in
+  `<name>_files/` beside the output, linked relatively;
 - definition lists become a bold term and a paragraph; a table Markdown cannot hold (spans, several header rows, block
   cells) is written as an HTML table, the one piece of HTML that stays, and counted in a `NOTE`;
 - what no Markdown can carry (Word XML, a LaTeX macro nothing read) is left out, and a `WARN` counts it and shows the
@@ -415,7 +416,7 @@ pdfmd-options:
   gfm: {scripts: unicode, math: dollars, title: true}
 ```
 
-The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to change it). The result is meant to be
+`-o notes.md` alone still means Pandoc's Markdown; name the target (`--to gfm -o notes.md`) for the flat one. The paragraphs are single lines (`--wrap=none`; pass `--wrap=auto` to Pandoc to change it). Image links stay as the document wrote them, relative to the document's folder (a `NOTE` says so when the output is written elsewhere). The result is meant to be
 final: what the flattening removes (ids, cross-reference numbers become text, citations become text) is not recoverable
 from it.
 
@@ -1094,7 +1095,10 @@ vector picture, a PDF for LaTeX, Typst and Word, an SVG for HTML. A syntax a fam
 included, which is odd but a clear way to say "this output has no HTML in it". A family not mentioned is left to Pandoc
 as it always was, `raw: all` lists everything, and `--no-raw` turns it off for a run. Pictures are kept in pdfmd's cache by
 their content. (An HTML file that is not self-contained points at the cache; use `--self-contained` to carry them.)
-Not yet: LaTeX pieces Pandoc cannot read (tikz, chemfig) as pictures in HTML, HTML drawn as a picture, Word XML as
+A LaTeX picture Pandoc cannot read (a `tikzpicture`, `circuitikz`, `pgfpicture`, `forest`, `\chemfig`...) is drawn by a LaTeX
+engine with the `standalone` class, after the document's own preamble and `header-includes`, and placed as a vector picture
+in HTML, Typst and flat Markdown builds (an SVG for HTML and Markdown; a piece that does not compile is reported and left
+out). Not yet: HTML drawn as a picture, Word XML as
 anything but Word XML.
 
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an

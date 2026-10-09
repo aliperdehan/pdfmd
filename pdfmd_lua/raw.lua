@@ -8,6 +8,9 @@
 --   tex   -> read with Pandoc's LaTeX reader (what it does not know stays raw LaTeX and is lost outside LaTeX);
 --   typst -> drawn by `typst compile` as a cropped PDF picture and placed as an image (an SVG for HTML targets, which
 --            cannot show a PDF), so it stays vector;
+--   a LaTeX picture Pandoc's reader cannot read (tikzpicture, circuitikz, pgfpicture, forest, \chemfig ...) is drawn by
+--   a LaTeX engine with the `standalone` class, the document's preamble (`pdfmd-raw-preamble`) and its own package, and
+--   placed the same way, for the HTML, Typst and flat-Markdown families;
 --   a syntax that is not on the family's list is left out, the family's own included (a rare, but demonstrative, use).
 --
 -- Configuration arrives as metadata (written by pdfmd): `pdfmd-raw` = {tex = [...], typst = [...], html = [...],
@@ -39,7 +42,10 @@ local family_syntax = family and NATIVE_SYNTAX[family] or nil
 local included = nil      -- set of syntaxes this family takes; nil = the filter is off
 local office_reads_tex = false   -- pdfmd's LaTeX route (office.lua, which runs after this filter) is on: it takes the LaTeX
 local cache_dir = nil
+local work_dir = nil       -- where the drawn PDFs are kept when the SVGs go elsewhere (flat Markdown); else the cache
 local cache_rel = nil      -- flat Markdown: the folder's name beside the output, which the pictures' links use
+local preamble_files = {}  -- the document's LaTeX preamble files, which a LaTeX picture is drawn with
+local header_tex = {}      -- and its header-includes
 local warned = {}
 
 local function warn(key, message)
@@ -62,7 +68,27 @@ local function read_config(meta)
     included[pandoc.utils.stringify(list)] = true
   end
   if meta["pdfmd-raw-cache"] then cache_dir = pandoc.utils.stringify(meta["pdfmd-raw-cache"]) end
+  if meta["pdfmd-raw-work"] then work_dir = pandoc.utils.stringify(meta["pdfmd-raw-work"]) end
   if meta["pdfmd-raw-rel"] then cache_rel = pandoc.utils.stringify(meta["pdfmd-raw-rel"]) end
+  if meta["pdfmd-raw-preamble"] then
+    for _, item in ipairs(meta["pdfmd-raw-preamble"]) do preamble_files[#preamble_files + 1] = pandoc.utils.stringify(item) end
+  end
+  if meta["header-includes"] then
+    -- the LaTeX the writer would put in the header: markdown-looking lines (a `$..$`) come back as TeX
+    local function tex_of(value)
+      local kind = pandoc.utils.type(value)
+      if kind == "Inlines" then value = pandoc.Blocks{pandoc.Plain(value)}
+      elseif kind == "Block" then value = pandoc.Blocks{value} end
+      local ok, text = pcall(pandoc.write, pandoc.Pandoc(value), "latex")
+      return ok and text or ""
+    end
+    local value = meta["header-includes"]
+    if pandoc.utils.type(value) == "List" then
+      for _, item in ipairs(value) do header_tex[#header_tex + 1] = tex_of(item) end
+    else
+      header_tex[1] = tex_of(value)
+    end
+  end
   office_reads_tex = meta["pdfmd-office-latex"] ~= nil
 end
 
@@ -75,14 +101,35 @@ end
 local function ensure_cache()
   if not cache_dir then return false end
   pcall(pandoc.system.make_directory, cache_dir, true)
+  if work_dir then pcall(pandoc.system.make_directory, work_dir, true) end
   return true
+end
+
+local function pdf_folder() return work_dir or cache_dir end
+
+-- A drawn PDF -> the file the target takes: the PDF itself, or (HTML, flat Markdown) an SVG next to it.
+local function picture_file(pdf, key, what)
+  if family ~= "html" and family ~= "md" then return pdf end
+  local svg = cache_dir .. "/" .. key .. ".svg"
+  if not file_exists(svg) then
+    local done = false
+    for _, tool in ipairs({{"pdftocairo", {"-svg", pdf, svg}}, {"mutool", {"draw", "-o", svg, pdf, "1"}},
+                           {"pdf2svg", {pdf, svg}}, {"inkscape", {pdf, "--export-type=svg", "--export-filename=" .. svg}}}) do
+      if pcall(pandoc.pipe, tool[1], tool[2], "") and file_exists(svg) then done = true break end
+    end
+    if not done then
+      warn("svg", "a PDF picture cannot become an SVG for HTML (install poppler's pdftocairo, mutool, pdf2svg or inkscape); " .. what .. " pieces were left out")
+      return nil
+    end
+  end
+  return svg
 end
 
 -- Typst source -> a PDF picture (cropped to its content), cached by content; an SVG for an HTML target.
 local function typst_picture(text)
   if not ensure_cache() then warn("cache", "no cache folder, so Typst pieces cannot be drawn") return nil end
   local key = pandoc.sha1(text)
-  local pdf = cache_dir .. "/" .. key .. ".pdf"
+  local pdf = pdf_folder() .. "/" .. key .. ".pdf"
   if not file_exists(pdf) then
     local source = "#set page(width: auto, height: auto, margin: 2pt)\n" .. text .. "\n"
     local ok, data = pcall(pandoc.pipe, "typst", {"compile", "--format", "pdf", "-", "-"}, source)
@@ -95,20 +142,77 @@ local function typst_picture(text)
     handle:write(data)
     handle:close()
   end
-  if family ~= "html" and family ~= "md" then return pdf end
-  local svg = cache_dir .. "/" .. key .. ".svg"
-  if not file_exists(svg) then
-    local done = false
-    for _, tool in ipairs({{"pdftocairo", {"-svg", pdf, svg}}, {"mutool", {"draw", "-o", svg, pdf, "1"}},
-                           {"pdf2svg", {pdf, svg}}, {"inkscape", {pdf, "--export-type=svg", "--export-filename=" .. svg}}}) do
-      if pcall(pandoc.pipe, tool[1], tool[2], "") and file_exists(svg) then done = true break end
-    end
-    if not done then
-      warn("svg", "a PDF picture cannot become an SVG for HTML (install poppler's pdftocairo, mutool, pdf2svg or inkscape); Typst pieces were left out")
+  return picture_file(pdf, key, "Typst")
+end
+
+-- LaTeX pictures -----------------------------------------------------------------------------------------------------
+-- What Pandoc's LaTeX reader leaves as raw LaTeX and a LaTeX engine draws: the environments and commands of the drawing
+-- packages. Each is typeset alone with the `standalone` class (cropped to its content), after the document's own
+-- preamble, and its package is loaded if the preamble has not.
+local PICTURE_ENV = {tikzpicture = "tikz", circuitikz = "circuitikz", pgfpicture = "tikz", forest = "forest",
+                     pspicture = "pstricks", axis = "pgfplots", chemfig = "chemfig", ["tikzcd"] = "tikz-cd"}
+local PICTURE_COMMAND = {chemfig = "chemfig", schemestart = "chemfig", tikz = "tikz"}
+local TEX_ENGINES = {"lualatex", "xelatex", "pdflatex"}
+
+local function picture_package(text)
+  local environment = text:match("^%s*\\begin%s*{([%w%*]+)}")
+  if environment and PICTURE_ENV[environment] then return PICTURE_ENV[environment] end
+  local command = text:match("^%s*\\(%a+)")
+  if command and PICTURE_COMMAND[command] then return PICTURE_COMMAND[command] end
+  return nil
+end
+
+local function read_file(path)
+  local handle = io.open(path, "rb")
+  if not handle then return "" end
+  local data = handle:read("a")
+  handle:close()
+  return data
+end
+
+local function tex_picture(text, package)
+  if not ensure_cache() then warn("cache", "no cache folder, so LaTeX pictures cannot be drawn") return nil end
+  local parts = {}
+  for _, path in ipairs(preamble_files) do parts[#parts + 1] = read_file(path) end
+  for _, snippet in ipairs(header_tex) do parts[#parts + 1] = snippet end
+  local preamble = table.concat(parts, "\n")
+  local source = "\\documentclass[border=2pt]{standalone}\n" .. preamble
+    .. "\n\\makeatletter\\@ifpackageloaded{" .. package .. "}{}{\\usepackage{" .. package .. "}}\\makeatother\n"
+    .. "\\begin{document}\n" .. text .. "\n\\end{document}\n"
+  local key = pandoc.sha1(source)
+  local pdf = pdf_folder() .. "/" .. key .. ".pdf"
+  if not file_exists(pdf) then
+    -- typeset in a scratch folder: the cache (the folder beside a flat Markdown output) only gets the picture
+    local data, problem = nil, nil
+    pandoc.system.with_temporary_directory("pdfmd-tex", function(folder)
+      local handle = io.open(folder .. "/pic.tex", "wb")
+      if not handle then return end
+      handle:write(source)
+      handle:close()
+      for _, engine in ipairs(TEX_ENGINES) do
+        pcall(pandoc.system.with_working_directory, folder, function()
+          return pandoc.pipe(engine, {"-interaction=nonstopmode", "-halt-on-error", "pic.tex"}, "")
+        end)
+        if file_exists(folder .. "/pic.pdf") then data = read_file(folder .. "/pic.pdf") break end
+        problem = problem or read_file(folder .. "/pic.log"):match("\n(![^\n]*)")
+      end
+    end)
+    if not data or #data == 0 then
+      warn("tex" .. key, "a LaTeX picture could not be drawn" .. (problem and (" (" .. problem .. ")") or "")
+           .. "; is a LaTeX engine with the `standalone` class installed, and does the picture need a package or macro "
+           .. "the document's preamble defines? It was left out")
       return nil
     end
+    local out = io.open(pdf, "wb")
+    if not out then return nil end
+    out:write(data)
+    out:close()
   end
-  return svg
+  return picture_file(pdf, key, "LaTeX")
+end
+
+local function drawable_family()
+  return family == "html" or family == "md" or family == "typst"
 end
 
 local function link_to(path)
@@ -116,8 +220,8 @@ local function link_to(path)
   return path
 end
 
-local function picture(text)
-  local source = typst_picture(text)
+local function picture(text, tex_package)
+  local source = tex_package and tex_picture(text, tex_package) or (not tex_package and typst_picture(text)) or nil
   if not source then return nil end
   return pandoc.Image({}, link_to(source), "", pandoc.Attr("", {"pdfmd-raw"}))
 end
@@ -230,6 +334,11 @@ local function convert_inline(list, index)
     local doc = read(item.text, "html")
     return doc and inlines_of(doc) or {}, index + 1
   elseif syntax == "tex" then
+    local package = drawable_family() and picture_package(item.text) or nil
+    if package then
+      local image = picture(item.text, package)
+      return image and {image} or {}, index + 1
+    end
     local doc = read(item.text, "latex")
     return doc and inlines_of(doc) or {}, index + 1
   elseif syntax == "typst" then
@@ -272,6 +381,11 @@ local function convert_block(list, index)
     local doc = read(item.text, "html")
     return doc and doc.blocks or {}, index + 1
   elseif syntax == "tex" then
+    local package = drawable_family() and picture_package(item.text) or nil
+    if package then
+      local image = picture(item.text, package)
+      return image and {pandoc.Para{image}} or {}, index + 1
+    end
     local doc = read(item.text, "latex")
     return doc and doc.blocks or {}, index + 1
   elseif syntax == "typst" then

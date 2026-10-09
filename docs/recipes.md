@@ -378,6 +378,9 @@ pdfmd report --no-raw                       # off for this run
   equations native and draws what is left (tikz, chemfig, a house style's macros) in your preamble as vector pictures
   (needs a `preamble.tex` that loads the packages, a LaTeX engine and poppler's `pdftocairo`).
 - **Typst** is drawn by `typst compile` as a cropped vector picture (PDF; SVG for HTML).
+- A **LaTeX picture** Pandoc's reader cannot read (`tikzpicture`, `circuitikz`, `pgfpicture`, `forest`, `\chemfig`) is drawn with
+  the `standalone` class after your preamble and `header-includes`, for HTML, Typst and flat Markdown (`--to gfm`) builds;
+  one that does not compile is reported with LaTeX's first error and left out.
 - A syntax a family does not list is dropped, its own included; a family not mentioned is left to Pandoc. `raw: all`,
   a list, or a mapping with a `default:` key are accepted.
 

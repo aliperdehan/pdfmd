@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.5 — 2026-10-09
+
+Pre-edit state: commit `36cfdb2` (v3.26.4).
+
+### Added
+
+- A raw LaTeX picture that Pandoc's reader cannot read (`tikzpicture`, `circuitikz`, `pgfpicture`, `forest`, `pspicture`,
+  `axis`, `\chemfig`, `\schemestart`) is drawn by `pdfmd_lua/raw.lua` for the HTML, Typst and flat-Markdown families: it is
+  typeset alone (lualatex, else xelatex, pdflatex) with the `standalone` class, after the document's preamble files and
+  its `header-includes` (given back as the TeX the LaTeX writer would write, so `$..$` in a macro survives), with its own
+  package loaded if the preamble has not; the cropped PDF becomes an SVG for HTML and flat Markdown. A piece that does not
+  compile is left out with a `WARN` that quotes LaTeX's first error. The engine runs in a scratch folder and in the
+  document's TeX search path (`TEXINPUTS`), so house packages resolve.
+- For a flat build only the SVGs are written beside the output (`<output stem>_files/`); the drawn PDFs stay in pdfmd's
+  cache (`pdfmd-raw-work`).
+
+- Flat Markdown: a display equation loses its numbering wrapper (`\begin{equation}`, `\label`, `\nonumber`, which GitHub's
+  math does not read) and `align`/`gather` become `aligned`/`gathered`.
+- A flat build written outside the document's folder says (a `NOTE`) that its image links stay relative to the document.
+- A flat build passes the document's TeX search path to Pandoc, so a house package's files resolve in a LaTeX picture.
+
+### Changed
+
+- The README and recipes no longer list "tikz and chemfig as pictures in HTML" as not yet done.
+
 ## v3.26.4 — 2026-10-09
 
 Pre-edit state: commit `dc41c97` (v3.26.3).
