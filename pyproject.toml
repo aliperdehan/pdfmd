@@ -58,7 +58,7 @@ inkmd = "pdfmd:inkmd_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
-packages = ["pdfmd_inkmd", "pdfmd_lua", "pdfmd_office", "pdfmd_setup", "pdfmd_tables", "pdfmd_unicode"]
+packages = ["pdfmd_direct", "pdfmd_inkmd", "pdfmd_lua", "pdfmd_office", "pdfmd_setup", "pdfmd_tables", "pdfmd_unicode"]
 
 [tool.setuptools.package-data]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]

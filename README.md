@@ -885,9 +885,19 @@ pdfmd paper.tex          # compiled directly with a LaTeX engine: reruns until
                          # no .aux/.log clutter (--keep-aux keeps them)
 pdfmd minutes.docx       # Word/PowerPoint/Excel/ODF: converted by LibreOffice
 pdfmd analysis.qmd       # handed to Quarto, so code chunks actually run
-pdfmd page.html          # anything else Pandoc can read (give the extension)
-pdfmd note.typ           # a Typst source is read as Typst (`.typst` too), not as Markdown
+pdfmd page.html          # built by WeasyPrint, or a browser if the page runs scripts: no Pandoc
+pdfmd note.typ           # compiled by Typst itself: the page setup in the file is kept
+pdfmd notes.rst          # anything else Pandoc can read (give the extension)
 ```
+
+A finished `.typ` or `.html` file goes straight to its own engine, because Pandoc would read it into its own model
+and write it out again, and the page size, the styles and the scripts would not survive the trip. For a page that is
+WeasyPrint first (it is quiet and needs no browser); a page with `<script>` goes to Chrome, Chromium, Edge or Brave
+(headless, printing the page), as does one WeasyPrint cannot draw, and wkhtmltopdf, Prince, pagedjs-cli and LibreOffice
+come after. `-e edge` (or `weasyprint`, `chromium`...) picks one. As with an Office file, such a document gets none of
+pdfmd's defaults, since it is finished; `--apply-defaults` (also in `pdfmd --setup`) gives it the title, author, date,
+language, font, font size, paper and margin of its `metadata.yaml`, ahead of its own settings so those win. A `.tex`
+file that no LaTeX engine can compile is tried through Pandoc, with a warning.
 
 The reader comes from the file's extension, as in Pandoc, and a bare name is looked up as `<name>.md`, so give the
 extension for anything else. The automatic decisions about Markdown (`READER`, `TITLE`, `citeproc`, `crossref` below)
@@ -915,6 +925,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a pipe table with plain `---` separators and long lines | picks the column widths that give the fewest lines within the text width (a column never narrower than its longest word), and gives a table that fits its natural width back; unequal dashes (`--|-----`) are kept, and `table-widths: keep` in `pdfmd-options` leaves every table as written |
+| `typstdirect`, `htmldirect` | a `.typ` or `.html` file | built by Typst / WeasyPrint or a browser, not through Pandoc (`--no-auto typstdirect` for the old route) |
 | `codewrap` | code blocks in a LaTeX build | long lines wrap at the margin (`--no-code-wrap` or `--no-auto codewrap` for the old behaviour) |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |

@@ -78,6 +78,19 @@ Input formats:
     helper (front matter, citations, Lua filters, font/margin defaults)
     assumes text input, which a binary office document never is.
 
+    A `.typ` (Typst) and an `.html` file are the fourth and fifth (v3.25.6; the package pdfmd_direct): they go
+    straight to their engine, with no Pandoc between them -- `typst compile` for the first, and for the second
+    WeasyPrint, or a browser (Chrome, Chromium, Edge, Brave: headless, printing the page) when the page runs scripts
+    or WeasyPrint fails, then wkhtmltopdf, Prince, pagedjs-cli and LibreOffice. Pandoc would read them into its own
+    model and write them out again, losing the page size, the styles and the scripts on the way. Like an office
+    file, such a document gets none of pdfmd's defaults (metadata.yaml, fonts, margins, the stamp): it is finished.
+    `--apply-defaults` (or `pdfmd-options: {apply-defaults: true}` in the config, or --setup) gives it the title,
+    author, date, language, main font, font size, paper and margin of its metadata files -- ahead of its own
+    settings, so those win -- without Pandoc. `-e` naming an engine of another kind (`-e lualatex`), `--from`,
+    a target other than PDF, `--no-auto typstdirect|htmldirect`, or the engine not being installed keeps the old
+    route through Pandoc (with a WARN for the last). A `.tex` file that no LaTeX engine can compile is tried through
+    Pandoc after the engines fail, with a WARN.
+
 No Pandoc, or no PDF engine (v3.20.0):
     pdfmd still turns a Markdown file into a plain PDF, with a pure-Python
     renderer: inkmd, vendored in pdfmd_inkmd/ (stdlib only, offline,
@@ -882,7 +895,8 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     the old way), officedirect (the direct office-document-to-PDF path,
     also under "Input formats" -- disabling it on a .docx/.odt is an
     error in this version, not a route back through Pandoc; see that
-    section for why), crossref (the auto-detected `--filter pandoc-
+    section for why), typstdirect and htmldirect (the same for a .typ and an
+    .html file: off, they go through Pandoc), crossref (the auto-detected `--filter pandoc-
     crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
     `{#fig:...}`-style attribute -- see crossref_filter_args()),
     citationengine (a document's own `pdfmd-options.citation-engine`
@@ -1104,7 +1118,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.5"
+PDFMD_VERSION = "3.25.6"
 import argparse
 import csv
 import filecmp
@@ -1338,7 +1352,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap",
+    "codewrap", "typstdirect", "htmldirect",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -3514,6 +3528,14 @@ def doctor_report() -> bool:
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()
     line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
+    try:
+        import pdfmd_direct as direct
+        browsers = [name for name in direct.BROWSER_NAMES if direct.find_browser(name, which)]
+        line(None, "HTML files go straight to: " + (", ".join(["weasyprint" if which("weasyprint") else "", *browsers])
+                                                     .strip(", ") or "no engine (pip install weasyprint)")
+                   + "; .typ files to: " + ("typst" if engine_executable("typst") else "no Typst (pdfmd --install typst)"))
+    except ImportError:
+        pass
     for module in ("yaml", "pypdf"):
         found = importlib.util.find_spec(module) is not None
         line(found, f"python package {module}", "pip install pyyaml pypdf",
@@ -12246,8 +12268,13 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         # opts back into the old Pandoc-mediated route for a document
         # that specifically needs pdfmd's own injection applied to it.
         ok, reason = compile_tex_direct(md_path, output, engines, keep_aux, verbose, debug)
-        flush_summary()
-        return md_path, ok, reason[-3000:]
+        if ok or not which("pandoc"):
+            flush_summary()
+            return md_path, ok, reason[-3000:]
+        # No LaTeX engine got it through (or none is installed): Pandoc can still read the file and any engine can
+        # draw what it reads -- less faithful than the source, so said out loud, and the LaTeX message stays above.
+        print(f"WARN  {display_path(md_path)}: direct compilation failed ({reason.strip().splitlines()[-1][:160] if reason.strip() else 'no reason given'}); "
+              "trying it through Pandoc, which rewrites the LaTeX and may change its look", file=sys.stderr)
 
     if md_path.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
         # A .docx/.pptx/.xlsx/.odt/etc. source converts straight to PDF
@@ -14822,6 +14849,112 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
             shutil.rmtree(base, ignore_errors=True)
 
 
+DIRECT_SUFFIXES = {".typ": "typst", ".typst": "typst", ".html": "html", ".htm": "html", ".xhtml": "html"}
+DIRECT_READERS = {"typst": ("typst",), "html": ("html", "html5")}
+
+
+def direct_route(path: Path, target_format: str, from_format: str | None, no_auto: list[str] | None,
+                 engine_request: str | None, announce: bool = True) -> str | None:
+    """`typst` or `html` when this input is finished enough to go straight to its engine (a `.typ` to Typst, an
+    `.html` to WeasyPrint or a browser), else None: the Pandoc route, which is also what is left when the tool for
+    the direct one is not installed. `--no-auto typstdirect|htmldirect`, an explicit `--from`, a target other than
+    PDF, or an `-e` naming an engine of another kind all keep the Pandoc route."""
+    kind = DIRECT_SUFFIXES.get(path.suffix.lower())
+    if kind is None or target_format != "pdf" or auto_disabled(no_auto, kind + "direct"):
+        return None
+    if from_format is not None and from_format.casefold().split("+")[0] not in DIRECT_READERS[kind]:
+        return None
+    try:
+        import pdfmd_direct as direct
+    except ImportError:
+        return None
+    if kind == "typst":
+        if not direct.typst_accepts_request(engine_request):
+            return None
+        if not engine_executable("typst"):
+            if announce:
+                print(f"WARN  {display_path(path)}: Typst is not installed, so this goes through Pandoc's Typst "
+                      "reader, which loses what Pandoc's model cannot hold (`pdfmd --install typst`)", file=sys.stderr)
+            return None
+        return kind
+    if not direct.html_accepts_request(engine_request):
+        return None
+    text = read_text_best_effort(path)
+    if not direct.html_attempts(text, engine_request, which, resolve_soffice):
+        if announce:
+            print(f"WARN  {display_path(path)}: no HTML engine or browser found for a direct build "
+                  "(WeasyPrint, Chrome, Edge...); going through Pandoc", file=sys.stderr)
+        return None
+    return kind
+
+
+def direct_defaults(source: Path, metadata_request: list[str] | None) -> dict:
+    """The settings `--apply-defaults` gives a direct document: those of the metadata files found for it."""
+    import pdfmd_direct.defaults as defaults
+    found = find_metadata(source.parent.resolve(), metadata_request, document_stem=source.stem)
+    files = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
+    return defaults.collect([metadata_file_yaml(item) for item in files])
+
+
+def convert_direct(kind: str, source: Path, output: Path, engine_request: str | None,
+                   verbose: bool, debug: bool, apply_defaults: bool = False,
+                   metadata_request: list[str] | None = None) -> tuple[Path, bool, str]:
+    """Build a `.typ` or `.html` file with its own engine; none of Pandoc's discovery (metadata, preambles, filters,
+    fonts, margins, the stamp) applies, since none of it goes through Pandoc."""
+    import pdfmd_direct as direct
+    import pdfmd_direct.defaults as defaults
+    given = direct_defaults(source, metadata_request) if apply_defaults else {}
+    text = read_text_best_effort(source)
+    prelude = defaults.typst_prelude(given, text) if kind == "typst" and given else ""
+    changed = defaults.apply_to_html(given, text) if kind == "html" and given else text
+    copy: Path | None = None
+    if (prelude or changed != text) and given:
+        # beside the original, so what it refers to by a relative path is found; removed afterwards
+        copy = source.with_name(f".{source.stem}.pdfmd-defaults{source.suffix}")
+        copy.write_text(prelude + text if kind == "typst" else changed, encoding="utf-8")
+        if verbose:
+            print(f"AUTO APPLYDEFAULTS  {display_path(source)}: " + ", ".join(sorted(given)))
+    try:
+        return _convert_direct(kind, source, copy or source, output, engine_request, verbose, debug, direct,
+                               prelude.count("\n"), text)
+    finally:
+        if copy is not None:
+            copy.unlink(missing_ok=True)
+
+
+def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_request: str | None,
+                    verbose: bool, debug: bool, direct, offset: int, text: str) -> tuple[Path, bool, str]:
+    if kind == "typst":
+        fonts = fonts_directory() if managed_index() is not None and managed_index().faces else None
+        ok, reason = direct.compile_typst(engine_executable("typst"), built, output,
+                                          str(fonts) if fonts else None, lambda command, cwd: log_cmd(command, cwd, verbose))
+        if built != source:             # the message names the copy and counts the added lines: say it as the file is
+            reason = re.sub(re.escape(built.name) + r":(\d+)", lambda found: f"{source.name}:{max(1, int(found.group(1)) - offset)}", reason)
+            reason = reason.replace(built.name, source.name)
+            reason = re.sub(r"(?m)^(\s*)(\d+)( │)", lambda found: f"{found.group(1)}{max(1, int(found.group(2)) - offset)}{found.group(3)}", reason)
+        if ok and verbose:
+            print(f"AUTO TYPSTDIRECT  {display_path(source)}: compiled with Typst directly (no Pandoc)")
+        elif not ok:
+            print(f"WARN  {display_path(source)}: typst failed", file=sys.stderr)
+        return source, ok, reason
+    order = direct.html_attempts(text, engine_request, which, resolve_soffice)
+    if order and order[0][0] == "weasyprint" and direct.has_scripts(text):
+        browser = any(name in dict(order) for name in direct.BROWSER_NAMES)
+        print(f"WARN  {display_path(source)}: the page has scripts and WeasyPrint does not run them, so what they draw "
+              "is missing" + (" (a browser would: -e chrome, edge or chromium)" if browser
+                              else "; no browser was found (Chrome, Chromium, Edge, Brave)"), file=sys.stderr)
+
+    def failed(name: str, reason: str, remaining: list[str]) -> None:
+        fake = subprocess.CompletedProcess(args=[name], returncode=1, stdout="", stderr=reason)
+        report_engine_failure(display_path(source), name, fake, remaining, debug)
+
+    ok, reason, used = direct.render_html(built, output, order, soffice_convert=lambda src, out: run_soffice_convert(src, out, verbose),
+                                          on_failure=failed, log=lambda command, cwd: log_cmd(command, cwd, verbose))
+    if ok and verbose:
+        print(f"AUTO HTMLDIRECT  {display_path(source)}: {used} (no Pandoc)")
+    return source, ok, reason
+
+
 def convert_qmd(source: Path, output: Path, target_format: str,
                 variables: list[str], pandoc_options: list[str]) -> tuple[Path, bool, str]:
     """Render a Quarto document (.qmd) via the Quarto CLI, not Pandoc directly.
@@ -15108,6 +15241,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "`pdfmd-options: {line-numbers: true}` or --setup make it the default")
     parser.add_argument("--no-code-wrap", action="store_true",
                         help="let long code lines run on (LaTeX builds wrap them by default); per block: {wrap=false}")
+    parser.add_argument("--apply-defaults", action=argparse.BooleanOptionalAction, default=None,
+                        help="for a .typ or .html file built directly (which gets none of pdfmd's defaults): give it "
+                             "the title, author, date, language, font, font size, paper and margin of its metadata "
+                             "files, ahead of its own settings, so those win. `pdfmd-options: {apply-defaults: true}` "
+                             "in the config, or --setup, makes it the default; --no-apply-defaults turns it off")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
@@ -15181,7 +15319,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "it routes .tex input back through Pandoc the pre-v3.1.0 way), "
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
-                             "back through Pandoc), crossref (the auto-detected --filter pandoc-crossref "
+                             "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
+                             "or a browser directly; off, it goes through Pandoc), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
                              "docstring; disabling this KIND always means plain --citeproc), csvtable "
@@ -16234,7 +16373,10 @@ def main() -> None:
         elif section_plan is not None:
             output_stem = section_plan.output_stem
         target_format = default_target(source, scaffold_metadata_files(source, args.metadata_file))
-        need_engines(target_format)
+        direct_kind = (direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
+                       if scaffold_plan is None and section_plan is None and not args.presentation else None)
+        if direct_kind is None:
+            need_engines(target_format)
         output_extension = FORMAT_EXTENSION.get(target_format, f".{target_format}")
         out_dir = None
         output_file = None
@@ -16258,6 +16400,13 @@ def main() -> None:
             if results[0][1]:
                 # Front matter only: Quarto has its own metadata system, so no
                 # metadata.yaml is looked up for a .qmd (see convert_qmd).
+                backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
+        elif direct_kind is not None:
+            results = [convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
+                                      apply_defaults=(config_options().get("apply-defaults", False) if args.apply_defaults is None
+                                                      else args.apply_defaults) not in (False, "false", "False", 0, ""),
+                                      metadata_request=args.metadata_file)]
+            if results[0][1]:
                 backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
         elif source.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
             # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no

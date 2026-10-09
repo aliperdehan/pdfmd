@@ -41,6 +41,40 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.6 — 2026-10-09
+
+Pre-edit state: commit `500ed2a` (v3.25.5).
+
+### Added
+
+- **A `.typ` file is compiled by Typst itself, and an `.html` file is printed by its own engine; Pandoc is not
+  involved** (new package `pdfmd_direct`). Pandoc read these into its own model and wrote them out again, losing the
+  page setup, the styles and the scripts: the same PDF now keeps the document's own page size (an A5 `@page`, a
+  `#set page(width: 12cm)`), where the Pandoc route gave US Letter. For a page, WeasyPrint is tried first; a page with
+  a `<script>` that is not data goes to a browser first (Chrome, Chromium, Edge, Brave, found on PATH or where the
+  installer puts them; `PDFMD_BROWSER` names one), then wkhtmltopdf, Prince, pagedjs-cli and LibreOffice; a failing
+  engine falls through to the next one with the usual `WARN`. `-e weasyprint|chrome|chromium|edge|brave|browser|html`
+  picks; `-e` naming another kind of engine, `--from`, a target other than PDF, `--no-auto typstdirect|htmldirect`
+  (listed in `--setup`), or the engine not being installed keeps the Pandoc route, with a `WARN` for the missing tool.
+  No Pandoc is needed. Some browser builds write the PDF and then keep running; pdfmd waits for the file to be complete
+  and stops the browser. `--doctor` lists what HTML and `.typ` files go to.
+- **`--apply-defaults` / `--no-apply-defaults`** (and `options: {apply-defaults: true}` in the config, or `--setup`):
+  a direct document gets none of the defaults a Markdown one does; this gives it the title, author, date, language, main
+  font, font size, paper size and margin of its metadata files (those found beside it, the global one, or `-y`), without
+  Pandoc. They are written ahead of the document's own settings so those win (`#set document/text/page` lines for Typst;
+  a `<title>`, `<meta name=author>`, `lang` and a `<style>` at the start of `<head>` for HTML), in a copy beside the
+  original that is removed afterwards; a Typst error names the original file and its own line numbers.
+- **A `.tex` file that no LaTeX engine can compile is tried through Pandoc** (the old route), with a `WARN` that says
+  the LaTeX is rewritten on the way and may look different. With no Pandoc the failure is returned as before.
+
+### Tests
+
+- Engine order and requests, a failing engine falling through, a browser that stays running (fake executables on a
+  scratch PATH, so they run anywhere), the route decisions, Typst and WeasyPrint end to end (page size kept, no Pandoc on
+  PATH, a Typst error leaves no PDF), the defaults for both formats and the config switch, and the `.tex` fallback.
+
+---
+
 ## v3.25.5 — 2026-10-09
 
 Pre-edit state: commit `a84a912` (v3.25.4).
