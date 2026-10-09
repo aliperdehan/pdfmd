@@ -877,6 +877,18 @@ def f(x):
 `--line-numbers 5` numbers every fifth line, `{.noNumberLines}` leaves one block out, and `step=5` and `numbersep=8pt`
 adjust a single block.
 
+### Images: SVG and remote ones
+
+LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG the document names, once, with
+whatever is installed (`rsvg-convert`, Inkscape, `cairosvg`, `svglib`, or LibreOffice, which most machines have), keeps
+the PDF by the file's content, and uses it where the document wrote the SVG: a Markdown image, a raw
+`\includegraphics{figure.svg}`, a raw `\includesvg{figure}`. A raw `\includegraphics` also gets `graphicx` loaded,
+which Pandoc only does for a Markdown image (a PNG in one used to stop the build with "undefined control sequence").
+A Markdown image from the web is fetched once and kept for a week, so the build does not need the network again, an SVG
+badge works, and a Pandoc built without HTTP support (Homebrew's is) no longer drops it; with no network there is one
+warning and the image's description stays. `--no-auto svg` and `--no-auto remoteimages` turn the two off, and
+`pdfmd --doctor` says which converter will be used.
+
 ### Not just Markdown
 
 ```sh
@@ -925,6 +937,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a pipe table with plain `---` separators and long lines | picks the column widths that give the fewest lines within the text width (a column never narrower than its longest word), and gives a table that fits its natural width back; unequal dashes (`--|-----`) are kept, and `table-widths: keep` in `pdfmd-options` leaves every table as written |
+| `svg`, `remoteimages` | an SVG, or an image from the web, in a LaTeX build | the SVG is converted to a PDF (once), the remote image is fetched and kept (`--no-auto svg`, `--no-auto remoteimages`) |
 | `typstdirect`, `htmldirect` | a `.typ` or `.html` file | built by Typst / WeasyPrint or a browser, not through Pandoc (`--no-auto typstdirect` for the old route) |
 | `codewrap` | code blocks in a LaTeX build | long lines wrap at the margin (`--no-code-wrap` or `--no-auto codewrap` for the old behaviour) |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |

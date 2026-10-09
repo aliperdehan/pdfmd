@@ -91,6 +91,19 @@ Input formats:
     route through Pandoc (with a WARN for the last). A `.tex` file that no LaTeX engine can compile is tried through
     Pandoc after the engines fail, with a WARN.
 
+Images LaTeX cannot read (v3.25.7; the package pdfmd_images):
+    LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown
+    image, a raw `\\includegraphics{a.svg}` or `\\includesvg{a}` -- once, with the first converter found (rsvg-convert,
+    Inkscape, cairosvg, svglib, LibreOffice), keeps the PDF in ~/.cache/pdfmd/images by the file's content, and the
+    Lua filter pdfmd_lua/images.lua puts it where the document wrote the SVG. A Markdown SVG is left to Pandoc when
+    rsvg-convert is installed (Pandoc converts it itself). A raw `\\includegraphics` also gets graphicx, which Pandoc
+    only loads for a Markdown image (a PNG in one failed with "undefined control sequence"). Without any converter
+    there is one WARN naming the file and what to install. A remote image (http/https) in a Markdown image is fetched
+    once into ~/.cache/pdfmd/images/remote (PNG, JPEG, SVG, PDF; seven days; an older copy is kept if the fetch
+    fails), which is what makes it work with a Pandoc built without HTTP support (Homebrew's is) and for an SVG badge;
+    with no network there is one WARN and Pandoc leaves the description. `--no-auto svg` and `--no-auto remoteimages`
+    turn the two off.
+
 No Pandoc, or no PDF engine (v3.20.0):
     pdfmd still turns a Markdown file into a plain PDF, with a pure-Python
     renderer: inkmd, vendored in pdfmd_inkmd/ (stdlib only, offline,
@@ -896,7 +909,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     also under "Input formats" -- disabling it on a .docx/.odt is an
     error in this version, not a route back through Pandoc; see that
     section for why), typstdirect and htmldirect (the same for a .typ and an
-    .html file: off, they go through Pandoc), crossref (the auto-detected `--filter pandoc-
+    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), crossref (the auto-detected `--filter pandoc-
     crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
     `{#fig:...}`-style attribute -- see crossref_filter_args()),
     citationengine (a document's own `pdfmd-options.citation-engine`
@@ -1118,7 +1131,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.6"
+PDFMD_VERSION = "3.25.7"
 import argparse
 import csv
 import filecmp
@@ -1352,7 +1365,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -1724,6 +1737,86 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         args += ["-M", f"pdfmd-{key}={str(value).lower() if isinstance(value, bool) else value}"]
     if str(settings.get("code-wrap", True)).lower() != "false" and header.is_file():
         args += ["--include-in-header", str(header), "-M", "pdfmd-code-header=1"]
+    return args
+
+
+SVG_WARNED: set[str] = set()
+
+
+def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str]:
+    """What a LaTeX build needs for images LaTeX cannot read (pdfmd_images; pdfmd_lua/images.lua): each SVG the
+    documents name is converted once to a PDF (kept by content in the cache) and the filter puts the PDF where the
+    document wrote the SVG, in a raw `\\includegraphics{a.svg}` or `\\includesvg{a}` and in a Markdown image when Pandoc
+    has no rsvg-convert to do it itself. A raw `\\includegraphics` also gets graphicx, which Pandoc only loads for a
+    Markdown image. Nothing for `--no-auto svg`, a document without such images, or a lone pdfmd.py."""
+    if auto_disabled(no_auto, "svg"):
+        return []
+    try:
+        import pdfmd_images
+        import pdfmd_lua
+        shipped, graphicx = pdfmd_lua.path("images"), pdfmd_lua.FILTERS / "graphicx.tex"
+    except ImportError:
+        return []
+    if shipped is None:
+        return []
+    pandoc_converts = bool(which("rsvg-convert"))
+    fetch_remote = not auto_disabled(no_auto, "remoteimages")
+    offline = False
+    mapping: dict[str, str] = {}
+    raw_graphics = False
+
+    def to_pdf(file: Path, source: Path, written: str) -> str | None:
+        pdf, why = pdfmd_images.convert_svg(file, cache_root() / "images", which, resolve_soffice)
+        if pdf is None and str(file) not in SVG_WARNED:
+            SVG_WARNED.add(str(file))
+            print(f"WARN  {display_path(source)}: {written} is an SVG and LaTeX cannot read it; {why}", file=sys.stderr)
+        return str(pdf) if pdf is not None else None
+
+    for source in sources:
+        for reference in pdfmd_images.find_references(read_text_best_effort(source)):
+            raw_graphics = raw_graphics or reference.kind != "markdown"
+            if reference.path in mapping:
+                continue
+            if reference.remote:
+                if not (fetch_remote and reference.kind == "markdown" and reference.path.lower().startswith(("http://", "https://"))) \
+                        or offline:
+                    continue
+                local, why, down = pdfmd_images.fetch_remote(reference.path, cache_root() / "images" / "remote")
+                if local is None:
+                    if down:
+                        offline = True
+                        print(f"WARN  {display_path(source)}: no network, so remote images ({reference.path} and the "
+                              "others) cannot be fetched; Pandoc will leave their descriptions instead", file=sys.stderr)
+                    elif reference.path not in SVG_WARNED:
+                        SVG_WARNED.add(reference.path)
+                        print(f"WARN  {display_path(source)}: {reference.path} could not be fetched ({why})", file=sys.stderr)
+                    continue
+                if local.suffix == ".svg":
+                    converted = to_pdf(local, source, reference.path)
+                    if converted:
+                        mapping[reference.path] = converted
+                else:
+                    mapping[reference.path] = str(local)
+                continue
+            if not reference.is_svg or (reference.kind == "markdown" and pandoc_converts):
+                continue
+            written = reference.path if reference.path.lower().endswith(".svg") else reference.path + ".svg"
+            file = source.parent / urllib.parse.unquote(written)
+            if not file.is_file():
+                continue
+            converted = to_pdf(file, source, reference.path)
+            if converted:
+                mapping[reference.path] = converted
+    args: list[str] = []
+    if mapping:
+        digest = hashlib.sha1(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+        map_file = cache_root() / "images" / "maps" / f"{digest}.yaml"
+        if not map_file.is_file():
+            map_file.parent.mkdir(parents=True, exist_ok=True)
+            map_file.write_text("pdfmd-image-map: " + json.dumps(mapping, ensure_ascii=False) + "\n", encoding="utf-8")
+        args += ["--lua-filter", str(shipped), "--metadata-file", str(map_file)]
+    if raw_graphics and graphicx.is_file():
+        args += ["--include-in-header", str(graphicx)]
     return args
 
 
@@ -3534,6 +3627,13 @@ def doctor_report() -> bool:
         line(None, "HTML files go straight to: " + (", ".join(["weasyprint" if which("weasyprint") else "", *browsers])
                                                      .strip(", ") or "no engine (pip install weasyprint)")
                    + "; .typ files to: " + ("typst" if engine_executable("typst") else "no Typst (pdfmd --install typst)"))
+    except ImportError:
+        pass
+    try:
+        import pdfmd_images
+        converters = pdfmd_images.available_converters(which, resolve_soffice)
+        line(None, "SVG images in LaTeX builds are converted with: " + (converters[0] if converters else
+             "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
     for module in ("yaml", "pypdf"):
@@ -12118,7 +12218,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
-            cmd += code_filter_args(no_auto, [md_path, title_source])
+            cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -12545,7 +12645,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target and tablewidth_auto:
                     cmd += width_filter_args(width_filter)
                 if is_tex_target:
-                    cmd += code_filter_args(no_auto, [md_path, *parts_inputs])
+                    cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -12746,7 +12846,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += width_filter_args(width_filter)
                     if engine in LATEX_ENGINES:
-                        cmd += code_filter_args(no_auto, [md_path, *parts_inputs])
+                        cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
@@ -15320,7 +15420,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), crossref (the auto-detected --filter pandoc-crossref "
+                             "or a browser directly; off, it goes through Pandoc), svg / remoteimages (SVG "
+                             "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
                              "docstring; disabling this KIND always means plain --citeproc), csvtable "
@@ -16092,7 +16193,7 @@ def main() -> None:
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += width_filter_args(width_filter)
                     if is_tex_target:
-                        cmd += code_filter_args(report_no_auto, list(files))
+                        cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -16207,7 +16308,7 @@ def main() -> None:
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += width_filter_args(width_filter)
                         if engine in LATEX_ENGINES:
-                            cmd += code_filter_args(report_no_auto, list(files))
+                            cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

@@ -41,6 +41,42 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.7 — 2026-10-09
+
+Pre-edit state: commit `8044f2c` (v3.25.6).
+
+### Added
+
+- **SVG images in LaTeX builds** (new package `pdfmd_images`, filter `pdfmd_lua/images.lua`). LaTeX cannot read SVG; a
+  raw `\includegraphics{a.svg}` failed outright, and a Markdown SVG needed `rsvg-convert` (in a sandbox without it:
+  "Package svg Error"). Each SVG a document names is now converted once, with the first converter found (rsvg-convert,
+  Inkscape, cairosvg, svglib, LibreOffice: Draw sizes the page to the drawing), kept in `~/.cache/pdfmd/images` by the
+  file's content, and put where the document wrote the SVG (Markdown image, raw `\includegraphics`, raw `\includesvg`).
+  A Markdown SVG is left to Pandoc when rsvg-convert is there. Without any converter there is one `WARN` naming the file
+  and what to install; `--doctor` shows the converter. `--no-auto svg` turns it off.
+- **Remote images are fetched once and kept** (seven days; an older copy is kept if a refetch fails; PNG, JPEG, SVG,
+  PDF; 20 MB; 10 s). Pandoc from Homebrew is "compiled without HTTP support" and dropped every badge of the README
+  (replacing it with its description); they now arrive, an SVG badge is converted, and the second build needs no
+  network. With no network there is one `WARN` (not one per image) and Pandoc leaves the descriptions.
+  `--no-auto remoteimages` turns it off. For LaTeX builds only, like the SVG conversion.
+
+### Fixed
+
+- **A raw `\includegraphics` in a document with no Markdown image** stopped the build ("Undefined control sequence"),
+  whatever the file: Pandoc loads graphicx only when it sees an image. pdfmd now adds `\usepackage{graphicx}` then.
+
+### Not done
+
+- `<img>` tags in Markdown (the README's screenshots) are raw HTML and are still dropped from a LaTeX build.
+
+### Tests
+
+- The scan (code, comments, front matter skipped; titles and `<...>` paths), conversion kept by content, the next
+  converter tried, no converter, the Lua map on Markdown and raw LaTeX, a local server for fetch/cache/expiry/errors/dead
+  network, an SVG badge through to the map file, and raw SVG end to end.
+
+---
+
 ## v3.25.6 — 2026-10-09
 
 Pre-edit state: commit `500ed2a` (v3.25.5).
