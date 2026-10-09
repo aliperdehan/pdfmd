@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.22 — 2026-10-09
+
+Pre-edit state: commit `7cd78d5` (v3.24.21).
+
+### Fixed
+
+- **A `.typst` file was read as Markdown.** Pandoc knows `.typ` but not `.typst`, and an extension it does not know
+  means Markdown, so the PDF held the Typst source as text. `.typ` and `.typst` now always give `-f typst` (with an
+  `AUTO READER` line for `.typst`, and a Pandoc without the Typst reader fails by name instead of printing the source).
+- **The Markdown-only helpers ran on any file.** The scan for `@key` citations (which added `--citeproc`, so a Typst
+  `@label` became a citation and printed as `[label]`), the one for pandoc-crossref's syntax and the promotion of a
+  leading `# Title` now look at Markdown (`.md`, `.markdown`, `.mdown`, `.mkd`, `.txt`) only.
+- **`--to md` failed** ("Unknown output format 'md'"). `--to` takes the names of the files as `default-output:` does:
+  `md`, `tex`, `typ`, `txt`, `htm`.
+
+---
+
 ## v3.24.21 — 2026-10-09
 
 Pre-edit state: commit `73818f4` (v3.24.20).

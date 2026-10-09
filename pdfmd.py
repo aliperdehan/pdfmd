@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.21"
+PDFMD_VERSION = "3.24.22"
 import argparse
 import csv
 import filecmp
@@ -6936,6 +6936,8 @@ def missing_glyph_warning(output: str) -> bool:
 
 def contains_citations(md_path: Path) -> bool:
     """Detect bracketed, bare, and suppress-citation Pandoc syntax."""
+    if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
+        return False
     text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
@@ -6962,6 +6964,8 @@ def contains_crossref(md_path: Path) -> bool:
     named "fig:setup"), but nothing ever added `--filter pandoc-crossref`,
     so the reference/numbering itself never actually resolved.
     """
+    if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
+        return False
     text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
     return bool(CROSSREF_RE.search(text))
 
@@ -7029,6 +7033,13 @@ def has_definition_list(text: str) -> bool:
     return bool(re.search(r"(?m)^:[ \t]", EMBED_BLOCK_RE.sub("", text)))
 
 
+# The readers Pandoc would not pick (or would pick wrongly) from the file's extension alone.
+SUFFIX_READERS = {".typ": "typst", ".typst": "typst"}
+PANDOC_KNOWN_SUFFIXES = frozenset({".typ"})
+# What pdfmd reads as Markdown: the helpers that look for Markdown syntax (citations, a bare `# Title`) run on these only
+MARKDOWN_LIKE_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd", ".txt", "")
+
+
 def resolve_from_format(md_path: Path, cli_from: str | None,
                         metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
 
@@ -7091,7 +7102,14 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     """
     if cli_from:
         return cli_from, None
-    if md_path.suffix.lower() not in (".md", ".markdown"):
+    suffix = md_path.suffix.lower()
+    if suffix in SUFFIX_READERS:
+        # said outright: an extension Pandoc does not know is read as Markdown, and an old Pandoc that has no
+        # reader for the format then fails by name instead of printing the source as text
+        reader = SUFFIX_READERS[suffix]
+        return reader, (None if suffix in PANDOC_KNOWN_SUFFIXES
+                        else f"{md_path}: Pandoc does not know the {suffix} extension; reading as {reader}")
+    if suffix not in (".md", ".markdown"):
         return None, None
     text = md_path.read_text(encoding="utf-8-sig")
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
@@ -7200,7 +7218,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         finally:
             temporary_path.unlink(missing_ok=True)
         return
-    if disabled:
+    if disabled or md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         yield md_path, False
         return
     text = md_path.read_text(encoding="utf-8-sig")
@@ -15306,6 +15324,10 @@ def main() -> None:
     use_managed_tools()
     if args.debug:
         args.verbose = True
+    if args.to:
+        # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
+        args.to = args.to.strip().casefold().lstrip(".")
+        args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI
     global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages
