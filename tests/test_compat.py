@@ -32,6 +32,7 @@ class Versions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, directory, True)
         environment = {k: v for k, v in os.environ.items() if k != "PDFMD_NO_PROMPT"}
         environment["XDG_CONFIG_HOME"] = str(directory)
+        environment["APPDATA"] = str(directory)           # where Windows keeps it
         with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(pdfmd, "pandoc_version", return_value=(3, 0, 1)):
             first, second = io.StringIO(), io.StringIO()
             with redirect_stderr(first):
@@ -47,6 +48,7 @@ class Versions(unittest.TestCase):
         for version in ((3, 1, 3), (3, 12), (0,)):
             environment = {k: v for k, v in os.environ.items() if k != "PDFMD_NO_PROMPT"}
             environment["XDG_CONFIG_HOME"] = str(directory)
+            environment["APPDATA"] = str(directory)           # where Windows keeps it
             with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(pdfmd, "pandoc_version", return_value=version):
                 shown = io.StringIO()
                 with redirect_stderr(shown):

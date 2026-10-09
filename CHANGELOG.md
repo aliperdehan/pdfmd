@@ -41,6 +41,15 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.20 — 2026-10-09
+
+Pre-edit state: commit `4c468e6` (v3.25.19).
+
+### Tests
+
+- The old-Pandoc notice tests point the config folder at a temporary one on Windows too (`APPDATA`, which is where
+  `config_root()` looks there); on a Windows runner the "said once" notice could already exist and the test failed.
+
 ## v3.25.19 — 2026-10-09
 
 Pre-edit state: commit `840ef6f` (v3.25.18).
