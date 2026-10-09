@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.18 — 2026-10-09
+
+Pre-edit state: commit `137aea7` (v3.25.17).
+
+### Changed
+
+- **`docs/recipes.md` is a manual now**, not eight short answers: fifteen chapters (the basics, a project with a house style,
+  long documents, tables, code and images and raw pieces, other inputs, other outputs, the PDF that carries its source,
+  history and backups, fonts and scripts, finishing a PDF, speed, the editor / VS Code / completion / setup, what to do
+  when something looks wrong) with the commands of every feature and a task-to-option table at the end.
+- The raw option (`pdfmd-options.raw`) hands LaTeX to pdfmd's LaTeX route for the families that take it: a Typst or HTML
+  build whose family lists `tex` now turns that route on (`\ce`, units and equations native, tikz and chemfig drawn as vector
+  pictures in the document's own preamble), instead of reading the LaTeX with Pandoc's plain reader; where the route is
+  off or missing the plain reader is still the fallback.
+
 ## v3.25.17 — 2026-10-09
 
 Pre-edit state: commit `86d71a7` (v3.25.16).

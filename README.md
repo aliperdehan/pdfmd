@@ -1337,7 +1337,7 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 
 ## Reference
 
-- [`docs/recipes.md`](https://github.com/aliperdehan/pdfmd/blob/main/docs/recipes.md) has short "how do I..." answers: a paper in several scripts, a scanned PDF to Markdown, a folder with a house style, a book from many files.
+- [`docs/recipes.md`](https://github.com/aliperdehan/pdfmd/blob/main/docs/recipes.md) is the task-by-task manual: fifteen chapters of "how do I..." with the commands (the basics, a house style, long documents, tables, code and images, raw HTML/LaTeX/Typst, other inputs and outputs, the PDF that carries its source, history, fonts and scripts, speed, the editor and VS Code, and what to do when something looks wrong), plus an option reference by task.
 - `pdfmd --help` lists every flag.
 - The docstring at the top of [`pdfmd.py`](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd.py) is the full reference
   for each behaviour and its edge cases.
