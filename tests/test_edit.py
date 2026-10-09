@@ -84,6 +84,34 @@ class Editing(unittest.TestCase):
         self.assertEqual(self.path.read_text(encoding="utf-8"), "hello")
 
 
+class VsCode(unittest.TestCase):
+    def test_init_vscode_writes_tasks_once_and_never_overwrites(self):
+        import json
+        import re
+        with tempfile.TemporaryDirectory() as folder:
+            env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+            first = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--init-vscode"], cwd=folder,
+                                   capture_output=True, text=True, env=env)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            target = Path(folder) / ".vscode" / "tasks.json"
+            data = json.loads(re.sub(r"^\s*//.*\n", "", target.read_text(encoding="utf-8"), flags=re.M))
+            self.assertIn("pdfmd: build", [task["label"] for task in data["tasks"]])
+            target.write_text("mine", encoding="utf-8")
+            second = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--init-vscode"], cwd=folder,
+                                    capture_output=True, text=True, env=env)
+            self.assertEqual(second.returncode, 1)
+            self.assertEqual(target.read_text(encoding="utf-8"), "mine")
+
+    def test_the_extension_declares_every_command_it_registers(self):
+        import json
+        manifest = json.loads((ROOT / "vscode" / "package.json").read_text(encoding="utf-8"))
+        declared = {command["command"] for command in manifest["contributes"]["commands"]}
+        source = (ROOT / "vscode" / "extension.js").read_text(encoding="utf-8")
+        import re
+        registered = set(re.findall(r'add\("(pdfmd\.[A-Za-z]+)"', source))
+        self.assertEqual(declared, registered)
+
+
 class CommandLine(unittest.TestCase):
     @unittest.skipIf(pdfmd_edit.available(), "prompt_toolkit is installed")
     def test_without_prompt_toolkit_it_says_how_to_get_it(self):

@@ -129,6 +129,22 @@ class RoundTrip(unittest.TestCase):
         again = self.extract(text, only={3})
         self.assertEqual(sorted(again.files), ["tables/table3.csv"])   # the position in the document names it
 
+    def test_a_gfm_document_is_checked_as_the_gfm_it_is_built_as(self):
+        # no front matter: built as gfm, plus fenced_divs once a .csv block is there -- the check must read it so too
+        text = "# Note\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
+        result = tables.extract(text, self.directory, pandoc=PANDOC, reader="gfm")
+        for name, data in result.files.items():
+            (self.directory / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.directory / name).write_text(data, encoding="utf-8")
+        self.assertEqual(result.changed, 1)
+        self.assertEqual(tables.same_tables(PANDOC, text, result.text, self.directory, FILTER, "gfm"), [])
+
+    def test_a_gfm_table_with_a_colon_line_under_it_is_left_alone_and_says_why(self):
+        text = "# Note\n\n| a | b |\n|---|---|\n| 1 | 2 |\n: Not a caption in gfm\n"
+        result = tables.extract(text, self.directory, pandoc=PANDOC, reader="gfm")
+        self.assertEqual(result.changed, 0)
+        self.assertTrue(any("paragraph in gfm" in line for line in result.report), result.report)
+
     def test_a_wide_table_with_equal_dashes_is_extracted_without_widths(self):
         # Pandoc gives its columns equal shares once a line is too long, and the table-width filter reads equal
         # shares as "not chosen"; a widths= attribute would make them chosen, so none is written and the check agrees

@@ -184,6 +184,13 @@ def extract(text: str, base_dir: Path, *, pandoc: str | None, names: list[str] |
     if reader.casefold().startswith(("gfm", "commonmark")):
         plain_text = sum(1 for table in tables if table.kind != "pipe")
         tables = [table for table in tables if table.kind == "pipe"]
+        document_lines = text.split("\n")
+        for table in tables:                    # no table_captions in these readers: a `: text` line is a paragraph
+            below = next((line for line in document_lines[table.end:table.end + 2] if line.strip()), "")
+            if table.caption is not None or below.startswith(": "):       # ... which a CSV block would take as its caption
+                table.problem = (f"the `: ` line under it is a paragraph in {reader.split('+')[0]} but a caption to a CSV "
+                                 "block (add YAML front matter, or --from markdown, to make it one)")
+            table.caption, table.span = None, (table.start, table.end)
     result = Extracted(text)
     if plain_text:
         result.report.append(f"NOTE  {plain_text} grid/simple table{'' if plain_text == 1 else 's'} left as they are: "

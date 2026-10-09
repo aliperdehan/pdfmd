@@ -347,6 +347,15 @@ Ctrl-G go to a line, Ctrl-K / Ctrl-U cut and paste a line, Ctrl-Z / Ctrl-Y undo 
 when there are unsaved changes); F1 lists them. Options given beside it (`pdfmd --edit lecture -e lualatex`) are used
 for the build, and a name that does not exist yet starts a new file. It is deliberately rough: a base for what comes later.
 
+### In VS Code
+
+`pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, extract tables; Terminal > Run
+Build Task). The [`vscode/`](https://github.com/aliperdehan/pdfmd/tree/main/vscode) folder of the repository is a small
+extension over the same command line: build (`Cmd/Ctrl+Alt+B`), build and open, build as Word/HTML/Typst/slides, extract
+tables (all, or chosen ones), file history, compare and restore, restore the source a PDF carries (right-click it). Every
+command it runs is written to the *pdfmd* output panel. Install it with `npx @vscode/vsce package` and
+`code --install-extension pdfmd-vscode-*.vsix`.
+
 ### One section
 
 `pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"

@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.16 — 2026-10-09
+
+Pre-edit state: commit `0516860` (v3.25.15).
+
+### Added
+
+- **VS Code.** `pdfmd --init-vscode` writes a `.vscode/tasks.json` (build, build and open, watch, extract tables; never
+  overwrites one). The new `vscode/` folder is an extension over the command line, no build step and no dependencies:
+  build / build and open / build as docx, odt, html, typst, tex, epub or slides, rebuild on change (terminal), extract
+  tables (all, chosen numbers, or a preview), expand, `<!-- pdfmd: ignore -->` above the cursor, history / compare /
+  restore, restore the source of a PDF (Explorer context menu), doctor; settings `pdfmd.command`, `pdfmd.extraArguments`,
+  `pdfmd.buildOnSave`, `pdfmd.openAfterBuild`. `npm test` runs it against a stand-in for the VS Code API and the real pdfmd;
+  `vsce package` produces the .vsix. It is not in the PyPI package.
+
+### Fixed
+
+- `--extract-tables` on a document with no front matter (read as gfm): the check read the new document as plain gfm, in
+  which a `.csv` block is not a table, so it always refused; it reads it as `gfm+fenced_divs`, which is what the build
+  uses. A table with a `: text` line under it is left alone there (gfm reads the line as a paragraph; a CSV block
+  would take it as its caption), with the reason.
+
 ## v3.25.15 — 2026-10-09
 
 Pre-edit state: commit `4d9339c` (v3.25.14).

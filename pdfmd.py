@@ -1196,7 +1196,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.15"
+PDFMD_VERSION = "3.25.16"
 import argparse
 import csv
 import filecmp
@@ -8316,6 +8316,62 @@ def history_documents(args) -> list[Path]:
 def linked_metadata(document: Path, requested) -> list[Path]:
     found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
     return [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
+
+
+VSCODE_TASKS = """{
+  // Written by `pdfmd --init-vscode`. Run with Terminal > Run Build Task (Cmd/Ctrl+Shift+B).
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pdfmd: build",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["${file}"],
+      "group": {"kind": "build", "isDefault": true},
+      "presentation": {"reveal": "silent", "panel": "shared"},
+      "problemMatcher": []
+    },
+    {
+      "label": "pdfmd: build and open",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["${file}", "--open"],
+      "group": "build",
+      "presentation": {"reveal": "silent", "panel": "shared"},
+      "problemMatcher": []
+    },
+    {
+      "label": "pdfmd: watch",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["-w", "${file}"],
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "pdfmd: extract tables",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["--extract-tables", "${file}"],
+      "problemMatcher": []
+    }
+  ]
+}
+"""
+
+
+def init_vscode_command(args) -> int:
+    """`pdfmd --init-vscode`: a .vscode/tasks.json with pdfmd tasks, in the current folder; never overwrites one."""
+    target = Path.cwd() / ".vscode" / "tasks.json"
+    if target.exists():
+        print(f"NOTE  {display_path(target)} exists; nothing was written. The tasks to add:\n{VSCODE_TASKS}")
+        return 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(VSCODE_TASKS, encoding="utf-8")
+    print(f"WROTE  {display_path(target)}: tasks pdfmd: build, build and open, watch, extract tables "
+          "(Terminal > Run Build Task). For commands, history and more, install the extension from the repository's vscode/ folder.")
+    return 0
 
 
 def edit_command(args) -> int:
@@ -16523,6 +16579,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="edit FILE (default: the Markdown file of this folder) in a small full-screen editor "
                              "with the build one key away (Ctrl-B; F1 lists the keys). Alpha. Needs "
                              "prompt_toolkit: pdfmd --install tui. Other options given beside it are used for the build")
+    parser.add_argument("--init-vscode", action="store_true",
+                        help="write .vscode/tasks.json here with pdfmd tasks (build, build and open, watch, extract "
+                             "tables) for VS Code; never overwrites one")
     parser.add_argument("--extract-tables", action="store_true",
                         help="rewrite FILE so that each of its tables (pipe, simple, multiline or grid) is a `.csv` block "
                              "reading tables/<name>.csv (--tables-inline: the data inside the document instead), the "
@@ -16992,6 +17051,8 @@ def main() -> None:
         raise SystemExit(0 if ok else 1)
     if args.edit:
         raise SystemExit(edit_command(args))
+    if args.init_vscode:
+        raise SystemExit(init_vscode_command(args))
     if args.show_config or args.init_config:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.setup is not None:

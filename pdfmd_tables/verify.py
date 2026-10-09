@@ -52,7 +52,9 @@ def same_tables(pandoc: str, before: str, after: str, directory: Path, csv_filte
                 reader: str = "markdown") -> list[str]:
     """What differs between the tables of `before` and of `after` (read with the CSV filter): [] when nothing."""
     old = pandoc_tables(pandoc, before, directory, *([csv_filter] if csv_filter else []), reader=reader)
-    new = pandoc_tables(pandoc, after, directory, *([csv_filter] if csv_filter else []), reader=reader)
+    # a document read as gfm is built as gfm+fenced_divs once it has a `.csv` block, so that is how it is read back
+    after_reader = reader + "+fenced_divs" if reader.casefold().startswith("gfm") and "fenced_divs" not in reader else reader
+    new = pandoc_tables(pandoc, after, directory, *([csv_filter] if csv_filter else []), reader=after_reader)
     if len(old) != len(new):
         return [f"{len(old)} tables before, {len(new)} after"]
     problems = []

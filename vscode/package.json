@@ -1,0 +1,69 @@
+{
+  "name": "pdfmd-vscode",
+  "displayName": "pdfmd",
+  "description": "Build, convert, extract tables and browse the history of Markdown documents with pdfmd (pdfmd-cli).",
+  "version": "0.1.0",
+  "publisher": "aliperdehan",
+  "license": "MIT",
+  "repository": {"type": "git", "url": "https://github.com/aliperdehan/pdfmd"},
+  "engines": {"vscode": "^1.80.0"},
+  "categories": ["Other"],
+  "keywords": ["markdown", "pdf", "pandoc", "pdfmd"],
+  "activationEvents": ["onLanguage:markdown", "onCommand:pdfmd.build"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {"command": "pdfmd.build", "title": "Build", "category": "pdfmd", "icon": "$(play)"},
+      {"command": "pdfmd.buildOpen", "title": "Build and open the result", "category": "pdfmd", "icon": "$(go-to-file)"},
+      {"command": "pdfmd.buildAs", "title": "Build as Word, OpenDocument, HTML, Typst...", "category": "pdfmd"},
+      {"command": "pdfmd.watch", "title": "Rebuild on every change (terminal)", "category": "pdfmd"},
+      {"command": "pdfmd.extractTables", "title": "Extract tables to CSV files", "category": "pdfmd"},
+      {"command": "pdfmd.expandTables", "title": "Expand CSV blocks back to tables", "category": "pdfmd"},
+      {"command": "pdfmd.ignoreHere", "title": "Insert <!-- pdfmd: ignore --> above this line", "category": "pdfmd"},
+      {"command": "pdfmd.history", "title": "Show the history of this file", "category": "pdfmd"},
+      {"command": "pdfmd.historyDiff", "title": "Compare this file with a version", "category": "pdfmd"},
+      {"command": "pdfmd.historyRestore", "title": "Restore a version of this file", "category": "pdfmd"},
+      {"command": "pdfmd.restoreSource", "title": "Restore the source a PDF carries", "category": "pdfmd"},
+      {"command": "pdfmd.doctor", "title": "Check what pdfmd can use (doctor)", "category": "pdfmd"}
+    ],
+    "menus": {
+      "editor/title": [
+        {"command": "pdfmd.build", "when": "resourceLangId == markdown", "group": "navigation"},
+        {"command": "pdfmd.buildOpen", "when": "resourceLangId == markdown", "group": "navigation"}
+      ],
+      "explorer/context": [
+        {"command": "pdfmd.restoreSource", "when": "resourceExtname == .pdf", "group": "pdfmd"},
+        {"command": "pdfmd.build", "when": "resourceExtname == .md", "group": "pdfmd"}
+      ],
+      "commandPalette": [
+        {"command": "pdfmd.restoreSource", "when": "true"}
+      ]
+    },
+    "keybindings": [
+      {"command": "pdfmd.build", "key": "ctrl+alt+b", "mac": "cmd+alt+b", "when": "editorLangId == markdown"},
+      {"command": "pdfmd.buildOpen", "key": "ctrl+alt+o", "mac": "cmd+alt+o", "when": "editorLangId == markdown"}
+    ],
+    "configuration": {
+      "title": "pdfmd",
+      "properties": {
+        "pdfmd.command": {
+          "type": "string", "default": "pdfmd",
+          "description": "The command that runs pdfmd. A path with spaces goes in double quotes; `python3 /path/to/pdfmd.py` works too."
+        },
+        "pdfmd.extraArguments": {
+          "type": "array", "items": {"type": "string"}, "default": [],
+          "description": "Options added to every build, for example [\"-e\", \"lualatex\", \"--attach-source\"]."
+        },
+        "pdfmd.buildOnSave": {
+          "type": "boolean", "default": false,
+          "description": "Build a Markdown file whenever it is saved."
+        },
+        "pdfmd.openAfterBuild": {
+          "type": "boolean", "default": false,
+          "description": "Open the built file after every build (otherwise the notification offers it)."
+        }
+      }
+    }
+  },
+  "scripts": {"test": "node test/smoke.js", "package": "npx --yes @vscode/vsce package"}
+}

@@ -15,7 +15,7 @@ import sys
 # topic -> (what it covers, option strings; a short form or any alias of an option names it)
 TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "output": ("where the result goes, in what format, with which engine", (
-        "-o", "-d", "-e", "-t", "--from", "--edit", "-f", "-y", "-V", "--open", "-w", "--keep-aux", "--self-contained",
+        "-o", "-d", "-e", "-t", "--from", "--edit", "--init-vscode", "-f", "-y", "-V", "--open", "-w", "--keep-aux", "--self-contained",
         "--no-self-contained", "--paper", "--pdf-title", "--pdf-subject", "--pdf-author", "--pdf-keywords",
         "--bookmarks", "--header", "--footer", "--attach-links", "--no-citeproc", "--extract", "--text-to-markdown")),
     "modes": ("several files, one report, slides, a long document in parts", (
