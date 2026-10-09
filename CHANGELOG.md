@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.3 — 2026-10-09
+
+Pre-edit state: commit `8a68435` (v3.25.2).
+
+### Added
+
+- **Long code lines wrap in LaTeX builds.** Pandoc's `Highlighting` and `verbatim` environments cannot break a line, so
+  a long command or path ran past the margin (the README's own `CMD` line did). The new filter `pdfmd_lua/code.lua`
+  loads fvextra with `breaklines` (breaking anywhere when a line has no space to break at), and turns a block with no
+  language into a fancyvrb `Verbatim`. A TeX without fvextra still builds, unwrapped. `--no-code-wrap`, `pdfmd-options:
+  {code-wrap: false}`, `--no-auto codewrap`, and `{wrap=false}` on a block switch it off; Typst, WeasyPrint and HTML
+  already wrapped.
+- **Optional line numbers**, off by default: `--line-numbers [STEP]`, `pdfmd-options: {line-numbers: true,
+  line-number-step: 5}` and the `--setup` entries number every code block; per block `{.numberLines startFrom=10
+  step=5 numbersep=8pt}` and `{.noNumberLines}`.
+
+---
+
 ## v3.25.2 — 2026-10-09
 
 Pre-edit state: commit `64044d7` (v3.25.1).

@@ -40,7 +40,7 @@ AUTO_HELP = {
     "csvtable": "tables from CSV files", "papersize": "fix `pagesize:` to `papersize:`", "parts": "report/book parts",
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
-    "officelatex": "make LaTeX native (or a picture) in Word files", "officeprofile": "a house style's Word profile",
+    "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
 }
 
 
@@ -115,6 +115,11 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
                (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
                 ("keep", "exactly the widths the separator's dashes say")), "auto",
                "Unequal dashes are always kept; this is about equal ones.", "Output"),
+        choice("options.code-wrap", "Long code lines (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",
+               "Needs fvextra (in every full TeX Live). Per block: {wrap=false}.", "Output"),
+        choice("options.line-numbers", "Number code lines (LaTeX)", on_off, "",
+               "Off unless set. Per block: {.numberLines startFrom=10} or {.noNumberLines}.", "Output"),
+        text("options.line-number-step", "Number every n-th code line", "1 is every line.", "Output", "config", "number"),
         choice("options.office.latex", "LaTeX in Word and ODT files",
                (("auto", "native where possible, pictures for the rest"), ("images", "pictures, formulas and units too"),
                 ("off", "Pandoc's own behaviour")), "auto", "How `\\ce`, `\\si`, tikz and house macros reach a .docx/.odt.",

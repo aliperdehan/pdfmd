@@ -658,6 +658,15 @@ CSV/TSV table inclusion:
     the real thing -- a raw-text approach keyed on some other character
     would not have that guarantee.
 
+Code blocks (v3.25.3; pdfmd_lua/code.lua, LaTeX engines):
+    Long code lines wrap at the margin (fvextra's breaklines, breaking anywhere when there is no space; a block with
+    no language, which Pandoc makes `verbatim`, becomes a fancyvrb `Verbatim` so it wraps too) instead of running
+    past it; a TeX without fvextra still builds, without the wrapping. `--no-code-wrap`, `pdfmd-options: {code-wrap:
+    false}` or `--no-auto codewrap` turn it off, `{wrap=false}` does for one block. Lines can be numbered: Pandoc's
+    own `{.numberLines startFrom=10}` for a block, `--line-numbers [STEP]` / `pdfmd-options: {line-numbers: true,
+    line-number-step: 5}` / --setup for all of them (`{.noNumberLines}` exempts one), `step=5` and `numbersep=8pt` for
+    one block. Typst, WeasyPrint and HTML wrap code by themselves.
+
 Tables to CSV and back (v3.25.2; the package pdfmd_tables):
     `pdfmd --extract-tables doc.md` rewrites the document so that each table -- pipe, simple, multiline or grid;
     not the ones inside code -- is a `.csv` block reading `tables/<name>.csv` (`--tables-dir`; `--tables-inline`
@@ -1092,7 +1101,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.2"
+PDFMD_VERSION = "3.25.3"
 import argparse
 import csv
 import filecmp
@@ -1326,6 +1335,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
+    "codewrap",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -1661,6 +1671,33 @@ def width_filter_args(width_filter: Path) -> list[str]:
     value = config_options().get("table-widths")
     if isinstance(value, str) and value.strip().casefold() in ("auto", "keep"):
         args += ["-M", f"pdfmd-table-widths={value.strip().casefold()}"]
+    return args
+
+
+CODE_CLI: dict = {}                       # --line-numbers and friends, filled in by main()
+
+
+def code_filter_args(no_auto: list[str] | None) -> list[str]:
+    """``--lua-filter`` for pdfmd_lua/code.lua (long code lines wrap, optional line numbers) in a LaTeX build, with
+    the settings of the command line and the global config handed to it as metadata (a document's own
+    `pdfmd-options` reach it through the document). Nothing for `--no-auto codewrap` or a lone pdfmd.py."""
+    if auto_disabled(no_auto, "codewrap"):
+        return []
+    try:
+        import pdfmd_lua
+        shipped = pdfmd_lua.path("code")
+    except ImportError:
+        shipped = None
+    if shipped is None:
+        return []
+    configured = config_options()
+    args = ["--lua-filter", str(shipped)]
+    for key in ("code-wrap", "line-numbers", "line-number-step"):
+        value = CODE_CLI.get(key)
+        if value is None:
+            value = configured.get(key)
+        if value is not None:
+            args += ["-M", f"pdfmd-{key}={str(value).lower() if isinstance(value, bool) else value}"]
     return args
 
 
@@ -12036,6 +12073,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
+            cmd += code_filter_args(no_auto)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -12456,6 +12494,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
                     cmd += width_filter_args(width_filter)
+                if is_tex_target:
+                    cmd += code_filter_args(no_auto)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -12655,6 +12695,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += width_filter_args(width_filter)
+                    if engine in LATEX_ENGINES:
+                        cmd += code_filter_args(no_auto)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
@@ -15037,6 +15079,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --extract-tables: write each table's data inside its `.csv` block, no files")
     parser.add_argument("--dry-run", action="store_true",
                         help="with --extract-tables or --expand-tables: show what would change and write nothing")
+    parser.add_argument("--line-numbers", nargs="?", const="1", metavar="STEP",
+                        help="number the lines of every code block (LaTeX builds); STEP numbers every STEP-th line. "
+                             "Per block: {.numberLines startFrom=10 step=5}, {.noNumberLines}. Off unless asked; "
+                             "`pdfmd-options: {line-numbers: true}` or --setup make it the default")
+    parser.add_argument("--no-code-wrap", action="store_true",
+                        help="let long code lines run on (LaTeX builds wrap them by default); per block: {wrap=false}")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
@@ -15347,6 +15395,13 @@ def main() -> None:
                              ("emoji_fallback", "emoji_fallback", args.emoji_fallback)):
         if getattr(args, flag) not in (None, False):
             INKMD_CLI[key] = value
+    CODE_CLI.clear()
+    if args.line_numbers:
+        CODE_CLI["line-numbers"] = True
+        if args.line_numbers.isdigit() and int(args.line_numbers) > 1:
+            CODE_CLI["line-number-step"] = int(args.line_numbers)
+    if args.no_code_wrap:
+        CODE_CLI["code-wrap"] = False
     POLISH_CLI.clear()
     configured = config_options()          # the config file's defaults (pdfmd --setup); the command line wins
     POLISH_CLI.update(header=args.header or configured.get("header") or None,
@@ -15874,6 +15929,8 @@ def main() -> None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += width_filter_args(width_filter)
+                    if is_tex_target:
+                        cmd += code_filter_args(report_no_auto)
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -15987,6 +16044,8 @@ def main() -> None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += width_filter_args(width_filter)
+                        if engine in LATEX_ENGINES:
+                            cmd += code_filter_args(report_no_auto)
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

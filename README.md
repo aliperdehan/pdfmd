@@ -857,6 +857,23 @@ as CSV (a list inside a cell, a cell spanning rows) is left as it is, with the r
 inside the document (in a fenced block) instead of in files, `--tables-dir DIR` picks the folder, and `--dry-run` shows
 the change without making it. `--expand-tables` is the reverse, every row included.
 
+### Code: wrapping and line numbers
+
+With a LaTeX engine a long line of code wraps at the margin instead of running off the page (a long path or option list
+breaks where the line is full), and `{wrap=false}` on one block, `--no-code-wrap` or `code-wrap: false` in
+`pdfmd-options` lets it run on. Line numbers are off until you ask for them:
+
+````markdown
+``` {.python .numberLines startFrom=10}
+def f(x):
+    return x * 2
+```
+````
+
+`--line-numbers` (or `pdfmd-options: {line-numbers: true}`, or the setting in `pdfmd --setup`) numbers every code block,
+`--line-numbers 5` numbers every fifth line, `{.noNumberLines}` leaves one block out, and `step=5` and `numbersep=8pt`
+adjust a single block.
+
 ### Not just Markdown
 
 ```sh
@@ -895,6 +912,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a pipe table with plain `---` separators and long lines | picks the column widths that give the fewest lines within the text width (a column never narrower than its longest word), and gives a table that fits its natural width back; unequal dashes (`--|-----`) are kept, and `table-widths: keep` in `pdfmd-options` leaves every table as written |
+| `codewrap` | code blocks in a LaTeX build | long lines wrap at the margin (`--no-code-wrap` or `--no-auto codewrap` for the old behaviour) |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
