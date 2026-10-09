@@ -1057,7 +1057,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.24.20"
+PDFMD_VERSION = "3.24.21"
 import argparse
 import csv
 import filecmp
@@ -3359,7 +3359,9 @@ def title_block(metadata: dict, body_lines: list[str]) -> str:
 
 
 def ignored_front_matter_keys(metadata: dict) -> list[str]:
-    return sorted(str(key) for key in metadata if str(key) not in NATIVE_META_KEYS)
+    # pdfmd's own marks on a joined or cut document are not the author's keys
+    own = {"pdfmd-assembled", "pdfmd-partial"}
+    return sorted(str(key) for key in metadata if str(key) not in NATIVE_META_KEYS and str(key) not in own)
 
 
 def native_paper(metadata: dict) -> str:
@@ -11847,7 +11849,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                metadata_files: list[Path], variables: list[str],
                                pandoc_options: list[str], lua_filters: list[Path],
                                csv_filter: Path, no_auto: list[str] | None,
-                               verbose: bool, labels: str = "off") -> tuple[bool, str]:
+                               verbose: bool, labels: str = "off", title_source: Path | None = None,
+                               part_files: list[Path] | tuple = (), partial: bool = False) -> tuple[bool, str]:
     """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
     LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
     for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
@@ -11855,44 +11858,53 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
     (geometry/mainfont/monofont/preamble/table-width filter) -- none of
     it means anything for an ODT target. Citeproc and a document's own
     auto-discovered Lua filters still apply, same as every other engine.
+
+    The input is what every other engine gets: `title_source` (the document with its title promoted, or cut
+    down to the sections asked for), `part_files` (the parts of a split document, joined after it) and
+    `partial` (a build of some parts only), so parts mode and `doc#section` work here as everywhere else.
     """
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
     try:
         odt = scratch / f"{md_path.stem}.docx"
-        cmd = ["pandoc", str(md_path), "-o", str(odt), "-t", "docx"]
-        if effective_from:
-            cmd += ["-f", effective_from]
-        for metadata in metadata_files:
-            cmd += ["--metadata-file", str(metadata)]
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
-        cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-        for variable in variables:
-            cmd += ["-V", variable]
-        cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
-        cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
-        if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
-            cmd.append("--citeproc")
-        # pandoc_options after --citeproc: any --lua-filter/--filter a caller
-        # passes through needs resolved citations already in the AST, same
-        # invariant as the auto-discovered lua_filters below (see run()'s
-        # matching comment in convert_one).
+
         def note(kind: str, detail: str) -> None:
             if verbose:
                 print(f"AUTO {kind}  {detail}")
-        # the LaTeX the document uses is made native or drawn (no PDF build for its numbers here: LaTeX is what failed)
-        with office_reference(md_path, metadata_files, variables, "docx", odt, pandoc_options, no_auto, note,
-                              labels=labels, force_filter=True) as office_arguments:
-            cmd += office_arguments
-            cmd += pandoc_options
-            for lua_filter in lua_filters:
-                cmd += ["--lua-filter", str(lua_filter)]
-            cmd += office_arguments.filter_arguments
-            if office_arguments.filter_arguments:
-                result = run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
-            else:
-                log_cmd(cmd, pandoc_cwd, verbose)
-                result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
-            office_finish(office_arguments, md_path, verbose)
+        with prepared_latex_inputs([title_source or md_path, *metadata_files], False, drop_embedded_preamble=True) as prepared:
+            source, *prepared_metadata = prepared
+            cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
+            if effective_from:
+                cmd += ["-f", effective_from]
+            for metadata in prepared_metadata:
+                cmd += ["--metadata-file", str(metadata)]
+            if partial:
+                cmd += PARTIAL_METADATA
+            cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
+            for variable in variables:
+                cmd += ["-V", variable]
+            cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+            if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
+                cmd.append("--citeproc")
+            # pandoc_options after --citeproc: any --lua-filter/--filter a caller
+            # passes through needs resolved citations already in the AST, same
+            # invariant as the auto-discovered lua_filters below (see run()'s
+            # matching comment in convert_one).
+            # the LaTeX the document uses is made native or drawn (no PDF build for its numbers here: LaTeX is what failed)
+            with office_reference(md_path, metadata_files, variables, "docx", odt, pandoc_options, no_auto, note,
+                                  labels=labels, force_filter=True) as office_arguments:
+                cmd += office_arguments
+                cmd += pandoc_options
+                for lua_filter in lua_filters:
+                    cmd += ["--lua-filter", str(lua_filter)]
+                cmd += office_arguments.filter_arguments
+                if office_arguments.filter_arguments:
+                    result = run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
+                else:
+                    log_cmd(cmd, pandoc_cwd, verbose)
+                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"
         return run_soffice_convert(odt, output, verbose)
@@ -12128,12 +12140,31 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     if target_format == "pdf" and native_engines:
         # The native tier (see the section after dependency_report()): no
         # Pandoc, no engine, none of the discovery below applies to it.
-        if parts_inputs:
-            raise SystemExit(f"{md_path}: parts mode needs Pandoc; the native renderers build one document")
-        if source_override is not None:
-            raise SystemExit(f"{md_path}: building one section needs Pandoc; the native renderers "
-                             "build the whole document (pdfmd --install pandoc)")
-        ok, reason = convert_native(md_path, output, native_engines, metadata_files, from_format, verbose, debug)
+        native_source, temporaries = md_path, []
+        if parts_inputs or source_override is not None:
+            # The renderers read one Markdown file: the parts are joined after the document and a section is
+            # the document cut down to it, the same text Pandoc would be given (see assemble_markdown_text)
+            first = md_path
+            if source_override is not None:
+                with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix, prefix=f".{md_path.stem}.pdfmd-section-",
+                                        dir=md_path.parent, delete=False) as handle:
+                    handle.write(source_override[0])
+                first = Path(handle.name)
+                temporaries.append(first)
+            with scaffold_inputs([first, *parts_inputs], bool(parts_inputs)) as scaffold_files, \
+                    NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix, prefix=f".{md_path.stem}.pdfmd-native-",
+                                       dir=md_path.parent, delete=False) as handle:
+                handle.write(assemble_markdown_text(scaffold_files, False, None, partial, False))
+            native_source = Path(handle.name)
+            temporaries.append(native_source)
+            if parts_inputs:
+                note("PARTS", f"{md_path}: {len(parts_inputs)} part{'s' if len(parts_inputs) != 1 else ''} "
+                              f"joined after it" + (" (partial build)" if partial else ""))
+        try:
+            ok, reason = convert_native(native_source, output, native_engines, metadata_files, from_format, verbose, debug)
+        finally:
+            for temporary in temporaries:
+                temporary.unlink(missing_ok=True)
         if ok:
             stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [],
                                  stamp_overrides, output, verbose)
@@ -12501,17 +12532,15 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
                 continue
-            if engine == "soffice" and (parts_inputs or source_override is not None):
-                print(f"SKIP  {md_path}: the soffice last-resort fallback doesn't support parts mode or sections",
-                      file=sys.stderr)
-                continue
             if engine == "soffice":
                 # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's
                 # own docstring for why this is special-cased here instead.
                 ok, reason = convert_via_soffice_bridge(md_path, output, effective_from, metadata_files,
                                                         variables, pandoc_options, lua_filters, csv_filter,
                                                         no_auto, verbose,
-                                                        labels="auto" if engines == ["soffice"] else "off")
+                                                        labels="auto" if engines == ["soffice"] else "off",
+                                                        title_source=title_source, part_files=part_files,
+                                                        partial=partial)
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
@@ -12674,9 +12703,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         if result is None:
-            # Every engine was skipped (the soffice fallback cannot build parts or sections).
-            return md_path, False, ("no PDF engine could build this: the soffice fallback cannot build "
-                                    "parts or sections. Install a LaTeX or Typst engine "
+            # Every engine was skipped: each shares an engine with one that failed already.
+            return md_path, False, ("no PDF engine could build this. Install a LaTeX or Typst engine "
                                     "(pdfmd --install typst) or use --to html")
         if result.returncode == 0:
             stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)

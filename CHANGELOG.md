@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.24.21 — 2026-10-09
+
+Pre-edit state: commit `73818f4` (v3.24.20).
+
+### Fixed
+
+- **Parts mode and `doc#section` work with every engine.** The soffice route (`-e soffice`, and the last resort when
+  every other engine fails) refused a split document or a section ("the soffice last-resort fallback doesn't support
+  parts mode or sections"); the built-in renderers (no Pandoc) refused them too. The soffice route now takes what every
+  other engine takes (the document cut down to its sections, the parts joined after it, the partial-build mark), and
+  is also given the same corrected inputs as `--to docx` (an embedded preamble is dropped). The built-in renderers
+  read the same text as one Markdown file: the parts joined after the document, a heading inside a part cut out of it.
+- The built-in renderers no longer list pdfmd's own `pdfmd-assembled`/`pdfmd-partial` marks as "front-matter keys not used".
+
+---
+
 ## v3.24.20 — 2026-10-09
 
 Pre-edit state: commit `5900c3b` (v3.24.19).
