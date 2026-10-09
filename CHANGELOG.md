@@ -41,6 +41,17 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.12 — 2026-10-09
+
+Pre-edit state: commit `7542c5c` (v3.26.11).
+
+### Added
+
+- `pdfmd --doctor --deep`: after the usual report, builds a small page (maths, an accent, code, a table) with each
+  installed engine (the built-in renderers when there is no Pandoc or engine) by running `pdfmd.py` itself in a scratch
+  folder, and prints `OK engine: built a PDF in N s` or `MISS engine: could not build it (reason)`; a failing engine is
+  added to the list of things to fix, and one that hangs is stopped after 180 s. `--deep` without `--doctor` is refused.
+
 ## v3.26.11 — 2026-10-09
 
 Pre-edit state: commit `5d4533e` (v3.26.10).

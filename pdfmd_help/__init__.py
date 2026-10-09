@@ -49,7 +49,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--no-cache", "--seed-labels")),
     "setup": ("installing, configuring and checking pdfmd itself", (
         "--setup", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
-        "--check-dependencies", "--version", "--trust-lua")),
+        "--check-dependencies", "--version", "--trust-lua", "--deep")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
         "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict")),
 }

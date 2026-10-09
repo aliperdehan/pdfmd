@@ -745,7 +745,8 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 2. **`pdfmd doc --no-auto`** switches every automatic behaviour off: close to plain Pandoc. If that fixes it, narrow it
    down: `--no-auto margin`, `--no-auto tablewidth` ...
 3. **`pdfmd doc --debug`** prints the full output of every engine that failed, even one a later engine recovered from.
-4. **`pdfmd --doctor`** says what is missing and how to install it.
+4. **`pdfmd --doctor`** says what is missing and how to install it; **`--doctor --deep`** also builds a small page with
+   every installed engine, to find one that is installed but cannot make a PDF (a missing LaTeX package, a broken font).
 5. **`pdfmd doc --stop-at tex`** (or `--assemble-only`) shows what is handed to the engine.
 6. **`pdfmd --clear-cache`** starts over.
 7. **A table or section will not be found?** `pdfmd doc --list-parts`.
@@ -784,7 +785,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
-| tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor`, `--check-dependencies` |
+| tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
 
 `pdfmd --help all` is the authoritative list; `pdfmd --help TOPIC` shows one group of it.

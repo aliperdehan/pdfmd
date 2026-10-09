@@ -1227,7 +1227,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.11"
+PDFMD_VERSION = "3.26.12"
 import argparse
 import csv
 import filecmp
@@ -3960,9 +3960,54 @@ def folder_size(folder: Path) -> int:
     return total
 
 
-def doctor_report() -> bool:
+DEEP_SAMPLE = """---
+title: pdfmd smoke test
+---
+
+# Heading
+
+Text with math $x^2 + \\alpha$, an accent (café), `code`, and a table:
+
+| a | b |
+|---|---|
+| 1 | 2 |
+"""
+
+
+def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool, str]]:
+    """--doctor --deep: build a small page with each engine by running pdfmd itself (the way a user would), in a
+    scratch folder. [(engine, built, seconds or the reason it failed)]; an engine that hangs is stopped."""
+    results: list[tuple[str, bool, str]] = []
+    with tempfile.TemporaryDirectory(prefix="pdfmd-deep-") as scratch:
+        folder = Path(scratch)
+        (folder / "sample.md").write_text(DEEP_SAMPLE, encoding="utf-8")
+        environment = {**os.environ, "PDFMD_NO_PROMPT": "1"}
+        environment.pop("PDFMD_STRICT", None)
+        for engine in engines:
+            output = folder / f"{engine}.pdf"
+            started = time.monotonic()
+            try:
+                done = subprocess.run([sys.executable, str(Path(__file__).resolve()), "sample.md", "-e", engine,
+                                       "-o", output.name, "--no-backup", "--no-stamp"],
+                                      capture_output=True, text=True, cwd=folder, env=environment, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                results.append((engine, False, f"no answer after {timeout} s"))
+                continue
+            seconds = time.monotonic() - started
+            if done.returncode == 0 and output.is_file() and output.read_bytes().startswith(b"%PDF"):
+                results.append((engine, True, f"{seconds:.1f} s"))
+                continue
+            text = done.stdout + done.stderr
+            found = re.search(r"failed \((.*?)\); (?:no more engines|trying)", text)
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            results.append((engine, False, found.group(1) if found else (lines[-1][:160] if lines else "no output")))
+    return results
+
+
+def doctor_report(deep: bool = False) -> bool:
     """`--doctor`: one page on everything pdfmd uses (tools, fonts, PDF reading, config, cache) and
-    what to run to fix what is missing. True unless no PDF can be made at all."""
+    what to run to fix what is missing. True unless no PDF can be made at all. ``deep`` also builds a small
+    page with each engine, to find the one that is installed but cannot make a PDF."""
     import platform
     problems: list[tuple[str, str]] = []
 
@@ -4059,6 +4104,15 @@ def doctor_report() -> bool:
         from pdfmd_unicode import tessdata
         own = tessdata.installed(tessdata_directory())
         line(None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
+
+    if deep:
+        print("\nSmoke test (a small page with maths, code and a table, built with each engine):")
+        candidates = [*engines, *(available_native_engines() if not (pandoc and engines) else [])]
+        if not candidates:
+            line(False, "nothing to try: no engine is installed", "pdfmd --install typst", "a PDF engine")
+        for name, built, detail in deep_checks(candidates):
+            line(built, f"{name}: " + (f"built a PDF in {detail}" if built else f"could not build it ({detail})"),
+                 f"pdfmd --setup, or rerun with: pdfmd sample.md -e {name} --debug", f"{name} is installed but cannot build a page")
 
     print("\nSettings and cache:")
     config = config_path()
@@ -17632,6 +17686,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")
+    parser.add_argument("--deep", action="store_true",
+                        help="with --doctor: also build a small page with each installed engine (a few seconds "
+                             "each), to find one that is installed but cannot make a PDF")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
@@ -18048,8 +18105,10 @@ def main() -> None:
     if args.completion:
         sys.stdout.write(completion_script(args.completion))
         raise SystemExit(0)
+    if args.deep and not args.doctor:
+        raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:
-        raise SystemExit(0 if doctor_report() else 1)
+        raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))
     if args.check_dependencies:

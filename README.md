@@ -199,6 +199,21 @@ MISS  poppler: not found
        brew install tesseract poppler
 ```
 
+"Installed" is not "works": a LaTeX engine can be on the PATH and still fail on a missing package or font.
+`pdfmd --doctor --deep` also builds a small page (maths, code, a table) with every engine it found, by running pdfmd
+itself in a scratch folder, and says which one built it and how long that took, or why it could not:
+
+```console
+$ pdfmd --doctor --deep
+...
+Smoke test (a small page with maths, code and a table, built with each engine):
+OK    lualatex: built a PDF in 8.7 s
+MISS  xelatex: could not build it (! LaTeX Error: File `stix2.sty' not found.)
+OK    typst: built a PDF in 1.1 s
+```
+
+It takes a few seconds per engine (a minute or more if TeX has to fetch packages); without `--deep` nothing is built.
+
 ### Tab completion
 
 `pdfmd --completion bash|zsh|fish` prints a completion script, generated from the command
