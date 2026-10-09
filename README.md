@@ -334,6 +334,19 @@ letters, no tones, vowels left out where the script leaves them out. Names that
 romanize alike (homophones) are listed as ambiguous, never picked between. The
 same spelling rules find a section by its heading (`doc#tyche`).
 
+### A small editor
+
+```sh
+pdfmd --install tui           # once: prompt_toolkit, about 1 MB
+pdfmd --edit lecture          # nano-like full screen; Ctrl-B saves and builds, Ctrl-P opens the PDF
+```
+
+`pdfmd --edit` (alpha) opens the Markdown file in a plain full-screen editor with the build one key away: Ctrl-S
+saves, Ctrl-B saves and builds (what pdfmd said stays at the bottom), Ctrl-P opens the result, Ctrl-W / F3 find,
+Ctrl-G go to a line, Ctrl-K / Ctrl-U cut and paste a line, Ctrl-Z / Ctrl-Y undo and redo, Ctrl-X leaves (asking once
+when there are unsaved changes); F1 lists them. Options given beside it (`pdfmd --edit lecture -e lualatex`) are used
+for the build, and a name that does not exist yet starts a new file. It is deliberately rough: a base for what comes later.
+
 ### One section
 
 `pdfmd doc#onlyapart` builds just the section whose heading is "Only a Part"

@@ -1196,7 +1196,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.14"
+PDFMD_VERSION = "3.25.15"
 import argparse
 import csv
 import filecmp
@@ -8316,6 +8316,40 @@ def history_documents(args) -> list[Path]:
 def linked_metadata(document: Path, requested) -> list[Path]:
     found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
     return [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
+
+
+def edit_command(args) -> int:
+    """`pdfmd --edit [FILE]`: the small full-screen editor (pdfmd_edit), building with the options given beside it."""
+    try:
+        import pdfmd_edit
+    except ImportError:
+        print("ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
+        return 1
+    if not pdfmd_edit.available():
+        print("ERROR  --edit needs prompt_toolkit: run `pdfmd --install tui`.", file=sys.stderr)
+        return 1
+    if len(args.path or []) > 1:
+        print("ERROR  --edit opens one file.", file=sys.stderr)
+        return 1
+    target = (args.path or [Path.cwd()])[0]
+    try:
+        document = find_markdown(target)
+    except FileNotFoundError as error:
+        if target.suffix.lower() in (".md", ".markdown") and not target.is_dir():
+            document = target.resolve()                 # a new file, made when it is first saved
+        else:
+            print(f"ERROR  {error}", file=sys.stderr)
+            return 1
+    given = {str(item) for item in args.path or []}
+    passed = [item for item in sys.argv[1:] if item != "--edit" and item not in given]
+
+    def build(path: Path):
+        done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, str(path)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=path.parent)
+        made = path.with_suffix(".pdf")
+        return done.returncode == 0, (done.stdout + done.stderr).strip(), made if done.returncode == 0 and made.exists() else None
+
+    return pdfmd_edit.run(document, build=build, opener=open_file)
 
 
 def history_view_command(args) -> int:
@@ -16485,6 +16519,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
+    parser.add_argument("--edit", action="store_true",
+                        help="edit FILE (default: the Markdown file of this folder) in a small full-screen editor "
+                             "with the build one key away (Ctrl-B; F1 lists the keys). Alpha. Needs "
+                             "prompt_toolkit: pdfmd --install tui. Other options given beside it are used for the build")
     parser.add_argument("--extract-tables", action="store_true",
                         help="rewrite FILE so that each of its tables (pipe, simple, multiline or grid) is a `.csv` block "
                              "reading tables/<name>.csv (--tables-inline: the data inside the document instead), the "
@@ -16952,6 +16990,8 @@ def main() -> None:
                 raise SystemExit(str(error))
             ok = check_fonts(document, args.no_auto, list(args.variable or [])) and ok
         raise SystemExit(0 if ok else 1)
+    if args.edit:
+        raise SystemExit(edit_command(args))
     if args.show_config or args.init_config:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.setup is not None:

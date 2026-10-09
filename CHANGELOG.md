@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.15 — 2026-10-09
+
+Pre-edit state: commit `4d9339c` (v3.25.14).
+
+### Added
+
+- **`pdfmd --edit [FILE]`: a small full-screen editor (alpha).** Nano-like, in the new `pdfmd_edit` package on the
+  optional `tui` extra (prompt_toolkit; `pdfmd --install tui`): Ctrl-S save, Ctrl-B save and build (the last lines of
+  pdfmd's output stay at the bottom), Ctrl-P open the result, Ctrl-W / F3 find, Ctrl-G go to a line, Ctrl-K / Ctrl-U cut
+  and paste a line, Ctrl-Z / Ctrl-Y undo and redo, Ctrl-X exit (asks once about unsaved changes), F1 help. Saves go
+  through a temporary file, options given beside `--edit` are used for the build, and a new name starts a new file. Rough
+  on purpose: a base for the interface of a later release. Tested with scripted keys through prompt_toolkit's pipe input
+  and by hand in a pseudo-terminal.
+
 ## v3.25.14 — 2026-10-09
 
 Pre-edit state: commit `b014262` (v3.25.13).
