@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.25.4 — 2026-10-09
+
+Pre-edit state: commit `1a7b146` (v3.25.3).
+
+### Fixed
+
+- **Code did not wrap in a document where pdfmd had added a header of its own.** 3.25.3 put the line that loads fvextra
+  into the document's `header-includes` from the Lua filter, but Pandoc lets `--include-in-header` win over
+  `header-includes`, so the line vanished from every build that also had pdfmd's font header (a document with other
+  scripts in it, the README among them). The line is now a file, `pdfmd_lua/code_wrap.tex`, passed with
+  `--include-in-header` and only for a document that has code (fenced or indented); the filter turns a language-less
+  block into a `Verbatim` only when told the header is there. Inline code is still not wrapped.
+
+---
+
 ## v3.25.3 — 2026-10-09
 
 Pre-edit state: commit `8a68435` (v3.25.2).

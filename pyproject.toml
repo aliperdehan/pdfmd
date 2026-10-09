@@ -62,7 +62,7 @@ packages = ["pdfmd_inkmd", "pdfmd_lua", "pdfmd_office", "pdfmd_setup", "pdfmd_ta
 
 [tool.setuptools.package-data]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
-pdfmd_lua = ["*.lua"]
+pdfmd_lua = ["*.lua", "*.tex"]
 pdfmd_office = ["*.lua"]
 
 [tool.setuptools.dynamic]

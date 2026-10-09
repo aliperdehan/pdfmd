@@ -665,7 +665,10 @@ Code blocks (v3.25.3; pdfmd_lua/code.lua, LaTeX engines):
     false}` or `--no-auto codewrap` turn it off, `{wrap=false}` does for one block. Lines can be numbered: Pandoc's
     own `{.numberLines startFrom=10}` for a block, `--line-numbers [STEP]` / `pdfmd-options: {line-numbers: true,
     line-number-step: 5}` / --setup for all of them (`{.noNumberLines}` exempts one), `step=5` and `numbersep=8pt` for
-    one block. Typst, WeasyPrint and HTML wrap code by themselves.
+    one block. Typst, WeasyPrint and HTML wrap code by themselves. (The header that loads fvextra,
+    pdfmd_lua/code_wrap.tex, goes in with --include-in-header, and only for a document that has code: a header
+    set from the Lua filter is lost whenever pdfmd passes its own, since Pandoc lets --include-in-header win
+    over `header-includes`. Inline code is not wrapped.)
 
 Tables to CSV and back (v3.25.2; the package pdfmd_tables):
     `pdfmd --extract-tables doc.md` rewrites the document so that each table -- pipe, simple, multiline or grid;
@@ -1101,7 +1104,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.25.3"
+PDFMD_VERSION = "3.25.4"
 import argparse
 import csv
 import filecmp
@@ -1677,28 +1680,44 @@ def width_filter_args(width_filter: Path) -> list[str]:
 CODE_CLI: dict = {}                       # --line-numbers and friends, filled in by main()
 
 
-def code_filter_args(no_auto: list[str] | None) -> list[str]:
-    """``--lua-filter`` for pdfmd_lua/code.lua (long code lines wrap, optional line numbers) in a LaTeX build, with
-    the settings of the command line and the global config handed to it as metadata (a document's own
-    `pdfmd-options` reach it through the document). Nothing for `--no-auto codewrap` or a lone pdfmd.py."""
+CODE_BLOCK_RE = re.compile(r"^ {0,3}(?:`{3,}|~{3,})|^(?: {4}|\t)\S", re.MULTILINE)
+
+
+def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str]:
+    """What a LaTeX build needs for code blocks (pdfmd_lua/code.lua; wrapping and optional line numbers): the filter
+    and, when the document has code and wrapping is not off, the header that loads fvextra. The settings of the
+    command line and the global config reach the filter as metadata; a document's own `pdfmd-options` through the
+    document. Nothing for `--no-auto codewrap`, a document without code, or a lone pdfmd.py."""
     if auto_disabled(no_auto, "codewrap"):
         return []
     try:
         import pdfmd_lua
-        shipped = pdfmd_lua.path("code")
+        shipped, header = pdfmd_lua.path("code"), pdfmd_lua.FILTERS / "code_wrap.tex"
     except ImportError:
-        shipped = None
-    if shipped is None:
+        return []
+    if shipped is None or not any(CODE_BLOCK_RE.search(read_text_best_effort(source)) for source in sources):
         return []
     configured = config_options()
-    args = ["--lua-filter", str(shipped)]
+    own = frontmatter_pdfmd_options(sources[0]) if sources else {}
+    settings = {}
     for key in ("code-wrap", "line-numbers", "line-number-step"):
-        value = CODE_CLI.get(key)
-        if value is None:
-            value = configured.get(key)
-        if value is not None:
-            args += ["-M", f"pdfmd-{key}={str(value).lower() if isinstance(value, bool) else value}"]
+        for where in (CODE_CLI, own, configured):
+            if where.get(key) is not None:
+                settings[key] = where[key]
+                break
+    args = ["--lua-filter", str(shipped)]
+    for key, value in settings.items():
+        args += ["-M", f"pdfmd-{key}={str(value).lower() if isinstance(value, bool) else value}"]
+    if str(settings.get("code-wrap", True)).lower() != "false" and header.is_file():
+        args += ["--include-in-header", str(header), "-M", "pdfmd-code-header=1"]
     return args
+
+
+def read_text_best_effort(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return ""
 
 
 @contextmanager
@@ -12073,7 +12092,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
-            cmd += code_filter_args(no_auto)
+            cmd += code_filter_args(no_auto, [md_path, title_source])
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -12495,7 +12514,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target and tablewidth_auto:
                     cmd += width_filter_args(width_filter)
                 if is_tex_target:
-                    cmd += code_filter_args(no_auto)
+                    cmd += code_filter_args(no_auto, [md_path, *parts_inputs])
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -12696,7 +12715,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += width_filter_args(width_filter)
                     if engine in LATEX_ENGINES:
-                        cmd += code_filter_args(no_auto)
+                        cmd += code_filter_args(no_auto, [md_path, *parts_inputs])
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
@@ -15930,7 +15949,7 @@ def main() -> None:
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += width_filter_args(width_filter)
                     if is_tex_target:
-                        cmd += code_filter_args(report_no_auto)
+                        cmd += code_filter_args(report_no_auto, list(files))
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -16045,7 +16064,7 @@ def main() -> None:
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += width_filter_args(width_filter)
                         if engine in LATEX_ENGINES:
-                            cmd += code_filter_args(report_no_auto)
+                            cmd += code_filter_args(report_no_auto, list(files))
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

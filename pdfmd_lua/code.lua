@@ -3,6 +3,9 @@
 -- numbering is on for the document), `step="5"` (number every 5th line), `numbersep="8pt"`, `wrap="false"`.
 -- Per document: pdfmd-options `code-wrap: true|false` (default true), `line-numbers: true|false`,
 -- `line-number-step: N`; the same keys in the global config reach this filter as -M pdfmd-code-wrap=... etc.
+-- The header that loads fvextra is pdfmd_lua/code_wrap.tex, passed by pdfmd with --include-in-header (a header set from
+-- here would be lost: Pandoc lets --include-in-header win over `header-includes`), together with -M pdfmd-code-header=1;
+-- without that flag no block is turned into a Verbatim.
 
 local function read(meta, key)
   local value = meta["pdfmd-" .. key]
@@ -18,27 +21,6 @@ local function truthy(text, default)
   if text == "true" or text == "on" or text == "yes" then return true end
   if text == "false" or text == "off" or text == "no" then return false end
   return default
-end
-
--- `breakanywhere` too: a path or a URL has no space to break at, and it would run past the margin; spaces are still
--- where lines break first, since a break "anywhere" only happens when the line is full
-local WRAP_HEADER = [[
-\IfFileExists{fvextra.sty}{\usepackage{fvextra}\fvset{breaklines,breakanywhere,breaksymbolleft={},breaksymbolright={}}}{\usepackage{fancyvrb}}
-]]
-
-local function add_header(meta, latex)
-  local block = pandoc.RawBlock("latex", latex)
-  local existing = meta["header-includes"]
-  local list
-  if existing == nil then
-    list = pandoc.List({})
-  elseif existing.t == "MetaList" or pandoc.utils.type(existing) == "List" then
-    list = pandoc.List(existing)
-  else
-    list = pandoc.List({existing})
-  end
-  list:insert(pandoc.MetaBlocks({block}))
-  meta["header-includes"] = pandoc.MetaList(list)
 end
 
 local function has(classes, name)
@@ -61,10 +43,9 @@ function Pandoc(doc)
   local wrap = truthy(read(meta, "code-wrap"), true)
   local numbers = truthy(read(meta, "line-numbers"), false)
   local step = read(meta, "line-number-step")
-  local seen_code = false
+  local header = read(meta, "code-header") == "1"
 
   local function code(block)
-    seen_code = true
     local attributes = block.attr.attributes
     local classes = block.classes
     local before = {}
@@ -82,7 +63,7 @@ function Pandoc(doc)
     if attributes["wrap"] == "false" then settings[#settings + 1] = "breaklines=false" end
     classes = without(classes, "noNumberLines")
     -- a block with no language is `verbatim` for Pandoc (which cannot wrap or number it): fancyvrb's Verbatim instead
-    if (wrap or number) and #without(classes, "numberLines") == 0 and block.identifier == "" and
+    if header and (wrap or number) and #without(classes, "numberLines") == 0 and block.identifier == "" and
         not block.text:find("\\end{Verbatim}", 1, true) then
       local options = {}
       if number then
@@ -105,7 +86,5 @@ function Pandoc(doc)
             pandoc.RawBlock("latex", "\\endgroup")}
   end
 
-  local blocks = doc.blocks:walk({CodeBlock = code})
-  if seen_code and wrap then add_header(meta, WRAP_HEADER) end
-  return pandoc.Pandoc(blocks, meta)
+  return pandoc.Pandoc(doc.blocks:walk({CodeBlock = code}), meta)
 end

@@ -95,7 +95,7 @@ class Packaging(unittest.TestCase):
         self.assertIsNone(pdfmd_lua.path("nope"))
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"pdfmd_lua"', pyproject)
-        self.assertIn('pdfmd_lua = ["*.lua"]', pyproject)
+        self.assertIn('pdfmd_lua = ["*.lua", "*.tex"]', pyproject)
 
     def test_a_lone_pdfmd_py_still_builds_without_the_package(self):
         import tempfile
