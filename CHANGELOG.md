@@ -41,6 +41,40 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.13 — 2026-10-10
+
+Pre-edit state: commit `bc1c81b` (v3.27.12).
+
+### Fixed
+
+- **A page break worked in some outputs only.** Through Pandoc each writer understood one spelling and dropped the
+  others (checked with five breaks: LaTeX made 4 pages of 6, Typst 1, WeasyPrint 2, Word 3 breaks); `<!-- pagebreak -->`
+  worked only in the built-in renderer. A new filter, `pdfmd_lua/pagebreak.lua`, runs on every Pandoc route (before
+  `raw.lua`) and makes a block that is only a page break, in any spelling, the output's own:
+
+  - written as: `<!-- pagebreak -->`, `page-break`, `newpage`, `new-page` or `<!-- pdfmd: pagebreak -->` (any case);
+    `\newpage`, `\newpage{}`, `\pagebreak`, `\pagebreak[n]`, `\clearpage`, `\cleardoublepage` (to an odd page);
+    `<div style="page-break-after: always">` (before or after, also `break-*: page`), `<div class="pagebreak">`,
+    `<hr class="pagebreak">`; an empty `::: pagebreak` (or `newpage`); a raw Typst `#pagebreak()` or a raw Word
+    `<w:br w:type="page"/>` paragraph;
+  - becomes: LaTeX `\newpage{}`, Typst `#pagebreak(weak: true)`, a `break-after: page` div for HTML, EPUB and
+    WeasyPrint, a Word page-break run, an OpenDocument paragraph in the `Pagebreak` style, ConTeXt `\page`, ms `.bp`,
+    a form feed in `--to txt` and `<!-- pagebreak -->` in `--to gfm`.
+
+  A spelling already in the output's language stays as written (`\pagebreak[3]` for LaTeX). A GitHub-Markdown file
+  (no front matter) reads `\newpage` as words, and it still breaks. Slides drop a break with a NOTE (a beamer
+  document's own `\newpage` stays); Pandoc Markdown, rst, org and the others keep what was written. New auto kind
+  `pagebreak` (`--no-auto pagebreak`: the old behaviour), with its row in `pdfmd --setup`.
+- The `.odt` reference document pdfmd builds gets a `Pagebreak` paragraph style (break before: page) when it has none.
+- The built-in renderer also reads `<!-- pdfmd: pagebreak -->`, `\pagebreak[n]` and `\cleardoublepage`.
+
+### Tests
+
+- `tests/test_pagebreak.py`: one list of 20 spellings checked against the filter for seven writers and against the
+  built-in renderer's patterns, what is not a break, the comment stripper keeping them, slides and Markdown, and real
+  output through pdfmd: five breaks make six pages with lualatex, Typst and WeasyPrint, and five breaks in a Word file
+  (fewer with `--no-auto pagebreak`).
+
 ## v3.27.12 — 2026-10-10
 
 Pre-edit state: commit `c34c6b5` (v3.27.11).

@@ -61,7 +61,20 @@ def _text_font(name: str) -> dict[str, str]:
     return {"style:font-name": name, "fo:font-family": f"&apos;{name}&apos;"}
 
 
+PAGEBREAK_STYLE = ('<style:style style:name="Pagebreak" style:family="paragraph" style:parent-style-name="Standard">'
+                   '<style:paragraph-properties fo:break-before="page"/></style:style>')
+
+
+def with_pagebreak_style(styles: str) -> str:
+    """`styles` with the `Pagebreak` paragraph style pdfmd_lua/pagebreak.lua writes page breaks in (v3.27.13), unless
+    the reference already has one."""
+    if _style_span(styles, "Pagebreak") is not None or "</office:styles>" not in styles:
+        return styles
+    return styles.replace("</office:styles>", PAGEBREAK_STYLE + "</office:styles>", 1)
+
+
 def patch_styles(styles: str, spec: OfficeSpec, house: bool) -> str:
+    styles = with_pagebreak_style(styles)
     if spec.has_page():
         width, height = spec.page_size()
         match = re.search(r"<style:page-layout-properties\b[^>]*>", styles)

@@ -103,6 +103,17 @@ Older Pandoc, and no network (v3.25.11):
     its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
 
+Page breaks (v3.27.13; auto kind `pagebreak`):
+    pdfmd_lua/pagebreak.lua runs on every Pandoc route, before raw.lua: a block that is only a page break, in any
+    spelling (the comments <!-- pagebreak|page-break|newpage|new-page --> and <!-- pdfmd: pagebreak -->, \newpage,
+    \pagebreak[n], \clearpage, \cleardoublepage, a CSS-break or class="pagebreak" div or hr, an empty `::: pagebreak`,
+    a raw Typst #pagebreak() or Word break), becomes the target's own: LaTeX \newpage{}, Typst #pagebreak(weak: true),
+    a CSS break div for HTML/EPUB/WeasyPrint, a Word break, an OpenDocument paragraph in the Pagebreak style (added to
+    the reference pdfmd builds, pdfmd_office/odt.py), ConTeXt \page, ms .bp, a form feed in text, <!-- pagebreak -->
+    in GitHub Markdown. A spelling in the target's own language stays as written; slides drop it with a NOTE. The
+    built-in renderer reads the line spellings itself (PAGE_BREAK_RE, PAGE_BREAK_COMMENT_RE); tests/test_pagebreak.py
+    holds the one list both are checked against.
+
 Math in WeasyPrint (v3.27.12):
     WeasyPrint does not draw MathML, Pandoc's default HTML math: each formula printed twice as flat text. For
     `-e weasyprint` pdfmd gives Pandoc --math-method=plain (unless the command line chooses the math) and
@@ -1267,7 +1278,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.12"
+PDFMD_VERSION = "3.27.13"
 import argparse
 import csv
 import filecmp
@@ -1510,7 +1521,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "pagebreak",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -2116,6 +2127,20 @@ def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -
         print(f"WARN  raw: {error}; the raw option was ignored", file=sys.stderr)
         return None
     return table
+
+
+def pagebreak_filter_args(no_auto: list[str] | None) -> list[str]:
+    """``--lua-filter pagebreak.lua`` (v3.27.13): every spelling of a page break (`<!-- pagebreak -->`, `\\newpage`, the
+    CSS div, a fenced `::: pagebreak` ...) becomes the target format's own. Before raw.lua, which would otherwise draw
+    or drop a raw TeX `\\newpage`. `--no-auto pagebreak` leaves it out."""
+    if auto_disabled(no_auto, "pagebreak"):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("pagebreak")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
@@ -2784,7 +2809,7 @@ FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*(.*)$")
 DIV_FENCE_RE = re.compile(r"^\s*:{3,}(?:\s.*)?$")
 HEADING_ATTR_RE = re.compile(r"^(#{1,6}\s+.*?)\s*\{(?:[#.][^{}\n]*|[A-Za-z][\w-]*=[^{}\n]*)\}\s*$")
 IMAGE_ATTR_RE = re.compile(r"(!\[[^\]\n]*\]\([^)\n]*\))\{[^{}\n]*\}")
-PAGE_BREAK_RE = re.compile(r"^\s*\\(?:newpage|pagebreak|clearpage)(?:\{\})?\s*$")
+PAGE_BREAK_RE = re.compile(r"^\s*\\(?:newpage|pagebreak|clearpage|cleardoublepage)(?:\[\d\])?(?:\{\})?\s*$")
 TEX_BEGIN_RE = re.compile(r"^\s*\\begin\{([A-Za-z]+\*?)\}")
 TEX_COMMAND_LINE_RE = re.compile(r"^\s*\\[A-Za-z]+\*?(?:\[[^\]\n]*\])*(?:\{[^{}\n]*\})*\s*$")
 TEX_MATH_ENVIRONMENTS = frozenset({"equation", "equation*", "align", "align*", "gather", "gather*",
@@ -2795,7 +2820,7 @@ INLINE_MATH_RE = re.compile(r"(?<![\\$])\$(?=\S)[^$\n]+?(?<=\S)\$(?!\d)")
 INLINE_MATH_CAPTURE_RE = re.compile(r"(?<![\\$])\$(?=\S)([^$\n]+?)(?<=\S)\$(?!\d)")
 DISPLAY_IN_TEXT_RE = re.compile(r"\$\$(.+?)\$\$")
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-PAGE_BREAK_COMMENT_RE = re.compile(r"^\s*<!--\s*(?:page-?break|new-?page)\s*-->\s*$", re.IGNORECASE)
+PAGE_BREAK_COMMENT_RE = re.compile(r"^\s*<!--\s*(?:pdfmd\s*:\s*)?(?:page-?break|new-?page)\s*-->\s*$", re.IGNORECASE)
 FOOTNOTE_DEF_RE = re.compile(r"^\[\^([^\]\s]+)\]:\s?(.*)$")
 FOOTNOTE_REF_RE = re.compile(r"\[\^([^\]\s]+)\](?!:)")
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF☀-➿\U0001F1E6-\U0001F1FF]")
@@ -14516,6 +14541,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             for variable in variables:
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
+            cmd += pagebreak_filter_args(no_auto)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
             cmd += select_filter_args(selection)
@@ -14661,6 +14687,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
+            cmd += pagebreak_filter_args(no_auto)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
@@ -15115,6 +15142,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
+                cmd += pagebreak_filter_args(no_auto)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
                                        flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                        preamble=list(preamble_files or []) if flat_markdown else None,
@@ -15347,6 +15375,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
+                    cmd += pagebreak_filter_args(no_auto)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     cmd += select_filter_args(selection)
@@ -18502,7 +18531,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), pagebreak (every spelling of a page break made the output format's own), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -19434,6 +19463,7 @@ def main() -> None:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
+                    cmd += pagebreak_filter_args(report_no_auto)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
@@ -19553,6 +19583,7 @@ def main() -> None:
                         if report_fonts_header or report_fonts_css:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
+                        cmd += pagebreak_filter_args(report_no_auto)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)

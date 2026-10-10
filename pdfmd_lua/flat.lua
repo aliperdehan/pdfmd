@@ -418,6 +418,7 @@ end
 
 -- raw pieces nothing carried -------------------------------------------------------------------------------------------
 local KEEP_RAW = {markdown = true, gfm = true, commonmark = true, ["markdown_strict"] = true}
+if text_format then KEEP_RAW.plain = true end       -- pagebreak.lua's form feed
 local RAW_NAME = {tex = "LaTeX", latex = "LaTeX", html = "HTML", html5 = "HTML", typst = "Typst", openxml = "Word XML",
                   opendocument = "OpenDocument XML"}
 local dropped = {}

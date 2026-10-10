@@ -290,7 +290,7 @@ OK    notes.md
 
 Every input is treated as GitHub-flavoured Markdown. Pandoc-only syntax is
 converted where possible (`\newpage` and `<!-- pagebreak -->` become a page
-break, footnotes become endnotes for inkmd, `$` prices are not mistaken for math)
+break, as they do through Pandoc, see `pagebreak` under *What it does automatically*; footnotes become endnotes for inkmd, `$` prices are not mistaken for math)
 and removed otherwise (heading and image attributes, `:::` divs, raw LaTeX,
 `<!-- comments -->`), with one warning per kind. CSV tables
 (`::: {.csv file="data.csv"}`) work as they do with Pandoc. The title, author and date in the
@@ -1331,6 +1331,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
+| `pagebreak` | a page break in any spelling: `<!-- pagebreak -->` (or `page-break`, `newpage`, `<!-- pdfmd: pagebreak -->`), `\newpage`, `\pagebreak`, `\clearpage`, `\cleardoublepage`, `<div style="page-break-after: always">`, `<div class="pagebreak">`, `::: pagebreak`, a raw Typst `#pagebreak()` or Word break | becomes the output's own: LaTeX `\newpage`, Typst `#pagebreak`, a CSS break for HTML and WeasyPrint, a Word or OpenDocument page break, a form feed in `--to txt`, `<!-- pagebreak -->` in `--to gfm`; a spelling already in the output's language stays as written, slides drop it with a note (`--no-auto pagebreak`) |
 
 `-v` explains each decision and prints the exact command it runs:
 
