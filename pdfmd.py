@@ -1249,7 +1249,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.2"
+PDFMD_VERSION = "3.27.3"
 import argparse
 import csv
 import filecmp
@@ -18569,6 +18569,22 @@ def run_watch(source: Path, argv: list[str]) -> None:
         print("\nWATCH  stopped")
 
 
+# What main() keeps in module globals from the command line: every *_CLI name, and these. -j workers are fresh processes
+# (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
+# --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
+# `global` main() sets is covered.
+WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS")
+
+
+def worker_state() -> dict:
+    return {name: value for name, value in globals().items()
+            if (name.endswith("_CLI") or name in WORKER_GLOBALS) and not callable(value)}
+
+
+def restore_worker_state(state: dict) -> None:
+    globals().update(state)
+
+
 def main() -> None:
     args, pandoc_options = build_parser().parse_known_args()
     if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
@@ -19459,7 +19475,8 @@ def main() -> None:
             return convert_one(file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained)
         results = []
         if jobs > 1:
-            with ProcessPoolExecutor(max_workers=jobs) as executor:
+            with ProcessPoolExecutor(max_workers=jobs, initializer=restore_worker_state,
+                                     initargs=(worker_state(),)) as executor:
                 futures = []
                 for file in files:
                     need_engines(file_target(file))

@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.3 — 2026-10-10
+
+Pre-edit state: commit `75529e1` (v3.27.2).
+
+### Fixed
+
+- **`-j N` built some documents without the command line's settings.** Worker processes start fresh (macOS and Windows
+  spawn them), so everything main() keeps in module globals was missing there: `--line-numbers`, `--no-code-wrap`,
+  `--fallback`, `--missing`, `--raw`, `--keep-source`, `--attach-source`, `--bundle`, `--paper`, `--header`/`--footer`,
+  `--no-citeproc`, the comment policy ... (only what travels as an environment variable, `--strict`, the budgets and
+  the CSV cap, arrived). The pool now starts each worker with a copy of them (`worker_state()`: every `*_CLI` global
+  and `WORKER_GLOBALS`).
+
+### Tests
+
+- `tests/test_jobs.py`: `-b -j 2 --to latex --line-numbers` writes the same files as `-j 1` (failed before the fix);
+  every `global` main() sets is one a worker gets; the state survives pickling.
+
 ## v3.27.2 — 2026-10-10
 
 Pre-edit state: commit `34bcec4` (v3.27.1).
@@ -61,7 +79,7 @@ Pre-edit state: commit `34bcec4` (v3.27.1).
 
 - With `-j N`, worker processes start fresh (macOS spawns them), so settings main() keeps in module globals do not
   reach them: `--line-numbers`/`--no-code-wrap` (CODE_CLI), `--fallback`/`--missing`, `--raw`... Only the ones handed over
-  as environment variables (`--strict`, the budgets, now the CSV cap) do. To fix in this line.
+  as environment variables (`--strict`, the budgets, now the CSV cap) do. Fixed in 3.27.3.
 
 ### Tests
 
