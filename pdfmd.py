@@ -1289,7 +1289,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.16"
+PDFMD_VERSION = "3.27.17"
 import argparse
 import csv
 import filecmp
@@ -3732,7 +3732,7 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     """
     front, body = split_front_matter(text.lstrip("﻿"))
     metadata: dict = {}
-    for path in metadata_files:
+    for path in pandoc_metadata_order(list(metadata_files)):
         metadata.update(metadata_file_yaml(path))
     metadata.update(front)
 
@@ -4587,9 +4587,9 @@ def office_module():
 
 def effective_metadata(md_path: Path, metadata_files: list[Path], variables: list[str]) -> dict:
     """The metadata Pandoc sees for a document, as plain data: -V variables over the document's front
-    matter over its metadata files (the first file wins, as in Pandoc)."""
+    matter over its metadata files (the later file wins, as in Pandoc, in pandoc_metadata_order)."""
     merged: dict = {}
-    for path in reversed(metadata_files):
+    for path in pandoc_metadata_order(metadata_files):
         merged.update(metadata_file_yaml(path))
     if md_path.suffix.lower() in (".md", ".markdown", ".txt", ""):
         try:
@@ -10452,11 +10452,23 @@ def global_metadata_file() -> Path | None:
     return candidate if candidate is not None and candidate.is_file() else None
 
 
+def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
+    """The metadata files in the order Pandoc gets them: the global metadata file first. Pandoc prefers a later
+    --metadata-file, and the global file is the lowest in priority (v3.27.17; it came last and so beat the
+    folder's own metadata.yaml). The list itself keeps the global file last: Pandoc runs in the folder of its first
+    entry, and pdfmd's own pdfmd-options lookups take the first file that sets a key."""
+    extra = global_metadata_file()
+    if extra is None or extra not in metadata_files:
+        return list(metadata_files)
+    return [extra, *(path for path in metadata_files if path != extra)]
+
+
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                   document_class: str | None = None,
                   document_stem: str | None = None) -> Path | list[Path] | object | None:
-    """Choose metadata files (see find_local_metadata), with the global metadata file last, so lowest in
-    priority, when the files were found automatically (not named with -y)."""
+    """Choose metadata files (see find_local_metadata), with the global metadata file last when the files were
+    found automatically (not named with -y). It is the lowest in priority: pandoc_metadata_order gives it to Pandoc
+    first."""
     found = find_local_metadata(directory, requested, report, document_class, document_stem)
     extra = global_metadata_file() if requested is None else None
     if extra is None or found is AUTO_METADATA_DISABLED:
@@ -12949,7 +12961,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
         write_text_lf(source, front_text + body)
         reader = resolve_from_format(source, None, metadata_files)[0] or "markdown"
         cmd = ["pandoc", str(source), "-f", reader, "-t", reader, "--wrap=preserve"]
-        for metadata_file in metadata_files:
+        for metadata_file in pandoc_metadata_order(metadata_files):
             cmd += ["--metadata-file", str(metadata_file)]
         for lua_filter in filters:
             cmd += ["--lua-filter", str(lua_filter)]
@@ -14631,7 +14643,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         def note(kind: str, detail: str) -> None:
             if verbose:
                 print(f"AUTO {kind}  {detail}")
-        with prepared_latex_inputs([title_source or md_path, *metadata_files], False, drop_embedded_preamble=True) as prepared:
+        with prepared_latex_inputs([title_source or md_path, *pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True) as prepared:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
             if effective_from:
@@ -14743,7 +14755,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     os.close(fd)
     tex_path = Path(tex_path_str)
     try:
-        with prepared_latex_inputs([title_source, *metadata_files], True) as prepared, \
+        with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], True) as prepared, \
                 document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text)) as header_file, \
                 pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
                 script_fallback([md_path], metadata_files, variables, preamble_files, nativebib_font, None,
@@ -15152,7 +15164,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             tex_first_font = (None if not is_tex_target else
                               mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
                                               document_font, mainfont_auto, no_auto, note))
-            with prepared_latex_inputs([title_source, *metadata_files], is_tex_target,
+            with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], is_tex_target,
                                        typst_engine=(target_format == "typst"),
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
@@ -15395,7 +15407,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                 report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
-            with prepared_latex_inputs([title_source, *metadata_files], engine in LATEX_ENGINES,
+            with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                        typst_engine=(engine == "typst")) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and engine in LATEX_ENGINES) as header_file, \
@@ -19518,7 +19530,7 @@ def main() -> None:
                                    mainfont_choice(list(files), metadata_files, variables, args.font,
                                                    report_document_font, report_mainfont_auto, report_no_auto,
                                                    report_note))
-                with prepared_latex_inputs([*files, *metadata_files], is_tex_target,
+                with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], is_tex_target,
                                            typst_engine=(target_format == "typst"),
                                            doc_count=len(files),
                                            drop_embedded_preamble=not is_tex_target) as prepared, \
@@ -19662,7 +19674,7 @@ def main() -> None:
                         print(f"SKIP  REPORT: {engine} shares the {family} engine with an earlier "
                               f"failure; skipping", file=sys.stderr)
                         continue
-                    with prepared_latex_inputs([*files, *metadata_files], engine in LATEX_ENGINES,
+                    with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                                typst_engine=(engine == "typst"),
                                                doc_count=len(files)) as prepared, \
                             pdf_metadata_header_file(

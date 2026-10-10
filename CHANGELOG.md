@@ -41,6 +41,35 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.17 — 2026-10-10
+
+Pre-edit state: commit `b4005b4` (v3.27.16).
+
+### Fixed
+
+- **The global metadata file (`metadata.yaml` beside the config, written by `pdfmd --setup`) beat the folder's own
+  metadata files**, the opposite of what it is for: pdfmd passed it last, and Pandoc prefers a later
+  `--metadata-file` (checked on Pandoc 3.12 and 3.1.3). A folder's `subtitle:` lost to a global `subtitle:`. Pandoc
+  now gets it first (`pandoc_metadata_order`), at every site that hands Pandoc the metadata files. Only that order
+  changed: the list keeps the global file last, so Pandoc still runs in the folder of the first local metadata file
+  and pdfmd's own `pdfmd-options` lookups still see it last.
+- `effective_metadata` (the Word/OpenDocument reference styles, the bibliography check) and the built-in renderer read
+  the metadata files the same way Pandoc does: a later file wins. `effective_metadata` had the first file winning, so
+  `metadata.yaml` beat a document-named `a.yaml` there while Pandoc took `a.yaml`.
+
+### Not changed (for the author)
+
+- pdfmd's own `pdfmd-options` lookups (`option_sources`) still take the FIRST metadata file that sets a key, so for a
+  pdfmd option a folder's `metadata.yaml` beats a document-named `a.yaml` or `report.yaml`, while for a Pandoc key the
+  document-named file wins (`find_local_metadata` calls it the override). Turning that around changes which file
+  wins for existing setups, so it waits for the author.
+
+### Tests
+
+- `tests/test_setup.py`: a build with a global and a folder `metadata.yaml` (the folder's `subtitle` wins, the global
+  `author` still arrives), `pandoc_metadata_order`, and `effective_metadata` with a later file winning. Both new
+  tests fail on 3.27.16.
+
 ## v3.27.16 — 2026-10-10
 
 Pre-edit state: commit `607540c` (v3.27.15).

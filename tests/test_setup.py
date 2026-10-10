@@ -119,6 +119,49 @@ class Plain(unittest.TestCase):
         self.assertIn("Global Author", html)            # the document names no author: the global one
         self.assertIn('lang="fr"', html)                # its own language wins
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
+    def test_the_folders_metadata_beats_the_global_metadata(self):
+        # v3.27.17: Pandoc prefers a later --metadata-file, and the global file used to come last
+        directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
+        self.addCleanup(__import__("shutil").rmtree, directory, True)
+        config, project = Path(directory) / "config", Path(directory) / "project"
+        config.mkdir()
+        project.mkdir()
+        (config / "config.yaml").write_text("options: {}\n", encoding="utf-8")
+        (config / "metadata.yaml").write_text("author: Global Author\nsubtitle: Global Subtitle\n", encoding="utf-8")
+        (project / "metadata.yaml").write_text("subtitle: Folder Subtitle\n", encoding="utf-8")
+        (project / "a.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": str(config / "config.yaml")}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "-o", "a.html", "--standalone", "--no-stamp",
+                               "--no-backup"], cwd=project, capture_output=True, text=True, env=environment)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (project / "a.html").read_text(encoding="utf-8")
+        self.assertIn("Folder Subtitle", html)
+        self.assertNotIn("Global Subtitle", html)
+        self.assertIn("Global Author", html)            # what the folder does not say still comes from the global file
+        old = os.environ.get("PDFMD_CONFIG")
+        os.environ["PDFMD_CONFIG"] = environment["PDFMD_CONFIG"]
+        pdfmd.load_config.cache_clear()
+        try:
+            files = [project / "metadata.yaml", config / "metadata.yaml"]
+            self.assertEqual(pdfmd.pandoc_metadata_order(files), [config / "metadata.yaml", project / "metadata.yaml"])
+            self.assertEqual(pdfmd.effective_metadata(project / "a.md", files, [])["subtitle"], "Folder Subtitle")
+        finally:
+            if old is None:
+                os.environ.pop("PDFMD_CONFIG", None)
+            else:
+                os.environ["PDFMD_CONFIG"] = old
+            pdfmd.load_config.cache_clear()
+
+    def test_a_later_metadata_file_wins_as_in_pandoc(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))
+        self.addCleanup(__import__("shutil").rmtree, directory, True)
+        (directory / "metadata.yaml").write_text("subtitle: Shared\nauthor: Shared Author\n", encoding="utf-8")
+        (directory / "a.yaml").write_text("subtitle: Own\n", encoding="utf-8")
+        (directory / "a.md").write_text("Text.\n", encoding="utf-8")
+        merged = pdfmd.effective_metadata(directory / "a.md", [directory / "metadata.yaml", directory / "a.yaml"], [])
+        self.assertEqual((merged["subtitle"], merged["author"]), ("Own", "Shared Author"))
+
     def test_the_config_can_switch_automatic_behaviour_off_for_every_document(self):
         directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
         self.addCleanup(__import__("shutil").rmtree, directory, True)
