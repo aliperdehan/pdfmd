@@ -4,6 +4,8 @@ for LaTeX, and a machine with no network (a sandbox with no DNS) gets one warnin
 from __future__ import annotations
 
 import hashlib
+import os
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -13,6 +15,27 @@ TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/
          "application/pdf": ".pdf"}
 SUFFIXES = (".png", ".jpg", ".jpeg", ".svg", ".pdf")
 USER_AGENT = "pdfmd (+https://github.com/aliperdehan/pdfmd)"
+
+
+CA_BUNDLES = ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt")
+
+
+def _open(request, timeout: float):
+    """urlopen, and once more with the system's CA bundle (else certifi's) when this Python has no certificates of its
+    own (a python.org Python on macOS before "Install Certificates"; pdfmd's open_url, v3.27.27)."""
+    try:
+        return urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.URLError as error:
+        if not isinstance(getattr(error, "reason", None), ssl.SSLCertVerificationError):
+            raise
+        cafile = next((path for path in CA_BUNDLES if os.path.isfile(path)), None)
+        if cafile is None:
+            try:
+                import certifi
+                cafile = certifi.where()
+            except ImportError:
+                raise error from None
+        return urllib.request.urlopen(request, timeout=timeout, context=ssl.create_default_context(cafile=cafile))
 
 
 def _cached(directory: Path, key: str) -> Path | None:
@@ -35,7 +58,7 @@ def fetch(url: str, directory: Path, *, max_age_days: float = 7, timeout: float 
         return old, "", False
     try:
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "image/*,application/pdf"})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _open(request, timeout) as response:
             kind = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             data = response.read(limit + 1)
     except urllib.error.HTTPError as error:

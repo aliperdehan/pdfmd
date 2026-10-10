@@ -41,6 +41,42 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.27 — 2026-10-11
+
+Pre-edit state: commit `8e7053b` (v3.27.26).
+
+### Added
+
+- **A citation style named by its URL is fetched by pdfmd** (`remotecsl`), at the author's request. `csl:
+  https://.../ieee.csl` needs the network and Pandoc's HTTP support, which a Homebrew Pandoc lacks: the author's
+  `prelab1` stopped with "pandoc was compiled without HTTP support". pdfmd now fetches the style once into its cache
+  (`csl/` there, fetched again after 30 days) and hands Pandoc the file (`--csl`, beside `--citeproc` on every route).
+  When the fetch fails, it tries in this order:
+  1. the copy it fetched before, however old (a NOTE);
+  2. a style of the same file name in Pandoc's own `csl/` folder, with a WARN;
+  3. `pdfmd-options: {csl-fallback: default}` (the default): Pandoc's default style, with a WARN;
+     `csl-fallback: error` stops instead. Under `--strict` the WARNs fail the build as usual.
+
+  A style the command line names (`--csl`, `-M csl=...`) is left alone, and so is everything with
+  `--no-auto remotecsl`. `csl-fallback` is a `pdfmd --setup` row (Citations).
+- **https fetches retry with the system's certificates** (`open_url`; `_open` in `pdfmd_images/remote.py`). A
+  python.org Python on macOS has no CA certificates until its "Install Certificates" step runs, so every https fetch
+  failed with CERTIFICATE_VERIFY_FAILED. That covers the style, remote images and `--install` downloads. pdfmd now
+  tries once more with `/etc/ssl/cert.pem` (or the Linux bundles, or certifi). Found on `prelab1` once the author's
+  `python3` became the python.org one after a Homebrew upgrade.
+
+Checked on a copy of `prelab1`: it fetched the IEEE style from GitHub and built with lualatex. Without the
+certificate retry, it built with the author's own `ieee.csl` from Pandoc's folder, with a WARN.
+
+### Tests
+
+- `tests/test_remote_csl.py`:
+  - which `csl:` counts, and what is left alone;
+  - fetched once and kept; offline, the old copy, then Pandoc's own style of the same name, then the default style or
+    an error;
+  - the certificate retry, and no retry for other errors;
+  - a build with an unreachable style, which works with `remotecsl` and fails with `--no-auto remotecsl`.
+
 ## v3.27.26 — 2026-10-11
 
 Pre-edit state: commit `3d303ed` (v3.27.25).

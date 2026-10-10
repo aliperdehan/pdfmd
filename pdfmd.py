@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.26"
+PDFMD_VERSION = "3.27.27"
 import argparse
 import csv
 import filecmp
@@ -1313,6 +1313,8 @@ import importlib.util
 import json
 import platform
 import tarfile
+import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
 import struct
@@ -1541,7 +1543,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures",
+    "draftpictures", "remotecsl",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -5807,7 +5809,7 @@ def github_release_asset(repository: str, name: str) -> tuple[str, str | None]:
     try:
         request = urllib.request.Request(f"https://api.github.com/repos/{repository}/releases/latest",
                                          headers=headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with open_url(request, 30) as response:
             release = json.load(response)
         for asset in release["assets"]:
             if asset["name"] == name:
@@ -5822,7 +5824,7 @@ def download_file(url: str, destination: Path, sha256: str | None) -> None:
     """Download url to destination, refusing a file whose SHA-256 is not the expected one."""
     request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
     digest = hashlib.sha256()
-    with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as handle:
+    with open_url(request, 120) as response, destination.open("wb") as handle:
         for chunk in iter(lambda: response.read(1 << 20), b""):
             digest.update(chunk)
             handle.write(chunk)
@@ -11769,6 +11771,142 @@ def pandoc_user_data_dir() -> Path | None:
     return _PANDOC_DATA_DIR or None
 
 
+# -- A citation style named by its URL (v3.27.27) -----------------------------------------------------------------
+# `csl: https://.../ieee.csl` needs the network and Pandoc's HTTP support, which a Homebrew Pandoc can lack ("pandoc
+# was compiled without HTTP support"). pdfmd fetches the style itself, once, into its cache (re-fetched after 30 days)
+# and hands Pandoc the file. Without the network it takes the copy it fetched before, however old; else a style of
+# the same file name in Pandoc's own csl/ folder, with a WARN; else `csl-fallback: default` (the default) builds with
+# Pandoc's default style, with a WARN, and `csl-fallback: error` stops. `--no-auto remotecsl` leaves the URL to Pandoc.
+
+CSL_FALLBACKS = ("default", "error")
+CSL_FETCH_DAYS = 30
+CA_BUNDLES = ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt")
+
+
+def open_url(request, timeout: float):
+    """urllib's urlopen, and once more with the system's CA bundle (else certifi's) when this Python has no certificates
+    of its own: a python.org Python on macOS has none until its "Install Certificates" step runs, and every https fetch
+    failed with CERTIFICATE_VERIFY_FAILED (v3.27.27; found fetching a csl: style)."""
+    try:
+        return urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.URLError as error:
+        if not isinstance(getattr(error, "reason", None), ssl.SSLCertVerificationError):
+            raise
+        cafile = next((path for path in CA_BUNDLES if os.path.isfile(path)), None)
+        if cafile is None:
+            try:
+                import certifi
+                cafile = certifi.where()
+            except ImportError:
+                raise error from None
+        return urllib.request.urlopen(request, timeout=timeout, context=ssl.create_default_context(cafile=cafile))
+
+
+def document_csl(sources: list[Path], metadata_files: list[Path]) -> str | None:
+    """The `csl:` Pandoc takes from the files: the last source's front matter, else the winning metadata file's."""
+    for source in reversed(sources):
+        value = front_matter_dict(read_text_best_effort(Path(source))).get("csl")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for path in metadata_files_by_priority(metadata_files):
+        value = metadata_file_yaml(path).get("csl")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def csl_fallback(md_path: Path, metadata_files: list[Path]) -> str:
+    """`pdfmd-options.csl-fallback`: default (Pandoc's default style, with a WARN) or error."""
+    value = first_pdfmd_option(md_path, metadata_files, "csl-fallback")
+    mode = str(value).strip().casefold() if value is not None else "default"
+    if mode not in CSL_FALLBACKS:
+        raise SystemExit(f"{md_path}: unknown csl-fallback value {value!r}. Valid: {', '.join(CSL_FALLBACKS)}")
+    return mode
+
+
+def fetch_csl(url: str) -> tuple[str | None, str]:
+    """(the style's text, "") or (None, why)."""
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
+        with open_url(request, 20) as response:
+            data = response.read(2 * 1024 * 1024 + 1)
+    except urllib.error.HTTPError as error:
+        error.close()
+        return None, f"{error.code} {error.reason}"
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+        return None, str(getattr(error, "reason", error)) or type(error).__name__
+    text = data.decode("utf-8", errors="replace")
+    if "<style" not in text[:4000]:
+        return None, "what it sent is not a CSL style"
+    return text, ""
+
+
+def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | None:
+    """The local file for a `csl:` URL (see above); None leaves the URL to Pandoc."""
+    name = Path(urllib.parse.urlparse(url).path).name or "style.csl"
+    name = name if name.lower().endswith(".csl") else name + ".csl"
+    folder = cache_root() / "csl"
+    cached = folder / f"{hashlib.sha1(url.encode('utf-8')).hexdigest()[:12]}-{name}"
+    if cached.is_file() and time.time() - cached.stat().st_mtime < CSL_FETCH_DAYS * 86400:
+        return cached
+    text, why = fetch_csl(url)
+    if text is not None:
+        folder.mkdir(parents=True, exist_ok=True)
+        partial = cached.with_name(cached.name + ".part")
+        partial.write_text(text, encoding="utf-8")
+        partial.replace(cached)
+        print(f"AUTO CSL   {url} -> {display_path(cached)}")
+        return cached
+    if cached.is_file():
+        when = time.strftime("%Y-%m-%d", time.localtime(cached.stat().st_mtime))
+        print(f"NOTE  {display_path(md_path)}: {url} could not be fetched ({why}); using the copy fetched on {when}")
+        return cached
+    data_dir = pandoc_user_data_dir()
+    own = next((place / name for place in ((data_dir / "csl", data_dir) if data_dir else ()) if (place / name).is_file()),
+               None)
+    if own is not None:
+        print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}); using Pandoc's own "
+              f"{display_path(own)} instead", file=sys.stderr)
+        return own
+    if csl_fallback(md_path, metadata_files) == "error":
+        raise SystemExit(f"{display_path(md_path)}: the citation style {url} could not be fetched ({why}), and Pandoc's "
+                         f"csl/ folder has no {name} (pdfmd-options: {{csl-fallback: error}})")
+    default = folder / "pandoc-default.csl"
+    if not default.is_file():
+        try:
+            done = subprocess.run(["pandoc", "--print-default-data-file", "default.csl"], capture_output=True,
+                                  text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            done = None
+        if done is None or done.returncode != 0 or "<style" not in done.stdout:
+            return None
+        folder.mkdir(parents=True, exist_ok=True)
+        default.write_text(done.stdout, encoding="utf-8")
+    print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
+          "the citations use Pandoc's default style (Chicago author-date). pdfmd-options: {csl-fallback: error} stops "
+          "instead", file=sys.stderr)
+    return default
+
+
+def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
+             no_auto: list[str] | None) -> list[str]:
+    """`--csl FILE` for a `csl:` URL in the front matter or a metadata file (see remote_csl); nothing for a local style,
+    one the command line names (--csl, -M csl=...), or `--no-auto remotecsl`."""
+    if auto_disabled(no_auto, "remotecsl"):
+        return []
+    for index, option in enumerate(pandoc_options):
+        following = pandoc_options[index + 1] if index + 1 < len(pandoc_options) else ""
+        if (option == "--csl" or option.startswith("--csl=")
+                or (option in ("-M", "--metadata") and following.startswith(("csl=", "csl:")))
+                or option.startswith(("-Mcsl=", "-Mcsl:", "--metadata=csl=", "--metadata=csl:"))):
+            return []
+    value = document_csl([Path(source) for source in sources], metadata_files)
+    if not value or not value.lower().startswith(("http://", "https://")):
+        return []
+    local = remote_csl(value, Path(sources[0]), metadata_files)
+    return ["--csl", str(local)] if local is not None else []
+
+
 _PANDOC_VERSION: tuple[int, ...] | None = None
 
 
@@ -14921,6 +15059,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += select_filter_args(selection)
             if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                 cmd.append("--citeproc")
+            if "--citeproc" in cmd or "--citeproc" in pandoc_options:
+                cmd += csl_args([md_path], metadata_files, pandoc_options, no_auto)
             # pandoc_options after --citeproc: any --lua-filter/--filter a caller
             # passes through needs resolved citations already in the AST, same
             # invariant as the auto-discovered lua_filters below (see run()'s
@@ -15534,6 +15674,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd.append(f"--{citation_engine}")
                     else:
                         cmd.append("--citeproc")
+                if "--citeproc" in cmd or "--citeproc" in pandoc_options:
+                    cmd += csl_args([md_path], metadata_files, pandoc_options, no_auto)
                 # pandoc_options after the citation-engine flag above: a
                 # caller-supplied --lua-filter/--filter needs resolved
                 # citations already in the AST (same invariant as the
@@ -15759,6 +15901,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += select_filter_args(selection)
                     if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")
+                    if "--citeproc" in cmd or "--citeproc" in pandoc_options:
+                        cmd += csl_args([md_path], metadata_files, pandoc_options, no_auto)
                     # pandoc_options after --citeproc, same reason as below: a
                     # caller-supplied --lua-filter/--filter needs resolved
                     # citations already in the AST. (This used to sit before
@@ -18927,7 +19071,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -19868,6 +20012,8 @@ def main() -> None:
                             and "--citeproc" not in pandoc_options
                             and not CITEPROC_DISABLED):
                         cmd.append("--citeproc")
+                    if "--citeproc" in cmd or "--citeproc" in pandoc_options:
+                        cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += report_office_arguments
@@ -19985,6 +20131,8 @@ def main() -> None:
                                 and "--citeproc" not in pandoc_options
                                 and not CITEPROC_DISABLED):
                             cmd.append("--citeproc")
+                        if "--citeproc" in cmd or "--citeproc" in pandoc_options:
+                            cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
                         # pandoc_options after --citeproc: see convert_one's
                         # matching comment.
                         cmd += pandoc_options

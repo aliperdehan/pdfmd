@@ -120,6 +120,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "cache-location": "options.cache.location",
     "check-ignore": "options.check-ignore",
     "citation-engine": "options.citation-engine",
+    "csl-fallback": "options.csl-fallback",
     "code-wrap": "options.code-wrap", "line-numbers": "options.line-numbers",
     "line-number-step": "options.line-number-step",
     "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols",

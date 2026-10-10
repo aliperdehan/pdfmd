@@ -1359,6 +1359,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `codewrap` | code blocks in a LaTeX build | long lines wrap at the margin (`--no-code-wrap` or `--no-auto codewrap` for the old behaviour) |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
+| `remotecsl` | `csl: https://.../ieee.csl` in the front matter or a metadata file | fetches the style once and keeps it (again after 30 days), so a Pandoc built without HTTP support and a build with no network still work: offline it takes that copy, else a style of the same name in Pandoc's own `csl/` folder, with a WARN, else Pandoc's default style with a WARN (`pdfmd-options: {csl-fallback: error}` stops instead) |
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 | `texpackages` | `\ce{H2O}` (mhchem) or `\SI{25}{\celsius}`, `\num`, `\qty` (siunitx) in a LaTeX build whose preamble does not load the package | loads it, last in the preamble, unless it is loaded already (your options win), the command is defined some other way, or the package is not installed |
