@@ -104,7 +104,10 @@ class Zipapp(unittest.TestCase):
         self.assertEqual(done.stdout.strip(), f"pdfmd {pdfmd.PDFMD_VERSION}")
         unpacked = list((directory / "cache" / "pdfmd" / "pyz").iterdir())
         self.assertEqual(len(unpacked), 1)
-        for name in ("pdfmd.py", "pdfmd_lua/table_width.lua", "pdfmd_lua/code_wrap.tex", "yaml/__init__.py", "pypdf/__init__.py"):
+        # PyYAML and pypdf are copied from this Python only if it has them (Homebrew's Python 3.14.8 has no pypdf)
+        import importlib.util
+        bundled = [f"{module}/__init__.py" for module in ("yaml", "pypdf") if importlib.util.find_spec(module)]
+        for name in ("pdfmd.py", "pdfmd_lua/table_width.lua", "pdfmd_lua/code_wrap.tex", *bundled):
             self.assertTrue((unpacked[0] / name).is_file(), name)
         again = subprocess.run([sys.executable, "-S", str(archive), "--version"], cwd=directory, capture_output=True,
                                text=True, env=env)

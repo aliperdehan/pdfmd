@@ -41,6 +41,69 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.28 — 2026-10-11
+
+Pre-edit state: commit `5a8abaf` (v3.27.27).
+
+### Fixed
+
+The author asked for nulabreport's plot cache to be switched on, on condition that a stored plot is used only while it
+still matches what the build would draw. Checked first on copies of LR4-5 and LR3, which turned up four gaps:
+
+- **A report's plots were thrown away by building other documents.** The plot folders were shared by every document
+  and the three newest were kept. Every report has its own preamble (its title, its `\LabExperiment`), so building
+  three other documents with the plot cache on, even ones without plots, deleted a report's plots. Each document now
+  keeps its plot folders in its own cache folder, the newest eight. `pdfmd DOC --clear-cache` now clears that
+  document's plots too.
+- **A part built alone drew its plots again, in a new folder at every build.** The folder is keyed by the
+  preamble, and `report#discussion` adds two things to it:
+  - pdfmd's label replay, which names a temporary file;
+  - nulabreport's filter drops a part's title.
+
+  So every build of a part had a new folder: LR4-5's Discussion drew its 4 plots again each time, and pushed the full
+  build's folder towards the prune. What pdfmd adds to one build only (the replay, the counter markers) is now left
+  out of the preamble the plots are keyed by and drawn with (`plot_preamble`). The key also leaves out the title
+  (`\title`, `pdftitle`) and ignores line wrapping (`plot_key_text`). LR4-5's Discussion now uses the full build's
+  plots.
+
+  A part whose preamble really differs keeps a folder of its own, drawn once and reused from its next build: Pandoc
+  writes the citation commands only for a part that cites (LR4-5's Calculations), and table packages only for one
+  with tables.
+- **A `tlmgr update` kept the old plots.** The engine's version line names only the TeX Live year. The folder's key
+  now also takes the size and time of TeX Live's package database (`tlpkg/texlive.tlpdb`, rewritten by every
+  install, update and removal; `tex_tree_stamp`). Nothing changes on MiKTeX or without `kpsewhich`.
+- **Files of the package's own were not inputs.** A plot job reads 5 files from `~/Library/texmf` besides
+  `nulabreport.sty`, which is in the folder's key: nulabreport's vendored chemfig and its `chemicals.tex`. Inputs
+  were recorded only under the report's folders. Files under TEXMFHOME and TEXMFLOCAL (`user_tex_trees`) are now
+  recorded too, with their SHA-1, like a CSV. Each file is hashed once per build, not once per plot.
+- **With `cache: {location: document}` no plot was ever reused.** The plot folder is then under the report's
+  folder, so the plot job's own `.tex` (deleted once it has run) was recorded as an input, and every entry was
+  dropped at the next build. Files in the plot folder itself are no longer inputs.
+
+`PLOT_CACHE_FORMAT` is 2, so the first build draws every plot once.
+
+Checked on copies of LR4-5 and LR3 (in a cache folder of their own):
+- LR4-5 cached against uncached: 0 of 12315 words moved by more than 0.05 bp. As pictures, the largest blurred
+  difference is 47/255, which is anti-aliasing.
+- LR4-5's Discussion with the full build's plots, against the Discussion uncached: 0 of 4628 words moved; 45/255.
+- Two full builds in a fresh cache used one folder, and the Discussion used the same one.
+- LR3 built after LR4-5 left LR4-5's folders alone.
+- With `--cache-location document`, LR3's second build stored nothing. 3.27.27 drew all 11 plots again.
+- LR4-5's timings (a busy machine, so roughly): 98 s with no cache, 55 s with the `.aux` cache, 30-45 s with both.
+  The build that stores the plots took about 140 s, about 35-55 s of it spent storing 12 plots, four at a time.
+
+### Tests
+
+- `tests/test_plot_cache.py`:
+  - a part's own headers leave the folder unchanged;
+  - each document keeps its folders;
+  - the TeX Live stamp;
+  - the user's trees are inputs and TeX Live's are not;
+  - a cache beside the document keeps its entries;
+  - TEXMFHOME/TEXMFLOCAL as kpsewhich gives them.
+- `tests/test_compat.py`: the zipapp test expects PyYAML and pypdf inside the file only when the Python running it
+  has them, as the build script does. Homebrew's Python 3.14.8 has no pypdf, so the test failed there.
+
 ## v3.27.27 — 2026-10-11
 
 Pre-edit state: commit `8e7053b` (v3.27.26).

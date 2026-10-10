@@ -1058,8 +1058,11 @@ sources, above). It never skips a build: Pandoc and
 LaTeX still process the whole document from the current sources and package
 every time, so a change shows in the next build. `cache: {plots: true}` (or
 `--cache-plots`, with nulabreport >= 1.26.0) additionally stores each plot as a
-PDF and reuses it until the package, the preamble, the engine or the plot's
-data file changes. Off by default; `--no-cache` for one build; `pdfmd --clear-cache`
+PDF in the document's cache folder and reuses it (a part built alone uses the whole
+document's, unless its preamble differs by more than the title) until the package,
+the preamble, the engine, TeX Live's packages (a `tlmgr update`) or a file the plot
+read changes (its data file, a file of the package's own: checked by
+SHA-1 of the contents before every build). Off by default; `--no-cache` for one build; `pdfmd --clear-cache`
 (or deleting the folder) is always safe.
 
 **Where the cache lives.** By default in `~/.cache/pdfmd`, one folder per document.

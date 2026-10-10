@@ -978,21 +978,25 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     --clear-cache` first, when verifying a change to the package itself.
 
     Plot cache (`cache: {plots: true}`, --cache-plots; nulabreport >= 1.26.0,
-    LuaLaTeX): nulabreport's whole plot pictures are stored as PDFs under the
-    cache folder after the build that first typesets them, and the next build
-    includes them at their exact size instead of drawing them again -- the
-    expensive part of a report full of spectra. A plot not stored yet is
-    simply typeset inline, so a build never depends on this having worked.
-    Staleness is closed off three ways: the folder is keyed by a hash of
-    nulabreport.sty, the document's whole preamble and the engine version (any
-    change starts a new folder; old ones are pruned); each entry records the
-    files its standalone job really read (LaTeX's -recorder) and is dropped
-    when one changes, so editing a CSV redraws exactly the plots that use it;
-    and the entry's key covers the call, its arguments, the layout it read
-    and the colours set by the call's own keys. On a real 29-page report:
-    80 s plain, 28 s with the aux cache, 15 s with both; pages identical to
-    the uncached build to 0.05 bp in every word. `pdfmd --clear-cache` deletes
-    the folder (a document's, or everything), always safe.
+    LuaLaTeX): nulabreport's whole plot pictures are stored as PDFs in the
+    document's cache folder after the build that first typesets them, and the
+    next build (a part built alone too, unless its preamble differs by more
+    than the title) includes them at their exact size
+    instead of drawing them again -- the expensive part of a report full of
+    spectra. A plot not stored yet is simply typeset inline, so a build never
+    depends on this having worked. Staleness is closed off three ways: the
+    folder is keyed by a hash of nulabreport.sty, the document's whole
+    preamble, the engine version and TeX Live's package database (any change,
+    a `tlmgr update` too, starts a new folder; old ones are pruned); each
+    entry records the files its standalone job really read (LaTeX's
+    -recorder) under the report's folders and the user's own TeX trees, with
+    their SHA-1, and is dropped when one changes, so editing a CSV redraws
+    exactly the plots that use it; and the entry's key covers the call, its
+    arguments, the layout it read and the colours set by the call's own keys.
+    On a real 29-page report: 98 s plain, 55 s with the aux cache, 35-45 s
+    with both; pages identical to the uncached build to 0.05 bp in every
+    word. `pdfmd --clear-cache` deletes the folder (a document's, or
+    everything), always safe.
 
     The cache route is also what makes `citation-engine: natbib`/`biblatex`
     work with parts (the Pandoc-run bibliography path takes one input file);
@@ -1297,7 +1301,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.27"
+PDFMD_VERSION = "3.27.28"
 import argparse
 import csv
 import filecmp
@@ -14676,17 +14680,31 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 #   * the directory is keyed by a hash of everything the picture can depend on
 #     apart from its own arguments -- the package (nulabreport.sty), the
 #     document's whole preamble (fonts, settings, preamble.tex, header-includes),
-#     the engine's version, and this cache's format -- so a changed package or
-#     setting simply lands in a new directory, and the old one is pruned;
+#     the engine's version, when TeX Live's packages last changed (its package
+#     database, rewritten by every `tlmgr update`), and this cache's format -- so a
+#     changed package or setting simply lands in a new directory, and the old one
+#     is pruned;
 #   * every entry records the files its standalone job actually read (LaTeX's
-#     own recorder, not a guess at argument names) and is dropped before the
-#     next build if any of them changed or vanished -- a CSV edit shows up;
+#     own recorder, not a guess at argument names) under the report's folders and
+#     the user's own TeX trees (TEXMFHOME, TEXMFLOCAL: a package's vendored files),
+#     with their SHA-1, and is dropped before the next build if any of them
+#     changed or vanished -- a CSV edit shows up;
 #   * the key includes the picture's arguments and the layout it read (text
 #     height/width, font size), so a different call or a different page
 #     geometry is a different entry.
-PLOT_CACHE_FORMAT = "1"
+# The directories live in the document's own cache folder (v3.27.28; they were
+# shared by every document, and the three newest were kept, so building three
+# other reports threw a report's plots away). What pdfmd itself adds to one build's
+# preamble (a part's label replay, which names a temporary file, and the counter
+# markers) is left out of the preamble the plots are keyed by and drawn with, and the
+# key leaves out the title, which a part does not typeset (plot_key_text), so a part
+# built alone uses the full build's plots instead of a directory of its own. A part
+# whose preamble really differs (Pandoc writes the citation commands only for a part
+# that cites, table packages only for one with tables) keeps a directory of its own,
+# drawn once and reused at its next build: eight are kept per document.
+PLOT_CACHE_FORMAT = "2"
 PLOT_REQUEST_SEP = "@@|@@"
-PLOT_CACHE_KEEP_DIRS = 3
+PLOT_CACHE_KEEP_DIRS = 8     # per document: the whole report, a few parts, a package changed and changed back
 CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
 
 
@@ -14719,9 +14737,84 @@ def sha1_file(path: Path) -> str | None:
         return None
 
 
+@lru_cache(maxsize=None)
+def tex_tree_stamp() -> str:
+    """When TeX Live's packages last changed: `tlmgr` rewrites its package database
+    (tlpkg/texlive.tlpdb) on every install, update and removal, and the engine's
+    version line names only the year. Empty elsewhere (MiKTeX, no kpsewhich)."""
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return ""
+    try:
+        root = subprocess.run([kpsewhich, "-var-value", "TEXMFROOT"], capture_output=True, text=True).stdout.strip()
+        stat = (Path(root) / "tlpkg" / "texlive.tlpdb").stat() if root else None
+    except OSError:
+        return ""
+    return f"{stat.st_size}:{stat.st_mtime_ns}" if stat else ""
+
+
+@lru_cache(maxsize=None)
+def user_tex_trees() -> tuple[Path, ...]:
+    """The user's own TeX trees (TEXMFHOME, TEXMFLOCAL). A plot job reads files there that
+    TeX Live's package database does not cover: nulabreport's vendored chemfig, its
+    chemicals.tex."""
+    kpsewhich = which("kpsewhich")
+    if not kpsewhich:
+        return ()
+    trees: list[Path] = []
+    for variable in ("TEXMFHOME", "TEXMFLOCAL"):
+        try:
+            value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, text=True).stdout
+        except OSError:
+            continue
+        for item in re.split(r"[,;{}]", value.strip()):      # a {a,b} list, rarely
+            item = item.strip().lstrip("!")
+            if item and Path(item).expanduser().is_dir():
+                tree = Path(os.path.abspath(Path(item).expanduser()))
+                if tree not in trees:
+                    trees.append(tree)
+    return tuple(trees)
+
+
+def plot_preamble(preamble: str, own_headers: list[str]) -> str:
+    """The preamble plots are keyed by and drawn with: the document's, without the
+    headers pdfmd adds to one build only (a part's label replay, which names a
+    temporary file; the counter markers). They draw nothing, and left in, every
+    part built alone had a plot directory of its own."""
+    for text in own_headers:
+        text = text.strip()
+        if text:                       # Pandoc writes a header's lines, then one newline
+            preamble = preamble.replace(text + "\n", "") if text + "\n" in preamble else preamble.replace(text, "")
+    return preamble
+
+
+PLOT_KEY_TITLE_RE = re.compile(r"\\title\{|pdftitle=\{")
+
+
+def plot_key_text(preamble: str) -> str:
+    """The preamble as the plot directory's key reads it: without the title (`\\title{...}`,
+    hyperref's `pdftitle={...}`) and with every run of white space one space. A part built
+    alone has the same settings as the whole document but not its title: nulabreport's
+    filter drops the title page of a part (`pdfmd-partial`), and Pandoc wraps the PDF
+    title's line differently. Neither draws anything in a plot."""
+    kept, position = [], 0
+    for match in PLOT_KEY_TITLE_RE.finditer(preamble):
+        if match.start() < position:
+            continue
+        kept.append(preamble[position:match.start()])
+        depth, end = 1, match.end()
+        while end < len(preamble) and depth:
+            if preamble[end - 1] != "\\":
+                depth += {"{": 1, "}": -1}.get(preamble[end], 0)
+            end += 1
+        position = end + 1 if preamble[end:end + 1] == "," else end
+    kept.append(preamble[position:])
+    return " ".join("".join(kept).split())
+
+
 def plot_cache_directory(preamble: str, sty_text: str, engine: str, root: Path | None = None) -> Path:
-    digest = hashlib.sha1("\0".join([PLOT_CACHE_FORMAT, preamble, sty_text,
-                                     engine_version_line(engine)]).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha1("\0".join([PLOT_CACHE_FORMAT, plot_key_text(preamble), sty_text, engine_version_line(engine),
+                                     tex_tree_stamp()]).encode("utf-8")).hexdigest()[:12]
     return (root or cache_root()) / f"plots-{digest}"
 
 
@@ -14741,6 +14834,13 @@ def validate_plot_entries(plot_dir: Path, verbose: bool, roots: list[Path] | Non
     import json
     dropped = 0
     current = [str(root) for root in roots] if roots else None
+    digests: dict[str, str | None] = {}        # every entry lists the package's own files: hash each once
+
+    def digest_of(name: str) -> str | None:
+        if name not in digests:
+            digests[name] = sha1_file(Path(name))
+        return digests[name]
+
     for deps_file in plot_dir.glob("*.deps"):
         key = deps_file.stem
         try:
@@ -14759,7 +14859,7 @@ def validate_plot_entries(plot_dir: Path, verbose: bool, roots: list[Path] | Non
                             break
                     remapped[name] = digest
                 deps, moved = remapped, True
-        if deps is None or any(sha1_file(Path(name)) != digest for name, digest in deps.items()):
+        if deps is None or any(digest_of(name) != digest for name, digest in deps.items()):
             for suffix in (".deps", ".dim", ".pdf"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
             dropped += 1
@@ -14786,8 +14886,9 @@ def read_plot_requests(path: Path) -> dict[str, tuple[str, str, str]]:
 
 def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
     """The user's own files a standalone plot job read (LaTeX -recorder), with
-    their content hashes -- anything under the report's folders, nothing from
-    the TeX tree."""
+    their content hashes -- anything under the report's folders and the user's
+    own TeX trees, nothing from TeX Live's (its package database is in the
+    directory's key), nothing of the job's own."""
     found: dict[str, str] = {}
     try:
         lines = fls.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -14799,6 +14900,10 @@ def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
             continue
         candidate = Path(os.path.abspath(base / line[6:].strip()))
         if candidate.suffix in (".aux", ".fls") or not candidate.is_file():
+            continue
+        if candidate.parent == Path(os.path.abspath(fls.parent)):
+            # the job's own .tex, deleted once it has run: a cache beside the document (`location: document`) is
+            # under the report's folder, and recording it dropped every entry at the next build
             continue
         if any(str(candidate).startswith(str(root) + os.sep) for root in roots):
             digest = sha1_file(candidate)
@@ -18366,6 +18471,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
     stem = safe_stem(output.stem)
     tex_path = base / f"{stem}.tex"
     headers = list(preamble_files or [])
+    own_headers: list[str] = []      # what pdfmd adds to this build only: left out of the plots' preamble
     seeded = 0
     global LAST_SEEDED
     LAST_SEEDED = 0
@@ -18374,6 +18480,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         defs = base / f"{stem}.pdfmd-defs.tex"
         defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
         headers.append(defs)
+        own_headers.append(PARTS_MARKER_DEFS)
     # A partial build takes its missing labels from the last full build's .aux: the
     # report's, in parts mode, or the document's own for one section or element of an
     # ordinary document (source_override), which has no parts and so no counter markers.
@@ -18390,12 +18497,14 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
             hook = base / f"{stem}.seed-hook.tex"
             hook.write_text("\\AtBeginDocument{\\InputIfFileExists{\"%s\"}{}{}}\n" % seed.as_posix(), encoding="utf-8")
             headers.append(hook)
+            own_headers.append(hook.read_text(encoding="utf-8"))
             when = datetime.fromtimestamp(full_aux.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
             note("CACHE", f"{md_path}: {seeded} labels from the last full build ({when}) fill in "
                           + ("references to the rest of the document" if source_override is not None
                              else "references to parts left out"))
     if label_scan is not None:
         headers.extend(label_scan.headers)          # after the .aux seed: what the last full build knew wins
+        own_headers.extend(header.read_text(encoding="utf-8", errors="replace") for header in label_scan.headers)
         if label_scan.exact:
             note("LABELS", f"{md_path}: labels from a draft pass over the whole document (exact), the scan fills in the rest")
         else:
@@ -18420,21 +18529,27 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         preamble_text = ""
         if plots:
             tex_text = tex_path.read_text(encoding="utf-8")
-            preamble_text = tex_text.split("\\begin{document}")[0]
+            preamble_text = plot_preamble(tex_text.split("\\begin{document}")[0], own_headers)
             sty_text = kpsewhich_text("nulabreport.sty") or ""
+            # the document's own cache folder: the aux cache's, or the one it would use when it is off
+            plot_home = base if persistent else cache_directory(full_scaffold or md_path, cache_base, note)
+            roots = [Path(os.path.abspath(pandoc_cwd)), Path(os.path.abspath(md_path.parent)), *user_tex_trees()]
             if engines[0] != "lualatex":
                 note("CACHE", "plots: only LuaLaTeX is supported; plot cache skipped")
             elif "LabPlotCacheDir" not in sty_text:
                 note("CACHE", "plots: this nulabreport.sty has no plot cache (needs v1.26.0); skipped")
-            elif " " in str(cache_base):
+            elif " " in str(plot_home):
                 note("CACHE", "plots: the cache folder's path has a space; plot cache skipped")
             else:
-                plot_dir = plot_cache_directory(preamble_text, sty_text, "lualatex", cache_base)
+                if not persistent:
+                    prepare_cache_root(cache_base)
+                    plot_home.mkdir(parents=True, exist_ok=True)
+                    write_cache_manifest(plot_home, full_scaffold or md_path)
+                plot_dir = plot_cache_directory(preamble_text, sty_text, "lualatex", plot_home)
                 plot_dir.mkdir(parents=True, exist_ok=True)
                 os.utime(plot_dir)
                 prune_plot_directories(plot_dir)
-                validate_plot_entries(plot_dir, verbose, [Path(os.path.abspath(pandoc_cwd)),
-                                                           Path(os.path.abspath(md_path.parent))])
+                validate_plot_entries(plot_dir, verbose, roots)
                 tex_path.write_text("\\def\\LabPlotCacheDir{%s/}\n" % plot_dir.as_posix() + tex_text,
                                     encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
@@ -18443,7 +18558,6 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
             requests = read_plot_requests(base / f"{stem}.plotreq")
             if requests:
                 started = time.time()
-                roots = [Path(os.path.abspath(pandoc_cwd)), Path(os.path.abspath(md_path.parent))]
                 done, failed = render_plot_requests(requests, plot_dir, preamble_text, "lualatex",
                                                     pandoc_cwd, tex_env, roots, verbose)
                 if done or failed:
