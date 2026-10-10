@@ -19,6 +19,16 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: E402
 
 
+class Sources(unittest.TestCase):
+    def test_every_source_compiles_without_a_warning(self):
+        # a docstring with `\newpage` in it (v3.27.13) made Python warn about `\p` on every run
+        import warnings
+        for path in [ROOT / "pdfmd.py", *sorted(ROOT.glob("pdfmd_*/**/*.py"))]:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()), warnings.catch_warnings():
+                warnings.simplefilter("error")
+                compile(path.read_text(encoding="utf-8"), str(path), "exec")
+
+
 class Versions(unittest.TestCase):
     def test_what_an_older_pandoc_does_without(self):
         self.assertEqual(pdfmd.pandoc_limits((3, 12)), [])

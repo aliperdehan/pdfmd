@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.attach-source": "off",
     "options.bundle": "off", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off",
@@ -77,13 +77,24 @@ AUTO_HELP = {
     "yaml": "metadata.yaml discovery", "preamble": "preamble.tex discovery", "tex": "preamble.tex discovery",
     "lua": "Lua filter discovery", "files": "metadata, preamble and filter discovery", "standalone": "--standalone",
     "texdirect": "compile .tex directly with LaTeX", "officedirect": "convert office files with LibreOffice",
-    "svg": "convert SVG images for LaTeX", "remoteimages": "fetch and keep remote images", "pdfimages": "show PDF images in HTML builds (as SVG)", "pagebreak": "one page break for every format", "typstdirect": "build .typ files with Typst directly", "htmldirect": "build .html files with WeasyPrint or a browser directly",
+    "svg": "convert SVG images for LaTeX", "remoteimages": "fetch and keep remote images", "pdfimages": "show PDF images in HTML builds (as SVG)", "typstdirect": "build .typ files with Typst directly", "htmldirect": "build .html files with WeasyPrint or a browser directly",
     "crossref": "pandoc-crossref for @fig: references", "citationengine": "citeproc / biblatex choice",
     "csvtable": "tables from CSV files", "papersize": "fix `pagesize:` to `papersize:`", "parts": "report/book parts",
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
     "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
 }
+
+
+# the families of pdfmd.PAGEBREAK_KINDS, in its order
+PAGEBREAK_CHOICES = (
+    ("comment", "<!-- pagebreak -->, <!-- newpage -->, <!-- pdfmd: pagebreak -->"),
+    ("tex", "\\newpage, \\pagebreak, \\clearpage, \\cleardoublepage"),
+    ("html", '<div style="page-break-after: always">, <div class="pagebreak">'),
+    ("div", "an empty ::: pagebreak"),
+    ("typst", "a raw Typst #pagebreak()"),
+    ("word", "a raw Word page break"),
+)
 
 
 def feature_choices() -> tuple[tuple[str, str], ...]:
@@ -294,10 +305,14 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.reader", "Markdown reader",
              "A Pandoc reader for every Markdown file: markdown, gfm, commonmark_x, with +/- extensions. Per run: --from.",
              "Input"),
+        # -- universal markup: what is written in one syntax, carried into every output (off unless set)
         choice("options.raw", "Carry raw HTML, LaTeX and Typst pieces into every output", on_off, "",
                "Raw pieces in another syntax than the output's are converted (HTML and LaTeX read into native elements, "
                "Typst drawn as a vector picture) instead of dropped. Per family: pdfmd-options.raw in a document.",
-               "Input"),
+               "Universal markup"),
+        Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
+                "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
+                "--no-pagebreak.", "Universal markup"),
         # -- checks and limits
         choice("options.strict", "A warning fails the build", on_off, "",
                "The output is kept; the exit status is 1. Per run: --strict / --no-strict.", "Checks and limits"),

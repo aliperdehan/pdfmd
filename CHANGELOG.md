@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.15 — 2026-10-10
+
+Pre-edit state: commit `b89ee55` (v3.27.14).
+
+### Changed
+
+- **Page breaks in every format are off unless asked, and you choose what takes part** (the author: 3.27.13 had them
+  on for everyone, as an auto kind). `pdfmd-options.pagebreak: true` (every family) or a list of families:
+  `comment` (`<!-- pagebreak -->` and the other spellings), `tex` (`\newpage`, `\clearpage` ...), `html` (a CSS-break or
+  `class="pagebreak"` div or hr), `div` (an empty `::: pagebreak`), `typst` (a raw `#pagebreak()`), `word` (a raw Word
+  break). From the document, a metadata file or the config (`pdfmd --setup`: a new section, **Universal markup**, which
+  also takes the raw-pieces row); `--pagebreak [KIND ...]` (bare: all) and `--no-pagebreak` for a run. pdfmd passes the
+  families to `pagebreak.lua` as `-M pdfmd-pagebreak=...`, which the filter takes out of the metadata. The auto kind
+  `pagebreak` and its `--no-auto` are gone (never released). Without the option every writer keeps only its own
+  spelling, as before 3.27.13; the built-in renderer reads the comment and TeX spellings as it always did.
+
+### Fixed
+
+- **Python warned `invalid escape sequence '\p'` on every run of 3.27.13**, and its docstring lost the `\n` of
+  `\newpage` to a line break: the new paragraph had single backslashes. `tests/test_compat.py` now compiles every
+  source with warnings as errors.
+
+### Tests
+
+- `tests/test_pagebreak.py`: the option's values, off unless asked, the command line over the document, only the
+  chosen families converted (in Pandoc and in a Word file).
+
 ## v3.27.14 — 2026-10-10
 
 Pre-edit state: commit `f824538` (v3.27.13).

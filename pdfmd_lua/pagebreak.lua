@@ -1,6 +1,8 @@
--- pdfmd: one page break for every writer (v3.27.13). Before it only the built-in renderer understood
--- `<!-- pagebreak -->`; through Pandoc each writer took its own spelling and dropped the others (LaTeX the TeX commands,
--- WeasyPrint the CSS div, Word nothing but its own XML, Typst none of them).
+-- pdfmd: one page break for every writer (v3.27.13; off unless asked since v3.27.15). Through Pandoc each writer takes
+-- its own spelling and drops the others (LaTeX the TeX commands, WeasyPrint the CSS div, Word nothing but its own XML,
+-- Typst none of them). pdfmd adds this filter when `pdfmd-options.pagebreak` or `--pagebreak` asks, with the families
+-- that take part as `-M pdfmd-pagebreak=comment,tex,...` (run by hand without it, every family does):
+-- comment, tex, html, div, typst, word.
 --
 -- A block that is nothing but a page break, in any of these spellings (case does not matter):
 --   <!-- pagebreak -->, <!-- page-break -->, <!-- newpage -->, <!-- new-page -->, <!-- pdfmd: pagebreak -->
@@ -13,7 +15,7 @@
 -- the reference document it builds), ConTeXt `\page`, ms `.bp`, plain text a form feed, GitHub Markdown and CommonMark
 -- `<!-- pagebreak -->`. A spelling already in the target's own language is left exactly as written (`\pagebreak[3]`
 -- stays for LaTeX). Slides have no page breaks: one there is dropped, with a NOTE. Other writers (Pandoc Markdown, rst,
--- org ...) keep what was written. `--no-auto pagebreak` leaves this filter out.
+-- org ...) keep what was written.
 
 local COMMENT_WORDS = {pagebreak = true, ["page-break"] = true, newpage = true, ["new-page"] = true}
 local TEX_COMMANDS = {newpage = "page", pagebreak = "page", clearpage = "page", cleardoublepage = "odd"}
@@ -58,6 +60,11 @@ local function html_break(text)
   end
   return nil
 end
+
+-- the family each recognised spelling belongs to (pdfmd.PAGEBREAK_KINDS)
+local FAMILY = {comment = "comment", latex = "tex", words = "tex", html = "html", class = "html", div = "div",
+                typst = "typst", docx = "word"}
+local enabled = nil          -- nil: every family
 
 -- (kind, the raw format it was written in) of a block that is only a page break, else nil
 local function page_break(block)
@@ -124,7 +131,7 @@ end
 
 local function block(element)
   local kind, source = page_break(element)
-  if not kind then return nil end
+  if not kind or (enabled and not enabled[FAMILY[source]]) then return nil end
   if SLIDES[target] then
     if source == "latex" and target == "beamer" then return nil end
     dropped = dropped + 1
@@ -137,6 +144,12 @@ end
 local filter = {RawBlock = block, Div = block, Para = block, Plain = block}
 
 return {{Pandoc = function(doc)
+  local chosen = doc.meta["pdfmd-pagebreak"]
+  if chosen ~= nil then
+    enabled = {}
+    for name in pandoc.utils.stringify(chosen):gmatch("[%w]+") do enabled[name:lower()] = true end
+    doc.meta["pdfmd-pagebreak"] = nil
+  end
   doc = doc:walk(filter)
   if dropped > 0 then
     io.stderr:write(string.format("NOTE  pagebreak: %d page break%s left out: slides have no pages to break\n", dropped,

@@ -290,7 +290,8 @@ OK    notes.md
 
 Every input is treated as GitHub-flavoured Markdown. Pandoc-only syntax is
 converted where possible (`\newpage` and `<!-- pagebreak -->` become a page
-break, as they do through Pandoc, see `pagebreak` under *What it does automatically*; footnotes become endnotes for inkmd, `$` prices are not mistaken for math)
+break, as they do through Pandoc with `pagebreak:`, see *Page breaks in every
+format*; footnotes become endnotes for inkmd, `$` prices are not mistaken for math)
 and removed otherwise (heading and image attributes, `:::` divs, raw LaTeX,
 `<!-- comments -->`), with one warning per kind. CSV tables
 (`::: {.csv file="data.csv"}`) work as they do with Pandoc. The title, author and date in the
@@ -1270,6 +1271,30 @@ in HTML, Typst and flat Markdown builds (an SVG for HTML and Markdown; a piece t
 out). Not yet: HTML drawn as a picture, Word XML as
 anything but Word XML.
 
+**Page breaks in every format.** Each output understands one way of writing a page break and drops the others: LaTeX
+takes `\newpage`, WeasyPrint a CSS-break `<div>`, Word only its own XML, Typst none of them. Ask for it and every
+spelling of the families you name becomes the output's own (LaTeX `\newpage`, Typst `#pagebreak`, a CSS break for HTML,
+EPUB and WeasyPrint, a Word or OpenDocument page break, a form feed in `--to txt`, `<!-- pagebreak -->` in `--to gfm`):
+
+```yaml
+pdfmd-options:
+  pagebreak: true              # every family; or a list of them:
+  # pagebreak: [comment, tex]
+```
+
+| family | spellings |
+|---|---|
+| `comment` | `<!-- pagebreak -->`, `<!-- page-break -->`, `<!-- newpage -->`, `<!-- new-page -->`, `<!-- pdfmd: pagebreak -->` |
+| `tex` | `\newpage`, `\pagebreak`, `\pagebreak[3]`, `\clearpage`, `\cleardoublepage` (an odd page) |
+| `html` | `<div style="page-break-after: always"></div>` (or `break-before: page`), `<div class="pagebreak"></div>`, `<hr class="pagebreak">` |
+| `div` | an empty `::: pagebreak` (or `newpage`) |
+| `typst` | a raw `` ```{=typst} `` `#pagebreak()` |
+| `word` | a raw `` ```{=openxml} `` page-break paragraph |
+
+It is off unless asked (the document, a metadata file, or `pdfmd --setup` under *Universal markup*); `--pagebreak
+[KIND ...]` and `--no-pagebreak` decide for one run. A spelling already in the output's own language stays as written,
+and slides leave a break out with a note. The built-in renderer (no Pandoc) reads the comment and TeX spellings anyway.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the
@@ -1331,7 +1356,6 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `citeproc` | `@key` / `[@key, p. 90]` citations (as Pandoc reads them: `@key` in a code span or an e-mail address is none) | adds `--citeproc`, so citations and the reference list render from your `bibliography:` without any flag (`--no-citeproc` turns it off) |
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
-| `pagebreak` | a page break in any spelling: `<!-- pagebreak -->` (or `page-break`, `newpage`, `<!-- pdfmd: pagebreak -->`), `\newpage`, `\pagebreak`, `\clearpage`, `\cleardoublepage`, `<div style="page-break-after: always">`, `<div class="pagebreak">`, `::: pagebreak`, a raw Typst `#pagebreak()` or Word break | becomes the output's own: LaTeX `\newpage`, Typst `#pagebreak`, a CSS break for HTML and WeasyPrint, a Word or OpenDocument page break, a form feed in `--to txt`, `<!-- pagebreak -->` in `--to gfm`; a spelling already in the output's language stays as written, slides drop it with a note (`--no-auto pagebreak`) |
 
 `-v` explains each decision and prints the exact command it runs:
 

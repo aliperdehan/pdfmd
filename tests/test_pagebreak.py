@@ -1,5 +1,5 @@
-"""Page breaks in every writer (v3.27.13): pdfmd_lua/pagebreak.lua and the built-in renderer's patterns, against one
-list of spellings, and real PDFs and Word files counted."""
+"""Page breaks in every writer (v3.27.13; off unless asked since v3.27.15): pdfmd_lua/pagebreak.lua and the built-in
+renderer's patterns, against one list of spellings, the families that take part, and real PDFs and Word files counted."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -120,6 +121,14 @@ class Filter(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertNotIn("#pagebreak", self.convert(document(text), "typst").stdout)
 
+    def test_only_the_chosen_families_take_part(self):
+        source = self.directory / "doc.md"
+        source.write_text(document("\\newpage") + "\n<!-- pagebreak -->\n\nLast.\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-t", "typst", "-M", "pdfmd-pagebreak=comment", "--lua-filter",
+                               str(PAGEBREAK_LUA)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.stdout.count("#pagebreak("), 1)                    # the comment; \newpage is TeX
+        self.assertNotIn("pdfmd-pagebreak", done.stdout)
+
     def test_slides_drop_it_with_a_note_and_markdown_keeps_it(self):
         done = self.convert(document("<!-- pagebreak -->"), "beamer")
         self.assertNotIn("pagebreak", done.stdout)
@@ -143,9 +152,29 @@ class NativeTier(unittest.TestCase):
         for spelling, _ in SPELLINGS[:6]:
             self.assertIn(spelling, pdfmd.strip_markdown_comments(f"A\n\n{spelling}\n\nB\n"))
 
-    def test_no_auto_leaves_the_filter_out(self):
-        self.assertEqual(pdfmd.pagebreak_filter_args(["pagebreak"]), [])
-        self.assertEqual(pdfmd.pagebreak_filter_args(None)[-1], str(PAGEBREAK_LUA))
+    def test_the_option_and_its_values(self):
+        self.assertEqual(pdfmd.pagebreak_value(None), [])
+        self.assertEqual(pdfmd.pagebreak_value(False), [])
+        self.assertEqual(pdfmd.pagebreak_value(True), list(pdfmd.PAGEBREAK_KINDS))
+        self.assertEqual(pdfmd.pagebreak_value("all"), list(pdfmd.PAGEBREAK_KINDS))
+        self.assertEqual(pdfmd.pagebreak_value(["tex", "comment"]), ["comment", "tex"])
+        self.assertEqual(pdfmd.pagebreak_value("tex, div"), ["tex", "div"])
+
+    def test_off_unless_asked(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-pagebreak-option-"))
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        plain = directory / "plain.md"
+        plain.write_text("A\n\n<!-- pagebreak -->\n\nB\n", encoding="utf-8")
+        asked = directory / "asked.md"
+        asked.write_text("---\npdfmd-options:\n  pagebreak: [comment, tex]\n---\n\nA\n", encoding="utf-8")
+        self.assertEqual(pdfmd.pagebreak_filter_args(plain, []), [])
+        arguments = pdfmd.pagebreak_filter_args(asked, [])
+        self.assertEqual(arguments[:2], ["-M", "pdfmd-pagebreak=comment,tex"])
+        self.assertEqual(arguments[-1], str(PAGEBREAK_LUA))
+        with unittest.mock.patch.dict(pdfmd.PAGEBREAK_CLI, {"kinds": [], "off": False}):
+            self.assertIn("pdfmd-pagebreak=" + ",".join(pdfmd.PAGEBREAK_KINDS), pdfmd.pagebreak_filter_args(plain, []))
+        with unittest.mock.patch.dict(pdfmd.PAGEBREAK_CLI, {"kinds": None, "off": True}):
+            self.assertEqual(pdfmd.pagebreak_filter_args(asked, []), [])
 
 
 FIVE = "\n\n".join(["One.", "<!-- pagebreak -->", "Two.", "\\newpage", "Three.", '<div class="pagebreak"></div>', "Four.",
@@ -167,7 +196,8 @@ class RealOutput(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-pagebreak-real-"))
         self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
-        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n" + FIVE + "\n", encoding="utf-8")
+        (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  pagebreak: true\n---\n\n" + FIVE + "\n",
+                                               encoding="utf-8")
 
     def run_pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", *arguments], capture_output=True,
@@ -183,15 +213,21 @@ class RealOutput(unittest.TestCase):
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(pages(self.directory / f"{engine}.pdf"), 6)
 
-    def test_five_breaks_in_a_word_file_and_fewer_without_the_filter(self):
+    def test_five_breaks_in_a_word_file_fewer_without_the_option_and_the_chosen_families(self):
         done = self.run_pdfmd("-o", "doc.docx")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         with zipfile.ZipFile(self.directory / "doc.docx") as word:
             self.assertEqual(word.read("word/document.xml").decode("utf-8").count('w:type="page"'), 5)
-        done = self.run_pdfmd("-o", "old.docx", "--no-auto", "pagebreak")
+        done = self.run_pdfmd("-o", "old.docx", "--no-pagebreak")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         with zipfile.ZipFile(self.directory / "old.docx") as word:
             self.assertLess(word.read("word/document.xml").decode("utf-8").count('w:type="page"'), 5)   # \newpage only
+        done = self.run_pdfmd("-o", "comments.docx", "--pagebreak", "comment")     # the command line over the document
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        with zipfile.ZipFile(self.directory / "comments.docx") as word:
+            xml = word.read("word/document.xml").decode("utf-8")
+        self.assertGreaterEqual(xml.count('w:type="page"'), 2)                   # the two comments, at least
+        self.assertLess(xml.count('w:type="page"'), 5)
 
 
 if __name__ == "__main__":

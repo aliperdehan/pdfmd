@@ -103,16 +103,19 @@ Older Pandoc, and no network (v3.25.11):
     its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
 
-Page breaks (v3.27.13; auto kind `pagebreak`):
-    pdfmd_lua/pagebreak.lua runs on every Pandoc route, before raw.lua: a block that is only a page break, in any
-    spelling (the comments <!-- pagebreak|page-break|newpage|new-page --> and <!-- pdfmd: pagebreak -->, \newpage,
-    \pagebreak[n], \clearpage, \cleardoublepage, a CSS-break or class="pagebreak" div or hr, an empty `::: pagebreak`,
-    a raw Typst #pagebreak() or Word break), becomes the target's own: LaTeX \newpage{}, Typst #pagebreak(weak: true),
-    a CSS break div for HTML/EPUB/WeasyPrint, a Word break, an OpenDocument paragraph in the Pagebreak style (added to
-    the reference pdfmd builds, pdfmd_office/odt.py), ConTeXt \page, ms .bp, a form feed in text, <!-- pagebreak -->
-    in GitHub Markdown. A spelling in the target's own language stays as written; slides drop it with a NOTE. The
-    built-in renderer reads the line spellings itself (PAGE_BREAK_RE, PAGE_BREAK_COMMENT_RE); tests/test_pagebreak.py
-    holds the one list both are checked against.
+Page breaks (v3.27.13, off unless asked since v3.27.15):
+    `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
+    pdfmd --setup), `--pagebreak [KIND ...]` and `--no-pagebreak` add pdfmd_lua/pagebreak.lua to every Pandoc route,
+    before raw.lua. A block that is only a page break, in a chosen family's spelling (the comments
+    <!-- pagebreak|page-break|newpage|new-page --> and <!-- pdfmd: pagebreak -->; \\newpage, \\pagebreak[n],
+    \\clearpage, \\cleardoublepage; a CSS-break or class="pagebreak" div or hr; an empty `::: pagebreak`; a raw Typst
+    #pagebreak(); a raw Word break), becomes the target's own: LaTeX \\newpage{}, Typst #pagebreak(weak: true), a CSS
+    break div for HTML/EPUB/WeasyPrint, a Word break, an OpenDocument paragraph in the Pagebreak style (added to the
+    reference pdfmd builds, pdfmd_office/odt.py), ConTeXt \\page, ms .bp, a form feed in text, <!-- pagebreak --> in
+    GitHub Markdown. A spelling in the target's own language stays as written; slides drop it with a NOTE. Without
+    the option every writer keeps only its own spelling, as before. The built-in renderer always read the comment and
+    TeX spellings itself (PAGE_BREAK_RE, PAGE_BREAK_COMMENT_RE); tests/test_pagebreak.py holds the one list both are
+    checked against.
 
 Math in WeasyPrint (v3.27.12):
     WeasyPrint does not draw MathML, Pandoc's default HTML math: each formula printed twice as flat text. For
@@ -1278,7 +1281,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.14"
+PDFMD_VERSION = "3.27.15"
 import argparse
 import csv
 import filecmp
@@ -1521,7 +1524,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "pagebreak",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -2129,18 +2132,54 @@ def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -
     return table
 
 
-def pagebreak_filter_args(no_auto: list[str] | None) -> list[str]:
-    """``--lua-filter pagebreak.lua`` (v3.27.13): every spelling of a page break (`<!-- pagebreak -->`, `\\newpage`, the
-    CSS div, a fenced `::: pagebreak` ...) becomes the target format's own. Before raw.lua, which would otherwise draw
-    or drop a raw TeX `\\newpage`. `--no-auto pagebreak` leaves it out."""
-    if auto_disabled(no_auto, "pagebreak"):
+# Page breaks carried into every format (v3.27.15, off unless asked; 3.27.13 had it on): the spelling families
+# pdfmd_lua/pagebreak.lua makes every output's own. `pdfmd-options.pagebreak` (document, metadata files, config:
+# true / all, false, or a list of families), `--pagebreak [KIND ...]` (bare: all) and `--no-pagebreak` for a run.
+PAGEBREAK_KINDS = ("comment", "tex", "html", "div", "typst", "word")
+PAGEBREAK_CLI: dict = {"kinds": None, "off": False}
+
+
+def pagebreak_value(value) -> list[str]:
+    """The families a `pagebreak` value names, in PAGEBREAK_KINDS order: true or `all` every one, false none, a list
+    (or a comma-separated string) those."""
+    if value is None or value is False:
+        return []
+    if value is True:
+        return list(PAGEBREAK_KINDS)
+    items = value if isinstance(value, list) else str(value).replace(",", " ").split()
+    words = [str(item).strip().casefold() for item in items if str(item).strip()]
+    if any(word in ("all", "true", "yes", "on") for word in words):
+        return list(PAGEBREAK_KINDS)
+    unknown = [word for word in words if word not in PAGEBREAK_KINDS and word not in ("false", "no", "off", "none")]
+    if unknown:
+        print(f"WARN  pagebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a page-break family "
+              f"({', '.join(PAGEBREAK_KINDS)}, or all)", file=sys.stderr)
+    return [kind for kind in PAGEBREAK_KINDS if kind in words]
+
+
+def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
+    """The page-break families this build carries into every format: the command line's, else pdfmd-options'."""
+    if PAGEBREAK_CLI["off"]:
+        return []
+    if PAGEBREAK_CLI["kinds"] is not None:
+        return pagebreak_value(PAGEBREAK_CLI["kinds"] or True)
+    return pagebreak_value(first_pdfmd_option(md_path, metadata_files, "pagebreak"))
+
+
+def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter pagebreak.lua`` with the families it takes part in (`-M pdfmd-pagebreak=comment,tex`), when any:
+    each such spelling of a page break becomes the target format's own. Before raw.lua, which would otherwise draw or
+    drop a raw TeX `\\newpage`."""
+    files = sources if isinstance(sources, list) else [sources]
+    kinds = pagebreak_kinds(files[0], metadata_files) if files else []
+    if not kinds:
         return []
     try:
         import pdfmd_lua
     except ImportError:
         return []
     shipped = pdfmd_lua.path("pagebreak")
-    return ["--lua-filter", str(shipped)] if shipped is not None else []
+    return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
@@ -14541,7 +14580,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             for variable in variables:
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
-            cmd += pagebreak_filter_args(no_auto)
+            cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
             cmd += select_filter_args(selection)
@@ -14687,7 +14726,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
-            cmd += pagebreak_filter_args(no_auto)
+            cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
@@ -15142,7 +15181,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
-                cmd += pagebreak_filter_args(no_auto)
+                cmd += pagebreak_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
                                        flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                        preamble=list(preamble_files or []) if flat_markdown else None,
@@ -15375,7 +15414,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
-                    cmd += pagebreak_filter_args(no_auto)
+                    cmd += pagebreak_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     cmd += select_filter_args(selection)
@@ -18384,6 +18423,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --raw or alone: the raw syntaxes one output family takes, e.g. html=tex,typst "
                              "(families: tex, typst, html, office, md; syntaxes: tex, html, typst, office; a syntax "
                              "left out is dropped, the family's own included). Repeat for more families")
+    parser.add_argument("--pagebreak", nargs="*", default=None, metavar="KIND",
+                        help="carry page breaks into every output format: each spelling of the named families becomes "
+                             "the format's own (LaTeX \\newpage, Typst #pagebreak, a CSS break, a Word break ...). "
+                             "Families: comment (<!-- pagebreak -->, <!-- pdfmd: pagebreak -->), tex (\\newpage, "
+                             "\\clearpage ...), html (a CSS-break or class=pagebreak div), div (::: pagebreak), typst "
+                             "(#pagebreak()), word (a raw Word break); bare: all. Off by default; also "
+                             "pdfmd-options.pagebreak (true or a list) and pdfmd --setup")
+    parser.add_argument("--no-pagebreak", action="store_true",
+                        help="no page-break carrying for this run, whatever pdfmd-options.pagebreak says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
                         help="with --to gfm (flat Markdown) or --to txt: how subscripts and superscripts are written -- unicode "
                              "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "
@@ -18531,7 +18579,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), pagebreak (every spelling of a page break made the output format's own), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -18956,6 +19004,7 @@ def main() -> None:
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
+    PAGEBREAK_CLI.update({"kinds": args.pagebreak, "off": args.no_pagebreak})
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:
@@ -19463,7 +19512,7 @@ def main() -> None:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
-                    cmd += pagebreak_filter_args(report_no_auto)
+                    cmd += pagebreak_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
@@ -19583,7 +19632,7 @@ def main() -> None:
                         if report_fonts_header or report_fonts_css:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
-                        cmd += pagebreak_filter_args(report_no_auto)
+                        cmd += pagebreak_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)
