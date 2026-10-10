@@ -248,6 +248,21 @@ class NewRows(unittest.TestCase):
         self.assertEqual(pdfmd.cascaded_option(document, [], "ascii"), {"missing": "escape"})
         self.assertEqual(pdfmd.resolve_keep_source(document, []), "readable")
 
+    def test_a_house_styles_word_defaults_are_above_the_config(self):
+        document = self.use({"options.office.reference-doc": "/global/template.dotx", "options.office.latex": "images"})
+        package = Path(self.directory) / "house"
+        package.mkdir()
+        (package / "house.sty").write_text("\\ProvidesPackage{house}\n", encoding="utf-8")
+        (package / "house-office.yaml").write_text("reference-doc: dept.dotx\n", encoding="utf-8")
+        original = pdfmd.office_packages
+        pdfmd.office_packages = lambda *args, **kwargs: [(package, "house", [])]
+        try:
+            options = pdfmd.office_options(document, [])
+        finally:
+            pdfmd.office_packages = original
+        self.assertEqual(options["reference-doc"], str((package / "dept.dotx").resolve()))   # the house style's
+        self.assertEqual(options["latex"], "images")                                          # the config's, below it
+
     def test_html_word_cache_and_bundle(self):
         document = self.use({"options.html.standalone": True, "options.html.css": "/styles/a.css",
                              "options.office.reference-doc": "/templates/house.dotx", "options.cache.plots": True,
@@ -368,6 +383,8 @@ class Completeness(unittest.TestCase):
         import re
         source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
         found: set[str] = set()
+        # A call with nested parentheses (`list(metadata_files)`) escapes this scan; the recorder run of 3.27.0 (every key
+        # read during the whole suite) found nothing missing, but a key added that way must be listed by hand.
         for call in re.findall(r"(?:first_pdfmd_option|cascaded_option)\(([^()]*)\)", source):
             found.update(re.findall(r'"([a-z][a-z0-9-]*)"', call))
         found.update(re.findall(r'config_options\(\)(?:\.get\(|\[)"([a-z][a-z0-9-]*)"', source))
@@ -413,9 +430,10 @@ class SwitchedOff(unittest.TestCase):
 
     def pdfmd(self, *argv: str, config: str = "disabled: [history, tables]\n", stdin: str = ""):
         (self.directory / "config.yaml").write_text(config, encoding="utf-8")
+        env = {**os.environ, "PDFMD_CONFIG": str(self.directory / "config.yaml")}
+        env.pop(pdfmd.DISABLED_OK_ENV, None)          # set by an in-process main() of another test
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *argv], input=stdin, capture_output=True,
-                              text=True, cwd=self.directory,
-                              env={**os.environ, "PDFMD_CONFIG": str(self.directory / "config.yaml")})
+                              text=True, cwd=self.directory, env=env)
 
     @staticmethod
     def listed(option: str, text: str) -> bool:
@@ -438,6 +456,21 @@ class SwitchedOff(unittest.TestCase):
     def test_an_option_of_a_feature_still_on_stays(self):
         done = self.pdfmd("--dry-run", "x.md", config="disabled: [tables]\n")       # --dry-run is history's too
         self.assertNotIn("switched off", done.stderr)
+
+    def test_a_plain_build_is_never_refused_whatever_is_off(self):
+        from pdfmd_help import DISABLEABLE
+        (self.directory / "x.md").write_text("Hello.\n", encoding="utf-8")
+        for topic in DISABLEABLE:                    # --keep-comments and --no-cache share a dest with a None default
+            done = self.pdfmd("x.md", "--to", "html", "-o", "x.html", config=f"disabled: [{topic}]\n")
+            self.assertNotIn("switched off", done.stderr, topic)
+
+    def test_pdfmds_own_child_processes_are_not_refused(self):
+        (self.directory / "config.yaml").write_text("disabled: [history]\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--no-stamp", "--version"], capture_output=True,
+                              text=True, cwd=self.directory,
+                              env={**os.environ, "PDFMD_CONFIG": str(self.directory / "config.yaml"),
+                                   pdfmd.DISABLED_OK_ENV: "1"})
+        self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_core_features_cannot_be_switched_off(self):
         done = self.pdfmd("--help", "all", config="disabled: [output, history]\n")

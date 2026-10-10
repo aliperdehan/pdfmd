@@ -1255,7 +1255,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.8"
+PDFMD_VERSION = "3.27.9"
 import argparse
 import csv
 import filecmp
@@ -4600,7 +4600,7 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
     """`pdfmd-options: {office: ...}` as the document, its metadata files and the config file give it, over the
     defaults of a package that ships them (`<name>-office.yaml`, or the `office:` of `<name>-pdfmd.yaml`); the
     document wins key by key."""
-    value = cascaded_option(md_path, metadata_files, "office")
+    value = first_pdfmd_option(md_path, metadata_files, "office", with_config=False)
     options = dict(value) if isinstance(value, dict) else {}
     for folder, package, chosen in reversed(office_packages(md_path, metadata_files, no_auto)):
         for data, candidate in office_defaults_sources(folder, package):
@@ -4629,6 +4629,11 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
             if isinstance(options.get("media"), dict) and "media" not in (value or {}):
                 options["media"] = {name: str((candidate.parent / file).resolve())
                                     for name, file in options["media"].items()}
+    # the config file (pdfmd --setup) is below a house style's own defaults (v3.27.9): a global reference-doc must not
+    # replace the department template nulabreport ships; the document and its metadata files are above both
+    configured = config_options().get("office")
+    if isinstance(configured, dict):
+        options = {**configured, **options}
     return options
 
 
@@ -12083,7 +12088,7 @@ def option_flag(value) -> bool | None:
     return None
 
 
-def option_sources(md_path: Path, metadata_files: list[Path]) -> list[tuple[str, dict]]:
+def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool = True) -> list[tuple[str, dict]]:
     """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files in
     order, then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
     name, or "config"."""
@@ -12091,16 +12096,17 @@ def option_sources(md_path: Path, metadata_files: list[Path]) -> list[tuple[str,
     for metadata_file in metadata_files:
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
-    sources.append(("config", config_options()))
+    if with_config:
+        sources.append(("config", config_options()))
     return sources
 
 
-def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
+def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str, with_config: bool = True):
     """The value of the first of ``names`` that the document's own pdfmd-options, then its metadata files' (in order),
     then the config file's set; None if none does. A mapping is merged field by field with the mappings set below it
     (the first place to set a field wins, v3.27.1), down to a place that sets the key to something else."""
     found: list[dict] = []
-    for _, options in option_sources(md_path, metadata_files):
+    for _, options in option_sources(md_path, metadata_files, with_config):
         for name in names:
             if name in options:
                 value = options[name]
@@ -18723,11 +18729,15 @@ def disabled_topics() -> list[str]:
     return [name for name in names if name in DISABLEABLE]
 
 
+DISABLED_OK_ENV = "PDFMD_ALLOW_DISABLED"     # set by a run that passed the check, for pdfmd's own child processes
+
+
 def command_line_parser(argv: list[str] | None = None) -> tuple[argparse.ArgumentParser, list[argparse.Action]]:
-    """The parser for this run, with the options of switched-off features hidden unless --disabled is on it."""
+    """The parser for this run, with the options of switched-off features hidden unless --disabled is on it (or this
+    is pdfmd's own child process: the Word route, --doctor --deep, --watch ... pass --no-stamp and the like)."""
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else argv
-    if "--disabled" in argv:
+    if "--disabled" in argv or os.environ.get(DISABLED_OK_ENV):
         return parser, []
     try:
         from pdfmd_help import hide
@@ -18736,11 +18746,18 @@ def command_line_parser(argv: list[str] | None = None) -> tuple[argparse.Argumen
     return parser, hide(parser, disabled_topics())
 
 
-def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action]) -> None:
-    """Stop when the command line used an option of a switched-off feature without --disabled."""
-    from_help = __import__("pdfmd_help") if hidden else None
+def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
+                    parser: argparse.ArgumentParser | None = None) -> None:
+    """Stop when the command line used an option of a switched-off feature without --disabled. "Used" is a value that
+    differs from what the parser gives with no options at all (two flags sharing a dest, --strip-comments and
+    --keep-comments, have different defaults of their own); a dest a visible option shares is never refused."""
+    if not hidden:
+        return
+    from_help = __import__("pdfmd_help")
+    baseline = vars((parser or build_parser()).parse_known_args([])[0])
+    visible = {action.dest for action in (parser or build_parser())._actions if action not in hidden}
     for action in hidden:
-        if getattr(args, action.dest, None) != action.default:
+        if action.dest not in visible and getattr(args, action.dest, None) != baseline.get(action.dest):
             name = next((item for item in action.option_strings if item.startswith("--")), action.option_strings[0])
             topics = " and ".join(sorted(from_help.topics_of(action)))
             raise SystemExit(f"{name}: the {topics} features are switched off (`pdfmd --setup`, d). Run it once with "
@@ -18750,7 +18767,9 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action]) -> 
 def main() -> None:
     parser, hidden = command_line_parser()
     args, pandoc_options = parser.parse_known_args()
-    refuse_disabled(args, hidden)
+    refuse_disabled(args, hidden, parser)
+    if hidden or args.disabled:
+        os.environ[DISABLED_OK_ENV] = "1"          # pdfmd's own child processes are not refused again
     if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
         from pdfmd_flat import asciify
         raise SystemExit(asciify.serve(*args.ascii_stdio))

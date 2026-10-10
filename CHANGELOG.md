@@ -41,6 +41,34 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.9 — 2026-10-10
+
+Pre-edit state: commit `3297564` (v3.27.8).
+
+### Fixed (found by a review of 3.27.8 before it was called done)
+
+- **With `source` or `cache` switched off, every plain build was refused** ("--keep-comments: the source features are
+  switched off"): two flags share a dest with different defaults (`--strip-comments` None, `--keep-comments` True;
+  `--cache` / `--no-cache`; `--attach-source` / `--no-attach-source`), and the check compared against the second
+  one's. It now compares against what the parser gives with no options at all, and never refuses a dest a visible
+  option shares. A test builds a plain document with each feature off in turn.
+- **pdfmd's own child processes were refused** when a feature they use is off: the Word/ODT route, `--hybrid`, Word
+  reference numbers, `--doctor --deep` and `--watch` start pdfmd again with `--no-stamp`, `--no-backup` and the like
+  (history). A run that passed the check sets `PDFMD_ALLOW_DISABLED` for its children.
+
+### Changed
+
+- **A house style's Word defaults are above the config file.** `office.reference-doc`, `office.latex` ... from
+  `pdfmd --setup` (the config) are now below what a package ships (`<package>-office.yaml`, nulabreport's department
+  template), so a global template no longer replaces the department one in every report's Word file; the document and
+  its metadata files stay above both. (Since 3.27.1 the config's `office:` was merged into the document's and then put
+  over the package's defaults.)
+
+### Tests
+
+- `SwitchedOff`: a plain build with each feature off, a child process; `NewRows`: a house style's reference doc over the
+  config's, the config's `latex` below it. The completeness test notes the calls its key scan cannot see.
+
 ## v3.27.8 — 2026-10-10
 
 Pre-edit state: commit `c47bfc9` (v3.27.7).
