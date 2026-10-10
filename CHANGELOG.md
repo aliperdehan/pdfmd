@@ -41,6 +41,30 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.16 — 2026-10-10
+
+Pre-edit state: commit `607540c` (v3.27.15).
+
+### Fixed
+
+- **`\ce{H2O}` (or `\SI{25}{\celsius}`) stopped every LaTeX engine** when the document did not load mhchem (siunitx)
+  itself: "Undefined control sequence" with lualatex and xelatex alike (queue item 2(e) asked whether xelatex got
+  mhchem; no engine did). New auto kind `texpackages`: when a source uses `\ce`/`\cee`/`\cf` or
+  `\SI`/`\si`/`\num`/`\qty`/`\unit`/`\ang`/the range commands, the preamble gets a guarded load, after everything
+  else: nothing when the package is loaded already (a house package's own options win, no option clash), when the
+  command is defined some other way (a document's own `\newcommand{\ce}`), or when the package is not installed (the
+  old error, not a new one). An `AUTO TEXPACKAGES` line says so; `--no-auto texpackages` turns it off.
+- How it reaches the preamble matters: one `--include-in-header` replaces every metadata file's `header-includes`
+  (Pandoc's command line wins over metadata; nulabreport loads its package that way). With a header file already on
+  the command line (those are gone then anyway) it is one more, last; without one, a new filter
+  `pdfmd_lua/header.lua` appends it to the header-includes Pandoc merged.
+
+### Tests
+
+- `tests/test_texpackages.py`: the arguments in both modes, nothing without the commands, `--no-auto`; real lualatex
+  builds: chemistry and units with no preamble, a metadata file that loads mhchem with its own options and defines a
+  macro (both survive), a `preamble.tex` that loads it, a document's own `\ce`.
+
 ## v3.27.15 — 2026-10-10
 
 Pre-edit state: commit `b89ee55` (v3.27.14).

@@ -103,6 +103,14 @@ Older Pandoc, and no network (v3.25.11):
     its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
 
+Packages a document's commands need (v3.27.16; auto kind `texpackages`):
+    A LaTeX build of a document that uses \\ce/\\cee/\\cf (mhchem) or \\SI/\\si/\\num/\\qty/\\unit (siunitx) without
+    loading the package stopped with "Undefined control sequence". tex_package_args adds a guarded load, after
+    everything else in the preamble: nothing when the package is loaded already (a house package's options win), when
+    the command is defined some other way, or when the package is not installed. With an --include-in-header on the
+    command line it is one more header file, last; without one, pdfmd_lua/header.lua appends it to the header-includes
+    Pandoc merged, because a header file of pdfmd's own would replace a metadata file's header-includes.
+
 Page breaks (v3.27.13, off unless asked since v3.27.15):
     `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
     pdfmd --setup), `--pagebreak [KIND ...]` and `--no-pagebreak` add pdfmd_lua/pagebreak.lua to every Pandoc route,
@@ -1281,7 +1289,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.15"
+PDFMD_VERSION = "3.27.16"
 import argparse
 import csv
 import filecmp
@@ -1524,7 +1532,7 @@ NO_AUTO_KINDS = frozenset({
     "metadata", "yaml", "preamble", "tex", "lua", "files", "standalone",
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
-    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams",
+    "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -2180,6 +2188,62 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+
+
+# LaTeX packages a document's own commands need (v3.27.16, auto kind `texpackages`): `\ce{H2O}` without mhchem, or
+# `\SI{3}{\metre}` without siunitx, stopped every LaTeX engine ("Undefined control sequence"). When a source uses one,
+# the preamble gets a guarded load, last: nothing when the package is loaded already (nulabreport's own options win, no
+# option clash), when the command is defined some other way, or when the package is not installed (the old error).
+TEX_PACKAGE_USES = (
+    ("mhchem", "[version=4]", "ce", re.compile(r"\\(?:ce|cee|cf)\s*\{")),
+    ("siunitx", "", "SI", re.compile(r"\\(?:SI|si|num|qty|unit|ang|SIrange|numrange|qtyrange)\s*\{")),
+)
+
+
+def tex_package_args(sources: Path | list[Path], no_auto: list[str] | None, cmd: list[str],
+                     pandoc_options: list[str], note=None) -> list[str]:
+    """The arguments that give a LaTeX build the packages its commands need (TEX_PACKAGE_USES), or []. With an
+    --include-in-header already on the command line (the header-includes of the metadata files are gone then anyway)
+    a header file, last; without one, pdfmd_lua/header.lua, which appends it to the merged header-includes instead."""
+    if auto_disabled(no_auto, "texpackages"):
+        return []
+    texts = []
+    for file in sources if isinstance(sources, list) else [sources]:
+        try:
+            texts.append(Path(file).read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError):
+            continue
+    wanted = [(name, options, macro) for name, options, macro, pattern in TEX_PACKAGE_USES
+              if any(pattern.search(text) for text in texts)]
+    if not wanted:
+        return []
+    lines = ["% pdfmd: packages the document's commands need, unless already there (--no-auto texpackages)",
+             "\\makeatletter"]
+    for name, options, macro in wanted:
+        lines.append(f"\\@ifpackageloaded{{{name}}}{{}}{{\\ifdefined\\{macro}\\else"
+                     f"\\IfFileExists{{{name}.sty}}{{\\usepackage{options}{{{name}}}}}{{}}\\fi}}")
+    lines.append("\\makeatother")
+    text = "\n".join(lines) + "\n"
+    path = cache_root() / "tex" / f"packages-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    if note is not None:
+        note("TEXPACKAGES", "loads " + ", ".join(name for name, _, _ in wanted) + " unless the preamble does "
+             "(the document uses " + ", ".join(f"\\{macro}" for _, _, macro in wanted) + ")")
+    header_given = any(item in ("-H", "--include-in-header") or item.startswith(("-H", "--include-in-header="))
+                       for item in [*cmd, *pandoc_options])
+    if header_given:
+        return ["--include-in-header", str(path)]
+    try:
+        import pdfmd_lua
+        shipped = pdfmd_lua.path("header")
+    except ImportError:
+        shipped = None
+    return ["-M", f"pdfmd-header={path}", "--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
@@ -15206,6 +15270,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += office_arguments
                 cmd += pandoc_options
+                if is_tex_target:
+                    cmd += tex_package_args([md_path, *parts_inputs], no_auto, cmd, pandoc_options, note)
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -15429,6 +15495,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # on the actual pandoc command line. Confirmed via
                     # --verbose CMD output before this fix.)
                     cmd += pandoc_options
+                    if engine in LATEX_ENGINES:
+                        cmd += tex_package_args([md_path, *parts_inputs], no_auto, cmd, pandoc_options, note)
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -18579,7 +18647,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -19642,6 +19710,8 @@ def main() -> None:
                         # pandoc_options after --citeproc: see convert_one's
                         # matching comment.
                         cmd += pandoc_options
+                        if engine in LATEX_ENGINES:
+                            cmd += tex_package_args(files, report_no_auto, cmd, pandoc_options, report_note)
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
