@@ -41,6 +41,47 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.22 — 2026-10-10
+
+Pre-edit state: commit `5112eb8` (v3.27.21).
+
+### Changed
+
+- **When two metadata files set the same key, the later one wins for pdfmd's own keys too.** Pandoc takes a later
+  `--metadata-file` over an earlier one, but pdfmd read its own keys (`pdfmd-options:`, `margin:`, the engine) from the
+  first file that set them. A folder with `metadata.yaml` and `report.yaml` (or `<name>.yaml`, which pdfmd's own code
+  calls the override of the shared base) got `report.yaml`'s margins and title, but `metadata.yaml`'s
+  `pdfmd-options`. The same split happened with `-y base.yaml -y extra.yaml`. Decided by the author.
+
+  One helper, `metadata_files_by_priority`, now gives the order for every reader of pdfmd's own keys:
+  `option_sources` (and through it `first_pdfmd_option`, the stamp), `seed_labels_mode`, `parts_setting`,
+  `resolve_embed`, `cache_location`, `cache_settings`, `frontmatter_engine`, `frontmatter_citation_engine` and the
+  `margin:` reader. The document's own front matter still comes first, and the global `metadata.yaml` (pdfmd --setup)
+  and the config come last.
+
+  None of the author's folders stacks two metadata files that both set `pdfmd-options` (checked: Fall26 has none;
+  nulabreport's `metadata.yaml`, `genchem-metadata.yaml` and `prelab-metadata.yaml` are each used alone), so no
+  build of theirs changes.
+
+### Added
+
+- `--metadata-precedence later|first`, and `metadata-precedence` in `pdfmd --setup` (Input), at the author's request,
+  for anyone the new order would surprise. `first` makes the first file win everywhere: pdfmd reads it first, and
+  Pandoc gets the files in reverse (`pandoc_metadata_order`), so it wins Pandoc's keys as well. Either way there is
+  one rule for every key. The global metadata file stays the lowest. It is read from the command line and the config
+  only, not from a document or a metadata file, since it decides how those are layered.
+  `pdfmd --help output` lists it beside `-y`.
+
+### Tests
+
+- `test_setup.Plain`:
+  - `test_pdfmd_options_follow_the_same_rule`: `metadata.yaml` + `a.yaml` both setting `seed-labels` and `margin:`;
+    `a.yaml` wins both, and a key only the first file sets still comes from it.
+  - `test_the_rule_can_be_turned_round`: with `first`, `metadata.yaml` wins Pandoc's `subtitle` and pdfmd's keys;
+    the config's `options.metadata-precedence` is read, and a wrong value names the valid ones.
+  - `test_the_flag_reaches_pandoc`: a build with `-y metadata.yaml a.yaml` shows `a.yaml`'s subtitle, and
+    `metadata.yaml`'s with `--metadata-precedence first`.
+
 ## v3.27.21 — 2026-10-10
 
 Pre-edit state: commit `0b4b3a9` (v3.27.20).

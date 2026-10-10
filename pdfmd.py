@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.21"
+PDFMD_VERSION = "3.27.22"
 import argparse
 import csv
 import filecmp
@@ -7864,7 +7864,7 @@ def frontmatter_margin_geometry_options(md_path: Path, variables: list[str],
     text = md_path.read_text(encoding="utf-8-sig")
     front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
     blocks = [front_matter.group(1)] if front_matter else []
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         meta_text = metadata_file.read_text(encoding="utf-8-sig")
         # A --metadata-file may be fenced (---...---, same as front matter)
         # or completely bare -- Pandoc accepts either. yaml.safe_load()
@@ -8576,7 +8576,8 @@ def metadata_file_yaml(path: Path) -> dict:
 
 def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | None:
     """Read the effective default PDF engine: the document's own front
-    matter first, then (in order) each linked --metadata-file's own
+    matter first, then each linked --metadata-file's own (the later file first, see
+    metadata_files_by_priority)
     ``pdf-engine``/``pdfmd-options`` as a course-wide default the document
     can still override. This is what lets nulabreport's shared
     metadata.yaml -- symlinked into every course folder -- set
@@ -8594,8 +8595,8 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     new document should put pdfmd-only settings) and falls back to the
     older bare top-level key for documents already written with that
     spelling, which keeps working unchanged. A metadata file gets the same
-    nested-then-bare check, in the order metadata_files is given (find_metadata's
-    own order); this deliberately does NOT extend to `no-auto` -- no-auto
+    nested-then-bare check, in metadata_files_by_priority's order (v3.27.22; it
+    was find_metadata's own order, so the first file won); this deliberately does NOT extend to `no-auto` -- no-auto
     decides whether metadata auto-discovery runs at all, so it cannot also
     depend on the metadata file that discovery itself would find.
     """
@@ -8606,7 +8607,7 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     own = frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
     if own is not None:
         return own
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         data = metadata_file_yaml(metadata_file)
         options = data.get("pdfmd-options")
         value = (options.get("pdf-engine") or options.get("engine")) if isinstance(options, dict) else None
@@ -8655,7 +8656,7 @@ def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) 
     value = options.get("citation-engine")
     if value is not None:
         return str(value).casefold()
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         data = metadata_file_yaml(metadata_file)
         options = data.get("pdfmd-options")
         value = options.get("citation-engine") if isinstance(options, dict) else None
@@ -8886,7 +8887,7 @@ def stamp_fields(value, implied_on: bool = True) -> dict:
 
 def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | None:
     """Cascade a document's own pdfmd-options.stamp, then each linked
-    metadata file's, in that order -- same precedence as frontmatter_engine
+    metadata file's (the later first) -- same precedence as frontmatter_engine
     (see its docstring): a shared metadata.yaml can turn stamping on for
     every report that finds it, and any one document can still override it
     with its own pdfmd-options.stamp. Returns None (not
@@ -10552,15 +10553,46 @@ def global_metadata_file() -> Path | None:
     return candidate if candidate is not None and candidate.is_file() else None
 
 
+METADATA_PRECEDENCE_CLI: str | None = None    # --metadata-precedence (set in main)
+METADATA_PRECEDENCES = ("later", "first")
+
+
+def metadata_precedence() -> str:
+    """Which of two metadata files wins a key both set (v3.27.22): `later` (the default, as Pandoc takes them) or
+    `first`. From --metadata-precedence, else the config's `options.metadata-precedence` (pdfmd --setup). Not from a
+    document or a metadata file: it decides how those are layered."""
+    value = METADATA_PRECEDENCE_CLI
+    if value is None:
+        value = config_options().get("metadata-precedence")
+    if value is None:
+        return "later"
+    mode = str(value).strip().casefold()
+    if mode not in METADATA_PRECEDENCES:
+        raise SystemExit(f"unknown metadata-precedence value {value!r}. Valid: {', '.join(METADATA_PRECEDENCES)}")
+    return mode
+
+
 def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
     """The metadata files in the order Pandoc gets them: the global metadata file first. Pandoc prefers a later
     --metadata-file, and the global file is the lowest in priority (v3.27.17; it came last and so beat the
-    folder's own metadata.yaml). The list itself keeps the global file last: Pandoc runs in the folder of its first
-    entry, and pdfmd's own pdfmd-options lookups take the first file that sets a key."""
+    folder's own metadata.yaml). With `--metadata-precedence first` the others go in reverse, so that the first wins
+    in Pandoc too (v3.27.22). The list itself keeps the global file last (Pandoc runs in the folder of its first
+    entry); what pdfmd reads out of the files itself follows this order too (metadata_files_by_priority)."""
     extra = global_metadata_file()
     if extra is None or extra not in metadata_files:
-        return list(metadata_files)
-    return [extra, *(path for path in metadata_files if path != extra)]
+        extra = None
+    local = [path for path in metadata_files if path != extra]
+    if len(local) > 1 and metadata_precedence() == "first":
+        local.reverse()
+    return [extra, *local] if extra is not None else local
+
+
+def metadata_files_by_priority(metadata_files) -> list[Path]:
+    """The metadata files, the one that wins first, for what pdfmd reads out of them itself (`pdfmd-options`, `margin`,
+    the engine): the later file, as Pandoc takes it, then the earlier, the global metadata file (pdfmd --setup) last.
+    Until v3.27.22 the first file won for pdfmd's keys while the later won for Pandoc's (a document-named YAML overrode
+    metadata.yaml's margins but not its pdfmd-options)."""
+    return list(reversed(pandoc_metadata_order(list(metadata_files))))
 
 
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
@@ -10748,7 +10780,7 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
     if is_assembled_document(md_path):
         return None
     sources = [frontmatter_pdfmd_options(md_path)]
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
     sources.append(config_options())
@@ -12369,11 +12401,11 @@ def option_flag(value) -> bool | None:
 
 
 def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool = True) -> list[tuple[str, dict]]:
-    """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files in
-    order, then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
+    """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files
+    (the later first, as Pandoc takes them: metadata_files_by_priority, v3.27.22), then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
     name, or "config"."""
     sources = [("document", frontmatter_pdfmd_options(md_path))]
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
     if with_config:
@@ -12382,8 +12414,8 @@ def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool 
 
 
 def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str, with_config: bool = True):
-    """The value of the first of ``names`` that the document's own pdfmd-options, then its metadata files' (in order),
-    then the config file's set; None if none does. A mapping is merged field by field with the mappings set below it
+    """The value of the first of ``names`` that the document's own pdfmd-options, then its metadata files' (the later
+    first, metadata_files_by_priority), then the config file's set; None if none does. A mapping is merged field by field with the mappings set below it
     (the first place to set a field wins, v3.27.1), down to a place that sets the key to something else."""
     found: list[dict] = []
     for _, options in option_sources(md_path, metadata_files, with_config):
@@ -12452,7 +12484,7 @@ def resolve_embed(md_path: Path, metadata_files: list[Path],
     wanted = None
     option_mode = None
     sources = [frontmatter_pdfmd_options(md_path)]
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(found if isinstance(found, dict) else {})
     for options in sources:
@@ -13845,7 +13877,7 @@ def cache_location(md_path: Path, metadata_files: list[Path]) -> str:
     value = CACHE_LOCATION_CLI
     if value is None:
         sources = [frontmatter_pdfmd_options(md_path)]
-        for metadata_file in metadata_files:
+        for metadata_file in metadata_files_by_priority(metadata_files):
             found = metadata_file_yaml(metadata_file).get("pdfmd-options")
             sources.append(found if isinstance(found, dict) else {})
         sources.append(config_options())
@@ -13960,7 +13992,7 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
     settings = dict(CACHE_DEFAULTS)
     chosen: set = set()
     sources = [frontmatter_pdfmd_options(md_path)]
-    for metadata_file in metadata_files:
+    for metadata_file in metadata_files_by_priority(metadata_files):
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
     sources.append(config_options())
@@ -14234,7 +14266,7 @@ def seed_labels_mode(md_path: Path, metadata_files: list[Path]) -> str:
     value = SEED_LABELS_CLI
     if value is None:
         sources = [frontmatter_pdfmd_options(md_path)]
-        for metadata_file in metadata_files:
+        for metadata_file in metadata_files_by_priority(metadata_files):
             options = metadata_file_yaml(metadata_file).get("pdfmd-options")
             sources.append(options if isinstance(options, dict) else {})
         sources.append(config_options())
@@ -18696,6 +18728,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-V", "--var", action="append", default=[], dest="variable", metavar="KEY=VALUE")
     parser.add_argument("-y", "--metadata-file", nargs="*", default=None, metavar="FILE",
                         help="metadata YAML file(s), 'all', or bare -y to disable discovery")
+    parser.add_argument("--metadata-precedence", choices=METADATA_PRECEDENCES, default=None,
+                        help="which of two metadata files wins a key both set, pdfmd-options too: later (default, as "
+                             "Pandoc takes them) or first. The document's own front matter beats both, the global "
+                             "metadata.yaml (pdfmd --setup) is below both. Also `options: {metadata-precedence: first}` "
+                             "in the config (pdfmd --setup)")
     parser.add_argument("-i", "--ignore", "--exclude", action="append", default=[], metavar="FILE",
                         help="exclude a Markdown file from report/book input (extension optional)")
     parser.add_argument("--exclude-unnumbered", action="store_true",
@@ -19159,7 +19196,7 @@ def main() -> None:
     # which implies it just above) turns this on too, not just --full-paths
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, METADATA_PRECEDENCE_CLI
     CITEPROC_DISABLED = args.no_citeproc
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
@@ -19189,6 +19226,7 @@ def main() -> None:
         print(f"WARN  --translit: {problem}", file=sys.stderr)
     CACHE_PLOTS_CLI = args.cache_plots or None
     SEED_LABELS_CLI = args.seed_labels
+    METADATA_PRECEDENCE_CLI = args.metadata_precedence
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})

@@ -305,6 +305,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.reader", "Markdown reader",
              "A Pandoc reader for every Markdown file: markdown, gfm, commonmark_x, with +/- extensions. Per run: --from.",
              "Input"),
+        choice("options.metadata-precedence", "Which metadata file wins a key two of them set",
+               (("later", "the later one, as Pandoc takes them"), ("first", "the first one")), "later",
+               "pdfmd-options too. A document's own front matter beats both; the global metadata.yaml is below both. "
+               "Per run: --metadata-precedence.", "Input"),
         # -- universal markup: what is written in one syntax, carried into every output (off unless set)
         choice("options.raw", "Carry raw HTML, LaTeX and Typst pieces into every output", on_off, "",
                "Raw pieces in another syntax than the output's are converted (HTML and LaTeX read into native elements, "

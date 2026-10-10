@@ -162,6 +162,61 @@ class Plain(unittest.TestCase):
         merged = pdfmd.effective_metadata(directory / "a.md", [directory / "metadata.yaml", directory / "a.yaml"], [])
         self.assertEqual((merged["subtitle"], merged["author"]), ("Own", "Shared Author"))
 
+    def metadata_pair(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))
+        self.addCleanup(__import__("shutil").rmtree, directory, True)
+        (directory / "metadata.yaml").write_text("subtitle: Shared\nmargin: 1in\npdfmd-options:\n  seed-labels: scan\n"
+                                                 "  citation-engine: biblatex\n", encoding="utf-8")
+        (directory / "a.yaml").write_text("subtitle: Own\nmargin: 2cm\npdfmd-options:\n  seed-labels: draft\n",
+                                          encoding="utf-8")
+        (directory / "a.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
+        return directory, [directory / "metadata.yaml", directory / "a.yaml"]
+
+    def test_pdfmd_options_follow_the_same_rule(self):
+        # v3.27.22: pdfmd's own keys took the FIRST file while Pandoc took the later one
+        from unittest import mock
+        directory, files = self.metadata_pair()
+        doc = directory / "a.md"
+        with mock.patch.object(pdfmd, "SEED_LABELS_CLI", None):
+            self.assertEqual(pdfmd.seed_labels_mode(doc, files), "draft")
+        self.assertEqual(pdfmd.first_pdfmd_option(doc, files, "seed-labels", with_config=False), "draft")
+        self.assertEqual(pdfmd.frontmatter_citation_engine(doc, files), "biblatex")     # only the shared file says it
+        self.assertEqual(pdfmd.frontmatter_margin_geometry_options(doc, [], files), ["margin=2cm"])
+        self.assertEqual(pdfmd.metadata_files_by_priority(files), list(reversed(files)))
+
+    def test_the_rule_can_be_turned_round(self):
+        from unittest import mock
+        directory, files = self.metadata_pair()
+        doc = directory / "a.md"
+        with mock.patch.object(pdfmd, "METADATA_PRECEDENCE_CLI", "first"), mock.patch.object(pdfmd, "SEED_LABELS_CLI", None):
+            self.assertEqual(pdfmd.pandoc_metadata_order(files), list(reversed(files)))
+            self.assertEqual(pdfmd.effective_metadata(doc, files, [])["subtitle"], "Shared")
+            self.assertEqual(pdfmd.seed_labels_mode(doc, files), "scan")
+            self.assertEqual(pdfmd.frontmatter_margin_geometry_options(doc, [], files), ["margin=1in"])
+        config = directory / "config.yaml"
+        config.write_text("options:\n  metadata-precedence: first\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"PDFMD_CONFIG": str(config)}):
+            pdfmd.load_config.cache_clear()
+            try:
+                self.assertEqual(pdfmd.metadata_precedence(), "first")
+                config.write_text("options:\n  metadata-precedence: sideways\n", encoding="utf-8")
+                pdfmd.load_config.cache_clear()
+                with self.assertRaises(SystemExit) as caught:
+                    pdfmd.metadata_precedence()
+                self.assertIn("later, first", str(caught.exception))
+            finally:
+                pdfmd.load_config.cache_clear()
+
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
+    def test_the_flag_reaches_pandoc(self):
+        directory, _ = self.metadata_pair()
+        for flag, expected in (([], "Own"), (["--metadata-precedence", "first"], "Shared")):
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "-y", "metadata.yaml", "a.yaml",
+                                   "-o", "a.html", "--standalone", "--no-stamp", "--no-backup", *flag],
+                                  cwd=directory, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn(f'class="subtitle">{expected}<', (directory / "a.html").read_text(encoding="utf-8"), flag)
+
     def test_the_config_can_switch_automatic_behaviour_off_for_every_document(self):
         directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
         self.addCleanup(__import__("shutil").rmtree, directory, True)

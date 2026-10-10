@@ -1609,8 +1609,18 @@ files could apply and none is clearly meant, `pdfmd` stops and asks you to
 choose with `-y FILE`, rather than guessing. `-y` alone turns discovery
 off.
 
+**When two metadata files set the same key, the later one wins**, as in Pandoc:
+`<name>.yaml` over `metadata.yaml`, `report.yaml` over `metadata.yaml`, and the
+second of `-y base.yaml -y extra.yaml`. This holds for Pandoc's keys and for
+pdfmd's own (`pdfmd-options:`, `margin:`), key by key: the earlier file still
+gives whatever the later one leaves out. The document's own front matter beats
+every file. `--metadata-precedence first` (or `metadata-precedence: first` in
+`pdfmd --setup`, under Input) turns this round so that the first file wins.
+Until 3.27.22, pdfmd's own keys followed that `first` rule while Pandoc's followed
+the later file.
+
 A `header-includes:` stays when a preamble file joins it: the document's own, or
-else the one of the metadata file Pandoc picks (a later file wins). The same holds
+else the one of the metadata file that wins (above). The same holds
 for the header files pdfmd adds itself, such as the code-wrapping header of a
 document with code. A metadata file's lines go before `preamble.tex`, and the
 document's own go after everything. An `--include-in-header` you pass yourself
