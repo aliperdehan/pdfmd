@@ -41,6 +41,34 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.2 — 2026-10-10
+
+Pre-edit state: commit `34bcec4` (v3.27.1).
+
+### Added
+
+- **The cap of `::: {.csv}` tables for every table of a document**, not only per div: `--csv-rows N|all` and
+  `--csv-cols N|all`, `pdfmd-options: {csv: {rows, cols, header, reader}}` (the document, its metadata files, the config;
+  field by field), and two `--setup` rows ("Rows a .csv table shows", "Columns ..."). Default unchanged, 10 x 7. A div's
+  own `rows=`/`cols=`/`header=`/`reader=` still win for that table. pdfmd hands what differs from the defaults to
+  `pdfmd_lua/csv_table.lua` as `-M pdfmd-csv-*`, which the filter reads first and removes from the metadata (so a
+  `--to markdown`/`native` output carries no trace); the built-in renderer's own CSV tables (`csv_div_table`) take the
+  same values. The command line reaches `-j` workers as `PDFMD_CSV_ROWS` / `PDFMD_CSV_COLS`. The note under a cut table
+  now also names `--csv-rows`/`--csv-cols`. `csv.header` and `csv.reader` are per document (listed as such in setup's
+  `o` list); a bad value is an error naming the key.
+
+### Not changed, found on the way
+
+- With `-j N`, worker processes start fresh (macOS spawns them), so settings main() keeps in module globals do not
+  reach them: `--line-numbers`/`--no-code-wrap` (CODE_CLI), `--fallback`/`--missing`, `--raw`... Only the ones handed over
+  as environment variables (`--strict`, the budgets, now the CSV cap) do. To fix in this line.
+
+### Tests
+
+- `tests/test_csv_table.py` `Limits` (5): the default cap and its note, the command line / document / config and their
+  order, a div's own attributes, header and reader for every table, a bad value, the built-in renderer. Passes on
+  Pandoc 3.12 and 3.1.3.
+
 ## v3.27.1 — 2026-10-10
 
 Pre-edit state: commit `641e917` (v3.27.0).

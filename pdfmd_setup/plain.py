@@ -77,6 +77,14 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
             answer = int(value) if value == int(value) else value
         elif setting.check == "list":
             answer = [item.strip() for item in answer.split(",") if item.strip()]
+        elif setting.check == "count":
+            if answer.strip().lower() == "all":
+                answer = "all"
+            elif answer.strip().isdigit() and int(answer) > 0:
+                answer = int(answer)
+            else:
+                say("A whole number, or all, please.")
+                return False
         write(stores, setting, answer)
         return answer != current
     if setting.kind == "multi":

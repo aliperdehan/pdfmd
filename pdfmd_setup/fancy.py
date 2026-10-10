@@ -218,6 +218,14 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                         continue
                 elif setting.check == "list":
                     value = [item.strip() for item in value.split(",") if item.strip()]
+                elif setting.check == "count":
+                    if value.lower() == "all":
+                        value = "all"
+                    elif value.isdigit() and int(value) > 0:
+                        value = int(value)
+                    else:
+                        state["message"] = "A whole number, or all, please."
+                        continue
                 write(stores, setting, value)
             state["dirty"] = True
     return result["save"]

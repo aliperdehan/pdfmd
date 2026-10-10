@@ -7,6 +7,11 @@ local DEFAULT_MAX_ROWS = 10
 
 local DEFAULT_MAX_COLS = 7
 
+-- For every table of the document (v3.27.2): pdfmd passes --csv-rows/--csv-cols or `pdfmd-options: {csv: ...}` as
+-- `-M pdfmd-csv-rows=N|all`, `pdfmd-csv-cols`, `pdfmd-csv-header=false`, `pdfmd-csv-reader=gfm`, only when they differ
+-- from the defaults; a div's own attributes still win. read_defaults (run first) takes them out of the metadata.
+local defaults = {rows = nil, cols = nil, header = true, reader = "markdown"}
+
 -- The whole text at once (a quoted field may hold a line break, and inline data arrives as one string): rows of
 -- fields, RFC 4180 quoting (a doubled `""` is a quote); blank lines are skipped.
 local function parse_csv(text, delim)
@@ -288,13 +293,14 @@ local function csv_blocks(div)
   else
     delim = DELIMITER_NAMES[delim:lower()] or delim:sub(1, 1)
   end
-  local max_rows = limit_or_all(div.attributes["rows"], DEFAULT_MAX_ROWS)
-  local max_cols = limit_or_all(div.attributes["cols"], DEFAULT_MAX_COLS)
-  local has_header = div.attributes["header"] ~= "false"
+  local max_rows = limit_or_all(div.attributes["rows"], defaults.rows or DEFAULT_MAX_ROWS)
+  local max_cols = limit_or_all(div.attributes["cols"], defaults.cols or DEFAULT_MAX_COLS)
+  local has_header = defaults.header
+  if div.attributes["header"] ~= nil then has_header = div.attributes["header"] ~= "false" end
   local separator = (div.attributes["separator"] or "auto"):lower()
   -- cells are read as Pandoc's own Markdown (H~2~O, $x^2$, [@key], \ce{...}); reader="gfm" restores plain GFM
   local reader = div.attributes["reader"]
-  if reader == nil or reader == "" then reader = "markdown" end
+  if reader == nil or reader == "" then reader = defaults.reader end
 
   local parsed_rows = parse_csv(text, delim)
   local header_fields = nil
@@ -379,7 +385,7 @@ local function csv_blocks(div)
     local shown_rows = #data_rows
     local note = string.format(
       "*(showing %d of %d row%s, %d of %d column%s -- use `rows=all`/`cols=all`, or " ..
-      "`rows=N`/`cols=N`, on this `.csv` div to include more)*",
+      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every table)*",
       shown_rows, total_data_rows, total_data_rows == 1 and "" or "s",
       shown_cols, total_cols, total_cols == 1 and "" or "s")
     for _, block in ipairs(pandoc.read(note .. "\n", "markdown").blocks) do blocks[#blocks + 1] = block end
@@ -441,3 +447,24 @@ function Blocks(blocks)
   if changed then return out end
   return nil
 end
+
+
+local function read_defaults(meta)
+  local changed = false
+  local function take(key)
+    local value = meta["pdfmd-csv-" .. key]
+    if value == nil then return nil end
+    meta["pdfmd-csv-" .. key] = nil
+    changed = true
+    if type(value) == "boolean" then return tostring(value) end
+    return pandoc.utils.stringify(value)
+  end
+  local rows, cols, header, reader = take("rows"), take("cols"), take("header"), take("reader")
+  if rows then defaults.rows = limit_or_all(rows, DEFAULT_MAX_ROWS) end
+  if cols then defaults.cols = limit_or_all(cols, DEFAULT_MAX_COLS) end
+  if header then defaults.header = header ~= "false" end
+  if reader and reader ~= "" then defaults.reader = reader end
+  if changed then return meta end
+end
+
+return {{Meta = read_defaults}, {Blocks = Blocks}}

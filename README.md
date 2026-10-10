@@ -1116,7 +1116,11 @@ Water,18.015,1.20
 - The first row is the header unless you add `header="false"`.
 - Large files are capped at 10 rows × 7 columns, so a huge CSV can't
   silently fill 40 pages. `rows=all` or `cols=20` raise the cap. When a
-  table is cut, the PDF itself shows a note saying so.
+  table is cut, the PDF itself shows a note saying so. For every table of a
+  document: `--csv-rows N|all` / `--csv-cols N|all`, or
+  `pdfmd-options: {csv: {rows: all, cols: 12, header: false, reader: gfm}}`
+  (in the front matter, a metadata file, or the config, where `pdfmd --setup`
+  sets rows and columns); a div's own attributes still win.
 
 This works for every output format.
 

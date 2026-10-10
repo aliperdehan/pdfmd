@@ -662,7 +662,9 @@ CSV/TSV table inclusion:
     working folder). Delimiter is auto-detected from the extension
     (`.tsv` -> tab, otherwise comma), or set explicitly with a
     `delimiter="..."` attribute; the first row is treated as a header
-    unless `header="false"`. Capped at 10 rows and 7 columns by default --
+    unless `header="false"`. Capped at 10 rows and 7 columns by default (for every
+    table: --csv-rows/--csv-cols, `pdfmd-options: {csv: {rows, cols, header, reader}}`
+    or --setup, v3.27.2) --
     `rows`/`cols` attributes override either (a number, or `all` for no
     cap) -- so an accidentally-huge CSV doesn't produce a many-page table
     nobody intended; a truncated table gets both a one-line `WARN` (naming
@@ -1247,7 +1249,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.1"
+PDFMD_VERSION = "3.27.2"
 import argparse
 import csv
 import filecmp
@@ -1982,8 +1984,57 @@ def contains_csv_table(md_path: Path) -> bool:
     return bool(CSV_DIV_RE.search(text))
 
 
+# The cap of a `.csv` table, for every table of a document (v3.27.2): --csv-rows / --csv-cols (reaching -j workers as
+# PDFMD_CSV_ROWS / PDFMD_CSV_COLS, as --strict does), else `pdfmd-options: {csv: {rows, cols, header, reader}}` (the
+# document, its metadata files, the config: field by field), else 10 rows x 7 columns, a header row and Pandoc's
+# Markdown in the cells. A div's own rows= / cols= / header= / reader= still win for that one table.
+CSV_DEFAULTS = {"rows": 10, "cols": 7, "header": True, "reader": "markdown"}
+CSV_ENV = {"rows": "PDFMD_CSV_ROWS", "cols": "PDFMD_CSV_COLS"}
+
+
+def csv_count(value) -> int | str | None:
+    """A rows/cols cap: a positive whole number or "all"; None when it is neither."""
+    text = str(value).strip().casefold()
+    if text == "all":
+        return "all"
+    return int(text) if text.isdigit() and int(text) > 0 else None
+
+
+def csv_count_argument(value: str) -> int | str:
+    found = csv_count(value)
+    if found is None:
+        raise argparse.ArgumentTypeError(f"{value!r}: a whole number of rows or columns, or all")
+    return found
+
+
+def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
+    """The cap, the header rule and the cell reader of every `.csv` div of ``md_path`` (see CSV_DEFAULTS)."""
+    chosen = dict(CSV_DEFAULTS)
+    option = first_pdfmd_option(md_path, list(metadata_files), "csv") if md_path is not None else None
+    where = display_path(md_path) if md_path is not None else "csv"
+    if option is not None and not isinstance(option, dict):
+        raise SystemExit(f"{where}: pdfmd-options.csv must be a mapping (rows, cols, header, reader), not {option!r}")
+    option = option or {}
+    for key in ("rows", "cols"):
+        value = os.environ.get(CSV_ENV[key])
+        if value is None and option.get(key) is not None:
+            value = option[key]
+            if csv_count(value) is None:
+                raise SystemExit(f"{where}: pdfmd-options.csv.{key} must be a whole number or all, not {value!r}")
+        if value is not None and csv_count(value) is not None:
+            chosen[key] = csv_count(value)
+    if option.get("header") is not None:
+        flag = option_flag(option["header"])
+        if flag is None:
+            raise SystemExit(f"{where}: pdfmd-options.csv.header must be true or false, not {option['header']!r}")
+        chosen["header"] = flag
+    if option.get("reader"):
+        chosen["reader"] = str(option["reader"]).strip()
+    return chosen
+
+
 def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
-                          csv_filter_path: Path) -> list[str]:
+                          csv_filter_path: Path, metadata_files: list[Path] = ()) -> list[str]:
     """``--lua-filter`` for CSV_TABLE_LUA_FILTER, only when actually needed.
 
     Mirrors crossref_filter_args()'s own shape and reasoning: silently a
@@ -1997,7 +2048,12 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
     files = sources if isinstance(sources, list) else [sources]
     if not any(contains_csv_table(file) for file in files):
         return []
-    return ["--lua-filter", str(csv_filter_path)]
+    args = ["--lua-filter", str(csv_filter_path)]
+    chosen = csv_defaults(files[0], metadata_files)
+    for key, value in chosen.items():            # only what differs: the filter's own defaults are the same
+        if value != CSV_DEFAULTS[key]:
+            args += ["-M", f"pdfmd-csv-{key}={str(value).lower() if isinstance(value, bool) else value}"]
+    return args
 
 
 # --raw / --no-raw / --raw-for FAMILY=SYNTAXES (filled in by main()); `pdfmd-options.raw` is the document's way.
@@ -3232,12 +3288,15 @@ def csv_separator_alignments(row: list[str]) -> list[str]:
     return out
 
 
-def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: str | None = None) -> list[str]:
+def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: str | None = None,
+                  defaults: dict | None = None) -> list[str]:
     """The Markdown pipe table for a `::: {.csv file="data.csv"}` div, the way
     pdfmd_lua/csv_table.lua builds it for Pandoc: the data from `file=` or written inside the div, the delimiter
     from `delimiter=` (a character or its name), the extension or the first line, the first row the header unless
     `header="false"`, a `---`/`:-:`/`--:` second row or `align="lcr"` for the alignments, capped at 10 rows x 7
-    columns unless `rows=`/`cols=` (or `all`) say otherwise. (Column `widths=` need Pandoc.)"""
+    columns unless `rows=`/`cols=` (or `all`) say otherwise, or ``defaults`` (csv_defaults) for every table. (Column
+    `widths=` need Pandoc.)"""
+    defaults = defaults or CSV_DEFAULTS
     options = {name: next(value for value in groups if value is not None)
                for name, *groups in ((m.group(1), m.group(2), m.group(3), m.group(4))
                                      for m in DIV_ATTRIBUTE_RE.finditer(attributes))}
@@ -3264,8 +3323,9 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
 
     delimiter = options.get("delimiter")
     delimiter = CSV_DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1]) if delimiter else csv_guess_delimiter(text, name)
-    max_rows, max_columns = limit("rows", 10), limit("cols", 7)
-    has_header = options.get("header") != "false"
+    max_rows, max_columns = (limit(key, float("inf") if defaults[key] == "all" else defaults[key])
+                             for key in ("rows", "cols"))
+    has_header = options.get("header") != "false" if options.get("header") is not None else defaults["header"]
     rows = [row for row in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter) if row]
     total_columns = max((len(row) for row in rows), default=0)
     shown_columns = int(min(total_columns, max_columns))
@@ -3291,7 +3351,8 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
         plural = lambda number: "" if number == 1 else "s"  # noqa: E731
         lines += ["", f"*(showing {len(shown)} of {len(rows)} row{plural(len(rows))}, {shown_columns} of "
                       f"{total_columns} column{plural(total_columns)} -- use `rows=all`/`cols=all`, or "
-                      "`rows=N`/`cols=N`, on this `.csv` div to include more)*"]
+                      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every "
+                      "table)*"]
     return lines
 
 
@@ -3548,7 +3609,8 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
                 if data and FENCE_RE.match(data[0]):
                     data = data[1:-1] if len(data) > 1 and FENCE_RE.match(data[-1]) else data[1:]
                 inline = "\n".join(data) if any(part.strip() for part in data) else None
-            table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path, inline)
+            table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path, inline,
+                                  csv_defaults(source_path, metadata_files) if source_path is not None else None)
             items.extend([("", False), *[(row, False) for row in table], ("", False)])
             skip_csv_div = inline is None and bool(re.search(r"\bfile=", csv_div.group(1)))
             count("csv")
@@ -14302,7 +14364,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
-            cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
             cmd += select_filter_args(selection)
@@ -14447,7 +14509,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             # docstring for the 2026-09-20 fix this is part of).
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
-            cmd += csv_table_filter_args(md_path, no_auto, csv_filter)
+            cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
@@ -14901,7 +14963,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # document_header_includes()'s own docstring.
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
-                cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
                                        flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                        preamble=list(preamble_files or []) if flat_markdown else None,
@@ -15127,7 +15189,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
-                    cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter)
+                    cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     cmd += select_filter_args(selection)
@@ -18152,6 +18214,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expand-tables", action="store_true",
                         help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
                              "(all its rows), its caption= the line under it. The CSV files are left where they are")
+    parser.add_argument("--csv-rows", type=csv_count_argument, default=None, metavar="N|all",
+                        help="how many data rows a `::: {.csv}` table shows when its div does not say (default 10). "
+                             "Also `pdfmd-options: {csv: {rows: N}}`, or --setup")
+    parser.add_argument("--csv-cols", type=csv_count_argument, default=None, metavar="N|all",
+                        help="how many columns a `::: {.csv}` table shows when its div does not say (default 7). "
+                             "Also `pdfmd-options: {csv: {cols: N}}`, or --setup")
     parser.add_argument("--table-numbers", metavar="1,3-4",
                         help="with --extract-tables: only these tables, by their position in the document "
                              "(1 is the first; ranges allowed); the others stay as they are, and --table-names "
@@ -18578,6 +18646,9 @@ def main() -> None:
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
+    for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"])):
+        if value is not None:
+            os.environ[variable] = str(value)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
         if value is not None:
             os.environ[variable] = str(value)
@@ -19105,7 +19176,7 @@ def main() -> None:
                     if target_format in HTML_TARGETS:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
-                    cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
+                    cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
@@ -19224,7 +19295,7 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_pdf_meta_file)]
                         if report_fonts_header or report_fonts_css:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
-                        cmd += csv_table_filter_args(files, report_no_auto, csv_filter)
+                        cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)

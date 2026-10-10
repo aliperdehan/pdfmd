@@ -123,3 +123,81 @@ class InlineData(CsvTables):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Limits(unittest.TestCase):
+    """The cap for every table (v3.27.2): --csv-rows/--csv-cols, `pdfmd-options: {csv: ...}`, the config; a div's own
+    rows=/cols= still win."""
+
+    DATA = "a,b,c,d,e,f,g,h,i\n" + "".join(f"{n},2,3,4,5,6,7,8,9\n" for n in range(1, 16))
+
+    def build(self, markdown: str, *flags: str, front: str = "", config: str | None = None, target: str = "native"):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "d.csv").write_text(self.DATA, encoding="utf-8")
+        (directory / "d.md").write_text(f"---\ntitle: T\n{front}---\n\n" + markdown, encoding="utf-8")
+        env = {**os.environ, "PDFMD_CONFIG": ""}
+        env.pop("PDFMD_CSV_ROWS", None)
+        env.pop("PDFMD_CSV_COLS", None)
+        if config is not None:
+            (directory / "config.yaml").write_text(config, encoding="utf-8")
+            env["PDFMD_CONFIG"] = str(directory / "config.yaml")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", target, "-o", f"out.{target}",
+                               "--no-stamp", "--no-backup", "--no-auto", "crossref", *flags], cwd=directory,
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return (directory / f"out.{target}").read_text(encoding="utf-8"), done.stdout + done.stderr
+
+    def rows_and_columns(self, native: str) -> tuple[int, int]:
+        import re
+        rows = len(re.findall(r"\bRow\b", native.split("TableBody", 1)[1]))
+        header = native.split("TableHead", 1)[1].split("TableBody", 1)[0]
+        return rows, len(re.findall(r"\bCell\b", header))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_default_cap_and_its_note(self):
+        native, stderr = self.build('::: {.csv file="d.csv"}\n:::\n')
+        self.assertEqual(self.rows_and_columns(native), (10, 7))
+        self.assertIn("--csv-rows", native)                                  # the note under the table says how
+        self.assertIn("WARN", stderr)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_command_line_the_document_and_the_config(self):
+        block = '::: {.csv file="d.csv"}\n:::\n'
+        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "3", "--csv-cols", "all")[0]), (3, 9))
+        front = "pdfmd-options:\n  csv: {rows: all, cols: 4}\n"
+        self.assertEqual(self.rows_and_columns(self.build(block, front=front)[0]), (15, 4))
+        config = "options:\n  csv: {rows: 5}\n"
+        self.assertEqual(self.rows_and_columns(self.build(block, config=config)[0]), (5, 7))
+        # the document over the config, field by field; the command line over both
+        self.assertEqual(self.rows_and_columns(self.build(block, front="pdfmd-options:\n  csv: {cols: 2}\n",
+                                                          config=config)[0]), (5, 2))
+        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "all", config=config)[0]), (15, 7))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_a_divs_own_attributes_win_and_header_and_reader_apply_to_every_table(self):
+        native, _ = self.build('::: {.csv file="d.csv" rows="2"}\n:::\n', "--csv-rows", "all")
+        self.assertEqual(self.rows_and_columns(native)[0], 2)
+        native, _ = self.build('::: {.csv file="d.csv"}\n:::\n', front="pdfmd-options:\n  csv: {header: false, rows: all}\n")
+        self.assertEqual(self.rows_and_columns(native)[0], 16)            # the first line is data now
+        self.assertNotIn("pdfmd-csv", native)                              # the settings left no trace in the metadata
+
+    def test_a_bad_value_is_an_error(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "x.md", "--csv-rows", "many"], cwd=directory,
+                              capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("whole number", done.stderr)
+
+    def test_the_built_in_renderer_takes_the_same_cap(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "d.csv").write_text(self.DATA, encoding="utf-8")
+        lines = pdfmd.csv_div_table('.csv file="d.csv"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3, "cols": "all"})
+        self.assertEqual(len([line for line in lines if line.startswith("| ")]), 5)       # header, ---, 3 rows
+        self.assertEqual(lines[0].count("|"), 10)                                          # 9 columns
+        lines = pdfmd.csv_div_table('.csv file="d.csv" rows="1"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3})
+        self.assertEqual(len([line for line in lines if line.startswith("| ")]), 3)

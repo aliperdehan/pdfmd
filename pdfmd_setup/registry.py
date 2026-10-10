@@ -20,7 +20,8 @@ class Setting:
     help: str = ""
     section: str = ""
     store: str = "config"             # which file: "config" (config.yaml) or "metadata" (metadata.yaml beside it)
-    check: str = ""                   # "number" for a text that must be one, "list" for a comma-separated list
+    check: str = ""                   # "number" for a text that must be one, "list" for a comma-separated list,
+                                      # "count" for a whole number or `all`
     unset: str = ""                   # what pdfmd does when the key is not set, in words (see UNSET); the screens show it
     scope: str = "any"                # "machine": this computer only, never a folder's setup (see MACHINE)
 
@@ -58,6 +59,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
+    "options.csv.rows": "10", "options.csv.cols": "7",
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
@@ -159,6 +161,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.html.math", "Math in HTML",
                (("mathml", "MathML (no network)"), ("mathjax", "MathJax"), ("katex", "KaTeX"), ("webtex", "WebTeX images"),
                 ("plain", "plain text")), "", "", "Output"),
+        text("options.csv.rows", "Rows a .csv table shows", "A whole number, or all. A div's rows= wins. Per run: --csv-rows.",
+             "Output", "config", "count"),
+        text("options.csv.cols", "Columns a .csv table shows", "A whole number, or all. A div's cols= wins. Per run: --csv-cols.",
+             "Output", "config", "count"),
         choice("options.table-widths", "Pipe-table column widths",
                (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
                 ("keep", "exactly the widths the separator's dashes say")), "auto",
