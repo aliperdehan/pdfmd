@@ -1027,8 +1027,10 @@ number of the heading before it, and the build says how many there were.
 `\pageref` is always `??`. The last full build's `.aux` (cache on,
 below) is exact and is used first; the scan fills in what it does not know.
 `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` or `--seed-labels` picks
-the source (`draft` runs LaTeX once over the whole document without output, for
-exact numbers at about half a compile's cost); `off` brings back the `??`. A section of an ordinary document
+the source (`draft` runs LaTeX once over the whole document without output and
+without drawing its pictures, TikZ, pgfplots, chemfig and images, for exact
+numbers at a fraction of a compile, though a page reference into what was left out
+prints `??`; `--no-auto draftpictures` draws them); `off` brings back the `??`. A section of an ordinary document
 (`doc#results`) gets the same for the references it makes, but keeps numbering
 its own headings from 1.
 
@@ -1360,6 +1362,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `crossref` | `@fig:`/`@tbl:` references or `{#fig:...}` labels | adds the `pandoc-crossref` filter, ahead of citeproc |
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 | `texpackages` | `\ce{H2O}` (mhchem) or `\SI{25}{\celsius}`, `\num`, `\qty` (siunitx) in a LaTeX build whose preamble does not load the package | loads it, last in the preamble, unless it is loaded already (your options win), the command is defined some other way, or the package is not installed |
+| `draftpictures` | a part (or section) built alone with `seed-labels: draft` | the draft pass over the whole document does not draw TikZ pictures (pgfplots too), `\chemfig`, chemfig schemes or images: they step no counter. A page reference into what was left out prints `??`; a picture that ends inside a macro makes pdfmd run the pass again with the pictures |
 
 `-v` explains each decision and prints the exact command it runs:
 

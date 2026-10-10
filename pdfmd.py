@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.22"
+PDFMD_VERSION = "3.27.23"
 import argparse
 import csv
 import filecmp
@@ -1541,6 +1541,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
+    "draftpictures",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont"}),
@@ -14034,18 +14035,96 @@ PARTS_MARKER_DEFS = r"""\makeatletter
 \makeatother
 """
 DRAFT_FLAGS = {"lualatex": "-draftmode", "pdflatex": "-draftmode", "xelatex": "-no-pdf"}   # a pass without output
+# The draft pass only counts, so it does not draw (v3.27.23): a tikzpicture (pgfplots inside it too), \chemfig, a chemfig
+# \schemestart...\schemestop and an image cost most of a nulabreport report's pass and step no counter (a figure's
+# \caption is outside its picture). A picture is skipped up to its literal \end{tikzpicture}. When that \end is hidden
+# in a macro, the skip meets \end{<the environment around the picture>} or \end{document} first: it says so in the log,
+# and build_label_scan runs the pass again with the pictures (draft_skip_problem). Needs LaTeX 2020-10 (\AddToHook).
+DRAFT_SKIP_PICTURES = r"""% pdfmd: a pass that only counts the numbers, so the pictures are not drawn
+\makeatletter
+\ifdefined\AddToHook
+\def\pdfmd@picenv{tikzpicture}\def\pdfmd@docenv{document}\let\pdfmd@outerenv\@empty
+\AddToHook{env/tikzpicture/before}{\let\pdfmd@outerenv\@currenvir}
+\long\def\pdfmd@skippic#1\end#2{\def\pdfmd@arg{#2}\let\pdfmd@next\pdfmd@skippic
+  \ifx\pdfmd@arg\pdfmd@picenv\let\pdfmd@next\pdfmd@skippicdone\fi
+  \ifx\pdfmd@arg\pdfmd@outerenv\let\pdfmd@next\pdfmd@skipfailed\fi
+  \ifx\pdfmd@arg\pdfmd@docenv\let\pdfmd@next\pdfmd@skipfailed\fi
+  \pdfmd@next}
+\def\pdfmd@skippicdone{\end{tikzpicture}}
+\def\pdfmd@skipfailed{\typeout{PDFMD-DRAFT-SKIP-FAILED}\end{tikzpicture}\expandafter\end\expandafter{\pdfmd@arg}}
+\def\pdfmd@tikz{\ifx\@currenvir\pdfmd@picenv\let\endtikzpicture\relax\expandafter\pdfmd@skippic
+  \else\let\endtikzpicture\pdfmd@endtikzpicture\expandafter\pdfmd@tikzpicture\fi}
+\def\pdfmd@chemfig{\@ifstar\pdfmd@cf\pdfmd@cf}
+\def\pdfmd@cf{\@ifnextchar[\pdfmd@cfopt\pdfmd@cfarg}
+\def\pdfmd@cfopt[#1]{\@ifnextchar[\pdfmd@cfopt\pdfmd@cfarg}
+\long\def\pdfmd@cfarg#1{}
+\long\def\pdfmd@schemestart#1\schemestop{}
+\AtBeginDocument{%
+  \@ifundefined{tikzpicture}{}{\let\pdfmd@tikzpicture\tikzpicture\let\pdfmd@endtikzpicture\endtikzpicture
+    \let\tikzpicture\pdfmd@tikz}%
+  \@ifundefined{chemfig}{}{\let\chemfig\pdfmd@chemfig}%
+  \@ifundefined{schemestart}{}{\let\schemestart\pdfmd@schemestart}%
+  \@ifundefined{Gin@setfile}{}{\setkeys{Gin}{draft}}}
+\fi
+\makeatother
+"""
 PART_COUNTER_RE = re.compile(r"^\\pdfmd@part\{([^{}]*)\}\{([^{}]*)\}\s*$")
 SEED_LABEL_RE = re.compile(r"^\\newlabel\{([^{}]*)\}(\{.*\})\s*$")
 
 
-def seed_labels_file(full_aux: Path, target: Path) -> int:
+def draft_skip_problem(log: Path, aux: Path, text: str) -> str | None:
+    """Why a draft pass that skipped the pictures (DRAFT_SKIP_PICTURES) cannot be trusted, or None: a skip that met
+    another environment's end first, a LaTeX error about the skip or a picture, or a label of the document's body that
+    the pass did not define (the skip swallowed it). Ordinary errors of the document do not count: the pass with the
+    pictures would have them too."""
+    try:
+        log_text = log.read_text(encoding="utf-8", errors="replace")
+        aux_text = aux.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "it left no .aux"
+    if "PDFMD-DRAFT-SKIP-FAILED" in log_text:
+        return "a picture ends inside a macro"
+    for block in re.findall(r"^!.*(?:\n.*){0,3}", log_text, re.MULTILINE):
+        if "pdfmd@" in block or "tikzpicture" in block:
+            return block.splitlines()[0].lstrip("! ").strip()
+    defined = set(re.findall(r"^\\newlabel\{([^{}]*)\}", aux_text, re.MULTILINE))
+    body = text[text.find("\\begin{document}"):]
+    missing = sorted(set(re.findall(r"\\label\{([^{}]*)\}", body)) - defined)
+    if missing:
+        return f"{len(missing)} labels went missing ({missing[0]})"
+    return None
+
+
+def label_without_page(value: str) -> str:
+    """A \\newlabel value with its page number left out (``??``): a pass that skipped the pictures has the right numbers
+    but not the right pages. ``{{3}{12}{..}{..}{}}`` has the page second; so does cleveref's
+    ``{{[table][3][]3}{[1][12][]12}{}{}{}}``, whose page group keeps its form (``[1][0][]??``) for \\cpageref."""
+    groups, depth, start = [], 0, None
+    inner = value[1:-1] if value.startswith("{") and value.endswith("}") else value
+    for index, character in enumerate(inner):
+        if character == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                groups.append(inner[start:index + 1])
+    if len(groups) < 2:
+        return value
+    groups[1] = "{[1][0][]??}" if groups[0].startswith("{[") else "{??}"
+    return "{" + "".join(groups) + "}"
+
+
+def seed_labels_file(full_aux: Path, target: Path, pages: bool = True) -> int:
     """Write ``target`` (a .tex fragment) that defines every label of the last
     full build's .aux that a partial build does not define itself, and, per
     part, the counter values at its start (\\pdfmd@st@key, run by
     \\pdfmdpart), so a part's own numbers continue from the full report's
     instead of restarting at 1. Returns the number of labels; 0 writes
     nothing. Defining only the undefined is what keeps a part's own labels
-    authoritative.
+    authoritative. ``pages=False`` leaves the labels' page numbers out
+    (``??``), for a draft pass that skipped the pictures.
     """
     try:
         lines = full_aux.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -14056,7 +14135,8 @@ def seed_labels_file(full_aux: Path, target: Path) -> int:
     for line in lines:
         match = SEED_LABEL_RE.match(line)
         if match:
-            seeded.append(f"\\pdfmd@seed{{{match.group(1)}}}{match.group(2)}")
+            value = match.group(2) if pages else label_without_page(match.group(2))
+            seeded.append(f"\\pdfmd@seed{{{match.group(1)}}}{value}")
             continue
         match = PART_COUNTER_RE.match(line)
         if match:
@@ -14379,21 +14459,39 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
                    str(scratch), str(tex_path)]
-        try:
-            subprocess.run(command, cwd=pandoc_cwd, env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
-                           capture_output=True, text=True, timeout=1800)
-        except (OSError, subprocess.SubprocessError) as error:
-            if verbose:
-                print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
+        whole = tex_path.read_text(encoding="utf-8", errors="replace")
+        quick = not auto_disabled(no_auto, "draftpictures") and whole.count("\\begin{document}") == 1
+
+        def draft_pass(text: str) -> None:
+            tex_path.write_text(text, encoding="utf-8")
+            try:
+                subprocess.run(command, cwd=pandoc_cwd, env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
+                               capture_output=True, text=True, timeout=1800)
+            except (OSError, subprocess.SubprocessError) as error:
+                if verbose:
+                    print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
+
+        if quick:
+            draft_pass(whole.replace("\\begin{document}", DRAFT_SKIP_PICTURES + "\\begin{document}"))
+            problem = draft_skip_problem(scratch / "labels-scan.log", scratch / "labels-scan.aux", whole)
+            if problem:
+                if verbose:
+                    print(f"LABELS    the draft pass without the pictures cannot be trusted ({problem}); "
+                          "running it with them")
+                quick = False
+                draft_pass(whole)
+        else:
+            draft_pass(whole)
         aux_seed = scratch / "labels-aux-seed.tex"
-        found = seed_labels_file(scratch / "labels-scan.aux", aux_seed)
+        found = seed_labels_file(scratch / "labels-scan.aux", aux_seed, pages=not quick)
         if found:
             hook = scratch / "labels-aux-hook.tex"
             hook.write_text("\\AtBeginDocument{\\InputIfFileExists{\"%s\"}{}{}}\n" % aux_seed.as_posix(), encoding="utf-8")
             headers.insert(0, hook)
             exact = True
             if verbose:
-                print(f"LABELS    draft pass over the whole document: {found} labels in {time.time() - began:.1f} s")
+                print(f"LABELS    draft pass over the whole document{' (pictures not drawn, page numbers ??)' if quick else ''}: "
+                      f"{found} labels in {time.time() - began:.1f} s")
         elif verbose:
             print("LABELS    the draft pass left no .aux; the scan alone is used")
     if markers:
@@ -18804,7 +18902,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "

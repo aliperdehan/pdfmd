@@ -315,6 +315,80 @@ class UnknownWrapper(unittest.TestCase):
         self.assertNotIn("does not know", out)
 
 
+def has_tikz() -> bool:
+    found = subprocess.run(["kpsewhich", "tikz.sty"], capture_output=True, text=True) if shutil.which("kpsewhich") else None
+    return bool(found and found.returncode == 0 and found.stdout.strip())
+
+
+@NEEDS
+@unittest.skipUnless(has_tikz(), "needs TikZ")
+class QuickDraft(unittest.TestCase):
+    """v3.27.23: the draft pass does not draw the pictures (DRAFT_SKIP_PICTURES), and runs again with them when a
+    picture's end is hidden in a macro."""
+
+    def report(self, picture: str, package: str = "") -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name).resolve()
+        cache = self.root / "cache"
+        self.environment = {**os.environ, "XDG_CACHE_HOME": str(cache), "LOCALAPPDATA": str(cache)}
+        (self.root / "parts").mkdir()
+        (self.root / "report.md").write_text(
+            "---\ntitle: Q\nnumbersections: true\nheader-includes: |\n  \\usepackage{tikz}\n"
+            + ("  \\usepackage{mypic}\n" if package else "")
+            + "  \\AddToHook{package/hyperref/after}{\\usepackage{cleveref}}\npdfmd-options:\n  parts: auto\n---\n",
+            encoding="utf-8")
+        if package:      # a house style's package, as nulabreport is (a preamble.tex holding \begin{tikzpicture} is not one)
+            (self.root / "mypic.sty").write_text(package, encoding="utf-8")
+        (self.root / "parts" / "10-a.md").write_text("# A\n\nText.\n", encoding="utf-8")
+        (self.root / "parts" / "20-data.md").write_text(
+            "# Data\n\n```{=latex}\n\\begin{figure}\\centering\n" + picture + "\n\\caption{Drawn}\\label{fig:a}\\end{figure}\n"
+            "\\begin{figure}\\centering x\\caption{Plain}\\label{fig:b}\\end{figure}\n```\n", encoding="utf-8")
+        (self.root / "parts" / "30-use.md").write_text(
+            "# Use\n\nSee Figure \\ref{fig:a} and Figure \\ref{fig:b}, on page \\pageref{fig:b} (\\cpageref{fig:b}).\n",
+            encoding="utf-8")
+
+    def part(self) -> tuple[str, str]:
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#use", "-e", "lualatex", "--seed-labels",
+                               "draft", "--verbose"], cwd=self.root, env=self.environment, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True)
+        return re.sub(r"\s+", " ", text.stdout), done.stdout
+
+    def test_the_pictures_are_not_drawn_and_the_numbers_stay(self):
+        self.report("\\begin{tikzpicture}\\draw (0,0) -- (1,1);\\end{tikzpicture}")
+        text, out = self.part()
+        self.assertIn("See Figure 1 and Figure 2, on page ?? (page ??)", text)
+        self.assertIn("pictures not drawn", out)
+        self.assertNotIn("cannot be trusted", out)
+
+    def test_a_picture_whose_end_is_in_a_macro_gets_the_full_pass(self):
+        # the skip cannot see \end{tikzpicture} inside mypic's end code: it meets \end{mypic} first
+        self.report("\\begin{mypic}\\draw (0,0) -- (1,1);\\end{mypic}",
+                    "\\ProvidesPackage{mypic}\n\\newenvironment{mypic}{\\begin{tikzpicture}}{\\end{tikzpicture}}\n")
+        text, out = self.part()
+        self.assertIn("See Figure 1 and Figure 2, on page", text)
+        self.assertNotIn("??", text)                              # the full pass knows the pages too
+        self.assertIn("cannot be trusted", out)
+        self.assertNotIn("pictures not drawn", out)
+
+    def test_it_can_be_switched_off(self):
+        self.report("\\begin{tikzpicture}\\draw (0,0) -- (1,1);\\end{tikzpicture}")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#use", "-e", "lualatex", "--seed-labels",
+                               "draft", "--verbose", "--no-auto", "draftpictures"], cwd=self.root, env=self.environment,
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("LABELS    draft pass over the whole document:", done.stdout)
+
+
+class PagesLeftOut(unittest.TestCase):
+    def test_the_page_number_of_a_label_is_left_out(self):
+        self.assertEqual(pdfmd.label_without_page("{{3}{12}{T}{figure.3}{}}"), "{{3}{??}{T}{figure.3}{}}")
+        self.assertEqual(pdfmd.label_without_page("{{[figure][3][]3}{[1][12][]12}{}{}{}}"),
+                         "{{[figure][3][]3}{[1][0][]??}{}{}{}}")
+        self.assertEqual(pdfmd.label_without_page("{{3}}"), "{{3}}")
+
+
 @NEEDS
 class SectionBuild(unittest.TestCase):
     def test_a_section_of_an_ordinary_document_resolves_its_references_without_a_full_build(self):

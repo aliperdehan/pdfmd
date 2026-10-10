@@ -41,6 +41,51 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.23 — 2026-10-11
+
+Pre-edit state: commit `6288eeb` (v3.27.22).
+
+### Changed
+
+- **The draft pass of `seed-labels: draft` does not draw pictures.** A part built alone (`report#discussion`) with
+  `seed-labels: draft` gets the other parts' numbers from one LaTeX pass over the whole document, and most of that
+  pass was drawing: nulabreport's pgfplots IR spectra, chemfig structures and reaction schemes. None of them steps a
+  counter, because a figure's `\caption` is outside its picture. `DRAFT_SKIP_PICTURES`, put before
+  `\begin{document}` for that pass only, skips:
+  - a `tikzpicture` (pgfplots inside it too), up to its literal `\end{tikzpicture}`;
+  - `\chemfig` and a chemfig `\schemestart ... \schemestop`;
+  - images (graphicx's `draft`).
+
+  On LR4-5 (copies): 44.8 s for the pass, now 12.9 s, with all 170 labels at the same numbers. Built part by part, LR3
+  (8 parts), LR4-5 (8 sections) and the split-report demo (8 parts) gave text identical to the full pass's.
+
+  Pages move when pictures are not drawn, so the seed leaves the labels' page numbers out: `\pageref` and `\cpageref`
+  into what was left out print `??` (`label_without_page`; cleveref's page group keeps its form).
+- **A pass that went wrong runs again with the pictures** (`draft_skip_problem`), in any of these cases:
+  - a picture whose `\end{tikzpicture}` is hidden in a macro (a house style's environment around a tikzpicture): the
+    skip meets the end of the surrounding environment or of the document first, and writes `PDFMD-DRAFT-SKIP-FAILED`
+    to the log;
+  - a LaTeX error that names the skip or a `tikzpicture`;
+  - a `\label` of the document's body missing from the pass's `.aux`.
+
+  The document's own errors do not count, since the pass with pictures would have them too. `--verbose` says which
+  pass ran. `--no-auto draftpictures` always draws them. It needs LaTeX 2020-10 (`\AddToHook`); older kernels draw as
+  before.
+
+### Found (not changed here)
+
+- `is_latex_preamble` refuses a `preamble.tex` that contains `\begin{tikzpicture}`, so it never mistakes a TikZ
+  picture file for a preamble. That also refuses one that defines an environment around a tikzpicture: it is silently
+  left out, and the build fails at the first use. Queued.
+
+### Tests
+
+- `test_labels.QuickDraft` (needs TikZ):
+  - a literal tikzpicture: the numbers stay, the pages print `??`, and `--verbose` says the pictures were not drawn;
+  - a package's `mypic` environment around a tikzpicture: the full pass runs, with exact pages;
+  - `--no-auto draftpictures`.
+- `test_labels.PagesLeftOut`: plain and cleveref label values lose their page.
+
 ## v3.27.22 — 2026-10-10
 
 Pre-edit state: commit `5112eb8` (v3.27.21).
