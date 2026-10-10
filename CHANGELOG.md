@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.21 — 2026-10-10
+
+Pre-edit state: commit `0b4b3a9` (v3.27.20).
+
+### Fixed
+
+- **Documents with no code got the code header (`code_wrap.tex`, fvextra) and the code filter.** The test was one
+  regex that took any line starting with a fence, or indented four spaces, for code. So it also counted:
+  - the fences of raw blocks (```` ```{=latex} ```` around a `tikzpicture` or `chemfig`, and their closing ```` ``` ````);
+  - the front matter's indented YAML (a `references:` list: `    type: article-journal`);
+  - a list item's continuation indented four spaces.
+
+  In the A/B check of the author's documents for 3.27.18, 13 of the 16 that got the header had no code block. Five
+  proposals and a pre-lab had only a `references:` list; the rest had only raw LaTeX blocks. Until 3.27.18 that header
+  threw away their `header-includes`. Since then it is only wasted, but it was still wrong.
+
+  `has_code_block` now skips the front matter, raw `{=format}` blocks (fences and contents) and inline code written
+  ```` ```x``` ````. An indented block counts only after a blank line that does not continue a list item. A fenced
+  block in a list item (indented) still counts. On the same 16 documents: the three SOC203 references (```` ```r ````)
+  and the two CHEM341 midterm guides (bare ```` ``` ```` blocks) keep it; the other 11 do not.
+
+### Tests
+
+- `test_code_blocks.Arguments.test_what_is_not_code`: front-matter YAML, raw blocks, list continuations and inline
+  triple backticks are not code; plain, `r`, `{.python}`, `~~~~`, a block after a raw one, a block in a list item and an
+  indented block are.
+
 ## v3.27.20 — 2026-10-10
 
 Pre-edit state: commit `952195b` (v3.27.19).

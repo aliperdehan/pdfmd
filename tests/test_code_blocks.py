@@ -93,6 +93,30 @@ class Arguments(unittest.TestCase):
         self.assertTrue(self.args("Text\n\n    indented code\n"))
         self.assertEqual(self.args("Just text.\n"), [])
 
+    def test_what_is_not_code(self):
+        # v3.27.21: thirteen of sixteen real documents that got the code header had no code block at all
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        not_code = [
+            "---\nreferences:\n  - id: a\n    type: article-journal\n---\n\nText.\n",       # the front matter's YAML
+            "```{=latex}\n\\begin{tikzpicture}\\end{tikzpicture}\n```\n",                  # raw blocks, their fences
+            "~~~ {=html}\n<b>x</b>\n~~~\n\nText.\n",
+            "- item\n\n    more of the item\n",                                             # a list goes on
+            "1. one\n    - nested\n",
+            "Use ```x``` inline.\n```y``` too.\n",
+        ]
+        for text in not_code:
+            self.assertFalse(pdfmd.has_code_block(text), text)
+        code = [
+            "```\nplain\n```\n", "```r\nx <- 1\n```\n", "``` {.python}\nx\n```\n", "~~~~\nx\n~~~~\n",
+            "```{=latex}\n\\x\n```\n\nThen\n\n```python\ny\n```\n",                          # after a raw block
+            "- item\n\n    ```python\n    x\n    ```\n",                                     # fenced in a list item
+            "Text\n\n    indented code\n",
+        ]
+        for text in code:
+            self.assertTrue(pdfmd.has_code_block(text), text)
+        self.assertEqual(self.args("---\nreferences:\n  - id: a\n    type: book\n---\n\n```{=latex}\n\\x\n```\n"), [])
+
     def test_switches(self):
         self.assertEqual(self.args("```\nx\n```\n", ["codewrap"]), [])
         args = self.args("```\nx\n```\n", **{"code-wrap": False})

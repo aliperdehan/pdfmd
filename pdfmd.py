@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.20"
+PDFMD_VERSION = "3.27.21"
 import argparse
 import csv
 import filecmp
@@ -1884,7 +1884,35 @@ def width_filter_args(width_filter: Path) -> list[str]:
 CODE_CLI: dict = {}                       # --line-numbers and friends, filled in by main()
 
 
-CODE_BLOCK_RE = re.compile(r"^ {0,3}(?:`{3,}|~{3,})|^(?: {4}|\t)\S", re.MULTILINE)
+CODE_FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(?![`~])[ \t]*(.*)$")          # indented too: in a list item
+INDENTED_CODE_RE = re.compile(r"^(?: {4}|\t)\S")
+LIST_CONTEXT_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)]|#\.|[A-Za-z][.)])\s|^(?: {2,}|\t)")
+
+
+def has_code_block(text: str) -> bool:
+    """Whether Pandoc would see a code block in ``text``: a fenced block that is not a raw ``{=latex}`` one, or an
+    indented one after a blank line that does not go on with a list item. The front matter is not looked at: its
+    indented YAML (a `references:` list) is not code (v3.27.21; it gave five proposals with no code the code header)."""
+    _, body = split_front_matter(text)
+    fence = None                                     # the fence of the raw block we are in
+    blank, context = True, ""                        # whether the last line was blank; the last line that was not
+    for line in body.splitlines():
+        if fence:
+            if re.match(r"^[ \t]*%s{%d,}[ \t]*$" % (re.escape(fence[0]), len(fence)), line):
+                fence = None
+            continue
+        match = CODE_FENCE_RE.match(line)
+        if match and not (match.group(1)[0] == "`" and "`" in match.group(2)):     # ```x``` is inline code
+            if not match.group(2).strip().startswith("{="):
+                return True
+            fence = match.group(1)
+            continue
+        if INDENTED_CODE_RE.match(line) and blank and not LIST_CONTEXT_RE.match(context):
+            return True
+        blank = not line.strip()
+        if not blank:
+            context = line
+    return False
 
 
 def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str]:
@@ -1899,7 +1927,7 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         shipped, header = pdfmd_lua.path("code"), pdfmd_lua.FILTERS / "code_wrap.tex"
     except ImportError:
         return []
-    if shipped is None or not any(CODE_BLOCK_RE.search(read_text_best_effort(source)) for source in sources):
+    if shipped is None or not any(has_code_block(read_text_best_effort(source)) for source in sources):
         return []
     configured = config_options()
     own = frontmatter_pdfmd_options(sources[0]) if sources else {}
