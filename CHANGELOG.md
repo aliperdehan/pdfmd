@@ -41,6 +41,32 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.8 — 2026-10-10
+
+Pre-edit state: commit `c47bfc9` (v3.27.7).
+
+### Added
+
+- **Whole features can be switched off** (the author's idea from the 3.25 line): `disabled: [history, tables]` in
+  `config.yaml`, or `d` in `pdfmd --setup` (a new row, "Features switched off", in the Setup section). The features are
+  the topics of `--help` (`pdfmd_help.TOPICS`); `output`, `setup` and `debug` stay on (`pdfmd_help.CORE`; naming one is a
+  WARN). A switched-off feature's options leave `--help` (`--help history` says it is off), shell completion and the
+  setup screen (its rows are hidden, and the list says how many), and the command line refuses them with a message
+  that names the way back; `--disabled` lets one run use them and shows them in `--help`. An option that also belongs
+  to a feature still on stays (`--dry-run` is tables' and history's). A setup row belongs to the features of the flags
+  that set it, else to its family (`inventory.ROW_TOPICS`: `options.stamp.` -> history ...). What a document's own
+  `pdfmd-options` asks for still applies, so a document from someone else builds the same. A completion script made
+  before the change keeps the old options until `--completion` writes it again.
+
+### Changed
+
+- In the full-screen setup, `r` resets a row to its default; `d` now opens the features list, as the author asked.
+
+### Tests
+
+- `tests/test_setup.py` `SwitchedOff` (6): help, refusal and `--disabled`, a shared option, the core topics,
+  completion, the setup screen and `d`; `Fancy`: `d` and `r`.
+
 ## v3.27.7 — 2026-10-10
 
 Pre-edit state: commit `b010b69` (v3.27.6).

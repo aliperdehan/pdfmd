@@ -826,7 +826,9 @@ The global config file (v3.23.6):
     `pdfmd --setup` edits it from a menu (v3.23.6; v3.27.0: every flag and every
     pdfmd-options key is either one of its rows or in its list of what it leaves
     out on purpose, with the reason -- `o` shows that list; pdfmd_setup/inventory.py
-    is the table, and a test keeps it complete).
+    is the table, and a test keeps it complete). `disabled:` (v3.27.8; setup's d)
+    switches whole --help topics off: hidden from help, completion and setup,
+    refused on the command line unless --disabled is given.
     What pdfmd itself remembers (trusted-filters.txt, the dismissed native-renderer
     offer) lives beside it, not in the cache that --clear-cache empties.
 
@@ -1253,7 +1255,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.7"
+PDFMD_VERSION = "3.27.8"
 import argparse
 import csv
 import filecmp
@@ -4066,7 +4068,7 @@ def data_root() -> Path:
 # romanization packs of the lookup (below --translit and PDFMD_TRANSLIT). The decisions pdfmd itself
 # remembers for the user (filters it trusts, a dismissed offer) live in the same folder.
 CONFIG_FILENAME = "config.yaml"
-CONFIG_KEYS = ("translit", "options", "setup-ui")
+CONFIG_KEYS = ("translit", "options", "setup-ui", "disabled")
 CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a line to get the built-in default back.
 # Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.
 
@@ -4338,7 +4340,8 @@ def completion_options() -> list[dict]:
     """The command line as data for the completion scripts: flags, help, whether a value follows,
     and the values it can take (argparse choices; the kinds and names of --install/--uninstall)."""
     options = []
-    for action in build_parser()._actions:
+    parser, _ = command_line_parser([])          # a switched-off feature is not offered
+    for action in parser._actions:
         flags = [flag for flag in action.option_strings if flag not in ("-h", "--help")]
         if not flags or action.help == argparse.SUPPRESS:
             continue
@@ -5872,6 +5875,18 @@ def maybe_hint_setup() -> None:
         pass
 
 
+def flag_topics() -> dict[str, set[str]]:
+    """The features (pdfmd_help topics) of each flag, by its argparse dest: for --setup to hide switched-off rows."""
+    try:
+        from pdfmd_help import topics_of
+    except ImportError:
+        return {}
+    found: dict[str, set[str]] = {}
+    for action in build_parser()._actions:
+        found.setdefault(action.dest, set()).update(topics_of(action))
+    return found
+
+
 def flag_names() -> dict[str, str]:
     """How each command-line flag is written, by its argparse dest (the first long form), for `--setup`'s list of what
     it leaves out (pdfmd_setup.inventory)."""
@@ -5924,7 +5939,8 @@ def setup_command(screen: str = "") -> bool:
                 return False
             stores[name] = loaded if isinstance(loaded, dict) else {}
     original = copy.deepcopy(stores)
-    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None, flag_names=flag_names())
+    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None, flag_names=flag_names(),
+                       flag_topics=flag_topics())
     if not saved:
         print("Nothing saved.")
         return True
@@ -18235,6 +18251,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--setup", nargs="?", const="", metavar="SCREEN",
                         help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
                              "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file")
+    parser.add_argument("--disabled", action="store_true",
+                        help="use features the config switches off (`disabled:` in config.yaml, `pdfmd --setup` and d) "
+                             "for this run, and show them in --help")
     parser.add_argument("--init-config", action="store_true",
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
     parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
@@ -18679,8 +18698,59 @@ def restore_worker_state(state: dict) -> None:
     globals().update(state)
 
 
+# Whole features switched off (v3.27.8): `disabled: [history, tables]` in config.yaml (pdfmd --setup, d) names topics of
+# pdfmd_help.TOPICS; their options leave --help, completion and the setup screen, and the command line refuses them
+# unless --disabled is given. What a document's own pdfmd-options asks for still applies: a document from someone
+# else builds the same.
+DISABLED_WARNED = False
+
+
+def disabled_topics() -> list[str]:
+    global DISABLED_WARNED
+    value = load_config().get("disabled")
+    names = [value] if isinstance(value, str) else value if isinstance(value, list) else []
+    names = [str(name).strip().casefold() for name in names]
+    try:
+        from pdfmd_help import CORE, DISABLEABLE
+    except ImportError:
+        return []
+    wrong = [name for name in names if name not in DISABLEABLE]
+    if wrong and not DISABLED_WARNED:
+        DISABLED_WARNED = True
+        print(f"WARN  config {config_path()}: disabled: {', '.join(wrong)} "
+              f"{'is not a feature that can be switched off' if len(wrong) == 1 else 'are not features that can be switched off'}"
+              f" (can: {', '.join(DISABLEABLE)}; {', '.join(CORE)} stay on)", file=sys.stderr)
+    return [name for name in names if name in DISABLEABLE]
+
+
+def command_line_parser(argv: list[str] | None = None) -> tuple[argparse.ArgumentParser, list[argparse.Action]]:
+    """The parser for this run, with the options of switched-off features hidden unless --disabled is on it."""
+    parser = build_parser()
+    argv = sys.argv[1:] if argv is None else argv
+    if "--disabled" in argv:
+        return parser, []
+    try:
+        from pdfmd_help import hide
+    except ImportError:
+        return parser, []
+    return parser, hide(parser, disabled_topics())
+
+
+def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action]) -> None:
+    """Stop when the command line used an option of a switched-off feature without --disabled."""
+    from_help = __import__("pdfmd_help") if hidden else None
+    for action in hidden:
+        if getattr(args, action.dest, None) != action.default:
+            name = next((item for item in action.option_strings if item.startswith("--")), action.option_strings[0])
+            topics = " and ".join(sorted(from_help.topics_of(action)))
+            raise SystemExit(f"{name}: the {topics} features are switched off (`pdfmd --setup`, d). Run it once with "
+                             f"`pdfmd --disabled {name} ...`, or switch them back on.")
+
+
 def main() -> None:
-    args, pandoc_options = build_parser().parse_known_args()
+    parser, hidden = command_line_parser()
+    args, pandoc_options = parser.parse_known_args()
+    refuse_disabled(args, hidden)
     if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
         from pdfmd_flat import asciify
         raise SystemExit(asciify.serve(*args.ascii_stdio))

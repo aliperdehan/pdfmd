@@ -14,10 +14,11 @@ def available() -> bool:
 
 
 def run(stores: dict, settings: list[Setting], path: str, input=None, output=None, ask=None,
-        left_out: list[str] | None = None) -> bool:
+        left_out: list[str] | None = None, hidden=lambda setting: False) -> bool:
     """Edit `stores` ({"config": ..., "metadata": ...}) in place; True when the user chose to save. `input`/`output`
     let a test drive it; `ask(title, now)` answers a text setting (default: a prompt on the real terminal); `o` shows
-    `left_out`, the flags and keys that are not settable here."""
+    `left_out`, the flags and keys that are not settable here; `hidden(setting)` leaves the rows of switched-off
+    features out, and `d` opens the "Features switched off" row (v3.27.8; `r` resets a row, which `d` used to)."""
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.data_structures import Point
@@ -27,6 +28,12 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     from prompt_toolkit.styles import Style
 
     state = {"row": 0, "sub": None, "subrow": 0, "dirty": False, "message": "", "line": 0, "left_out": False}
+    switch = next((setting for setting in settings if setting.key == "disabled"), None)
+
+    def rows() -> list[Setting]:
+        shown = [setting for setting in settings if not hidden(setting)]
+        state["row"] = min(state["row"], len(shown) - 1)
+        return shown
 
     def cycle(setting: Setting, step: int) -> None:
         current = from_stored(setting, read(stores, setting))
@@ -65,7 +72,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
             lines.append(("class:help", "\n up/down move   space toggles   enter or esc: back"))
             return lines
         section = None
-        for index, setting in enumerate(settings):
+        for index, setting in enumerate(rows()):
             if setting.section != section:
                 section = setting.section
                 lines.append(("class:section", f"\n {section}\n"))
@@ -74,10 +81,10 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                 state["line"] = sum(text.count("\n") for _, text in lines)
             lines.append((style, f"  {setting.title:<46}"))
             lines.append((style + " class:value" if style else "class:value", f"{shown(setting, read(stores, setting))}\n"))
-        current = settings[state["row"]]
+        current = rows()[state["row"]]
         lines.append(("class:help", f"\n {current.help}\n"))
-        lines.append(("class:help", "\n up/down move   space/right next value   left previous   d default   enter: choose list"
-                                     "\n o what is not here and why   s save and quit   q quit"))
+        lines.append(("class:help", "\n up/down move   space/right next value   left previous   r default   enter: choose list"
+                                     "\n d features switched off   o what is not here and why   s save and quit   q quit"))
         if state["message"]:
             lines.append(("class:warn", f"\n {state['message']}"))
         return lines
@@ -104,7 +111,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         if state["sub"] is not None:
             state["subrow"] = (state["subrow"] + 1) % len(state["sub"].choices)
         else:
-            state["row"] = (state["row"] + 1) % len(settings)
+            state["row"] = (state["row"] + 1) % len(rows())
 
     @keys.add("up")
     @keys.add("k")
@@ -114,14 +121,14 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         if state["sub"] is not None:
             state["subrow"] = (state["subrow"] - 1) % len(state["sub"].choices)
         else:
-            state["row"] = (state["row"] - 1) % len(settings)
+            state["row"] = (state["row"] - 1) % len(rows())
 
     @keys.add("space")
     @keys.add("right")
     def _next(event):
         if leaving():
             return
-        setting = state["sub"] or settings[state["row"]]
+        setting = state["sub"] or rows()[state["row"]]
         if setting.kind == "text":
             result["edit"] = setting
             event.app.exit()
@@ -137,7 +144,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     def _previous(event):
         if leaving():
             return
-        setting = settings[state["row"]]
+        setting = rows()[state["row"]]
         if state["sub"] is None and setting.kind == "choice":
             cycle(setting, -1)
 
@@ -148,7 +155,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         if state["sub"] is not None:
             state["sub"] = None
             return
-        setting = settings[state["row"]]
+        setting = rows()[state["row"]]
         if setting.kind == "multi":
             state["sub"], state["subrow"] = setting, 0
         elif setting.kind == "text":
@@ -164,11 +171,18 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         state["sub"] = None
 
     @keys.add("d")
+    def _features(event):
+        if leaving():
+            return
+        if switch is not None and state["sub"] is None:
+            state["sub"], state["subrow"] = switch, 0
+
+    @keys.add("r")
     def _default(event):
         if leaving():
             return
         if state["sub"] is None:
-            write(stores, settings[state["row"]], None)
+            write(stores, rows()[state["row"]], None)
             state["dirty"] = True
 
     @keys.add("s")

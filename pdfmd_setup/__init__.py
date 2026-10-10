@@ -14,16 +14,24 @@ __all__ = ["fancy", "inventory", "plain", "registry", "Setting", "settings_for",
 
 
 def run(stores: dict, no_auto_kinds, path: str, ui: str | None = None, read_line=input, say=print,
-        flag_names: dict[str, str] | None = None) -> bool:
+        flag_names: dict[str, str] | None = None, flag_topics: dict[str, set[str]] | None = None) -> bool:
     """Open the setup screen for `stores` ({"config": {...}, "metadata": {...}}, edited in place); True when the
     user saved. `ui` is `plain` or `fancy` (default: the config's `setup-ui`, else plain). `flag_names` maps a flag's
-    argparse dest to how it is written, for the list of what is not settable here."""
+    argparse dest to how it is written, for the list of what is not settable here; `flag_topics` maps it to its
+    features (pdfmd_help topics), so the rows of a switched-off feature leave the screen."""
     choice = ui or registry.get(stores.setdefault("config", {}), "setup-ui") or "plain"
     settings = settings_for(no_auto_kinds, ("plain", "fancy") if fancy.available() else ("plain",))
     left_out = inventory.omitted_lines(flag_names)
+    topics = inventory.row_topics(flag_topics or {}, [setting.key for setting in settings])
+
+    def hidden(setting: Setting) -> bool:
+        """A row of a feature the screen's own "Features switched off" row has off."""
+        off = registry.get(stores.setdefault("config", {}), "disabled") or []
+        return setting.key != "disabled" and bool(topics.get(setting.key)) and topics[setting.key] <= set(off)
+
     if choice == "fancy":
         if fancy.available():
-            return fancy.run(stores, settings, path, left_out=left_out)
+            return fancy.run(stores, settings, path, left_out=left_out, hidden=hidden)
         say("NOTE  the full-screen setup needs prompt_toolkit: pdfmd --install tui (using the numbered list)")
     nudge = "" if fancy.available() else "A full-screen version is optional: pdfmd --install tui, then set \"This setup screen\" to fancy."
-    return plain.run(stores, settings, path, read_line, say, nudge, left_out)
+    return plain.run(stores, settings, path, read_line, say, nudge, left_out, hidden)

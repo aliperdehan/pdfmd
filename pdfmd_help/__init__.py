@@ -48,7 +48,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--no-cache", "--seed-labels")),
     "setup": ("installing, configuring and checking pdfmd itself", (
-        "--setup", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
+        "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
         "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict", "--check", "--check-ignore",
@@ -91,6 +91,31 @@ More:
   pdfmd --doctor           what is installed and what is missing        pdfmd --setup   change the defaults
   README / CHANGELOG: https://github.com/aliperdehan/pdfmd
 """
+
+
+# Topics the config can switch off as a whole (v3.27.8, `disabled:` in config.yaml, `pdfmd --setup` and `d`): their
+# options are hidden from --help, completion and the setup screen, and refused on the command line unless --disabled
+# is given. An option that also belongs to a topic still on stays. These three stay on: without them pdfmd cannot build
+# anything, or be set up again.
+CORE = ("output", "setup", "debug")
+DISABLEABLE = tuple(topic for topic in TOPICS if topic not in CORE)
+
+
+def topics_of(action: argparse.Action) -> set[str]:
+    return {topic for topic, (_, names) in TOPICS.items() if any(name in names for name in action.option_strings)}
+
+
+def hide(parser: argparse.ArgumentParser, disabled) -> list[argparse.Action]:
+    """Hide the options of switched-off topics from `parser`'s help (they still parse); returns their actions."""
+    off = {topic for topic in disabled or () if topic in DISABLEABLE}
+    parser.pdfmd_disabled = off
+    hidden = []
+    for action in _option_actions(parser):
+        topics = topics_of(action)
+        if topics and topics <= off:
+            action.help = argparse.SUPPRESS
+            hidden.append(action)
+    return hidden
 
 
 def _option_actions(parser: argparse.ArgumentParser) -> list[argparse.Action]:
@@ -148,7 +173,8 @@ def _short(parser: argparse.ArgumentParser) -> str:
         rows.append((flags, text))
     width = max(len(flags) for flags, _ in rows) + 2
     options = "Common options:\n" + "\n".join(f"  {flags.ljust(width)}{text}" for flags, text in rows)
-    return SHORT.format(options=options, topics=", ".join(TOPICS))
+    off = getattr(parser, "pdfmd_disabled", set())
+    return SHORT.format(options=options, topics=", ".join(topic for topic in TOPICS if topic not in off))
 
 
 def _write(text: str) -> None:
@@ -176,6 +202,9 @@ class TieredHelp(argparse.Action):
             text = _short(parser)
         elif values == "all":
             text = _full(parser)
+        elif values in getattr(parser, "pdfmd_disabled", set()):
+            text = (f"The {values} features are switched off (`pdfmd --setup`, d). `pdfmd --disabled --help {values}` "
+                    "shows them; `--disabled` also lets one run use them.")
         else:
             text = _topic(parser, values)
         _write(text)

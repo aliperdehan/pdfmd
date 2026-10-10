@@ -1531,7 +1531,14 @@ say in `pdfmd-options:` or its front matter, for every document:
 
 Every flag and every `pdfmd-options` key is either one of these rows or left out on purpose: `o` lists the rest (commands,
 what is about one run or one document, trust, what pdfmd writes for itself) with the reason, and a test keeps that
-complete. Choosing 0 (for a text, `-`) gives a setting its built-in default back; `s` saves, `q` quits. The files are rewritten without your
+complete. Choosing 0 (for a text, `-`) gives a setting its built-in default back; `s` saves, `q` quits.
+
+**Switching whole features off.** `d` in `--setup` (or `disabled: [history, tables]` in `config.yaml`) switches off
+features you never use: modes, source, tables, history, code, raw, markdown, fonts, builtin, office, cache (the topics
+of `--help`; output, setup and debug stay on). Their options leave `--help`, shell completion (regenerate it with
+`--completion`) and the setup screen, and the command line refuses them; `pdfmd --disabled --history doc` uses one for a
+single run and `pdfmd --disabled --help all` shows them. A document's own `pdfmd-options` still apply, so a document
+from someone else builds the same. In the full-screen setup, `r` resets a row (it used to be `d`). The files are rewritten without your
 comments (the old one is kept as `.bak`). The same keys can be written by hand under `options:` of `config.yaml`. A
 full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then `pdfmd --setup fancy`, or set
 "This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time pdfmd finishes a build in a terminal

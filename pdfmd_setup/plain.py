@@ -4,33 +4,43 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .registry import Setting, from_stored, read, shown, to_stored, write
+from .registry import Setting, from_stored, read, to_stored, write
+from .registry import shown as shown_value
 
 
 def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[str], str] = input,
-        say: Callable[[str], None] = print, nudge: str = "", left_out: list[str] | None = None) -> bool:
+        say: Callable[[str], None] = print, nudge: str = "", left_out: list[str] | None = None,
+        hidden: Callable[[Setting], bool] = lambda setting: False) -> bool:
     """Edit `stores` ({"config": {...}, "metadata": {...}}) in place; True when the user chose to save. `left_out` is
     what `o` prints: the flags and keys that are not settable here, and why (pdfmd_setup.inventory)."""
     changed = False
     say(f"pdfmd setup  --  {path}")
     if nudge:
         say(nudge)
+    switch = next((setting for setting in settings if setting.key == "disabled"), None)
     while True:
         say("")
         section = None
-        for number, setting in enumerate(settings, start=1):
+        shown = [setting for setting in settings if not hidden(setting)]
+        for number, setting in enumerate(shown, start=1):
             if setting.section != section:
                 section = setting.section
                 say(section)
-            say(f"  {number:>2}. {setting.title:<44} {shown(setting, read(stores, setting))}")
+            say(f"  {number:>2}. {setting.title:<44} {shown_value(setting, read(stores, setting))}")
+        if len(shown) < len(settings):
+            say(f"  ({len(settings) - len(shown)} rows of switched-off features are hidden: d)")
         say("")
         try:
-            answer = read_line("Number to change, o = what is not here and why, s = save and quit, "
-                               "q = quit without saving: ").strip().lower()
+            answer = read_line("Number to change, d = features switched off, o = what is not here and why, "
+                               "s = save and quit, q = quit without saving: ").strip().lower()
         except EOFError:
             return False
         if answer in ("s", "save"):
             return True
+        if answer == "d" and switch is not None:
+            if edit(stores, switch, read_line, say):
+                changed = True
+            continue
         if answer == "o":
             say("")
             say("Not settable here, on purpose:")
@@ -46,10 +56,10 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
             except EOFError:
                 pass
             return False
-        if not answer.isdigit() or not 1 <= int(answer) <= len(settings):
+        if not answer.isdigit() or not 1 <= int(answer) <= len(shown):
             say("Not a number from the list.")
             continue
-        if edit(stores, settings[int(answer) - 1], read_line, say):
+        if edit(stores, shown[int(answer) - 1], read_line, say):
             changed = True
 
 
@@ -58,7 +68,7 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
     say("")
     say(setting.title + (" -- " + setting.help if setting.help else ""))
     if setting.kind == "text":
-        say(f"  now: {shown(setting, current)}")
+        say(f"  now: {shown_value(setting, current)}")
         try:
             answer = read_line("New value (Enter = leave as it is, - = back to the default): ").strip()
         except EOFError:

@@ -60,10 +60,11 @@ UNSET = {
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.rows": "10", "options.csv.cols": "7",
+    "disabled": "nothing switched off",
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit"})
+MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 
 TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian"), ("hebrew", "Hebrew"),
             ("arabic", "Arabic"), ("hangul", "Korean (needs the translit extra)"), ("kana", "Japanese kana"),
@@ -83,6 +84,15 @@ AUTO_HELP = {
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
     "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
 }
+
+
+def feature_choices() -> tuple[tuple[str, str], ...]:
+    """The features (topics of pdfmd_help) the config can switch off, with what each covers."""
+    try:
+        from pdfmd_help import DISABLEABLE, TOPICS
+    except ImportError:
+        return ()
+    return tuple((topic, TOPICS[topic][0]) for topic in DISABLEABLE)
 
 
 def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Setting]:
@@ -294,6 +304,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.no-auto", "Automatic behaviour to switch off", "multi",
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "What pdfmd does by itself, off for every document (`--no-auto`).", "Automatic behaviour"),
+        Setting("disabled", "Features switched off", "multi", feature_choices(), "",
+                "Hidden from --help, completion and this screen, refused on the command line; "
+                "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),
         choice("setup-ui", "This setup screen",
                tuple((value, {"plain": "a numbered list", "fancy": "full screen (pdfmd --install tui)"}[value])
                      for value in setup_ui_choices), "plain", "", "Setup"),

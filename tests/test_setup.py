@@ -402,6 +402,77 @@ class Completeness(unittest.TestCase):
                 self.assertIn(pdfmd.flag_names()[dest], text, dest)
 
 
+@unittest.skipUnless(yaml, "needs PyYAML")
+class SwitchedOff(unittest.TestCase):
+    """`disabled:` in the config (v3.27.8): whole features leave --help, completion and --setup, and the command line
+    refuses them unless --disabled is given."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-disabled-"))
+        self.addCleanup(__import__("shutil").rmtree, self.directory, True)
+
+    def pdfmd(self, *argv: str, config: str = "disabled: [history, tables]\n", stdin: str = ""):
+        (self.directory / "config.yaml").write_text(config, encoding="utf-8")
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *argv], input=stdin, capture_output=True,
+                              text=True, cwd=self.directory,
+                              env={**os.environ, "PDFMD_CONFIG": str(self.directory / "config.yaml")})
+
+    @staticmethod
+    def listed(option: str, text: str) -> bool:
+        """Whether `option` has a line of its own in a help page (other options' help may name it)."""
+        import re
+        return re.search(rf"^\s+{re.escape(option)}\b", text, re.MULTILINE) is not None
+
+    def test_help_hides_them_and_disabled_shows_them(self):
+        self.assertFalse(self.listed("--history-restore", self.pdfmd("--help", "all").stdout))
+        self.assertTrue(self.listed("--history-restore", self.pdfmd("--disabled", "--help", "all").stdout))
+        self.assertIn("switched off", self.pdfmd("--help", "history").stdout)
+        self.assertIn("--line-numbers", self.pdfmd("--help", "all").stdout)        # code is still on
+
+    def test_the_command_line_refuses_them_unless_disabled_is_given(self):
+        done = self.pdfmd("--history", "x.md")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("switched off", done.stderr)
+        self.assertNotIn("switched off", self.pdfmd("--disabled", "--history", "x.md").stderr)
+
+    def test_an_option_of_a_feature_still_on_stays(self):
+        done = self.pdfmd("--dry-run", "x.md", config="disabled: [tables]\n")       # --dry-run is history's too
+        self.assertNotIn("switched off", done.stderr)
+
+    def test_core_features_cannot_be_switched_off(self):
+        done = self.pdfmd("--help", "all", config="disabled: [output, history]\n")
+        self.assertIn("not a feature that can be switched off", done.stderr)
+        self.assertTrue(self.listed("-o", done.stdout))
+        self.assertFalse(self.listed("--history-restore", done.stdout))
+
+    def test_completion_leaves_them_out(self):
+        old = os.environ.get("PDFMD_CONFIG")
+        (self.directory / "config.yaml").write_text("disabled: [history]\n", encoding="utf-8")
+        os.environ["PDFMD_CONFIG"] = str(self.directory / "config.yaml")
+        pdfmd.load_config.cache_clear()
+        try:
+            flags = {flag for option in pdfmd.completion_options() for flag in option["flags"]}
+        finally:
+            if old is None:
+                os.environ.pop("PDFMD_CONFIG", None)
+            else:
+                os.environ["PDFMD_CONFIG"] = old
+            pdfmd.load_config.cache_clear()
+        self.assertNotIn("--history", flags)
+        self.assertIn("--line-numbers", flags)
+
+    def test_setup_hides_their_rows_and_d_switches_features(self):
+        done = self.pdfmd("--setup", stdin="q\n")
+        self.assertIn("rows of switched-off features are hidden", done.stdout)
+        self.assertNotIn("Backup file names", done.stdout)
+        self.assertIn("Number code lines", done.stdout)
+        from pdfmd_help import DISABLEABLE
+        number = DISABLEABLE.index("code") + 1
+        done = self.pdfmd("--setup", stdin=f"d\n{number}\ns\n", config="disabled: [history]\n")
+        self.assertEqual(yaml.safe_load((self.directory / "config.yaml").read_text(encoding="utf-8"))["disabled"],
+                         ["history", "code"])                              # in the order of the list
+
+
 class Registry(unittest.TestCase):
     def test_put_and_get_nest_and_prune(self):
         config: dict = {}
@@ -457,6 +528,13 @@ class Fancy(unittest.TestCase):
         stores: dict = {}
         self.assertFalse(self.drive("q", stores))
         self.assertEqual(stores.get("config", {}), {})
+
+    def test_d_opens_the_features_and_r_resets_a_row(self):
+        stores: dict = {"config": {"options": {"fallback": "box"}}}
+        down = "j" * [s.key for s in SETTINGS].index("options.fallback")
+        self.assertTrue(self.drive("d \r" + down + "rs", stores))          # d, space toggles the first, enter back
+        self.assertEqual(stores["config"]["disabled"], [registry.feature_choices()[0][0]])
+        self.assertNotIn("fallback", stores["config"].get("options", {}))
 
     def test_o_shows_what_is_left_out_and_a_key_goes_back(self):
         from prompt_toolkit.input import create_pipe_input

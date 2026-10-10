@@ -68,7 +68,7 @@ FLAGS: dict[str, str | Omitted] = {
     "engine": "options.pdf-engine", "to": "options.default-output", "from_format": "options.reader",
     "install": CMD, "translit": "translit", "fallback": "options.fallback", "missing": "options.missing",
     "check_fonts": CMD, "show_config": CMD, "text_to_markdown": "options.text-to-markdown",
-    "setup": CMD, "init_config": CMD, "uninstall": CMD, "init_reference": CMD, "completion": CMD, "init": CMD,
+    "setup": CMD, "disabled": Omitted("run", "uses switched-off features for one run"), "init_config": CMD, "uninstall": CMD, "init_reference": CMD, "completion": CMD, "init": CMD,
     "check": CMD, "check_ignore": "options.check-ignore", "check_docx": CMD, "edit": CMD,
     "raw": "options.raw", "no_raw": "options.raw",
     "raw_for": Omitted("document", "per output family: pdfmd-options.raw as a mapping"),
@@ -174,6 +174,28 @@ OPTIONS: dict[str, str | Omitted] = {
     "text-to-markdown": "options.text-to-markdown",
     "unicode": "options.unicode",
 }
+
+
+# The feature (pdfmd_help topic) of the rows no flag sets, by key prefix; a row's flags give the rest. A row whose
+# features are all switched off (`disabled:`) leaves the setup screen.
+ROW_TOPICS = {
+    "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
+    "options.csv.": "tables", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
+    "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",
+}
+
+
+def row_topics(flag_topics: dict[str, set[str]], keys) -> dict[str, set[str]]:
+    """setting key -> the features it belongs to: the topics of the flags that set it (`flag_topics`: dest -> topics,
+    from pdfmd's parser), else ROW_TOPICS."""
+    found: dict[str, set[str]] = {}
+    for dest, where in FLAGS.items():
+        if isinstance(where, str):
+            found.setdefault(where, set()).update(flag_topics.get(dest, set()))
+    for key in keys:
+        if not found.get(key):
+            found[key] = {topic for prefix, topic in ROW_TOPICS.items() if key.startswith(prefix)}
+    return found
 
 
 def omitted_lines(flag_names: dict[str, str] | None = None, width: int = 110) -> list[str]:
