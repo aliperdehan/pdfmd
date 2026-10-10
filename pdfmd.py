@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.18"
+PDFMD_VERSION = "3.27.19"
 import argparse
 import csv
 import filecmp
@@ -2011,15 +2011,9 @@ def hoist_code_header(cmd: list[str]) -> None:
 
 
 def header_includes_latex(value) -> str | None:
-    """A `header-includes:` value as the LaTeX it holds: list items one per line, a ```{=latex} fence taken off."""
+    """A `header-includes:` value as the LaTeX it holds: list items one per line, through raw_latex_only."""
     items = value if isinstance(value, list) else [value]
-    lines = []
-    for item in items:
-        if item is None:
-            continue
-        text = str(item).strip()
-        fenced = re.match(r"^```+\s*\{=(?:latex|tex)\}\s*\n(.*?)\n```+$", text, re.DOTALL)
-        lines.append(fenced.group(1) if fenced else text)
+    lines = [raw_latex_only(str(item)).strip() for item in items if item is not None]
     return "\n".join(line for line in lines if line).strip() or None
 
 
@@ -6228,9 +6222,9 @@ def offer_native_upgrade() -> None:
 
 
 def has_header_include_option(options: list[str]) -> bool:
-    """Return whether the caller already explicitly supplied Pandoc's -H option."""
+    """Return whether the caller already explicitly supplied Pandoc's -H option (also attached: -Hmine.tex)."""
     return any(option in {"-H", "--include-in-header"}
-               or option.startswith("--include-in-header=")
+               or option.startswith(("--include-in-header=", "-H"))
                for option in options)
 
 
@@ -6412,8 +6406,23 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
             path.unlink(missing_ok=True)
 
 
+RAW_FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*\{=([\w+-]+)\}[ \t]*\n(.*?)\n[ \t]*\1[ \t]*$",
+                          re.DOTALL | re.MULTILINE)
+RAW_INLINE_RE = re.compile(r"`([^`\n]+)`\{=([\w+-]+)\}")
+
+
+def raw_latex_only(text: str) -> str:
+    """What LaTeX gets of a `header-includes:` item written with Pandoc's raw attribute (v3.27.19): a ```{=latex} block
+    or `...`{=latex} span without its fence, a block or span for another format (html, typst ...) dropped, as Pandoc's
+    LaTeX writer does. A header file pdfmd builds from the item would otherwise hand LaTeX the backticks."""
+    def keep(match: re.Match, body: int, form: int) -> str:
+        return match.group(body) if match.group(form).lower() in ("latex", "tex") else ""
+    text = RAW_FENCE_RE.sub(lambda match: keep(match, 3, 2), text)
+    return RAW_INLINE_RE.sub(lambda match: keep(match, 1, 2), text)
+
+
 def document_header_includes(text: str) -> str | None:
-    """Return the LaTeX in a document's own ``header-includes:`` block.
+    """Return the LaTeX in a document's own ``header-includes:`` block (raw_latex_only of each item).
 
     Pandoc feeds ``--include-in-header`` files into the very same
     ``header-includes`` template variable, and a variable set on the command
@@ -6459,10 +6468,10 @@ def document_header_includes(text: str) -> str | None:
             if isinstance(data, dict):
                 value = data.get("header-includes")
                 if isinstance(value, list):
-                    lines_out = [str(item) for item in value if item is not None]
-                    return "\n".join(lines_out).strip() or None
+                    lines_out = [raw_latex_only(str(item)).strip() for item in value if item is not None]
+                    return "\n".join(line for line in lines_out if line).strip() or None
                 if isinstance(value, str):
-                    return value.strip() or None
+                    return raw_latex_only(value).strip() or None
                 return None
 
     front_matter = re.match(r"^(---\s*\n)(.*?)(\n(?:---|\.\.\.)\s*(?:\n|$))", text, re.DOTALL)
@@ -6484,7 +6493,7 @@ def document_header_includes(text: str) -> str | None:
             if line.strip() and len(line) - len(line.lstrip(" \t")) <= base_indent:
                 break
             index += 1
-        block = dedent("".join(lines[start:index])).strip()
+        block = raw_latex_only(dedent("".join(lines[start:index]))).strip()
         return block or None
     return None
 

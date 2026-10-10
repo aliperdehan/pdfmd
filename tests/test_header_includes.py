@@ -79,6 +79,17 @@ class WhatPandocKeeps(Folder):
     def test_nothing(self):
         self.assertIsNone(pdfmd.pandoc_header_includes([self.write("a.md", "Text.\n")], []))
 
+    def test_raw_blocks_and_spans_as_the_latex_writer_takes_them(self):
+        # v3.27.19: the manual's own way of writing a header-includes item put the backticks in the preamble
+        self.assertEqual(pdfmd.raw_latex_only("```{=latex}\n\\usepackage{x}\n```"), "\\usepackage{x}")
+        self.assertEqual(pdfmd.raw_latex_only("~~~~ {=tex}\n\\usepackage{x}\n~~~~"), "\\usepackage{x}")
+        self.assertEqual(pdfmd.raw_latex_only("```{=html}\n<style>p {}</style>\n```").strip(), "")
+        self.assertEqual(pdfmd.raw_latex_only("`\\usepackage{y}`{=latex}`<b>`{=html}"), "\\usepackage{y}")
+        self.assertEqual(pdfmd.raw_latex_only("\\usepackage{z} % plain"), "\\usepackage{z} % plain")
+        doc = self.write("a.md", "---\nheader-includes:\n  - |\n    ```{=latex}\n    \\usepackage{x}\n    ```\n"
+                                 "  - |\n    ```{=html}\n    <style>p {}</style>\n    ```\n  - \\usepackage{y}\n---\n\nText.\n")
+        self.assertEqual(pdfmd.document_header_includes(doc.read_text(encoding="utf-8")), "\\usepackage{x}\n\\usepackage{y}")
+
 
 class Placement(Folder):
     def command(self, *headers: str) -> list[str]:
@@ -119,7 +130,7 @@ class Placement(Folder):
         untouched = self.command()                                           # no header file: Pandoc keeps them
         pdfmd.keep_header_includes(untouched, [doc], [], [])
         self.assertEqual(untouched, self.command())
-        for options in (["-H", "mine.tex"], ["--include-in-header=mine.tex"], ["-M", "header-includes=x"]):
+        for options in (["-H", "mine.tex"], ["-Hmine.tex"], ["--include-in-header=mine.tex"], ["-M", "header-includes=x"]):
             cmd = self.command("/x/code_wrap.tex")                           # the caller's own replaces them
             pdfmd.keep_header_includes(cmd, [doc], [], options)
             self.assertEqual(cmd, self.command("/x/code_wrap.tex"), options)
@@ -144,6 +155,12 @@ class Building(Folder):
 
     def test_the_documents_own_with_code(self):
         self.write("a.md", f"---\ntitle: A\nheader-includes:\n  - {LIPSUM}\n---\n\n{BODY}{CODE}")
+        self.assert_built("a.md")
+
+    def test_fenced_items_with_code(self):
+        # a ```{=latex} item and an ```{=html} one: LaTeX gets the first without its fence and not the second
+        self.write("a.md", "---\ntitle: A\nheader-includes:\n  - |\n    ```{=latex}\n    " + LIPSUM + "\n    ```\n"
+                           "  - |\n    ```{=html}\n    <style>p {}</style>\n    ```\n---\n\n" + BODY + CODE)
         self.assert_built("a.md")
 
     def test_the_documents_own_with_a_raw_includegraphics(self):

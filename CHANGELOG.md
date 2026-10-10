@@ -41,6 +41,41 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.19 — 2026-10-10
+
+Pre-edit state: commit `4bd2230` (v3.27.18).
+
+### Fixed
+
+- **3.27.18 stopped a document whose `header-includes` item uses Pandoc's raw attribute**, the manual's own way of
+  writing one:
+
+  ```yaml
+  header-includes:
+    - |
+      ```{=latex}
+      \setlength{\parskip}{1em}
+      ```
+  ```
+
+  With one code block, the header file 3.27.18 builds from the item handed LaTeX the backticks ("Missing
+  \begin{document}"); 3.27.17 had dropped the item silently and built. `raw_latex_only` now gives LaTeX what Pandoc's
+  LaTeX writer would:
+  - a ```` ```{=latex} ```` (or `{=tex}`) block or a `` `...`{=latex} `` span without its fence;
+  - nothing of a block or span for another format (`{=html}`, `{=typst}` ...).
+
+  It runs inside `document_header_includes`, so `document_header_file` (the same text whenever a `preamble.tex` is
+  there, for every version) and the package scans that read it get it too, and in `header_includes_latex` for a
+  metadata file's.
+- `has_header_include_option` knows Pandoc's attached form `-Hmine.tex`. With it, your own header file still let
+  pdfmd add the header-includes next to it, and preamble discovery still ran (it stops for `-H mine.tex`).
+
+### Tests
+
+- `tests/test_header_includes.py`: `raw_latex_only` (latex/tex fences with backticks or tildes, an html block, inline
+  spans, plain text untouched), `document_header_includes` with a latex item, an html item and a plain one, `-Hmine.tex`
+  left alone, and a real build with a fenced latex item, a fenced html item and code.
+
 ## v3.27.18 — 2026-10-10
 
 Pre-edit state: commit `5aed974` (v3.27.17).
