@@ -41,6 +41,64 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.18 — 2026-10-10
+
+Pre-edit state: commit `5aed974` (v3.27.17).
+
+### Fixed
+
+- **A header file of pdfmd's own threw away `header-includes:`.** Pandoc puts `--include-in-header` files and
+  `header-includes` in one template variable, and the command line wins (checked on 3.12 and 3.1.3). So, for a
+  document that loads a package in its front matter (`header-includes: \usepackage{lipsum}`), one code block was
+  enough to stop LaTeX at the first `\lipsum` (the code-wrapping header, since 3.25.3). The same happened with:
+  - a raw `\includegraphics` (graphicx),
+  - text in another script (the fonts header),
+  - `\ce`/`\SI` (3.27.16's packages header: its filter route was undone by any later header file),
+  - a `preamble.tex` beside a metadata file that has `header-includes`.
+
+  Without the document's own, a metadata file's went the same way. A real case was a nulabreport pre-lab, which loads
+  `\usepackage[prelab]{nulabreport}` only through `prelab-metadata.yaml`: with one code block it stopped at `\ce`.
+  - Now `keep_header_includes` runs on the finished command at every LaTeX site (the PDF and `--to latex` builds,
+    the native-bibliography route, both report sites). When pdfmd added a header file and the caller did not, it puts
+    back what Pandoc would have kept, as a header file of its own:
+    - the document's own (the last input's, when there are several), placed last but for the packages header, which
+      must see them;
+    - else the last metadata file's in Pandoc's order, placed where a shared preamble goes: after the code-wrapping
+      header (which must come first, see `hoist_code_header`) and before `preamble.tex` and the rest.
+  - `document_header_file` still re-adds the document's own when a preamble is there. The text is the raw LaTeX of the
+    YAML value, as `document_header_file` does, with a `{=latex}` fence taken off.
+  - An `--include-in-header` or `-M header-includes` you pass yourself replaces them, as in Pandoc.
+  - This also closes the report PDF route's "known gap" for the chapters' own header-includes. The front-matter macro
+    definitions are still not made there.
+- `\ce`/`\SI` packages: always a header file, last (keep_header_includes keeps everything before it);
+  `pdfmd_lua/header.lua` is gone, and `tex_package_args` lost its `cmd`/`pandoc_options` parameters.
+
+### Checked
+
+- Read-only scan of nulabreport and the author's course folders for `header-includes` that would now come back:
+  - 29 files: 27 documents' own and 2 copies of `prelab-metadata.yaml`;
+  - none has a `preamble.tex` beside it (the copy in nulabreport's root is never built there);
+  - none loads what pdfmd's own headers load (fvextra/fancyvrb, graphicx; the packages header is guarded).
+- A pre-lab with one code block, in a frozen export of nulabreport: fails on 3.27.16 ("Undefined control sequence",
+  `\ce`) and builds with the house style on 3.27.18.
+
+### Tests
+
+- New `tests/test_header_includes.py`:
+  - what Pandoc keeps: the document beats metadata files, the later metadata file and the later input win, a
+    fenced metadata file, a `{=latex}` fence;
+  - the placement around the code-wrapping, graphicx, preamble, fonts and packages headers;
+  - left alone with no header file, with your own `-H` or `-M header-includes`, or when `document_header_file` has
+    them;
+  - real lualatex builds that load lipsum: the document's own with code, the document's own with a raw
+    `\includegraphics`, a metadata file's with code, a metadata file's beside a `preamble.tex`, a `-r` report whose
+    first chapter has its own and code, and your own `-H` replacing them.
+
+  The five builds that should succeed all fail on 3.27.17.
+- `tests/test_texpackages.py`: the arguments test follows the single route. The document's own `\ce` is now defined
+  with `\csname` in a block scalar: Pandoc expands a `\newcommand`, `\def`, `\DeclareRobustCommand` or
+  `\NewDocumentCommand` itself, so LaTeX never saw it and the test passed whatever the preamble did.
+
 ## v3.27.17 — 2026-10-10
 
 Pre-edit state: commit `b4005b4` (v3.27.16).

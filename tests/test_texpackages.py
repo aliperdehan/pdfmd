@@ -41,22 +41,17 @@ class Arguments(unittest.TestCase):
         return path
 
     def test_nothing_without_the_commands(self):
-        self.assertEqual(pdfmd.tex_package_args(self.source("Plain $x^2$.\n"), None, [], []), [])
+        self.assertEqual(pdfmd.tex_package_args(self.source("Plain $x^2$.\n"), None), [])
 
-    def test_a_filter_when_there_is_no_header_file_and_a_header_file_when_there_is(self):
-        source = self.source(CHEMISTRY)
-        quiet = pdfmd.tex_package_args(source, None, ["pandoc", "doc.md"], [])
-        self.assertEqual(quiet[0], "-M")
-        self.assertTrue(quiet[-1].endswith("header.lua"))
-        header = Path(quiet[1].partition("=")[2]).read_text(encoding="utf-8")
+    def test_a_header_file(self):
+        arguments = pdfmd.tex_package_args(self.source(CHEMISTRY), None)
+        self.assertEqual(arguments[0], "--include-in-header")
+        header = Path(arguments[1]).read_text(encoding="utf-8")
         self.assertIn("\\@ifpackageloaded{mhchem}{}{\\ifdefined\\ce\\else\\IfFileExists{mhchem.sty}", header)
         self.assertIn("\\usepackage{siunitx}", header)
-        loud = pdfmd.tex_package_args(source, None, ["pandoc", "--include-in-header", "x.tex"], [])
-        self.assertEqual(loud[0], "--include-in-header")
-        self.assertEqual(pdfmd.tex_package_args(source, None, ["pandoc"], ["-H", "mine.tex"])[0], "--include-in-header")
 
     def test_no_auto(self):
-        self.assertEqual(pdfmd.tex_package_args(self.source(CHEMISTRY), ["texpackages"], [], []), [])
+        self.assertEqual(pdfmd.tex_package_args(self.source(CHEMISTRY), ["texpackages"]), [])
 
 
 @unittest.skipUnless(shutil.which("pandoc") and has_latex_package("mhchem") and has_latex_package("siunitx"),
@@ -97,7 +92,10 @@ class Building(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
     def test_a_command_of_the_documents_own(self):
-        text = "---\ntitle: C\nheader-includes:\n  - \\newcommand{\\ce}[1]{OWN-#1}\n---\n\nWater is \\ce{H2O}.\n"
+        # a \csname definition: Pandoc expands a \newcommand (and \def, \DeclareRobustCommand ...) itself, so LaTeX
+        # would never see the document's own \ce and the test would pass whatever the preamble did
+        text = ("---\ntitle: C\nheader-includes: |\n  \\expandafter\\def\\csname ce\\endcsname#1{OWN-#1}\n---\n\n"
+                "Water is \\ce{H2O}.\n")
         done, out = self.build(text)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("OWN-H2O", out)

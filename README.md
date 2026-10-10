@@ -1606,6 +1606,14 @@ files could apply and none is clearly meant, `pdfmd` stops and asks you to
 choose with `-y FILE`, rather than guessing. `-y` alone turns discovery
 off.
 
+A `header-includes:` stays when a preamble file joins it: the document's own, or
+else the one of the metadata file Pandoc picks (a later file wins). The same holds
+for the header files pdfmd adds itself, such as the code-wrapping header of a
+document with code. A metadata file's lines go before `preamble.tex`, and the
+document's own go after everything. An `--include-in-header` you pass yourself
+replaces them all, as it does in Pandoc. The global `metadata.yaml` that
+`pdfmd --setup` writes is the lowest of all metadata files.
+
 With a `metadata/` folder, a report's own folder can hold nothing but
 `report.md` and `report.pdf`. Relative paths inside the metadata (such as
 `bibliography: refs.bib`) resolve from `metadata/`, and image paths in the

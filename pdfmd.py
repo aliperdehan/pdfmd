@@ -107,9 +107,17 @@ Packages a document's commands need (v3.27.16; auto kind `texpackages`):
     A LaTeX build of a document that uses \\ce/\\cee/\\cf (mhchem) or \\SI/\\si/\\num/\\qty/\\unit (siunitx) without
     loading the package stopped with "Undefined control sequence". tex_package_args adds a guarded load, after
     everything else in the preamble: nothing when the package is loaded already (a house package's options win), when
-    the command is defined some other way, or when the package is not installed. With an --include-in-header on the
-    command line it is one more header file, last; without one, pdfmd_lua/header.lua appends it to the header-includes
-    Pandoc merged, because a header file of pdfmd's own would replace a metadata file's header-includes.
+    the command is defined some other way, or when the package is not installed. It is a header file, last.
+
+Header files and header-includes (v3.27.18):
+    Pandoc puts --include-in-header files and `header-includes:` in one template variable, and the command line wins:
+    any header file pdfmd adds (the code-wrapping one for a document with code, graphicx for a raw \\includegraphics,
+    the fonts header, preamble.tex, the packages above) dropped the document's own `header-includes` or, without
+    them, a metadata file's, and the first command from them stopped LaTeX. keep_header_includes runs on the finished
+    command and puts back what Pandoc would have kept: the document's own (the last input's, when there are several),
+    else the last metadata file's in Pandoc's order, as a header file of its own. A metadata file's go first (after
+    the code-wrapping header), where a shared preamble goes; the document's own last but for the packages header. An
+    --include-in-header or `-M header-includes` of your own replaces them, as in Pandoc.
 
 Page breaks (v3.27.13, off unless asked since v3.27.15):
     `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
@@ -1289,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.17"
+PDFMD_VERSION = "3.27.18"
 import argparse
 import csv
 import filecmp
@@ -2002,6 +2010,71 @@ def hoist_code_header(cmd: list[str]) -> None:
     cmd[positions[0]:positions[0]] = pair
 
 
+def header_includes_latex(value) -> str | None:
+    """A `header-includes:` value as the LaTeX it holds: list items one per line, a ```{=latex} fence taken off."""
+    items = value if isinstance(value, list) else [value]
+    lines = []
+    for item in items:
+        if item is None:
+            continue
+        text = str(item).strip()
+        fenced = re.match(r"^```+\s*\{=(?:latex|tex)\}\s*\n(.*?)\n```+$", text, re.DOTALL)
+        lines.append(fenced.group(1) if fenced else text)
+    return "\n".join(line for line in lines if line).strip() or None
+
+
+def pandoc_header_includes(sources: list[Path], metadata_files: list[Path]) -> tuple[str, str] | None:
+    """The `header-includes` Pandoc keeps when the command line has no --include-in-header, as (LaTeX, where):
+    "document" for the last source that has its own (they beat every metadata file), else "metadata" for the last
+    metadata file in Pandoc's order that has them (checked on Pandoc 3.12 and 3.1.3). None when nothing has any."""
+    for source in reversed(sources):
+        text = document_header_includes(read_text_best_effort(Path(source)))
+        if text:
+            return text, "document"
+    for path in reversed(pandoc_metadata_order(metadata_files)):
+        data = metadata_file_yaml(path) or front_matter_dict(read_text_best_effort(path))
+        if "header-includes" in data:
+            text = header_includes_latex(data["header-includes"])
+            return (text, "metadata") if text else None
+    return None
+
+
+def keep_header_includes(cmd: list[str], sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
+                         header_file: Path | None = None) -> None:
+    """Give back the `header-includes` pdfmd's own --include-in-header files took away (v3.27.18). Pandoc puts those
+    files and `header-includes:` in one template variable and the command line wins, so the code-wrapping header of a
+    document with code, graphicx for a raw \\includegraphics, the fonts header, a preamble.tex or the packages header
+    each dropped the document's own `header-includes` or, without them, a metadata file's (a house package loaded
+    there: nulabreport's prelab-metadata.yaml). Run last, on the finished command: when pdfmd added a header file and
+    the caller none, what Pandoc would have kept goes back in, as a header file of its own. A metadata file's go where
+    a shared preamble goes, before the other headers (after code_wrap.tex, which must come first); the document's own
+    last but for the packages header, which must see them (document_header_file has them already when it is there).
+    An --include-in-header or an `-M header-includes` of the caller's own replaces them, as in Pandoc."""
+    positions = [index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"]
+    if not positions or has_header_include_option(pandoc_options) \
+            or any("header-includes" in option for option in pandoc_options):
+        return
+    kept = pandoc_header_includes(sources, metadata_files)
+    if kept is None or (kept[1] == "document" and header_file is not None):
+        return
+    text, where = kept
+    path = cache_root() / "tex" / f"header-includes-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"% pdfmd: the {where} header-includes the header files below would drop\n{text}\n",
+                            encoding="utf-8")
+    except OSError:
+        return
+    packages = cache_root() / "tex"
+    if where == "metadata":
+        at = next((index for index in positions if not cmd[index + 1].endswith("code_wrap.tex")), len(cmd))
+    else:
+        at = next((index for index in positions if Path(cmd[index + 1]).parent == packages
+                   and Path(cmd[index + 1]).name.startswith("packages-")), len(cmd))
+    cmd[at:at] = ["--include-in-header", str(path)]
+
+
 def read_text_best_effort(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8-sig")
@@ -2200,11 +2273,10 @@ TEX_PACKAGE_USES = (
 )
 
 
-def tex_package_args(sources: Path | list[Path], no_auto: list[str] | None, cmd: list[str],
-                     pandoc_options: list[str], note=None) -> list[str]:
-    """The arguments that give a LaTeX build the packages its commands need (TEX_PACKAGE_USES), or []. With an
-    --include-in-header already on the command line (the header-includes of the metadata files are gone then anyway)
-    a header file, last; without one, pdfmd_lua/header.lua, which appends it to the merged header-includes instead."""
+def tex_package_args(sources: Path | list[Path], no_auto: list[str] | None, note=None) -> list[str]:
+    """The arguments that give a LaTeX build the packages its commands need (TEX_PACKAGE_USES), or []: a header file,
+    last (keep_header_includes puts back the header-includes it would drop, before it; v3.27.16 appended it to them
+    with a filter instead, which a later header file of pdfmd's own undid)."""
     if auto_disabled(no_auto, "texpackages"):
         return []
     texts = []
@@ -2234,16 +2306,7 @@ def tex_package_args(sources: Path | list[Path], no_auto: list[str] | None, cmd:
     if note is not None:
         note("TEXPACKAGES", "loads " + ", ".join(name for name, _, _ in wanted) + " unless the preamble does "
              "(the document uses " + ", ".join(f"\\{macro}" for _, _, macro in wanted) + ")")
-    header_given = any(item in ("-H", "--include-in-header") or item.startswith(("-H", "--include-in-header="))
-                       for item in [*cmd, *pandoc_options])
-    if header_given:
-        return ["--include-in-header", str(path)]
-    try:
-        import pdfmd_lua
-        shipped = pdfmd_lua.path("header")
-    except ImportError:
-        shipped = None
-    return ["-M", f"pdfmd-header={path}", "--lua-filter", str(shipped)] if shipped is not None else []
+    return ["--include-in-header", str(path)]
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
@@ -14813,6 +14876,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += width_filter_args(width_filter)
             cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
             hoist_code_header(cmd)
+            keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
@@ -15283,7 +15347,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += office_arguments
                 cmd += pandoc_options
                 if is_tex_target:
-                    cmd += tex_package_args([md_path, *parts_inputs], no_auto, cmd, pandoc_options, note)
+                    cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -15291,6 +15355,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target:
                     cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                     hoist_code_header(cmd)
+                    keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
@@ -15508,7 +15573,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # --verbose CMD output before this fix.)
                     cmd += pandoc_options
                     if engine in LATEX_ENGINES:
-                        cmd += tex_package_args([md_path, *parts_inputs], no_auto, cmd, pandoc_options, note)
+                        cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -15521,6 +15586,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                         hoist_code_header(cmd)
+                        keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
                     cmd += typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
@@ -19610,6 +19676,7 @@ def main() -> None:
                     if is_tex_target:
                         cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                         hoist_code_header(cmd)
+                        keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     cmd += report_office_arguments.filter_arguments
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
@@ -19651,20 +19718,12 @@ def main() -> None:
                                            f"using {default_monofont()} on LaTeX-family engines")
                 # Reports need one Pandoc invocation, so retry each usable engine here.
                 #
-                # KNOWN GAP (2026-09-20, not yet fixed): this PDF-target branch never
-                # calls document_header_file() at all, unlike its is_tex_target sibling
-                # above and every convert_one call site -- so files[0]'s own YAML
-                # header-includes can still be silently dropped here whenever
-                # report_pdf_meta_file (or a report_preambles entry) triggers Pandoc's
-                # --include-in-header/header-includes collision (see
-                # document_header_includes()'s docstring for the mechanism). Left
-                # unfixed rather than patched blind: CLAUDE.md's own process note
-                # requires verifying a pdfmd command-building fix through the full
-                # pipeline, and this session had no report/book-mode document to
-                # verify against. Next report-mode session: add the same
-                # document_header_file(files[0], ...) wiring the block above and
-                # every convert_one call site now use, then verify with an actual
-                # -r/--report build of a file that has its own header-includes.
+                # This PDF-target branch never calls document_header_file(), unlike its
+                # is_tex_target sibling above. The chapters' own header-includes are
+                # kept since v3.27.18 (keep_header_includes below, checked with a real
+                # -r build in tests/test_header_includes.py); the front-matter macro
+                # definitions document_header_file adds (document_latex_definitions)
+                # are still not made here.
                 result = None
                 failed_families: set[str] = set()
                 failed_engines: list[str] = []
@@ -19723,7 +19782,7 @@ def main() -> None:
                         # matching comment.
                         cmd += pandoc_options
                         if engine in LATEX_ENGINES:
-                            cmd += tex_package_args(files, report_no_auto, cmd, pandoc_options, report_note)
+                            cmd += tex_package_args(files, report_no_auto, report_note)
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
@@ -19731,6 +19790,7 @@ def main() -> None:
                         if engine in LATEX_ENGINES:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                             hoist_code_header(cmd)
+                            keep_header_includes(cmd, list(files), metadata_files, pandoc_options)
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))
