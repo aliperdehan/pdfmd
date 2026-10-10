@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.7 — 2026-10-10
+
+Pre-edit state: commit `b010b69` (v3.27.6).
+
+### Changed
+
+- **A cut `.csv` table keeps the last ⌊√cap⌋ rows (and columns)**, not about 30% of the cap: 7 + 3 of 10, 5 + 2 of 7
+  (as before), 16 + 4 of 20, 25 + 5 of 30, 90 + 10 of 100. The author's numbers for 10, 7 and 20 all follow this rule:
+  the tail is a short look at the end and grows slowly; the head keeps most of a large cap. A cap of 3 now keeps
+  2 + 1 (was 3 + 0); under 3 the head only, as before. `csv_keep` (built-in renderer) and `keep_indices` (Lua) agree.
+
+### Tests
+
+- `csv_keep` for caps 7, 10, 20, 30, 100; the cap-3 cases.
+
 ## v3.27.6 — 2026-10-10
 
 Pre-edit state: commit `0c39591` (v3.27.5).

@@ -121,8 +121,9 @@ end
 local DELIMITER_WORDS = {[","] = "comma", [";"] = "semicolon", ["\t"] = "tab", ["|"] = "pipe", [" "] = "space",
                          [":"] = "colon"}
 
--- which of n items stay under a cap: all of them, the first `cap` (cut "head"), or about the first 70% and the last
--- 30% (cut "ends", the default since v3.27.4; a cap under 3 keeps the head only). Returns the kept indices, and how
+-- which of n items stay under a cap: all of them, the first `cap` (cut "head"), or the first ones and the last
+-- floor(sqrt(cap)) (cut "ends", the default since v3.27.4; v3.27.7: 7 + 3 of 10, 5 + 2 of 7, 16 + 4 of 20, 25 + 5 of
+-- 30; a cap under 3 keeps the head only). Returns the kept indices, and how
 -- many come from the head and the tail (both nil when nothing was cut).
 local function keep_indices(n, cap, cut)
   local kept = {}
@@ -131,7 +132,7 @@ local function keep_indices(n, cap, cut)
     return kept, nil, nil
   end
   local tail = 0
-  if cut == "ends" and cap >= 3 then tail = (math.floor(cap) * 3) // 10 end
+  if cut == "ends" and cap >= 3 then tail = math.floor(math.sqrt(math.floor(cap)) + 1e-9) end
   local head = cap - tail
   for i = 1, head do kept[#kept + 1] = i end
   for i = n - tail + 1, n do kept[#kept + 1] = i end

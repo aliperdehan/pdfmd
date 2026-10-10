@@ -1120,7 +1120,7 @@ Water,18.015,1.20
 - Large files are capped at 10 rows × 7 columns, so a huge CSV can't
   silently fill 40 pages. A cut table keeps both ends: the first 7 rows, a row
   of `…`, the last 3, and the first 5 columns, a `…` column, the last 2 (about
-  70% and 30% of any cap; `cut="head"` or `csv: {cut: head}` keeps the first
+  any cap keeps its last ⌊√cap⌋: 16 + 4 of 20, 25 + 5 of 30; `cut="head"` or `csv: {cut: head}` keeps the first
   ones only). `rows=all` or `cols=20` raise the cap. When a table is cut, the
   build warns and the PDF itself shows a note saying so. For every table of a
   document: `--csv-rows N|all` / `--csv-cols N|all`, or

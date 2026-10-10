@@ -1253,7 +1253,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.6"
+PDFMD_VERSION = "3.27.7"
 import argparse
 import csv
 import filecmp
@@ -1279,6 +1279,7 @@ from pathlib import PurePosixPath
 from fnmatch import fnmatchcase
 from functools import lru_cache
 import logging
+import math
 import os
 import re
 import shlex
@@ -3315,12 +3316,13 @@ CSV_DELIMITER_WORDS = {",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe",
 
 def csv_keep(total: int, cap: float, cut: str) -> tuple[list[int], int | None, int]:
     """Which of `total` rows or columns stay under `cap` (as the Lua filter's keep_indices): all, the first `cap`
-    (cut "head"), or about the first 70% and the last 30% (cut "ends", the default; a cap under 3 keeps the head).
+    (cut "head"), or the first ones and the last floor(sqrt(cap)) (cut "ends", the default: 7 + 3 of 10, 5 + 2 of 7,
+    16 + 4 of 20; a cap under 3 keeps the head).
     Returns the kept indices, how many come from the head (None when nothing was cut) and from the tail."""
     if total <= cap:
         return list(range(total)), None, 0
     cap = int(cap)
-    tail = cap * 3 // 10 if cut == "ends" and cap >= 3 else 0
+    tail = math.isqrt(cap) if cut == "ends" and cap >= 3 else 0
     head = cap - tail
     return list(range(head)) + list(range(total - tail, total)), head, tail
 

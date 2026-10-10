@@ -167,7 +167,7 @@ class Limits(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_command_line_the_document_and_the_config(self):
         block = '::: {.csv file="d.csv"}\n:::\n'
-        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "3", "--csv-cols", "all")[0]), (3, 9))
+        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "3", "--csv-cols", "all")[0]), (4, 9))   # 2 + … + 1
         front = "pdfmd-options:\n  csv: {rows: all, cols: 4}\n"
         self.assertEqual(self.rows_and_columns(self.build(block, front=front)[0]), (15, 5))      # 3 + … + 1
         config = "options:\n  csv: {rows: 5}\n"
@@ -226,6 +226,8 @@ class Limits(unittest.TestCase):
         self.assertEqual(pdfmd.csv_guess_delimiter("a,b,c\n1,2,3\n4,5,6\n" * 3000, "big.csv"), ",")
         self.assertEqual(pdfmd.csv_keep(15, 10, "ends"), (list(range(7)) + [12, 13, 14], 7, 3))
         self.assertEqual(pdfmd.csv_keep(15, 10, "head"), (list(range(10)), 10, 0))
+        self.assertEqual([pdfmd.csv_keep(1000, cap, "ends")[1:] for cap in (7, 10, 20, 30, 100)],
+                         [(5, 2), (7, 3), (16, 4), (25, 5), (90, 10)])
         self.assertEqual(pdfmd.csv_keep(5, 10, "ends"), (list(range(5)), None, 0))
 
     def test_a_bad_value_is_an_error(self):
@@ -243,7 +245,7 @@ class Limits(unittest.TestCase):
         self.addCleanup(shutil.rmtree, directory, True)
         (directory / "d.csv").write_text(self.DATA, encoding="utf-8")
         lines = pdfmd.csv_div_table('.csv file="d.csv"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3, "cols": "all"})
-        self.assertEqual(len([line for line in lines if line.startswith("| ")]), 5)       # header, ---, 3 rows
+        self.assertEqual(len([line for line in lines if line.startswith("| ")]), 6)       # header, ---, 2 + … + 1
         self.assertEqual(lines[0].count("|"), 10)                                          # 9 columns
         lines = pdfmd.csv_div_table('.csv file="d.csv" rows="1"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3})
         self.assertEqual(len([line for line in lines if line.startswith("| ")]), 3)
