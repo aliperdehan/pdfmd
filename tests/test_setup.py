@@ -592,6 +592,12 @@ class SwitchedOff(unittest.TestCase):
         self.assertNotIn("--history", flags)
         self.assertIn("--line-numbers", flags)
 
+    def test_config_is_another_name_for_setup(self):
+        # v3.27.24, the author's request
+        self.assertEqual(pdfmd.build_parser().parse_args(["--config"]).setup, "")
+        self.assertEqual(pdfmd.build_parser().parse_args(["--config", "fancy"]).setup, "fancy")
+        self.assertIn("rows of switched-off features are hidden", self.pdfmd("--config", stdin="q\n").stdout)
+
     def test_setup_hides_their_rows_and_d_switches_features(self):
         done = self.pdfmd("--setup", stdin="q\n")
         self.assertIn("rows of switched-off features are hidden", done.stdout)

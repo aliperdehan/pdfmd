@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.23"
+PDFMD_VERSION = "3.27.24"
 import argparse
 import csv
 import filecmp
@@ -18691,9 +18691,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "is typed, the words never changing (needs batchocr 1.2.5: pdfmd --install batchocr). MODE: "
                              "auto (default; a garbled text gets paragraphs only), force, or paragraphs (no structure). Writes "
                              "notes.md beside the text; with -o x.md that is all it does. Off unless asked")
-    parser.add_argument("--setup", nargs="?", const="", metavar="SCREEN",
+    parser.add_argument("--setup", "--config", nargs="?", const="", metavar="SCREEN",
                         help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
-                             "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file")
+                             "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file. --config is the same")
     parser.add_argument("--disabled", action="store_true",
                         help="use features the config switches off (`disabled:` in config.yaml, `pdfmd --setup` and d) "
                              "for this run, and show them in --help")

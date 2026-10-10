@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.24 — 2026-10-11
+
+Pre-edit state: commit `927c794` (v3.27.23).
+
+### Added
+
+- `--config` is another name for `--setup` (the settings menu), at the author's request. `--setup fancy` and
+  `--config fancy` are the same; `--show-config` and `--init-config` are unchanged.
+
+### Tests
+
+- `test_setup`: `test_config_is_another_name_for_setup`.
+
 ## v3.27.23 — 2026-10-11
 
 Pre-edit state: commit `6288eeb` (v3.27.22).

@@ -1550,7 +1550,7 @@ options:
   pdf-engine: lualatex
 ```
 
-**`pdfmd --setup`** changes the same defaults from a menu, without editing the files: a numbered list (nothing to
+**`pdfmd --setup`** (or `pdfmd --config`) changes the same defaults from a menu, without editing the files: a numbered list (nothing to
 install, works over ssh), each setting with its choices and what they mean. It covers what a document would otherwise
 say in `pdfmd-options:` or its front matter, for every document:
 
