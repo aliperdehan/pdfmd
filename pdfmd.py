@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.25"
+PDFMD_VERSION = "3.27.26"
 import argparse
 import csv
 import filecmp
@@ -19921,12 +19921,11 @@ def main() -> None:
                                            f"using {default_monofont()} on LaTeX-family engines")
                 # Reports need one Pandoc invocation, so retry each usable engine here.
                 #
-                # This PDF-target branch never calls document_header_file(), unlike its
-                # is_tex_target sibling above. The chapters' own header-includes are
-                # kept since v3.27.18 (keep_header_includes below, checked with a real
-                # -r build in tests/test_header_includes.py); the front-matter macro
-                # definitions document_header_file adds (document_latex_definitions)
-                # are still not made here.
+                # Like its is_tex_target sibling above, it adds document_header_file()
+                # (v3.27.26): the first chapter's front-matter macro definitions
+                # (document_latex_definitions: experiment: -> \LabExperiment) were
+                # never made here, so a -r PDF printed N/A for them. The chapters'
+                # own header-includes are kept since v3.27.18 (keep_header_includes).
                 result = None
                 failed_families: set[str] = set()
                 failed_engines: list[str] = []
@@ -19945,7 +19944,10 @@ def main() -> None:
                             script_fallback(list(files), metadata_files, variables, preambles, None, engine,
                                             report_no_auto, report_note) as (report_fonts_header,
                                                                              report_fonts_filter), \
-                            managed_fonts_css(engine) as report_fonts_css:
+                            managed_fonts_css(engine) as report_fonts_css, \
+                            document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
+                                                            or bool(report_pdf_meta_snippet_text))
+                                                 and engine in LATEX_ENGINES) as report_header_file:
                         prepared_files = prepared[:len(files)]
                         prepared_metadata = prepared[len(files):]
                         cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
@@ -19973,6 +19975,8 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_pdf_meta_file)]
                         if report_fonts_header or report_fonts_css:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
+                        if report_header_file is not None:          # last, as in the branch above
+                            cmd += ["--include-in-header", str(report_header_file)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
@@ -19993,7 +19997,7 @@ def main() -> None:
                         if engine in LATEX_ENGINES:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                             hoist_code_header(cmd)
-                            keep_header_includes(cmd, list(files), metadata_files, pandoc_options)
+                            keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                         log_cmd(cmd, pandoc_cwd, args.verbose)
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
                                                 env=tex_search_env(files[0].parent, pandoc_cwd))

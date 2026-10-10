@@ -187,6 +187,18 @@ class Building(Folder):
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
+    def test_a_report_takes_the_first_chapters_macro_values(self):
+        # v3.27.26: experiment: in the front matter sets \LabExperiment (document_latex_definitions) in a -r PDF too
+        self.write("preamble.tex", "\\newcommand{\\LabExperiment}{N/A}\n")
+        self.write("one.md", "---\ntitle: R\nexperiment: 7\n---\n\n# One\n\nExperiment \\LabExperiment{} done.\n")
+        self.write("two.md", "# Two\n\nMore.\n")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "-r", "one.md", "two.md", "-o", "r.pdf",
+                               "-e", "lualatex"], capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = subprocess.run(["pdftotext", str(self.directory / "r.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("Experiment 7 done", " ".join(text.split()))
+
     def test_a_header_file_of_the_callers_own_replaces_them_as_in_pandoc(self):
         self.write("mine.tex", "\\usepackage{xcolor}\n")
         self.write("a.md", f"---\ntitle: A\nheader-includes:\n  - {LIPSUM}\n---\n\n{BODY}")

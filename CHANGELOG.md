@@ -41,6 +41,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.26 — 2026-10-11
+
+Pre-edit state: commit `3d303ed` (v3.27.25).
+
+### Fixed
+
+- **A `-r` report's PDF printed "N/A" for front-matter values such as `experiment:`.** For nulabreport, the first
+  chapter's `experiment:`, `group:`, `course:` (and a package's own `latex-keys`) become
+  `\renewcommand{\LabExperiment}{...}` lines (`document_latex_definitions`, in `document_header_file`). A single
+  document gets them, and so does a report built `--to latex`. The report's PDF route never made that header file, so
+  the macros kept their defaults: "Experiment N/A done" for `experiment: 7`. Noted as a known gap in 3.27.18; the PDF
+  route now adds the header file under the same condition, last, and `keep_header_includes` knows it carries the
+  chapter's own header-includes.
+
+### Tests
+
+- `test_header_includes.Building.test_a_report_takes_the_first_chapters_macro_values`: a `preamble.tex` default of
+  `N/A` and `experiment: 7`. A `-r` PDF printed "Experiment N/A done" on 3.27.23 and now prints "Experiment 7 done".
+
 ## v3.27.25 — 2026-10-11
 
 Pre-edit state: commit `3f715f3` (v3.27.24).
