@@ -22,7 +22,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "-p", "--slide-level", "-b", "-r", "--recursive", "-j", "-i", "--exclude-unnumbered", "--section",
         "--split", "--split-depth", "--list-parts")),
     "source": ("a PDF that carries its source, an assembled single file, comments", (
-        "--stop-at", "--assemble-only", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
+        "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
         "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-source",
         "--no-attach-source", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
         "--slim", "--trust-embedded", "--hybrid")),

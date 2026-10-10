@@ -1253,7 +1253,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.5"
+PDFMD_VERSION = "3.27.6"
 import argparse
 import csv
 import filecmp
@@ -18027,6 +18027,11 @@ def build_parser() -> argparse.ArgumentParser:
                              f"{ASSEMBLED_SUFFIX} also means 'markdown'")
     parser.add_argument("--assemble-only", action="store_true",
                         help="shorthand for --stop-at markdown")
+    parser.add_argument("--merge", action="store_true",
+                        help="one standalone Markdown file that builds alone, anywhere: the parts joined and everything "
+                             "pdfmd finds beside the document (metadata, preamble, Lua filters, bibliography, data files "
+                             "and pictures) embedded, NAME.assembled.md (or -o). Shorthand for --assemble-only "
+                             "--embed-metadata all; --unpack gives the files back"),
     parser.add_argument("--embed-metadata", nargs="*", default=None, metavar="KIND",
                         help="with --stop-at markdown: fold what pdfmd discovers beside the document "
                              "into the assembled file, so it builds the same without them. KIND is "
@@ -18688,6 +18693,13 @@ def main() -> None:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     use_managed_tools()
+    if args.merge:
+        # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all
+        if args.no_embed_metadata:
+            raise SystemExit("--merge embeds everything; it contradicts --no-embed-metadata")
+        args.assemble_only = True
+        if args.embed_metadata is None:
+            args.embed_metadata = ["all"]
     if args.debug:
         args.verbose = True
     if args.to:

@@ -701,6 +701,7 @@ them beside it. What the text points at otherwise (images, files a preamble
 the assembled file.
 
 ```sh
+pdfmd report --merge                                           # everything: one file that builds alone, anywhere
 pdfmd report --assemble-only --embed-metadata                  # metadata.yaml, preamble.tex, Lua filters, .bib/.csl
 pdfmd report --assemble-only --embed-metadata metadata preamble   # only those
 pdfmd report --assemble-only --embed-metadata --lua-mode ref   # name the filter instead of copying it

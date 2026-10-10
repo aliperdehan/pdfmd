@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.6 — 2026-10-10
+
+Pre-edit state: commit `0c39591` (v3.27.5).
+
+### Added
+
+- **`--merge`**: one standalone Markdown file that builds alone, anywhere (`NAME.assembled.md`, or `-o`): the parts
+  joined and everything pdfmd finds beside the document embedded, data files and pictures included. A shorthand for
+  `--assemble-only --embed-metadata all` (the author asked where "merge everything into one Markdown" is; it existed
+  under those two flags). `--unpack` gives the files back. Before this, argparse took `--merge` as an abbreviation of
+  `--merge-history`. Not `--standalone`: pdfmd hands options it does not know to Pandoc, and that one is Pandoc's own.
+
+### Tests
+
+- `tests/test_embedding.py`: `--merge` writes the same file as `--assemble-only --embed-metadata all`, and refuses
+  `--no-embed-metadata`.
+
 ## v3.27.5 — 2026-10-10
 
 Pre-edit state: commit `868f670` (v3.27.4).

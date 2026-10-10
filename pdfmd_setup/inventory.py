@@ -44,7 +44,7 @@ FLAGS: dict[str, str | Omitted] = {
     "slide_level": Omitted("document", "the document's own slide-level:"),
     "batch": RUN, "report": RUN, "recursive": RUN, "out": RUN,
     "strict": "options.strict", "max_asset_mb": "options.max-asset-mb", "max_output_mb": "options.max-output-mb",
-    "stop_at": RUN, "assemble_only": RUN,
+    "stop_at": RUN, "assemble_only": RUN, "merge": RUN,
     "embed_metadata": Omitted("document", "per document: pdfmd-options.embed"),
     "no_embed_metadata": RUN,
     "lua_mode": Omitted("document", "per document: pdfmd-options.embed.lua"),

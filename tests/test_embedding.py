@@ -180,6 +180,19 @@ class FilesEndToEnd(Env):
         self.assertEqual((source / "every.md").read_text(encoding="utf-8").count("type: file"), 3, every.stdout)
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_merge_is_assemble_only_with_everything_embedded(self):
+        source = self.make_source()
+        merged = self.run_pdfmd("doc.md", "--merge", cwd=source)
+        self.assertEqual(merged.returncode, 0, merged.stdout + merged.stderr)
+        every = self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "all", "-o", "every.md", cwd=source)
+        self.assertEqual(every.returncode, 0, every.stdout + every.stderr)
+        text = (source / "doc.assembled.md").read_text(encoding="utf-8")
+        self.assertEqual(text.count("type: file"), 3)
+        self.assertEqual(text, (source / "every.md").read_text(encoding="utf-8"))
+        refused = self.run_pdfmd("doc.md", "--merge", "--no-embed-metadata", cwd=source)
+        self.assertNotEqual(refused.returncode, 0)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_unpack_gives_back_the_same_bytes_and_slim_leaves_a_clean_document(self):
         source = self.make_source()
         self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "files", "-o", "one.md", cwd=source)

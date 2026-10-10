@@ -268,6 +268,7 @@ pdfmd report --assemble-only                               # report.assembled.md
 ```sh
 pdfmd report --stop-at markdown          # the assembled Markdown (= --assemble-only)
 pdfmd report --stop-at tex               # the .tex a LaTeX engine would get (= -t latex)
+pdfmd report --merge                                 # one file with everything (data files and pictures too): builds alone
 pdfmd report --assemble-only --embed-metadata        # one file that carries metadata, preamble, filters, .bib, .csl
 pdfmd report.assembled.md --unpack                   # ... and the way back, into report.assembled.unpacked/
 pdfmd report.assembled.md --unpack --slim            # strip what was unpacked from the file
