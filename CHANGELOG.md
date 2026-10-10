@@ -41,6 +41,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.25 — 2026-10-11
+
+Pre-edit state: commit `3f715f3` (v3.27.24).
+
+### Fixed
+
+- **A `preamble.tex` that defines an environment around a tikzpicture was left out.** Preamble discovery refuses a
+  file that is a TikZ picture rather than a preamble, but it tested for any `\begin{tikzpicture}`. So
+  `\newenvironment{plot}{\begin{tikzpicture}}{\end{tikzpicture}}` (or a `\newcommand` that draws) made the whole
+  preamble "a picture": it was left out with no `AUTO TEX` line, and the build stopped at the environment's first use.
+  Found while writing 3.27.23's tests. Now only a tikzpicture at the top level, outside every brace group (comments
+  aside), makes a file a picture (`top_level_tikzpicture`).
+
+### Tests
+
+- `test_header_includes.PreambleWithAPicture`:
+  - definitions and a commented mention are preambles, while a bare picture and a full document are not;
+  - a build with such a `preamble.tex` succeeds and announces it.
+
 ## v3.27.24 — 2026-10-11
 
 Pre-edit state: commit `927c794` (v3.27.23).

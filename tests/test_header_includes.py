@@ -193,5 +193,30 @@ class Building(Folder):
         self.assertNotEqual(self.build("a.md", "-H", "mine.tex").returncode, 0)
 
 
+class PreambleWithAPicture(Folder):
+    """v3.27.25: a preamble that defines an environment around a tikzpicture was taken for a TikZ picture file and
+    left out, and the build stopped at the environment's first use."""
+
+    def test_a_definition_is_a_preamble_and_a_picture_is_not(self):
+        cases = {
+            "\\newenvironment{plot}{\\begin{tikzpicture}}{\\end{tikzpicture}}\n": True,
+            "\\newcommand{\\dot}{\\begin{tikzpicture}\\fill (0,0) circle (1pt);\\end{tikzpicture}}\n": True,
+            "% \\begin{tikzpicture} in a comment\n\\usepackage{tikz}\n": True,
+            "\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n": False,      # a picture file
+            "\\documentclass{article}\n": False,
+        }
+        for text, expected in cases.items():
+            self.assertEqual(pdfmd.is_latex_preamble(self.write("preamble.tex", text)), expected, text)
+
+    @unittest.skipUnless(shutil.which("pandoc") and has_latex_package("tikz"), "needs Pandoc, lualatex with TikZ")
+    def test_it_builds(self):
+        self.write("preamble.tex", "\\usepackage{tikz}\n\\newenvironment{plot}{\\begin{tikzpicture}}{\\end{tikzpicture}}\n")
+        self.write("a.md", "---\ntitle: A\n---\n\nText.\n\n```{=latex}\n\\begin{plot}\\draw (0,0) -- (1,1);\\end{plot}\n```\n")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "-e", "lualatex"], capture_output=True,
+                              text=True, encoding="utf-8", cwd=self.directory, env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("AUTO TEX", done.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

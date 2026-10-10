@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.24"
+PDFMD_VERSION = "3.27.25"
 import argparse
 import csv
 import filecmp
@@ -6279,10 +6279,35 @@ def has_standalone_option(options: list[str]) -> bool:
 
 
 def is_latex_preamble(path: Path) -> bool:
-    """Accept preamble snippets, but reject complete documents and TikZ images."""
+    """Accept preamble snippets, but reject complete documents and TikZ images. A tikzpicture inside a definition
+    (``\\newenvironment{plot}{\\begin{tikzpicture}}{\\end{tikzpicture}}``) belongs to a preamble: only one at the top
+    level makes the file a picture (v3.27.25; any tikzpicture used to, so such a preamble was left out unannounced and
+    the build stopped at the first use of the environment)."""
     text = path.read_text(encoding="utf-8-sig")
-    forbidden = r"\\(?:documentclass|begin\s*\{document\}|end\s*\{document\}|begin\s*\{tikzpicture\})"
-    return not bool(re.search(forbidden, text, re.IGNORECASE))
+    forbidden = r"\\(?:documentclass|begin\s*\{document\}|end\s*\{document\})"
+    return not (re.search(forbidden, text, re.IGNORECASE) or top_level_tikzpicture(text))
+
+
+def top_level_tikzpicture(text: str) -> bool:
+    """Whether ``text`` opens a tikzpicture outside every brace group (comments and escaped braces aside)."""
+    depth = index = 0
+    while index < len(text):
+        character = text[index]
+        if character == "\\":
+            if depth == 0 and re.match(r"\\begin\s*\{tikzpicture\}", text[index:index + 40], re.IGNORECASE):
+                return True
+            index += 2
+            continue
+        if character == "%":
+            newline = text.find("\n", index)
+            index = len(text) if newline < 0 else newline
+            continue
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth = max(0, depth - 1)
+        index += 1
+    return False
 
 
 def preamble_candidates(directory: Path, document_stem: str) -> list[Path]:
