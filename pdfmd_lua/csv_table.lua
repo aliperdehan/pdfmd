@@ -75,42 +75,44 @@ local function extension_delimiter(path)
   return ","
 end
 
--- v3.27.4: the one of , ; tab | that splits the first lines (outside quotes) into the same number of fields, more than
--- one, the most fields winning and the name's own delimiter winning a tie; failing that, the one the first line holds
--- most of (the old rule), else the name's own.
+-- v3.27.5: the one of , ; tab | that gives the first 20 records, parsed as CSV (quotes and line breaks inside them
+-- count as they should), the same number of fields, more than one; the most fields win, the name's own delimiter wins
+-- a tie. Failing that, the one the first line holds most of (the rule before 3.27.4), else the name's own.
 local function guess_delimiter(text, path)
   local expected = extension_delimiter(path)
-  local lines = {}
-  for line in (text .. "\n"):gmatch("([^\r\n]*)\r?\n") do
-    if line:match("%S") then lines[#lines + 1] = line end
-    if #lines == 8 then break end
-  end
-  local function count_in(line, candidate)
-    local count, in_quotes = 0, false
-    for i = 1, #line do
-      local c = line:sub(i, i)
-      if c == '"' then in_quotes = not in_quotes
-      elseif c == candidate and not in_quotes then count = count + 1 end
-    end
-    return count
+  local sample, cut = text, false
+  if #sample > 65536 then                       -- a long file: its first 64 KB, whose last record may be cut short
+    sample, cut = sample:sub(1, 65536), true
   end
   local candidates = {expected}
   for _, candidate in ipairs({",", ";", "\t", "|"}) do
     if candidate ~= expected then candidates[#candidates + 1] = candidate end
   end
-  local best, best_count = nil, 0
+  local best, best_fields = nil, 1
   for _, candidate in ipairs(candidates) do
-    local first = lines[1] and count_in(lines[1], candidate) or 0
-    local steady = first > 0
-    for i = 2, #lines do
-      if count_in(lines[i], candidate) ~= first then steady = false break end
+    local records = parse_csv(sample, candidate)
+    local count = math.min(#records, 20)
+    if cut and count == #records and count > 1 then count = count - 1 end
+    if count >= 1 then
+      local fields = #records[1]
+      local steady = fields > 1
+      for i = 2, count do
+        if #records[i] ~= fields then steady = false break end
+      end
+      if steady and fields > best_fields then best, best_fields = candidate, fields end
     end
-    if steady and first > best_count then best, best_count = candidate, first end
   end
   if best then return best end
-  best, best_count = expected, 0
+  local first = text:match("^[^\r\n]*") or ""
+  local best_count = 0
+  best = expected
   for _, candidate in ipairs(candidates) do
-    local count = lines[1] and count_in(lines[1], candidate) or 0
+    local count, in_quotes = 0, false
+    for i = 1, #first do
+      local c = first:sub(i, i)
+      if c == '"' then in_quotes = not in_quotes
+      elseif c == candidate and not in_quotes then count = count + 1 end
+    end
     if count > best_count then best, best_count = candidate, count end
   end
   return best
@@ -346,8 +348,8 @@ local function csv_blocks(div)
     delim = guess_delimiter(text, path)
     if delim ~= extension_delimiter(path) then
       local word = DELIMITER_WORDS[delim] or delim
-      io.stderr:write("WARN  " .. label .. ": read with " .. word .. "s as the delimiter (its lines split evenly on " ..
-                       "them); say delimiter=\"" .. word .. "\" on the div, or `csv: {delimiter: " .. word ..
+      io.stderr:write("WARN  " .. label .. ": read with " .. word .. "s as the delimiter (its records all have the same number of fields " ..
+                       "with them); say delimiter=\"" .. word .. "\" on the div, or `csv: {delimiter: " .. word ..
                        "}` in pdfmd-options, to make it explicit\n")
     end
   else

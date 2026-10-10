@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.5 — 2026-10-10
+
+Pre-edit state: commit `868f670` (v3.27.4).
+
+### Changed
+
+- **The delimiter guess parses records, not lines** (the author's point: what makes a delimiter is that every record has
+  the same number of fields with it). For each of `,` `;` tab `|`, the first 20 records are read with the real CSV
+  parser, so a quoted delimiter or a line break inside a quoted field counts as it should; the candidate that gives
+  them all the same number of fields, more than one, wins (the most fields first, the file name's own delimiter on a
+  tie). 3.27.4 counted per physical line, and a quoted line break made the right delimiter look uneven. A long file is
+  sampled in its first 64 KB. The first-line count stays as the last fallback. Same in `pdfmd_lua/csv_table.lua` and the
+  built-in renderer (`csv_guess_delimiter`).
+
+### Tests
+
+- A `;` file whose quoted field holds commas and a line break; a 9000-line file.
+
 ## v3.27.4 — 2026-10-10
 
 Pre-edit state: commit `cc6c86d` (v3.27.3).

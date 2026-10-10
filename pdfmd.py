@@ -659,8 +659,8 @@ CSV/TSV table inclusion:
     plain GFM), a `: Caption {#tbl:id}` or `Table: Caption` paragraph right after
     the block, or `caption="..."` among its attributes, is the table's caption,
     and a relative `file=` is found beside the document, not only in Pandoc's
-    working folder). Delimiter is auto-detected (v3.27.4: the one of , ; tab |
-    that splits the first lines evenly, the extension's own -- tab for .tsv,
+    working folder). Delimiter is auto-detected (v3.27.5: the one of , ; tab |
+    that splits the first 20 records evenly, parsed as CSV, the extension's own -- tab for .tsv,
     else comma -- on a tie; a WARN when it is not the extension's), or set
     with a `delimiter="..."` attribute or `csv: {delimiter: ...}`; a cut table
     keeps its first and last rows and columns with a row/column of an ellipsis
@@ -1253,7 +1253,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.4"
+PDFMD_VERSION = "3.27.5"
 import argparse
 import csv
 import filecmp
@@ -3274,32 +3274,37 @@ def csv_extension_delimiter(name: str | None) -> str:
 
 
 def csv_guess_delimiter(text: str, name: str | None) -> str:
-    """The delimiter of a CSV nobody named (v3.27.4, as pdfmd_lua/csv_table.lua guesses it): the one of , ; tab | that
-    splits the first lines (outside quotes) into the same number of fields, more than one, the most fields winning and
-    the name's own delimiter winning a tie; failing that, the one the first line holds most of, else the name's own."""
+    """The delimiter of a CSV nobody named (v3.27.5, as pdfmd_lua/csv_table.lua guesses it): the one of , ; tab | that
+    gives the first 20 records, parsed as CSV (quoted delimiters and line breaks count as they should), the same number
+    of fields, more than one; the most fields win, the name's own delimiter (csv_extension_delimiter) wins a tie.
+    Failing that, the one the first line holds most of, else the name's own."""
     expected = csv_extension_delimiter(name)
-    lines = [line for line in text.splitlines() if line.strip()][:8]
-
-    def count_in(line: str, candidate: str) -> int:
+    sample, cut = (text[:65536], True) if len(text) > 65536 else (text, False)
+    candidates = [expected] + [item for item in (",", ";", "\t", "|") if item != expected]
+    best, best_fields = None, 1
+    for candidate in candidates:
+        try:
+            records = [row for row in csv.reader(io.StringIO(sample, newline=""), delimiter=candidate) if row]
+        except csv.Error:
+            continue
+        count = min(len(records), 20)
+        if cut and count == len(records) and count > 1:
+            count -= 1                                  # the sample's last record may be cut short
+        if count >= 1:
+            fields = len(records[0])
+            if fields > best_fields and all(len(record) == fields for record in records[1:count]):
+                best, best_fields = candidate, fields
+    if best is not None:
+        return best
+    first = text.splitlines()[0] if text.strip() else ""
+    best, best_count = expected, 0
+    for candidate in candidates:
         count, quoted = 0, False
-        for char in line:
+        for char in first:
             if char == '"':
                 quoted = not quoted
             elif char == candidate and not quoted:
                 count += 1
-        return count
-
-    candidates = [expected] + [item for item in (",", ";", "\t", "|") if item != expected]
-    best, best_count = None, 0
-    for candidate in candidates:
-        first = count_in(lines[0], candidate) if lines else 0
-        if first > best_count and all(count_in(line, candidate) == first for line in lines[1:]):
-            best, best_count = candidate, first
-    if best is not None:
-        return best
-    best, best_count = expected, 0
-    for candidate in candidates:
-        count = count_in(lines[0], candidate) if lines else 0
         if count > best_count:
             best, best_count = candidate, count
     return best
@@ -3379,8 +3384,8 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
         delimiter = csv_guess_delimiter(text, name)
         if delimiter != csv_extension_delimiter(name):
             word = CSV_DELIMITER_WORDS.get(delimiter, delimiter)
-            native_note("csv", f"{name or 'inline data'}: read with {word}s as the delimiter (its lines split evenly on "
-                               f"them); say delimiter=\"{word}\" on the div, or `csv: {{delimiter: {word}}}` in "
+            native_note("csv", f"{name or 'inline data'}: read with {word}s as the delimiter (its records all have the same "
+                               f"number of fields with them); say delimiter=\"{word}\" on the div, or `csv: {{delimiter: {word}}}` in "
                                "pdfmd-options, to make it explicit", source)
     cut = (options.get("cut") or defaults.get("cut") or "ends").lower()
     max_rows, max_columns = (limit(key, float("inf") if defaults[key] == "all" else defaults[key])

@@ -221,6 +221,9 @@ class Limits(unittest.TestCase):
         self.assertEqual(pdfmd.csv_guess_delimiter('"a;b",c\n"1;2",3\n', "q.csv"), ",")     # quoted ; do not count
         self.assertEqual(pdfmd.csv_guess_delimiter("a,b\n1,2\n", "t.tsv"), ",")              # the lines win
         self.assertEqual(pdfmd.csv_guess_delimiter("one\ntwo\n", "t.tsv"), "\t")              # nothing: the name
+        quoted = 'name;note\n"x";"a, b\nc, d, e"\n"y";"f"\n'                    # commas and a line break in a field
+        self.assertEqual(pdfmd.csv_guess_delimiter(quoted, "q.csv"), ";")
+        self.assertEqual(pdfmd.csv_guess_delimiter("a,b,c\n1,2,3\n4,5,6\n" * 3000, "big.csv"), ",")
         self.assertEqual(pdfmd.csv_keep(15, 10, "ends"), (list(range(7)) + [12, 13, 14], 7, 3))
         self.assertEqual(pdfmd.csv_keep(15, 10, "head"), (list(range(10)), 10, 0))
         self.assertEqual(pdfmd.csv_keep(5, 10, "ends"), (list(range(5)), None, 0))
