@@ -1365,6 +1365,10 @@ OK    paper.md  (typst; lualatex, xelatex failed)
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.
 
+A link to an anchor the document does not have (`[see 13.5](#135-your-own-defaults)` quoted from another document) is
+only a warning for LaTeX and HTML, but Typst stops on it. For Typst, PDF or `.typ`, such a link becomes its text, and
+one `WARN` names the anchors.
+
 `--strict` (or `pdfmd-options: {strict: true}` in the document; `--no-strict` overrides it) makes that, and every other
 warning, an error for scripts and CI: a file whose build printed a `WARN` line, or about which Pandoc warned (an image
 or citation it could not find, a LaTeX reference left undefined), is reported `FAIL` with the first warnings listed and

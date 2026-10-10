@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.11 — 2026-10-10
+
+Pre-edit state: commit `08a3a32` (v3.27.10).
+
+### Fixed
+
+- **A link to an anchor the document does not have stopped a Typst build** ("label <135-your-own-defaults> does not
+  exist in the document"; a pasted transcript quoting another document's `(see 13.5)` links was enough). LaTeX and
+  HTML only warn. A new last filter for Typst, `pdfmd_lua/typst.lua` (PDF and `.typ`), makes each such link its text,
+  with one `WARN` naming the anchors. Pandoc's Typst writer labels headings, divs, spans, figures and tables (3.1.3 and
+  3.12 alike, checked); a link to the id of a code block, an image, inline code or a link is made text too.
+- **A Typst PDF lost its relative pictures with Pandoc 3.1.3 when Pandoc runs in a metadata file's folder** (a
+  discovered `~/.config/pdfmd/metadata.yaml`, or `-y shared/meta.yaml`): that Pandoc runs Typst in its own working
+  folder without fetching the pictures first. `typst.lua` makes each picture's path the absolute path found on the
+  resource path, for a PDF only (a `.typ` file keeps its relative paths); 3.27.10's `--root=/` lets Typst read it.
+
+### Tests
+
+- `tests/test_typst.py`: the filter through Pandoc (labels kept, the rest text, one WARN, other writers untouched), a
+  Typst PDF with a missing anchor, and a picture found when Pandoc runs in the metadata file's folder (fails on 3.1.3
+  without the filter).
+
 ## v3.27.10 — 2026-10-10
 
 Pre-edit state: commit `1c2c70c` (v3.27.9).

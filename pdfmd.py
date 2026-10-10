@@ -93,13 +93,20 @@ Input formats:
 
 Older Pandoc, and no network (v3.25.11):
     The oldest Pandoc pdfmd is tested with is PANDOC_MIN, 3.1.3 (the claude.ai sandbox's); the suite runs against it, with
-    a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Word equation tables, caption attributes;
-    Typst pictures work since v3.27.10: Typst is given --root=/ as a newer Pandoc does). The first compile with an older Pandoc warns once (per version, a marker in the config folder), and
-    --doctor lists what the one installed does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
+    a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Word equation tables, caption attributes).
+    Typst pictures work with it since v3.27.10-11: Typst is given --root=/ as a newer Pandoc does, and pdfmd_lua/typst.lua
+    makes a picture's relative path absolute (that Pandoc runs Typst in its own working folder). The first compile with
+    an older Pandoc warns once (per version, a marker in the config folder), and --doctor lists what the one installed
+    does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
     pandoc.log (Pandoc 3.2); a pandoc-crossref built for another Pandoc than the running one is not run (it would leave
     ?? for the numbers) and a WARN says which release to get. scripts/build_zipapp.py makes dist/pdfmd.pyz, pdfmd and
     its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
+
+Links Typst would stop on (v3.27.11):
+    LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
+    PDF or a .typ file) pdfmd_lua/typst.lua runs last and makes such a link its text, with one WARN naming the anchors.
+    Pandoc's Typst writer labels headings, divs, spans, figures and tables; a link to another element's id is text too.
 
 Images LaTeX cannot read (v3.25.7; the package pdfmd_images):
     LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown
@@ -1255,7 +1262,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.10"
+PDFMD_VERSION = "3.27.11"
 import argparse
 import csv
 import filecmp
@@ -10857,6 +10864,20 @@ def select_filter_args(selection) -> list[str]:
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
+def typst_filter_args(writer: str) -> list[str]:
+    """``--lua-filter typst.lua`` for Typst (v3.27.11): a link to an anchor the document does not have becomes its
+    text with one WARN, where Typst would stop the build; with a Pandoc before 3.2, a picture's relative path is made
+    absolute. Last, after citeproc and the document's own filters."""
+    if writer != "typst":
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("typst")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
 @contextmanager
 def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
@@ -15108,6 +15129,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
+                cmd += typst_filter_args(target_format)
                 if flat_target:
                     cmd += flat_filter_args(flat, target_format)       # last: it sees what every other filter made
                 ascii_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-ascii-") if ascii_on else None
@@ -15333,6 +15355,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         hoist_code_header(cmd)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
+                    cmd += typst_filter_args(engine)
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html"):
                         # LaTeX failed (or the document asks): what the document says in LaTeX becomes native or
