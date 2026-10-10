@@ -138,9 +138,11 @@ class NormaliseTests(unittest.TestCase):
                                                  base_dir=Path(directory))
             self.assertEqual(counts["csv"], 1)
             self.assertIn("| n | square | text |\n| --- | --- | --- |\n| 1 | 1 | x\\|y |", source.text)
+            self.assertIn("| 7 | 49 |", source.text)                    # the first 7 rows, a row of …, the last 3
+            self.assertNotIn("| 8 |", source.text)
+            self.assertIn("| … | … | … |", source.text)
             self.assertIn("| 10 | 100 |", source.text)
-            self.assertNotIn("| 11 |", source.text)
-            self.assertIn("showing 10 of 12 rows, 3 of 3 columns", source.text)
+            self.assertIn("showing the first 7 and the last 3 of 12 rows, 3 of 3 columns", source.text)
             full, _ = pdfmd.normalise_gfm('::: {.csv file="data.csv" rows=all header="false"}\n:::\n', "inkmd",
                                           base_dir=Path(directory))
             self.assertIn("| Column 1 | Column 2 | Column 3 |", full.text)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -157,7 +158,9 @@ class Limits(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_default_cap_and_its_note(self):
         native, stderr = self.build('::: {.csv file="d.csv"}\n:::\n')
-        self.assertEqual(self.rows_and_columns(native), (10, 7))
+        self.assertEqual(self.rows_and_columns(native), (11, 8))           # 7 + a row of … + 3; 5 + … + 2
+        self.assertIn("the first 7 and the last 3 of 15 rows", " ".join(re.findall(r'Str "([^"]*)"', native)))
+        self.assertTrue('Str "15"' in native, "the last row is missing")
         self.assertIn("--csv-rows", native)                                  # the note under the table says how
         self.assertIn("WARN", stderr)
 
@@ -166,13 +169,16 @@ class Limits(unittest.TestCase):
         block = '::: {.csv file="d.csv"}\n:::\n'
         self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "3", "--csv-cols", "all")[0]), (3, 9))
         front = "pdfmd-options:\n  csv: {rows: all, cols: 4}\n"
-        self.assertEqual(self.rows_and_columns(self.build(block, front=front)[0]), (15, 4))
+        self.assertEqual(self.rows_and_columns(self.build(block, front=front)[0]), (15, 5))      # 3 + … + 1
         config = "options:\n  csv: {rows: 5}\n"
-        self.assertEqual(self.rows_and_columns(self.build(block, config=config)[0]), (5, 7))
+        self.assertEqual(self.rows_and_columns(self.build(block, config=config)[0]), (6, 8))     # 4 + … + 1
         # the document over the config, field by field; the command line over both
         self.assertEqual(self.rows_and_columns(self.build(block, front="pdfmd-options:\n  csv: {cols: 2}\n",
-                                                          config=config)[0]), (5, 2))
-        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "all", config=config)[0]), (15, 7))
+                                                          config=config)[0]), (6, 2))           # under 3: the head
+        self.assertEqual(self.rows_and_columns(self.build(block, "--csv-rows", "all", config=config)[0]), (15, 8))
+        front = "pdfmd-options:\n  csv: {cut: head}\n"
+        self.assertEqual(self.rows_and_columns(self.build(block, front=front)[0]), (10, 7))      # the old cut
+        self.assertEqual(self.rows_and_columns(self.build('::: {.csv file="d.csv" cut="head"}\n:::\n')[0]), (10, 7))
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_divs_own_attributes_win_and_header_and_reader_apply_to_every_table(self):
@@ -181,6 +187,43 @@ class Limits(unittest.TestCase):
         native, _ = self.build('::: {.csv file="d.csv"}\n:::\n', front="pdfmd-options:\n  csv: {header: false, rows: all}\n")
         self.assertEqual(self.rows_and_columns(native)[0], 16)            # the first line is data now
         self.assertNotIn("pdfmd-csv", native)                              # the settings left no trace in the metadata
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_delimiter_is_guessed_with_a_warning_or_named(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-delimiter-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "s.csv").write_text("name;value\nx;1,5\ny;2,25\n", encoding="utf-8")
+        (directory / "t.tsv").write_text("a\tb\n1\t2\n", encoding="utf-8")
+
+        def run(markdown, front=""):
+            (directory / "d.md").write_text(f"---\ntitle: T\n{front}---\n\n" + markdown, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "native", "-o", "o.native",
+                                   "--no-stamp", "--no-backup", "--no-auto", "crossref"], cwd=directory,
+                                  capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return (directory / "o.native").read_text(encoding="utf-8"), done.stdout + done.stderr
+
+        native, said = run('::: {.csv file="s.csv"}\n:::\n')
+        self.assertIn('Str "1,5"', native)                                  # a decimal comma stays in its cell
+        self.assertIn("semicolons as the delimiter", said)
+        native, said = run('::: {.csv file="s.csv"}\n:::\n', "pdfmd-options:\n  csv: {delimiter: semicolon}\n")
+        self.assertIn('Str "1,5"', native)
+        self.assertNotIn("as the delimiter", said)                          # named: no warning
+        native, said = run('::: {.csv file="t.tsv"}\n:::\n')
+        self.assertNotIn("as the delimiter", said)                          # a .tsv is tab-separated as it says
+        native, said = run('::: {.csv file="s.csv" delimiter="comma"}\n:::\n')
+        self.assertIn('Str "name;value"', native)                          # the div's own word wins
+
+    def test_the_built_in_renderer_guesses_the_same_way(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        self.assertEqual(pdfmd.csv_guess_delimiter("name;value\nx;1,5\ny;2,25\n", "s.csv"), ";")
+        self.assertEqual(pdfmd.csv_guess_delimiter('"a;b",c\n"1;2",3\n', "q.csv"), ",")     # quoted ; do not count
+        self.assertEqual(pdfmd.csv_guess_delimiter("a,b\n1,2\n", "t.tsv"), ",")              # the lines win
+        self.assertEqual(pdfmd.csv_guess_delimiter("one\ntwo\n", "t.tsv"), "\t")              # nothing: the name
+        self.assertEqual(pdfmd.csv_keep(15, 10, "ends"), (list(range(7)) + [12, 13, 14], 7, 3))
+        self.assertEqual(pdfmd.csv_keep(15, 10, "head"), (list(range(10)), 10, 0))
+        self.assertEqual(pdfmd.csv_keep(5, 10, "ends"), (list(range(5)), None, 0))
 
     def test_a_bad_value_is_an_error(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))

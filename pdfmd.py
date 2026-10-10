@@ -659,9 +659,13 @@ CSV/TSV table inclusion:
     plain GFM), a `: Caption {#tbl:id}` or `Table: Caption` paragraph right after
     the block, or `caption="..."` among its attributes, is the table's caption,
     and a relative `file=` is found beside the document, not only in Pandoc's
-    working folder). Delimiter is auto-detected from the extension
-    (`.tsv` -> tab, otherwise comma), or set explicitly with a
-    `delimiter="..."` attribute; the first row is treated as a header
+    working folder). Delimiter is auto-detected (v3.27.4: the one of , ; tab |
+    that splits the first lines evenly, the extension's own -- tab for .tsv,
+    else comma -- on a tie; a WARN when it is not the extension's), or set
+    with a `delimiter="..."` attribute or `csv: {delimiter: ...}`; a cut table
+    keeps its first and last rows and columns with a row/column of an ellipsis
+    between them (`cut="head"` / `csv: {cut: head}`: the first ones only);
+    the first row is treated as a header
     unless `header="false"`. Capped at 10 rows and 7 columns by default (for every
     table: --csv-rows/--csv-cols, `pdfmd-options: {csv: {rows, cols, header, reader}}`
     or --setup, v3.27.2) --
@@ -1249,7 +1253,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.3"
+PDFMD_VERSION = "3.27.4"
 import argparse
 import csv
 import filecmp
@@ -1988,7 +1992,8 @@ def contains_csv_table(md_path: Path) -> bool:
 # PDFMD_CSV_ROWS / PDFMD_CSV_COLS, as --strict does), else `pdfmd-options: {csv: {rows, cols, header, reader}}` (the
 # document, its metadata files, the config: field by field), else 10 rows x 7 columns, a header row and Pandoc's
 # Markdown in the cells. A div's own rows= / cols= / header= / reader= still win for that one table.
-CSV_DEFAULTS = {"rows": 10, "cols": 7, "header": True, "reader": "markdown"}
+CSV_DEFAULTS = {"rows": 10, "cols": 7, "header": True, "reader": "markdown", "delimiter": "auto", "cut": "ends"}
+CSV_CUTS = ("ends", "head")
 CSV_ENV = {"rows": "PDFMD_CSV_ROWS", "cols": "PDFMD_CSV_COLS"}
 
 
@@ -2030,6 +2035,17 @@ def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
         chosen["header"] = flag
     if option.get("reader"):
         chosen["reader"] = str(option["reader"]).strip()
+    if option.get("delimiter"):
+        text = str(option["delimiter"]).strip()
+        if text.casefold() != "auto" and text.casefold() not in CSV_DELIMITER_NAMES and len(text) != 1:
+            raise SystemExit(f"{where}: pdfmd-options.csv.delimiter must be auto, a name "
+                             f"({', '.join(CSV_DELIMITER_NAMES)}) or one character, not {text!r}")
+        chosen["delimiter"] = text.casefold() if len(text) > 1 else text
+    if option.get("cut"):
+        cut = str(option["cut"]).strip().casefold()
+        if cut not in CSV_CUTS:
+            raise SystemExit(f"{where}: pdfmd-options.csv.cut must be ends or head, not {option['cut']!r}")
+        chosen["cut"] = cut
     return chosen
 
 
@@ -2051,6 +2067,8 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
     args = ["--lua-filter", str(csv_filter_path)]
     chosen = csv_defaults(files[0], metadata_files)
     for key, value in chosen.items():            # only what differs: the filter's own defaults are the same
+        if key == "delimiter":
+            value = CSV_DELIMITER_WORDS.get(value, value)     # a name survives -M, a tab or a colon would not
         if value != CSV_DEFAULTS[key]:
             args += ["-M", f"pdfmd-csv-{key}={str(value).lower() if isinstance(value, bool) else value}"]
     return args
@@ -3250,23 +3268,56 @@ CSV_ALIGNMENTS = {"l": "left", "left": "left", "c": "center", "center": "center"
 CSV_SEPARATOR_CELL_RE = re.compile(r"^\s*:?-+:?\s*$")
 
 
+def csv_extension_delimiter(name: str | None) -> str:
+    """The delimiter a file's name promises: tab for .tsv/.tab, else a comma."""
+    return "\t" if name and name.lower().endswith((".tsv", ".tab")) else ","
+
+
 def csv_guess_delimiter(text: str, name: str | None) -> str:
-    """The delimiter of a CSV nobody named: tab for `.tsv`, else the one of , ; tab | the first line holds most of
-    (outside quotes), a comma when none."""
-    if name and name.lower().endswith(".tsv"):
-        return "\t"
-    first = text.splitlines()[0] if text.strip() else ""
-    best, best_count = ",", 0
-    for candidate in (",", ";", "\t", "|"):
+    """The delimiter of a CSV nobody named (v3.27.4, as pdfmd_lua/csv_table.lua guesses it): the one of , ; tab | that
+    splits the first lines (outside quotes) into the same number of fields, more than one, the most fields winning and
+    the name's own delimiter winning a tie; failing that, the one the first line holds most of, else the name's own."""
+    expected = csv_extension_delimiter(name)
+    lines = [line for line in text.splitlines() if line.strip()][:8]
+
+    def count_in(line: str, candidate: str) -> int:
         count, quoted = 0, False
-        for char in first:
+        for char in line:
             if char == '"':
                 quoted = not quoted
             elif char == candidate and not quoted:
                 count += 1
+        return count
+
+    candidates = [expected] + [item for item in (",", ";", "\t", "|") if item != expected]
+    best, best_count = None, 0
+    for candidate in candidates:
+        first = count_in(lines[0], candidate) if lines else 0
+        if first > best_count and all(count_in(line, candidate) == first for line in lines[1:]):
+            best, best_count = candidate, first
+    if best is not None:
+        return best
+    best, best_count = expected, 0
+    for candidate in candidates:
+        count = count_in(lines[0], candidate) if lines else 0
         if count > best_count:
             best, best_count = candidate, count
     return best
+
+
+CSV_DELIMITER_WORDS = {",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe", " ": "space", ":": "colon"}
+
+
+def csv_keep(total: int, cap: float, cut: str) -> tuple[list[int], int | None, int]:
+    """Which of `total` rows or columns stay under `cap` (as the Lua filter's keep_indices): all, the first `cap`
+    (cut "head"), or about the first 70% and the last 30% (cut "ends", the default; a cap under 3 keeps the head).
+    Returns the kept indices, how many come from the head (None when nothing was cut) and from the tail."""
+    if total <= cap:
+        return list(range(total)), None, 0
+    cap = int(cap)
+    tail = cap * 3 // 10 if cut == "ends" and cap >= 3 else 0
+    head = cap - tail
+    return list(range(head)) + list(range(total - tail, total)), head, tail
 
 
 def csv_alignments(value: str | None) -> list[str] | None:
@@ -3321,22 +3372,49 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
             return float("inf")
         return int(value) if value.isdigit() else default
 
-    delimiter = options.get("delimiter")
-    delimiter = CSV_DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1]) if delimiter else csv_guess_delimiter(text, name)
+    delimiter = options.get("delimiter") or (defaults["delimiter"] if defaults["delimiter"] != "auto" else None)
+    if delimiter and delimiter.lower() != "auto":
+        delimiter = CSV_DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1])
+    else:
+        delimiter = csv_guess_delimiter(text, name)
+        if delimiter != csv_extension_delimiter(name):
+            word = CSV_DELIMITER_WORDS.get(delimiter, delimiter)
+            native_note("csv", f"{name or 'inline data'}: read with {word}s as the delimiter (its lines split evenly on "
+                               f"them); say delimiter=\"{word}\" on the div, or `csv: {{delimiter: {word}}}` in "
+                               "pdfmd-options, to make it explicit", source)
+    cut = (options.get("cut") or defaults.get("cut") or "ends").lower()
     max_rows, max_columns = (limit(key, float("inf") if defaults[key] == "all" else defaults[key])
                              for key in ("rows", "cols"))
     has_header = options.get("header") != "false" if options.get("header") is not None else defaults["header"]
     rows = [row for row in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter) if row]
     total_columns = max((len(row) for row in rows), default=0)
-    shown_columns = int(min(total_columns, max_columns))
-    rows = [row[:shown_columns] for row in rows]
-    header = rows.pop(0) if has_header and rows else [f"Column {n}" for n in range(1, max(shown_columns, 1) + 1)]
+    header = rows.pop(0) if has_header and rows else [f"Column {n}" for n in range(1, max(total_columns, 1) + 1)]
     alignments = None
     if (has_header and rows and options.get("separator", "auto").lower() not in ("none", "false")
             and all(CSV_SEPARATOR_CELL_RE.match(cell) for cell in rows[0])):
         alignments = csv_separator_alignments(rows.pop(0))
     alignments = csv_alignments(options.get("align")) or alignments or []
-    shown = rows[:int(min(len(rows), max_rows))]
+    kept_columns, column_head, column_tail = csv_keep(total_columns, max_columns, cut)
+    kept_rows, row_head, row_tail = csv_keep(len(rows), max_rows, cut)
+    gap = "\u2026"
+
+    def project(values: list, filler):
+        out = []
+        for position, index in enumerate(kept_columns, start=1):
+            out.append(values[index] if index < len(values) else "")
+            if column_tail and position == column_head:
+                out.append(filler)
+        return out
+
+    if column_head is not None:
+        header = project(header, gap)
+        alignments = project(alignments, "center") if alignments else alignments
+    shown = []
+    for position, index in enumerate(kept_rows, start=1):
+        shown.append(project(rows[index], gap) if column_head is not None else rows[index])
+        if row_tail and position == row_head:
+            shown.append([gap] * len(header))
+    shown_columns = len(kept_columns)
 
     def cell(value: str | None) -> str:
         return (value or "").replace("\r", "").replace("\n", " ").replace("|", "\\|")
@@ -3347,12 +3425,16 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
                            for n in range(len(header)))]
     for row in shown:
         lines.append("| " + " | ".join(cell(row[n] if n < len(row) else "") for n in range(len(header))) + " |")
-    if len(shown) < len(rows) or shown_columns < total_columns:
-        plural = lambda number: "" if number == 1 else "s"  # noqa: E731
-        lines += ["", f"*(showing {len(shown)} of {len(rows)} row{plural(len(rows))}, {shown_columns} of "
-                      f"{total_columns} column{plural(total_columns)} -- use `rows=all`/`cols=all`, or "
-                      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every "
-                      "table)*"]
+    if row_head is not None or column_head is not None:
+        def part(head, tail, shown_count, total, noun):
+            plural = "" if total == 1 else "s"
+            if head is not None and tail:
+                return f"the first {head} and the last {tail} of {total} {noun}{plural}"
+            return f"{shown_count} of {total} {noun}{plural}"
+        lines += ["", f"*(showing {part(row_head, row_tail, len(kept_rows), len(rows), 'row')}, "
+                      f"{part(column_head, column_tail, shown_columns, total_columns, 'column')} -- use "
+                      "`rows=all`/`cols=all`, or `rows=N`/`cols=N`, on this `.csv` div to include more, or "
+                      "`--csv-rows`/`--csv-cols` for every table)*"]
     return lines
 
 

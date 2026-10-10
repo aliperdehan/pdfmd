@@ -121,6 +121,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "code-wrap": "options.code-wrap", "line-numbers": "options.line-numbers",
     "line-number-step": "options.line-number-step",
     "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols",
+    "csv.cut": "options.csv.cut", "csv.delimiter": "options.csv.delimiter",
     "csv.header": Omitted("document", "the shape of a project's data: per table (header=), or a folder's metadata.yaml"),
     "csv.reader": Omitted("document", "the shape of a project's data: per table (reader=), or a folder's metadata.yaml"),
     "default-output": "options.default-output",

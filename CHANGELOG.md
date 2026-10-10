@@ -41,6 +41,37 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.4 — 2026-10-10
+
+Pre-edit state: commit `cc6c86d` (v3.27.3).
+
+### Changed
+
+- **A cut `.csv` table keeps both ends.** Over the cap (10 x 7 by default) it shows the first 7 rows, a row of `…`, the
+  last 3, and the first 5 columns, a `…` column, the last 2: about 70% and 30% of any cap (a cap under 3 keeps the head
+  only). The note under the table says "the first 7 and the last 3 of 15 rows, ...". `cut="head"` on the div,
+  `pdfmd-options: {csv: {cut: head}}` or the `--setup` row "Where a long .csv table is cut" gives the old cut back. A
+  separator row's or `align=`'s alignments and widths follow their columns; the `…` column is centred. The built-in
+  renderer cuts the same way (`csv_keep`, the Lua filter's `keep_indices`). The `…` is U+2026, which every text font
+  has (U+22EE ⋮ is only in the math fonts of STIX and Libertinus).
+
+### Added
+
+- **The delimiter guess reads the first eight lines**: the one of `,` `;` tab `|` that splits them into the same number
+  of fields (more than one) wins, the most fields first and the file name's own delimiter (tab for `.tsv`/`.tab`, else
+  comma) on a tie; failing that, the old rule (what the first line holds most of). A `.tsv` used to be read with tabs
+  whatever it held. When the guess is not the name's delimiter, the build **warns** (`d.csv: read with semicolons as
+  the delimiter (its lines split evenly on them); say delimiter="semicolon" on the div, or `csv: {delimiter:
+  semicolon}` in pdfmd-options, to make it explicit`). `pdfmd-options: {csv: {delimiter: auto|comma|semicolon|tab|pipe
+  |space|colon|<one character>}}` names it for every table (no warning), and so does the `--setup` row "The delimiter of
+  .csv data"; a div's own `delimiter=` still wins.
+
+### Tests
+
+- `tests/test_csv_table.py`: the cut in both modes and through every layer, the delimiter guess with and without the
+  warning (a decimal comma in a `;` file stays in its cell, a `.tsv`, a div's own word), the built-in renderer's guess
+  and cut. `tests/test_native.py` expects the new cut. Passes on Pandoc 3.12 and 3.1.3.
+
 ## v3.27.3 — 2026-10-10
 
 Pre-edit state: commit `75529e1` (v3.27.2).

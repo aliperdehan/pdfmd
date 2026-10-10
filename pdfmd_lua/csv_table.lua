@@ -10,7 +10,7 @@ local DEFAULT_MAX_COLS = 7
 -- For every table of the document (v3.27.2): pdfmd passes --csv-rows/--csv-cols or `pdfmd-options: {csv: ...}` as
 -- `-M pdfmd-csv-rows=N|all`, `pdfmd-csv-cols`, `pdfmd-csv-header=false`, `pdfmd-csv-reader=gfm`, only when they differ
 -- from the defaults; a div's own attributes still win. read_defaults (run first) takes them out of the metadata.
-local defaults = {rows = nil, cols = nil, header = true, reader = "markdown"}
+local defaults = {rows = nil, cols = nil, header = true, reader = "markdown", delimiter = "auto", cut = "ends"}
 
 -- The whole text at once (a quoted field may hold a line break, and inline data arrives as one string): rows of
 -- fields, RFC 4180 quoting (a doubled `""` is a quote); blank lines are skipped.
@@ -69,21 +69,74 @@ local function parse_csv(text, delim)
 end
 
 -- no `delimiter=`: tab for `.tsv`, else whichever of , ; tab | the first line holds most of (outside quotes)
+-- the delimiter a file's name promises: tab for .tsv/.tab, else a comma
+local function extension_delimiter(path)
+  if path and (path:lower():match("%.tsv$") or path:lower():match("%.tab$")) then return "\t" end
+  return ","
+end
+
+-- v3.27.4: the one of , ; tab | that splits the first lines (outside quotes) into the same number of fields, more than
+-- one, the most fields winning and the name's own delimiter winning a tie; failing that, the one the first line holds
+-- most of (the old rule), else the name's own.
 local function guess_delimiter(text, path)
-  if path and path:match("%.tsv$") then return "\t" end
-  local first = text:match("^[^\r\n]*") or ""
-  local best, best_count = ",", 0
-  for _, candidate in ipairs({",", ";", "\t", "|"}) do
+  local expected = extension_delimiter(path)
+  local lines = {}
+  for line in (text .. "\n"):gmatch("([^\r\n]*)\r?\n") do
+    if line:match("%S") then lines[#lines + 1] = line end
+    if #lines == 8 then break end
+  end
+  local function count_in(line, candidate)
     local count, in_quotes = 0, false
-    for i = 1, #first do
-      local c = first:sub(i, i)
+    for i = 1, #line do
+      local c = line:sub(i, i)
       if c == '"' then in_quotes = not in_quotes
       elseif c == candidate and not in_quotes then count = count + 1 end
     end
+    return count
+  end
+  local candidates = {expected}
+  for _, candidate in ipairs({",", ";", "\t", "|"}) do
+    if candidate ~= expected then candidates[#candidates + 1] = candidate end
+  end
+  local best, best_count = nil, 0
+  for _, candidate in ipairs(candidates) do
+    local first = lines[1] and count_in(lines[1], candidate) or 0
+    local steady = first > 0
+    for i = 2, #lines do
+      if count_in(lines[i], candidate) ~= first then steady = false break end
+    end
+    if steady and first > best_count then best, best_count = candidate, first end
+  end
+  if best then return best end
+  best, best_count = expected, 0
+  for _, candidate in ipairs(candidates) do
+    local count = lines[1] and count_in(lines[1], candidate) or 0
     if count > best_count then best, best_count = candidate, count end
   end
   return best
 end
+
+local DELIMITER_WORDS = {[","] = "comma", [";"] = "semicolon", ["\t"] = "tab", ["|"] = "pipe", [" "] = "space",
+                         [":"] = "colon"}
+
+-- which of n items stay under a cap: all of them, the first `cap` (cut "head"), or about the first 70% and the last
+-- 30% (cut "ends", the default since v3.27.4; a cap under 3 keeps the head only). Returns the kept indices, and how
+-- many come from the head and the tail (both nil when nothing was cut).
+local function keep_indices(n, cap, cut)
+  local kept = {}
+  if n <= cap then
+    for i = 1, n do kept[#kept + 1] = i end
+    return kept, nil, nil
+  end
+  local tail = 0
+  if cut == "ends" and cap >= 3 then tail = (math.floor(cap) * 3) // 10 end
+  local head = cap - tail
+  for i = 1, head do kept[#kept + 1] = i end
+  for i = n - tail + 1, n do kept[#kept + 1] = i end
+  return kept, head, tail
+end
+
+local GAP = "\u{2026}"     -- the cells standing for what was cut
 
 local DELIMITER_NAMES = {comma = ",", semicolon = ";", tab = "\t", pipe = "|", space = " ", colon = ":"}
 
@@ -288,11 +341,19 @@ local function csv_blocks(div)
   end
 
   local delim = div.attributes["delimiter"]
-  if delim == nil or delim == "" then
+  if (delim == nil or delim == "") and defaults.delimiter ~= "auto" then delim = defaults.delimiter end
+  if delim == nil or delim == "" or delim:lower() == "auto" then
     delim = guess_delimiter(text, path)
+    if delim ~= extension_delimiter(path) then
+      local word = DELIMITER_WORDS[delim] or delim
+      io.stderr:write("WARN  " .. label .. ": read with " .. word .. "s as the delimiter (its lines split evenly on " ..
+                       "them); say delimiter=\"" .. word .. "\" on the div, or `csv: {delimiter: " .. word ..
+                       "}` in pdfmd-options, to make it explicit\n")
+    end
   else
     delim = DELIMITER_NAMES[delim:lower()] or delim:sub(1, 1)
   end
+  local cut = (div.attributes["cut"] or defaults.cut or "ends"):lower()
   local max_rows = limit_or_all(div.attributes["rows"], defaults.rows or DEFAULT_MAX_ROWS)
   local max_cols = limit_or_all(div.attributes["cols"], defaults.cols or DEFAULT_MAX_COLS)
   local has_header = defaults.header
@@ -311,39 +372,60 @@ local function csv_blocks(div)
   local cols_truncated = false
   local aligns, widths
 
+  local all_rows = {}
   for index, fields in ipairs(parsed_rows) do
     if #fields > total_cols then total_cols = #fields end
-    if #fields > max_cols then
-      cols_truncated = true
-      local kept = {}
-      for i = 1, max_cols do kept[i] = fields[i] end
-      fields = kept
-    end
     if has_header and index == 1 then
       header_fields = fields
     elseif has_header and index == 2 and separator ~= "none" and separator ~= "false" and separator_row(fields) then
       aligns, widths = separator_settings(fields)
     else
       total_data_rows = total_data_rows + 1
-      if #data_rows < max_rows then
-        table.insert(data_rows, fields)
-      else
-        rows_truncated = true
-      end
+      all_rows[#all_rows + 1] = fields
     end
   end
-
-  local shown_cols = math.min(total_cols, max_cols)
   if not header_fields then
     header_fields = {}
-    for i = 1, math.max(shown_cols, 1) do
-      header_fields[i] = "Column " .. i
-    end
+    for i = 1, math.max(total_cols, 1) do header_fields[i] = "Column " .. i end
   end
-  -- attributes win over a separator row
+  -- attributes win over a separator row; they name the columns of the file, like the separator row
   aligns = read_align(div.attributes["align"]) or aligns
   local own_widths = read_widths(div.attributes["widths"])
   widths = own_widths or widths
+
+  local kept_cols, col_head, col_tail = keep_indices(total_cols, max_cols, cut)
+  local kept_rows, row_head, row_tail = keep_indices(#all_rows, max_rows, cut)
+  cols_truncated, rows_truncated = col_head ~= nil, row_head ~= nil
+  local shown_cols = #kept_cols
+  local width_count = #kept_cols + ((col_tail and col_tail > 0) and 1 or 0)
+  local function project(list, gap)                 -- a row (or the alignments, widths) cut to the kept columns
+    local out, n = {}, 0
+    for position, index in ipairs(kept_cols) do
+      n = n + 1
+      out[n] = list and list[index] or nil
+      if col_tail and col_tail > 0 and position == col_head then n = n + 1; out[n] = gap end
+    end
+    return out
+  end
+  if cols_truncated then
+    header_fields = project(header_fields, GAP)
+    if aligns then aligns = project(aligns, "AlignCenter") end
+    if widths then
+      local before, after = 0, 0
+      for i = 1, total_cols do before = before + (widths[i] or 0) end
+      widths = project(widths, 0.04)
+      for i = 1, width_count do widths[i] = widths[i] or 0.04; after = after + widths[i] end
+      for i = 1, width_count do widths[i] = widths[i] * before / after end
+    end
+  end
+  for position, index in ipairs(kept_rows) do
+    data_rows[#data_rows + 1] = cols_truncated and project(all_rows[index], GAP) or all_rows[index]
+    if row_tail and row_tail > 0 and position == row_head then
+      local gap_row = {}
+      for i = 1, #header_fields do gap_row[i] = GAP end
+      data_rows[#data_rows + 1] = gap_row
+    end
+  end
 
   local lines = {}
   local function emit_row(fields)
@@ -382,12 +464,17 @@ local function csv_blocks(div)
   end
 
   if rows_truncated or cols_truncated then
-    local shown_rows = #data_rows
-    local note = string.format(
-      "*(showing %d of %d row%s, %d of %d column%s -- use `rows=all`/`cols=all`, or " ..
-      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every table)*",
-      shown_rows, total_data_rows, total_data_rows == 1 and "" or "s",
-      shown_cols, total_cols, total_cols == 1 and "" or "s")
+    local shown_rows = #kept_rows
+    local function part(head, tail, shown, total, noun)
+      local plural = total == 1 and "" or "s"
+      if head and tail and tail > 0 then
+        return string.format("the first %d and the last %d of %d %s%s", head, tail, total, noun, plural)
+      end
+      return string.format("%d of %d %s%s", shown, total, noun, plural)
+    end
+    local note = "*(showing " .. part(row_head, row_tail, shown_rows, total_data_rows, "row") .. ", " ..
+      part(col_head, col_tail, shown_cols, total_cols, "column") .. " -- use `rows=all`/`cols=all`, or " ..
+      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every table)*"
     for _, block in ipairs(pandoc.read(note .. "\n", "markdown").blocks) do blocks[#blocks + 1] = block end
     io.stderr:write("WARN  " .. label .. ": showing " .. shown_rows .. " of " ..
                      total_data_rows .. " row(s), " .. shown_cols .. " of " ..
@@ -460,6 +547,11 @@ local function read_defaults(meta)
     return pandoc.utils.stringify(value)
   end
   local rows, cols, header, reader = take("rows"), take("cols"), take("header"), take("reader")
+  local delimiter, cut = take("delimiter"), take("cut")
+  if delimiter and delimiter ~= "" then
+    defaults.delimiter = delimiter:lower() == "auto" and "auto" or (DELIMITER_NAMES[delimiter:lower()] or delimiter:sub(1, 1))
+  end
+  if cut and cut ~= "" then defaults.cut = cut:lower() end
   if rows then defaults.rows = limit_or_all(rows, DEFAULT_MAX_ROWS) end
   if cols then defaults.cols = limit_or_all(cols, DEFAULT_MAX_COLS) end
   if header then defaults.header = header ~= "false" end

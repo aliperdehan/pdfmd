@@ -1107,20 +1107,25 @@ Water,18.015,1.20
   braces, with the identifier as `#tbl:id` there too. A caption in the attributes wins over a line after the block.
 - A relative `file=` is found beside the document (and along the resource path), wherever Pandoc runs. With both
   `file=` and data inside the block, the file is used.
-- The delimiter is `delimiter=";"` or its name (`semicolon`, `tab`, `pipe`, `space`, `colon`, `comma`); without one it
-  comes from the extension (`.tsv` means tab) or from the first line (whichever of `,` `;` tab `|` it holds most of).
+- The delimiter is `delimiter=";"` or its name (`semicolon`, `tab`, `pipe`, `space`, `colon`, `comma`), or
+  `pdfmd-options: {csv: {delimiter: semicolon}}` for every table; without one it is guessed: whichever of `,` `;` tab `|`
+  splits the first lines into the same number of fields (the extension's own, comma or tab for `.tsv`, on a tie). When
+  the guess is not what the file's name says (a `;` file named `.csv`), the build warns and says how to name it.
 - Columns are aligned with `align="lcr"` (or `align="left,center,right"`), or by a second row in the data made of
   `---`, `:--`, `:-:`, `--:` as in a pipe table; `align=` wins. If such a row is really data, say `separator="none"`.
   `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Without either, pdfmd picks
   widths that suit the contents.
 - The first row is the header unless you add `header="false"`.
 - Large files are capped at 10 rows × 7 columns, so a huge CSV can't
-  silently fill 40 pages. `rows=all` or `cols=20` raise the cap. When a
-  table is cut, the PDF itself shows a note saying so. For every table of a
+  silently fill 40 pages. A cut table keeps both ends: the first 7 rows, a row
+  of `…`, the last 3, and the first 5 columns, a `…` column, the last 2 (about
+  70% and 30% of any cap; `cut="head"` or `csv: {cut: head}` keeps the first
+  ones only). `rows=all` or `cols=20` raise the cap. When a table is cut, the
+  build warns and the PDF itself shows a note saying so. For every table of a
   document: `--csv-rows N|all` / `--csv-cols N|all`, or
-  `pdfmd-options: {csv: {rows: all, cols: 12, header: false, reader: gfm}}`
+  `pdfmd-options: {csv: {rows: all, cols: 12, cut: ends, delimiter: auto, header: false, reader: gfm}}`
   (in the front matter, a metadata file, or the config, where `pdfmd --setup`
-  sets rows and columns); a div's own attributes still win.
+  sets rows, columns, the cut and the delimiter); a div's own attributes still win.
 
 This works for every output format.
 
