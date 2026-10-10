@@ -20,7 +20,7 @@ os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
 import pdfmd_flat  # noqa: E402
-from pandoc_support import needs_pandoc  # noqa: E402
+from pandoc_support import CROSSREF_USABLE, needs_pandoc  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 FLAT_LUA = ROOT / "pdfmd_lua" / "flat.lua"
@@ -245,8 +245,12 @@ class FlatText(unittest.TestCase):
         self.assertNotIn("<https://x.org>", text)              # the words are the address
         self.assertIn("top.", text)                           # a link to a heading is its words
         self.assertIn("H₂O, x² and X_(q+z).", " ".join(text.split()))
-        self.assertIn("[Figure 1. A figure]", text)
-        self.assertIn("Table 1. A table\n", text)
+        if CROSSREF_USABLE:
+            self.assertIn("[Figure 1. A figure]", text)
+            self.assertIn("Table 1. A table\n", text)
+        else:                                                 # no numbers, and no {#tbl:t} left (Pandoc 3.1.3)
+            self.assertIn("[A figure]", text)
+            self.assertIn("A table\n", text)
         self.assertIn("(Doe 2020)", text)
         self.assertIn("Raw html and tex.", text)
         self.assertNotIn("{#", text)

@@ -93,8 +93,8 @@ Input formats:
 
 Older Pandoc, and no network (v3.25.11):
     The oldest Pandoc pdfmd is tested with is PANDOC_MIN, 3.1.3 (the claude.ai sandbox's); the suite runs against it, with
-    a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Typst pictures, Word equation tables, caption
-    attributes). The first compile with an older Pandoc warns once (per version, a marker in the config folder), and
+    a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Word equation tables, caption attributes;
+    Typst pictures work since v3.27.10: Typst is given --root=/ as a newer Pandoc does). The first compile with an older Pandoc warns once (per version, a marker in the config folder), and
     --doctor lists what the one installed does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
     pandoc.log (Pandoc 3.2); a pandoc-crossref built for another Pandoc than the running one is not run (it would leave
     ?? for the numbers) and a WARN says which release to get. scripts/build_zipapp.py makes dist/pdfmd.pyz, pdfmd and
@@ -1255,7 +1255,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.9"
+PDFMD_VERSION = "3.27.10"
 import argparse
 import csv
 import filecmp
@@ -2637,7 +2637,6 @@ NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", 
 # older one may still work; the first compile with it says so once. What an older-than-latest one does without:
 PANDOC_MIN = (3, 1, 3)
 PANDOC_FEATURES = (
-    ((3, 2), "Typst PDFs with a picture pdfmd drew (an older writer gives Typst an absolute path it reads from its root)"),
     ((3, 4), "Word files: the borderless style of numbered equations (the equation and its number sit in a plain table)"),
     ((3, 8, 2), "a table caption's {#id} read as the table's identifier: --extract-tables leaves a table whose caption "
                 "has one"),
@@ -15240,6 +15239,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "--pdf-engine=" + engine]
                     if engine == "typst" and managed_index() is not None and managed_index().faces:
                         cmd.append(f"--pdf-engine-opt=--font-path={fonts_directory()}")
+                    if engine == "typst" and (0,) < pandoc_version() < (3, 2) and not any(
+                            "--root" in option for option in pandoc_options):
+                        # an older Pandoc runs typst with its root at the document, where an absolute picture path
+                        # (pdfmd's drawn diagrams, in the cache) is looked for under it; a newer one gives Typst /
+                        cmd.append("--pdf-engine-opt=--root=/")
                     if effective_from:
                         cmd += ["-f", effective_from]
                     for metadata in prepared_metadata:

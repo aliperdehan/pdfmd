@@ -26,6 +26,11 @@
 -- Configuration arrives as metadata written by pdfmd: `pdfmd-flat` = {scripts = "unicode|html|drop|ascii", title = true|false,
 -- target = "gfm|txt"}.
 
+-- Pandoc before 3.2 has no pandoc.Caption: a table's caption is the table {long, short} (as in csv_table.lua).
+if not pandoc.Caption then
+  pandoc.Caption = function(long, short) return {long = long or {}, short = short} end
+end
+
 local text_format = FORMAT == "plain"
 if not text_format and not FORMAT:match("^gfm") and not FORMAT:match("^commonmark") and not FORMAT:match("^markdown") then return {} end
 
@@ -247,6 +252,27 @@ local function split_caption(inlines)
   return nil, inlines
 end
 
+-- `{#tbl:x}` at the end of a caption is still words when pandoc-crossref did not run (not installed, or built for
+-- another Pandoc) and the Pandoc is too old (3.1.3) to read a table caption's attributes: they are dropped.
+local function drop_attribute_text(inlines)
+  local last = #inlines
+  while last > 0 and inlines[last].t == "Space" do last = last - 1 end
+  if last == 0 or inlines[last].t ~= "Str" or not inlines[last].text:match("}$") then return inlines end
+  for first = last, 1, -1 do
+    local item = inlines[first]
+    if item.t ~= "Str" and item.t ~= "Space" and item.t ~= "Quoted" then return inlines end
+    local at = item.t == "Str" and item.text:find("{[#.]")
+    if at then
+      local out = pandoc.Inlines{}
+      for k = 1, first - 1 do out:insert(inlines[k]) end
+      if at > 1 then out:insert(pandoc.Str(item.text:sub(1, at - 1))) end
+      while #out > 0 and out[#out].t == "Space" do out:remove(#out) end
+      return out
+    end
+  end
+  return inlines
+end
+
 local function caption_inlines(caption)
   local out = pandoc.Inlines{}
   for _, block in ipairs(caption.long) do
@@ -255,7 +281,7 @@ local function caption_inlines(caption)
       out:extend(block.content)
     end
   end
-  return out
+  return drop_attribute_text(out)
 end
 
 local function caption_paragraph(caption)
@@ -466,6 +492,13 @@ local function definition_list(list)
   return out
 end
 
+-- Pandoc 3.1.3's gfm writer ends a hard line break with two spaces, which an editor strips without a trace; a newer one
+-- writes a backslash. With the old writer every break is written as the backslash itself.
+local function old_style_breaks()
+  local probe = pandoc.write(pandoc.Pandoc{pandoc.Plain{pandoc.Str("a"), pandoc.LineBreak(), pandoc.Str("b")}}, "gfm")
+  return probe:find("a  \n", 1, true) ~= nil
+end
+
 local function line_block(block)
   local inlines = pandoc.Inlines{}
   for index, line in ipairs(block.content) do
@@ -502,6 +535,9 @@ local function flatten(doc)
     local head = title_block(doc.meta)
     head:extend(doc.blocks)
     doc.blocks = head
+  end
+  if not text_format and old_style_breaks() then
+    doc = doc:walk({LineBreak = function() return pandoc.RawInline("markdown", "\\\n") end})
   end
   report_dropped()
   return doc

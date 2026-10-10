@@ -460,7 +460,6 @@ class OtherOutputs(unittest.TestCase):
                               text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
 
     @unittest.skipUnless(TYPST, "needs Typst")
-    @needs_pandoc(3, 2, why="an older Pandoc writes an absolute image path Typst reads as relative to its root")
     def test_typst_gets_the_drawing_when_the_document_asks(self):
         root = self.folder("pdfmd-options:\n  office: {latex: auto, labels: off}\n")
         done = self.run_pdfmd(root, "-e", "typst")

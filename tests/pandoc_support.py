@@ -26,7 +26,28 @@ def _version() -> tuple[int, ...]:
 PANDOC_VERSION = _version()
 
 
+def _crossref_usable() -> bool:
+    """pandoc-crossref is installed and built for this Pandoc: pdfmd runs it only then (crossref_filter_args)."""
+    crossref = shutil.which("pandoc-crossref")
+    if not crossref or PANDOC_VERSION == (0,):
+        return False
+    try:
+        done = subprocess.run([crossref, "--version"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    found = re.search(r"built with Pandoc v(\d+(?:\.\d+)+)", done.stdout + done.stderr)
+    return not found or tuple(int(part) for part in found.group(1).split("."))[:2] == PANDOC_VERSION[:2]
+
+
+CROSSREF_USABLE = _crossref_usable()
+
+
 def needs_pandoc(*version: int, why: str = ""):
     """Skip the test unless Pandoc is at least `version`."""
     wanted = ".".join(map(str, version))
     return unittest.skipIf(PANDOC_VERSION < tuple(version), f"needs Pandoc {wanted}" + (f" ({why})" if why else ""))
+
+
+def needs_crossref(test):
+    """Skip the test unless pdfmd would run pandoc-crossref (installed, and built for this Pandoc)."""
+    return unittest.skipUnless(CROSSREF_USABLE, "needs a pandoc-crossref built for this Pandoc")(test)

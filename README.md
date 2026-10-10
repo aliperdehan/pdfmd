@@ -229,7 +229,7 @@ pdfmd --completion fish > ~/.config/fish/completions/pdfmd.fish
 
 The oldest Pandoc `pdfmd` is tested with is **3.1.3** (what the claude.ai sandbox has); the whole test suite runs against
 it. An older one may work, and the first build with it says so once; `pdfmd --doctor` lists what a given Pandoc does
-without. With 3.1.3: Typst PDFs cannot show a picture `pdfmd` drew itself (before 3.2), a numbered equation in a Word file
+without. With 3.1.3: a numbered equation in a Word file
 sits in a plain table instead of a borderless one (before 3.4), and `--extract-tables` leaves a table whose caption has
 a `{#tbl:id}` (before 3.8.2: Pandoc reads that as words, so the change could not be checked). A `pandoc-crossref` must be
 the release built for the Pandoc you run; one built for another is not run, with a warning, because it would put `??` where

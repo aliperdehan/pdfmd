@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.10 — 2026-10-10
+
+Pre-edit state: commit `1c2c70c` (v3.27.9).
+
+### Fixed (Pandoc 3.1.3, the oldest pdfmd is tested with: the 3.26.x features had never run on it)
+
+- **`--to gfm`, `--to txt`, `--to ascii` and `--keep-source` failed outright** on a Pandoc before 3.2: `flat.lua` called
+  `pandoc.Caption`, which those versions lack. It gets the same stand-in as `csv_table.lua`.
+- **`{#tbl:x}` was left in a table's caption** in flat Markdown and text when pandoc-crossref did not run (not installed,
+  or built for another Pandoc) and the Pandoc is too old to read a table caption's attributes. The words go.
+- **A hard line break in flat Markdown was two trailing spaces** with Pandoc 3.1.3's gfm writer (an editor strips them
+  without a trace); it is now the backslash a newer Pandoc writes.
+- **A Typst PDF with a picture pdfmd drew (a diagram, a raw TeX piece) failed** with "file not found": an older Pandoc
+  runs Typst with its root at the document, where the picture's absolute path in the cache was looked for. Typst is now
+  given `--root=/`, as a newer Pandoc does (not when the command line sets its own `--root`). The limit is gone from
+  `--doctor`'s list for older Pandoc.
+
+### Tests
+
+- `tests/pandoc_support.py`: `CROSSREF_USABLE` / `needs_crossref`, true only when pdfmd would run pandoc-crossref
+  (installed and built for this Pandoc). The whole-document numbering tests skip without it; the text-output test checks
+  the unnumbered captions instead.
+
 ## v3.27.9 — 2026-10-10
 
 Pre-edit state: commit `3297564` (v3.27.8).

@@ -22,7 +22,7 @@ import pdfmd  # noqa: E402
 class Versions(unittest.TestCase):
     def test_what_an_older_pandoc_does_without(self):
         self.assertEqual(pdfmd.pandoc_limits((3, 12)), [])
-        self.assertEqual(len(pdfmd.pandoc_limits((3, 1, 3))), 3)
+        self.assertEqual(len(pdfmd.pandoc_limits((3, 1, 3))), 2)
         self.assertEqual(len(pdfmd.pandoc_limits((3, 4))), 1)
         self.assertIn("{#id}", pdfmd.pandoc_limits((3, 4))[0])
         self.assertEqual(pdfmd.PANDOC_MIN, (3, 1, 3))

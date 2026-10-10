@@ -16,6 +16,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
@@ -23,6 +24,7 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 import pdfmd  # noqa: E402
 import pdfmd_labels  # noqa: E402
 from pdfmd_labels.scan import Event, scan  # noqa: E402
+from pandoc_support import needs_crossref  # noqa: E402
 
 WRAP = "\\documentclass{article}\n\\newcommand{\\gone}{\\section{in preamble}\\label{gone}}\n\\begin{document}\n%s\n\\end{document}\n"
 
@@ -281,7 +283,7 @@ class SectionBuild(unittest.TestCase):
             self.assertNotIn("??", text)
 
 
-@unittest.skipUnless(shutil.which("pandoc") and shutil.which("pandoc-crossref"), "needs Pandoc and pandoc-crossref")
+@needs_crossref
 class WholeNumbering(unittest.TestCase):
     """HTML, Word, Typst: the whole document is numbered by pandoc-crossref and the part kept (select.lua)."""
 
