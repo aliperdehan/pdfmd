@@ -187,6 +187,19 @@ class Registry(unittest.TestCase):
             self.assertIn(setting.store, ("config", "metadata"))
             self.assertEqual(bool(setting.choices), setting.kind != "text", setting.key)
 
+    def test_an_unset_setting_says_what_pdfmd_does_instead(self):
+        for setting in SETTINGS:
+            self.assertTrue(setting.unset or setting.default, f"{setting.key}: nothing says what the default is")
+            self.assertNotIn("not set", registry.shown(setting, None), setting.key)
+        for key in registry.UNSET:
+            self.assertIn(key, [setting.key for setting in SETTINGS], f"UNSET names {key}, which is no setting")
+
+    def test_the_screen_shows_the_fonts_pdfmd_picks(self):
+        by_key = {setting.key: setting for setting in SETTINGS}
+        self.assertIn("STIX Two Text", registry.shown(by_key["mainfont"], None))
+        self.assertIn("JetBrains Mono", registry.shown(by_key["monofont"], None))
+        self.assertEqual(registry.shown(by_key["mainfont"], "Georgia"), "Georgia")
+
 
 @unittest.skipUnless(fancy.available() and yaml, "needs prompt_toolkit")
 class Fancy(unittest.TestCase):

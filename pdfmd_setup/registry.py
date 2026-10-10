@@ -7,7 +7,7 @@ user chose, so deleting a line gives the default back.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -21,9 +21,34 @@ class Setting:
     section: str = ""
     store: str = "config"             # which file: "config" (config.yaml) or "metadata" (metadata.yaml beside it)
     check: str = ""                   # "number" for a text that must be one
+    unset: str = ""                   # what pdfmd does when the key is not set, in words (see UNSET); the screens show it
 
 
 ON_OFF = (("on", "yes"), ("off", "no"))
+
+# What a build does when a setting is not set: the words the screens print beside "default", for every setting whose
+# `default` is not itself one of its choices. Checked by tests/test_setup.py: a setting with neither is a bug.
+UNSET = {
+    "author": "none", "lang": "none",
+    "papersize": "US Letter (A4 in WeasyPrint)", "fontsize": "10 pt LaTeX, 11 pt Typst",
+    "geometry": "margin=1in", "mainfont": "STIX Two Text (or a serif with the letters)",
+    "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
+    "colorlinks": "off", "toc": "off",
+    "options.unicode": "off (only for text the font lacks)", "translit": "Cyrillic only",
+    "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
+    "options.attach-bibliography": "only the cited entries",
+    "options.pdf-engine": "first installed: lualatex, xelatex, ...",
+    "options.html.self-contained": "off", "options.html.math": "MathML",
+    "options.line-numbers": "off", "options.line-number-step": "1",
+    "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
+    "options.stamp.enabled": "off", "options.backup.enabled": "off",
+    "options.backup.dir": ".backups (or an existing backup/)",
+    "options.strip-comments": "off", "options.hybrid": "off",
+    "options.raw": "off", "options.attach-source": "off",
+    "options.bundle": "off", "options.bundle-max-mb": "100",
+    "options.cache.aux": "off", "options.text-to-markdown": "off",
+    "options.no-auto": "nothing switched off",
+}
 
 TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian"), ("hebrew", "Hebrew"),
             ("arabic", "Arabic"), ("hangul", "Korean (needs the translit extra)"), ("kana", "Japanese kana"),
@@ -54,6 +79,11 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
         return Setting(key, title, "text", (), "", help, section, store, check)
 
     on_off = ON_OFF
+    return [replace(setting, unset=UNSET.get(setting.key, "")) for setting in _settings(choice, text, no_auto_kinds,
+                                                                                    setup_ui_choices, on_off)]
+
+
+def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Setting]:
     return [
         # -- what every document gets (metadata.yaml beside the config file)
         text("author", "Author", "Put in every document that names none.", "Every document (global metadata)", "metadata"),
@@ -221,7 +251,8 @@ def write(stores: dict, setting: Setting, value) -> None:
 def shown(setting: Setting, value) -> str:
     """The current value as the screens print it."""
     if value is None:
-        return f"{setting.default or 'not set'} (default)" if setting.default else "not set"
+        what = setting.unset or setting.default
+        return f"{what} (default)" if what else "none"
     if isinstance(value, bool):
         return "on" if value else "off"
     if isinstance(value, list):

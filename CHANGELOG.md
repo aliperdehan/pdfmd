@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.26.21 — 2026-10-10
+
+Pre-edit state: commit `17a3afc` (v3.26.20).
+
+### Fixed
+
+- `pdfmd --setup` printed "not set" for every setting whose default is not a choice of its own: paper size, font size, page
+  geometry, main font, code font and about thirty more, as if pdfmd did nothing when they were empty. Each now says what
+  pdfmd does (`STIX Two Text (or a serif with the letters) (default)`, `margin=1in (default)`, `US Letter (A4 in WeasyPrint)
+  (default)`, `10 pt LaTeX, 11 pt Typst (default)`), or `none` where nothing is added. The words are `registry.UNSET` in
+  `pdfmd_setup`; the numbered list's "0. back to the default (...)" line and the full-screen list use them too, and a test
+  fails for a setting with neither a default nor an entry there.
+
 ## v3.26.20 — 2026-10-10
 
 Pre-edit state: commit `28944c3` (v3.26.19).

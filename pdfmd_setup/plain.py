@@ -94,7 +94,8 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
     for number, (value, meaning) in enumerate(setting.choices, start=1):
         mark = "*" if value == now else " "
         say(f"  {number:>2}. {mark} {value:<14} {meaning}")
-    default = f"the default ({setting.default})" if setting.default else "not set"
+    what = setting.unset or setting.default
+    default = f"the default ({what})" if what else "none"
     say(f"   0.   back to {default}")
     try:
         answer = read_line("Choose a number, Enter = leave as it is: ").strip()
