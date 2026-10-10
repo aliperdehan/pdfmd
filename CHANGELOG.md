@@ -41,6 +41,38 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.20 — 2026-10-10
+
+Pre-edit state: commit `952195b` (v3.27.19).
+
+### Fixed
+
+- **A part built alone printed a wrong number, not `??`, for a table in an environment of the document's own.**
+  nulabreport writes a table as its own `labtabularbt` environment with a `\caption` inside. pdfmd's label scan
+  (`pdfmd_labels/scan.py`, the source of a partial build's numbers since 3.26.0) knows `table`, `longtable` and the
+  other standard floats, so it did not count that caption, but it still replayed the `\label` in it. Replayed, the
+  label took the number of the last thing counted, the section around the table. The split-report demo's Discussion,
+  built alone, said "(Section 4, Results)" where the full report says "(Table 1, Results)". The scanner's docstring
+  promised `??` for what it cannot see.
+
+  Now a `\label` after a caption the scan could not count is left out until the next step it does count, so the
+  reference prints `??`. This covers every package's wrappers, not only nulabreport's. `--seed-labels draft` (a LaTeX
+  pass over the whole document) still counts such labels exactly. The build's closing NOTE says how many labels were
+  left out, and `--verbose` says so after the scan.
+
+### Not changed (for the author)
+
+- Teaching the scan a document's own wrappers is the next step: a declaration in `pdfmd-options` (nulabreport's
+  metadata files would declare theirs). pdfmd itself names no package's environments.
+
+### Tests
+
+- `test_labels.Scanner.test_a_label_after_a_caption_it_could_not_count_is_left_out`: Pandoc's LaTeX for a
+  `labtabularbt` table; a counted equation afterwards is replayed again.
+- `test_labels.UnknownWrapper`: a three-part report whose middle part has a table in a `preamble.tex` environment.
+  Built alone, the last part printed "See Table 3 in Section 3" on 3.27.19; now "See Table ?? in Section 3", and
+  "See Table 1" with `--seed-labels draft`.
+
 ## v3.27.19 — 2026-10-10
 
 Pre-edit state: commit `4bd2230` (v3.27.18).

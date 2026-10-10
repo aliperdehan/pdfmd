@@ -1297,7 +1297,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.19"
+PDFMD_VERSION = "3.27.20"
 import argparse
 import csv
 import filecmp
@@ -14184,6 +14184,7 @@ def strict_message(lines: list[str]) -> str:
 SEED_LABELS_CLI: str | None = None         # --seed-labels (set in main)
 LAST_SCANNED = 0                           # labels the last build took from the scan (for the closing NOTE)
 LAST_EXACT = False                         # ... and whether they came from a draft pass
+LAST_SKIPPED = 0                           # ... and how many it left out (after a caption it could not count)
 LAST_WHOLE = False                         # the last build numbered the whole document and kept the part (select.lua)
 REF_USE_RE = re.compile(r"\\(?:auto|eq|page|name|vpage|[cCvV])?ref\*?\s*\{|(?<![\w@])@(?:sec|fig|tbl|eq|lst):")
 
@@ -14224,8 +14225,9 @@ def seed_labels_mode(md_path: Path, metadata_files: list[Path]) -> str:
 class LabelScan:
     """The header files that make a partial build know the labels of the whole document (see above)."""
 
-    def __init__(self, headers: list[Path], labels: int, steps: int, markers: bool, exact: bool = False):
-        self.headers, self.labels, self.steps = headers, labels, steps
+    def __init__(self, headers: list[Path], labels: int, steps: int, markers: bool, exact: bool = False,
+                 skipped: int = 0):
+        self.headers, self.labels, self.steps, self.skipped = headers, labels, steps, skipped
         self.exact = exact             # the numbers come from a LaTeX pass over the whole document (draft), not a count
         self.markers = markers         # whether the headers define \pdfmdpart (PARTS_MARKER_DEFS) too
 
@@ -14306,7 +14308,9 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     seed.write_text(pdfmd_labels.render(result), encoding="utf-8")
     if verbose:
         print(f"LABELS    scanned the whole document in {time.time() - started:.1f} s: {result.labels} labels, "
-              f"{result.steps} numbered items, {result.parts()} parts")
+              f"{result.steps} numbered items, {result.parts()} parts"
+              + (f"; {result.skipped} labels left out (after a caption in an environment it does not know)"
+                 if result.skipped else ""))
     headers = [seed]
     exact = False
     if draft_engine is not None:
@@ -14334,7 +14338,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
             print("LABELS    the draft pass left no .aux; the scan alone is used")
     if markers:
         headers.insert(0, defs)
-    return LabelScan(headers, result.labels, result.steps, markers, exact)
+    return LabelScan(headers, result.labels, result.steps, markers, exact, result.skipped)
 
 
 # -- Plot cache (pdfmd-options: {cache: {plots: true}}, --cache-plots) --------
@@ -17822,8 +17826,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
     gets it, including any added later.
     """
-    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE
-    LAST_SCANNED, LAST_EXACT, LAST_WHOLE = 0, False, False
+    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED
+    LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED = 0, False, False, 0
     metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     scratch = None
     label_scan = None
@@ -17840,6 +17844,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                                           verbose, draft=(seed_mode == "draft"))
             LAST_SCANNED = label_scan.labels if label_scan is not None else 0
             LAST_EXACT = bool(label_scan is not None and label_scan.exact)
+            LAST_SKIPPED = label_scan.skipped if label_scan is not None else 0
         elif select_wanted(seed_mode, target_format, engines, presentation, md_path):
             # HTML, Word, OpenDocument, Typst: no LaTeX to seed. Number the whole document, then keep the part(s) asked for.
             if parts_root is not None and all_parts and extra_inputs:
@@ -20120,6 +20125,12 @@ def main() -> None:
                     print("NOTE  a section or element cut out of a part is numbered from its own start, "
                           "cache or not: its heading, figure, table and equation numbers restart there "
                           "(only whole parts get their numbers from the last full build)")
+            if (LAST_SKIPPED and not (LAST_EXACT or LAST_SEEDED or LAST_WHOLE) and results[0][1]
+                    and target_format != ASSEMBLED_FORMAT
+                    and (section_plan is not None or (scaffold_plan is not None and scaffold_plan.selected is not None))):
+                print(f"NOTE  {LAST_SKIPPED} label{'' if LAST_SKIPPED == 1 else 's'} came after a caption in an "
+                      "environment pdfmd does not know, so a reference to one outside this build prints ?? rather "
+                      "than the number of the heading before it (--seed-labels draft counts them exactly)")
         if args.open and results[0][1]:
             open_file(output)
     failures = [result for result in results if not result[1]]

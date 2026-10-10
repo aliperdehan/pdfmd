@@ -1021,7 +1021,10 @@ section, figure, table or equation outside the part then prints its number
 own sections, figures and equations continue from the parts before it. What the
 scan cannot count is whatever the document defines itself (a macro that opens
 a figure, say): that label stays `??`, and the build says the numbers are
-approximate. `\pageref` is always `??`. The last full build's `.aux` (cache on,
+approximate. So does a label after a caption in an environment the document
+defines itself (a table wrapper of a house style): it prints `??`, never the
+number of the heading before it, and the build says how many there were.
+`\pageref` is always `??`. The last full build's `.aux` (cache on,
 below) is exact and is used first; the scan fills in what it does not know.
 `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` or `--seed-labels` picks
 the source (`draft` runs LaTeX once over the whole document without output, for

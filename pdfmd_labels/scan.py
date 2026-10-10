@@ -6,7 +6,9 @@ to LaTeX, which replays them (see ``replay.py``), so ``\\counterwithin``, a Roma
 counters and per-chapter resets all come out as in the full build.
 
 What it cannot see: a macro or environment the document defines itself (nulabreport's float wrappers, say), a
-``\\label`` that a package writes, ``\\item`` labels. Those labels stay undefined (``??``) as before.
+``\\label`` that a package writes, ``\\item`` labels. Those labels stay undefined (``??``) as before. A ``\\label`` after
+a caption it could not count (one in an environment it does not know) is left out as well, until the next step it
+does count: replayed, it would take the number of the heading before it (v3.27.20; a table printed as "Section 4").
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ class Scan:
     events: list[Event]
     labels: int          # how many labels the document defines (as the scanner sees them)
     steps: int           # how many counter steps it saw (headings, captions, equations, footnotes)
+    skipped: int = 0     # labels left out: each came after a caption it could not count
 
     def parts(self) -> int:
         return sum(1 for event in self.events if event.kind == "part")
@@ -117,12 +120,14 @@ def scan(text: str) -> Scan:
     events: list[Event] = []
     stack: list[str] = []            # open environments, innermost last
     row = {"pending": False, "numbered": True, "from": 0}
-    labels = steps = 0
+    labels = steps = skipped = 0
+    uncounted = False                # since a caption it could not count, no step it did count
 
     def step(counter: str) -> None:
-        nonlocal steps
+        nonlocal steps, uncounted
         events.append(Event("step", counter))
         steps += 1
+        uncounted = False
 
     def top_math() -> str | None:
         return stack[-1] if stack and (stack[-1] in ROWS or stack[-1] in EQUATION or stack[-1] in SINGLE) else None
@@ -147,6 +152,7 @@ def scan(text: str) -> Scan:
             if not starred:
                 events.append(Event("sec", name, LEVELS[name]))
                 steps += 1
+                uncounted = False
         elif name == "caption" or name == "captionof":
             if starred:
                 continue
@@ -162,6 +168,8 @@ def scan(text: str) -> Scan:
                         break
             if counter:
                 step(counter)
+            else:
+                uncounted = True
         elif name == "label":
             group = GROUP.match(text, position)
             if group:
@@ -169,6 +177,9 @@ def scan(text: str) -> Scan:
                 if top_math() in ROWS and row["pending"] and row["numbered"]:
                     step("equation")
                     row["pending"] = False
+                if uncounted:
+                    skipped += 1
+                    continue
                 events.append(Event("lab", group.group(1)))
                 labels += 1
         elif name == "begin":
@@ -216,7 +227,7 @@ def scan(text: str) -> Scan:
             position = _definition_body(text, position)
         elif name in DEFINES_ENV:
             position = _skip_groups(text, position, 3)
-    return Scan(events, labels, steps)
+    return Scan(events, labels, steps, skipped)
 
 
 def _definition_body(text: str, position: int) -> int:

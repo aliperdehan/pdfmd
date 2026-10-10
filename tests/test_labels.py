@@ -54,6 +54,16 @@ class Scanner(unittest.TestCase):
     def test_a_caption_outside_a_known_float_is_not_counted(self):
         self.assertEqual(kinds("\\begin{mybox}\\caption{F}\\end{mybox}"), [])
 
+    def test_a_label_after_a_caption_it_could_not_count_is_left_out(self):
+        # v3.27.20: nulabreport's table wrapper, as Pandoc writes it; replayed, tbl:rf took the section's number
+        text = ("\\section{Results}\\label{results}\n\\begin{labtabularbt}[c]{lr}\n"
+                "\\caption{Retention factors\\label{tbl:rf}}\\\\\n\\toprule\nA & 1 \\\\\n\\end{labtabularbt}\n"
+                "\\phantomsection\\label{after-table}\nText.\n\\section{Next}\\label{next}")
+        self.assertEqual(kinds(text), [("sec", "section"), ("lab", "results"), ("sec", "section"), ("lab", "next")])
+        self.assertEqual(scan(WRAP % text).skipped, 2)
+        self.assertEqual(kinds("\\begin{mybox}\\caption{F}\\end{mybox}\\begin{equation}\\label{e}\\end{equation}"),
+                         [("step", "equation"), ("lab", "e")])
+
     def test_captionof_names_its_counter(self):
         self.assertEqual(kinds("\\captionof{table}{T}\\label{t}"), [("step", "table"), ("lab", "t")])
 
@@ -263,6 +273,46 @@ class PartsBuild(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotIn("??", self.text("report.method.pdf"))
         self.assertIn("Back to Section 4", self.text("report.method.pdf"))
+
+
+@NEEDS
+class UnknownWrapper(unittest.TestCase):
+    """A table in an environment of the document's own: a part built alone printed the section's number for it."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name).resolve()
+        cache = self.root / "cache"
+        self.environment = {**os.environ, "XDG_CACHE_HOME": str(cache), "LOCALAPPDATA": str(cache)}
+        (self.root / "parts").mkdir()
+        (self.root / "report.md").write_text("---\ntitle: W\nnumbersections: true\npdfmd-options:\n  parts: auto\n---\n",
+                                             encoding="utf-8")
+        (self.root / "preamble.tex").write_text("\\newenvironment{mytab}{\\begin{table}[h]\\centering}{\\end{table}}\n",
+                                                encoding="utf-8")
+        (self.root / "parts" / "10-a.md").write_text("# A\n\nText.\n\n# B\n\nText.\n", encoding="utf-8")
+        (self.root / "parts" / "20-data.md").write_text(
+            "# Data {#sec:data}\n\n```{=latex}\n\\begin{mytab}x\\caption{Raw}\\label{tbl:raw}\\end{mytab}\n```\n",
+            encoding="utf-8")
+        (self.root / "parts" / "30-use.md").write_text("# Use\n\nSee Table \\ref{tbl:raw} in Section \\ref{sec:data}.\n",
+                                                       encoding="utf-8")
+
+    def part(self, *arguments):
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#use", "-e", "lualatex", *arguments],
+                              cwd=self.root, env=self.environment, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True)
+        return re.sub(r"\s+", " ", text.stdout), done.stdout
+
+    def test_the_scan_leaves_it_undefined_rather_than_wrong(self):
+        text, out = self.part("--seed-labels", "scan")
+        self.assertIn("See Table ?? in Section 3", text)       # not "Table 3", the number of the section around it
+        self.assertIn("came after a caption in an environment pdfmd does not know", out)
+
+    def test_the_draft_pass_knows_it(self):
+        text, out = self.part("--seed-labels", "draft")
+        self.assertIn("See Table 1 in Section 3", text)
+        self.assertNotIn("does not know", out)
 
 
 @NEEDS
