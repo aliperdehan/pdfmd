@@ -749,7 +749,7 @@ An old Pandoc (3.1.3 or later) works; pdfmd says once what it does without.
 ### 13.5 Your own defaults
 
 ```sh
-pdfmd --setup               # a numbered menu: every default pdfmd has, with its choices; s saves, q quits
+pdfmd --setup               # a numbered menu: every default pdfmd has, with its choices; o: what is not there and why
 pdfmd --setup fancy         # the full-screen version (pdfmd --install tui)
 pdfmd --init-config         # a commented ~/.config/pdfmd/config.yaml
 pdfmd --show-config         # where it is and what it sets

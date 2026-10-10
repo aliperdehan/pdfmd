@@ -20,8 +20,9 @@ class Setting:
     help: str = ""
     section: str = ""
     store: str = "config"             # which file: "config" (config.yaml) or "metadata" (metadata.yaml beside it)
-    check: str = ""                   # "number" for a text that must be one
+    check: str = ""                   # "number" for a text that must be one, "list" for a comma-separated list
     unset: str = ""                   # what pdfmd does when the key is not set, in words (see UNSET); the screens show it
+    scope: str = "any"                # "machine": this computer only, never a folder's setup (see MACHINE)
 
 
 ON_OFF = (("on", "yes"), ("off", "no"))
@@ -48,7 +49,19 @@ UNSET = {
     "options.bundle": "off", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off",
+    "options.reader": "gfm without front matter, markdown with it",
+    "options.strict": "off", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
+    "options.check-ignore": "none",
+    "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
+    "options.office.reference-doc": "one beside the document, else Pandoc's",
+    "options.keep-source": "off",
+    "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on",
+    "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
+    "options.bundle-packages": "off", "options.cache.plots": "off",
 }
+
+# Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
+MACHINE = frozenset({"setup-ui", "translit"})
 
 TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian"), ("hebrew", "Hebrew"),
             ("arabic", "Arabic"), ("hangul", "Korean (needs the translit extra)"), ("kana", "Japanese kana"),
@@ -79,8 +92,8 @@ def settings_for(no_auto_kinds, setup_ui_choices=("plain", "fancy")) -> list[Set
         return Setting(key, title, "text", (), "", help, section, store, check)
 
     on_off = ON_OFF
-    return [replace(setting, unset=UNSET.get(setting.key, "")) for setting in _settings(choice, text, no_auto_kinds,
-                                                                                    setup_ui_choices, on_off)]
+    return [replace(setting, unset=UNSET.get(setting.key, ""), scope="machine" if setting.key in MACHINE else "any")
+            for setting in _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off)]
 
 
 def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Setting]:
@@ -139,6 +152,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("typst", "Typst")), "pdf", "What `pdfmd file.md` writes when no -o or --to is given.", "Output"),
         choice("options.html.self-contained", "HTML as one file", on_off, "", "Everything inlined (--embed-resources).",
                "Output"),
+        choice("options.html.standalone", "HTML as a full page", on_off, "",
+               "A whole page with <head> (--standalone), not a fragment to paste into one.", "Output"),
+        text("options.html.css", "Style sheet for HTML", "A .css file; an absolute path, or one read beside each document.",
+             "Output"),
         choice("options.html.math", "Math in HTML",
                (("mathml", "MathML (no network)"), ("mathjax", "MathJax"), ("katex", "KaTeX"), ("webtex", "WebTeX images"),
                 ("plain", "plain text")), "", "", "Output"),
@@ -160,6 +177,29 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.office.labels", "Reference numbers in Word files",
                (("auto", "build the PDF once and read LaTeX's numbers"), ("off", "count them instead")), "auto",
                "Where \"Figure 3\" and \"Equation 2\" come from.", "Output"),
+        text("options.office.reference-doc", "Word/ODT template (reference document)",
+             "A .docx/.dotx or .odt/.ott whose styles Word and ODT files take; an absolute path.", "Output"),
+        # -- plain Markdown and text
+        choice("options.gfm.scripts", "Sub- and superscripts in plain Markdown",
+               (("unicode", "H\u2082O; _(..) and ^(..) where Unicode has none"), ("html", "<sub> and <sup>"),
+                ("drop", "plain text"), ("ascii", "_2 and ^(2+)")), "unicode", "--to gfm. Per run: --gfm-scripts.",
+               "Plain Markdown and text"),
+        choice("options.gfm.math", "Math in plain Markdown",
+               (("dollars", "$..$ and $$..$$ (GitHub, VS Code, Obsidian)"), ("fenced", "```math fences")), "dollars",
+               "--to gfm. Per run: --gfm-math.", "Plain Markdown and text"),
+        choice("options.gfm.title", "A title block in plain Markdown",
+               (("true", "# Title and an author/date line"), ("false", "none")), "true", "", "Plain Markdown and text"),
+        choice("options.txt.scripts", "Sub- and superscripts in text",
+               (("unicode", "H\u2082O; _(..) and ^(..) where Unicode has none"), ("drop", "plain text"),
+                ("ascii", "_2 and ^(2+)")), "unicode", "--to txt.", "Plain Markdown and text"),
+        choice("options.txt.title", "A title block in text", (("true", "the title, underlined"), ("false", "none")), "true",
+               "", "Plain Markdown and text"),
+        choice("options.ascii.missing", "Characters with no ASCII form",
+               (("question", "?"), ("escape", "\\u65e5"), ("drop", "nothing"), ("fail", "no file is written")),
+               "question", "--to ascii. Per run: --ascii-missing.", "Plain Markdown and text"),
+        choice("options.keep-source", "Markdown output carries its source",
+               (("packed", "compressed, in one comment at the end"), ("readable", "as text, escaped")), "",
+               "pdfmd --restore FILE.md writes the folder back. Per run: --keep-source.", "Plain Markdown and text"),
         # -- PDF extras
         text("options.header", "Page header", "A template: {title}, {page}, {pages}, {date}, {header}.", "PDF finishing"),
         text("options.footer", "Page footer", "The same, e.g. {page} / {pages}.", "PDF finishing"),
@@ -171,12 +211,29 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.stamp.store", "Where the compile history goes", (("notes", "the document's BUILD NOTES"),
                ("file", "a NAME.hst file in the backup folder; the document is left alone"), ("both", "both")), "notes",
                "Only matters when the line above is on.", "The source file"),
+        choice("options.stamp.mode", "Older \"Compiled with...\" lines",
+               (("replace", "the new line replaces the old one"), ("history", "kept below it as a list")), "replace", "",
+               "The source file"),
+        choice("options.stamp.scope", "When the line is written",
+               (("always", "every build"), ("report", "only as part of a -r report"),
+                ("standalone", "only when built on its own")), "always", "", "The source file"),
+        text("options.stamp.packages", "LaTeX packages whose version the line names",
+             "Comma-separated, e.g. nulabreport; left out when the document does not load it.", "The source file",
+             "config", "list"),
+        choice("options.stamp.include-output", "The line names the output file", on_off, "", "", "The source file"),
+        choice("options.stamp.pdf-metadata", "The PDF records the build too", on_off, "",
+               "Two invisible fields in the PDF's Info dictionary.", "The source file"),
         choice("options.stamp.restored-note", "A \"Restored ...\" entry when a version is put back", (("true", "yes"), ("false", "no")),
                "true", "pdfmd --history-restore adds it to the history when the document keeps one.", "The source file"),
         choice("options.backup.enabled", "A backup of the source after each build", on_off, "",
                "Into .backups/ beside the document, when it changed. Off unless set.", "The source file"),
         text("options.backup.dir", "Backup folder", "Where the copies go, beside the document (or an absolute path). Without "
              "one: .backups, a hidden folder, or a backup/ folder that is already there.", "The source file"),
+        text("options.backup.format", "Backup file names",
+             "compact, dashed, stem, suffix, short, or a template with {name} {stem} {ext} and strftime codes.",
+             "The source file"),
+        text("options.backup.keep", "Backups kept per document", "The newest n; 0 keeps all.", "The source file",
+             "config", "number"),
         choice("options.strip-comments", "Drop <!-- comments --> from what is assembled or attached", on_off, "", "",
                "The source file"),
         choice("options.hybrid", "Make the PDF editable in LibreOffice (hybrid PDF)", on_off, "",
@@ -189,11 +246,19 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Anyone can read it back from the PDF (pdfmd --restore).", "The source file"),
         choice("options.bundle", "Attach the images and files too", (("true", "what the text points at"), ("all", "everything")),
                "", "", "The source file"),
+        choice("options.bundle-packages", "Attach the LaTeX packages too", on_off, "",
+               "The .sty/.cls files the build used that are not in TeX Live.", "The source file"),
         text("options.bundle-max-mb", "Size limit of the attached bundle (MB)", "Default 100.", "The source file",
              "config", "number"),
         # -- cache
         choice("options.cache.aux", "Remember reference numbers between builds", on_off, "",
                "Carries figure/table numbers over to a partial build of a long document.", "Cache"),
+        choice("options.cache.plots", "Keep the plots a build draws", on_off, "",
+               "Plots drawn by code in the document are reused while the code is unchanged.", "Cache"),
+        choice("options.seed-labels", "Reference numbers in a part built alone",
+               (("auto", "the last full build's, else a scan of the whole document"), ("aux", "the last full build's only"),
+                ("scan", "a scan of the whole document"), ("draft", "a LaTeX pass over the whole document (slow)"),
+                ("off", "none: ?? for references outside the part")), "auto", "", "Cache"),
         choice("options.cache.location", "Where the cache lives",
                (("global", "~/.cache/pdfmd"), ("document", ".cache/pdfmd beside the document")), "global", "", "Cache"),
         # -- input
@@ -201,6 +266,18 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("auto", "guess headings, lists, tables; a garbled text gets paragraphs only"),
                 ("force", "guess structure even in a garbled text"), ("paragraphs", "paragraphs only, no structure")), "",
                "Off unless set. Needs batchocr 1.2.5 (pdfmd --install batchocr); the words never change.", "Input"),
+        text("options.reader", "Markdown reader",
+             "A Pandoc reader for every Markdown file: markdown, gfm, commonmark_x, with +/- extensions. Per run: --from.",
+             "Input"),
+        # -- checks and limits
+        choice("options.strict", "A warning fails the build", on_off, "",
+               "The output is kept; the exit status is 1. Per run: --strict / --no-strict.", "Checks and limits"),
+        text("options.max-asset-mb", "Warn about an image or data file over (MB)", "Before the build starts.",
+             "Checks and limits", "config", "number"),
+        text("options.max-output-mb", "Warn about an output over (MB)", "After the build.", "Checks and limits", "config",
+             "number"),
+        text("options.check-ignore", "Codes `pdfmd --check` leaves out", "Comma-separated, e.g. heading-skip, link-anchor.",
+             "Checks and limits", "config", "list"),
         Setting("options.no-auto", "Automatic behaviour to switch off", "multi",
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "What pdfmd does by itself, off for every document (`--no-auto`).", "Automatic behaviour"),

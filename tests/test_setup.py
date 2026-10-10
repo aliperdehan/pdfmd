@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
-from pdfmd_setup import fancy, registry, settings_for  # noqa: E402
+from pdfmd_setup import fancy, inventory, registry, settings_for  # noqa: E402
 
 try:
     import yaml
@@ -69,6 +69,20 @@ class Plain(unittest.TestCase):
         done, path = self.run_setup([str(number("options.missing")), "3", "s"], "# my note\noptions:\n  fallback: box\n")
         self.assertTrue(path.with_name("config.yaml.bak").is_file())
         self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8")), {"options": {"fallback": "box", "missing": "error"}})
+
+    def test_o_lists_what_is_not_settable_and_why(self):
+        done, path = self.run_setup(["o", "q"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Not settable here, on purpose", done.stdout)
+        self.assertIn("--history-restore", done.stdout)                       # a command, written as people type it
+        self.assertIn("--no-embed-metadata", done.stdout)                     # a dest spelled from the parser
+        self.assertIn("office.title-page", done.stdout)                       # a pdfmd-options key
+        self.assertIn(inventory.REASONS["trust"], done.stdout)
+
+    def test_a_list_setting_is_stored_as_a_list(self):
+        done, path = self.run_setup([str(number("options.check-ignore")), "heading-skip, link-anchor", "s"])
+        self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8")),
+                         {"options": {"check-ignore": ["heading-skip", "link-anchor"]}})
 
     def test_fancy_without_the_package_falls_back_with_a_note(self):
         if fancy.available():
@@ -170,6 +184,149 @@ class ConfigLayer(unittest.TestCase):
         self.assertFalse(pdfmd.unicode_forced(document))
 
 
+@unittest.skipUnless(yaml, "needs PyYAML")
+class NewRows(unittest.TestCase):
+    """The rows added in 3.27.0 reach a build: each value as `--setup` stores it, read by the function pdfmd uses."""
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp(prefix="pdfmd-config-")
+        self.addCleanup(__import__("shutil").rmtree, self.directory, True)
+        self.old = os.environ.get("PDFMD_CONFIG")
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        if self.old is None:
+            os.environ.pop("PDFMD_CONFIG", None)
+        else:
+            os.environ["PDFMD_CONFIG"] = self.old
+        pdfmd.load_config.cache_clear()
+
+    def use(self, values: dict) -> Path:
+        config: dict = {}
+        by_key = {setting.key: setting for setting in SETTINGS}
+        for key, value in values.items():
+            registry.write({"config": config}, by_key[key], value)
+        path = Path(self.directory) / "config.yaml"
+        path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        os.environ["PDFMD_CONFIG"] = str(path)
+        pdfmd.load_config.cache_clear()
+        document = Path(self.directory) / "d.md"
+        document.write_text("Hello.\n", encoding="utf-8")
+        return document
+
+    def test_checks_and_limits(self):
+        document = self.use({"options.strict": True, "options.max-asset-mb": 5, "options.max-output-mb": 20,
+                             "options.check-ignore": ["heading-skip"]})
+        self.assertIs(pdfmd.first_pdfmd_option(document, [], "strict"), True)
+        self.assertEqual(pdfmd.resolve_budget(document, []), (5, 20))
+        self.assertEqual(pdfmd.first_pdfmd_option(document, [], "check-ignore"), ["heading-skip"])
+
+    def test_the_reader(self):
+        document = self.use({"options.reader": "commonmark_x"})
+        self.assertEqual(pdfmd.resolve_from_format(document, None, [])[0], "commonmark_x")
+
+    def test_stamp_and_backup_details(self):
+        document = self.use({"options.stamp.mode": "history", "options.stamp.scope": "report",
+                             "options.stamp.packages": ["nulabreport"], "options.stamp.include-output": True,
+                             "options.stamp.pdf-metadata": False, "options.backup.format": "dashed",
+                             "options.backup.keep": 3})
+        stamp = pdfmd.resolve_stamp_options(document, [], {})
+        self.assertEqual((stamp["mode"], stamp["scope"], stamp["packages"], stamp["include_output"], stamp["pdf_metadata"]),
+                         ("history", "report", ["nulabreport"], True, False))
+        backup = pdfmd.resolve_backup_options(document, [], None)
+        self.assertEqual((backup["format"], backup["keep"]), ("dashed", 3))
+
+    def test_plain_markdown_and_text(self):
+        import pdfmd_flat
+        document = self.use({"options.gfm.scripts": "ascii", "options.gfm.math": "fenced", "options.gfm.title": False,
+                             "options.txt.scripts": "drop", "options.txt.title": False, "options.ascii.missing": "escape",
+                             "options.keep-source": "readable"})
+        gfm = pdfmd_flat.settings(pdfmd.cascaded_option(document, [], "gfm"))
+        self.assertEqual(gfm, {"scripts": "ascii", "math": "fenced", "title": False})
+        txt = pdfmd_flat.settings(pdfmd.cascaded_option(document, [], "txt"), target="txt")
+        self.assertEqual((txt["scripts"], txt["title"]), ("drop", False))
+        self.assertEqual(pdfmd.cascaded_option(document, [], "ascii"), {"missing": "escape"})
+        self.assertEqual(pdfmd.resolve_keep_source(document, []), "readable")
+
+    def test_html_word_cache_and_bundle(self):
+        document = self.use({"options.html.standalone": True, "options.html.css": "/styles/a.css",
+                             "options.office.reference-doc": "/templates/house.dotx", "options.cache.plots": True,
+                             "options.seed-labels": "scan", "options.bundle-packages": True})
+        html = pdfmd.html_settings(document, [])
+        self.assertEqual((html["standalone"], html["css"]), (True, "/styles/a.css"))
+        self.assertEqual(pdfmd.office_options(document, [])["reference-doc"], "/templates/house.dotx")
+        self.assertTrue(pdfmd.cache_settings(document, [], None)["plots"])
+        self.assertEqual(pdfmd.seed_labels_mode(document, []), "scan")
+        self.assertIs(pdfmd.first_pdfmd_option(document, [], "bundle-packages"), True)
+
+
+class Completeness(unittest.TestCase):
+    """Every flag and every pdfmd-options key is a --setup row or left out on purpose (pdfmd_setup/inventory.py)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.keys = {setting.key for setting in SETTINGS}
+        cls.dests = {action.dest for action in pdfmd.build_parser()._actions}
+
+    def test_every_flag_is_accounted_for(self):
+        missing = sorted(self.dests - set(inventory.FLAGS))
+        self.assertEqual(missing, [], "flags in neither --setup nor pdfmd_setup.inventory.FLAGS (add them there)")
+        stale = sorted(set(inventory.FLAGS) - self.dests)
+        self.assertEqual(stale, [], "inventory.FLAGS names flags the parser no longer has")
+
+    def test_every_row_named_exists_and_every_reason_is_known(self):
+        for table in (inventory.FLAGS, inventory.OPTIONS):
+            for name, where in table.items():
+                if isinstance(where, inventory.Omitted):
+                    self.assertIn(where.reason, inventory.REASONS, name)
+                else:
+                    self.assertIn(where, self.keys, f"{name} points at {where!r}, which is no --setup row")
+
+    def test_every_options_row_is_a_key_people_can_write(self):
+        written = {where for where in inventory.OPTIONS.values() if isinstance(where, str)}
+        for key in self.keys:
+            if key.startswith("options."):
+                self.assertIn(key, written, f"the row {key} has no pdfmd-options key in inventory.OPTIONS")
+                self.assertIn(key[len("options."):], inventory.OPTIONS, key)
+
+    def test_the_keys_pdfmd_reads_are_accounted_for(self):
+        import re
+        source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
+        found: set[str] = set()
+        for call in re.findall(r"(?:first_pdfmd_option|cascaded_option)\(([^()]*)\)", source):
+            found.update(re.findall(r'"([a-z][a-z0-9-]*)"', call))
+        found.update(re.findall(r'config_options\(\)(?:\.get\(|\[)"([a-z][a-z0-9-]*)"', source))
+        found.update(re.findall(r'"([a-z][a-z0-9-]*)" in config_options\(\)', source))
+        found.update(re.findall(r'frontmatter_pdfmd_options\([^()]*\)\.get\("([a-z][a-z0-9-]*)"', source))
+        found.update(re.findall(r'"([a-z][a-z0-9-]*)" in (?:options|own|nested)\b', source))
+        found.update(re.findall(r'\b(?:options|own|nested)\["([a-z][a-z0-9-]*)"\]', source))
+        found -= {"info"}                              # the PDF Info record pdfmd builds for itself
+        self.assertGreater(len(found), 25)             # the scan itself still works
+        # a mapping's field read inside its normaliser (`options["mode"]` of stamp) counts as its dotted key
+        listed = {part for key in inventory.OPTIONS for part in (key, key.split(".")[0], key.split(".")[-1])}
+        self.assertEqual(sorted(found - listed), [], "pdfmd reads pdfmd-options keys inventory.OPTIONS does not list")
+
+    def test_the_fields_of_mappings_are_accounted_for(self):
+        import pdfmd_flat
+        fields = {f"stamp.{key.replace('_', '-')}" for key in pdfmd.DEFAULT_STAMP_OPTIONS}
+        fields |= {f"backup.{key}" for key in pdfmd.DEFAULT_BACKUP_OPTIONS}
+        fields |= {f"cache.{key}" for key in pdfmd.CACHE_DEFAULTS} | {"cache.location"}
+        fields |= {f"{target}.{key}" for target in pdfmd_flat.TARGETS for key in pdfmd_flat.DEFAULTS}
+        fields |= {f"office.{key}" for key in pdfmd.OFFICE_OPTION_KEYS}
+        self.assertEqual(sorted(fields - set(inventory.OPTIONS)), [])
+
+    def test_every_setting_has_a_scope(self):
+        for setting in SETTINGS:
+            self.assertIn(setting.scope, ("any", "machine"), setting.key)
+        self.assertEqual({s.key for s in SETTINGS if s.scope == "machine"}, set(registry.MACHINE))
+
+    def test_the_list_of_what_is_left_out_names_every_one(self):
+        text = "\n".join(inventory.omitted_lines(pdfmd.flag_names(), width=10000))
+        for dest, where in inventory.FLAGS.items():
+            if isinstance(where, inventory.Omitted):
+                self.assertIn(pdfmd.flag_names()[dest], text, dest)
+
+
 class Registry(unittest.TestCase):
     def test_put_and_get_nest_and_prune(self):
         config: dict = {}
@@ -225,6 +382,16 @@ class Fancy(unittest.TestCase):
         stores: dict = {}
         self.assertFalse(self.drive("q", stores))
         self.assertEqual(stores.get("config", {}), {})
+
+    def test_o_shows_what_is_left_out_and_a_key_goes_back(self):
+        from prompt_toolkit.input import create_pipe_input
+        from prompt_toolkit.output import DummyOutput
+        stores: dict = {}
+        with create_pipe_input() as pipe:
+            pipe.send_text("oqq")                     # o shows the list, q goes back, q quits
+            saved = fancy.run(stores, SETTINGS, "config.yaml", input=pipe, output=DummyOutput(),
+                              left_out=inventory.omitted_lines())
+        self.assertFalse(saved)
 
 
 if __name__ == "__main__":

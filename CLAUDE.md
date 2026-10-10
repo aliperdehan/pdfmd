@@ -37,6 +37,12 @@ If a fix touches how `pdfmd` builds its Pandoc command, test through
 `pdfmd` itself, not just through the Pandoc/LaTeX commands it constructs
 internally.
 
+## A new flag or a new pdfmd-options key
+
+Add it to `pdfmd_setup/inventory.py` in the same commit: either the `--setup` row that sets it for
+every document (`pdfmd_setup/registry.py`, with its `UNSET` words) or an `Omitted` entry with the
+reason. `tests/test_setup.py` (`Completeness`) fails until it is in one of them.
+
 ## Debugging
 
 `pdfmd --version` prints the current version. `--verbose` prints pdfmd's

@@ -1508,13 +1508,20 @@ say in `pdfmd-options:` or its front matter, for every document:
   paper size, font size, page geometry, main and code font, line spacing, coloured links, table of contents, and for
   citations the bibliography file, the CSL style and linked citations;
 - characters a font lacks or none draws, fonts for other scripts, romanization packs;
-- the citation engine, the PDF engine, the default output format, HTML (one file, math method), LaTeX and reference
-  numbers in Word files;
-- PDF finishing (header, footer, bookmarks, attached links) and the source file (the "Compiled with..." stamp, backups,
-  comment stripping, attaching the source and its files to the PDF);
-- the cache, reading `.txt` as Markdown, and which of pdfmd's automatic behaviours (`--no-auto` kinds) are off.
+- the citation engine, the PDF engine, the default output format, HTML (full page, one file, style sheet, math method),
+  LaTeX, reference numbers and the template of Word files;
+- plain Markdown, text and ASCII output (`--to gfm`, `txt`, `ascii`: scripts, math, title block, the source carried at
+  the end);
+- PDF finishing (header, footer, bookmarks, attached links) and the source file (the "Compiled with..." stamp and its
+  details, backups, their names and how many are kept, comment stripping, attaching the source, its files and its LaTeX
+  packages to the PDF);
+- the cache (reference numbers, plots, a part built alone), the Markdown reader, reading `.txt` as Markdown;
+- checks and limits (`--strict`, the size budgets, the codes `--check` leaves out), and which of pdfmd's automatic
+  behaviours (`--no-auto` kinds) are off.
 
-Choosing 0 (for a text, `-`) gives a setting its built-in default back; `s` saves, `q` quits. The files are rewritten without your
+Every flag and every `pdfmd-options` key is either one of these rows or left out on purpose: `o` lists the rest (commands,
+what is about one run or one document, trust, what pdfmd writes for itself) with the reason, and a test keeps that
+complete. Choosing 0 (for a text, `-`) gives a setting its built-in default back; `s` saves, `q` quits. The files are rewritten without your
 comments (the old one is kept as `.bak`). The same keys can be written by hand under `options:` of `config.yaml`. A
 full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then `pdfmd --setup fancy`, or set
 "This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time pdfmd finishes a build in a terminal

@@ -817,6 +817,10 @@ The global config file (v3.23.6):
     block and its metadata files, below the command line; `translit:` the
     romanization packs of the lookup (below --translit and PDFMD_TRANSLIT).
     --init-config writes a commented template, --show-config says what is set.
+    `pdfmd --setup` edits it from a menu (v3.23.6; v3.27.0: every flag and every
+    pdfmd-options key is either one of its rows or in its list of what it leaves
+    out on purpose, with the reason -- `o` shows that list; pdfmd_setup/inventory.py
+    is the table, and a test keeps it complete).
     What pdfmd itself remembers (trusted-filters.txt, the dismissed native-renderer
     offer) lives beside it, not in the cache that --clear-cache empties.
 
@@ -1243,7 +1247,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.26.21"
+PDFMD_VERSION = "3.27.0"
 import argparse
 import csv
 import filecmp
@@ -5717,6 +5721,19 @@ def maybe_hint_setup() -> None:
         pass
 
 
+def flag_names() -> dict[str, str]:
+    """How each command-line flag is written, by its argparse dest (the first long form), for `--setup`'s list of what
+    it leaves out (pdfmd_setup.inventory)."""
+    names: dict[str, str] = {}
+    for action in build_parser()._actions:
+        if action.option_strings:
+            long = [item for item in action.option_strings if item.startswith("--")]
+            names.setdefault(action.dest, (long or action.option_strings)[0])
+        else:
+            names.setdefault(action.dest, action.dest.upper())
+    return names
+
+
 SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by hand, or run that again).\n"
                 "# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.\n")
 
@@ -5756,7 +5773,7 @@ def setup_command(screen: str = "") -> bool:
                 return False
             stores[name] = loaded if isinstance(loaded, dict) else {}
     original = copy.deepcopy(stores)
-    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None)
+    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None, flag_names=flag_names())
     if not saved:
         print("Nothing saved.")
         return True
@@ -11877,8 +11894,10 @@ LUA_MODES = ("embed", "ref", "apply", "off")
 EMBED_BLOCK_RE = re.compile(
     r"^(?P<fence>`{3,})\{=pdfmd\}[ \t]*\n(?P<body>.*?)\n(?P=fence)[ \t]*$",
     re.MULTILINE | re.DOTALL)
-# Never carried from a metadata file into the document: they are read from the
-# document's own front matter only (effective_no_auto, parts_setting).
+# Not folded from a metadata file into an assembled document's pdfmd-options (--embed-metadata metadata): an assembled
+# file already holds its parts and records its own no-auto kinds. A normal build reads `parts` from the document, its
+# metadata files and the config (parts_setting), `no-auto` from the command line, the document and the config
+# (effective_no_auto).
 FILE_ONLY_OPTION_KEYS = frozenset({"no-auto", "parts"})
 
 

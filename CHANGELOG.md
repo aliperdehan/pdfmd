@@ -41,6 +41,50 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.0 — 2026-10-10
+
+Pre-edit state: commit `ee1977f` (v3.26.21). The 3.27 line holds the rest of the plan: the settings foundations, the
+Calibre/math/CSS/format-router work, the per-folder setup, the parts markers, `--doc`, and the fixes found on the way.
+
+### Added
+
+- **Every flag and every `pdfmd-options` key is accounted for in `pdfmd --setup`.** `pdfmd_setup/inventory.py` lists all
+  145 argparse destinations and every key pdfmd reads (dotted for a mapping's field: `stamp.mode`), each pointing at the
+  `--setup` row that sets it for every document or carrying the reason it has none: a command (`--doctor`), about one
+  run (`-o`, `--section`), about one document or project (`alias`, `lua-filter`, the Word-only `office.*` overrides),
+  trust (`--trust-lua`), written by pdfmd itself (an assembled file's `origin`), or accepted but inert (`txt.math`). `o`
+  in the numbered list and in the full-screen one shows that list with the reasons. `tests/test_setup.py` checks it both
+  ways (the parser's flags, the keys read through `first_pdfmd_option`, `cascaded_option`, `config_options()` and the
+  front-matter reader, the fields of the stamp/backup/cache/gfm/txt/office mappings, and the registry), so a new flag
+  or key that is in neither fails the suite; CLAUDE.md says so.
+- **31 new rows**, each read by the same function a document's own key goes through (a test per group):
+  checks and limits (`strict`, `max-asset-mb`, `max-output-mb`, `check-ignore`); the Markdown reader (`reader`); HTML
+  as a full page and its style sheet (`html.standalone`, `html.css`); the Word/ODT template (`office.reference-doc`);
+  plain Markdown and text (`gfm.scripts`, `gfm.math`, `gfm.title`, `txt.scripts`, `txt.title`, `ascii.missing`,
+  `keep-source`); the stamp's details (`stamp.mode`, `stamp.scope`, `stamp.packages`, `stamp.include-output`,
+  `stamp.pdf-metadata`); backup names and how many are kept (`backup.format`, `backup.keep`); the LaTeX packages in the
+  bundle (`bundle-packages`); the plot cache and the labels of a part built alone (`cache.plots`, `seed-labels`).
+  Each says what pdfmd does when it is not set (`registry.UNSET`).
+- A text row can hold a list (`check-ignore`, `stamp.packages`): typed comma-separated, stored as a YAML list.
+- Each row has a scope: `setup-ui` and `translit` are this computer's (`registry.MACHINE`), the rest may later come
+  from a folder's own setup (`pdfmd --setup DIR`, planned).
+
+### Fixed
+
+- The comment above `FILE_ONLY_OPTION_KEYS` said `parts` and `no-auto` are read from a document's front matter only;
+  they are left out of what an assembled file folds in, but a normal build reads `parts` from the document, its
+  metadata files and the config, and `no-auto` from the command line, the document and the config.
+
+### Not changed, found while building the table (planned in this line)
+
+- A mapping-valued option is taken whole from the first place that has it: a document's `stamp: {enabled: true}`
+  hides the config's `stamp: {mode: history}`, and the same for `backup`, `html`, `office`, `cache`, `gfm`, `txt`.
+- `no-auto` in a metadata file is not read (the document and the config are).
+
+### Tests
+
+- `tests/test_setup.py`: `Completeness` (7 tests), `NewRows` (5), the `o` list in both screens, a list row.
+
 ## v3.26.21 — 2026-10-10
 
 Pre-edit state: commit `17a3afc` (v3.26.20).

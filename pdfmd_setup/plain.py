@@ -8,8 +8,9 @@ from .registry import Setting, from_stored, read, shown, to_stored, write
 
 
 def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[str], str] = input,
-        say: Callable[[str], None] = print, nudge: str = "") -> bool:
-    """Edit `stores` ({"config": {...}, "metadata": {...}}) in place; True when the user chose to save."""
+        say: Callable[[str], None] = print, nudge: str = "", left_out: list[str] | None = None) -> bool:
+    """Edit `stores` ({"config": {...}, "metadata": {...}}) in place; True when the user chose to save. `left_out` is
+    what `o` prints: the flags and keys that are not settable here, and why (pdfmd_setup.inventory)."""
     changed = False
     say(f"pdfmd setup  --  {path}")
     if nudge:
@@ -24,11 +25,18 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
             say(f"  {number:>2}. {setting.title:<44} {shown(setting, read(stores, setting))}")
         say("")
         try:
-            answer = read_line("Number to change, s = save and quit, q = quit without saving: ").strip().lower()
+            answer = read_line("Number to change, o = what is not here and why, s = save and quit, "
+                               "q = quit without saving: ").strip().lower()
         except EOFError:
             return False
         if answer in ("s", "save"):
             return True
+        if answer == "o":
+            say("")
+            say("Not settable here, on purpose:")
+            for line in left_out or ["  (nothing)"]:
+                say(line)
+            continue
         if answer in ("q", "quit", ""):
             if answer == "" or not changed:
                 return False
@@ -67,6 +75,8 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
                 say("A number, please.")
                 return False
             answer = int(value) if value == int(value) else value
+        elif setting.check == "list":
+            answer = [item.strip() for item in answer.split(",") if item.strip()]
         write(stores, setting, answer)
         return answer != current
     if setting.kind == "multi":

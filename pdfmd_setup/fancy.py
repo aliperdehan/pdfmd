@@ -13,17 +13,20 @@ def available() -> bool:
     return True
 
 
-def run(stores: dict, settings: list[Setting], path: str, input=None, output=None, ask=None) -> bool:
+def run(stores: dict, settings: list[Setting], path: str, input=None, output=None, ask=None,
+        left_out: list[str] | None = None) -> bool:
     """Edit `stores` ({"config": ..., "metadata": ...}) in place; True when the user chose to save. `input`/`output`
-    let a test drive it; `ask(title, now)` answers a text setting (default: a prompt on the real terminal)."""
+    let a test drive it; `ask(title, now)` answers a text setting (default: a prompt on the real terminal); `o` shows
+    `left_out`, the flags and keys that are not settable here."""
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.data_structures import Point
+    from prompt_toolkit.filters import Condition
     from prompt_toolkit.layout import HSplit, Layout, ScrollOffsets, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.styles import Style
 
-    state = {"row": 0, "sub": None, "subrow": 0, "dirty": False, "message": "", "line": 0}
+    state = {"row": 0, "sub": None, "subrow": 0, "dirty": False, "message": "", "line": 0, "left_out": False}
 
     def cycle(setting: Setting, step: int) -> None:
         current = from_stored(setting, read(stores, setting))
@@ -43,6 +46,11 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
 
     def render():
         lines = [("class:title", f" pdfmd setup  --  {path}\n\n")]
+        if state["left_out"]:
+            lines.append(("class:section", " Not settable here, on purpose\n"))
+            lines += [("", line + "\n") for line in left_out or ["  (nothing)"]]
+            lines.append(("class:help", "\n o, esc or q: back"))
+            return lines
         if state["sub"] is not None:
             setting = state["sub"]
             chosen = read(stores, setting)
@@ -69,7 +77,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         current = settings[state["row"]]
         lines.append(("class:help", f"\n {current.help}\n"))
         lines.append(("class:help", "\n up/down move   space/right next value   left previous   d default   enter: choose list"
-                                     "\n s save and quit   q quit"))
+                                     "\n o what is not here and why   s save and quit   q quit"))
         if state["message"]:
             lines.append(("class:warn", f"\n {state['message']}"))
         return lines
@@ -77,9 +85,22 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     keys = KeyBindings()
     result = {"save": False, "edit": None}
 
+    def leaving() -> bool:
+        """Keys close the list of what is not here first (and do nothing else)."""
+        if state["left_out"]:
+            state["left_out"] = False
+            return True
+        return False
+
+    @keys.add("o", filter=Condition(lambda: state["sub"] is None))
+    def _left_out(event):
+        state["left_out"] = not state["left_out"]
+
     @keys.add("down")
     @keys.add("j")
     def _down(event):
+        if leaving():
+            return
         if state["sub"] is not None:
             state["subrow"] = (state["subrow"] + 1) % len(state["sub"].choices)
         else:
@@ -88,6 +109,8 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     @keys.add("up")
     @keys.add("k")
     def _up(event):
+        if leaving():
+            return
         if state["sub"] is not None:
             state["subrow"] = (state["subrow"] - 1) % len(state["sub"].choices)
         else:
@@ -96,6 +119,8 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     @keys.add("space")
     @keys.add("right")
     def _next(event):
+        if leaving():
+            return
         setting = state["sub"] or settings[state["row"]]
         if setting.kind == "text":
             result["edit"] = setting
@@ -110,12 +135,16 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
 
     @keys.add("left")
     def _previous(event):
+        if leaving():
+            return
         setting = settings[state["row"]]
         if state["sub"] is None and setting.kind == "choice":
             cycle(setting, -1)
 
     @keys.add("enter")
     def _enter(event):
+        if leaving():
+            return
         if state["sub"] is not None:
             state["sub"] = None
             return
@@ -130,22 +159,30 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
 
     @keys.add("escape")
     def _escape(event):
+        if leaving():
+            return
         state["sub"] = None
 
     @keys.add("d")
     def _default(event):
+        if leaving():
+            return
         if state["sub"] is None:
             write(stores, settings[state["row"]], None)
             state["dirty"] = True
 
     @keys.add("s")
     def _save(event):
+        if leaving():
+            return
         result["save"] = True
         event.app.exit()
 
     @keys.add("q")
     @keys.add("c-c")
     def _quit(event):
+        if leaving():
+            return
         if state["dirty"] and not state["message"]:
             state["message"] = "Unsaved changes: q again to quit without saving, s to save."
             return
@@ -179,6 +216,8 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                     except ValueError:
                         state["message"] = "A number, please."
                         continue
+                elif setting.check == "list":
+                    value = [item.strip() for item in value.split(",") if item.strip()]
                 write(stores, setting, value)
             state["dirty"] = True
     return result["save"]
