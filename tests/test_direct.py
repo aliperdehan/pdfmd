@@ -22,6 +22,7 @@ import pdfmd_direct as direct  # noqa: E402
 PAGE = ('<!doctype html><html><head><meta charset="utf-8"><title>P</title><style>@page{size:A5;margin:15mm}</style>'
         "</head><body><h1>Hello page</h1></body></html>")
 SCRIPTED = PAGE.replace("</body>", "<script>document.title='x'</script></body>")
+MATHML = PAGE.replace("</body>", '<p><math display="inline"><msup><mi>x</mi><mn>2</mn></msup></math></p></body>')
 TYPST = "#set page(width: 12cm, height: 6cm, margin: 1cm)\n= Typst doc\nA *bold* word.\n"
 
 
@@ -53,6 +54,12 @@ class Choosing(unittest.TestCase):
     def test_a_plain_page_goes_to_weasyprint_first_and_a_scripted_one_to_a_browser(self):
         self.assertEqual(self.names(PAGE), ["weasyprint", "chromium", "edge", "wkhtmltopdf"])
         self.assertEqual(self.names(SCRIPTED), ["chromium", "edge", "weasyprint", "wkhtmltopdf"])
+
+    def test_a_page_with_mathml_goes_to_a_browser_first(self):
+        # WeasyPrint prints MathML as flat text (v3.27.12)
+        self.assertTrue(direct.has_mathml(MATHML))
+        self.assertFalse(direct.has_mathml(PAGE.replace("Hello", "the math class")))
+        self.assertEqual(self.names(MATHML), ["chromium", "edge", "weasyprint", "wkhtmltopdf"])
 
     def test_data_scripts_are_not_code(self):
         self.assertFalse(direct.has_scripts('<script type="application/ld+json">{}</script>'))

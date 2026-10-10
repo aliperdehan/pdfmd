@@ -103,6 +103,11 @@ Older Pandoc, and no network (v3.25.11):
     its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
 
+Math in WeasyPrint (v3.27.12):
+    WeasyPrint does not draw MathML, Pandoc's default HTML math: each formula printed twice as flat text. For
+    `-e weasyprint` pdfmd gives Pandoc --math-method=plain (unless the command line chooses the math) and
+    pdfmd_lua/weasyprint.lua says once that the math is text. A direct .html page with MathML goes to a browser first.
+
 Links Typst would stop on (v3.27.11):
     LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
     PDF or a .typ file) pdfmd_lua/typst.lua runs last and makes such a link its text, with one WARN naming the anchors.
@@ -1262,7 +1267,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.11"
+PDFMD_VERSION = "3.27.12"
 import argparse
 import csv
 import filecmp
@@ -10878,6 +10883,21 @@ def typst_filter_args(writer: str) -> list[str]:
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
+def weasyprint_math_args(engine: str, pandoc_options: list[str]) -> list[str]:
+    """For WeasyPrint (v3.27.12), which does not draw MathML (Pandoc's default HTML math printed each formula twice as
+    flat text): Pandoc's plain math, simple formulas in Unicode and the others as TeX, unless the command line chooses
+    the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text."""
+    if engine != "weasyprint":
+        return []
+    out = [] if any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options) else html_math_args("plain")
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return out
+    shipped = pdfmd_lua.path("weasyprint")
+    return out + (["--lua-filter", str(shipped)] if shipped is not None else [])
+
+
 @contextmanager
 def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
@@ -11380,6 +11400,8 @@ DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "txt", "text": "txt", "md": "ma
 # long forms at all). Found out from `pandoc --help`, never from a guessed
 # version number.
 HTML_MATH_METHODS = ("mathml", "mathjax", "katex", "webtex", "plain", "gladtex")
+HTML_MATH_OPTIONS = ("--math-method", "--html-math-method", "--mathml", "--mathjax", "--katex", "--webtex", "--gladtex",
+                     "--latexmathml")       # on the command line, any of these chooses the math itself
 HTML_MATH_SHORT_FLAGS = {"mathml": "--mathml", "mathjax": "--mathjax", "katex": "--katex",
                          "webtex": "--webtex", "gladtex": "--gladtex"}   # "plain" is the default: no flag
 _PANDOC_HELP: str | None = None
@@ -11487,9 +11509,7 @@ def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: 
     elif standalone:
         note("HTML", f"{md_path}: a full page (--standalone)")
     math = str(settings.get("math", "")).casefold()
-    has_math_option = any(item.startswith(("--math-method", "--html-math-method", "--mathml", "--mathjax",
-                                           "--katex", "--webtex", "--gladtex", "--latexmathml"))
-                          for item in pandoc_options)
+    has_math_option = any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options)
     if not has_math_option and math in HTML_MATH_METHODS:
         out += html_math_args(math)
     elif not has_math_option and math in ("", "auto") and self_contained:
@@ -15355,7 +15375,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         hoist_code_header(cmd)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
-                    cmd += typst_filter_args(engine)
+                    cmd += typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
                     if engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html"):
                         # LaTeX failed (or the document asks): what the document says in LaTeX becomes native or
@@ -17976,11 +17996,15 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
             print(f"WARN  {display_path(source)}: typst failed", file=sys.stderr)
         return source, ok, reason
     order = direct.html_attempts(text, engine_request, which, resolve_soffice)
+    browser = any(name in dict(order) for name in direct.BROWSER_NAMES)
+    advice = (" (a browser would: -e chrome, edge or chromium)" if browser
+              else "; no browser was found (Chrome, Chromium, Edge, Brave)")
     if order and order[0][0] == "weasyprint" and direct.has_scripts(text):
-        browser = any(name in dict(order) for name in direct.BROWSER_NAMES)
         print(f"WARN  {display_path(source)}: the page has scripts and WeasyPrint does not run them, so what they draw "
-              "is missing" + (" (a browser would: -e chrome, edge or chromium)" if browser
-                              else "; no browser was found (Chrome, Chromium, Edge, Brave)"), file=sys.stderr)
+              "is missing" + advice, file=sys.stderr)
+    if order and order[0][0] == "weasyprint" and direct.has_mathml(text):
+        print(f"WARN  {display_path(source)}: the page has MathML and WeasyPrint does not draw it, so its formulas "
+              "print as flat text" + advice, file=sys.stderr)
 
     def failed(name: str, reason: str, remaining: list[str]) -> None:
         fake = subprocess.CompletedProcess(args=[name], returncode=1, stdout="", stderr=reason)

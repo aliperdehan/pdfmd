@@ -1,5 +1,5 @@
-"""`.html` straight to a PDF: WeasyPrint first (quiet, small, no browser), a browser when the page runs scripts or
-WeasyPrint cannot draw it, then the other HTML engines and LibreOffice."""
+"""`.html` straight to a PDF: WeasyPrint first (quiet, small, no browser), a browser when the page runs scripts, has
+MathML (v3.27.12) or WeasyPrint cannot draw it, then the other HTML engines and LibreOffice."""
 
 from __future__ import annotations
 
@@ -46,6 +46,14 @@ def has_scripts(text: str) -> bool:
     return bool(SCRIPT_RE.search(text))
 
 
+MATHML_RE = re.compile(r"<math\b", re.IGNORECASE)
+
+
+def has_mathml(text: str) -> bool:
+    """True when the page has MathML (Pandoc's HTML math, among others); WeasyPrint prints it as flat text."""
+    return bool(MATHML_RE.search(text))
+
+
 def find_browser(name: str, which: Callable[[str], str | None] = shutil.which) -> str | None:
     """The executable of browser `name` (chrome, chromium, edge, brave), on PATH or where its installer puts it."""
     override = os.environ.get("PDFMD_BROWSER")
@@ -79,8 +87,8 @@ def accepts_request(request: str | None) -> bool:
 
 def attempts(text: str, request: str | None, which: Callable[[str], str | None] = shutil.which,
              soffice: Callable[[], str | None] = lambda: None) -> list[tuple[str, str]]:
-    """(name, executable) of the engines to try, in order. A page with scripts goes to a browser first; any other
-    page to WeasyPrint first. `request` narrows the list to one engine (or to the browsers, or the HTML engines)."""
+    """(name, executable) of the engines to try, in order. A page with scripts or MathML goes to a browser first; any
+    other page to WeasyPrint first. `request` narrows the list to one engine (or to the browsers, or the HTML engines)."""
     found: dict[str, str] = {}
     for name in HTML_ENGINES:
         path = which(name)
@@ -104,7 +112,7 @@ def attempts(text: str, request: str | None, which: Callable[[str], str | None] 
             order = [*engines, *browsers]
         else:
             order = [word] if word in found else []
-    elif has_scripts(text):
+    elif has_scripts(text) or has_mathml(text):
         order = [*browsers, *engines, *(["soffice"] if "soffice" in found else [])]
     else:
         order = [*(["weasyprint"] if "weasyprint" in found else []), *browsers,

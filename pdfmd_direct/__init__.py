@@ -6,9 +6,9 @@ Pandoc as before."""
 from __future__ import annotations
 
 from . import defaults
-from .html import (BROWSER_NAMES, HTML_ENGINES, accepts_request as html_accepts_request, find_browser, has_scripts,
-                   render_html, attempts as html_attempts)
+from .html import (BROWSER_NAMES, HTML_ENGINES, accepts_request as html_accepts_request, find_browser, has_mathml,
+                   has_scripts, render_html, attempts as html_attempts)
 from .typst import compile_typst, accepts_request as typst_accepts_request
 
-__all__ = ["defaults", "BROWSER_NAMES", "HTML_ENGINES", "html_accepts_request", "find_browser", "has_scripts", "render_html",
+__all__ = ["defaults", "BROWSER_NAMES", "HTML_ENGINES", "html_accepts_request", "find_browser", "has_mathml", "has_scripts", "render_html",
            "html_attempts", "compile_typst", "typst_accepts_request"]

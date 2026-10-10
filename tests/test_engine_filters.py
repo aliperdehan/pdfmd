@@ -1,4 +1,5 @@
-"""pdfmd_lua/typst.lua (v3.27.11): links to anchors the document does not have, and pictures with an older Pandoc."""
+"""The filters pdfmd adds for one engine: pdfmd_lua/typst.lua (v3.27.11: links to anchors the document does not have,
+pictures with an older Pandoc) and pdfmd_lua/weasyprint.lua (v3.27.12: math WeasyPrint cannot draw)."""
 
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 TYPST = shutil.which("typst")
+WEASYPRINT = shutil.which("weasyprint")
 TYPST_LUA = ROOT / "pdfmd_lua" / "typst.lua"
 
 DOCUMENT = """\
@@ -118,6 +120,49 @@ class CommandLine(unittest.TestCase):
     def test_the_filter_is_given_only_to_typst(self):
         self.assertEqual(pdfmd.typst_filter_args("latex"), [])
         self.assertEqual(pdfmd.typst_filter_args("typst")[-1], str(TYPST_LUA))
+
+
+class WeasyPrintArguments(unittest.TestCase):
+    def test_plain_math_and_the_filter_only_for_weasyprint(self):
+        self.assertEqual(pdfmd.weasyprint_math_args("typst", []), [])
+        arguments = pdfmd.weasyprint_math_args("weasyprint", [])
+        self.assertEqual(arguments[-1], str(ROOT / "pdfmd_lua" / "weasyprint.lua"))
+        if pdfmd.pandoc_has_option("--math-method"):
+            self.assertIn("--math-method=plain", arguments)
+
+    def test_the_command_lines_math_wins(self):
+        arguments = pdfmd.weasyprint_math_args("weasyprint", ["--mathml"])
+        self.assertFalse([item for item in arguments if item.startswith("--math")])
+        self.assertIn("--lua-filter", arguments)
+
+
+@unittest.skipUnless(PANDOC and WEASYPRINT, "needs Pandoc and WeasyPrint")
+class WeasyPrintMath(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-weasy-math-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+
+    def build(self, text: str) -> subprocess.CompletedProcess:
+        (self.directory / "doc.md").write_text(text, encoding="utf-8")
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "weasyprint"], capture_output=True,
+                              text=True, encoding="utf-8", cwd=self.directory, env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+
+    def test_math_is_text_once_and_said_once(self):
+        done = self.build("---\ntitle: M\n---\n\nSee $\\alpha_i \\le \\beta$ and $x^2 + \\frac{a}{b}$.\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        said = done.stdout + done.stderr
+        self.assertEqual(said.count("WeasyPrint does not typeset math"), 1)
+        self.assertIn("2 formulas are printed as text", said)
+        if shutil.which("pdftotext"):
+            text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True,
+                                  text=True).stdout
+            self.assertIn("α", text)
+            self.assertNotIn("x2+ab", text)                    # MathML's flat text, before the TeX, is gone
+
+    def test_no_math_no_warning(self):
+        done = self.build("---\ntitle: M\n---\n\nJust words.\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("typeset math", done.stdout + done.stderr)
 
 
 if __name__ == "__main__":

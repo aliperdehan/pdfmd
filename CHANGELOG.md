@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.12 — 2026-10-10
+
+Pre-edit state: commit `c34c6b5` (v3.27.11).
+
+### Fixed
+
+- **Math in a PDF made by WeasyPrint was garbage**: WeasyPrint does not draw MathML, Pandoc's default HTML math (since
+  Pandoc 3.x), so each formula printed as its flat text followed by its TeX (`x2+abx^2 + \frac{a}{b}`). For
+  `-e weasyprint` (or a fallback to it) pdfmd now gives Pandoc `--math-method=plain`: simple formulas in Unicode
+  (`αi ≤ β`), the others as their TeX, once. A new filter, `pdfmd_lua/weasyprint.lua`, says it once
+  (`WARN  weasyprint: WeasyPrint does not typeset math; 5 formulas are printed as text ... -e typst`). A math option
+  on the command line (`--mathml`, `--math-method=...`) is kept. Real math for WeasyPrint (KaTeX) is stage 6 A2.
+- **A direct `.html` page with MathML went to WeasyPrint first**; it now goes to a browser first, as a page with
+  scripts does (the author's decision: WeasyPrint first again once pdfmd gives it math). With no browser, a `WARN`
+  says the formulas print as flat text.
+
+### Tests
+
+- `tests/test_typst.py` is now `tests/test_engine_filters.py` (both engine filters): the WeasyPrint math arguments,
+  a WeasyPrint build with math (one WARN, no MathML flat text) and one without. `tests/test_direct.py`: a MathML page's
+  engine order.
+
 ## v3.27.11 — 2026-10-10
 
 Pre-edit state: commit `08a3a32` (v3.27.10).

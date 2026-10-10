@@ -1284,16 +1284,16 @@ pdfmd paper.tex          # compiled directly with a LaTeX engine: reruns until
                          # no .aux/.log clutter (--keep-aux keeps them)
 pdfmd minutes.docx       # Word/PowerPoint/Excel/ODF: converted by LibreOffice
 pdfmd analysis.qmd       # handed to Quarto, so code chunks actually run
-pdfmd page.html          # built by WeasyPrint, or a browser if the page runs scripts: no Pandoc
+pdfmd page.html          # built by WeasyPrint, or a browser if the page runs scripts or has MathML: no Pandoc
 pdfmd note.typ           # compiled by Typst itself: the page setup in the file is kept
 pdfmd notes.rst          # anything else Pandoc can read (give the extension)
 ```
 
 A finished `.typ` or `.html` file goes straight to its own engine, because Pandoc would read it into its own model
 and write it out again, and the page size, the styles and the scripts would not survive the trip. For a page that is
-WeasyPrint first (it is quiet and needs no browser); a page with `<script>` goes to Chrome, Chromium, Edge or Brave
-(headless, printing the page), as does one WeasyPrint cannot draw, and wkhtmltopdf, Prince, pagedjs-cli and LibreOffice
-come after. `-e edge` (or `weasyprint`, `chromium`...) picks one. As with an Office file, such a document gets none of
+WeasyPrint first (it is quiet and needs no browser); a page with `<script>` or MathML (`<math>`, which WeasyPrint prints
+as flat text) goes to Chrome, Chromium, Edge or Brave (headless, printing the page), as does one WeasyPrint cannot draw,
+and wkhtmltopdf, Prince, pagedjs-cli and LibreOffice come after. `-e edge` (or `weasyprint`, `chromium`...) picks one. As with an Office file, such a document gets none of
 pdfmd's defaults, since it is finished; `--apply-defaults` (also in `pdfmd --setup`) gives it the title, author, date,
 language, font, font size, paper and margin of its `metadata.yaml`, ahead of its own settings so those win. A `.tex`
 file that no LaTeX engine can compile is tried through Pandoc, with a warning.
@@ -1364,6 +1364,10 @@ OK    paper.md  (typst; lualatex, xelatex failed)
 
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.
+
+WeasyPrint does not typeset math. A Markdown document built with `-e weasyprint` (or one that falls back to it) gets
+Pandoc's plain math, simple formulas in Unicode (`αᵢ ≤ β`) and the others as their TeX, with one `WARN`; Typst or a
+LaTeX engine typesets them. A math option of your own (`--mathml`, `--math-method=...`) is kept.
 
 A link to an anchor the document does not have (`[see 13.5](#135-your-own-defaults)` quoted from another document) is
 only a warning for LaTeX and HTML, but Typst stops on it. For Typst, PDF or `.typ`, such a link becomes its text, and
