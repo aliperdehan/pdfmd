@@ -1527,14 +1527,17 @@ say in `pdfmd-options:` or its front matter, for every document:
   paper size, font size, page geometry, main and code font, line spacing, coloured links, table of contents, and for
   citations the bibliography file, the CSL style and linked citations;
 - characters a font lacks or none draws, fonts for other scripts, romanization packs;
-- the citation engine, the PDF engine, the default output format, HTML (full page, one file, style sheet, math method),
-  LaTeX, reference numbers and the template of Word files;
+- the citation engine; output (the PDF engine, the default output format, defaults for `.typ` and `.html` files);
+  HTML (full page, one file, style sheet, math method); tables (the rows, columns, cut and delimiter of `.csv` tables,
+  pipe-table widths); code (wrapping, line numbers); Word and OpenDocument (LaTeX in them, reference numbers, the
+  template);
 - plain Markdown, text and ASCII output (`--to gfm`, `txt`, `ascii`: scripts, math, title block, the source carried at
   the end);
-- PDF finishing (header, footer, bookmarks, attached links) and the source file (the "Compiled with..." stamp and its
-  details, backups, their names and how many are kept, comment stripping, attaching the source, its files and its LaTeX
-  packages to the PDF);
-- the cache (reference numbers, plots, a part built alone), the Markdown reader, reading `.txt` as Markdown;
+- PDF finishing (header, footer, bookmarks, attached links, a hybrid PDF); the build history (the "Compiled with..."
+  stamp and its details); backups (their folder, names and how many are kept); the source inside the PDF (attaching
+  the source, its files and its LaTeX packages, comment stripping);
+- the cache (reference numbers, plots, a part built alone); input (the Markdown reader, reading `.txt` as Markdown, raw
+  pieces);
 - checks and limits (`--strict`, the size budgets, the codes `--check` leaves out), and which of pdfmd's automatic
   behaviours (`--no-auto` kinds) are off.
 

@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.14 — 2026-10-10
+
+Pre-edit state: commit `f824538` (v3.27.13).
+
+### Changed
+
+- **`pdfmd --setup` has a section per subject** (the author: the CSV rows had "leaked into Output"). "Output" held 18
+  rows and "The source file" 19; they are now Output (the engine, the default format, defaults for `.typ`/`.html`),
+  HTML, Tables (the `.csv` rows, columns, cut and delimiter, pipe-table widths), Code, Word and OpenDocument, Build
+  history (the stamp), Backups, and Source inside the PDF (attaching, bundling, comment stripping). The hybrid-PDF
+  row moved to PDF finishing and the raw-pieces row to Input. The settings and what they write are unchanged.
+
 ## v3.27.13 — 2026-10-10
 
 Pre-edit state: commit `bc1c81b` (v3.27.12).
