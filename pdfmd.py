@@ -1247,7 +1247,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.27.0"
+PDFMD_VERSION = "3.27.1"
 import argparse
 import csv
 import filecmp
@@ -8420,7 +8420,12 @@ DEFAULT_STAMP_OPTIONS = {
 
 
 def normalize_stamp_value(value) -> dict:
-    """Normalize a pdfmd-options.stamp value into a complete options dict.
+    """A pdfmd-options.stamp value as a complete options dict: DEFAULT_STAMP_OPTIONS under stamp_fields(value)."""
+    return {**DEFAULT_STAMP_OPTIONS, **stamp_fields(value)}
+
+
+def stamp_fields(value, implied_on: bool = True) -> dict:
+    """The fields a pdfmd-options.stamp value sets (no defaults filled in).
 
     Accepts the same range of shapes --no-auto's own settings do: a bare
     bool (on/off, everything else default), a single package name or list
@@ -8430,9 +8435,11 @@ def normalize_stamp_value(value) -> dict:
     -- bothering to
     configure packages/mode/scope implies wanting it active; write
     ``enabled: false`` explicitly to keep a shared default off until a
-    document (or --stamp on the command line) turns it on.
+    document (or --stamp on the command line) turns it on. Not in the config
+    file (``implied_on`` False, v3.27.1): there `pdfmd --setup` writes each
+    detail as its own row, and only the "enabled" row switches stamping on.
     """
-    options = dict(DEFAULT_STAMP_OPTIONS)
+    options: dict = {}
     if isinstance(value, bool):
         options["enabled"] = value
     elif isinstance(value, str):
@@ -8442,7 +8449,8 @@ def normalize_stamp_value(value) -> dict:
         options["enabled"] = True
         options["packages"] = [str(item) for item in value]
     elif isinstance(value, dict):
-        options["enabled"] = bool(value.get("enabled", True))
+        if "enabled" in value or implied_on:
+            options["enabled"] = bool(value.get("enabled", True))
         if "mode" in value:
             options["mode"] = str(value["mode"])
         if "store" in value:
@@ -8474,17 +8482,16 @@ def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | 
     DEFAULT_STAMP_OPTIONS) when nothing sets it at all, so
     resolve_stamp_options can tell "nowhere set" apart from "set to off".
     """
-    options = frontmatter_pdfmd_options(md_path)
-    if "stamp" in options:
-        return normalize_stamp_value(options["stamp"])
-    for metadata_file in metadata_files:
-        data = metadata_file_yaml(metadata_file)
-        nested = data.get("pdfmd-options")
-        if isinstance(nested, dict) and "stamp" in nested:
-            return normalize_stamp_value(nested["stamp"])
-    if "stamp" in config_options():           # the config file's default (pdfmd --setup)
-        return normalize_stamp_value(config_options()["stamp"])
-    return None
+    # v3.27.1: field by field, the first place to set a field winning (a document's `stamp: true` keeps a shared
+    # metadata.yaml's `store: file`); it used to be the whole value of the first place.
+    merged: dict = {}
+    found = False
+    for where, options in option_sources(md_path, metadata_files):
+        if "stamp" in options:
+            found = True
+            for key, value in stamp_fields(options["stamp"], implied_on=where != "config").items():
+                merged.setdefault(key, value)
+    return {**DEFAULT_STAMP_OPTIONS, **merged} if found else None
 
 
 def resolve_stamp_options(md_path: Path, metadata_files: list[Path], cli_overrides: dict) -> dict:
@@ -9697,19 +9704,25 @@ def backup_snapshots(backup_dir: Path, md_path: Path, template: str) -> tuple[li
 
 
 def normalize_backup_value(value) -> dict:
-    """Normalize a pdfmd-options.backup value: a bare bool, a directory name
+    """A pdfmd-options.backup value as a complete options dict: DEFAULT_BACKUP_OPTIONS under backup_fields(value)."""
+    return {**DEFAULT_BACKUP_OPTIONS, **backup_fields(value)}
+
+
+def backup_fields(value, implied_on: bool = True) -> dict:
+    """The fields a pdfmd-options.backup value sets: a bare bool, a directory name
     (shorthand for enabling it with that directory), or a full dict of
     {enabled, dir, keep, format}. A dict with no explicit ``enabled`` counts
-    as on, same as normalize_stamp_value's rule.
+    as on, same as stamp_fields' rule, except in the config file (``implied_on`` False).
     """
-    options = dict(DEFAULT_BACKUP_OPTIONS)
+    options: dict = {}
     if isinstance(value, bool):
         options["enabled"] = value
     elif isinstance(value, str):
         options["enabled"] = True
         options["dir"] = value
     elif isinstance(value, dict):
-        options["enabled"] = bool(value.get("enabled", True))
+        if "enabled" in value or implied_on:
+            options["enabled"] = bool(value.get("enabled", True))
         if value.get("dir"):
             options["dir"] = str(value["dir"])
         if value.get("format"):
@@ -9728,20 +9741,12 @@ def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enable
     cascade as frontmatter_stamp), then --backup/--no-backup and
     --backup-format on top.
     """
-    options = None
-    own = frontmatter_pdfmd_options(md_path)
-    if "backup" in own:
-        options = normalize_backup_value(own["backup"])
-    else:
-        for metadata_file in metadata_files:
-            nested = metadata_file_yaml(metadata_file).get("pdfmd-options")
-            if isinstance(nested, dict) and "backup" in nested:
-                options = normalize_backup_value(nested["backup"])
-                break
-        else:
-            if "backup" in config_options():          # the config file's default (pdfmd --setup)
-                options = normalize_backup_value(config_options()["backup"])
-    options = options or dict(DEFAULT_BACKUP_OPTIONS)
+    merged: dict = {}
+    for where, own in option_sources(md_path, metadata_files):       # field by field since v3.27.1
+        if "backup" in own:
+            for key, value in backup_fields(own["backup"], implied_on=where != "config").items():
+                merged.setdefault(key, value)
+    options = {**DEFAULT_BACKUP_OPTIONS, **merged}
     if cli_enabled is not None:
         options["enabled"] = cli_enabled
     if cli_format:
@@ -11209,17 +11214,9 @@ def html_math_args(method: str) -> list[str]:
 
 
 def cascaded_option(md_path: Path, metadata_files: list[Path], key: str):
-    """The first ``pdfmd-options.<key>`` found: the document's own, else its
-    metadata files' in order (None if none sets it)."""
-    sources = [frontmatter_pdfmd_options(md_path)]
-    for metadata_file in metadata_files:
-        found = metadata_file_yaml(metadata_file).get("pdfmd-options")
-        sources.append(found if isinstance(found, dict) else {})
-    sources.append(config_options())
-    for options in sources:
-        if key in options:
-            return options[key]
-    return None
+    """``pdfmd-options.<key>``: the document's own, else its metadata files' in order, else the config's (None if none
+    sets it); a mapping merged field by field (see first_pdfmd_option)."""
+    return first_pdfmd_option(md_path, metadata_files, key)
 
 
 def default_output_format(md_path: Path, metadata_files: list[Path]) -> str | None:
@@ -11919,19 +11916,32 @@ def option_flag(value) -> bool | None:
     return None
 
 
-def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
-    """The value of the first of ``names`` that the document's own
-    pdfmd-options, then its metadata files' (in order), set; None if none does."""
-    sources = [frontmatter_pdfmd_options(md_path)]
+def option_sources(md_path: Path, metadata_files: list[Path]) -> list[tuple[str, dict]]:
+    """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files in
+    order, then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
+    name, or "config"."""
+    sources = [("document", frontmatter_pdfmd_options(md_path))]
     for metadata_file in metadata_files:
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
-        sources.append(found if isinstance(found, dict) else {})
-    sources.append(config_options())
-    for options in sources:
+        sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
+    sources.append(("config", config_options()))
+    return sources
+
+
+def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str):
+    """The value of the first of ``names`` that the document's own pdfmd-options, then its metadata files' (in order),
+    then the config file's set; None if none does. A mapping is merged field by field with the mappings set below it
+    (the first place to set a field wins, v3.27.1), down to a place that sets the key to something else."""
+    found: list[dict] = []
+    for _, options in option_sources(md_path, metadata_files):
         for name in names:
             if name in options:
-                return options[name]
-    return None
+                value = options[name]
+                if not isinstance(value, dict):
+                    return merge_option_dicts(found) if found else value
+                found.append(value)
+                break
+    return merge_option_dicts(found) if found else None
 
 
 def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False) -> frozenset[str]:
@@ -13495,6 +13505,7 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
     front matter first, then each linked metadata file, then --cache/--no-cache
     (--cache turns aux on, --no-cache turns everything off)."""
     settings = dict(CACHE_DEFAULTS)
+    chosen: set = set()
     sources = [frontmatter_pdfmd_options(md_path)]
     for metadata_file in metadata_files:
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
@@ -13508,9 +13519,9 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
             value = {"aux": value}
         if isinstance(value, dict):
             for key in settings:
-                if key in value:
+                if key in value and key not in chosen:      # the first place to set a field wins (v3.27.1)
+                    chosen.add(key)
                     settings[key] = bool(value[key])
-        break
     if cli is True:
         settings["aux"] = True
     elif cli is False:

@@ -41,6 +41,30 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.27.1 — 2026-10-10
+
+Pre-edit state: commit `641e917` (v3.27.0).
+
+### Fixed
+
+- **A detail row of `pdfmd --setup` switched stamping or backups on for every document.** "Where the compile history
+  goes" (`stamp: {store: file}` in the config), "Backup folder" (`backup: {dir: ...}`) and the 3.27.0 detail rows were
+  read with the rule meant for documents, "a `stamp:`/`backup:` mapping without `enabled` means on". In the config file
+  a mapping now says only what it says; `enabled` comes from its own row. (A document or a metadata file keeps the old
+  rule: `stamp: {mode: history}` there still switches stamping on. A list or a name, `stamp: [nulabreport]`, means on
+  everywhere.)
+- **A mapping-valued option is merged field by field** down the document, its metadata files (in order) and the config,
+  the first place to set a field winning, until a place sets the key to a plain value. It used to be taken whole from
+  the first place that had it, so a document's `stamp: true` dropped the shared metadata.yaml's `store: file` (the
+  report's BUILD NOTES were written after all), and a document's `html: {math: katex}` dropped the config's `css:`. This
+  covers `stamp`, `backup`, `cache` and every key read through `first_pdfmd_option` / `cascaded_option` (`html`,
+  `office`, `gfm`, `txt`, `ascii`, `raw`, `strip-comments`...). New `option_sources()` is the one list of places.
+
+### Tests
+
+- `tests/test_setup.py` `FieldByField` (7): the config's detail rows, a document switching on over them, a shared
+  metadata file's details under a document's own, an explicit off, the list shorthand, html/cache/raw.
+
 ## v3.27.0 — 2026-10-10
 
 Pre-edit state: commit `ee1977f` (v3.26.21). The 3.27 line holds the rest of the plan: the settings foundations, the

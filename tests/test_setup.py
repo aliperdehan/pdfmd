@@ -260,6 +260,81 @@ class NewRows(unittest.TestCase):
         self.assertIs(pdfmd.first_pdfmd_option(document, [], "bundle-packages"), True)
 
 
+@unittest.skipUnless(yaml, "needs PyYAML")
+class FieldByField(unittest.TestCase):
+    """v3.27.1: a mapping-valued option is merged field by field down document > metadata files > config, and a
+    config mapping says only what it says (a detail row does not switch stamping or backups on)."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-layers-"))
+        self.addCleanup(__import__("shutil").rmtree, self.directory, True)
+        self.old = os.environ.get("PDFMD_CONFIG")
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        if self.old is None:
+            os.environ.pop("PDFMD_CONFIG", None)
+        else:
+            os.environ["PDFMD_CONFIG"] = self.old
+        pdfmd.load_config.cache_clear()
+
+    def layers(self, config: str, document: str = "", metadata: str = ""):
+        (self.directory / "config.yaml").write_text(config, encoding="utf-8")
+        os.environ["PDFMD_CONFIG"] = str(self.directory / "config.yaml")
+        pdfmd.load_config.cache_clear()
+        path = self.directory / "d.md"
+        path.write_text((f"---\n{document}---\n\n" if document else "") + "Text.\n", encoding="utf-8")
+        files = []
+        if metadata:
+            (self.directory / "metadata.yaml").write_text(metadata, encoding="utf-8")
+            files.append(self.directory / "metadata.yaml")
+        return path, files
+
+    def test_a_detail_in_the_config_does_not_switch_stamping_or_backups_on(self):
+        path, files = self.layers("options:\n  stamp: {store: file, mode: history}\n  backup: {dir: old, keep: 2}\n")
+        stamp = pdfmd.resolve_stamp_options(path, files, {})
+        backup = pdfmd.resolve_backup_options(path, files, None)
+        self.assertFalse(stamp["enabled"])
+        self.assertFalse(backup["enabled"])
+        self.assertEqual((stamp["store"], stamp["mode"], backup["dir"], backup["keep"]), ("file", "history", "old", 2))
+
+    def test_a_document_switches_it_on_and_keeps_the_details_below(self):
+        path, files = self.layers("options:\n  stamp: {store: file}\n  backup: {dir: old}\n",
+                                  "pdfmd-options:\n  stamp: true\n  backup: true\n")
+        stamp = pdfmd.resolve_stamp_options(path, files, {})
+        self.assertEqual((stamp["enabled"], stamp["store"]), (True, "file"))
+        backup = pdfmd.resolve_backup_options(path, files, None)
+        self.assertEqual((backup["enabled"], backup["dir"]), (True, "old"))
+
+    def test_a_shared_metadata_file_still_switches_on_by_naming_details(self):
+        path, files = self.layers("options: {}\n", "pdfmd-options:\n  stamp: {mode: replace}\n",
+                                  "pdfmd-options:\n  stamp: {packages: [nulabreport], mode: history, store: file}\n")
+        stamp = pdfmd.resolve_stamp_options(path, files, {})
+        self.assertEqual((stamp["enabled"], stamp["mode"], stamp["store"], stamp["packages"]),
+                         (True, "replace", "file", ["nulabreport"]))
+
+    def test_the_documents_explicit_off_wins(self):
+        path, files = self.layers("options: {}\n", "pdfmd-options:\n  stamp: false\n",
+                                  "pdfmd-options:\n  stamp: {store: file}\n")
+        self.assertFalse(pdfmd.resolve_stamp_options(path, files, {})["enabled"])
+
+    def test_a_list_shorthand_in_the_config_still_means_on(self):
+        path, files = self.layers("options:\n  stamp: [nulabreport]\n")
+        self.assertTrue(pdfmd.resolve_stamp_options(path, files, {})["enabled"])
+
+    def test_other_mappings_merge_and_a_plain_value_ends_the_merge(self):
+        path, files = self.layers("options:\n  html: {css: a.css}\n  cache: {aux: true}\n  raw: {html: [tex]}\n",
+                                  "pdfmd-options:\n  html: {math: katex}\n  cache: {plots: true}\n  raw: true\n")
+        self.assertEqual(pdfmd.html_settings(path, files), {"math": "katex", "css": "a.css"})
+        self.assertEqual(pdfmd.cache_settings(path, files, None), {"aux": True, "plots": True})
+        self.assertIs(pdfmd.first_pdfmd_option(path, files, "raw"), True)
+
+    def test_the_first_place_to_set_a_field_wins(self):
+        path, files = self.layers("options:\n  html: {math: mathml, css: c.css}\n", "pdfmd-options:\n  html: {math: katex}\n",
+                                  "pdfmd-options:\n  html: {math: webtex, css: m.css}\n")
+        self.assertEqual(pdfmd.html_settings(path, files), {"math": "katex", "css": "m.css"})
+
+
 class Completeness(unittest.TestCase):
     """Every flag and every pdfmd-options key is a --setup row or left out on purpose (pdfmd_setup/inventory.py)."""
 
