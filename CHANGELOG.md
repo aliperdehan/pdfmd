@@ -41,6 +41,46 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.6 — 2026-10-11
+
+Pre-edit state: commit `d111afc` (v3.28.5).
+
+### Fixed
+
+- **A PDF's Title lost the LaTeX in a title.** For LR4-5's `Reduction of \emph{trans}-Cinnamaldehyde`, the Title read
+  "Reduction of -Cinnamaldehyde". Pandoc makes `title-meta`, which hyperref writes as the LaTeX PDF's Title, from the
+  title as plain text, and leaves raw LaTeX out. A part built alone (`report#discussion`) had the same gap in every
+  output: nulabreport's filter takes the title out and keeps a `title-meta` it flattens the same way, and 3.28.5's
+  properties used it. `pdfmd_lua/title_meta.lua` now reads the LaTeX first ("trans"), for the authors too
+  (`author-meta`, "A; B").
+  - It runs only when the title or the authors have a backslash, and before the document's own filters. A filter that
+    keeps `title-meta` when it is set (nulabreport's) therefore finds it right, and nulabreport needs no change.
+  - A `title-meta` or `author-meta` of the document's own stays.
+  - It is added at every build site where pdfmd adds its page-break filter: one document, the native-bibliography
+    route, LibreOffice, Typst/WeasyPrint/Calibre, and `-r` (both).
+- In a Word or OpenDocument file, `title-meta`, `author-meta` and `pagetitle` are no longer custom properties of their
+  own. They are Pandoc's variables for a PDF's or a page's properties and only repeated the Title and Author.
+
+Checked through pdfmd, LR4-5's Title:
+
+| Output | Before | After |
+|---|---|---|
+| LaTeX PDF (LuaLaTeX), whole and `report#discussion` | "... Reduction of -Cinnamaldehyde ..." | "... Reduction of trans-Cinnamaldehyde ..." |
+| `report#discussion` with Calibre, WeasyPrint or Typst, and to `.docx` | "-Cinnamaldehyde" (3.28.5) | "trans-Cinnamaldehyde" |
+
+- The whole LaTeX PDF is 29 pages, with no `??`.
+- The `.docx`'s 42 links all reach a bookmark, and no path is left in it.
+
+### Tests
+
+- `tests/test_office_latex.py`, `Properties.test_a_latex_pdfs_title_keeps_its_latex`, through `pdfmd --to latex`:
+  - `pdftitle` and `pdfauthor` keep the LaTeX's words;
+  - so does a document filter that takes the title out and keeps `title-meta`;
+  - a title without LaTeX gets no filter.
+  It fails on `d111afc`.
+- `test_word_and_opendocument` also checks for no `title-meta` property.
+- Full suite: Pandoc 3.12, 1007 tests OK; Pandoc 3.1.3, 1007 OK.
+
 ## v3.28.5 — 2026-10-11
 
 Pre-edit state: commit `9f7fd88` (v3.28.4).

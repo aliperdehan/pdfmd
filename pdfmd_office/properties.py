@@ -18,8 +18,11 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-OWN_CUSTOM = re.compile(r'<property\b[^>]*\bname="pdfmd-[^"]*"[^>]*?(?:/>|>.*?</property>)', re.S)
-OWN_ODF = re.compile(r'\s*<meta:user-defined\b[^>]*\bmeta:name="pdfmd-[^"]*"[^>]*?(?:/>|>.*?</meta:user-defined>)', re.S)
+# pdfmd's own keys, and Pandoc's template variables for a PDF's or a page's properties (v3.28.6: title_meta.lua sets
+# `title-meta`), which in a Word or OpenDocument file only repeat its Title and Author
+OWN_NAMES = r'(?:pdfmd-[^"]*|title-meta|author-meta|pagetitle)'
+OWN_CUSTOM = re.compile(rf'<property\b[^>]*\bname="{OWN_NAMES}"[^>]*?(?:/>|>.*?</property>)', re.S)
+OWN_ODF = re.compile(rf'\s*<meta:user-defined\b[^>]*\bmeta:name="{OWN_NAMES}"[^>]*?(?:/>|>.*?</meta:user-defined>)', re.S)
 
 
 def fill(xml: str, tag: str, value: str) -> str:

@@ -737,6 +737,8 @@ class Properties(unittest.TestCase):
         self.assertIn(f"<dc:title>{COVERED_TITLE}</dc:title>", core)
         self.assertIn("<dc:creator>A. One; B. Two</dc:creator>", core)
         self.assert_private(self.root / "d.docx")
+        # title_meta.lua's title-meta repeats the Title: not a custom property of its own (v3.28.6)
+        self.assertNotIn("title-meta", zipfile.ZipFile(self.root / "d.docx").read("docProps/custom.xml").decode())
         self.pdfmd("d.md", "-o", "d.odt")
         meta = zipfile.ZipFile(self.root / "d.odt").read("meta.xml").decode()
         self.assertIn(f"<dc:title>{COVERED_TITLE}</dc:title>", meta)
@@ -810,6 +812,27 @@ class Properties(unittest.TestCase):
         self.assertNotIn((self.root / "cache").as_posix(), after)
         self.assertIn('descr="drawn.png"', after)
         self.assertIn("A dot", after)                       # the description a reader sees stays
+
+    def test_a_latex_pdfs_title_keeps_its_latex(self):
+        # v3.28.6: Pandoc's title-meta (hyperref's pdftitle) left raw LaTeX out: "Reduction of -Cinnamaldehyde, ..."
+        (self.root / "office.lua").unlink()
+        done = self.pdfmd("d.md", "--to", "latex", "-o", "d.tex", "-v")
+        self.assertIn("pdftitle={Reduction of trans-Cinnamaldehyde,", (self.root / "d.tex").read_text(encoding="utf-8"))
+        self.assertIn("pdfauthor={A. One; B. Two}", (self.root / "d.tex").read_text(encoding="utf-8"))
+        self.assertIn("title_meta.lua", done.stdout + done.stderr)
+        # a filter of the document's own that takes the title out and keeps title-meta, as nulabreport's does for a
+        # part built alone, finds it set already
+        (self.root / "d.lua").write_text(
+            "function Meta(m)\n  if not m['title-meta'] then m['title-meta'] = pandoc.MetaString("
+            "pandoc.utils.stringify(m.title)) end\n  m.title = nil\n  return m\nend\n", encoding="utf-8")
+        self.pdfmd("d.md", "--to", "latex", "-o", "d.tex")
+        self.assertIn("pdftitle={Reduction of trans-Cinnamaldehyde,", (self.root / "d.tex").read_text(encoding="utf-8"))
+        # a title without LaTeX: Pandoc's own, no filter
+        (self.root / "d.lua").unlink()
+        (self.root / "d.md").write_text("---\ntitle: Plain\n---\n\nBody.\n", encoding="utf-8")
+        done = self.pdfmd("d.md", "--to", "latex", "-o", "d.tex", "-v")
+        self.assertNotIn("title_meta.lua", done.stdout + done.stderr)
+        self.assertIn("pdftitle={Plain}", (self.root / "d.tex").read_text(encoding="utf-8"))
 
     def test_a_calibre_pdf(self):
         try:

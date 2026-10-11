@@ -155,6 +155,8 @@ A file's properties (v3.28.5):
     cache, the temporary folder or the home folder by its name alone. When a house style's cover takes the title and
     authors out of the metadata (nulabreport), the file's properties keep them: a Calibre, WeasyPrint, Typst (0.12 and
     later) or LibreOffice PDF's Title and Author, a Word or OpenDocument file's Title and Author.
+    A title or authors with LaTeX in them (`\\emph{trans}`) keep its words in every PDF's Title and Author, a LaTeX
+    engine's included (v3.28.6: Pandoc leaves raw LaTeX out of `title-meta`, hyperref's pdftitle).
 
 Links Typst would stop on (v3.27.11):
     LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
@@ -1332,7 +1334,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.5"
+PDFMD_VERSION = "3.28.6"
 import argparse
 import csv
 import filecmp
@@ -2321,6 +2323,32 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+
+
+def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter title_meta.lua`` when the title or the authors have LaTeX in them (v3.28.6): Pandoc's own
+    `title-meta`, the PDF's Title, leaves raw LaTeX out ("Reduction of -Cinnamaldehyde" for `\\emph{trans}`). Before the
+    document's own filters, so that one which takes the title out and keeps `title-meta` finds it set."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files:
+        return []
+
+    def text(value) -> str:
+        if isinstance(value, dict):
+            return " ".join(text(item) for item in value.values())
+        if isinstance(value, list):
+            return " ".join(text(item) for item in value)
+        return "" if value is None else str(value)
+
+    metadata = effective_metadata(files[0], metadata_files, [])
+    if not any("\\" in text(metadata.get(key)) for key in ("title", "author")):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("title_meta")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 # LaTeX packages a document's own commands need (v3.27.16, auto kind `texpackages`): `\ce{H2O}` without mhchem, or
@@ -15302,6 +15330,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += title_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
             cmd += select_filter_args(selection)
@@ -15560,6 +15589,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += title_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
@@ -16016,6 +16046,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
+                cmd += title_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
                                        flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                        preamble=list(preamble_files or []) if flat_markdown else None,
@@ -16254,6 +16285,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
+                    cmd += title_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     cmd += select_filter_args(selection)
@@ -20390,6 +20422,7 @@ def main() -> None:
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
+                    cmd += title_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
@@ -20509,6 +20542,7 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_header_file)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
+                        cmd += title_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)
