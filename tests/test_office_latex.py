@@ -6,11 +6,13 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,6 +24,11 @@ from pdfmd_office import caption_separator, cref_names, parse_aux  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 FILTER = ROOT / "pdfmd_office" / "office.lua"
+# a 1x1 PNG
+TINY_PNG = (b"\x89PNG\r\n\x1a\n" + b"".join(struct.pack(">I", len(data)) + kind + data
+            + struct.pack(">I", zlib.crc32(kind + data)) for kind, data in
+            ((b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)), (b"IDAT", zlib.compress(b"\x00\xff\x00\x00")),
+             (b"IEND", b""))))
 
 AUX = r"""
 \relax
@@ -229,6 +236,85 @@ class Documents(unittest.TestCase):
         self.assertNotIn("Table 1. Table", text)
 
 
+def unreached(path: Path) -> list[str]:
+    """The internal links of a .docx or .odt with no bookmark of their name."""
+    archive = zipfile.ZipFile(path)
+    if path.suffix == ".docx":
+        xml = archive.read("word/document.xml").decode("utf-8")
+        links = set(re.findall(r'<w:hyperlink [^>]*w:anchor="([^"]*)"', xml))
+        marks = set(re.findall(r'<w:bookmarkStart [^>]*w:name="([^"]*)"', xml))
+    else:
+        xml = archive.read("content.xml").decode("utf-8")
+        links = {link[1:] for link in re.findall(r'<text:a [^>]*xlink:href="(#[^"]*)"', xml)}
+        marks = set(re.findall(r'<text:bookmark(?:-start)? text:name="([^"]*)"', xml))
+    return sorted(links - marks)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Anchors(unittest.TestCase):
+    """v3.28.4: a reference to what LaTeX labelled leads somewhere in Word, OpenDocument, HTML and Typst."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.root = Path(self._directory.name)
+
+    def convert(self, markdown: str, output: str, *before: str) -> subprocess.CompletedProcess:
+        """`before` goes ahead of the filter, as pdfmd puts --citeproc."""
+        (self.root / "d.md").write_text(markdown, encoding="utf-8")
+        target = ["-o", output] if "." in output else ["-t", output]
+        done = subprocess.run(["pandoc", "d.md", *target, *before, "--lua-filter", str(FILTER)], capture_output=True,
+                              text=True, encoding="utf-8", cwd=self.root)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done
+
+    def test_a_label_in_a_caption(self):
+        # LR4-5: `: caption \`\label{tbl:rf}\`{=latex}`, the label was dropped and \cref{tbl:rf} led nowhere
+        text = "See [the table](#tbl:rf).\n\n| a |\n|---|\n| 1 |\n\n: Caption `\\label{tbl:rf}`{=latex}\n"
+        for output in ("d.docx", "d.odt"):
+            self.convert(text, output)
+            self.assertEqual(unreached(self.root / output), [], output)
+        caption = re.sub(r"<[^>]+>", "", zipfile.ZipFile(self.root / "d.docx").read("word/document.xml").decode())
+        self.assertIn("Table\u00a01. Caption", caption)
+
+    def test_every_label_of_an_equation(self):
+        text = ("See [one](#eq:a) and [two](#eq:b).\n\n```{=latex}\n\\begin{align}\na &= b \\label{eq:a}\\\\\n"
+                "c &= d \\label{eq:b}\n\\end{align}\n```\n")
+        for output in ("d.docx", "d.odt"):           # OpenDocument kept no Div's identifier: the first was lost too
+            self.convert(text, output)
+            self.assertEqual(unreached(self.root / output), [], output)
+        page = self.convert(text, "html5").stdout
+        self.assertEqual((page.count('id="eq:a"'), page.count('id="eq:b"')), (1, 1))
+
+    def test_opendocument_reaches_a_table_a_figure_a_div_and_a_citation(self):
+        (self.root / "r.bib").write_text("@book{k, title={A Book}, author={Doe, Jane}, year={2020}}\n", encoding="utf-8")
+        (self.root / "a.png").write_bytes(TINY_PNG)
+        text = ("---\nbibliography: r.bib\nlink-citations: true\n---\n\n"
+                "See [the div](#dv), [the figure](#fig:p), [the table](#tbl:t) and @k.\n\n::: {#dv}\nIn a div.\n:::\n\n"
+                "![Picture](a.png){#fig:p}\n\n```{=latex}\n\\begin{table}\n\\caption{Stock.\\label{tbl:t}}\n"
+                "\\begin{tabular}{l}\nx\\\\\n\\end{tabular}\n\\end{table}\n```\n")
+        self.convert(text, "d.odt", "--citeproc")
+        self.assertEqual(unreached(self.root / "d.odt"), [])
+
+    def test_no_label_twice_in_html_or_typst(self):
+        # Pandoc's LaTeX reader puts a figure's label on the figure and on an empty span in its caption: Typst stopped
+        # on it ("label occurs multiple times", typst.lua kept the first) and HTML had the id twice
+        (self.root / "a.png").write_bytes(TINY_PNG)
+        text = ("See [it](#fig:tlc).\n\n```{=latex}\n\\begin{figure}\n\\centering\n\\includegraphics{a.png}\n"
+                "\\caption{Plates.\\label{fig:tlc}}\n\\end{figure}\n```\n\nAgain `\\label{fig:tlc}`{=latex}.\n")
+        self.assertEqual(self.convert(text, "html5").stdout.count('id="fig:tlc"'), 1)
+        self.assertEqual(self.convert(text, "typst").stdout.count("<fig:tlc>"), 2)      # the label and the link
+        self.convert(text, "d.docx")
+        self.assertEqual(unreached(self.root / "d.docx"), [])
+
+    def test_a_picture_sized_by_its_height_with_an_older_pandoc(self):
+        # Pandoc 3.1.3 has no pandoc.image: "attempt to index a nil value (field 'image')" stopped the build
+        (self.root / "a.png").write_bytes(TINY_PNG)
+        text = "```{=latex}\n\\begin{figure}\n\\includegraphics[height=2cm]{a.png}\n\\caption{A dot.}\n\\end{figure}\n```\n"
+        self.convert(text, "d.docx")
+        self.assertIn("<pic:pic", zipfile.ZipFile(self.root / "d.docx").read("word/document.xml").decode())
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -343,6 +429,15 @@ class Pictures(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode())
         self.assertIn("Figure\u00a01: A circle.", text)
+
+    def test_a_drawn_block_keeps_its_labels(self):
+        # v3.28.4: LR4-5's \irspectrumpage and sidefigure were drawn whole and \cref{fig:...} led nowhere
+        root, done = self.build({"preamble.tex": "\\usepackage{tikz}\n\\newenvironment{sidebox}{}{}\n"},
+                                "See [one](#fig:side) and [two](#fig:other).\n\n\\begin{sidebox}\n"
+                                "\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n"
+                                "\\label{fig:side}\\label{fig:other}\n\\end{sidebox}\n")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(unreached(root / "d.docx"), [])
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")

@@ -41,6 +41,66 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.4 — 2026-10-11
+
+Pre-edit state: commit `fd9f00d` (v3.28.3).
+
+### Fixed
+
+- **A reference to what LaTeX labelled led nowhere** in Word, OpenDocument and HTML output, and in Typst it became
+  plain text. The LaTeX filter makes `\cref{x}` a link to `#x`. Before 3.28.2 this went unseen. Once 3.28.2 gave a
+  named `-e weasyprint` the filter, WeasyPrint printed `ERROR: No anchor #fig:… for internal URI reference` for each
+  such link (19 lines for LR4-5).
+  - **The cause:** the label was dropped on the way:
+    - a raw `\label{}` in a Markdown caption (LR4-5's tables: `` : caption `\label{tbl:rf}`{=latex} ``);
+    - a block drawn as a picture (nulabreport's `\irspectrumpage`, a `sidefigure` in an `\input` file);
+    - every line of an equation but the first;
+    - in OpenDocument, any equation, since its label sat on a Div and that writer writes no Div's identifier.
+  - **The fix:** each such `\label` is now an anchor where it stands, an empty span with the label as its identifier.
+    That is a bookmark in Word and OpenDocument, an id in HTML and a label in Typst. A figure environment drawn
+    whole keeps its first label as the figure's and the others (subfigures) as anchors. An equation's labels are
+    anchors in its cell, and the Div around it is gone. A caption's own label gives the caption LaTeX's number.
+  - In HTML and Typst an anchor whose label the document already carries is dropped, and so is a second anchor of a
+    label. This includes Pandoc's LaTeX reader's own empty span beside a figure's identifier: Typst no longer warns
+    "1 label on more than one element (fig:tlc)" for LR4-5, and HTML has no id twice. Word and OpenDocument keep
+    that span, since their writers do not always write a figure's identifier (OpenDocument never, Word not with
+    Pandoc 3.1.3).
+  - OpenDocument writes no bookmark for a table's, a figure's or a div's identifier. Such an element gets an anchor
+    in its caption, or else in its first line or first cell. This covers a `{#tbl:x}` table, a nulabreport
+    `\chemicals` table and the references' entries, so a citation's link now leads to its entry.
+- **A picture sized by one side stopped the Word or OpenDocument build with Pandoc 3.1.3.** An `\includegraphics[height=...]`
+  read through Pandoc's LaTeX reader (LR4-5's TLC plates) failed with "attempt to index a nil value (field 'image')":
+  Pandoc 3.1.3 has no `pandoc.image`. Without it the size is now left to the writer, which keeps the aspect ratio.
+
+Not done: the one-line warning for WeasyPrint's links to missing anchors, planned in 3.28.3's notes. The anchors
+left LR4-5 with none in any output, and such a check would have to run after the LaTeX filter (the order 3.28.2 had
+to fix for Typst).
+
+Checked through pdfmd, LR4-5:
+
+| Output | Links without a target, before | After |
+|---|---|---|
+| `.docx`, Pandoc 3.12 | 12 of 42 | 0 |
+| `.docx`, Pandoc 3.1.3 | (the build stopped) | 0 |
+| `.odt`, Pandoc 3.12 and 3.1.3 | 28 | 0 |
+| `-e weasyprint` | 19 `No anchor` lines | none |
+
+- `-e typst` builds with no warning.
+- `-e calibre` builds (28 pages).
+- Caption numbers agree with the LaTeX PDF (Table 1 to 14).
+
+### Tests
+
+- `tests/test_office_latex.py`, new class `Anchors`, on Pandoc 3.12 and 3.1.3:
+  - a caption's `\label` in Word and OpenDocument, with LaTeX's number;
+  - both labels of an `align`;
+  - OpenDocument reaching a div, a figure, a table and a citation;
+  - no label twice in HTML or Typst;
+  - a height-sized picture.
+- `Pictures`: a drawn block keeps both its labels.
+- On `fd9f00d`'s filter the six fail on Pandoc 3.1.3, and the five but the picture on 3.12.
+- Full suite: Pandoc 3.12, 998 tests OK (14 skipped); Pandoc 3.1.3, 998 OK (24 skipped).
+
 ## v3.28.3 — 2026-10-11
 
 Pre-edit state: commit `cb7adde` (v3.28.2).

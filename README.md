@@ -656,7 +656,10 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
 - raw `figure`, `tabular`, lists, `\emph`, `\newpage`... are read by Pandoc's own LaTeX reader;
 - `\ref`, `\eqref`, `\cref`, `\Cref`, `\pageref` and the "Figure 3." in front of a caption use the numbers
   LaTeX itself gave (pdfmd builds the PDF once, in its cache, and reads the `.aux`; reused while the sources
-  are older), with the caption separator (`labelsep=`) and `\crefname`s of your preamble;
+  are older), with the caption separator (`labelsep=`) and `\crefname`s of your preamble. Each reference is a link
+  to what it names. A `\label` in a caption, in a block drawn as a picture or on any line of an equation becomes a
+  bookmark there. In OpenDocument a labelled table, figure or div, and a citation's entry in the references, get one
+  too, since its writer bookmarks none of them;
 - **what is left is drawn by LaTeX**: tikz, chemfig, a house style's own macros, math Pandoc cannot convert are compiled in
   *your document's own preamble* (the same fonts, packages and macros as the PDF, one fragment to a page), and the
   pages go into the Word file as vector pictures: an SVG with a 300 dpi PNG fallback (Word 2016 and later draw the SVG,

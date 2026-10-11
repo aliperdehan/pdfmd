@@ -39,6 +39,27 @@ local counters = {math = 0, native = 0}
 
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
+-- the \label{...}s of a piece of LaTeX, in order
+local function labels_of(tex)
+  local found = {}
+  for label in tex:gmatch("\\label%s*{([^}]*)}") do found[#found + 1] = label end
+  return found
+end
+
+-- What LaTeX labels gets an anchor where it stands (v3.28.4): an empty span with the label as its identifier, which is a
+-- bookmark in Word and OpenDocument, an id in HTML and a label in Typst. A label in a caption's raw `\label{}`, in a
+-- block drawn as a picture (a nulabreport \irspectrumpage, a sidefigure) or on an equation's second line was dropped,
+-- and a \cref to it was a link to nothing (WeasyPrint said "No anchor" for each). Pandoc writes a Div's identifier
+-- into Word but not into OpenDocument, so an equation's label is an anchor too. Pandoc(doc) drops an anchor whose
+-- label something else in the document carries already.
+local function anchors_for(list)
+  local out = {}
+  for _, label in ipairs(list) do
+    if label ~= "" then out[#out + 1] = pandoc.Span({}, pandoc.Attr(label, {"pdfmd-anchor"})) end
+  end
+  return out
+end
+
 
 -- the {...} group starting at or after `pos`: content, position after it
 local function group(s, pos)
@@ -669,10 +690,20 @@ local function crossref_numbered(el, kind, first)
   return title ~= "" and text:sub(1, #title) == title and text:sub(#title + 1):match("^%s*%d") ~= nil
 end
 
+-- the label a caption's own `\label{}` left as an anchor in it (v3.28.4)
+local function caption_anchor(caption)
+  local found
+  pandoc.Blocks(caption.long):walk({Span = function(span)
+    if not found and span.classes:includes("pdfmd-anchor") then found = span.identifier end
+  end})
+  return found
+end
+
 local function number_caption(el, kind)
   local caption = el.caption
   if not caption or not caption.long or #caption.long == 0 then return nil end
   local identifier = el.identifier or (el.attr and el.attr.identifier) or ""
+  if identifier == "" then identifier = caption_anchor(caption) or "" end    -- LaTeX's number for it
   local entry = identifier ~= "" and labels[identifier] or nil
   local number
   if entry and entry.num ~= "" then
@@ -936,6 +967,8 @@ end
 function RawInline(el)
   if off() or el.format ~= "latex" and el.format ~= "tex" then return nil end
   local raw = trim(el.text)
+  local label = raw:match("^\\label%s*{([^}]*)}$")
+  if label then return anchors_for({label}) end
   local reference = ref_inlines(raw)
   if reference then counters.native = counters.native + 1; return reference end
   local custom = profile_command(raw, false)
@@ -970,7 +1003,7 @@ function RawInline(el)
   end
   if pictures() and raw:match("^\\[%a]+") and text_command(raw) then
     local image = fragment_image("inline", raw)
-    if image then return image end
+    if image then return {image, table.unpack(anchors_for(labels_of(raw)))} end
     record("inline", raw)
     return nil
   end
@@ -990,7 +1023,7 @@ function RawInline(el)
     end
   end
   local image = fragment_image("inline", raw)
-  if image then return image end
+  if image then return {image, table.unpack(anchors_for(labels_of(raw)))} end
   record("inline", raw)
   return nil
 end
@@ -1037,6 +1070,7 @@ local function sized_image(img)
   local width, height = img.attributes["width"], img.attributes["height"]
   if (width and height) or not (width or height) then return nil end
   if img.src:lower():match("%.svg$") then return nil end
+  if not pandoc.image then return nil end        -- Pandoc 3.1.3 has no pandoc.image: the build stopped (v3.28.4)
   local ok, _, contents = pcall(pandoc.mediabag.fetch, img.src)
   if not ok or not contents then return nil end
   local known, info = pcall(pandoc.image.size, contents)
@@ -1081,11 +1115,12 @@ local function captioned_float(raw, env)
       inner = inner:sub(1, at - 1) .. inner:sub(stop)
     end
   end
+  local more = labels_of(inner)              -- a subfigure's own, kept as anchors
   if caption then
     label = caption:match("\\label%s*{([^}]*)}")
     caption = caption:gsub("\\label%s*{[^}]*}", "")
   end
-  label = label or inner:match("\\label%s*{([^}]*)}")
+  if not label then label = table.remove(more, 1) end
   inner = inner:gsub("\\label%s*{[^}]*}", ""):gsub("\\centering", ""):gsub("\\noindent", "")
   local image = fragment_image("block", inner)
   if not image then
@@ -1097,14 +1132,15 @@ local function captioned_float(raw, env)
     local ok, doc = pcall(pandoc.read, trim(caption), "latex")
     if ok then caption_blocks = doc.blocks end
   end
-  local figure = pandoc.Figure({pandoc.Plain({image})}, pandoc.Caption(caption_blocks),
+  local figure = pandoc.Figure({pandoc.Plain({image, table.unpack(anchors_for(more))})}, pandoc.Caption(caption_blocks),
     pandoc.Attr(label or ""))
   return number_caption(figure, env == "table" and "table" or "figure")
 end
 
 -- a picture on a line of its own: centred, and not indented like body text
-function centred(image)
-  return pandoc.Div({pandoc.Para({image})}, pandoc.Attr("", {}, {{"custom-style", "PdfmdCentered"}}))
+function centred(image, labelled)
+  return pandoc.Div({pandoc.Para({image, table.unpack(anchors_for(labelled or {}))})},
+    pandoc.Attr("", {}, {{"custom-style", "PdfmdCentered"}}))
 end
 
 local input_depth = 0
@@ -1267,7 +1303,7 @@ function RawBlock(el)
     if figure then return figure end
   end
   local image = fragment_image("block", raw)
-  if image then return centred(image) end
+  if image then return centred(image, labels_of(raw)) end
   record("block", raw)
   return nil
 end
@@ -1277,9 +1313,13 @@ end
 function equation_block(span)
   local numbered = span.attributes["numbered"] ~= "no"
   local math = span.content[1]
-  local mid = pandoc.Plain({math})
-  local right = pandoc.Plain({})
   local anchor = span.identifier
+  -- every label of the equation an anchor in its cell (OpenDocument keeps no Div's identifier; v3.28.4)
+  local all = {}
+  for label in (span.attributes["labels"] or anchor):gmatch("[^,]+") do all[#all + 1] = trim(label) end
+  local mid = pandoc.Plain({table.unpack(anchors_for(all))})
+  mid.content:insert(math)
+  local right = pandoc.Plain({})
   if numbered then
     local entry = anchor ~= "" and labels[anchor] or nil
     local number
@@ -1298,7 +1338,6 @@ function equation_block(span)
     {{pandoc.AlignDefault, 0.1}, {pandoc.AlignCenter, 0.8}, {pandoc.AlignRight, 0.1}},
     pandoc.TableHead({}), {pandoc.TableBody({row})}, pandoc.TableFoot({}),
     pandoc.Attr("", {}, {{"custom-style", "PdfmdEquation"}}))
-  if anchor ~= "" then return pandoc.Div({table_}, pandoc.Attr(anchor)) end
   return table_
 end
 
@@ -1486,6 +1525,65 @@ local function write_report()
   file:close()
 end
 
+-- Of two anchors of one label the first stays. In HTML and Typst an anchor whose label the document carries already (a
+-- figure's own identifier, a {#id}) goes too: an id used twice is invalid HTML, and Typst stops on a label used twice.
+-- Pandoc's LaTeX reader leaves an anchor of its own in a figure's caption (an empty span, label="fig:x") beside the
+-- figure's identifier; Word and OpenDocument keep it, as their writers do not always write a figure's or a table's
+-- identifier (OpenDocument never, Word from Pandoc 3.2 or so: not with 3.1.3).
+local CARRIERS = {"Header", "Div", "Span", "Figure", "Table", "CodeBlock", "Code", "Image", "Link"}
+
+local function is_anchor(el)
+  return el.t == "Span" and (el.classes:includes("pdfmd-anchor")
+    or (#el.content == 0 and el.attributes["label"] == el.identifier))
+end
+
+local function drop_repeated_anchors(doc)
+  local carried, seen = {}, {}
+  local collector = {}
+  for _, name in ipairs(CARRIERS) do
+    collector[name] = function(el)
+      if el.identifier ~= "" and not is_anchor(el) then carried[el.identifier] = true end
+    end
+  end
+  if FORMAT:match("^html") or FORMAT:match("^epub") or FORMAT:match("^typst") then doc:walk(collector) end
+  return doc:walk({Span = function(span)
+    if span.identifier == "" or not is_anchor(span) then return nil end
+    if carried[span.identifier] or seen[span.identifier] then return {} end
+    seen[span.identifier] = true
+  end})
+end
+
+-- OpenDocument writes no bookmark for a table's, a figure's or a div's identifier ({#tbl:x}, {#fig:x}, a house style's
+-- own table, a figure LaTeX labelled, a citation's entry in the references): its caption, or else its first line,
+-- gets an anchor of the same label, so a reference to it leads to it (Pandoc 3.12 and 3.1.3 alike)
+local function odt_anchors(doc)
+  if not (FORMAT:match("^odt") or FORMAT:match("^opendocument")) then return doc end
+  local function anchor(el)
+    if el.identifier == "" then return nil end
+    local held = false                   -- an anchor of its label inside it already (Pandoc's LaTeX reader's, ours)
+    el:walk({Span = function(span) if span.identifier == el.identifier then held = true end end})
+    if held then return nil end
+    local span = pandoc.Span({}, pandoc.Attr(el.identifier, {"pdfmd-anchor"}))
+    local first = el.caption and el.caption.long and el.caption.long[1]
+    if not first and el.t == "Figure" then first = el.content[1] end
+    if first and (first.t == "Plain" or first.t == "Para") then
+      first.content:insert(1, span)
+      return el
+    end
+    if el.t == "Figure" then return nil end
+    -- a div, or a table whose caption a house style made a paragraph of its own (its first cell)
+    local placed = false
+    local function place(block)
+      if placed then return nil end
+      placed = true
+      block.content:insert(1, span)
+      return block
+    end
+    return el:walk({Plain = place, Para = place})
+  end
+  return doc:walk({Table = anchor, Figure = anchor, Div = anchor})
+end
+
 function Pandoc(doc)
   current_meta = doc.meta
   if profile.pandoc then
@@ -1493,6 +1591,7 @@ function Pandoc(doc)
     if ok and result then doc = result
     elseif not ok then io.stderr:write("[pdfmd] the office profile's pandoc hook failed: " .. tostring(result) .. "\n") end
   end
+  doc = odt_anchors(drop_repeated_anchors(doc))
   write_report()
   if settings.mode == "collect" and settings.wanted then
     local file = io.open(settings.wanted, "w")
