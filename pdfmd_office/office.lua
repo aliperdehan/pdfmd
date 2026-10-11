@@ -656,6 +656,19 @@ local function caption_label(kind)
   return (kind == "figure") and "Figure" or "Table"
 end
 
+-- what pandoc-crossref puts in front of a caption it numbers (its figureTitle and tableTitle, read in Meta)
+local crossref_titles = {figure = "Figure", table = "Table"}
+
+-- a caption pandoc-crossref has numbered already ("Table 1: "): one of its labels (fig:, tbl:), and its title and a
+-- number at the start. Numbered again, it read "Table 1: Table 1: A table".
+local function crossref_numbered(el, kind, first)
+  local identifier = el.identifier or (el.attr and el.attr.identifier) or ""
+  if not identifier:match(kind == "figure" and "^fig:" or "^tbl:") then return false end
+  local text = stringify(first):gsub("\u{00A0}", " ")
+  local title = crossref_titles[kind]
+  return title ~= "" and text:sub(1, #title) == title and text:sub(#title + 1):match("^%s*%d") ~= nil
+end
+
 local function number_caption(el, kind)
   local caption = el.caption
   if not caption or not caption.long or #caption.long == 0 then return nil end
@@ -670,6 +683,7 @@ local function number_caption(el, kind)
     number = tostring(counters_by[kind])
   end
   local first = caption.long[1]
+  if crossref_numbered(el, kind, first) then return nil end    -- counted all the same, as LaTeX counts it
   if first.t == "Plain" or first.t == "Para" then
     table.insert(first.content, 1, pandoc.Str(caption_label(kind) .. "\u{00A0}" .. number .. caption_sep))
   end
@@ -1398,6 +1412,8 @@ function Meta(meta)
     if meta[key] ~= nil then meta[key] = without_latex(meta[key]); stripped = true end
   end
   if meta["pdfmd-office-latex"] then settings.latex = stringify(meta["pdfmd-office-latex"]) end
+  if meta.figureTitle then crossref_titles.figure = stringify(meta.figureTitle) end
+  if meta.tableTitle then crossref_titles.table = stringify(meta.tableTitle) end
   if meta["pdfmd-office-report"] then settings.report = stringify(meta["pdfmd-office-report"]) end
   if meta["pdfmd-office-profile"] then
     local path = stringify(meta["pdfmd-office-profile"])

@@ -41,6 +41,37 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.1 — 2026-10-11
+
+Pre-edit state: commit `a2566ad` (v3.28.0).
+
+### Fixed
+
+- **A table caption pandoc-crossref had numbered was numbered again**: "Table 1: Table 1: A table". pdfmd's LaTeX
+  filter (`pdfmd_office/office.lua`) puts "Table N. " in front of every table and figure caption, as the PDF prints
+  it, and pandoc-crossref runs before it. This affected every `.docx` and `.odt` with a `{#tbl:...}` table, the
+  LibreOffice route, Calibre (3.28.0, where it was found), and Typst, WeasyPrint and HTML output with
+  `office: {latex: auto}`. In Word files figures were not affected; in HTML (Calibre) a `{#fig:...}` figure is now
+  numbered once too.
+  - The filter now leaves alone a caption with one of crossref's labels (`tbl:`, `fig:`) whose text starts with
+    crossref's title and a number (its `tableTitle`/`figureTitle`, "Table"/"Figure" by default). Such a table is still
+    counted, so an unlabelled table after it is "Table 2" as in LaTeX.
+  - The same label without pandoc-crossref (not installed, or `--no-auto crossref`) is numbered by the filter as
+    before.
+
+Checked through pdfmd: a document with a labelled and an unlabelled table and figure, to `.docx` and with
+`-e calibre`, with pandoc-crossref and with `--no-auto crossref`. Each caption carries one number, in the same order
+as before.
+
+### Tests
+
+- `tests/test_office_latex.py`: a caption crossref numbered (simulated, and with a custom `tableTitle`) keeps one
+  number and the next table counts it; a `tbl:` label without crossref is numbered; and the same with
+  pandoc-crossref itself (skipped without a pandoc-crossref built for this Pandoc). The first and the last fail on
+  3.28.0.
+- `test_office_latex`, `test_office`, `test_docx_tables`, `test_soffice_parts`, `test_engine_filters` and
+  `test_calibre` pass. The full suite runs at 3.28.2.
+
 ## v3.28.0 — 2026-10-11
 
 Pre-edit state: commit `a8a73a2` (v3.27.28). The first commit of the Calibre line (stage 6 of the plan; the author

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import needs_pandoc  # noqa: E402
+from pandoc_support import needs_crossref, needs_pandoc  # noqa: E402
 from pdfmd_office import caption_separator, cref_names, parse_aux  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
@@ -189,6 +189,33 @@ class Documents(unittest.TestCase):
         data = json.loads(report.read_text(encoding="utf-8"))
         kinds = sorted(item["kind"] for item in data["left_over"])
         self.assertEqual(kinds, ["block", "inline"])
+
+    TABLES = "| a |\n|---|\n| 1 |\n\n: {numbered} {{#tbl:t}}\n\n| b |\n|---|\n| 2 |\n\n: Second\n"
+
+    def test_a_caption_pandoc_crossref_numbered_is_not_numbered_again(self):
+        # it read "Table 1: Table 1: Labelled" in every Word file, LibreOffice and Calibre PDF (v3.28.1)
+        text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Table 1: Labelled")))
+        self.assertIn("Table 1: Labelled", text)
+        self.assertNotIn("Table 1. Table", text)
+        self.assertIn("Table 2. Second", text)                     # counted all the same
+        text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Tab. 1: Labelled"),
+                                                        "-M", "tableTitle=Tab."))
+        self.assertNotIn("Table 1. Tab.", text)
+
+    def test_a_crossref_label_without_crossref_is_still_numbered(self):
+        text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Labelled")))
+        self.assertIn("Table 1. Labelled", text)
+
+    @needs_crossref
+    def test_with_pandoc_crossref_itself(self):
+        source = self.root / "d.md"
+        source.write_text(self.TABLES.format(numbered="Labelled"), encoding="utf-8")
+        done = subprocess.run(["pandoc", str(source), "-o", str(self.root / "d.docx"), "--filter", "pandoc-crossref",
+                               "--lua-filter", str(FILTER)], capture_output=True, text=True, cwd=self.root)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(self.root / "d.docx").read("word/document.xml").decode("utf-8"))
+        self.assertIn("Table 1: Labelled", text)
+        self.assertNotIn("Table 1. Table", text)
 
 
 if __name__ == "__main__":
