@@ -41,6 +41,62 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.8 — 2026-10-11
+
+Pre-edit state: commit `26b37f8` (v3.28.7).
+
+Stage 6 A, second step: the converter itself. It is added and tested on its own; the LaTeX filter switches to it in
+the next version.
+
+### Added
+
+- **`pdfmd_chem/`, LaTeX's chemistry and units for the outputs LaTeX does not make.** It gives text runs (text,
+  subscripts, superscripts) for running text and math TeX for an equation.
+  - **`siunitx.py`** follows siunitx 3 for `\num`, `\qty`/`\SI`, `\unit`/`\si`, `\ang`, `\numrange`/`\qtyrange`/
+    `\SIrange` and `\numlist`/`\qtylist`/`\SIlist`:
+    - digit groups from five digits on, the decimal part included (`0.000 123 45`);
+    - the decimal marker as set, `1,5` read as `1.5`;
+    - `× 10` exponents, the compact uncertainty (`1.23 +- 0.04` is `1.23(4)`), comparators (`\sim 5`, `<5`) and
+      signs;
+    - `per-mode` power or symbol, and no space before `\degree`;
+    - the abbreviations (`\mL`, `\mol`, `\uL`: the LaTeX filter's translator knew none of them);
+    - the document's `\sisetup`, `\DeclareSIUnit` and unit shortcuts (nulabreport's `\gml`, `\molar`).
+
+    What siunitx itself refuses (`\num{2 x 3}`), or a unit it does not know, is left to LaTeX.
+  - **`render.py`** writes what `pdfmd_mhchem` parses as runs and math. It works from mhchem's parse, not its TeX,
+    which is full of phantoms that Word does not take.
+    - A mass or atomic number before a symbol is in Unicode script digits (¹⁴N): in Word and LibreOffice a script
+      with nothing before it is an empty box.
+    - An arrow with words over or under it is an equation (`needs_math`), since text cannot set words over an
+      arrow. It is written with `\overset`/`\underset`, because Pandoc's math converter has no `\xrightarrow`. So
+      the old translator's labelled arrows were pictures in Word.
+    - A `\ce` inside `$...$` inside a `\ce` is converted too.
+    - Two subscripts in a row (`CO3^2-_{(aq)}`) are joined into one, which TeX requires.
+    - chemfig's drawings (`\chemfig`, `\schemestart`...) are left to LaTeX.
+  - **`batch.py`** is one process per document: `python3 pdfmd_chem` reads a JSON request (the preamble, then every
+    command) and writes the answers, in 0.09 s.
+
+Checked:
+- **siunitx:** 268 commands give what siunitx 3.4.14 prints (LuaLaTeX, then pdftotext, spaces left out), with
+  siunitx's defaults and with nulabreport's `\sisetup`. That is 536 of 536; the 269th, `\num{2 x 3}`, is refused, as
+  LaTeX refuses it. The commands are 228 from the author's reports and 41 more.
+- **mhchem:** 482 of 504 formulas (the 388 real ones and mhchem's tests) have mhchem's structure (text, scripts,
+  arrows, labels). 18 differ on purpose, as the isotopes, the joined subscripts and the converted inner `\ce` above.
+  4 are left to LaTeX: a `\chemfig` inside a `\ce`, a `\frac` in a subscript, and two of mhchem's rarer bond
+  styles.
+- **Equations:** the math of every formula not left to LaTeX (763) becomes MathML through Pandoc's converter on
+  Pandoc 3.12 and 3.1.3, so it is an equation in Word.
+
+### Tests
+
+- `tests/test_chem.py`:
+  - siunitx against `tests/fixtures/chem/siunitx-latex.json` (LaTeX's own output);
+  - spacing and scripts, the preamble's settings, math, refusals;
+  - chemistry: the translator's old mistakes, arrows that need math, nested `\ce`, units;
+  - every fixture formula through Pandoc's converter;
+  - the batch process.
+- Full suite: Pandoc 3.12, 1030 tests OK; Pandoc 3.1.3, 1030 OK.
+
 ## v3.28.7 — 2026-10-11
 
 Pre-edit state: commit `0749bd4` (v3.28.6).
