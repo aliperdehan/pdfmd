@@ -142,308 +142,95 @@ local function fragment_image(kind, tex)
 end
 
 ---------------------------------------------------------------------------
--- units (siunitx)
+-- chemistry and units (v3.28.9): mhchem's \ce and \pu and siunitx's commands are converted by pdfmd_chem, Python
+-- beside this filter's folder (pdfmd_mhchem is a port of mhchem's own parser), in one call per document: prefetch()
+-- sends every one the document has, the handlers read the answers. One met later (a profile's table, an \input
+-- file) is asked for on its own. Until 3.28.8 this filter had its own translators: they read a bond at the end of a
+-- formula as a charge, knew none of siunitx's abbreviations (\mL, \mol) and made labelled arrows that Word drew as
+-- pictures. If Python cannot be run, LaTeX draws these as before (one WARN).
 
-local PREFIX = {
-  yocto = "y", zepto = "z", atto = "a", femto = "f", pico = "p", nano = "n", micro = "µ", milli = "m",
-  centi = "c", deci = "d", deca = "da", hecto = "h", kilo = "k", mega = "M", giga = "G", tera = "T", peta = "P",
-}
-local UNIT = {
-  gram = "g", liter = "L", litre = "L", meter = "m", metre = "m", second = "s", mole = "mol", molar = "M",
-  kelvin = "K", ampere = "A", candela = "cd", hertz = "Hz", newton = "N", pascal = "Pa", joule = "J",
-  watt = "W", coulomb = "C", volt = "V", farad = "F", ohm = "Ω", siemens = "S", weber = "Wb", tesla = "T",
-  henry = "H", lumen = "lm", lux = "lx", becquerel = "Bq", gray = "Gy", sievert = "Sv", katal = "kat",
-  celsius = "°C", degreeCelsius = "°C", degree = "°", arcminute = "′", arcsecond = "″",
-  minute = "min", hour = "h", day = "d", bar = "bar", atm = "atm", torr = "torr", angstrom = "Å",
-  percent = "%", dalton = "Da", electronvolt = "eV", tonne = "t", hectare = "ha", mmHg = "mmHg",
-  calorie = "cal", ppm = "ppm", ppb = "ppb", molal = "m", dB = "dB", bit = "bit", byte = "B", psi = "psi",
-  rpm = "rpm", gauss = "G", debye = "D", neper = "Np", radian = "rad", steradian = "sr", fg = "fg",
-}
-local POWER = {squared = 2, cubed = 3, tothe = false}
+local CHEM_NAMES = {ce = true, cee = true, cf = true, pu = true, num = true, numlist = true, numrange = true,
+  numproduct = true, si = true, unit = true, SI = true, qty = true, SIlist = true, qtylist = true, SIrange = true,
+  qtyrange = true, ang = true}
 
--- "\gram\per\milli\liter" -> { {sym="g", pow=1}, {sym="mL", pow=-1} }; nil when a macro is unknown
-local function parse_unit(s)
-  local out, per, pending, power = {}, false, "", nil
-  local i = 1
-  s = s:gsub("%s+", " ")
-  while i <= #s do
-    local c = s:sub(i, i)
-    if c == "\\" then
-      local name = s:match("^\\([%a]+)", i)
-      if not name then return nil end
-      i = i + 1 + #name
-      if name == "per" then per = true; pending = ""
-      elseif name == "squared" or name == "cubed" then
-        if #out == 0 then return nil end
-        out[#out].pow = out[#out].pow * (name == "squared" and 2 or 3)
-      elseif name == "tothe" then
-        local arg, nxt = group(s, i)
-        if not arg or #out == 0 or not tonumber(arg) then return nil end
-        out[#out].pow = out[#out].pow * tonumber(arg); i = nxt
-      elseif name == "cdot" or name == "times" then pending = ""
-      elseif PREFIX[name] then pending = pending .. PREFIX[name]
-      elseif UNIT[name] then
-        out[#out + 1] = {sym = pending .. UNIT[name], pow = per and -1 or 1}
-        pending = ""
-      else return nil end
-    elseif c == "^" then
-      local arg, nxt = s:match("^%^{?(%-?%d+)}?()", i)
-      if not arg or #out == 0 then return nil end
-      out[#out].pow = out[#out].pow * tonumber(arg); i = nxt
-    elseif c == " " or c == "." then i = i + 1
-    elseif c:match("[%a°%%]") then   -- a bare symbol such as `m` or `mol`
-      local word = s:match("^[%a°%%]+", i)
-      out[#out + 1] = {sym = pending .. word, pow = per and -1 or 1}
-      pending = ""; i = i + #word
-    else return nil end
+local function has_chem(tex)
+  for name in tex:gmatch("\\(%a+)") do
+    if CHEM_NAMES[name] then return true end
   end
-  if #out == 0 then return nil end
-  return out
+  return false
 end
 
-local SUP = {["-"] = "−", ["0"] = "0", ["1"] = "1", ["2"] = "2", ["3"] = "3", ["4"] = "4", ["5"] = "5",
-             ["6"] = "6", ["7"] = "7", ["8"] = "8", ["9"] = "9"}
-local function sup_text(n)
-  return (tostring(n):gsub(".", function(ch) return SUP[ch] or ch end))
-end
-
-local function unit_math(units)
-  local parts = {}
-  for _, u in ipairs(units) do
-    local sym = "\\text{" .. u.sym:gsub("%%", "\\%%") .. "}"
-    if u.sym == "°C" then sym = "\\text{°C}" end
-    if u.pow ~= 1 then sym = sym .. "^{" .. u.pow .. "}" end
-    parts[#parts + 1] = sym
-  end
-  return table.concat(parts, "\\,")
-end
-
-local function unit_inlines(units)
-  local out = {}
-  for index, u in ipairs(units) do
-    if index > 1 then out[#out + 1] = pandoc.Str("\u{00A0}") end
-    out[#out + 1] = pandoc.Str(u.sym)
-    if u.pow ~= 1 then out[#out + 1] = pandoc.Superscript({pandoc.Str(sup_text(u.pow))}) end
-  end
-  return out
-end
-
--- siunitx number: 1.5e-3 -> {text="1.5 × 10", exp="−3"}
-local function number_parts(s)
-  s = trim(s):gsub("[{}]", "")
-  local mantissa, exp = s:match("^(.-)[eE]([+-]?%d+)$")
-  if not mantissa then return (s:gsub("%+%-", "±"):gsub("%-", "−")), nil end
-  mantissa = mantissa:gsub("%-", "−")
-  return mantissa .. "\u{00A0}×\u{00A0}10", (tostring(tonumber(exp)):gsub("%-", "−"))
-end
-
-local function number_math(s)
-  s = trim(s):gsub("[{}]", "")
-  local mantissa, exp = s:match("^(.-)[eE]([+-]?%d+)$")
-  if mantissa then return mantissa .. "\\times 10^{" .. tonumber(exp) .. "}" end
-  return (s:gsub("%+%-", "\\pm "))
-end
-
----------------------------------------------------------------------------
--- mhchem \ce{...}
-
-local ARROWS = {
-  {"<=>", "⇌", "\\rightleftharpoons"}, {"<->", "⟷", "\\longleftrightarrow"}, {"<-->", "⟷", "\\longleftrightarrow"},
-  {"-->", "⟶", "\\longrightarrow"}, {"->", "⟶", "\\longrightarrow"}, {"<--", "⟵", "\\longleftarrow"},
-  {"<-", "⟵", "\\longleftarrow"}, {"<=", "⇐", "\\Leftarrow"}, {"=>", "⇒", "\\Rightarrow"},
+local here = (debug.getinfo(1, "S").source or ""):match("^@(.*)$") or ""
+local chem = {
+  dir = (here:gsub("[/\\][^/\\]*$", ""):gsub("[/\\][^/\\]*$", "")) .. "/pdfmd_chem",
+  cache = {}, calls = 0, failed = false, python = nil, header = "",
 }
 
--- one species such as `2Ag+(aq)`, `SO4^2-`, `(NH4)2SO4`, `[Cu(NH3)4]^2+`, `CuSO4.5H2O`
--- -> list of parts {t = text, sub = , sup = } or nil
-local function species(word)
-  local parts = {}
-  local i = 1
-  local coefficient = word:match("^(%d+)%a") or word:match("^(%d+)[%(%[]")
-  if coefficient then
-    parts[#parts + 1] = {t = coefficient, coef = true}
-    i = #coefficient + 1
+local function chem_key(kind, source) return (kind == "math" and "M" or "T") .. source end
+
+-- the document's LaTeX preamble, its header-includes too: the \sisetup and \DeclareSIUnit siunitx follows
+local function chem_preamble()
+  local text = chem.header
+  if settings.preamble then
+    local file = io.open(settings.preamble, "r")
+    if file then text = file:read("a") .. "\n" .. text; file:close() end
   end
-  local function push(t) parts[#parts + 1] = {t = t} end
-  while i <= #word do
-    local c = word:sub(i, i)
-    if c:match("%u") then
-      local el = word:match("^%u%l?", i)
-      push(el); i = i + #el
-    elseif c:match("%l") then          -- R-groups and lower-case labels (e.g. `aq`, `x`)
-      push(c); i = i + 1
-    elseif c:match("%d") then
-      local digits = word:match("^%d+", i)
-      local last = parts[#parts]
-      if not last then return nil end
-      if last.coef or last.dot then parts[#parts + 1] = {t = digits, coef = true}   -- 5 in CuSO4.5H2O
-      else last.sub = (last.sub or "") .. digits end
-      i = i + #digits
-    elseif c == "(" or c == "[" then
-      -- a state label (aq) (s) (l) (g) stays text; other groups open normally
-      local state = word:match("^%((aq)%)", i) or word:match("^%((s)%)", i) or word:match("^%((l)%)", i)
-          or word:match("^%((g)%)", i) or word:match("^%((cr)%)", i)
-      if c == "(" and state then push("(" .. state .. ")"); i = i + #state + 2
-      else push(c); i = i + 1 end
-    elseif c == ")" or c == "]" then
-      push(c); i = i + 1
-    elseif c == "^" then
-      local arg, nxt = group(word, i + 1)
-      if arg then
-        local last = parts[#parts]
-        if not last then return nil end
-        last.sup = arg:gsub("%-", "−"); i = nxt
-      else
-        local tail = word:match("^%^(%d*[%+%-]?)", i)
-        local last = parts[#parts]
-        if not last or tail == "" then return nil end
-        last.sup = tail:gsub("%-", "−"); i = i + 1 + #tail
-      end
-    elseif c == "_" then
-      local arg, nxt = group(word, i + 1)
-      local last = parts[#parts]
-      if not arg or not last then return nil end
-      last.sub = arg; i = nxt
-    elseif c == "+" or c == "-" then
-      -- a charge when it follows a species and is not followed by another species
-      local last = parts[#parts]
-      local nextc = word:sub(i + 1, i + 1)
-      local charge = last and not last.coef and not last.dot and not last.bond
-      if charge and c == "-" and nextc:match("%a") then charge = false end   -- a bond: R-O, C-Cl
-      if charge then
-        local sign = (c == "-") and "−" or "+"
-        last.sup = (last.sup or "") .. sign; i = i + 1
-      elseif c == "-" then
-        push("-"); parts[#parts].bond = true; i = i + 1
-      else push("+"); i = i + 1 end
-    elseif c == "=" or c == "#" then      -- a double or triple bond: C=O, HC#CH
-      local glyph = (c == "=") and "=" or "\u{2261}"
-      push(glyph); parts[#parts].bond = true; parts[#parts].glyph = glyph; i = i + 1
-    elseif c == "." or c == "*" then
-      push("·"); parts[#parts].dot = true; i = i + 1
-    elseif c == "{" then
-      local arg, nxt = group(word, i)
-      if not arg then return nil end
-      push(arg); i = nxt
-    elseif c == "\\" then
-      local name = word:match("^\\(%a+)", i)
-      if name == "Delta" then push("Δ"); i = i + 6
-      elseif name == "text" then
-        local arg, nxt = group(word, i)
-        if not arg then return nil end
-        push(arg); i = nxt
-      else return nil end
-    else return nil end
-  end
-  return parts
+  return text
 end
 
-local function ce_parse(src)
-  src = trim(src)
-  local out, i = {}, 1
-  while i <= #src do
-    local c = src:sub(i, i)
-    if c:match("%s") then
-      i = i + 1
-      out[#out + 1] = {kind = "space"}
-    else
-      local arrow
-      for _, a in ipairs(ARROWS) do
-        if src:sub(i, i + #a[1] - 1) == a[1] then arrow = a; break end
-      end
-      if arrow then
-        -- arrow decorations: ->[above][below]
-        i = i + #arrow[1]
-        local above, below
-        above, i = optional(src, i)
-        if above then below, i = optional(src, i) end
-        out[#out + 1] = {kind = "arrow", text = arrow[2], math = arrow[3], above = above, below = below}
-      else
-        -- a word runs to the next space or arrow
-        local j = i
-        while j <= #src do
-          local d = src:sub(j, j)
-          if d:match("%s") then break end
-          local at_arrow = false
-          for _, a in ipairs(ARROWS) do
-            if j > i and src:sub(j, j + #a[1] - 1) == a[1] then at_arrow = true end
-          end
-          if at_arrow then break end
-          if d == "{" then local _, nxt = group(src, j); j = (nxt or j + 1) else j = j + 1 end
-        end
-        local word = src:sub(i, j - 1)
-        if word == "+" then out[#out + 1] = {kind = "plus"}
-        elseif word == "-" then out[#out + 1] = {kind = "minus"}
-        else
-          local parts = species(word)
-          if not parts then return nil end
-          out[#out + 1] = {kind = "species", parts = parts}
-        end
-        i = j
-      end
-    end
+local function chem_ask(items)
+  if chem.failed or #items == 0 then return end
+  chem.calls = chem.calls + 1
+  local request = pandoc.json.encode({preamble = chem_preamble(), items = items})
+  local ok, out = pcall(pandoc.pipe, chem.python or "python3", {chem.dir}, request)
+  local decoded, answers = false, nil
+  if ok then decoded, answers = pcall(pandoc.json.decode, out, false) end
+  if not decoded or type(answers) ~= "table" then
+    chem.failed = true
+    io.stderr:write("[pdfmd] WARN the converter of \\ce and siunitx (pdfmd_chem) could not run; LaTeX draws them\n")
+    return
   end
-  return out
+  for index, item in ipairs(items) do
+    chem.cache[chem_key(item.math and "math" or "text", item.math or item.text)] = answers[index] or {error = "none"}
+  end
 end
 
-local function ce_math(tokens)
+-- the converter's answer for one command in text ("text") or one formula ("math"); nil when it cannot convert it
+local function chem_answer(kind, source)
+  local key = chem_key(kind, source)
+  if chem.cache[key] == nil then chem_ask({kind == "math" and {math = source} or {text = source}}) end
+  local answer = chem.cache[key]
+  if answer == nil or answer.error then return nil end
+  return answer
+end
+
+-- an equation can be shown: not in an HTML page whose math is plain text (WeasyPrint's)
+local function math_renders()
+  if not FORMAT:match("^html") then return true end
+  local method = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.html_math_method
+  method = type(method) == "table" and method.method or method
+  return method ~= "plain"
+end
+
+-- the runs of an answer: text, its ordinary spaces as spaces, sub- and superscripts
+local function runs_inlines(runs)
   local out = {}
-  local run = ""
-  local function flush()
-    if run ~= "" then out[#out + 1] = "\\text{" .. run .. "}"; run = "" end
+  local function words(text)
+    local list = {}
+    for piece, space in text:gmatch("([^ ]*)( ?)") do
+      if piece ~= "" then list[#list + 1] = pandoc.Str(piece) end
+      if space ~= "" then list[#list + 1] = pandoc.Space() end
+    end
+    return list
   end
-  local function mathrm(text) return "\\text{" .. text:gsub("%%", "\\%%") .. "}" end
-  for _, t in ipairs(tokens) do
-    if t.kind == "space" then
-      flush(); if #out > 0 and out[#out] ~= "\\ " then out[#out + 1] = "\\ " end
-    elseif t.kind == "plus" then flush(); out[#out + 1] = "+"
-    elseif t.kind == "minus" then flush(); out[#out + 1] = "-"
-    elseif t.kind == "arrow" then
-      flush()
-      local arrow = t.math
-      if t.above or t.below then
-        if t.math == "\\rightleftharpoons" then
-          arrow = "\\overset{" .. mathrm(t.above or "") .. "}{" .. (t.below and ("\\underset{" .. mathrm(t.below) .. "}{\\rightleftharpoons}") or "\\rightleftharpoons") .. "}"
-        else
-          arrow = "\\xrightarrow" .. (t.below and ("[" .. mathrm(t.below) .. "]") or "") .. "{" .. mathrm(t.above or "") .. "}"
-        end
-      end
-      out[#out + 1] = arrow
+  for _, run in ipairs(runs) do
+    local text, place = run[1], run[2]
+    if place == "sub" then out[#out + 1] = pandoc.Subscript(words(text))
+    elseif place == "sup" then out[#out + 1] = pandoc.Superscript(words(text))
     else
-      for _, p in ipairs(t.parts) do
-        if p.coef then flush(); out[#out + 1] = p.t .. "\\,"
-        elseif p.bond then flush(); out[#out + 1] = "\\text{" .. (p.glyph or "-") .. "}"
-        elseif p.sub or p.sup then
-          flush()
-          local text = mathrm(p.t)
-          if p.sub then text = text .. "_{" .. p.sub .. "}" end
-          if p.sup then text = text .. "^{" .. p.sup .. "}" end
-          out[#out + 1] = text
-        else run = run .. p.t end
-      end
+      for _, item in ipairs(words(text)) do out[#out + 1] = item end
     end
   end
-  flush()
-  return (table.concat(out):gsub("−", "-"))
-end
-
-local function ce_inlines(tokens)
-  local out = {}
-  local function add(x) out[#out + 1] = x end
-  for _, t in ipairs(tokens) do
-    if t.kind == "space" then add(pandoc.Space())
-    elseif t.kind == "plus" then add(pandoc.Str("+"))
-    elseif t.kind == "minus" then add(pandoc.Str("−"))
-    elseif t.kind == "arrow" then
-      add(pandoc.Str(t.text))
-    else
-      for _, p in ipairs(t.parts) do
-        add(pandoc.Str(p.t))
-        if p.sub then add(pandoc.Subscript({pandoc.Str(p.sub)})) end
-        if p.sup then add(pandoc.Superscript({pandoc.Str(p.sup)})) end
-      end
-    end
-  end
-  -- `2` `Ag` ... : a coefficient is followed by a thin space
   return out
 end
 
@@ -516,49 +303,19 @@ local function break_display(tex, limit)
   return "\\begin{aligned}" .. table.concat(rows, "\\\\") .. "\\end{aligned}"
 end
 
--- Replace \ce{..}, \si{..}, \SI{..}{..}, \num{..}, \qty{..}{..} in a math string. nil when one fails.
-local function math_translate(tex)
+-- what Lua does to a formula before the converter sees it (the empty degree script, \xoverline): prefetch() and
+-- math_translate() make the same string, which is the converter's cache key
+local function prepare_math(tex)
   tex = fix_empty_scripts(tex)
-  local out, i = {}, 1
-  while i <= #tex do
-    local at = tex:find("\\", i, true)
-    if not at then out[#out + 1] = tex:sub(i); break end
-    out[#out + 1] = tex:sub(i, at - 1)
-    local name = tex:match("^\\(%a+)", at)
-    local after = at + 1 + (name and #name or 0)
-    if name == "ce" then
-      local arg, nxt = group(tex, after)
-      local tokens = arg and ce_parse(arg)
-      if not tokens then return nil end
-      out[#out + 1] = ce_math(tokens); i = nxt
-    elseif name == "si" or name == "unit" then
-      local _, after_opt = optional(tex, after)
-      local arg, nxt = group(tex, after_opt)
-      local units = arg and parse_unit(arg)
-      if not units then return nil end
-      out[#out + 1] = unit_math(units); i = nxt
-    elseif name == "SI" or name == "qty" then
-      local _, after_opt = optional(tex, after)
-      local number, n1 = group(tex, after_opt)
-      local unit, n2 = nil, nil
-      if number then unit, n2 = group(tex, n1) end
-      local units = unit and parse_unit(unit)
-      if not units then return nil end
-      out[#out + 1] = number_math(number) .. "\\," .. unit_math(units); i = n2
-    elseif name == "num" then
-      local _, after_opt = optional(tex, after)
-      local arg, nxt = group(tex, after_opt)
-      if not arg then return nil end
-      out[#out + 1] = number_math(arg); i = nxt
-    elseif name == "xoverline" then
-      local _, after_opt = optional(tex, after)
-      out[#out + 1] = "\\overline"; i = after_opt
-    else
-      out[#out + 1] = tex:sub(at, after - 1) ; i = after
-      if not name then out[#out + 1] = tex:sub(at + 1, at + 1); i = at + 2 end
-    end
-  end
-  return table.concat(out)
+  return (tex:gsub("\\xoverline%s*%b[]", "\\overline"):gsub("\\xoverline", "\\overline"))
+end
+
+-- a formula with its \ce, \pu and siunitx commands converted; nil when one cannot be
+local function math_translate(tex)
+  tex = prepare_math(tex)
+  if not has_chem(tex) then return tex end
+  local answer = chem_answer("math", tex)
+  return answer and answer.math or nil
 end
 
 local math_cache = {}
@@ -800,35 +557,12 @@ end
 local function text_command(raw)
   local name = raw:match("^\\(%a+)")
   if not name then return nil end
-  if name == "ce" then
-    local arg, nxt = group(raw, #name + 2)
-    if arg and trim(raw:sub(nxt)) == "" then
-      local tokens = ce_parse(arg)
-      if tokens then return ce_inlines(tokens) end
-    end
-  elseif name == "si" or name == "unit" or name == "SI" or name == "qty" or name == "num" then
-    local _, p = optional(raw, #name + 2)
-    local first, n1 = group(raw, p)
-    if not first then return nil end
-    if name == "num" then
-      local text, exp = number_parts(first)
-      local out = {pandoc.Str(text)}
-      if exp then out[#out + 1] = pandoc.Superscript({pandoc.Str(exp)}) end
-      return out
-    elseif name == "si" or name == "unit" then
-      local units = parse_unit(first)
-      return units and unit_inlines(units) or nil
-    else
-      local second = group(raw, n1)
-      local units = second and parse_unit(second)
-      if not units then return nil end
-      local text, exp = number_parts(first)
-      local out = {pandoc.Str(text)}
-      if exp then out[#out + 1] = pandoc.Superscript({pandoc.Str(exp)}) end
-      out[#out + 1] = pandoc.Str("\u{00A0}")
-      for _, item in ipairs(unit_inlines(units)) do out[#out + 1] = item end
-      return out
-    end
+  if CHEM_NAMES[name] then
+    local answer = chem_answer("text", raw)
+    if not answer then return nil end
+    -- an arrow with words over it: an equation, where one can be shown
+    if answer.needs_math and math_renders() then return {pandoc.Math("InlineMath", answer.math)} end
+    return runs_inlines(answer.runs)
   elseif name == "allowbreak" then
     local rest = trim((raw:gsub("^\\allowbreak%s*", "")))
     return rest ~= "" and {pandoc.Str(rest)} or {}
@@ -1467,9 +1201,27 @@ local function without_latex(value)
   return value
 end
 
+-- the LaTeX of a metadata value (header-includes): what the converter of \ce and siunitx reads with the preamble
+local function latex_of(value)
+  local parts = {}
+  local function visit(item)
+    if type(item) ~= "table" then return end
+    if (item.t == "RawBlock" or item.t == "RawInline") and (item.format == "latex" or item.format == "tex") then
+      parts[#parts + 1] = item.text
+      return
+    end
+    for _, child in ipairs(item) do visit(child) end
+  end
+  visit(value)
+  return table.concat(parts, "\n")
+end
+
 function Meta(meta)
   current_meta = meta
   local stripped = false
+  if meta["header-includes"] ~= nil then chem.header = latex_of(meta["header-includes"]) end
+  if meta["pdfmd-office-python"] then chem.python = stringify(meta["pdfmd-office-python"]) end
+  if meta["pdfmd-office-chem-cache"] then chem.store = stringify(meta["pdfmd-office-chem-cache"]) end
   for _, key in ipairs({"header-includes", "include-before", "include-after"}) do
     if meta[key] ~= nil then meta[key] = without_latex(meta[key]); stripped = true end
   end
@@ -1523,7 +1275,8 @@ local function write_report()
   local file = io.open(settings.report, "w")
   if not file then return end
   file:write(pandoc.json and pandoc.json.encode and pandoc.json.encode({
-    left_over = left_over, math = counters.math, native = counters.native, properties = properties}) or "")
+    left_over = left_over, math = counters.math, native = counters.native, properties = properties,
+    chem_calls = chem.calls}) or "")
   file:close()
 end
 
@@ -1672,6 +1425,10 @@ function Pandoc(doc)
   end
   doc = keep_properties(odt_anchors(drop_repeated_anchors(doc)), before)
   write_report()
+  if chem.store and next(chem.cache) ~= nil then
+    local file = io.open(chem.store, "w")
+    if file then file:write(pandoc.json.encode(chem.cache)); file:close() end
+  end
   if settings.mode == "collect" and settings.wanted then
     local file = io.open(settings.wanted, "w")
     if file then
@@ -1686,16 +1443,54 @@ end
 
 -- for the tests: `pandoc lua` can load this file and reach the helpers
 if PDFMD_OFFICE_EXPORT then
-  PDFMD_OFFICE_EXPORT.ce_parse, PDFMD_OFFICE_EXPORT.ce_math = ce_parse, ce_math
-  PDFMD_OFFICE_EXPORT.math_translate, PDFMD_OFFICE_EXPORT.parse_unit = math_translate, parse_unit
-  PDFMD_OFFICE_EXPORT.unit_math, PDFMD_OFFICE_EXPORT.math_native = unit_math, math_native
+  PDFMD_OFFICE_EXPORT.math_translate, PDFMD_OFFICE_EXPORT.math_native = math_translate, math_native
+  PDFMD_OFFICE_EXPORT.text_command, PDFMD_OFFICE_EXPORT.chem = text_command, chem
   PDFMD_OFFICE_EXPORT.break_display, PDFMD_OFFICE_EXPORT.fix_empty_scripts = break_display, fix_empty_scripts
   PDFMD_OFFICE_EXPORT.plain_number = plain_number
   PDFMD_OFFICE_EXPORT.script_only = script_only
 end
 
+-- every \ce, \pu and siunitx command of the document, in text, in $...$, in \[...\] and in equation environments, sent
+-- to the converter in one call before the handlers ask for them (math_translate's string is the key: prepare_math)
+local function prefetch(doc)
+  if off() or pictures() then return nil end
+  -- the answers of the collect run, for the render run: the same answers, and no call for them
+  local stored = chem.store and io.open(chem.store, "r")
+  if stored then
+    local ok, saved = pcall(pandoc.json.decode, stored:read("a"), false)
+    stored:close()
+    if ok and type(saved) == "table" then
+      for key, value in pairs(saved) do chem.cache[key] = value end
+    end
+  end
+  local items, seen = {}, {}
+  local function add(kind, source)
+    local key = chem_key(kind, source)
+    if seen[key] or chem.cache[key] ~= nil then return end
+    seen[key] = true
+    items[#items + 1] = kind == "math" and {math = source} or {text = source}
+  end
+  local function formula(tex)
+    local prepared = prepare_math(tex)
+    if has_chem(prepared) then add("math", prepared) end
+  end
+  local function raw_latex(element)
+    if element.format ~= "latex" and element.format ~= "tex" then return end
+    local raw = trim(element.text)
+    local name = raw:match("^\\(%a+)")
+    if name and CHEM_NAMES[name] then add("text", raw) end
+    local display = raw:match("^\\%[(.*)\\%]$")
+    if display then formula(display) end
+    local tex = math_block(raw)
+    if tex then formula(tex) end
+  end
+  doc:walk({Math = function(el) formula(el.text) end, RawInline = raw_latex, RawBlock = raw_latex})
+  chem_ask(items)
+  return nil
+end
+
 return {
-  {Meta = Meta},
+  {Meta = Meta, Pandoc = prefetch},
   {Math = Math, RawInline = RawInline, Image = asset_image},
   {RawBlock = RawBlock, Para = Para, Figure = Figure, Table = Table, Div = Div},
   {Pandoc = Pandoc},

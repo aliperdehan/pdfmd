@@ -71,26 +71,67 @@ class Translators(unittest.TestCase):
         return done.stdout.strip()
 
     def ce(self, source: str) -> str:
-        return self.lua(f"local t = E.ce_parse([[{source}]]); print(t and E.ce_math(t) or 'FAIL')")
+        return self.lua(f"print(tostring(E.math_translate([[\\ce{{{source}}}]])))")
 
     def test_mhchem(self):
-        self.assertEqual(self.ce("H2O"), r"\text{H}_{2}\text{O}")
+        # v3.28.9: pdfmd_chem (mhchem's own parser, ported) writes them; the filter's Lua translator read a bond at the
+        # end as a charge and set every symbol in \\text
+        self.assertEqual(self.ce("H2O"), r"{\mathrm{H}_{2}\mathrm{O}}")
         self.assertEqual(self.ce("Ag+(aq) + Cl-(aq) -> AgCl(s)"),
-                         r"\text{Ag}^{+}\text{(aq)}\ +\ \text{Cl}^{-}\text{(aq)}\ \longrightarrow\ \text{AgCl(s)}")
-        self.assertEqual(self.ce("SO4^2-"), r"\text{S}\text{O}_{4}^{2-}")
-        self.assertEqual(self.ce("2AgCl(s)"), r"2\,\text{AgCl(s)}")
-        self.assertEqual(self.ce("R2CH-O-Cl"), r"\text{R}_{2}\text{CH}\text{-}\text{O}\text{-}\text{Cl}")
-        self.assertEqual(self.ce("Q+X-"), r"\text{Q}^{+}\text{X}^{-}")
-        self.assertEqual(self.ce("CuSO4.5H2O"), r"\text{CuS}\text{O}_{4}\text{·}5\,\text{H}_{2}\text{O}")
-        self.assertEqual(self.ce("C=O"), r"\text{C}\text{=}\text{O}")
-        self.assertEqual(self.ce("HC#CH"), "\\text{HC}\\text{\u2261}\\text{CH}")
-        self.assertEqual(self.ce("nonsense $"), "FAIL")
+                         r"{\mathrm{Ag}^{+}(\mathrm{aq})+\mathrm{Cl}^{-}(\mathrm{aq})\longrightarrow\mathrm{AgCl}(\mathrm{s})}")
+        self.assertEqual(self.ce("SO4^2-"), r"{\mathrm{SO}_{4}^{2-}}")
+        self.assertEqual(self.ce("2AgCl(s)"), r"{2\,\mathrm{AgCl}(\mathrm{s})}")
+        self.assertEqual(self.ce("R2CH-O-Cl"), r"{\mathrm{R}_{2}\mathrm{CH}-\mathrm{O}-\mathrm{Cl}}")
+        self.assertEqual(self.ce("Q+X-"), r"{\mathrm{Q}^{+}\mathrm{X}^{-}}")
+        self.assertEqual(self.ce("CuSO4.5H2O"), r"{\mathrm{CuSO}_{4}\cdot 5\,\mathrm{H}_{2}\mathrm{O}}")
+        self.assertEqual(self.ce("C=O"), r"{\mathrm{C}=\mathrm{O}}")
+        self.assertEqual(self.ce("HC#CH"), r"{\mathrm{HC}\equiv \mathrm{CH}}")
+        self.assertEqual(self.ce("-COO-"), r"{-\mathrm{COO}-}")                         # bonds, not a charge
+        self.assertEqual(self.ce("R-CHO + \\chemfig{A-B}"), "nil")                     # LaTeX draws it
+
+    def test_mhchem_in_text(self):
+        native = self.lua("print(pandoc.write(pandoc.Pandoc({pandoc.Plain(E.text_command([[\\ce{SO4^2-}]]))}), 'native'))")
+        self.assertEqual(" ".join(native.split()), '[ Plain [ Str "SO" , Subscript [ Str "4" ] , Superscript [ Str "2\\8722" ] ] ]')
 
     def test_siunitx_in_math(self):
         self.assertEqual(self.lua(r"print(E.math_translate([[M = 35.453\,\si{\gram\per\mole}]]))"),
-                         r"M = 35.453\,\text{g}\,\text{mol}^{-1}")
-        self.assertEqual(self.lua(r"print(E.math_translate([[\SI{5}{\milli\liter}]]))"), r"5\,\text{mL}")
+                         r"M = 35.453\,{\mathrm{g}\,\mathrm{mol}^{-1}}")
+        self.assertEqual(self.lua(r"print(E.math_translate([[\SI{5}{\milli\liter}]]))"), r"{5\,\mathrm{mL}}")
+        self.assertEqual(self.lua(r"print(E.math_translate([[\qty{25}{\mL}]]))"), r"{25\,\mathrm{mL}}")   # an abbreviation
         self.assertEqual(self.lua(r"print(E.math_translate([[\si{\unknownunit}]]))"), "nil")
+
+    def filtered(self, text: str, *arguments: str) -> tuple[str, dict, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "d.md").write_text(text, encoding="utf-8")
+            done = subprocess.run(["pandoc", "d.md", "--lua-filter", str(FILTER), "-M", "pdfmd-office-latex=auto",
+                                   "-M", f"pdfmd-office-report={root / 'report.json'}", *arguments], cwd=root,
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            report = json.loads((root / "report.json").read_text(encoding="utf-8"))
+        return done.stdout, report, done.stderr
+
+    def test_one_call_of_the_converter_for_a_document(self):
+        text = ("\\ce{H2O} and \\ce{SO4^2-}, \\qty{25}{\\mL}, $\\ce{CO2}$ and $c = \\SI{0.1}{\\molar}$.\n\n"
+                "\\begin{equation}\\ce{A + B -> C}\\end{equation}\n")
+        native, report, _ = self.filtered(text, "-t", "native")
+        self.assertEqual(report["chem_calls"], 1)
+        self.assertIn('Subscript [ Str "2" ]', native)
+        self.assertIn("\\\\mathrm{CO}_{2}", native)
+
+    def test_an_arrow_with_words_is_text_where_math_is_plain(self):
+        text = "Heat: \\ce{A ->[\\Delta] B}.\n"
+        import pdfmd                              # the option for each Pandoc: --math-method= from 3.2 or so
+        page, _, _ = self.filtered(text, "-t", "html5", *pdfmd.html_math_args("plain"))
+        self.assertIn("A \u27f6 (\u0394) B", page)
+        page, _, _ = self.filtered(text, "-t", "html5", *pdfmd.html_math_args("mathml"))
+        self.assertIn("<math", page)
+
+    def test_without_python_latex_draws_them(self):
+        _, report, stderr = self.filtered("\\ce{H2O} and \\qty{5}{\\mL}\n", "-t", "native",
+                                          "-M", "pdfmd-office-python=/nonexistent/python3")
+        self.assertEqual(stderr.count("could not run"), 1)                  # one WARN, and the build goes on
+        self.assertEqual([item["tex"] for item in report["left_over"]], ["\\ce{H2O}"])  # Pandoc's reader knows \\qty
 
     def test_a_degree_sign_without_a_base_is_text_not_an_empty_box(self):
         self.assertEqual(self.lua(r"print(E.fix_empty_scripts([[105\,^\circ\text{C}]]))"), r"105\,\text{°}\text{C}")

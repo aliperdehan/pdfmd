@@ -1334,7 +1334,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.8"
+PDFMD_VERSION = "3.28.9"
 import argparse
 import csv
 import filecmp
@@ -5161,6 +5161,8 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
     done = int(data.get("math", 0)) + int(data.get("native", 0))
     if done and verbose:
         print(f"OFFICE  {md_path}: {data.get('math', 0)} formula(s) and {data.get('native', 0)} LaTeX piece(s) made native")
+    if data.get("chem_calls") and verbose:
+        print(f"OFFICE  {md_path}: \\ce and siunitx converted in {data['chem_calls']} call(s) of pdfmd_chem")
     if left:
         kinds: dict[str, int] = {}
         for item in left:
@@ -5224,16 +5226,23 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                 dict.fromkeys(str(Path(item).resolve()) for item in places))]
             if profile is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-profile={profile}"]
+            # the document's preamble: a profile reads its options, the converter of \ce and siunitx its \sisetup
+            # and the house packages it loads (v3.28.9: before, it was passed only with a profile)
+            parts = []
+            for item in (find_preambles(md_path.parent, md_path.stem, [])
+                         if not auto_disabled(no_auto, "preamble") else []):
+                try:
+                    parts.append(item.read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    pass
+            if parts:
                 preamble_copy = Path(scratch) / "preamble.txt"
-                parts = []
-                for item in (find_preambles(md_path.parent, md_path.stem, [])
-                             if not auto_disabled(no_auto, "preamble") else []):
-                    try:
-                        parts.append(item.read_text(encoding="utf-8", errors="replace"))
-                    except OSError:
-                        pass
                 preamble_copy.write_text("\n".join(parts), encoding="utf-8")
                 arguments.filter_arguments += ["-M", f"pdfmd-office-preamble={preamble_copy}"]
+            # pdfmd_chem runs in this Python (the one with pdfmd's packages), not whatever python3 is first on PATH
+            arguments.filter_arguments += ["-M", f"pdfmd-office-python={sys.executable}"]
+            # its answers, kept between the two runs of the filter (the collect run's for the render run)
+            arguments.filter_arguments += ["-M", f"pdfmd-office-chem-cache={Path(scratch) / 'chem.json'}"]
             # last: other filters (a house style's own) have shaped the document by then
             arguments.filter_arguments += ["--lua-filter", str(Path(module.__file__).parent / "office.lua")]
         yield arguments

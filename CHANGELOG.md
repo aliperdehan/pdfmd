@@ -41,6 +41,65 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.9 — 2026-10-12
+
+Pre-edit state: commit `2846890` (v3.28.8).
+
+Stage 6 A, third step: the LaTeX filter uses the converter.
+
+### Changed
+
+- **`\ce`, `\pu` and siunitx in Word, OpenDocument, Typst, WeasyPrint and Calibre output come from `pdfmd_chem`.**
+  The filter's own Lua translators are gone.
+  - **How it runs:**
+    - A first pass collects every such command of the document: in text, in `$...$`, in `\[...\]` and in equation
+      environments.
+    - One `python3 pdfmd_chem` call converts them all.
+    - The collect run's answers are kept in a file for the render run, which therefore makes no call and gets the
+      same answers.
+    - A command met later (a profile's table, an `\input` file) is asked for on its own.
+  - **Settings:** pdfmd passes its own Python and the document's preamble, which the filter used to get only with a
+    house-style profile. The converter reads the preamble's `\sisetup`, `\DeclareSIUnit` and unit shortcuts, and
+    those of the user's own packages it loads: nulabreport's `group-separator={,}`, `\molar`, `\gml`. These are
+    found with one kpsewhich call, read one level deep, and never TeX Live's own.
+  - **If Python cannot be run:** one WARN, and LaTeX draws the formulas as before.
+  - **Where an equation cannot be shown** (WeasyPrint's plain math), a formula with words over its arrow stays text:
+    `A ⟶ (Δ) B`.
+
+What changes in a document:
+- the siunitx abbreviations (`\mL`, `\mol`, `\uL`) inside math are converted; before, they were pictures;
+- a bond is a minus sign (`C−H`, `R₂CH−O−Cl`, as mhchem sets it), not a hyphen, and a bond at the end is a bond
+  (`-COO-`), not a charge;
+- isotopes are `¹⁵N` and labelled arrows are equations Word edits (`\overset`), not pictures;
+- in text, a number and its unit, and digit groups, are separated by a narrow no-break space (U+202F, as siunitx's
+  `\,`; Times New Roman and STIX Two have it), not a full one;
+- in an equation, Word's own operator spacing replaces the translator's explicit spaces.
+
+Typst no longer prints `$\ce{CO2}$` as "C O2": it is CO₂.
+
+Checked through pdfmd, LR4-5 to `.docx` on Pandoc 3.12 and 3.1.3, against v3.28.8:
+- **Pictures:** the same (23, and 24 with Pandoc 3.1.3).
+- **Native pieces:** the same, 24 formulas and 191 LaTeX pieces made native.
+- **WARN lines:** none, before and after.
+- **Text:** every paragraph's text, scripts marked, compared. Only two kinds of change, both above: 51 bonds
+  hyphen → minus, and 22 equations without the explicit spaces.
+- **Time:** a warm build is 4.0 s, against 3.4 s before.
+- **Other outputs:** `.odt`, `report#discussion` and the LibreOffice PDF were built and looked at (page 2 beside
+  the LaTeX PDF). So were Typst, WeasyPrint and Calibre PDFs of a test page; Calibre's was looked at: CO₂, H₂O,
+  25 mL, Δ over the arrow.
+
+### Tests
+
+- `tests/test_office_latex.py`, `Translators`, now through the converter:
+  - mhchem and siunitx in math, with the old cases plus a bond at the end, chemfig left to LaTeX and an
+    abbreviation;
+  - `\ce` in text as runs;
+  - one call for a whole document;
+  - an arrow with words as text where math is plain, as an equation where it is MathML;
+  - without Python: one WARN, the build goes on, and the `\ce` is left to LaTeX.
+- Full suite: Pandoc 3.12, 1034 tests OK; Pandoc 3.1.3, 1034 OK. One test first failed on 3.1.3: it asked for
+  `--math-method`, which 3.1.3 does not have. It now asks for the option each Pandoc has, as pdfmd does.
+
 ## v3.28.8 — 2026-10-11
 
 Pre-edit state: commit `26b37f8` (v3.28.7).

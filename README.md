@@ -650,9 +650,11 @@ pdfmd-options:
 **LaTeX in the document.** Pandoc turns `$x^2$` into a Word equation and drops everything else of
 LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it can:
 
-- `\ce{Ag+(aq) + Cl-(aq) -> AgCl(s)}` (mhchem) and `\si{\gram\per\mole}`, `\SI{5}{\milli\liter}`,
+- `\ce{Ag+(aq) + Cl-(aq) -> AgCl(s)}` (mhchem) and `\si{\gram\per\mole}`, `\qty{5}{\mL}`,
   `\num{1.5e-3}` (siunitx) become formatted text with real subscripts, charges and units, and, inside
-  math, Word equation pieces;
+  math, Word equation pieces. `\ce` is read by a port of mhchem's own parser, so it comes out as LaTeX sets it;
+  siunitx follows your `\sisetup`, `\DeclareSIUnit`s and unit shortcuts, those of your own packages too. A
+  formula with words over its arrow is an equation;
 - `\begin{equation}`, `align`, `reaction`... become Word equations with their number at the right;
 - raw `figure`, `tabular`, lists, `\emph`, `\newpage`... are read by Pandoc's own LaTeX reader;
 - `\ref`, `\eqref`, `\cref`, `\Cref`, `\pageref` and the "Figure 3." in front of a caption use the numbers
