@@ -117,15 +117,17 @@ class PandocReadsTheMath(unittest.TestCase):
     """every formula's math TeX through Pandoc's own converter (texmath): MathML, so Word gets an equation"""
 
     def test_every_fixture_formula(self):
-        formulas = []
+        formulas, as_text = [], set()           # as_text: formulas text outputs show as text (chem.lua), not as math
         for kind, source, _ in json.loads((FIXTURES / "mhchem" / "documents.json").read_text(encoding="utf-8")) + \
                 json.loads((FIXTURES / "mhchem" / "upstream.json").read_text(encoding="utf-8")):
             if kind in ("ce", "pu"):
                 try:
-                    runs, _ = render.convert(source, kind)
+                    runs, needs_math = render.convert(source, kind)
                 except (render.RenderError, render.MhchemError):
                     continue
                 formulas.append((source, render.math_tex(runs)))
+                if needs_math:
+                    as_text.add(render.math_tex(runs))
         house = siunitx.settings_from_preamble(HOUSE)
         for command, default, _ in json.loads((FIXTURES / "chem" / "siunitx-latex.json").read_text(encoding="utf-8")):
             if default is not None:
@@ -144,6 +146,83 @@ class PandocReadsTheMath(unittest.TestCase):
         failed = [source for (source, _), mark in zip(formulas, done.stdout) if mark != "1"]
         self.assertEqual(len(done.stdout), len(formulas))
         self.assertEqual(failed, [])
+        # and Typst and plain text (v3.28.10: chem.lua's outputs): no TeX left over
+        typst = ('local bad = {}\nfor line in io.lines(arg[1]) do\n'
+                 '  for _, writer in ipairs({"typst", "plain"}) do\n'
+                 '    local ok, out = pcall(pandoc.write, pandoc.Pandoc({pandoc.Plain({pandoc.Math("InlineMath", line)})}),'
+                 ' writer)\n'
+                 '    if not ok or out:find("\\\\[A-Za-z]") then bad[#bad + 1] = writer .. ": " .. line end\n'
+                 '  end\nend\nio.write(table.concat(bad, "\\n"))\n')
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "check.lua").write_text(typst, encoding="utf-8")
+            (Path(folder) / "formulas.txt").write_text("\n".join(tex for _, tex in formulas) + "\n", encoding="utf-8")
+            done = subprocess.run(["pandoc", "lua", "check.lua", "formulas.txt"], cwd=folder, capture_output=True,
+                                  text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        bad = [line for line in done.stdout.splitlines() if line.split(": ", 1)[1] not in as_text
+               or line.startswith("typst")]
+        self.assertEqual(bad, [])
+
+
+class CommandLists(unittest.TestCase):
+    def test_one_list_of_commands(self):
+        import pdfmd
+        lua = (ROOT / "pdfmd_lua" / "chem_client.lua").read_text(encoding="utf-8")
+        block = re.search(r"M\.NAMES = \{(.*?)\}", lua, re.S).group(1)
+        lua_names = set(re.findall(r"(\w+) = true", block))
+        self.assertEqual(lua_names, set(pdfmd.CHEM_COMMANDS))
+        self.assertEqual(set(batch.CHEMISTRY) | set(siunitx.COMMANDS), set(pdfmd.CHEM_COMMANDS))
+
+
+DOCUMENT = ("---\ntitle: Routes\n---\n\nWater \\ce{H2O}, \\qty{25}{\\mL}, $\\ce{CO2}$ and \\ce{A ->[\\Delta] B}.\n\n"
+            "\\ce{2H2 + O2 -> 2H2O}\n\nIsotope \\ce{^15N}, $\\num{1.5e-3}$.\n")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Routes(unittest.TestCase):
+    """v3.28.10: the outputs the LaTeX filter does not run for (chem.lua)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        root = Path(cls.folder.name)
+        (root / "d.md").write_text(DOCUMENT, encoding="utf-8")
+        cls.out = {}
+        for target in ("html", "gfm", "txt", "ascii", "typst", "markdown"):
+            extra = ["-s"] if target == "markdown" else []
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", target, "-o", f"d.{target}",
+                                   *extra], cwd=root, capture_output=True, text=True,
+                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "c"),
+                                       "PDFMD_NO_PROMPT": "1"})
+            assert done.returncode == 0, done.stdout + done.stderr
+            cls.out[target] = (root / f"d.{target}").read_text(encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_html(self):
+        page = self.out["html"]
+        self.assertIn("Water H<sub>2</sub>O, 25\u202fmL", page)
+        self.assertIn("2\u202fH<sub>2</sub> + O<sub>2</sub> \u27f6 2\u202fH<sub>2</sub>O", page)   # a paragraph of its own
+        self.assertIn("\u00b9\u2075N", page)
+        self.assertNotIn("\\ce", page)
+
+    def test_markdown_and_text(self):
+        # in Markdown a formula that is one command is text too
+        self.assertIn("Water H\u2082O, 25\u202fmL, CO\u2082 and", self.out["gfm"])
+        self.assertIn("1.5\u202f\u00d7\u202f10\u207b\u00b3", self.out["gfm"])
+        self.assertIn("A \u27f6 (\u0394) B", self.out["gfm"])               # no equation in Markdown: the words follow
+        self.assertIn("CO\u2082 and A \u27f6 (\u0394) B", self.out["txt"])
+        self.assertIn("H_2O", self.out["ascii"])
+
+    def test_typst(self):
+        self.assertIn("H#sub[2]O", self.out["typst"])
+        self.assertNotIn("\\ce", self.out["typst"])
+
+    def test_none_of_its_settings_in_the_output(self):
+        # a standalone Markdown file writes the metadata: pdfmd-chem-python (the home folder) is taken out first
+        self.assertNotIn("pdfmd-chem", self.out["markdown"])
 
 
 class Batch(unittest.TestCase):
@@ -157,6 +236,9 @@ class Batch(unittest.TestCase):
         self.assertEqual(answers[0]["runs"], [["H", ""], ["2", "sub"], ["O", ""]])
         self.assertEqual(answers[1]["math"], r"c = {12{,}345\,\mathrm{mol}}, {\mathrm{Cu}^{2+}}")
         self.assertIn("error", answers[2])
+        # a reaction scheme is LaTeX's to draw: its \\ce are left as they are
+        scheme = batch.answer({"items": [{"math": r"\schemestart A \arrow{->[\ce{NaBH4}]} B \schemestop"}]})
+        self.assertIn("error", scheme[0])
         self.assertEqual(batch.answer({"items": []}), [])
 
 

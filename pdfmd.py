@@ -1334,7 +1334,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.9"
+PDFMD_VERSION = "3.28.10"
 import argparse
 import csv
 import filecmp
@@ -5333,7 +5333,11 @@ def raw_takes(md_path: Path, metadata_files: list[Path], family: str, syntax: st
 RAW_TEX_FENCE_RE = re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{=(?:latex|tex)\}")
 TEXT_COMMAND_RE = re.compile(r"\\[A-Za-z@]+")
 MATH_SPAN_RE = re.compile(r"\$\$.*?\$\$|\$[^$\n]+\$", re.DOTALL)
-MATH_ONLY_LATEX_RE = re.compile(r"\\(?:ce|pu|SI|si|qty|num|unit|ang|SIrange|qtyrange|numrange)(?![A-Za-z])")
+# mhchem's and siunitx's commands pdfmd_chem converts (v3.28.10: one list; pdfmd_lua/chem_client.lua's NAMES and
+# pdfmd_chem/batch.py's are the same, tests/test_chem.py)
+CHEM_COMMANDS = ("ce", "cee", "cf", "pu", "num", "numlist", "numrange", "numproduct", "si", "unit", "SI", "qty",
+                 "SIlist", "qtylist", "SIrange", "qtyrange", "ang")
+MATH_ONLY_LATEX_RE = re.compile(r"\\(?:" + "|".join(CHEM_COMMANDS) + r")(?![A-Za-z])")
 
 
 def latex_failed(failed_families: set) -> bool:
@@ -11346,6 +11350,32 @@ def select_filter_args(selection) -> list[str]:
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
+def chem_filter_args(sources: list[Path], metadata_files: list[Path], preamble_files: list[Path], writer: str,
+                     office_filter: bool, no_auto: list[str] | None) -> list[str]:
+    """``--lua-filter chem.lua`` (v3.28.10) for an output whose writer drops raw LaTeX and that the LaTeX filter does not
+    run for (an HTML, EPUB, Markdown, text or .typ file, a PowerPoint deck), when a source has a \\ce, \\pu or siunitx
+    command: they become text with sub- and superscripts, or converted math. Not for LaTeX, nor Word and OpenDocument
+    (the LaTeX filter's own), nor with `office: {latex: off}`."""
+    if (office_filter or writer in ("latex", "beamer", "context", "docx", "odt", "opendocument", "json", "native")
+            or auto_disabled(no_auto, "officelatex")
+            or str(office_options(sources[0], metadata_files, no_auto).get("latex", "")).casefold() in ("off", "false", "no")):
+        return []
+    if not any(MATH_ONLY_LATEX_RE.search(strip_code_text(split_front_matter(read_text_best_effort(source))[1]))
+               for source in sources):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("chem")
+    if shipped is None:
+        return []
+    args = ["-M", f"pdfmd-chem-python={sys.executable}"]
+    if preamble_files:
+        args += ["-M", "pdfmd-chem-preamble=" + os.pathsep.join(str(item) for item in preamble_files)]
+    return args + ["--lua-filter", str(shipped)]
+
+
 def typst_filter_args(writer: str) -> list[str]:
     """``--lua-filter typst.lua`` for Typst (v3.27.11): a link to an anchor the document does not have becomes its
     text with one WARN, where Typst would stop the build; with a Pandoc before 3.2, a picture's relative path is made
@@ -16095,6 +16125,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
+                cmd += chem_filter_args(list(all_inputs or [md_path]), metadata_files,
+                                        list(preamble_files or ([] if auto_disabled(no_auto, "preamble")
+                                                                else find_preambles(md_path.parent, md_path.stem, []))),
+                                        target_format, bool(office_arguments.filter_arguments), no_auto)
                 cmd += typst_filter_args(target_format)
                 if flat_target:
                     cmd += flat_filter_args(flat, target_format)       # last: it sees what every other filter made
@@ -20453,6 +20487,11 @@ def main() -> None:
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     cmd += report_office_arguments.filter_arguments
+                    cmd += chem_filter_args(list(files), metadata_files,
+                                            list(report_preambles or ([] if auto_disabled(report_no_auto, "preamble")
+                                                                      else find_preambles(files[0].parent, files[0].stem, []))),
+                                            target_format, bool(report_office_arguments.filter_arguments),
+                                            report_no_auto)
                     if report_office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
                                                    args.verbose, args.debug)

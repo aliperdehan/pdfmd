@@ -655,6 +655,7 @@ LaTeX. For `.docx` and `.odt` pdfmd adds a filter that makes it native where it 
   math, Word equation pieces. `\ce` is read by a port of mhchem's own parser, so it comes out as LaTeX sets it;
   siunitx follows your `\sisetup`, `\DeclareSIUnit`s and unit shortcuts, those of your own packages too. A
   formula with words over its arrow is an equation;
+  the same in an HTML, EPUB, Markdown, text or Typst file and a PowerPoint deck, whose writers would drop them;
 - `\begin{equation}`, `align`, `reaction`... become Word equations with their number at the right;
 - raw `figure`, `tabular`, lists, `\emph`, `\newpage`... are read by Pandoc's own LaTeX reader;
 - `\ref`, `\eqref`, `\cref`, `\Cref`, `\pageref` and the "Figure 3." in front of a caption use the numbers

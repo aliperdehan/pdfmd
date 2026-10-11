@@ -207,8 +207,8 @@ class Writer:
     def chemfive(self, buf: dict) -> list:
         runs: list = []
         amount = _flat(self.items(buf["a"]))
-        if amount:
-            runs.append((amount + THIN, ""))
+        if amount:                                      # a letter amount (x, n) is a variable: italic, as mhchem sets it
+            runs.append((amount + THIN, "var" if re.search(r"[A-Za-z]", amount) else ""))
         mass, number = _flat(self.items(buf["b"])), _flat(self.items(buf["p"]))
         if mass or number:
             runs.append((_scripted(mass, SUPERSCRIPT) + _scripted(number, SUBSCRIPT), ""))

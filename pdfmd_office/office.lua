@@ -147,26 +147,18 @@ end
 -- sends every one the document has, the handlers read the answers. One met later (a profile's table, an \input
 -- file) is asked for on its own. Until 3.28.8 this filter had its own translators: they read a bond at the end of a
 -- formula as a charge, knew none of siunitx's abbreviations (\mL, \mol) and made labelled arrows that Word drew as
--- pictures. If Python cannot be run, LaTeX draws these as before (one WARN).
-
-local CHEM_NAMES = {ce = true, cee = true, cf = true, pu = true, num = true, numlist = true, numrange = true,
-  numproduct = true, si = true, unit = true, SI = true, qty = true, SIlist = true, qtylist = true, SIrange = true,
-  qtyrange = true, ang = true}
-
-local function has_chem(tex)
-  for name in tex:gmatch("\\(%a+)") do
-    if CHEM_NAMES[name] then return true end
-  end
-  return false
-end
+-- pictures. If Python cannot be run, LaTeX draws these as before (one WARN). The Lua side is pdfmd_lua/chem_client.lua
+-- (v3.28.10), which chem.lua shares for the outputs this filter does not run for.
 
 local here = (debug.getinfo(1, "S").source or ""):match("^@(.*)$") or ""
-local chem = {
-  dir = (here:gsub("[/\\][^/\\]*$", ""):gsub("[/\\][^/\\]*$", "")) .. "/pdfmd_chem",
-  cache = {}, calls = 0, failed = false, python = nil, header = "",
-}
-
-local function chem_key(kind, source) return (kind == "math" and "M" or "T") .. source end
+local root = (here:gsub("[/\\][^/\\]*$", ""):gsub("[/\\][^/\\]*$", ""))
+local loaded, chem_client = pcall(dofile, root .. "/pdfmd_lua/chem_client.lua")
+if not loaded then
+  io.stderr:write("[pdfmd] WARN pdfmd_lua/chem_client.lua could not be loaded (" .. tostring(chem_client)
+    .. "); LaTeX draws \\ce and siunitx\n")
+  chem_client = nil
+end
+local chem = {header = "", python = nil, store = nil, client = nil}
 
 -- the document's LaTeX preamble, its header-includes too: the \sisetup and \DeclareSIUnit siunitx follows
 local function chem_preamble()
@@ -178,60 +170,20 @@ local function chem_preamble()
   return text
 end
 
-local function chem_ask(items)
-  if chem.failed or #items == 0 then return end
-  chem.calls = chem.calls + 1
-  local request = pandoc.json.encode({preamble = chem_preamble(), items = items})
-  local ok, out = pcall(pandoc.pipe, chem.python or "python3", {chem.dir}, request)
-  local decoded, answers = false, nil
-  if ok then decoded, answers = pcall(pandoc.json.decode, out, false) end
-  if not decoded or type(answers) ~= "table" then
-    chem.failed = true
-    io.stderr:write("[pdfmd] WARN the converter of \\ce and siunitx (pdfmd_chem) could not run; LaTeX draws them\n")
-    return
+local function chem_get()
+  if not chem_client then return nil end
+  if not chem.client then
+    chem.client = chem_client.new({dir = root .. "/pdfmd_chem", python = chem.python, preamble = chem_preamble,
+      store = chem.store})
   end
-  for index, item in ipairs(items) do
-    chem.cache[chem_key(item.math and "math" or "text", item.math or item.text)] = answers[index] or {error = "none"}
-  end
+  return chem.client
 end
 
--- the converter's answer for one command in text ("text") or one formula ("math"); nil when it cannot convert it
+local function has_chem(tex) return chem_client ~= nil and chem_client.has(tex) end
+
 local function chem_answer(kind, source)
-  local key = chem_key(kind, source)
-  if chem.cache[key] == nil then chem_ask({kind == "math" and {math = source} or {text = source}}) end
-  local answer = chem.cache[key]
-  if answer == nil or answer.error then return nil end
-  return answer
-end
-
--- an equation can be shown: not in an HTML page whose math is plain text (WeasyPrint's)
-local function math_renders()
-  if not FORMAT:match("^html") then return true end
-  local method = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.html_math_method
-  method = type(method) == "table" and method.method or method
-  return method ~= "plain"
-end
-
--- the runs of an answer: text, its ordinary spaces as spaces, sub- and superscripts
-local function runs_inlines(runs)
-  local out = {}
-  local function words(text)
-    local list = {}
-    for piece, space in text:gmatch("([^ ]*)( ?)") do
-      if piece ~= "" then list[#list + 1] = pandoc.Str(piece) end
-      if space ~= "" then list[#list + 1] = pandoc.Space() end
-    end
-    return list
-  end
-  for _, run in ipairs(runs) do
-    local text, place = run[1], run[2]
-    if place == "sub" then out[#out + 1] = pandoc.Subscript(words(text))
-    elseif place == "sup" then out[#out + 1] = pandoc.Superscript(words(text))
-    else
-      for _, item in ipairs(words(text)) do out[#out + 1] = item end
-    end
-  end
-  return out
+  local client = chem_get()
+  return client and client:answer(kind, source) or nil
 end
 
 ---------------------------------------------------------------------------
@@ -557,12 +509,9 @@ end
 local function text_command(raw)
   local name = raw:match("^\\(%a+)")
   if not name then return nil end
-  if CHEM_NAMES[name] then
-    local answer = chem_answer("text", raw)
-    if not answer then return nil end
-    -- an arrow with words over it: an equation, where one can be shown
-    if answer.needs_math and math_renders() then return {pandoc.Math("InlineMath", answer.math)} end
-    return runs_inlines(answer.runs)
+  if chem_client and chem_client.NAMES[name] then
+    -- an arrow with words over it is an equation, where one can be shown (chem_client.inlines)
+    return chem_client.inlines(chem_answer("text", raw))
   elseif name == "allowbreak" then
     local rest = trim((raw:gsub("^\\allowbreak%s*", "")))
     return rest ~= "" and {pandoc.Str(rest)} or {}
@@ -935,6 +884,11 @@ function RawBlock(el)
   raw = raw:gsub("([^\\])%%[ \t]*\n[ \t]*", "%1")
   local custom = profile_command(raw, true)
   if custom then counters.native = counters.native + 1; return custom end
+  -- a paragraph that is one \ce or siunitx command (v3.28.10: it was a picture)
+  if chem_client and chem_client.command(raw) and not pictures() then
+    local inlines = chem_client.inlines(chem_answer("text", raw))
+    if inlines then counters.native = counters.native + 1; return pandoc.Para(inlines) end
+  end
   -- `\setcounter{table}{1}\chemicals{...}`: the counter is set, and what follows may be a profile's own
   local peeled, resets = raw, {}
   while true do
@@ -1201,25 +1155,10 @@ local function without_latex(value)
   return value
 end
 
--- the LaTeX of a metadata value (header-includes): what the converter of \ce and siunitx reads with the preamble
-local function latex_of(value)
-  local parts = {}
-  local function visit(item)
-    if type(item) ~= "table" then return end
-    if (item.t == "RawBlock" or item.t == "RawInline") and (item.format == "latex" or item.format == "tex") then
-      parts[#parts + 1] = item.text
-      return
-    end
-    for _, child in ipairs(item) do visit(child) end
-  end
-  visit(value)
-  return table.concat(parts, "\n")
-end
-
 function Meta(meta)
   current_meta = meta
   local stripped = false
-  if meta["header-includes"] ~= nil then chem.header = latex_of(meta["header-includes"]) end
+  if meta["header-includes"] ~= nil and chem_client then chem.header = chem_client.latex_of(meta["header-includes"]) end
   if meta["pdfmd-office-python"] then chem.python = stringify(meta["pdfmd-office-python"]) end
   if meta["pdfmd-office-chem-cache"] then chem.store = stringify(meta["pdfmd-office-chem-cache"]) end
   for _, key in ipairs({"header-includes", "include-before", "include-after"}) do
@@ -1276,7 +1215,7 @@ local function write_report()
   if not file then return end
   file:write(pandoc.json and pandoc.json.encode and pandoc.json.encode({
     left_over = left_over, math = counters.math, native = counters.native, properties = properties,
-    chem_calls = chem.calls}) or "")
+    chem_calls = chem.client and chem.client.calls or 0}) or "")
   file:close()
 end
 
@@ -1425,10 +1364,7 @@ function Pandoc(doc)
   end
   doc = keep_properties(odt_anchors(drop_repeated_anchors(doc)), before)
   write_report()
-  if chem.store and next(chem.cache) ~= nil then
-    local file = io.open(chem.store, "w")
-    if file then file:write(pandoc.json.encode(chem.cache)); file:close() end
-  end
+  if chem.client then chem.client:save() end
   if settings.mode == "collect" and settings.wanted then
     local file = io.open(settings.wanted, "w")
     if file then
@@ -1454,38 +1390,25 @@ end
 -- to the converter in one call before the handlers ask for them (math_translate's string is the key: prepare_math)
 local function prefetch(doc)
   if off() or pictures() then return nil end
-  -- the answers of the collect run, for the render run: the same answers, and no call for them
-  local stored = chem.store and io.open(chem.store, "r")
-  if stored then
-    local ok, saved = pcall(pandoc.json.decode, stored:read("a"), false)
-    stored:close()
-    if ok and type(saved) == "table" then
-      for key, value in pairs(saved) do chem.cache[key] = value end
-    end
-  end
-  local items, seen = {}, {}
-  local function add(kind, source)
-    local key = chem_key(kind, source)
-    if seen[key] or chem.cache[key] ~= nil then return end
-    seen[key] = true
-    items[#items + 1] = kind == "math" and {math = source} or {text = source}
-  end
+  local client = chem_get()
+  if not client then return nil end
+  client:load()          -- the answers of the collect run, for the render run: the same answers, and no call for them
+  local batch = client:batch()
   local function formula(tex)
     local prepared = prepare_math(tex)
-    if has_chem(prepared) then add("math", prepared) end
+    if has_chem(prepared) then batch.add("math", prepared) end
   end
   local function raw_latex(element)
     if element.format ~= "latex" and element.format ~= "tex" then return end
     local raw = trim(element.text)
-    local name = raw:match("^\\(%a+)")
-    if name and CHEM_NAMES[name] then add("text", raw) end
+    if chem_client.command(raw) then batch.add("text", raw) end
     local display = raw:match("^\\%[(.*)\\%]$")
     if display then formula(display) end
     local tex = math_block(raw)
     if tex then formula(tex) end
   end
   doc:walk({Math = function(el) formula(el.text) end, RawInline = raw_latex, RawBlock = raw_latex})
-  chem_ask(items)
+  batch.flush()
   return nil
 end
 

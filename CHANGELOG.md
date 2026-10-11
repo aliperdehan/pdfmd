@@ -41,6 +41,61 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.10 — 2026-10-12
+
+Pre-edit state: commit `b2a5eb9` (v3.28.9).
+
+Stage 6 A, last step: every output gets the chemistry and units.
+
+### Fixed
+
+- **An HTML, EPUB, Markdown, text or `.typ` file, or a PowerPoint deck, dropped `\ce` and siunitx.** Their writers
+  drop raw LaTeX, and the LaTeX filter does not run for them: `Water \ce{H2O} and \qty{25}{\mL}` was "Water and", and
+  `$\ce{CO2}$` stayed TeX.
+  - The new `pdfmd_lua/chem.lua` makes each such command in text text with sub- and superscripts.
+  - A formula with them in it gets them converted.
+  - In text and Markdown, a formula that is one command becomes its text too: CO₂, `A ⟶ (Δ) B`. Pandoc's plain
+    writer cannot write words over an arrow.
+  - pdfmd adds it only when a source has such a command, after the document's own filters, for every output but
+    LaTeX, Word and OpenDocument (the LaTeX filter's own), and not with `office: {latex: off}`.
+  - Its metadata (`pdfmd-chem-python`, `pdfmd-chem-preamble`) is removed once read, so that a standalone Markdown
+    file does not write out a folder of this machine.
+  - `raw.lua` leaves such a command to it: with the flat outputs' raw setting it dropped the `\ce` first.
+- **A paragraph that is one command** (`\ce{2H2 + O2 -> 2H2O}` on a line of its own) was a picture in Word and was
+  dropped in HTML. It is now text in both.
+- **A reaction scheme in display math** (`\schemestart ... \arrow{->[\ce{NaBH4}]} ...`) is left whole: only LaTeX
+  draws it, and its arguments are LaTeX's.
+- **A letter amount** (the `x` of `x Na(NH4)HPO4`) is italic in an equation, as mhchem sets it.
+
+### Changed
+
+- The Lua side of the converter is `pdfmd_lua/chem_client.lua`, shared by the LaTeX filter and `chem.lua`. The
+  filter loads it guarded: if it is missing, one WARN, and LaTeX draws the formulas.
+- One list of the commands, `CHEM_COMMANDS` in `pdfmd.py`. It is the same as the Lua one and pdfmd_chem's (a test
+  says so). The check for LaTeX that Typst and WeasyPrint would drop now also knows `\cee`, `\cf` and siunitx's
+  lists.
+
+Checked:
+- **No regression:** LR4-5 to `.docx` on Pandoc 3.12 and 3.1.3 has the same text as with v3.28.9. A document
+  without chemistry gives byte-identical HTML, GFM and Typst, and the same Word text.
+- **LR4-5 to HTML, GFM and Typst:** the changes, read through, are the chemistry and units that used to be missing
+  (NaBH₄, R₂CH−O−Cl, C−H, CDCl₃, the formula display lines), Typst's table cells with their text back, and lines
+  wrapped anew around them.
+- **A test page** to HTML, GFM, txt, ascii (`H_2O`, `-->`, `^(15)N`), Typst and `.pptx`: each shows the chemistry.
+- **Packaging:** the wheel, installed in a fresh virtual environment, builds `.docx` and `.html` with `\ce`. The
+  wheel and `pdfmd.pyz` both hold `pdfmd_lua/chem_client.lua` and `chem.lua`.
+- **nulabreport smoke test** on v3.28.9: 94 checks pass.
+
+### Tests
+
+- `tests/test_chem.py`:
+  - `CommandLists`: the three lists agree;
+  - `Routes`: HTML, GFM, txt, ascii and Typst through pdfmd, with no `pdfmd-chem` key in a standalone Markdown file;
+  - every fixture formula through Pandoc's Typst and plain writers, with no TeX left over (the ones text shows as
+    text aside);
+  - a reaction scheme is left whole.
+- Full suite: Pandoc 3.12, 1039 tests OK; Pandoc 3.1.3, 1039 OK.
+
 ## v3.28.9 — 2026-10-12
 
 Pre-edit state: commit `2846890` (v3.28.8).

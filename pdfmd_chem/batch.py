@@ -56,6 +56,10 @@ def one(command: str, settings: siunitx.Settings) -> tuple[list, str, bool]:
 
 
 def in_math(tex: str, settings: siunitx.Settings) -> str:
+    """the formula with each command converted; a reaction scheme (chemfig's \\schemestart, \\chemfig) is left whole:
+    only LaTeX draws it, and its arguments are LaTeX's"""
+    if render.DRAWN.search(tex):
+        raise render.RenderError("a structure LaTeX draws (chemfig)")
     out, position = [], 0
     for found in COMMAND.finditer(tex):
         if found.start() < position:

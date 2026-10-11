@@ -43,6 +43,10 @@ local NATIVE_SYNTAX = {tex = "tex", typst = "typst", html = "html", office = "of
 local family_syntax = family and NATIVE_SYNTAX[family] or nil
 local included = nil      -- set of syntaxes this family takes; nil = the filter is off
 local office_reads_tex = false   -- pdfmd's LaTeX route (office.lua, which runs after this filter) is on: it takes the LaTeX
+local chem_after = false         -- chem.lua runs after this filter (v3.28.10): it takes a \ce or siunitx command
+local here = (debug.getinfo(1, "S").source or ""):match("^@(.*)$") or ""
+local chem_loaded, chem_client = pcall(dofile, (here:gsub("[/\\][^/\\]*$", "")) .. "/chem_client.lua")
+if not chem_loaded then chem_client = nil end
 local cache_dir = nil
 local work_dir = nil       -- where the drawn PDFs are kept when the SVGs go elsewhere (flat Markdown); else the cache
 local cache_rel = nil      -- flat Markdown: the folder's name beside the output, which the pictures' links use
@@ -92,6 +96,7 @@ local function read_config(meta)
     end
   end
   office_reads_tex = meta["pdfmd-office-latex"] ~= nil
+  chem_after = meta["pdfmd-chem-python"] ~= nil
 end
 
 local function file_exists(path)
@@ -408,6 +413,9 @@ local function process(list, kind, convert)
     local syntax = (item.t == kind) and SYNTAX[item.format] or nil
     if syntax == nil then
       out[#out + 1] = item
+      index = index + 1
+    elseif syntax == "tex" and chem_after and chem_client and chem_client.command(item.text) then
+      out[#out + 1] = item                   -- a \ce or siunitx command: chem.lua makes it the target's own text
       index = index + 1
     elseif not included[syntax] then
       changed, index = true, index + 1                              -- not a syntax this family takes
