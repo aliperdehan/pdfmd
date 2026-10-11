@@ -41,6 +41,81 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.0 — 2026-10-11
+
+Pre-edit state: commit `a8a73a2` (v3.27.28). The first commit of the Calibre line (stage 6 of the plan; the author
+approved 3.28 for it, and everything after it stays 3.28.x). Calibre comes before the planned `\ce`/siunitx converter
+and the math work, which follow.
+
+### Added
+
+- **`-e calibre`**: Calibre's `ebook-convert` as a PDF engine. It can also be asked for as `-e ebook-convert`,
+  `pdf-engine: calibre` or the `--setup` choice. It is used only when named: it is not in the automatic chain (the
+  author: try it explicitly first, add it to the chain once it works) and has no number of its own.
+  - Pandoc writes one standalone HTML page into a scratch folder (math as MathML, pictures inlined, the same filters,
+    citations and fonts WeasyPrint gets) and `ebook-convert` prints it. Calibre draws MathML with its own MathJax.
+  - Not an EPUB, as the plan had it: Pandoc splits an EPUB at every top-level heading (`--split-level` takes 1 to 6,
+    there is no "never") and Calibre starts each of those files on a new page, so a report got a page per section.
+    The EPUB stays the in-between file for e-book outputs (the format router, later).
+  - The page is the document's. `papersize`, `geometry`, `margin`, `classoption: landscape` and `lang` are read as
+    for a Word file; without them it is Letter with 1in margins, as with LaTeX. Text is 12pt unless `fontsize:` says
+    otherwise (a browser's default, as with WeasyPrint). Page numbers go at the foot, and the PDF bookmarks are the
+    headings (h1 to h3, the title left out).
+  - Calibre's e-book defaults are turned off:
+    - font sizes rescaled to its output profile (11pt text came out about twice as large; with no `fontsize`, 15pt);
+    - 5pt of margin of its own inside the page's;
+    - a page break before every h1/h2, and before headings with "Chapter" or "Section" in them;
+    - bookmarks made from the document's links ("1", "the other file", "↩︎");
+    - following links into other local files.
+
+    Pandoc's screen styling is reset for paper: a 36em column with 50px of padding, and an off-white page that
+    printed as a grey tint (Calibre does not apply `@media print`).
+  - LaTeX in the document always goes through the Word route's filter, as for LibreOffice. It is made native (`\ce`,
+    `\SI`, `\cref`...) or drawn by LaTeX as a picture, and references take the numbers of a LaTeX build of the document
+    (`office: {labels}`, cached). `office: {latex: off}` turns this off. Report mode (`-r`) works the same way, without
+    LaTeX's label numbers: they would be the first chapter's only.
+  - Qt runs offscreen (`QT_QPA_PLATFORM=offscreen`, unless already set) on macOS and Linux: no window, and no display
+    needed on a server.
+  - `ebook-convert` is found on PATH, in `calibre.app` (`/Applications` or `~/Applications`), or in `Calibre2` under
+    Program Files. If it is missing, the error says how to install Calibre. `--check-dependencies` and `--doctor` list
+    it, and `-e`'s help mentions it.
+  - A `.html` input with `-e calibre` goes through Pandoc's HTML reader (the direct HTML route keeps its own engines).
+
+Checked through pdfmd:
+
+- **A small document** (math, a table, code, a footnote, a picture, a link): one A4 page at its 11pt, bookmarks
+  "Introduction" and "Second section", title and author in the PDF's properties, about 5 s.
+- **Page breaks:** `\newpage` breaks, and so does `<!-- pagebreak -->` with `--pagebreak`. A5 landscape with 1cm
+  margins lands within 0.5pt.
+- **A copy of LR4-5** (nulabreport):
+  - 35 pages (LaTeX: 29); every section and subsection is in the bookmarks;
+  - the reaction schemes are drawn, `\ce` is text, and reactions, equations and figures are numbered in the text;
+  - no `??` anywhere;
+  - 188 s with an empty cache (one LaTeX build for the numbers, 19 pieces drawn), 25 s once they are cached.
+- **Pandoc 3.1.3** (the oldest supported): the same command and bookmarks.
+- **A two-chapter `-r` report.**
+
+Not done, or known:
+
+- The PDF's title is the HTML page's `<title>`. A document whose title nulabreport builds itself (no `title:`) gets
+  the file name, "report", where LaTeX's PDF has the real title.
+- macOS's STIX Two Text (pdfmd's default main font) is a variable font, and Calibre embeds it as Type 3. The text
+  stays searchable and sharp, but some print shops object. A static font in `mainfont:` avoids it.
+- Whether Calibre's icon still bounces in the macOS dock is open (an item of the plan).
+- **Found here, fixed in 3.28.1:** pdfmd's LaTeX filter numbers a caption that pandoc-crossref has already numbered
+  ("Table 1: Table 1: A table"). This affects `.docx`, `.odt`, the LibreOffice route and now Calibre.
+
+### Tests
+
+- `tests/test_calibre.py` (new) covers:
+  - finding `ebook-convert` (PATH first, Program Files);
+  - using Calibre only when named, the install hint when it is missing, no slides, the `--check-dependencies` line;
+  - the Pandoc command it rewrites (html5, standalone, inlined resources, MathML unless the command line chose the
+    math);
+  - the page options (A5 landscape, 1cm, de-DE; Letter and 72pt by default);
+  - a real build, skipped without Pandoc and Calibre: A4, the headings as bookmarks, one page.
+- Full suite: 978 passed (14 skipped).
+
 ## v3.27.28 — 2026-10-11
 
 Pre-edit state: commit `5a8abaf` (v3.27.27).

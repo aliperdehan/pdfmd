@@ -176,11 +176,19 @@ OK    7. weasyprint  (/opt/homebrew/bin/weasyprint)
 MISS  8. wkhtmltopdf
 ...
 OK    14. soffice  (/Applications/LibreOffice.app/Contents/MacOS/soffice)
+OK    calibre (only when named: -e calibre)  (/opt/homebrew/bin/ebook-convert)
 OK    quarto (only needed for .qmd files)  (/usr/local/bin/quarto)
 ```
 
 The numbers are the fallback order, and also shortcuts: `-e 6` means
 `-e typst`.
+
+`-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
+instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own
+MathJax) and Calibre turns it into a PDF with the document's paper, margins, `fontsize:` and
+language, page numbers, and bookmarks from the headings. LaTeX in the document is made native
+or drawn as a picture, as for a Word file. Calibre is never tried on its own: only when you
+name it (`-e calibre`, or `pdf-engine: calibre` in `pdfmd-options:`).
 
 For everything at once, `pdfmd --doctor` is one page on the Markdown-to-PDF tools, fonts
 and emoji, PDF reading (batchocr, Tesseract, Poppler, OCR languages), your config file and
