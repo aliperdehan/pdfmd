@@ -1,0 +1,4002 @@
+[
+[
+"ce",
+"  ",
+""
+],
+[
+"ce",
+"  (aq)",
+"{\\mskip2mu (\\mathrm{aq})}"
+],
+[
+"ce",
+"  +\\bond{=}H",
+"{{+}\\,{=}\\mathrm{H}}"
+],
+[
+"ce",
+"  H<<=>->CuK",
+"{\\mathrm{H} {}\\mathrel{\\longLeftrightharpoons}{}  {}\\mathrel{\\longrightarrow}{} \\mathrm{CuK}}"
+],
+[
+"ce",
+"  K1/2",
+"{\\mathrm{K}{\\vphantom{A}}_{\\smash[t]{1}}/2}"
+],
+[
+"ce",
+"  O(IV-",
+"{\\mathrm{O}(\\mathrm{IV}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"  R",
+"{\\mathrm{R}}"
+],
+[
+"ce",
+"  \\pu{1 kg}(aq)(g)",
+"{{1~\\mathrm{kg}}(\\mathrm{aq})\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+" ]2<-->_{n}M[",
+"{]{\\vphantom{A}}_{\\smash[t]{2}} {}\\mathrel{\\longleftrightarrows}{} {\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{n }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{n }}}\\mathrm{M}[}"
+],
+[
+"ce",
+" ^ ^C+II[[",
+"{ \\uparrow{} ~{\\vphantom{A}}^{\\mathrm{C}}+\\mathrm{II}[[}"
+],
+[
+"ce",
+" ^(g) ^#\\bond{~}P\\frac{1}{2}(",
+"{{\\vphantom{A}}^{\\hphantom{(}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{(}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{g})~{\\vphantom{A}}^{#}{\\tripledash}\\mathrm{P}\\frac{1}{2}(}"
+],
+[
+"ce",
+" ^He",
+"{{\\vphantom{A}}^{\\hphantom{\\mathrm{H}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{H}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{e}}"
+],
+[
+"ce",
+" ^\\mu^2+#Me\\pu{1 kg}",
+"{{\\vphantom{A}}^{\\mathrm{\\mu}}^2 {}+{} {\\equiv}\\mathrm{Me}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+" ^^2+\\\\<<=>CO…->[\\Delta",
+"{\\vphantom{A}}^{^}2 {}+{} \\\\  {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{CO}{{\\cdot}{\\cdot}{\\cdot}} {}\\mathrel{\\longrightarrow}{} [\\mathrm{\\Delta}"
+],
+[
+"ce",
+" ^~(s)*Ph)->[C<=>>",
+"{{\\vphantom{A}}^{~}(\\mathrm{s})\\,{\\cdot}\\,\\mathrm{Ph}) {}\\mathrel{\\longrightarrow}{} [\\mathrm{C} {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+" v$10^3}iNN<=>",
+null
+],
+[
+"ce",
+" v',N",
+"{\\mathrm{v}{\\vphantom{A}}^{\\prime }{,}\\mkern3mu \\mathrm{N}}"
+],
+[
+"ce",
+" v+II<->",
+"{\\mathrm{v}{\\vphantom{A}}^{+}\\mathrm{II} {}\\mathrel{\\longleftrightarrow}{} }"
+],
+[
+"ce",
+" v...1/2(",
+"{\\mathrm{v}{{\\cdot}{\\cdot}{\\cdot}}\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,(}"
+],
+[
+"ce",
+" v...^{2-}]]_{n}(g) ^pH",
+"{\\mathrm{v}{{\\cdot}{\\cdot}{\\cdot}}{\\vphantom{A}}^{2-}]]{\\vphantom{A}}_{\\smash[t]{n }}\\mskip2mu (\\mathrm{g})~{\\vphantom{A}}^{\\hphantom{p }}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{p }}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{H}}"
+],
+[
+"ce",
+" v4}2Fe;",
+"{\\mathrm{v}{\\vphantom{A}}_{\\smash[t]{4}}}2\\,\\mathrm{Fe}{;}\\mkern3mu }"
+],
+[
+"ce",
+" vNaK\\color{red}{O}*Cu_x4sp",
+"{v\\,\\mathrm{NaK}{\\color{red}{\\mathrm{O}}}\\,{\\cdot}\\,\\mathrm{Cu}{\\vphantom{A}}_{\\smash[t]{x }}4\\mathrm{sp}}"
+],
+[
+"ce",
+" v\\frac{1}{2}…Cu10^3Fe  \\color{red}{O}12",
+"{\\mathrm{v}\\frac{1}{2}\\ldots \\mathrm{Cu}{\\vphantom{A}}_{\\smash[t]{10}}\\mkern2mu{\\vphantom{A}}^{\\hphantom{3}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{3}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Fe}~{\\color{red}{\\mathrm{O}}}12}"
+],
+[
+"ce",
+" v^He?#+",
+"{\\mathrm{v}{\\vphantom{A}}^{\\mathrm{H}}\\mathrm{e?}{\\equiv} {}+{} }"
+],
+[
+"ce",
+"# ^ <-->n->",
+"{{\\equiv} \\uparrow{}  {}\\mathrel{\\longleftrightarrows}{} \\mathrm{n} {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"#-->,",
+"{{\\equiv}{-} {}\\mathrel{\\longrightarrow}{} {,}\\mkern3mu }"
+],
+[
+"ce",
+"#10^3]T[",
+"{{\\equiv}10{\\vphantom{A}}^{3}]\\mathrm{T}[}"
+],
+[
+"ce",
+"#<=>&\\\\_x$x$<=>>",
+"{\\equiv} {}\\mathrel{\\longrightleftharpoons}{} & \\\\ {\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{x }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{x }}}x  {}\\mathrel{\\longRightleftharpoons}{} "
+],
+[
+"ce",
+"#<=>>->[z|",
+"{{\\equiv} {}\\mathrel{\\longRightleftharpoons}{}  {}\\mathrel{\\longrightarrow}{} [\\mathrm{z}|}"
+],
+[
+"ce",
+"#MeFe\\Delta..Na|",
+"{{\\equiv}\\mathrm{MeFe\\Delta}\\,{\\cdot}\\,\\,{\\cdot}\\,\\mathrm{Na}|}"
+],
+[
+"ce",
+"#pH2p_[[",
+"{{\\equiv}p\\,\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}{\\vphantom{A}}_{\\smash[t]{[}}[}"
+],
+[
+"ce",
+"$@124",
+"{$\\mathrm{@}{\\vphantom{A}}_{\\smash[t]{124}}}"
+],
+[
+"ce",
+"$Fe<-><-->x}Fe\\overset{a}{b}",
+null
+],
+[
+"ce",
+"$\\text{x}",
+"{$\\text{x}}"
+],
+[
+"ce",
+"$x$",
+"{x }"
+],
+[
+"ce",
+"$x$-{",
+"{x \\text{-}{}"
+],
+[
+"ce",
+"$x$/$x$$}",
+null
+],
+[
+"ce",
+"$x$10^3#?…10^3^sp",
+"{x \\,10{\\vphantom{A}}^{3}#\\mathrm{?}{{\\cdot}{\\cdot}{\\cdot}}10{\\vphantom{A}}^{3s }\\mathrm{p}}"
+],
+[
+"ce",
+"$x$[[->['12\\cdot\\pu{1 kg}\\frac{1}{2}",
+"{x \\,[[ {}\\mathrel{\\longrightarrow}{} [{\\vphantom{A}}^{\\prime }12\\,\\cdot{1~\\mathrm{kg}}\\frac{1}{2}}"
+],
+[
+"ce",
+"$x$\\,,~<=>(",
+"{x \\,{,}\\mkern3mu ~ {}\\mathrel{\\longrightleftharpoons}{} (}"
+],
+[
+"ce",
+"$x$\\ce{H2O}~He4\\ce{H2O}−",
+"{x \\,\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}~\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}{-}}"
+],
+[
+"ce",
+"$x$xT[KHeIV\\cdot+x",
+"{x \\,\\mathrm{xT}[\\mathrm{KHeIV}\\cdot {}+{} \\mathrm{x}}"
+],
+[
+"ce",
+"$xi  <=>C/\\mu/",
+"{$\\mathrm{xi} {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{C}/\\mathrm{\\mu}/}"
+],
+[
+"ce",
+"&+\\color{red}{O}\\Delta(s)z",
+"& {+}\\,{\\color{red}{\\mathrm{O}}}\\mathrm{\\Delta}(\\mathrm{s})\\mathrm{z}"
+],
+[
+"ce",
+"&12T[($][~=}",
+null
+],
+[
+"ce",
+"&?0.5",
+"& \\mathrm{?}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5"
+],
+[
+"ce",
+"&Cl^{2-}",
+"& \\mathrm{Cl}{\\vphantom{A}}^{2-}"
+],
+[
+"ce",
+"&\\,+",
+"& \\, {}+{} "
+],
+[
+"ce",
+"&pH~",
+"& \\mathrm{pH}~"
+],
+[
+"ce",
+"&{][PhAg0.5i",
+"& {][\\mathrm{PhAg}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5\\,\\mathrm{i}"
+],
+[
+"ce",
+"'$,(s)\\color{red}{O}0.5",
+"{{\\vphantom{A}}^{\\prime }${,}\\mkern3mu (\\mathrm{s}){\\color{red}{\\mathrm{O}}}0.5}"
+],
+[
+"ce",
+"'<-->Ag&\\color{red}{O}  <=>>",
+"{\\vphantom{A}}^{\\prime } {}\\mathrel{\\longleftrightarrows}{} \\mathrm{Ag}& {\\color{red}{\\mathrm{O}}} {}\\mathrel{\\longRightleftharpoons}{} "
+],
+[
+"ce",
+"'\\ce{H2O}pH^2+~{$",
+"{{\\vphantom{A}}^{\\prime }\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}p\\,\\mathrm{H}{\\vphantom{A}}^{2+}~{$}"
+],
+[
+"ce",
+"'\\pu{1 kg}",
+"{{\\vphantom{A}}^{\\prime }{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"'z(s)",
+"{{\\vphantom{A}}^{\\hphantom{\\prime }}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\prime }}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{z}\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+"(...M[",
+"{(\\ldots \\mathrm{M}[}"
+],
+[
+"ce",
+"(<-R'\\frac{1}{2}...\\ce{H2O}][",
+"{( {}\\mathrel{\\longleftarrow}{} \\mathrm{R}{\\vphantom{A}}^{\\prime }\\frac{1}{2}\\ldots \\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}][}"
+],
+[
+"ce",
+"(@\\frac{1}{2}Fe2p20.5->[i",
+"{(\\mathrm{@}\\frac{1}{2}\\mathrm{Fe}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}{\\vphantom{A}}_{\\smash[t]{20}}\\,{\\cdot}\\,5 {}\\mathrel{\\longrightarrow}{} [\\mathrm{i}}"
+],
+[
+"ce",
+"(M[^{2-}e[[|->[(l)",
+"{(\\mathrm{M}[{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{e}[[| {}\\mathrel{\\longrightarrow}{} [\\mskip2mu (\\mathrm{l})}"
+],
+[
+"ce",
+"(NHe\\alpha",
+"{(\\mathrm{NHe\\alpha}}"
+],
+[
+"ce",
+"(\\alphaR1/2Cu~zCl",
+"{(\\alphaR\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,\\mathrm{Cu}~z\\,\\mathrm{Cl}}"
+],
+[
+"ce",
+"(aq) ^Cin}",
+"{\\mskip2mu (\\mathrm{aq})~{\\vphantom{A}}^{\\hphantom{\\mathrm{C}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{C}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{in}}}"
+],
+[
+"ce",
+"(aq)#~N\\ce{H2O} v<-",
+"{(\\mathrm{aq}){\\equiv}~\\mathrm{N}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}~\\mathrm{v} {}\\mathrel{\\longleftarrow}{} }"
+],
+[
+"ce",
+"(aq)'",
+"{(\\mathrm{aq}){\\vphantom{A}}^{\\prime }}"
+],
+[
+"ce",
+"(aq)10^3+II#H",
+"{(\\mathrm{aq}){\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3+}\\mathrm{II}{\\equiv}\\mathrm{H}}"
+],
+[
+"ce",
+"(aq)2<=>>1/2<-",
+"{(\\mathrm{aq}){\\vphantom{A}}_{\\smash[t]{2}} {}\\mathrel{\\longRightleftharpoons}{} \\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}} {}\\mathrel{\\longleftarrow}{} }"
+],
+[
+"ce",
+"(aq)Ag'@[,IV\\bond{=}\\\\",
+"(\\mathrm{aq})\\mathrm{Ag}{\\vphantom{A}}^{\\prime }\\mathrm{@}[{,}\\mkern3mu \\mathrm{IV}{=}\\\\ "
+],
+[
+"ce",
+"(aq)IV−NaRN<<=>",
+"{(\\mathrm{aq})\\mathrm{IV}{-}\\mathrm{NaRN} {}\\mathrel{\\longLeftrightharpoons}{} }"
+],
+[
+"ce",
+"(aq)\\DeltaaT[iP->[",
+"{(\\mathrm{aq})\\DeltaaT[i\\,\\mathrm{P} {}\\mathrel{\\longrightarrow}{} [}"
+],
+[
+"ce",
+"(aq)^2+...",
+"{(\\mathrm{aq}){\\vphantom{A}}^{2+}{{\\cdot}{\\cdot}{\\cdot}}}"
+],
+[
+"ce",
+"(g)",
+"{\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"(g)'(s){(g)",
+"{(\\mathrm{g}){\\vphantom{A}}^{\\prime }(\\mathrm{s}){\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"(g)+II",
+"{(\\mathrm{g}){\\vphantom{A}}^{+}\\mathrm{II}}"
+],
+[
+"ce",
+"(g)4T[\\muS(sp12",
+"{(\\mathrm{g}){\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{T}[\\muS(\\mathrm{sp}{\\vphantom{A}}_{\\smash[t]{12}}}"
+],
+[
+"ce",
+"(g)\\,2",
+"{(\\mathrm{g})\\,2}"
+],
+[
+"ce",
+"(g)\\pu{1 kg}",
+"{(\\mathrm{g}){1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"(g)]\\,~2p/2...",
+"{\\mskip2mu (\\mathrm{g})]\\,~2\\mathrm{p}/2\\ldots }"
+],
+[
+"ce",
+"(g)_{n}",
+"{(\\mathrm{g}){\\vphantom{A}}_{\\smash[t]{n }}}"
+],
+[
+"ce",
+"(g)e[\\\\Ag^",
+"(\\mathrm{g})\\mathrm{e}[\\\\ \\mathrm{Ag}"
+],
+[
+"ce",
+"(l))\\overset{a}{b}0.5&Me#",
+"\\mskip2mu (\\mathrm{l}))\\overset{\\mathrm{a}}{\\mathrm{b}}0.5& \\mathrm{Me}{\\equiv}"
+],
+[
+"ce",
+"(l),",
+"{\\mskip2mu (\\mathrm{l}){,}\\mkern3mu }"
+],
+[
+"ce",
+"(l)3][^C−H\\text{x}3",
+"{(\\mathrm{l}){\\vphantom{A}}_{\\smash[t]{3}}][{\\vphantom{A}}^{\\hphantom{\\mathrm{C}-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{C}-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{H}\\text{x}3}"
+],
+[
+"ce",
+"(l)IVO*Ph*^[[",
+"{(\\mathrm{l})\\mathrm{IVO}\\,{\\cdot}\\,\\mathrm{Ph}\\,{\\cdot}\\,{\\vphantom{A}}^{[}[}"
+],
+[
+"ce",
+"(l)_xP(l)[",
+"{(\\mathrm{l}){\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{P}(\\mathrm{l})[}"
+],
+[
+"ce",
+"(s)",
+"{\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+"(s) /",
+"{\\mskip2mu (\\mathrm{s})~/}"
+],
+[
+"ce",
+"(s)@->$x$",
+"{(\\mathrm{s})\\mathrm{@} {}\\mathrel{\\longrightarrow}{} x }"
+],
+[
+"ce",
+"(s)IV-]](l)  S=",
+"{(\\mathrm{s})\\mathrm{IV}{\\vphantom{A}}^{-}]]\\mskip2mu (\\mathrm{l})~\\mathrm{S}{=}}"
+],
+[
+"ce",
+"(s)^{2-}$",
+"{(\\mathrm{s}){\\vphantom{A}}^{2-}$}"
+],
+[
+"ce",
+"(zK\\DeltaMe^",
+"{(z\\,\\mathrm{K}\\DeltaMe}"
+],
+[
+"ce",
+")(l)...\\overset{a}{b}",
+"{)(\\mathrm{l}){{\\cdot}{\\cdot}{\\cdot}}\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+")(s)?pH<-->}^",
+"{)(\\mathrm{s})\\mathrm{?pH} {}\\mathrel{\\longleftrightarrows}{} }}"
+],
+[
+"ce",
+")(s)CuT[",
+"{)(\\mathrm{s})\\mathrm{CuT}[}"
+],
+[
+"ce",
+")->[CuPh\\color{red}{O} ^<=>z",
+"{) {}\\mathrel{\\longrightarrow}{} [\\mathrm{CuPh}{\\color{red}{\\mathrm{O}}}~{\\vphantom{A}}^{<}={>}\\mathrm{z}}"
+],
+[
+"ce",
+")...",
+"{){{\\cdot}{\\cdot}{\\cdot}}}"
+],
+[
+"ce",
+")...2^",
+"{){{\\cdot}{\\cdot}{\\cdot}}2}"
+],
+[
+"ce",
+")12",
+"{){\\vphantom{A}}_{\\smash[t]{12}}}"
+],
+[
+"ce",
+")AgHe",
+"{)\\mathrm{AgHe}}"
+],
+[
+"ce",
+")C_{n}<=>>",
+"{)\\mathrm{C}{\\vphantom{A}}_{\\smash[t]{n }} {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+")[(g)\\cdot",
+"{)[(\\mathrm{g})\\cdot}"
+],
+[
+"ce",
+")…\\cdotH\\cdotCuaH",
+"{){{\\cdot}{\\cdot}{\\cdot}}\\cdotH\\cdotCuaH}"
+],
+[
+"ce",
+"*->H\\\\ +]]",
+"\\,{\\cdot}\\, {}\\mathrel{\\longrightarrow}{} \\mathrm{H}\\\\ {+}]]"
+],
+[
+"ce",
+"*2p->Me[[(",
+"{\\,{\\cdot}\\,2\\mathrm{p} {}\\mathrel{\\longrightarrow}{} \\mathrm{Me}[[(}"
+],
+[
+"ce",
+"*He4R2p\\bond{=}_x[[",
+"{\\,{\\cdot}\\,\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{R}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}{=}{\\vphantom{A}}_{\\smash[t]{x }}[[}"
+],
+[
+"ce",
+"*He<-->&\\frac{1}{2}12# i",
+"\\,{\\cdot}\\,\\mathrm{He} {}\\mathrel{\\longleftrightarrows}{} & \\frac{1}{2}12\\,{\\equiv}~\\mathrm{i}"
+],
+[
+"ce",
+"*IVnP  ^]]?",
+"{\\,{\\cdot}\\,\\mathrm{IVnP} \\uparrow{} ]]\\mathrm{?}}"
+],
+[
+"ce",
+"*Ph\\bond{=}10^3",
+"{\\,{\\cdot}\\,\\mathrm{Ph}{=}10{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"*Sn_x(s)+IV",
+"{\\,{\\cdot}\\,\\mathrm{Sn}{\\vphantom{A}}_{\\smash[t]{x }}(\\mathrm{s}){\\vphantom{A}}^{+}\\mathrm{IV}}"
+],
+[
+"ce",
+"*][)KH",
+"{\\,{\\cdot}\\,][)\\mathrm{KH}}"
+],
+[
+"ce",
+"*}",
+"{\\,{\\cdot}\\,}}"
+],
+[
+"ce",
+"+?-",
+"{{+}\\,\\mathrm{?}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"+@@10^3",
+"{{+}\\,\\mathrm{@@}{\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"+IIClpH\\overset{a}{b}e2sp<-->[",
+"{{+}\\,\\mathrm{IIClpH}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{e}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{sp} {}\\mathrel{\\longleftrightarrows}{} [}"
+],
+[
+"ce",
+"+II[= v \\frac{1}{2}_{n}<-x",
+"{{+}\\,\\mathrm{II}[ {}={}  \\downarrow{} ~\\frac{1}{2}{\\vphantom{A}}_{\\smash[t]{n }} {}\\mathrel{\\longleftarrow}{} \\mathrm{x}}"
+],
+[
+"ce",
+"+II[[+10^3",
+"{{+}\\,\\mathrm{II}[[{+10}{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"+II\\bond{=}^\\color{red}{O}#",
+"{{+}\\,\\mathrm{II}{=}{\\vphantom{A}}^{{\\color{red}{\\mathrm{O}}}}#}"
+],
+[
+"ce",
+"+II\\color{red}{O}<-->\\,*.]](l)",
+"{{+}\\,\\mathrm{II}{\\color{red}{\\mathrm{O}}} {}\\mathrel{\\longleftrightarrows}{} \\,\\,{\\cdot}\\,\\,{\\cdot}\\,]]\\mskip2mu (\\mathrm{l})}"
+],
+[
+"ce",
+"+II\\pu{1 kg}4",
+"{{+}\\,\\mathrm{II}{1~\\mathrm{kg}}4}"
+],
+[
+"ce",
+"+IIee  \\text{x}&@",
+"{+}\\,\\mathrm{IIee}~\\text{x}& \\mathrm{@}"
+],
+[
+"ce",
+"+[[@(g)",
+"{{+}\\,[[\\mathrm{@}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"+\\cdot",
+"{{+}\\,\\cdot}"
+],
+[
+"ce",
+"+x",
+"{{+}\\,\\mathrm{x}}"
+],
+[
+"ce",
+"+|sp'a(s)",
+"{{+}|\\mathrm{sp}{\\vphantom{A}}^{\\prime }\\mathrm{a}\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+",<-S/",
+"{{,}\\mkern3mu  {}\\mathrel{\\longleftarrow}{} \\mathrm{S}/}"
+],
+[
+"ce",
+",Ag2",
+"{{,}\\mkern3mu \\mathrm{Ag}{\\vphantom{A}}_{\\smash[t]{2}}}"
+],
+[
+"ce",
+",spN4(g)O",
+"{{,}\\mkern3mu \\mathrm{spN}{\\vphantom{A}}_{\\smash[t]{4}}(\\mathrm{g})\\mathrm{O}}"
+],
+[
+"ce",
+"-2p\\cdot+HepH",
+"{{-2}\\,\\mathrm{p}\\cdot {}+{} \\mathrm{HepH}}"
+],
+[
+"ce",
+"->(l)IV\\color{red}{O}<- .",
+"{ {}\\mathrel{\\longrightarrow}{} (\\mathrm{l})\\mathrm{IV}{\\color{red}{\\mathrm{O}}} {}\\mathrel{\\longleftarrow}{} \\,{\\cdot}\\,}"
+],
+[
+"ce",
+"->...=\\alpha +.  2p",
+"{ {}\\mathrel{\\longrightarrow}{} \\ldots {=}\\mathrm{\\alpha }{\\vphantom{A}}^{+}\\,{\\cdot}\\,2\\mathrm{p}}"
+],
+[
+"ce",
+"->3(l)12M[-4\\bond{~}N",
+"{ {}\\mathrel{\\longrightarrow}{} 3\\,(\\mathrm{l}){\\vphantom{A}}_{\\smash[t]{12}}\\mathrm{M}[{-4}\\,{\\tripledash}\\mathrm{N}}"
+],
+[
+"ce",
+"-><->(aq)->[*}He\\pu{1 kg}*",
+null
+],
+[
+"ce",
+"->[()E−1/212",
+"{ {}\\mathrel{\\longrightarrow}{} [()\\mathrm{E}\\text{-}\\mathchoice{\\textstyle\\frac{1}{212}}{\\frac{1}{212}}{\\frac{1}{212}}{\\frac{1}{212}}}"
+],
+[
+"ce",
+"->[+_{n}R…=R\\cdot",
+"{ {}\\mathrel{\\longrightarrow}{} [{+}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{R}{{\\cdot}{\\cdot}{\\cdot}}{=}\\mathrm{R}\\cdot}"
+],
+[
+"ce",
+"->[M[_(s)\\Delta v~@]",
+"{ {}\\mathrel{\\xrightarrow{\\mathrm{M}[{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{(}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{(}}}\\mathrm{s})\\mathrm{\\Delta v}~\\mathrm{@}}}{} }"
+],
+[
+"ce",
+"->[\\bond{=}}Ag",
+null
+],
+[
+"ce",
+"->[\\ce{H2O}1/2",
+"{ {}\\mathrel{\\longrightarrow}{} [\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}}"
+],
+[
+"ce",
+"->[]]",
+"{ {}\\mathrel{\\longrightarrow}{} ]}"
+],
+[
+"ce",
+"->[…H;->",
+"{ {}\\mathrel{\\longrightarrow}{} [\\ldots \\mathrm{H}{;}\\mkern3mu  {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"->^{2-}",
+"{ {}\\mathrel{\\longrightarrow}{} {\\vphantom{A}}^{2-}}"
+],
+[
+"ce",
+"-Fea&Me][|{",
+"{-}\\mathrm{Fea}& \\mathrm{Me}][|{"
+],
+[
+"ce",
+"-_{n}  <<=>",
+"{{-}{\\vphantom{A}}_{\\smash[t]{n }} {}\\mathrel{\\longLeftrightharpoons}{} }"
+],
+[
+"ce",
+"-e",
+"{{-}\\mathrm{e}}"
+],
+[
+"ce",
+"-xS\\bond{=}E(aq)\\\\Me\\cdot",
+"{-x}\\,\\mathrm{S}{=}\\mathrm{E}(\\mathrm{aq})\\\\ \\mathrm{Me}\\cdot"
+],
+[
+"ce",
+"-z\\text{x}IVCl\\cdot",
+"{{-}\\mathrm{z}\\text{x}\\mathrm{IVCl}\\cdot}"
+],
+[
+"ce",
+".$(l)(aq)\\bond{=}}_{n}(l)",
+null
+],
+[
+"ce",
+".'z(l)IVPh]",
+"{\\,{\\cdot}\\,{\\vphantom{A}}^{\\hphantom{\\prime }}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\prime }}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{z}(\\mathrm{l})\\mathrm{IVPh}]}"
+],
+[
+"ce",
+".-<-->",
+"{\\,{\\cdot}\\,{-} {}\\mathrel{\\longleftrightarrows}{} }"
+],
+[
+"ce",
+"...2p\\pu{1 kg}n(l)_{n} ^",
+"{\\ldots 2\\mathrm{p}{1~\\mathrm{kg}}\\mathrm{n}(\\mathrm{l}){\\vphantom{A}}_{\\smash[t]{n }} \\uparrow{} }"
+],
+[
+"ce",
+"...;[N0.52pCl->",
+"{\\ldots {;}\\mkern3mu [\\mathrm{N}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,52p\\,\\mathrm{Cl} {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"...e\\color{red}{O}->['\\overset{a}{b}Cl",
+"{\\ldots \\mathrm{e}{\\color{red}{\\mathrm{O}}} {}\\mathrel{\\longrightarrow}{} [{\\vphantom{A}}^{\\prime }\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{Cl}}"
+],
+[
+"ce",
+"...|<-->(s)10^3\\frac{1}{2}~",
+"{\\ldots | {}\\mathrel{\\longleftrightarrows}{} (\\mathrm{s}){\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3}\\frac{1}{2}~}"
+],
+[
+"ce",
+"...}2pCl[[\\mu(aq)",
+"{\\ldots }2p\\,\\mathrm{Cl}[[\\mathrm{\\mu}\\mskip2mu (\\mathrm{aq})}"
+],
+[
+"ce",
+".PRsp0.5Ag−",
+"{\\,{\\cdot}\\,\\mathrm{PRsp}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5\\,\\mathrm{Ag}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+".Ph",
+"{\\,{\\cdot}\\,\\mathrm{Ph}}"
+],
+[
+"ce",
+".S\\pu{1 kg}Nae2#",
+"{\\,{\\cdot}\\,\\mathrm{S}{1~\\mathrm{kg}}\\mathrm{Nae}{\\vphantom{A}}_{\\smash[t]{2}}#}"
+],
+[
+"ce",
+"._{n}Cun\\frac{1}{2}[}\\bond{~}",
+"{\\,{\\cdot}\\,{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{n }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{n }}}\\mathrm{Cun}\\frac{1}{2}[}{\\tripledash}}"
+],
+[
+"ce",
+"/(g)R?*1/2",
+"{/(\\mathrm{g})\\mathrm{R?}\\,{\\cdot}\\,\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}}"
+],
+[
+"ce",
+"/,",
+"{/{,}\\mkern3mu }"
+],
+[
+"ce",
+"/. ^C",
+"{/\\,{\\cdot}\\,{\\vphantom{A}}^{\\mathrm{C}}}"
+],
+[
+"ce",
+"/.\\overset{a}{b}",
+"{/\\,{\\cdot}\\,\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"/;+][He\\bond{~}S",
+"{/{;}\\mkern3mu {+}][\\mathrm{He}{\\tripledash}\\mathrm{S}}"
+],
+[
+"ce",
+"/HeP#~pH",
+"{/\\mathrm{HeP}{\\equiv}~p\\,\\mathrm{H}}"
+],
+[
+"ce",
+"/NNC−",
+"{/\\mathrm{NNC}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"/PhCl",
+"{/\\mathrm{PhCl}}"
+],
+[
+"ce",
+"/_{n}~",
+"{/{\\vphantom{A}}_{\\smash[t]{n }}~}"
+],
+[
+"ce",
+"0.5  \\alphaCu<<=>[[3z",
+"{0.5~\\alphaCu {}\\mathrel{\\longLeftrightharpoons}{} [[3\\,\\mathrm{z}}"
+],
+[
+"ce",
+"0.5+'",
+"{0.5 {}+{} {\\vphantom{A}}^{\\prime }}"
+],
+[
+"ce",
+"0.5+II<<=>T[e<->0.5/",
+"{0.5 {}+{} \\mathrm{II} {}\\mathrel{\\overset{\\text{}}{\\longLeftrightharpoons}}{} [\\mathrm{e} {}\\mathrel{\\longleftrightarrow}{} 0.5/}"
+],
+[
+"ce",
+"0.5.E",
+"{0.5\\,{\\cdot}\\,\\mathrm{E}}"
+],
+[
+"ce",
+"0.5C",
+"{0.5\\,\\mathrm{C}}"
+],
+[
+"ce",
+"0.5Cl",
+"{0.5\\,\\mathrm{Cl}}"
+],
+[
+"ce",
+"0.5EP",
+"{0.5\\,\\mathrm{EP}}"
+],
+[
+"ce",
+"0.5Kn\\overset{a}{b}",
+"{0.5\\,\\mathrm{Kn}\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"0.5[  +#T[^]]+II",
+"{0.5\\,[~{+}\\,{\\equiv}\\mathrm{T}[ \\uparrow{} ]]{\\vphantom{A}}^{+}\\mathrm{II}}"
+],
+[
+"ce",
+"0.5\\bond{=}e",
+"{0.5\\,{=}\\mathrm{e}}"
+],
+[
+"ce",
+"1/210^3",
+"{\\mathchoice{\\textstyle\\frac{1}{210}}{\\frac{1}{210}}{\\frac{1}{210}}{\\frac{1}{210}}{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"1/24\\alpha^{2-}",
+"{\\mathchoice{\\textstyle\\frac{1}{24}}{\\frac{1}{24}}{\\frac{1}{24}}{\\frac{1}{24}}\\,\\mathrm{\\alpha}{\\vphantom{A}}^{2-}}"
+],
+[
+"ce",
+"1/2?  ",
+"{\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,\\mathrm{?}}"
+],
+[
+"ce",
+"1/2S10^3[Cl}Ag}",
+"{\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,\\mathrm{S}{\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3}[\\mathrm{Cl}}\\mathrm{Ag}}}"
+],
+[
+"ce",
+"1/2spR[[\\text{x}$x$Cu(",
+"{\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,\\mathrm{spR}[[\\text{x}x \\,\\mathrm{Cu}(}"
+],
+[
+"ce",
+"10^32pAg\\bond{~}(g)",
+"{10\\mkern2mu{\\vphantom{A}}^{\\hphantom{32}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{32}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{pAg}{\\tripledash}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"10^3N",
+"{10\\mkern2mu{\\vphantom{A}}^{\\hphantom{3}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{3}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{N}}"
+],
+[
+"ce",
+"10^3T[.^\\color{red}{O}<->",
+"{10\\mkern2mu{\\vphantom{A}}^{\\hphantom{3}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{3}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{T}[\\,{\\cdot}\\,{\\vphantom{A}}^{{\\color{red}{\\mathrm{O}}}} {}\\mathrel{\\longleftrightarrow}{} }"
+],
+[
+"ce",
+"10^3\\bond{~}n(g)",
+"{10{\\vphantom{A}}^{3}{\\tripledash}\\mathrm{n}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"12  ][Me\\\\2+",
+"12~][\\mathrm{Me}\\\\ 2 {}+{} "
+],
+[
+"ce",
+"12+[[CP][H\\overset{a}{b}$",
+"{12 {}+{} [[\\mathrm{CP}][\\mathrm{H}\\overset{\\mathrm{a}}{\\mathrm{b}}$}"
+],
+[
+"ce",
+"124",
+"{124}"
+],
+[
+"ce",
+"12@\\bond{~}−Ph,-(s)(g)",
+"{12\\,\\mathrm{@}{\\tripledash}{-}\\mathrm{Ph}{,}\\mkern3mu {-}(\\mathrm{s})\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"12][+II",
+"{12][{+}\\,\\mathrm{II}}"
+],
+[
+"ce",
+"2(g);e->[\\,",
+"{2\\mskip2mu (\\mathrm{g}){;}\\mkern3mu \\mathrm{e} {}\\mathrel{\\longrightarrow}{} [\\,}"
+],
+[
+"ce",
+"2\\bond{=}",
+"{2\\,{=}}"
+],
+[
+"ce",
+"2p+II\\alpha\\muAg[[(l)|",
+"{2\\mathrm{p}{\\vphantom{A}}^{+}\\mathrm{II\\alpha}\\muAg[[(\\mathrm{l})|}"
+],
+[
+"ce",
+"2p4Cla[",
+"{2\\mathrm{p}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{Cla}[}"
+],
+[
+"ce",
+"2p?\\,",
+"{2\\mathrm{p?}\\,}"
+],
+[
+"ce",
+"2pIVRN'_{n}\\Delta0.5",
+"{2p\\,\\mathrm{IVRN}{\\vphantom{A}}^{\\prime }_{\\smash[t]{n }}\\mathrm{\\Delta}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5}"
+],
+[
+"ce",
+"2pR",
+"{2p\\,\\mathrm{R}}"
+],
+[
+"ce",
+"2p\\\\*2pCIV",
+"2\\mathrm{p}\\\\ \\,{\\cdot}\\,2p\\,\\mathrm{CIV}"
+],
+[
+"ce",
+"2p]]}3 ^\\frac{1}{2}IVPh",
+"{2\\mathrm{p}]]}3\\,{\\vphantom{A}}^{\\hphantom{\\frac{1}{2}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\frac{1}{2}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{IVPh}}"
+],
+[
+"ce",
+"2pi_<=>>",
+"{2\\,\\mathrm{pi}{\\vphantom{A}}_{\\smash[t]{<}}{=}{>}{>}}"
+],
+[
+"ce",
+"2p{,",
+"{2\\mathrm{p}{{,}\\mkern3mu }"
+],
+[
+"ce",
+"2p~ ][][EC",
+"{2\\mathrm{p}~~][][\\mathrm{EC}}"
+],
+[
+"ce",
+"3$x$pH.->}",
+"{3x \\,\\mathrm{pH}\\,{\\cdot}\\, {}\\mathrel{\\longrightarrow}{} }}"
+],
+[
+"ce",
+"3<-eIV.Cu",
+"{3 {}\\mathrel{\\longleftarrow}{} e\\,\\mathrm{IV}\\,{\\cdot}\\,\\mathrm{Cu}}"
+],
+[
+"ce",
+"3Me+II/",
+"{3\\,\\mathrm{Me}{\\vphantom{A}}^{+}\\mathrm{II}/}"
+],
+[
+"ce",
+"3^12?xN2p\\overset{a}{b}\\Delta",
+"{3\\mkern2mu{\\vphantom{A}}^{\\hphantom{12}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{12}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{?xN}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{\\Delta}}"
+],
+[
+"ce",
+"3eH ^Ag(",
+"{3e\\,\\mathrm{H}~{\\vphantom{A}}^{\\hphantom{\\mathrm{A}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{A}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{g}(}"
+],
+[
+"ce",
+"4Cl}+II\\\\\\text{x}+II\\bond{=}",
+"4\\,\\mathrm{Cl}} {}+{} \\mathrm{II}\\\\ \\text{x} {}+{} \\mathrm{II}{=}"
+],
+[
+"ce",
+"4T[S\\overset{a}{b}M[\\pu{1 kg}",
+"{4\\,\\mathrm{T}[\\mathrm{S}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{M}[{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"4\\Delta",
+"{4\\,\\mathrm{\\Delta}}"
+],
+[
+"ce",
+"4^{2-}][[[\\Delta?",
+"{4{\\vphantom{A}}^{2-}][[[\\mathrm{\\Delta?}}"
+],
+[
+"ce",
+"4e ^",
+"{4\\,\\mathrm{e} \\uparrow{} }"
+],
+[
+"ce",
+";(s)3e",
+"{{;}\\mkern3mu (\\mathrm{s}){\\vphantom{A}}_{\\smash[t]{3}}\\mathrm{e}}"
+],
+[
+"ce",
+";+IINa(s)\\cdot",
+"{{;}\\mkern3mu {+}\\,\\mathrm{IINa}(\\mathrm{s})\\cdot}"
+],
+[
+"ce",
+";<-><=>>",
+"{{;}\\mkern3mu  {}\\mathrel{\\longleftrightarrow}{}  {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+";<-S12Pe[",
+"{{;}\\mkern3mu  {}\\mathrel{\\longleftarrow}{} \\mathrm{S}{\\vphantom{A}}_{\\smash[t]{12}}\\mathrm{Pe}[}"
+],
+[
+"ce",
+";Ag2i(l)|Ksp",
+"{{;}\\mkern3mu \\mathrm{Ag}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{i}(\\mathrm{l})|\\mathrm{Ksp}}"
+],
+[
+"ce",
+";\\\\",
+"{;}\\mkern3mu \\\\ "
+],
+[
+"ce",
+";\\text{x}@=2p~",
+"{{;}\\mkern3mu \\text{x}\\mathrm{@}{=}2\\mathrm{p}~}"
+],
+[
+"ce",
+";|- ^^{2-}a\\alpha-",
+"{{;}\\mkern3mu |{-}~{\\vphantom{A}}^{\\hphantom{^}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{^}}_{\\vphantom{2}\\llap{\\smash[t]{}}}{\\text{2-}}\\mathrm{a\\alpha}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"<-->$\\alpha?",
+"{ {}\\mathrel{\\longleftrightarrows}{} $\\mathrm{\\alpha?}}"
+],
+[
+"ce",
+"<-->...)$<=>>\\ce{H2O}",
+"{ {}\\mathrel{\\longleftrightarrows}{} \\ldots )$ {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"<-->10^3S",
+"{ {}\\mathrel{\\longleftrightarrows}{} 10\\mkern2mu{\\vphantom{A}}^{\\hphantom{3}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{3}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{S}}"
+],
+[
+"ce",
+"<-->24,Fe4i",
+"{ {}\\mathrel{\\longleftrightarrows}{} 24{,}\\mkern3mu \\mathrm{Fe}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{i}}"
+],
+[
+"ce",
+"<-->[[\\ce{H2O}\\frac{1}{2}+II[IV^2+->",
+"{ {}\\mathrel{\\longleftrightarrows}{} [[\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\frac{1}{2} {}+{} \\mathrm{II}[\\mathrm{IV}{\\vphantom{A}}^{2+} {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"<-->_x",
+"{ {}\\mathrel{\\longleftrightarrows}{} {\\vphantom{A}}_{\\smash[t]{x }}}"
+],
+[
+"ce",
+"<->",
+"{ {}\\mathrel{\\longleftrightarrow}{} }"
+],
+[
+"ce",
+"<->...<--> ^",
+"{ {}\\mathrel{\\longleftrightarrow}{} \\ldots  {}\\mathrel{\\longleftrightarrows}{}  \\uparrow{} }"
+],
+[
+"ce",
+"<->.<<=>",
+"{ {}\\mathrel{\\longleftrightarrow}{} \\,{\\cdot}\\, {}\\mathrel{\\longLeftrightharpoons}{} }"
+],
+[
+"ce",
+"<->E",
+"{ {}\\mathrel{\\longleftrightarrow}{} \\mathrm{E}}"
+],
+[
+"ce",
+"<->P",
+"{ {}\\mathrel{\\longleftrightarrow}{} \\mathrm{P}}"
+],
+[
+"ce",
+"<-N?^iNa#\\overset{a}{b}i",
+"{ {}\\mathrel{\\longleftarrow}{} \\mathrm{N?}{\\vphantom{A}}^{i }\\mathrm{Na}{\\equiv}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{i}}"
+],
+[
+"ce",
+"<-O\\\\\\frac{1}{2}_x\\cdot|",
+" {}\\mathrel{\\longleftarrow}{} \\mathrm{O}\\\\ \\frac{1}{2}{\\vphantom{A}}_{\\smash[t]{x }}\\cdot|"
+],
+[
+"ce",
+"<-^{2-}",
+"{ {}\\mathrel{\\longleftarrow}{} {\\vphantom{A}}^{2-}}"
+],
+[
+"ce",
+"<<=>  \\ce{H2O}(aq)<=>>\\pu{1 kg}",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}(\\mathrm{aq}) {}\\mathrel{\\longRightleftharpoons}{} {1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"<<=>(l)PM[Fe",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} (\\mathrm{l})\\mathrm{PM}[\\mathrm{Fe}}"
+],
+[
+"ce",
+"<<=><<=><<=>^2+@^2+z[a",
+"{ {}\\mathrel{\\longLeftrightharpoons}{}  {}\\mathrel{\\longLeftrightharpoons}{}  {}\\mathrel{\\longLeftrightharpoons}{} {\\vphantom{A}}^{2}+\\mathrm{@}{\\vphantom{A}}^{2+}\\mathrm{z}[\\mathrm{a}}"
+],
+[
+"ce",
+"<<=>H<<=>z?",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{H} {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{z?}}"
+],
+[
+"ce",
+"<<=>O}M[i",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{O}}\\mathrm{M}[\\mathrm{i}}"
+],
+[
+"ce",
+"<<=>RNa",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{RNa}}"
+],
+[
+"ce",
+"<<=>\\ce{H2O}KR'-Cu",
+"{ {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{KR}{\\vphantom{A}}^{\\prime }{-}\\mathrm{Cu}}"
+],
+[
+"ce",
+"<=>->[|^2+S",
+"{ {}\\mathrel{\\longrightleftharpoons}{}  {}\\mathrel{\\longrightarrow}{} [|{\\vphantom{A}}^{2+}\\mathrm{S}}"
+],
+[
+"ce",
+"<=>...",
+"{ {}\\mathrel{\\longrightleftharpoons}{} \\ldots }"
+],
+[
+"ce",
+"<=>>1/2C{HC[",
+"{ {}\\mathrel{\\longRightleftharpoons}{} \\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}\\,\\mathrm{C}{\\mathrm{HC}[}"
+],
+[
+"ce",
+"<=>><->}\\ce{H2O}",
+"{ {}\\mathrel{\\longRightleftharpoons}{}  {}\\mathrel{\\longleftrightarrow}{} }\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"<=>>@(g)\\bond{~}Fe\\ce{H2O}",
+"{ {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{@}(\\mathrm{g}){\\tripledash}\\mathrm{Fe}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"<=>>Me4spT[Cl~\\cdot",
+"{ {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{Me}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{spT}[\\mathrm{Cl}~\\cdot}"
+],
+[
+"ce",
+"<=>>\\frac{1}{2}",
+"{ {}\\mathrel{\\longRightleftharpoons}{} \\frac{1}{2}}"
+],
+[
+"ce",
+"<=>>a",
+"{ {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{a}}"
+],
+[
+"ce",
+"<=>>{",
+"{ {}\\mathrel{\\longRightleftharpoons}{} {}"
+],
+[
+"ce",
+"<=>Ph  3?->[R",
+"{ {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{Ph}~3\\,\\mathrm{?} {}\\mathrel{\\longrightarrow}{} [\\mathrm{R}}"
+],
+[
+"ce",
+"=<-->",
+"{{=} {}\\mathrel{\\longleftrightarrows}{} }"
+],
+[
+"ce",
+"=Cu",
+"{{=}\\mathrm{Cu}}"
+],
+[
+"ce",
+"=[(l)e_xCR",
+"{{=}[(\\mathrm{l})\\mathrm{e}{\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{CR}}"
+],
+[
+"ce",
+"=\\DeltaC...[z<=>>",
+"{{=}\\DeltaC\\ldots [\\mathrm{z} {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"=xCl…T[$x$@…\\pu{1 kg}",
+"{{=}x\\,\\mathrm{Cl}{{\\cdot}{\\cdot}{\\cdot}}\\mathrm{T}[x \\,\\mathrm{@}{{\\cdot}{\\cdot}{\\cdot}}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"?0.5\\color{red}{O}M[0.5PhO",
+"{\\mathrm{?}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5\\,{\\color{red}{\\mathrm{O}}}\\mathrm{M}[0.5\\,\\mathrm{PhO}}"
+],
+[
+"ce",
+"?10^3 \\overset{a}{b}O(aq)^O",
+"{\\mathrm{?}{\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3}~\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{O}(\\mathrm{aq}){\\vphantom{A}}^{\\mathrm{O}}}"
+],
+[
+"ce",
+"?2pO/(aq)\\mun)Ag",
+"{\\mathrm{?}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{pO}/(\\mathrm{aq})\\mun)\\mathrm{Ag}}"
+],
+[
+"ce",
+"?\\alpha",
+"{\\mathrm{?\\alpha}}"
+],
+[
+"ce",
+"?{",
+"{\\mathrm{?}{}"
+],
+[
+"ce",
+"@ ^nP2)",
+"{\\mathrm{@}~{\\vphantom{A}}^{\\hphantom{n }}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{n }}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{P}{\\vphantom{A}}_{\\smash[t]{2}})}"
+],
+[
+"ce",
+"@(g)",
+"{\\mathrm{@}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"@Fe[pH",
+"{\\mathrm{@Fe}[\\mathrm{pH}}"
+],
+[
+"ce",
+"@[_x_{n}&",
+"\\mathrm{@}[{\\vphantom{A}}_{\\smash[t]{x }}_{\\text{n}}& "
+],
+[
+"ce",
+"@\\bond{~}",
+"{\\mathrm{@}{\\tripledash}}"
+],
+[
+"ce",
+"@\\cdot+1/2<-2",
+"{\\mathrm{@}\\cdot {}+{} \\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}} {}\\mathrel{\\longleftarrow}{} 2}"
+],
+[
+"ce",
+"@_x0.5CuNa(aq)\\bond{~}Ph",
+"{\\mathrm{@}{\\vphantom{A}}_{\\smash[t]{x }}0\\,{\\cdot}\\,5\\,\\mathrm{CuNa}(\\mathrm{aq}){\\tripledash}\\mathrm{Ph}}"
+],
+[
+"ce",
+"@{^{2-}\\pu{1 kg} ^3Ag",
+"{\\mathrm{@}{{\\vphantom{A}}^{2-}{1~\\mathrm{kg}}~{\\vphantom{A}}^{\\hphantom{3}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{3}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Ag}}"
+],
+[
+"ce",
+"Ag/",
+"{\\mathrm{Ag}/}"
+],
+[
+"ce",
+"Ag\\color{red}{O}",
+"{\\mathrm{Ag}{\\color{red}{\\mathrm{O}}}}"
+],
+[
+"ce",
+"Ag\\text{x}",
+"{\\mathrm{Ag}\\text{x}}"
+],
+[
+"ce",
+"Ag\\text{x}_ vz_{n}][~K",
+"{\\mathrm{Ag}\\text{x}{\\vphantom{A}}_{\\smash[t]{ }}\\mathrm{vz}{\\vphantom{A}}_{\\smash[t]{n }}][~\\mathrm{K}}"
+],
+[
+"ce",
+"Ag^<=>^2+<-->sp->",
+"{\\mathrm{Ag}{\\vphantom{A}}^{<}{=}{>}{\\vphantom{A}}^{2+} {}\\mathrel{\\longleftrightarrows}{} \\mathrm{sp} {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"C",
+"{\\mathrm{C}}"
+],
+[
+"ce",
+"C(l)P",
+"{\\mathrm{C}(\\mathrm{l})\\mathrm{P}}"
+],
+[
+"ce",
+"C->,10^3)",
+"{\\mathrm{C} {}\\mathrel{\\longrightarrow}{} {,}\\mkern3mu 10{\\vphantom{A}}^{3})}"
+],
+[
+"ce",
+"C<-]]\\overset{a}{b}$",
+"{\\mathrm{C} {}\\mathrel{\\longleftarrow}{} ]]\\overset{\\mathrm{a}}{\\mathrm{b}}$}"
+],
+[
+"ce",
+"C\\\\",
+"\\mathrm{C}\\\\ "
+],
+[
+"ce",
+"C]",
+"{\\mathrm{C}]}"
+],
+[
+"ce",
+"C^{2-}][PM[&][\\bond{=}",
+"\\mathrm{C}{\\vphantom{A}}^{2-}][\\mathrm{PM}[& ][{=}"
+],
+[
+"ce",
+"C_x3",
+"{\\mathrm{C}{\\vphantom{A}}_{\\smash[t]{x }}3}"
+],
+[
+"ce",
+"Cl",
+"{\\mathrm{Cl}}"
+],
+[
+"ce",
+"Cl(l)/Cu",
+"{\\mathrm{Cl}(\\mathrm{l})/\\mathrm{Cu}}"
+],
+[
+"ce",
+"ClIVa",
+"{\\mathrm{ClIVa}}"
+],
+[
+"ce",
+"ClO^2->3$H",
+"{\\mathrm{ClO}{\\vphantom{A}}^{2} {}\\mathrel{\\longrightarrow}{} 3$\\mathrm{H}}"
+],
+[
+"ce",
+"ClR\\,\\\\IV\\\\Cu|",
+"\\mathrm{ClR}\\,\\\\ \\mathrm{IV}\\\\ \\mathrm{Cu}|"
+],
+[
+"ce",
+"Cl\\pu{1 kg},$",
+"{\\mathrm{Cl}{1~\\mathrm{kg}}{,}\\mkern3mu $}"
+],
+[
+"ce",
+"Cl][O]",
+"{\\mathrm{Cl}][\\mathrm{O}]}"
+],
+[
+"ce",
+"Cl^2+_x}HFe",
+"{\\mathrm{Cl}{\\vphantom{A}}^{2+}_{\\smash[t]{x }}}\\mathrm{HFe}}"
+],
+[
+"ce",
+"Cn",
+"{\\mathrm{Cn}}"
+],
+[
+"ce",
+"Cu]CRS",
+"{\\mathrm{Cu}]\\mathrm{CRS}}"
+],
+[
+"ce",
+"Cu_Rx-\\ce{H2O}(g)",
+"{\\mathrm{Cu}{\\vphantom{A}}_{\\smash[t]{\\mathrm{R}}}x \\text{-}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"Cu}<-(s)#",
+"{\\mathrm{Cu}} {}\\mathrel{\\longleftarrow}{} (\\mathrm{s}){\\equiv}}"
+],
+[
+"ce",
+"C…|+II",
+"{\\mathrm{C}{{\\cdot}{\\cdot}{\\cdot}}| {}+{} \\mathrm{II}}"
+],
+[
+"ce",
+"E  )\\overset{a}{b}",
+"{\\mathrm{E}~)\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"E  nCu",
+"{\\mathrm{E}~n\\,\\mathrm{Cu}}"
+],
+[
+"ce",
+"E(s)'\\overset{a}{b}",
+"{\\mathrm{E}(\\mathrm{s}){\\vphantom{A}}^{\\prime }\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"EMeT['{]E,",
+"{\\mathrm{EMeT}[{\\vphantom{A}}^{\\prime }{]\\mathrm{E}{,}\\mkern3mu }"
+],
+[
+"ce",
+"En",
+"{\\mathrm{En}}"
+],
+[
+"ce",
+"Fe",
+"{\\mathrm{Fe}}"
+],
+[
+"ce",
+"Fe4<-Me\\alpha<<=>2p~",
+"{\\mathrm{Fe}{\\vphantom{A}}_{\\smash[t]{4}} {}\\mathrel{\\longleftarrow}{} \\mathrm{Me\\alpha} {}\\mathrel{\\longLeftrightharpoons}{} 2\\mathrm{p}~}"
+],
+[
+"ce",
+"Fe<->Fe",
+"{\\mathrm{Fe} {}\\mathrel{\\longleftrightarrow}{} \\mathrm{Fe}}"
+],
+[
+"ce",
+"Fe<=>>\\alpha\\ce{H2O}",
+"{\\mathrm{Fe} {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{\\alpha}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"Fe\\Delta;−0.5sp-]]M[",
+"{\\mathrm{Fe\\Delta}{;}\\mkern3mu {-0.5}\\,\\mathrm{sp}{\\vphantom{A}}^{-}]]\\mathrm{M}[}"
+],
+[
+"ce",
+"Fe\\alpha… ^4^{2-}",
+"{\\mathrm{Fe\\alpha}{{\\cdot}{\\cdot}{\\cdot}}~{\\vphantom{A}}^{4}^{\\text{2-}}}"
+],
+[
+"ce",
+"H ^\\alphaCl/…\\alphaIVn",
+"{\\mathrm{H}~{\\vphantom{A}}^{\\alphaCl}/\\ldots \\alphaIVn}"
+],
+[
+"ce",
+"H v#IV{]]...^{2-}-",
+"{\\mathrm{H}~\\mathrm{v}{\\equiv}\\mathrm{IV}{]]{{\\cdot}{\\cdot}{\\cdot}}{\\vphantom{A}}^{2-}{-}}"
+],
+[
+"ce",
+"H@0.5H'",
+"{\\mathrm{H@}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5\\,\\mathrm{H}{\\vphantom{A}}^{\\prime }}"
+],
+[
+"ce",
+"H^{2-}M[+II(g)",
+"{\\mathrm{H}{\\vphantom{A}}^{2-}\\mathrm{M}[{+}\\,\\mathrm{II}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"He-",
+"{\\mathrm{He}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"He-\\overset{a}{b}\\pu{1 kg}CuNNai<=>",
+"{\\mathrm{He}{-}\\overset{\\mathrm{a}}{\\mathrm{b}}{1~\\mathrm{kg}}\\mathrm{CuNNai} {}\\mathrel{\\longrightleftharpoons}{} }"
+],
+[
+"ce",
+"He12,( ^IV v",
+"{\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{12}}{,}\\mkern3mu (~{\\vphantom{A}}^{\\hphantom{\\mathrm{I}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{I}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{V} \\downarrow{} }"
+],
+[
+"ce",
+"He_\\cdot<->\\cdot...z12",
+"{\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{\\cdot}} {}\\mathrel{\\longleftrightarrow}{} \\cdot\\ldots \\mathrm{z}{\\vphantom{A}}_{\\smash[t]{12}}}"
+],
+[
+"ce",
+"H}^He\\mu<-->",
+"{\\mathrm{H}}{\\vphantom{A}}^{\\mathrm{H}}\\mathrm{e\\mu} {}\\mathrel{\\longleftrightarrows}{} }"
+],
+[
+"ce",
+"H− ^12x\\,12\\color{red}{O}?",
+"{\\mathrm{H}{\\vphantom{A}}^{-}~{\\vphantom{A}}^{\\hphantom{12}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{12}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{x}\\,12\\,{\\color{red}{\\mathrm{O}}}\\mathrm{?}}"
+],
+[
+"ce",
+"IV ^[−.@Ph(s)−",
+"{\\mathrm{IV}~{\\vphantom{A}}^{[-}\\,{\\cdot}\\,\\mathrm{@Ph}(\\mathrm{s}){\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"IVT[",
+"{\\mathrm{IVT}[}"
+],
+[
+"ce",
+"IV\\overset{a}{b}IV-…~10^3…]]",
+"{\\mathrm{IV}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{IV}{-}\\ldots ~10{\\vphantom{A}}^{3}{{\\cdot}{\\cdot}{\\cdot}}]]}"
+],
+[
+"ce",
+"IV|",
+"{\\mathrm{IV}|}"
+],
+[
+"ce",
+"IV|C=2pClCl\\bond{=}C",
+"{\\mathrm{IV}|\\mathrm{C}{=}2p\\,\\mathrm{ClCl}{=}\\mathrm{C}}"
+],
+[
+"ce",
+"K<=>,<-\\bond{=}",
+"{\\mathrm{K} {}\\mathrel{\\longrightleftharpoons}{} {,}\\mkern3mu  {}\\mathrel{\\longleftarrow}{} {=}}"
+],
+[
+"ce",
+"K<=>>$",
+"{\\mathrm{K} {}\\mathrel{\\longRightleftharpoons}{} $}"
+],
+[
+"ce",
+"K\\cdot ^ <<=>…",
+"{\\mathrm{K}\\cdot {\\vphantom{A}}^{ } {}\\mathrel{\\longLeftrightharpoons}{} \\ldots }"
+],
+[
+"ce",
+"K\\mu\\mu<->",
+"{\\mathrm{K\\mu\\mu} {}\\mathrel{\\longleftrightarrow}{} }"
+],
+[
+"ce",
+"M[  v  (s)IV",
+"{\\mathrm{M}[ \\downarrow{} ~(\\mathrm{s})\\mathrm{IV}}"
+],
+[
+"ce",
+"M[<-",
+"{\\mathrm{M}[ {}\\mathrel{\\longleftarrow}{} }"
+],
+[
+"ce",
+"M[<-~]]@Fe…",
+"{\\mathrm{M}[ {}\\mathrel{\\longleftarrow}{} ~]]\\mathrm{@Fe}{{\\cdot}{\\cdot}{\\cdot}}}"
+],
+[
+"ce",
+"Me(s)0.5sp\\color{red}{O}",
+"{\\mathrm{Me}(\\mathrm{s}){\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5\\mathrm{sp}{\\color{red}{\\mathrm{O}}}}"
+],
+[
+"ce",
+"Me);&",
+"\\mathrm{Me}){;}\\mkern3mu & "
+],
+[
+"ce",
+"Me<-N",
+"{\\mathrm{Me} {}\\mathrel{\\longleftarrow}{} \\mathrm{N}}"
+],
+[
+"ce",
+"Me@^2+2\\color{red}{O})\\text{x}#+",
+"{\\mathrm{Me@}{\\vphantom{A}}^{2+}_{\\smash[t]{2}}{\\color{red}{\\mathrm{O}}})\\text{x}{\\equiv} {}+{} }"
+],
+[
+"ce",
+"MeC(g)_x?\\cdot",
+"{\\mathrm{MeC}(\\mathrm{g}){\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{?}\\cdot}"
+],
+[
+"ce",
+"Me[[... v_x4_{n}*",
+"{\\mathrm{Me}[[\\ldots ~\\mathrm{v}{\\vphantom{A}}_{\\smash[t]{x }}4{\\vphantom{A}}_{\\smash[t]{n }}\\,{\\cdot}\\,}"
+],
+[
+"ce",
+"Me−M[a12\\\\He  ",
+"\\mathrm{Me}{-}\\mathrm{M}[\\mathrm{a}{\\vphantom{A}}_{\\smash[t]{12}}\\\\ \\mathrm{He}"
+],
+[
+"ce",
+"N(g)",
+"{\\mathrm{N}\\mskip2mu (\\mathrm{g})}"
+],
+[
+"ce",
+"NK",
+"{\\mathrm{NK}}"
+],
+[
+"ce",
+"NPMe?\\ce{H2O}}",
+"{\\mathrm{NPMe?}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}}"
+],
+[
+"ce",
+"N\\\\*=\\color{red}{O}",
+"\\mathrm{N}\\\\ \\,{\\cdot}\\,{=}{\\color{red}{\\mathrm{O}}}"
+],
+[
+"ce",
+"Na3Fe]]",
+"{\\mathrm{Na}{\\vphantom{A}}_{\\smash[t]{3}}\\mathrm{Fe}]]}"
+],
+[
+"ce",
+"Na\\bond{=}",
+"{\\mathrm{Na}{=}}"
+],
+[
+"ce",
+"Na\\color{red}{O}_x  E",
+"{\\mathrm{Na}{\\color{red}{\\mathrm{O}}}{\\vphantom{A}}_{\\smash[t]{x }}~\\mathrm{E}}"
+],
+[
+"ce",
+"NaeE<-.\\alpha\\,\\mu\\pu{1 kg}",
+"{\\mathrm{NaeE} {}\\mathrel{\\longleftarrow}{} \\,{\\cdot}\\,\\mathrm{\\alpha}\\,\\mathrm{\\mu}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"Nn\\\\$\\\\/\\overset{a}{b}sp{",
+"\\mathrm{Nn}\\\\ $\\\\ /\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{sp}{"
+],
+[
+"ce",
+"N{[[[[/",
+"{\\mathrm{N}{[[[[/}"
+],
+[
+"ce",
+"O/O~IV Fe\\mua",
+"{\\mathrm{O}/\\mathrm{O}~\\mathrm{IV}~\\mathrm{Fe}\\mua}"
+],
+[
+"ce",
+"O2p(PhNaO,2p1/2",
+"{\\mathrm{O}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}(\\mathrm{PhNaO}{,}\\mkern3mu 2\\mathrm{p}{\\vphantom{A}}_{\\smash[t]{1}}/2}"
+],
+[
+"ce",
+"O4->[(g)3 ^_xIV*",
+"{\\mathrm{O}{\\vphantom{A}}_{\\smash[t]{4}} {}\\mathrel{\\longrightarrow}{} [(\\mathrm{g}){\\vphantom{A}}_{\\smash[t]{3}}~{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{x }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{x }}}\\mathrm{IV}\\,{\\cdot}\\,}"
+],
+[
+"ce",
+"OFeO\\overset{a}{b}_xR",
+"{\\mathrm{OFeO}\\overset{\\mathrm{a}}{\\mathrm{b}}{\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{R}}"
+],
+[
+"ce",
+"OM[x(aq) v-/-+",
+"{\\mathrm{OM}[\\mathrm{x}\\mskip2mu (\\mathrm{aq})~\\mathrm{v}{\\vphantom{A}}^{-}/{-} {}+{} }"
+],
+[
+"ce",
+"OPAg]]$AgPh",
+"{\\mathrm{OPAg}]]$\\mathrm{AgPh}}"
+],
+[
+"ce",
+"P$*<<=>\\DeltaNaAg",
+"{\\mathrm{P}$\\,{\\cdot}\\, {}\\mathrel{\\longLeftrightharpoons}{} \\DeltaNaAg}"
+],
+[
+"ce",
+"P'^En\\mu$x$",
+"{\\mathrm{P}{\\vphantom{A}}^{\\prime \\mathrm{E}}\\mathrm{n\\mu}x }"
+],
+[
+"ce",
+"P(2p,",
+"{\\mathrm{P}(2\\mathrm{p}{,}\\mkern3mu }"
+],
+[
+"ce",
+"PHe^2+Cl'][",
+"{\\mathrm{PHe}{\\vphantom{A}}^{2+}\\mathrm{Cl}{\\vphantom{A}}^{\\prime }][}"
+],
+[
+"ce",
+"PN3",
+"{\\mathrm{PN}{\\vphantom{A}}_{\\smash[t]{3}}}"
+],
+[
+"ce",
+"P\\\\\\bond{=}\\text{x} ^\\cdot",
+"\\mathrm{P}\\\\ {=}\\text{x}~{\\vphantom{A}}^{\\cdot}"
+],
+[
+"ce",
+"Ph<<=>^pH",
+"{\\mathrm{Ph} {}\\mathrel{\\longLeftrightharpoons}{} {\\vphantom{A}}^{\\hphantom{p }}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{p }}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{H}}"
+],
+[
+"ce",
+"PhM[+II\\bond{=}->−'RM[",
+"{\\mathrm{PhM}[{+}\\,\\mathrm{II}{=} {}\\mathrel{\\longrightarrow}{} {-}{\\vphantom{A}}^{\\prime }\\mathrm{RM}[}"
+],
+[
+"ce",
+"PhMe",
+"{\\mathrm{PhMe}}"
+],
+[
+"ce",
+"PhMe<<=>^",
+"{\\mathrm{PhMe} {}\\mathrel{\\longLeftrightharpoons}{} }"
+],
+[
+"ce",
+"Ph\\\\]]R(g)Cu->.",
+"\\mathrm{Ph}\\\\ ]]\\mathrm{R}(\\mathrm{g})\\mathrm{Cu} {}\\mathrel{\\longrightarrow}{} \\,{\\cdot}\\,"
+],
+[
+"ce",
+"Psp}e]]T[",
+"{\\mathrm{Psp}}\\mathrm{e}]]\\mathrm{T}[}"
+],
+[
+"ce",
+"R10^3[2*+II R",
+"{\\mathrm{R}{\\vphantom{A}}_{\\smash[t]{10}}{\\vphantom{A}}^{3}[2\\,{\\cdot}\\, {}+{} \\mathrm{II}~\\mathrm{R}}"
+],
+[
+"ce",
+"R@\\Delta  \\,-[",
+"{\\mathrm{R@\\Delta  }\\,{-}[}"
+],
+[
+"ce",
+"R@^2+Na4\\\\e",
+"\\mathrm{R@}{\\vphantom{A}}^{2+}\\mathrm{Na}{\\vphantom{A}}_{\\smash[t]{4}}\\\\ \\mathrm{e}"
+],
+[
+"ce",
+"R\\Delta<->\\pu{1 kg}{\\ce{H2O}(g)x",
+"{\\mathrm{R\\Delta} {}\\mathrel{\\longleftrightarrow}{} {1~\\mathrm{kg}}{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}(\\mathrm{g})\\mathrm{x}}"
+],
+[
+"ce",
+"R\\bond{~}\\cdot,",
+"{\\mathrm{R}{\\tripledash}\\cdot{,}\\mkern3mu }"
+],
+[
+"ce",
+"R\\frac{1}{2}[(s)OK}_[[",
+"{\\mathrm{R}\\frac{1}{2}[(\\mathrm{s})\\mathrm{OK}}{\\vphantom{A}}_{\\smash[t]{[}}[}"
+],
+[
+"ce",
+"S",
+"{\\mathrm{S}}"
+],
+[
+"ce",
+"S#",
+"{\\mathrm{S}{\\equiv}}"
+],
+[
+"ce",
+"S$\\frac{1}{2}",
+"{\\mathrm{S}$\\frac{1}{2}}"
+],
+[
+"ce",
+"S(aq)\\cdotE[[&P|1/2",
+"\\mathrm{S}(\\mathrm{aq})\\cdotE[[& \\mathrm{P}|\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}"
+],
+[
+"ce",
+"S\\DeltaP[[",
+"{\\mathrm{S}\\DeltaP[[}"
+],
+[
+"ce",
+"T[$x$",
+"{\\mathrm{T}[x }"
+],
+[
+"ce",
+"T[\\bond{~}|",
+"{\\mathrm{T}[{\\tripledash}|}"
+],
+[
+"ce",
+"T[]<-->P/P",
+"{\\mathrm{T}[] {}\\mathrel{\\longleftrightarrows}{} \\mathrm{P}/\\mathrm{P}}"
+],
+[
+"ce",
+"[=pHSHSx",
+"{[{=}p\\,\\mathrm{HSHSx}}"
+],
+[
+"ce",
+"[FeOS",
+"{[\\mathrm{FeOS}}"
+],
+[
+"ce",
+"[T[  (s)\\ce{H2O}IVN",
+"{[\\mathrm{T}[~(\\mathrm{s})\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{IVN}}"
+],
+[
+"ce",
+"[[+II",
+"{[[{+}\\,\\mathrm{II}}"
+],
+[
+"ce",
+"[[HeN",
+"{[[\\mathrm{HeN}}"
+],
+[
+"ce",
+"[[\\ce{H2O}?\\overset{a}{b}\\pu{1 kg}",
+"{[[\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{?}\\overset{\\mathrm{a}}{\\mathrm{b}}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"[\\text{x}.Cl\\mu<=>P(aq)\\alpha",
+"{[\\text{x}\\,{\\cdot}\\,\\mathrm{Cl\\mu} {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{P}(\\mathrm{aq})\\mathrm{\\alpha}}"
+],
+[
+"ce",
+"\\, ^_<->N",
+"{\\,~{\\vphantom{A}}_{\\smash[t]{<}} {}\\mathrel{\\longrightarrow}{} \\mathrm{N}}"
+],
+[
+"ce",
+"\\,-|OO  (l)",
+"{\\,{-}|\\mathrm{OO}\\mskip2mu (\\mathrm{l})}"
+],
+[
+"ce",
+"\\,@eN(",
+"{\\,\\mathrm{@eN}(}"
+],
+[
+"ce",
+"\\,Phn?pH^",
+"{\\,\\mathrm{Phn?pH}}"
+],
+[
+"ce",
+"\\,n_{n}(g)\\color{red}{O}T[",
+"{\\,\\mathrm{n}{\\vphantom{A}}_{\\smash[t]{n }}(\\mathrm{g}){\\color{red}{\\mathrm{O}}}\\mathrm{T}[}"
+],
+[
+"ce",
+"\\,pH0.5*a",
+"{\\,\\mathrm{pH}0.5\\,{\\cdot}\\,\\mathrm{a}}"
+],
+[
+"ce",
+"\\Delta",
+"{\\mathrm{\\Delta}}"
+],
+[
+"ce",
+"\\Delta-e",
+"{\\mathrm{\\Delta}{-}\\mathrm{e}}"
+],
+[
+"ce",
+"\\Delta=",
+"{\\mathrm{\\Delta}{=}}"
+],
+[
+"ce",
+"\\DeltaO->[zT[ E.\\color{red}{O}",
+"{\\DeltaO {}\\mathrel{\\longrightarrow}{} [z\\,\\mathrm{T}[~\\mathrm{E}\\,{\\cdot}\\,{\\color{red}{\\mathrm{O}}}}"
+],
+[
+"ce",
+"\\DeltaO_^2+#C−(s)  ",
+"{\\DeltaO{\\vphantom{A}}^{2+}#\\mathrm{C}{\\vphantom{A}}^{-}\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+"\\DeltaS\\overset{a}{b}EpH;\\,$1/2",
+"{\\DeltaS\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{EpH}{;}\\mkern3mu \\,$\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}}"
+],
+[
+"ce",
+"\\Delta\\pu{1 kg}2p*P<->)+II",
+"{\\mathrm{\\Delta}{1~\\mathrm{kg}}2\\mathrm{p}\\,{\\cdot}\\,\\mathrm{P} {}\\mathrel{\\longleftrightarrow}{} ){\\vphantom{A}}^{+}\\mathrm{II}}"
+],
+[
+"ce",
+"\\Delta]]->[ v <-->[",
+"{\\mathrm{\\Delta}]] {}\\mathrel{\\longrightarrow}{} [ \\downarrow{}  {}\\mathrel{\\longleftrightarrows}{} [}"
+],
+[
+"ce",
+"\\\\ ^\\overset{a}{b}\\frac{1}{2}^2+",
+"\\\\ {\\vphantom{A}}^{\\overset{a}{b}}\\frac{1}{2}{\\vphantom{A}}^{2+}"
+],
+[
+"ce",
+"\\\\&",
+"\\\\ & "
+],
+[
+"ce",
+"\\\\0.5a((l)^{2-}",
+"\\\\ 0.5\\,\\mathrm{a}((\\mathrm{l}){\\vphantom{A}}^{2-}"
+],
+[
+"ce",
+"\\\\4 ?<<=>=|",
+"\\\\ 4\\,\\mathrm{?} {}\\mathrel{\\longLeftrightharpoons}{} {=}|"
+],
+[
+"ce",
+"\\\\OH",
+"\\\\ \\mathrm{OH}"
+],
+[
+"ce",
+"\\\\\\overset{a}{b} ^IVz_{n}K_",
+"\\\\ \\overset{\\mathrm{a}}{\\mathrm{b}}~{\\vphantom{A}}^{\\hphantom{\\mathrm{I}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{I}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Vz}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{K}"
+],
+[
+"ce",
+"\\\\pH<-\\bond{~}",
+"\\\\ \\mathrm{pH} {}\\mathrel{\\longleftarrow}{} {\\tripledash}"
+],
+[
+"ce",
+"\\bond{=}\\cdot",
+"{{=}\\cdot}"
+],
+[
+"ce",
+"\\bond{~}",
+"{{\\tripledash}}"
+],
+[
+"ce",
+"\\bond{~}->[Ag",
+"{{\\tripledash} {}\\mathrel{\\longrightarrow}{} [\\mathrm{Ag}}"
+],
+[
+"ce",
+"\\bond{~}3(\\\\(g)",
+"{\\tripledash}3\\,(\\\\ \\mskip2mu (\\mathrm{g})"
+],
+[
+"ce",
+"\\bond{~}?2<=>",
+"{{\\tripledash}\\mathrm{?}{\\vphantom{A}}_{\\smash[t]{2}} {}\\mathrel{\\longrightleftharpoons}{} }"
+],
+[
+"ce",
+"\\bond{~}@$x$->3Cu",
+"{{\\tripledash}\\mathrm{@}x  {}\\mathrel{\\longrightarrow}{} 3\\,\\mathrm{Cu}}"
+],
+[
+"ce",
+"\\bond{~}\\color{red}{O}^{2-}.T[0.5<->_{n}",
+"{{\\tripledash}{\\color{red}{\\mathrm{O}}}{\\vphantom{A}}^{2-}\\,{\\cdot}\\,\\mathrm{T}[0.5 {}\\mathrel{\\longleftrightarrow}{} {\\vphantom{A}}_{\\smash[t]{n }}}"
+],
+[
+"ce",
+"\\bond{~}^2+#\\bond{~}P\\frac{1}{2}x",
+"{{\\tripledash}{\\vphantom{A}}^{2+}#{\\tripledash}\\mathrm{P}\\frac{1}{2}\\mathrm{x}}"
+],
+[
+"ce",
+"\\bond{~}_x",
+"{{\\tripledash}{\\vphantom{A}}_{\\smash[t]{x }}}"
+],
+[
+"ce",
+"\\bond{~}pHR2p",
+"{{\\tripledash}p\\,\\mathrm{HR}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}}"
+],
+[
+"ce",
+"\\cdot1/2<=>^2+",
+"{\\cdot\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}} {}\\mathrel{\\longrightleftharpoons}{} {\\vphantom{A}}^{2}+}"
+],
+[
+"ce",
+"\\cdot=][...^{2-}x",
+"{\\cdot{=}][\\ldots {\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{x}}"
+],
+[
+"ce",
+"\\cdot_\\Deltaa+II)3",
+"{\\cdot{\\vphantom{A}}_{\\smash[t]{\\Deltaa}}{\\vphantom{A}}^{+}\\mathrm{II}){\\vphantom{A}}_{\\smash[t]{3}}}"
+],
+[
+"ce",
+"\\cdotnC v]RNaxP",
+"{\\cdotnC \\mathrm{v}]\\mathrm{RNaxP}}"
+],
+[
+"ce",
+"\\ce{H2O}'IVO,}$x$(l)x",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}{\\vphantom{A}}^{\\prime }\\mathrm{IVO}{,}\\mkern3mu }x \\,(\\mathrm{l})\\mathrm{x}}"
+],
+[
+"ce",
+"\\ce{H2O}10^3-]OT[10^3",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}10{\\vphantom{A}}^{3-}]\\mathrm{OT}[10{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"\\ce{H2O}10^3\\color{red}{O}#&'",
+"\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}10{\\vphantom{A}}^{3}{\\color{red}{\\mathrm{O}}}{\\equiv}& {\\vphantom{A}}^{\\prime }"
+],
+[
+"ce",
+"\\ce{H2O}<=>>K",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O} {}\\mathrel{\\longRightleftharpoons}{} \\mathrm{K}}"
+],
+[
+"ce",
+"\\ce{H2O}EN",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{EN}}"
+],
+[
+"ce",
+"\\ce{H2O}[He3+#z12pH",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}[\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{3}}{\\vphantom{A}}^{+}#\\mathrm{z}{\\vphantom{A}}_{\\smash[t]{12}}\\mathrm{pH}}"
+],
+[
+"ce",
+"\\ce{H2O}\\,<=>N",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\, {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{N}}"
+],
+[
+"ce",
+"\\ce{H2O}\\,_xAg",
+"{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\,{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{x }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{x }}}\\mathrm{Ag}}"
+],
+[
+"ce",
+"\\color{red}{O}\\bond{=}&\\overset{a}{b}Ag\\overset{a}{b}4Me<-->",
+"{\\color{red}{\\mathrm{O}}}{=}& \\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{Ag}\\overset{\\mathrm{a}}{\\mathrm{b}}4\\,\\mathrm{Me} {}\\mathrel{\\longleftrightarrows}{} "
+],
+[
+"ce",
+"\\color{red}{O}\\ce{H2O}&pH'-Ph",
+"{\\color{red}{\\mathrm{O}}}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}& \\mathrm{pH}{\\vphantom{A}}^{\\hphantom{\\prime -}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\prime -}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Ph}"
+],
+[
+"ce",
+"\\color{red}{O}\\color{red}{O}\\ce{H2O}) ^",
+"{{\\color{red}{\\mathrm{O}}}{\\color{red}{\\mathrm{O}}}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}) \\uparrow{} }"
+],
+[
+"ce",
+"\\color{red}{O}~HM[\\\\na",
+"{\\color{red}{\\mathrm{O}}}~\\mathrm{HM}[\\\\ \\mathrm{na}"
+],
+[
+"ce",
+"\\frac{1}{2}+II-",
+"{\\frac{1}{2} {}+{} \\mathrm{II}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"\\frac{1}{2}R2/z_x−e",
+"{\\frac{1}{2}\\mathrm{R}{\\vphantom{A}}_{\\smash[t]{2}}/\\mathrm{z}{\\vphantom{A}}_{\\smash[t]{x }}\\text{-}\\mathrm{e}}"
+],
+[
+"ce",
+"\\frac{1}{2}R@Me",
+"{\\frac{1}{2}\\mathrm{R@Me}}"
+],
+[
+"ce",
+"\\frac{1}{2}T[Ag(aq)",
+"{\\frac{1}{2}\\mathrm{T}[\\mathrm{Ag}\\mskip2mu (\\mathrm{aq})}"
+],
+[
+"ce",
+"\\frac{1}{2}_{n}2",
+"{\\frac{1}{2}{\\vphantom{A}}_{\\smash[t]{n }}2}"
+],
+[
+"ce",
+"\\frac{1}{2}_{n}N\\\\\\frac{1}{2}Phi",
+"\\frac{1}{2}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{N}\\\\ \\frac{1}{2}\\mathrm{Phi}"
+],
+[
+"ce",
+"\\frac{1}{2}e",
+"{\\frac{1}{2}\\mathrm{e}}"
+],
+[
+"ce",
+"\\mu$x$][}+Ez−",
+"{\\mathrm{\\mu}x ][} {}+{} \\mathrm{Ez}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"\\mu&\\\\...\\mu",
+"\\mathrm{\\mu}& \\\\ \\ldots \\mathrm{\\mu}"
+],
+[
+"ce",
+"\\mu?2p2_{n}i->$x$?",
+"{\\mathrm{\\mu?}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{p}{\\vphantom{A}}_{\\smash[t]{2}}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{i} {}\\mathrel{\\longrightarrow}{} x \\,\\mathrm{?}}"
+],
+[
+"ce",
+"\\muK$x$&;\\,\\frac{1}{2}]]",
+"\\muKx & {;}\\mkern3mu \\,\\frac{1}{2}]]"
+],
+[
+"ce",
+"\\muM[\\ce{H2O}+II",
+"{\\muM[\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O} {}+{} \\mathrm{II}}"
+],
+[
+"ce",
+"\\mu\\cdot(1/2<=>?O3+II",
+"{\\mathrm{\\mu}\\cdot(\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}} {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{?O}{\\vphantom{A}}_{\\smash[t]{3}}{\\vphantom{A}}^{+}\\mathrm{II}}"
+],
+[
+"ce",
+"\\mu\\text{x}&' ^\\Delta",
+"\\mathrm{\\mu}\\text{x}& {\\vphantom{A}}^{\\prime }~{\\vphantom{A}}^{\\mathrm{\\Delta}}"
+],
+[
+"ce",
+"\\overset{a}{b}/+Cl/e",
+"{\\overset{\\mathrm{a}}{\\mathrm{b}}/ {}+{} \\mathrm{Cl}/\\mathrm{e}}"
+],
+[
+"ce",
+"\\overset{a}{b}2pClpH/",
+"{\\overset{\\mathrm{a}}{\\mathrm{b}}2p\\,\\mathrm{ClpH}/}"
+],
+[
+"ce",
+"\\overset{a}{b}4\\overset{a}{b}",
+"{\\overset{\\mathrm{a}}{\\mathrm{b}}4\\,\\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"\\overset{a}{b}M[\\ce{H2O}<-Me|\\bond{~}",
+"{\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{M}[\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O} {}\\mathrel{\\longleftarrow}{} \\mathrm{Me}|{\\tripledash}}"
+],
+[
+"ce",
+"\\overset{a}{b}P- &<=>",
+"\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{P}{\\vphantom{A}}^{-}&  {}\\mathrel{\\longrightleftharpoons}{} "
+],
+[
+"ce",
+"\\overset{a}{b}\\\\3\\color{red}{O}'NT[",
+"\\overset{\\mathrm{a}}{\\mathrm{b}}\\\\ 3\\,{\\color{red}{\\mathrm{O}}}{\\vphantom{A}}^{\\prime }\\mathrm{NT}["
+],
+[
+"ce",
+"\\overset{a}{b}_\\mu<=>>",
+"{\\overset{\\mathrm{a}}{\\mathrm{b}}{\\vphantom{A}}_{\\smash[t]{\\mathrm{\\mu}}} {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"\\pu{1 kg}$\\Delta\\color{red}{O}−PPhz",
+"{{1~\\mathrm{kg}}$\\mathrm{\\Delta}{\\color{red}{\\mathrm{O}}}{-}\\mathrm{PPhz}}"
+],
+[
+"ce",
+"\\pu{1 kg}2p\\bond{~}N^& v",
+"{{1~\\mathrm{kg}}2\\mathrm{p}{\\tripledash}\\mathrm{N}{\\vphantom{A}}^{&} \\downarrow{} }"
+],
+[
+"ce",
+"\\pu{1 kg}a?R&\\bond{~}<-K<-",
+"{1~\\mathrm{kg}}\\mathrm{a?R}& {\\tripledash} {}\\mathrel{\\longleftarrow}{} \\mathrm{K} {}\\mathrel{\\longleftarrow}{} "
+],
+[
+"ce",
+"\\pu{1 kg}sp(",
+"{{1~\\mathrm{kg}}\\mathrm{sp}(}"
+],
+[
+"ce",
+"\\text{x}",
+"{\\text{x}}"
+],
+[
+"ce",
+"\\text{x}4$x$->[x)+<=>",
+"{\\text{x}4x  {}\\mathrel{\\longrightarrow}{} [\\mathrm{x}){\\vphantom{A}}^{+} {}\\mathrel{\\longrightleftharpoons}{} }"
+],
+[
+"ce",
+"\\text{x}_{n}}^{2-}*pH2'",
+"{\\text{x}{\\vphantom{A}}_{\\smash[t]{n }}}{\\vphantom{A}}^{2-}\\,{\\cdot}\\,\\mathrm{pH}2{\\vphantom{A}}^{\\prime }}"
+],
+[
+"ce",
+"]...n",
+"{]{{\\cdot}{\\cdot}{\\cdot}}\\mathrm{n}}"
+],
+[
+"ce",
+"]<-^2+\\,  <->'(aq)<=>>",
+"{] {}\\mathrel{\\longleftarrow}{} {\\vphantom{A}}^{2}+\\, {}\\mathrel{\\longleftrightarrow}{} {\\vphantom{A}}^{\\prime }(\\mathrm{aq}) {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"]@\\pu{1 kg}epHCl(l)\\color{red}{O}IV",
+"{]\\mathrm{@}{1~\\mathrm{kg}}\\mathrm{epHCl}(\\mathrm{l}){\\color{red}{\\mathrm{O}}}\\mathrm{IV}}"
+],
+[
+"ce",
+"]Cl…_",
+"{]\\mathrm{Cl}{{\\cdot}{\\cdot}{\\cdot}}}"
+],
+[
+"ce",
+"]He&",
+"]\\mathrm{He}& "
+],
+[
+"ce",
+"]K",
+"{]\\mathrm{K}}"
+],
+[
+"ce",
+"]Ph12",
+"{]\\mathrm{Ph}{\\vphantom{A}}_{\\smash[t]{12}}}"
+],
+[
+"ce",
+"]R;\\frac{1}{2}\\bond{=}aNa",
+"{]\\mathrm{R}{;}\\mkern3mu \\frac{1}{2}{=}a\\,\\mathrm{Na}}"
+],
+[
+"ce",
+"][\\alpha->[a$\\text{x}Ph4",
+"{][\\mathrm{\\alpha} {}\\mathrel{\\longrightarrow}{} [\\mathrm{a}$\\text{x}\\mathrm{Ph}{\\vphantom{A}}_{\\smash[t]{4}}}"
+],
+[
+"ce",
+"][][3M[Ag#<=>IV&",
+"][][3\\,\\mathrm{M}[\\mathrm{Ag}{\\equiv} {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{IV}& "
+],
+[
+"ce",
+"][^2+CuAgT[\\frac{1}{2}'(aq)\\cdot",
+"{][{\\vphantom{A}}^{2}+\\mathrm{CuAgT}[\\frac{1}{2}{\\vphantom{A}}^{\\prime }(\\mathrm{aq})\\cdot}"
+],
+[
+"ce",
+"][^{2-}2 ^\\mu",
+"{][{\\vphantom{A}}^{2-}2~{\\vphantom{A}}^{\\mathrm{\\mu}}}"
+],
+[
+"ce",
+"][z{~(l)<=>>",
+"{][\\mathrm{z}{~(\\mathrm{l}) {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"]\\cdot10^3",
+"{]\\cdot10{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"]](l) O<=>->[",
+"{]]\\mskip2mu (\\mathrm{l})~\\mathrm{O} {}\\mathrel{\\longrightleftharpoons}{}  {}\\mathrel{\\longrightarrow}{} [}"
+],
+[
+"ce",
+"]])",
+"{]])}"
+],
+[
+"ce",
+"]]-Cli",
+"{]]{-}\\mathrm{Cli}}"
+],
+[
+"ce",
+"]]<->O(aq)",
+"{]] {}\\mathrel{\\longleftrightarrow}{} \\mathrm{O}\\mskip2mu (\\mathrm{aq})}"
+],
+[
+"ce",
+"]]\\\\",
+"]]\\\\ "
+],
+[
+"ce",
+"]]\\text{x}\\pu{1 kg}",
+"{]]\\text{x}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"]{",
+"{]{}"
+],
+[
+"ce",
+"^(aq)",
+"{{\\vphantom{A}}^{\\hphantom{(}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{(}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{aq})}"
+],
+[
+"ce",
+"^0.5",
+"{{\\vphantom{A}}^{0}\\,{\\cdot}\\,5}"
+],
+[
+"ce",
+"^2+",
+"{{\\vphantom{A}}^{2}+}"
+],
+[
+"ce",
+"^2+He",
+"{{\\vphantom{A}}^{2}+\\mathrm{He}}"
+],
+[
+"ce",
+"^2+\\bond{~}*<=> (aq)][\\color{red}{O}O",
+"{{\\vphantom{A}}^{2}+{\\tripledash}\\,{\\cdot}\\, {}\\mathrel{\\longrightleftharpoons}{} \\mskip2mu (\\mathrm{aq})][{\\color{red}{\\mathrm{O}}}\\mathrm{O}}"
+],
+[
+"ce",
+"^2+\\pu{1 kg}\\cdot\\color{red}{O}4",
+"{{\\vphantom{A}}^{2}+{1~\\mathrm{kg}}\\cdot{\\color{red}{\\mathrm{O}}}4}"
+],
+[
+"ce",
+"^2+]]Ph\\text{x}(l)-Cu.",
+"{{\\vphantom{A}}^{2}+]]\\mathrm{Ph}\\text{x}(l) \\text{-}\\mathrm{Cu}\\,{\\cdot}\\,}"
+],
+[
+"ce",
+"^2+_x[[n->[1/2<=>^",
+"{{\\vphantom{A}}^{2}+{\\vphantom{A}}_{\\smash[t]{x }}[[\\mathrm{n} {}\\mathrel{\\longrightarrow}{} [\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}} {}\\mathrel{\\longrightleftharpoons}{} }"
+],
+[
+"ce",
+"^2+x.$(aq)x\\bond{~}|",
+"{{\\vphantom{A}}^{2}+\\mathrm{x}\\,{\\cdot}\\,$(\\mathrm{aq})\\mathrm{x}{\\tripledash}|}"
+],
+[
+"ce",
+"^He{i",
+"{{\\vphantom{A}}^{\\hphantom{\\mathrm{H}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{H}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{e}{\\mathrm{i}}"
+],
+[
+"ce",
+"^M[M[}?(g)\\cdot",
+"{{\\vphantom{A}}^{\\mathrm{M}}[\\mathrm{M}[}\\mathrm{?}(\\mathrm{g})\\cdot}"
+],
+[
+"ce",
+"^NaPK\\mu",
+"{{\\vphantom{A}}^{\\hphantom{\\mathrm{N}}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{\\mathrm{N}}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{aPK\\mu}}"
+],
+[
+"ce",
+"^{2-}->[ v v<-->i4O",
+"{{\\vphantom{A}}^{2-} {}\\mathrel{\\longrightarrow}{} [ \\downarrow{} ~\\mathrm{v} {}\\mathrel{\\longleftrightarrows}{} \\mathrm{i}{\\vphantom{A}}_{\\smash[t]{4}}\\mathrm{O}}"
+],
+[
+"ce",
+"^{2-}4\\color{red}{O}…2z",
+"{{\\vphantom{A}}^{2-}4{\\color{red}{\\mathrm{O}}}\\ldots 2\\,\\mathrm{z}}"
+],
+[
+"ce",
+"^{2-}@a",
+"{{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{@a}}"
+],
+[
+"ce",
+"^{2-}Ph−?E[O",
+"{{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Ph}{-}\\mathrm{?E}[\\mathrm{O}}"
+],
+[
+"ce",
+"^{2-}[?",
+"{{\\vphantom{A}}^{2-}[\\mathrm{?}}"
+],
+[
+"ce",
+"^{2-}e \\text{x}e*->[",
+"{{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{e}~\\text{x}\\mathrm{e}\\,{\\cdot}\\, {}\\mathrel{\\longrightarrow}{} [}"
+],
+[
+"ce",
+"^{2-}n\\bond{~}'$x$eHe",
+"{{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{n}{\\tripledash}{\\vphantom{A}}^{\\prime }x \\mathrm{eHe}}"
+],
+[
+"ce",
+"^{2-}…",
+"{{\\vphantom{A}}^{2-}\\ldots }"
+],
+[
+"ce",
+"^…0.53<=>>\\overset{a}{b}",
+"{{\\vphantom{A}}^{\\mkern1mu \\bullet\\mkern1mu }\\,{\\cdot}\\,.0\\,{\\cdot}\\,53 {}\\mathrel{\\longRightleftharpoons}{} \\overset{\\mathrm{a}}{\\mathrm{b}}}"
+],
+[
+"ce",
+"_",
+""
+],
+[
+"ce",
+"_(T[n(_{n}",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{(}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{(}}}\\mathrm{T}[\\mathrm{n}({\\vphantom{A}}_{\\smash[t]{n }}}"
+],
+[
+"ce",
+"_<-->0.5sp$K",
+"{{\\vphantom{A}}_{\\smash[t]{<}}{-} {}\\mathrel{\\longrightarrow}{} 0.5\\,\\mathrm{sp}$\\mathrm{K}}"
+],
+[
+"ce",
+"_Cu\\ce{H2O}Fe+II,$x$\\frac{1}{2}<-",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{\\mathrm{C}}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{\\mathrm{C}}}}\\mathrm{u}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{Fe}{\\vphantom{A}}^{+}\\mathrm{II}{,}\\mkern3mu x \\frac{1}{2} {}\\mathrel{\\longleftarrow}{} }"
+],
+[
+"ce",
+"_Me",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{\\mathrm{M}}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{\\mathrm{M}}}}\\mathrm{e}}"
+],
+[
+"ce",
+"__{n}@#\\mu12",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{_}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{_}}}{\\text{n}}\\mathrm{@}{\\equiv}\\mathrm{\\mu}{\\vphantom{A}}_{\\smash[t]{12}}}"
+],
+[
+"ce",
+"_x&''/",
+"{\\vphantom{A}}_{\\smash[t]{x }}& {\\vphantom{A}}^{\\prime }'/"
+],
+[
+"ce",
+"_x(  E\\mueCl[(",
+"{{\\vphantom{A}}_{\\smash[t]{x }}(~\\mathrm{E}\\mueCl[(}"
+],
+[
+"ce",
+"_x((s)",
+"{{\\vphantom{A}}_{\\smash[t]{x }}(\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+"_x.->",
+"{{\\vphantom{A}}_{\\smash[t]{x }}\\,{\\cdot}\\, {}\\mathrel{\\longrightarrow}{} }"
+],
+[
+"ce",
+"_xCu",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{x }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{x }}}\\mathrm{Cu}}"
+],
+[
+"ce",
+"_x[_x_xCl;",
+"{{\\vphantom{A}}_{\\smash[t]{x }}[{\\vphantom{A}}_{\\smash[t]{x }}_x\\,\\mathrm{Cl}{;}\\mkern3mu }"
+],
+[
+"ce",
+"_x^",
+"{{\\vphantom{A}}_{\\smash[t]{x }}}"
+],
+[
+"ce",
+"_x^{2-}AgpHnT[Ag<=>>…",
+"{{\\vphantom{A}}^{\\hphantom{2-}}_{\\hphantom{x }}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2-}}_{\\vphantom{2}\\llap{\\smash[t]{x }}}\\mathrm{AgpHnT}[\\mathrm{Ag} {}\\mathrel{\\longRightleftharpoons}{} \\ldots }"
+],
+[
+"ce",
+"_x~10^34",
+"{{\\vphantom{A}}_{\\smash[t]{x }}~10{\\vphantom{A}}^{34}}"
+],
+[
+"ce",
+"_{n}",
+"{{\\vphantom{A}}_{\\smash[t]{n }}}"
+],
+[
+"ce",
+"_{n}#{...\\pu{1 kg}(s)K",
+"{{\\vphantom{A}}_{\\smash[t]{n }}#{\\ldots {1~\\mathrm{kg}}(\\mathrm{s})\\mathrm{K}}"
+],
+[
+"ce",
+"_{n}'-Me\\pu{1 kg}",
+"{{\\vphantom{A}}_{\\smash[t]{n }}{\\vphantom{A}}^{\\prime }-\\mathrm{Me}{1~\\mathrm{kg}}}"
+],
+[
+"ce",
+"_{n}10^3",
+"{{\\vphantom{A}}_{\\smash[t]{n }}10{\\vphantom{A}}^{3}}"
+],
+[
+"ce",
+"_{n}{\\,",
+"{{\\vphantom{A}}_{\\smash[t]{n }}{\\,}"
+],
+[
+"ce",
+"_{n}|_x@Na",
+"{{\\vphantom{A}}_{\\smash[t]{n }}|{\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{@Na}}"
+],
+[
+"ce",
+"_~pH?+",
+"{{\\vphantom{A}}^{\\hphantom{}}_{\\hphantom{~}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{}}_{\\vphantom{2}\\llap{\\smash[t]{~}}}\\mathrm{pH?}{\\vphantom{A}}^{+}}"
+],
+[
+"ce",
+"a(g)][\\,<<=>->[<-><->)",
+"{\\mathrm{a}\\mskip2mu (\\mathrm{g})][\\, {}\\mathrel{\\longLeftrightharpoons}{}  {}\\mathrel{\\longrightarrow}{} [ {}\\mathrel{\\longleftrightarrow}{}  {}\\mathrel{\\longleftrightarrow}{} )}"
+],
+[
+"ce",
+"a,,",
+"{\\mathrm{a}{,}\\mkern3mu {,}\\mkern3mu }"
+],
+[
+"ce",
+"a4[",
+"{\\mathrm{a}{\\vphantom{A}}_{\\smash[t]{4}}[}"
+],
+[
+"ce",
+"a<=>KIV\\bond{=}",
+"{\\mathrm{a} {}\\mathrel{\\longrightleftharpoons}{} \\mathrm{KIV}{=}}"
+],
+[
+"ce",
+"aO",
+"{a\\,\\mathrm{O}}"
+],
+[
+"ce",
+"aSO<-->-><=>>",
+"{a\\,\\mathrm{SO} {}\\mathrel{\\longleftrightarrows}{}  {}\\mathrel{\\longrightarrow}{}  {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"a\\text{x}][(l)3  ...",
+"{\\mathrm{a}\\text{x}][(\\mathrm{l}){\\vphantom{A}}_{\\smash[t]{3}}~\\ldots }"
+],
+[
+"ce",
+"e  (l)T[",
+"{\\mathrm{e}~(\\mathrm{l})\\mathrm{T}[}"
+],
+[
+"ce",
+"e&\\pu{1 kg}]->[",
+"\\mathrm{e}& {1~\\mathrm{kg}}] {}\\mathrel{\\longrightarrow}{} ["
+],
+[
+"ce",
+"e)|2Me",
+"{\\mathrm{e})|2\\,\\mathrm{Me}}"
+],
+[
+"ce",
+"e0.5",
+"{\\mathrm{e}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5}"
+],
+[
+"ce",
+"e2$\\bond{=}/T[12=",
+"{\\mathrm{e}{\\vphantom{A}}_{\\smash[t]{2}}${=}/\\mathrm{T}[12 {}={} }"
+],
+[
+"ce",
+"e<<=>...\\Delta vS|<=>>",
+"{\\mathrm{e} {}\\mathrel{\\longLeftrightharpoons}{} \\ldots \\mathrm{\\Delta vS}| {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"eH{Cu<=>2",
+"{e\\,\\mathrm{H}{\\mathrm{Cu} {}\\mathrel{\\longrightleftharpoons}{} 2}"
+],
+[
+"ce",
+"e…[\\mu\\frac{1}{2}^2+'Ph<=>>",
+"{\\mathrm{e}{{\\cdot}{\\cdot}{\\cdot}}[\\mathrm{\\mu}\\frac{1}{2}{\\vphantom{A}}^{2+\\prime }\\mathrm{Ph} {}\\mathrel{\\longRightleftharpoons}{} }"
+],
+[
+"ce",
+"i&E\\mu(g) ^",
+"\\mathrm{i}& \\mathrm{E\\mu}\\mskip2mu (\\mathrm{g}) \\uparrow{} "
+],
+[
+"ce",
+"i+",
+"{\\mathrm{i}{\\vphantom{A}}^{+}}"
+],
+[
+"ce",
+"i<->4Ag_x",
+"{\\mathrm{i} {}\\mathrel{\\longleftrightarrow}{} 4\\,\\mathrm{Ag}{\\vphantom{A}}_{\\smash[t]{x }}}"
+],
+[
+"ce",
+"n.\\,",
+"{\\mathrm{n}\\,{\\cdot}\\,\\,}"
+],
+[
+"ce",
+"n<-[K",
+"{\\mathrm{n} {}\\mathrel{\\longleftarrow}{} [\\mathrm{K}}"
+],
+[
+"ce",
+"nIV=\\cdot$x$He(aq)M[",
+"{n\\,\\mathrm{IV}{=}\\cdotx \\,\\mathrm{He}(\\mathrm{aq})\\mathrm{M}[}"
+],
+[
+"ce",
+"n\\ce{H2O}_{n}NCu",
+"{\\mathrm{n}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{NCu}}"
+],
+[
+"ce",
+"nz(l)",
+"{\\mathrm{nz}\\mskip2mu (\\mathrm{l})}"
+],
+[
+"ce",
+"pH&... ^-Fe][sp",
+"\\mathrm{pH}& \\ldots ~{\\vphantom{A}}^{\\hphantom{-}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{-}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{Fe}][\\mathrm{sp}"
+],
+[
+"ce",
+"pH+II@",
+"{\\mathrm{pH} {}+{} \\mathrm{II@}}"
+],
+[
+"ce",
+"pH1/2",
+"{\\mathrm{pH}\\mathchoice{\\textstyle\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}{\\frac{1}{2}}}"
+],
+[
+"ce",
+"pH2p\\alpha…Cl^2p\\muAg",
+"{\\mathrm{pH}2\\mathrm{p\\alpha}{{\\cdot}{\\cdot}{\\cdot}}\\mathrm{Cl}\\mkern2mu{\\vphantom{A}}^{\\hphantom{2}}_{\\hphantom{}}\\mkern-1.5mu{\\vphantom{A}}^{\\smash[t]{\\vphantom{2}}\\llap{2}}_{\\vphantom{2}\\llap{\\smash[t]{}}}\\mathrm{p}\\muAg}"
+],
+[
+"ce",
+"pHHRpH^2+]",
+"{p\\,\\mathrm{HHRpH}{\\vphantom{A}}^{2+}]}"
+],
+[
+"ce",
+"pH[ vi~Cl\\pu{1 kg}{\\ce{H2O}",
+"{\\mathrm{pH}[~\\mathrm{vi}~\\mathrm{Cl}{1~\\mathrm{kg}}{\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"pH\\mu@=Ag$x$[^",
+"{\\mathrm{pH}\\mathrm{\\mu@}{=}\\mathrm{Ag}x [ \\uparrow{} }"
+],
+[
+"ce",
+"sp ",
+"{\\mathrm{sp}}"
+],
+[
+"ce",
+"sp.<->",
+"{\\mathrm{sp}\\,{\\cdot}\\, {}\\mathrel{\\longleftrightarrow}{} }"
+],
+[
+"ce",
+"spM[pH->/* v−",
+"{\\mathrm{spM}[\\mathrm{pH} {}\\mathrel{\\longrightarrow}{} /\\,{\\cdot}\\,\\mathrm{v}{\\vphantom{A}}^{-}}"
+],
+[
+"ce",
+"sp\\bond{=}][SCu",
+"{\\mathrm{sp}{=}][\\mathrm{SCu}}"
+],
+[
+"ce",
+"sp\\bond{~}O\\cdot. v0.5<-->\\bond{=}",
+"{\\mathrm{sp}{\\tripledash}\\mathrm{O}\\cdot\\,{\\cdot}\\,\\mathrm{v}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5 {}\\mathrel{\\longleftrightarrows}{} {=}}"
+],
+[
+"ce",
+"sp]]…M[",
+"{\\mathrm{sp}]]{{\\cdot}{\\cdot}{\\cdot}}\\mathrm{M}[}"
+],
+[
+"ce",
+"sp^{2-}=,~a v",
+"{\\mathrm{sp}{\\vphantom{A}}^{2-}{=}{,}\\mkern3mu ~\\mathrm{a} \\downarrow{} }"
+],
+[
+"ce",
+"spnHe][(\\alpha./S",
+"{\\mathrm{spnHe}][(\\mathrm{\\alpha}\\,{\\cdot}\\,/\\mathrm{S}}"
+],
+[
+"ce",
+"sp−\\frac{1}{2}",
+"{\\mathrm{sp}\\text{-}\\frac{1}{2}}"
+],
+[
+"ce",
+"x'@\\ce{H2O}",
+"{\\mathrm{x}{\\vphantom{A}}^{\\prime }\\mathrm{@}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}}"
+],
+[
+"ce",
+"x;,T[",
+"{\\mathrm{x}{;}\\mkern3mu {,}\\mkern3mu \\mathrm{T}[}"
+],
+[
+"ce",
+"x\\cdot\\alpha\\bond{=}H",
+"{\\mathrm{x}\\cdot\\mathrm{\\alpha}{=}\\mathrm{H}}"
+],
+[
+"ce",
+"z",
+"{\\mathrm{z}}"
+],
+[
+"ce",
+"z(s)@_{n}M[+->|",
+"{\\mathrm{z}(\\mathrm{s})\\mathrm{@}{\\vphantom{A}}_{\\smash[t]{n }}\\mathrm{M}[{+} {}\\mathrel{\\longrightarrow}{} |}"
+],
+[
+"ce",
+"z->[/10^310^3+II=",
+"{\\mathrm{z} {}\\mathrel{\\longrightarrow}{} [/10{\\vphantom{A}}^{3103+}\\mathrm{II}{=}}"
+],
+[
+"ce",
+"z<->(",
+"{\\mathrm{z} {}\\mathrel{\\longleftrightarrow}{} (}"
+],
+[
+"ce",
+"zH<=>>M[\\frac{1}{2}i\\pu{1 kg}\\frac{1}{2}",
+"{z\\,\\mathrm{H} {}\\mathrel{\\longRightleftharpoons}{} [\\frac{1}{2}\\mathrm{i}{1~\\mathrm{kg}}\\frac{1}{2}}"
+],
+[
+"ce",
+"z^CFe)He}\\,",
+"{\\mathrm{z}{\\vphantom{A}}^{\\mathrm{C}}\\mathrm{Fe})\\mathrm{He}}\\,}"
+],
+[
+"ce",
+"ze$x$24",
+"{\\mathrm{ze}x {\\vphantom{A}}_{\\smash[t]{24}}}"
+],
+[
+"ce",
+"zzx(aq);$n    ",
+"{\\mathrm{zzx}\\mskip2mu (\\mathrm{aq}){;}\\mkern3mu $\\mathrm{n}}"
+],
+[
+"ce",
+"{->T[n@~ ^N1/2",
+"{{ {}\\mathrel{\\xrightarrow{\\text{}}}{} [\\mathrm{n@}~~{\\vphantom{A}}^{\\mathrm{N}}1/2}"
+],
+[
+"ce",
+"{Cli",
+"{{\\mathrm{Cli}}"
+],
+[
+"ce",
+"|",
+"{|}"
+],
+[
+"ce",
+"|(",
+"{|(}"
+],
+[
+"ce",
+"|<=>\\bond{=}\\Deltai(g)−3",
+"{| {}\\mathrel{\\longrightleftharpoons}{} {=}\\Deltai(\\mathrm{g})\\text{-}3}"
+],
+[
+"ce",
+"|\\mu2HN",
+"{|\\mathrm{\\mu}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{HN}}"
+],
+[
+"ce",
+"|e\\alpha->[He_x",
+"{|\\mathrm{e\\alpha} {}\\mathrel{\\longrightarrow}{} [\\mathrm{He}{\\vphantom{A}}_{\\smash[t]{x }}}"
+],
+[
+"ce",
+"|i",
+"{|\\mathrm{i}}"
+],
+[
+"ce",
+"|}Fe\\ce{H2O}R^{2-}0.5)<-",
+"{|}\\mathrm{Fe}\\mathrm{H}{\\vphantom{A}}_{\\smash[t]{2}}\\mathrm{O}\\mathrm{R}{\\vphantom{A}}^{2-}_{\\smash[t]{0}}\\,{\\cdot}\\,5) {}\\mathrel{\\longleftarrow}{} }"
+],
+[
+"ce",
+"} vAg$x$−$x$E/",
+"{}~v\\,\\mathrm{Ag}x {-}x \\,\\mathrm{E}/}"
+],
+[
+"ce",
+"}/@0.5+IIa~ v$x$",
+"{}/\\mathrm{@}{\\vphantom{A}}_{\\smash[t]{0}}\\,{\\cdot}\\,5 {}+{} \\mathrm{IIa}~~\\mathrm{v}x }"
+],
+[
+"ce",
+"}0.5z'3;−/",
+"{}0.5\\,\\mathrm{z}{\\vphantom{A}}^{\\prime }_{\\smash[t]{3}}{;}\\mkern3mu {-}/}"
+],
+[
+"ce",
+"}Fe->[(g)Ag^2+\\\\",
+"}\\mathrm{Fe} {}\\mathrel{\\longrightarrow}{} [(\\mathrm{g})\\mathrm{Ag}{\\vphantom{A}}^{2+}\\\\ "
+],
+[
+"ce",
+"}IV-<-->_x12",
+"{}\\mathrm{IV}{-} {}\\mathrel{\\longleftrightarrows}{} {\\vphantom{A}}_{\\smash[t]{x }}12}"
+],
+[
+"ce",
+"}\\overset{a}{b}#\\frac{1}{2}(l)z\\overset{a}{b}E(s)",
+"{}\\overset{\\mathrm{a}}{\\mathrm{b}}{\\equiv}\\frac{1}{2}(\\mathrm{l})\\mathrm{z}\\overset{\\mathrm{a}}{\\mathrm{b}}\\mathrm{E}\\mskip2mu (\\mathrm{s})}"
+],
+[
+"ce",
+"}|x|R@C\\,#",
+"{}|\\mathrm{x}|\\mathrm{R@C}\\,{\\equiv}}"
+],
+[
+"ce",
+"~[<-->\\alpha",
+"{~[ {}\\mathrel{\\longleftrightarrows}{} \\mathrm{\\alpha}}"
+],
+[
+"ce",
+"~_xN<=>><-][M[",
+"{~{\\vphantom{A}}_{\\smash[t]{x }}\\mathrm{N} {}\\mathrel{\\longRightleftharpoons}{}  {}\\mathrel{\\longleftarrow}{} ][\\mathrm{M}[}"
+],
+[
+"ce",
+"… v12Ph",
+"{\\ldots ~\\mathrm{v}{\\vphantom{A}}_{\\smash[t]{12}}\\mathrm{Ph}}"
+],
+[
+"ce",
+"…=H@#+II",
+"{\\ldots {=}\\mathrm{H@}{\\equiv} {}+{} \\mathrm{II}}"
+],
+[
+"ce",
+"…He]]Me",
+"{\\ldots \\mathrm{He}]]\\mathrm{Me}}"
+],
+[
+"ce",
+"…T[  [H  −",
+"{\\ldots \\mathrm{T}[~[\\mathrm{H} {}-{} }"
+],
+[
+"ce",
+"…\\text{x}",
+"{\\ldots \\text{x}}"
+],
+[
+"ce",
+"−2'Ph",
+"{{-2}{\\vphantom{A}}^{\\prime }\\mathrm{Ph}}"
+],
+[
+"ce",
+"−Ag,",
+"{{-}\\mathrm{Ag}{,}\\mkern3mu }"
+],
+[
+"ce",
+"−\\text{x}|{12}",
+"{{-}\\text{x}|{\\text{12}}}"
+],
+[
+"ce",
+"−e<<=>NaHe;",
+"{{-}\\mathrm{e} {}\\mathrel{\\longLeftrightharpoons}{} \\mathrm{NaHe}{;}\\mkern3mu }"
+],
+[
+"ce",
+"−sp(aq)$4*",
+"{{-}\\mathrm{sp}(\\mathrm{aq})$4\\,{\\cdot}\\,}"
+],
+[
+"pu",
+"  m{\\Omega..",
+"{\\mathrm{m{\\Omega}\\mkern1mu{\\cdot}\\mkern1mu \\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+" +",
+"{+}"
+],
+[
+"pu",
+" J.0,5°C",
+"{\\mathrm{J}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{0,5{}^{\\circ}C}}"
+],
+[
+"pu",
+" ^21.5",
+"{^{21}~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{5}}"
+],
+[
+"pu",
+" {)",
+"{\\mathrm{{)}}"
+],
+[
+"pu",
+"( J123456mol)",
+"{(\\mathrm{J^{123456}mol)}}"
+],
+[
+"pu",
+"({)+-",
+"{(\\mathrm{{)+-}}"
+],
+[
+"pu",
+"(}+--",
+"{(\\mathrm{}+--}}"
+],
+[
+"pu",
+"(}K-^21+-",
+"{(\\mathrm{}K-^{21}+-}}"
+],
+[
+"pu",
+"(°C+s)\\mu",
+"{(\\mathrm{{}^{\\circ}C+s)\\mu}}"
+],
+[
+"pu",
+")123456e12J/",
+"{)123\\mkern2mu 456\\cdot 10^{12}~\\mathrm{J}}"
+],
+[
+"pu",
+")^oC^oC",
+"{)\\mathrm{{}^{\\circ}C{}^{\\circ}C}}"
+],
+[
+"pu",
+")e)1.5x10^\\pm",
+"{)\\mathrm{e)^{1.5}x^{10}^\\pm}}"
+],
+[
+"pu",
+")e-3s+-s+",
+"{)10^{-3}~\\mathrm{s+-s+}}"
+],
+[
+"pu",
+"){K",
+"{)\\mathrm{{K}}"
+],
+[
+"pu",
+"**)12e",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mkern1mu{\\cdot}\\mkern1mu \\mathrm{)^{12}e}}"
+],
+[
+"pu",
+"*-\\pm",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{-\\pm}}"
+],
+[
+"pu",
+"*-^-1123456°C",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{-^{-1123456}{}^{\\circ}C}}"
+],
+[
+"pu",
+"*-x10^J J{",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{-x^{10}^J}\\mkern3mu \\mathrm{J{}}"
+],
+[
+"pu",
+"*K/\\mukg1e-3",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{K}\\,/\\,\\mathrm{\\mukg1e^{-3}}}"
+],
+[
+"pu",
+"*\\muJm^2",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\muJm^^{2}}}"
+],
+[
+"pu",
+"+*\\mu//0,5",
+"{+~\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\mu}}{0{,}5}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\mu}}{0{,}5}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\mu}}{0{,}5}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\mu}}{0{,}5}}}"
+],
+[
+"pu",
+"+--J °C",
+"{\\pm ~\\mathrm{-J}\\mkern3mu \\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"+--sK",
+"{\\pm ~\\mathrm{-sK}}"
+],
+[
+"pu",
+"+-//1.5J",
+"{\\pm ~\\mathrm{/}\\,/\\,1.5~\\mathrm{J}}"
+],
+[
+"pu",
+"+-3x10^//^oCs",
+"{\\pm 3~\\mathchoice{\\textstyle\\frac{\\mathrm{x^{10}^}}{\\mathrm{{}^{\\circ}Cs}}}{\\frac{\\mathrm{x^{10}^}}{\\mathrm{{}^{\\circ}Cs}}}{\\frac{\\mathrm{x^{10}^}}{\\mathrm{{}^{\\circ}Cs}}}{\\frac{\\mathrm{x^{10}^}}{\\mathrm{{}^{\\circ}Cs}}}}"
+],
+[
+"pu",
+"+-e-31.5",
+"{\\pm 10^{-31}~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{5}}"
+],
+[
+"pu",
+"+-x10^.\\mu",
+"{\\pm ~\\mathrm{x^{10}^}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\mu}}"
+],
+[
+"pu",
+"+-~0,5J+-123456",
+"{\\pm ~\\mathrm{~^{0,5}J+^{-123456}}}"
+],
+[
+"pu",
+"+-°C",
+"{\\pm ~\\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"+-°C\\mukg",
+"{\\pm ~\\mathrm{{}^{\\circ}C\\mukg}}"
+],
+[
+"pu",
+"+123456^-1m))",
+"{+123\\mkern2mu 456^{-1}~\\mathrm{m))}}"
+],
+[
+"pu",
+"+}123456//e-3K",
+"{+~\\mathchoice{\\textstyle\\frac{\\mathrm{}^{123456}}}{10^{-3}~\\mathrm{K}}}{\\frac{\\mathrm{}^{123456}}}{10^{-3}~\\mathrm{K}}}{\\frac{\\mathrm{}^{123456}}}{10^{-3}~\\mathrm{K}}}{\\frac{\\mathrm{}^{123456}}}{10^{-3}~\\mathrm{K}}}}"
+],
+[
+"pu",
+"- e+-+-(kg",
+"{-~\\mathrm{e+-+-(kg}}"
+],
+[
+"pu",
+"-//m\\mu^212*",
+"{-~\\mathrm{/}\\,/\\,\\mathrm{m\\mu^{212}}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"-J^-1",
+"{-~\\mathrm{J^{-1}}}"
+],
+[
+"pu",
+"-\\mu//",
+"{-~\\mathrm{\\mu}}"
+],
+[
+"pu",
+"./K\\mu",
+"{\\mkern1mu{\\cdot}\\mkern1mu /\\mathrm{K\\mu}}"
+],
+[
+"pu",
+".123456.^2kg",
+"{.123\\mkern2mu 456~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{^^{2}kg}}"
+],
+[
+"pu",
+".1\\Omega",
+"{.1~\\mathrm{\\Omega}}"
+],
+[
+"pu",
+".K0,5°Ce-3//\\mu",
+"{\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{K^{0,5}{}^{\\circ}Ce^{-3}}}{\\mathrm{\\mu}}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{K^{0,5}{}^{\\circ}Ce^{-3}}}{\\mathrm{\\mu}}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{K^{0,5}{}^{\\circ}Ce^{-3}}}{\\mathrm{\\mu}}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{K^{0,5}{}^{\\circ}Ce^{-3}}}{\\mathrm{\\mu}}}}"
+],
+[
+"pu",
+".\\pm~\\mum\\pmm",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{\\pm~\\mum\\pmm}}"
+],
+[
+"pu",
+".kges^-1(",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{kges^{-1}(}}"
+],
+[
+"pu",
+".sx10^1J~",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{sx^{10}^^{1}J~}}"
+],
+[
+"pu",
+".{3",
+"{\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{{^{3}}}"
+],
+[
+"pu",
+"/+\\Omega",
+"{\\mathrm{/+\\Omega}}"
+],
+[
+"pu",
+"//(",
+"{\\mathrm{/}/(}"
+],
+[
+"pu",
+"//3123456^oC{mJ",
+"{\\mathrm{/}\\,/\\,3\\mkern2mu 123\\mkern2mu 456~\\mathrm{{}^{\\circ}C{mJ}}"
+],
+[
+"pu",
+"//e-3J.+",
+"{\\mathrm{/}\\,/\\,10^{-3}~\\mathrm{J}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{+}}"
+],
+[
+"pu",
+"//mee+",
+"{\\mathrm{/}/\\mathrm{mee+}}"
+],
+[
+"pu",
+"//°C",
+"{\\mathrm{/}/\\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"/12J1\\pm^2",
+"{\\mathrm{/^{12}J^{1}\\pm^^{2}}}"
+],
+[
+"pu",
+"/KJ.^2m",
+"{\\mathrm{/KJ}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{^^{2}m}}"
+],
+[
+"pu",
+"/^oC+//+-",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{/{}^{\\circ}C+}}{\\pm }}{\\frac{\\mathrm{/{}^{\\circ}C+}}{\\pm }}{\\frac{\\mathrm{/{}^{\\circ}C+}}{\\pm }}{\\frac{\\mathrm{/{}^{\\circ}C+}}{\\pm }}}"
+],
+[
+"pu",
+"/e3*e-3",
+"{\\mathrm{/e^{3}}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{e^{-3}}}"
+],
+[
+"pu",
+"/{",
+"{\\mathrm{/{}}"
+],
+[
+"pu",
+"/}x10^e-3J\\mu",
+"{\\mathrm{/}x^{10}^e^{-3}J\\mu}}"
+],
+[
+"pu",
+"0,5*^oC",
+"{0{,}5~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"0,5/+0,5",
+"{0{,}5~\\mathrm{/^{+0,5}}}"
+],
+[
+"pu",
+"0,5//kg123456e-3/",
+"{0{,}5~\\mathrm{/}/\\mathrm{kg^{123456}e^{-3}}}"
+],
+[
+"pu",
+"0,5/123456//",
+"{0{,}5~\\mathrm{/^{123456}}}"
+],
+[
+"pu",
+"0,51",
+"{0{,}51}"
+],
+[
+"pu",
+"0,51123456e-3",
+"{0{,}511\\mkern2mu 234\\mkern2mu 56\\cdot 10^{-3}}"
+],
+[
+"pu",
+"0,5K+-",
+"{0{,}5~\\mathrm{K+-}}"
+],
+[
+"pu",
+"0,5\\Omega",
+"{0{,}5~\\mathrm{\\Omega}}"
+],
+[
+"pu",
+"0,5m\\mu",
+"{0{,}5~\\mathrm{m\\mu}}"
+],
+[
+"pu",
+"0,5{K++^-1^oC",
+"{0{,}5~\\mathrm{{K++^{-1}{}^{\\circ}C}}"
+],
+[
+"pu",
+"0,5}1.5{",
+"{0{,}5~\\mathrm{}^{1.5}{}}"
+],
+[
+"pu",
+"1.123456{~\\mu)",
+"{1.123\\mkern2mu 456~\\mathrm{{~\\mu)}}"
+],
+[
+"pu",
+"1.5).1*{",
+"{1.5)~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{1}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{{}}"
+],
+[
+"pu",
+"1.5*1.512345612~0,5",
+"{1.5~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{1.512345612~^{0,5}}}"
+],
+[
+"pu",
+"1.512e+-K",
+"{1.512~\\mathrm{e+-K}}"
+],
+[
+"pu",
+"1.5kg+-kg",
+"{1.5~\\mathrm{kg+-kg}}"
+],
+[
+"pu",
+"1.5mol-",
+"{1.5~\\mathrm{mol-}}"
+],
+[
+"pu",
+"1.5°C^-1//J",
+"{1.5~\\mathchoice{\\textstyle\\frac{\\mathrm{{}^{\\circ}C^{-1}}}{\\mathrm{J}}}{\\frac{\\mathrm{{}^{\\circ}C^{-1}}}{\\mathrm{J}}}{\\frac{\\mathrm{{}^{\\circ}C^{-1}}}{\\mathrm{J}}}{\\frac{\\mathrm{{}^{\\circ}C^{-1}}}{\\mathrm{J}}}}"
+],
+[
+"pu",
+"11kg",
+"{11~\\mathrm{kg}}"
+],
+[
+"pu",
+"12( /",
+"{12(~\\mathrm{/}}"
+],
+[
+"pu",
+"12)",
+"{12)}"
+],
+[
+"pu",
+"123456-",
+"{123\\mkern2mu 456-}"
+],
+[
+"pu",
+"123456-1.5+molK",
+"{123\\mkern2mu 456-1.5+\\mathrm{molK}}"
+],
+[
+"pu",
+"1234561.5/K123456{",
+"{1\\mkern2mu 234\\mkern2mu 561.5~\\mathrm{/K^{123456}{}}"
+],
+[
+"pu",
+"123456^2\\Omega*",
+"{123\\mkern2mu 456^{2}~\\mathrm{\\Omega}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"123456^oC*°C",
+"{123\\mkern2mu 456~\\mathrm{{}^{\\circ}C}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"123456kg}+1kg",
+"{123\\mkern2mu 456~\\mathrm{kg}^{+1}kg}}"
+],
+[
+"pu",
+"12\\mu-1.5^-1.//",
+"{12~\\mathrm{\\mu-1.5^^{-1}}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"12m",
+"{12~\\mathrm{m}}"
+],
+[
+"pu",
+"12s\\mu+Ke",
+"{12~\\mathrm{s\\mu+Ke}}"
+],
+[
+"pu",
+"12{)-\\Omega ",
+"{12~\\mathrm{{)-\\Omega}~}"
+],
+[
+"pu",
+"12°Ce-3kg\\Omega",
+"{12~\\mathrm{{}^{\\circ}Ce^{-3}kg\\Omega}}"
+],
+[
+"pu",
+"1J",
+"{1~\\mathrm{J}}"
+],
+[
+"pu",
+"1^-1)*.(",
+"{1^{-1})~\\mkern1mu{\\cdot}\\mkern1mu \\mkern1mu{\\cdot}\\mkern1mu \\mathrm{(}}"
+],
+[
+"pu",
+"1^-1-s//K",
+"{1^{-1}~\\mathchoice{\\textstyle\\frac{-~\\mathrm{s}}{\\mathrm{K}}}{\\frac{-~\\mathrm{s}}{\\mathrm{K}}}{\\frac{-~\\mathrm{s}}{\\mathrm{K}}}{\\frac{-~\\mathrm{s}}{\\mathrm{K}}}}"
+],
+[
+"pu",
+"1m",
+"{1~\\mathrm{m}}"
+],
+[
+"pu",
+"1{//^2",
+"{1~\\mathchoice{\\textstyle\\frac{\\mathrm{{}}{^{2}}}{\\frac{\\mathrm{{}}{^{2}}}{\\frac{\\mathrm{{}}{^{2}}}{\\frac{\\mathrm{{}}{^{2}}}}"
+],
+[
+"pu",
+"1{}\\mu ",
+"{1~\\mathrm{{}\\mu}~}"
+],
+[
+"pu",
+"3//^-1",
+"{3~\\mathrm{/}/^{-1}}"
+],
+[
+"pu",
+"3//kg",
+"{3~\\mathrm{/}/\\mathrm{kg}}"
+],
+[
+"pu",
+"3\\mu+^oC\\Omegakg",
+"{3~\\mathrm{\\mu+{}^{\\circ}C\\Omegakg}}"
+],
+[
+"pu",
+"3~",
+"{3~\\mathrm{~}}"
+],
+[
+"pu",
+"3~e-3-{0,5+-",
+"{3~\\mathrm{~e^{-3}-{^{0,5}+-}}"
+],
+[
+"pu",
+"3°C.~3)",
+"{3~\\mathrm{{}^{\\circ}C}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{~^{3})}}"
+],
+[
+"pu",
+"J(",
+"{\\mathrm{J(}}"
+],
+[
+"pu",
+"J1-123456x10^ ",
+"{\\mathrm{J^{1}-123456x^{10}^}~}"
+],
+[
+"pu",
+"JJ",
+"{\\mathrm{JJ}}"
+],
+[
+"pu",
+"J\\Omega-x10^)x10^+",
+"{\\mathrm{J\\Omega-x^{10}^)x^{10}^+}}"
+],
+[
+"pu",
+"J\\mu",
+"{\\mathrm{J\\mu}}"
+],
+[
+"pu",
+"Je0,512J",
+"{\\mathrm{Je^{0,512}J}}"
+],
+[
+"pu",
+"Je\\mu0,5*",
+"{\\mathrm{Je\\mu^{0,5}}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"J°Ce-33*",
+"{\\mathrm{J{}^{\\circ}Ce^{-33}}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"K(K//-+-",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{K(K}}{- {}\\pm{} }}{\\frac{\\mathrm{K(K}}{- {}\\pm{} }}{\\frac{\\mathrm{K(K}}{- {}\\pm{} }}{\\frac{\\mathrm{K(K}}{- {}\\pm{} }}}"
+],
+[
+"pu",
+"K)K",
+"{\\mathrm{K)K}}"
+],
+[
+"pu",
+"K.+-",
+"{\\mathrm{K}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{+-}}"
+],
+[
+"pu",
+"K/^oCmol.",
+"{\\mathrm{K}\\,/\\,\\mathrm{{}^{\\circ}Cmol}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"K3.1)",
+"{\\mathrm{K^{3.1})}}"
+],
+[
+"pu",
+"K3m{mol12",
+"{\\mathrm{K^{3}m{mol^{12}}}"
+],
+[
+"pu",
+"K\\mu3//x10^",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{K\\mu^{3}}}{\\mathrm{x^{10}^}}}{\\frac{\\mathrm{K\\mu^{3}}}{\\mathrm{x^{10}^}}}{\\frac{\\mathrm{K\\mu^{3}}}{\\mathrm{x^{10}^}}}{\\frac{\\mathrm{K\\mu^{3}}}{\\mathrm{x^{10}^}}}}"
+],
+[
+"pu",
+"K~",
+"{\\mathrm{K~}}"
+],
+[
+"pu",
+"\\Omega \\muK12\\pm3",
+"{\\mathrm{\\Omega \\muK12\\pm3}}"
+],
+[
+"pu",
+"\\Omega)e-3123456-",
+"{\\mathrm{\\Omega)e^{-3123456}-}}"
+],
+[
+"pu",
+"\\Omega1",
+"{\\mathrm{\\Omega1}}"
+],
+[
+"pu",
+"\\Omega\\Omega0,5e^oC(",
+"{\\mathrm{\\Omega\\Omega0,5e{}^{\\circ}C(}}"
+],
+[
+"pu",
+"\\mu3Kx10^^oC",
+"{\\mathrm{\\mu3Kx^{10}^{}^{\\circ}C}}"
+],
+[
+"pu",
+"\\muKs",
+"{\\mathrm{\\muKs}}"
+],
+[
+"pu",
+"\\mu\\Omega1234560,512",
+"{\\mathrm{\\mu\\Omega1234560,512}}"
+],
+[
+"pu",
+"\\mu\\mu.J°C3",
+"{\\mathrm{\\mu\\mu}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{J{}^{\\circ}C^{3}}}"
+],
+[
+"pu",
+"\\mu^2°C\\Omegam",
+"{\\mathrm{\\mu^^{2}{}^{\\circ}C\\Omegam}}"
+],
+[
+"pu",
+"\\mue-312{^2123456",
+"{\\mathrm{\\mue-312{^{2123456}}}"
+],
+[
+"pu",
+"\\mue}/",
+"{\\mathrm{\\mue}}}"
+],
+[
+"pu",
+"\\pm\\Omega//^-11)",
+"{\\pm~\\mathchoice{\\textstyle\\frac{\\mathrm{\\Omega}}{^{-11})}}{\\frac{\\mathrm{\\Omega}}{^{-11})}}{\\frac{\\mathrm{\\Omega}}{^{-11})}}{\\frac{\\mathrm{\\Omega}}{^{-11})}}}"
+],
+[
+"pu",
+"\\pmx10^}+-°C",
+"{\\pm~\\mathrm{x^{10}^}+-{}^{\\circ}C}}"
+],
+[
+"pu",
+"^-1Kmol\\pmx10^",
+"{^{-1}~\\mathrm{Kmol\\pmx^{10}^}}"
+],
+[
+"pu",
+"^2 ",
+"{^{2}~}"
+],
+[
+"pu",
+"^2e-3mx10^\\mux10^",
+"{^{2}~\\mathrm{e^{-3}mx^{10}^\\mux^{10}^}}"
+],
+[
+"pu",
+"^2kg1s0,5^-1123456",
+"{^{2}~\\mathrm{kg^{1}s^{0,5}^^{-1123456}}}"
+],
+[
+"pu",
+"^2{+-",
+"{^{2}~\\mathrm{{+-}}"
+],
+[
+"pu",
+"^oC//Km",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{Km}}}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{Km}}}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{Km}}}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{Km}}}}"
+],
+[
+"pu",
+"^oC//mol0,5mol.",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{mol^{0,5}mol}\\mkern1mu{\\cdot}\\mkern1mu }}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{mol^{0,5}mol}\\mkern1mu{\\cdot}\\mkern1mu }}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{mol^{0,5}mol}\\mkern1mu{\\cdot}\\mkern1mu }}{\\frac{\\mathrm{{}^{\\circ}C}}{\\mathrm{mol^{0,5}mol}\\mkern1mu{\\cdot}\\mkern1mu }}}"
+],
+[
+"pu",
+"^oCK/+J",
+"{\\mathrm{{}^{\\circ}CK}\\,/\\,+~\\mathrm{J}}"
+],
+[
+"pu",
+"^oC^oC12m\\Omega123456^-1",
+"{\\mathrm{{}^{\\circ}C{}^{\\circ}C^{12}m\\Omega^{123456}^^{-1}}}"
+],
+[
+"pu",
+"^oC}mol",
+"{\\mathrm{{}^{\\circ}C}mol}}"
+],
+[
+"pu",
+"e)\\mu//.//1",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{e)\\mu}}{\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}}}{\\frac{\\mathrm{e)\\mu}}{\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}}}{\\frac{\\mathrm{e)\\mu}}{\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}}}{\\frac{\\mathrm{e)\\mu}}{\\mathchoice{\\textstyle\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}{\\frac{\\mkern1mu{\\cdot}\\mkern1mu }{1}}}}}"
+],
+[
+"pu",
+"e-3(",
+"{10^{-3}(}"
+],
+[
+"pu",
+"e-3+-e/)e",
+"{10^{-3} {}\\pm{} \\mathrm{e}\\,/\\,)\\mathrm{e}}"
+],
+[
+"pu",
+"e-30,5K^2°C\\pm}",
+"{10^{-30}~\\mathrm{,^{5}K^{2}{}^{\\circ}C\\pm}}}"
+],
+[
+"pu",
+"e-3e-3",
+"{10^{-3}~\\mathrm{e^{-3}}}"
+],
+[
+"pu",
+"e-3°C}x10^)",
+"{10^{-3}~\\mathrm{{}^{\\circ}C}x^{10}^)}}"
+],
+[
+"pu",
+"e1.5.e-3^oC",
+"{10^{1}~\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{5}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{e^{-3}{}^{\\circ}C}}"
+],
+[
+"pu",
+"eJ//123456Jm",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{eJ}}{123\\mkern2mu 456~\\mathrm{Jm}}}{\\frac{\\mathrm{eJ}}{123\\mkern2mu 456~\\mathrm{Jm}}}{\\frac{\\mathrm{eJ}}{123\\mkern2mu 456~\\mathrm{Jm}}}{\\frac{\\mathrm{eJ}}{123\\mkern2mu 456~\\mathrm{Jm}}}}"
+],
+[
+"pu",
+"ekg°C\\pm31",
+"{\\mathrm{ekg{}^{\\circ}C\\pm^{31}}}"
+],
+[
+"pu",
+"e~123456{\\pm",
+"{\\mathrm{e~^{123456}{\\pm}}"
+],
+[
+"pu",
+"kg+",
+"{\\mathrm{kg+}}"
+],
+[
+"pu",
+"kg1.5x10^*+J\\pm",
+"{\\mathrm{kg^{1.5}x^{10}^}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{+J\\pm}}"
+],
+[
+"pu",
+"kg121.5",
+"{\\mathrm{kg^{121.5}}}"
+],
+[
+"pu",
+"kg123456 e ",
+"{\\mathrm{kg^{123456}}\\mkern3mu \\mathrm{e}~}"
+],
+[
+"pu",
+"kg^2",
+"{\\mathrm{kg^{2}}}"
+],
+[
+"pu",
+"kge-3^2",
+"{\\mathrm{kge^{-3}^^{2}}}"
+],
+[
+"pu",
+"kgmol)0,5^2////",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{kgmol)^{0,5}^^{2}}}{\\mathrm{/}}}{\\frac{\\mathrm{kgmol)^{0,5}^^{2}}}{\\mathrm{/}}}{\\frac{\\mathrm{kgmol)^{0,5}^^{2}}}{\\mathrm{/}}}{\\frac{\\mathrm{kgmol)^{0,5}^^{2}}}{\\mathrm{/}}}}"
+],
+[
+"pu",
+"kgx10^3^2~+-e-3",
+"{\\mathrm{kgx^{10}^^{3}^^{2}~+-e^{-3}}}"
+],
+[
+"pu",
+"m 12",
+"{\\mathrm{m}\\mkern3mu \\mathrm{12}}"
+],
+[
+"pu",
+"m+",
+"{\\mathrm{m+}}"
+],
+[
+"pu",
+"m/+-",
+"{\\mathrm{m}/\\pm }"
+],
+[
+"pu",
+"mJ",
+"{\\mathrm{mJ}}"
+],
+[
+"pu",
+"mol+-mol.",
+"{\\mathrm{mol+-mol}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"s",
+"{\\mathrm{s}}"
+],
+[
+"pu",
+"s1.5\\mu0,5",
+"{\\mathrm{s^{1.5}\\mu0,5}}"
+],
+[
+"pu",
+"ss\\mu^2",
+"{\\mathrm{ss\\mu^{2}}}"
+],
+[
+"pu",
+"s}~\\Omega*^2e",
+"{\\mathrm{s}~\\Omega}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{^^{2}e}}"
+],
+[
+"pu",
+"s~\\pm123456(K+-",
+"{\\mathrm{s~\\pm^{123456}(K+-}}"
+],
+[
+"pu",
+"x10^\\Omega.x10^)1 ",
+"{\\mathrm{x^{10}^\\Omega}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{x^{10}^)^{1}}~}"
+],
+[
+"pu",
+"x10^~(*.",
+"{\\mathrm{x^{10}^~(}\\mkern1mu{\\cdot}\\mkern1mu \\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"x10^~).",
+"{\\mathrm{x^{10}^~)}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"{-eemol",
+"{\\mathrm{{-eemol}}"
+],
+[
+"pu",
+"{.",
+"{\\mathrm{{}\\mkern1mu{\\cdot}\\mkern1mu }"
+],
+[
+"pu",
+"{^-1+-)1\\mu",
+"{\\mathrm{{^{-1}+-)^{1}\\mu}}"
+],
+[
+"pu",
+"{^oC",
+"{\\mathrm{{{}^{\\circ}C}}"
+],
+[
+"pu",
+"{x10^\\pm",
+"{\\mathrm{{x^{10}^\\pm}}"
+],
+[
+"pu",
+"} +123456m+-",
+"{\\mathrm{}}\\mkern3mu \\mathrm{+123456m+-}}"
+],
+[
+"pu",
+"})°C1234561.5\\pm12",
+"{\\mathrm{}){}^{\\circ}C^{1234561.5}\\pm12}}"
+],
+[
+"pu",
+"}+{",
+"{\\mathrm{}+{}}"
+],
+[
+"pu",
+"}-x10^\\mu",
+"{\\mathrm{}-x^{10}^\\mu}}"
+],
+[
+"pu",
+"}3//s(~",
+"{\\mathchoice{\\textstyle\\frac{\\mathrm{}^{3}}}{\\mathrm{s(~}}}{\\frac{\\mathrm{}^{3}}}{\\mathrm{s(~}}}{\\frac{\\mathrm{}^{3}}}{\\mathrm{s(~}}}{\\frac{\\mathrm{}^{3}}}{\\mathrm{s(~}}}}"
+],
+[
+"pu",
+"}J3kg12^-13",
+"{\\mathrm{}J^{3}kg^{12}^^{-13}}}"
+],
+[
+"pu",
+"}e",
+"{\\mathrm{}e}}"
+],
+[
+"pu",
+"}}\\mu3^2~e",
+"{\\mathrm{}}\\mu^{3}^^{2}~e}}"
+],
+[
+"pu",
+"~",
+"{\\mathrm{~}}"
+],
+[
+"pu",
+"~ ",
+"{\\mathrm{~}~}"
+],
+[
+"pu",
+"~+-\\mu",
+"{\\mathrm{~+-\\mu}}"
+],
+[
+"pu",
+"~/^-1~",
+"{\\mathrm{~}\\,/\\,^{-1}~\\mathrm{~}}"
+],
+[
+"pu",
+"~12se3°Cs",
+"{\\mathrm{~^{12}se^{3}{}^{\\circ}Cs}}"
+],
+[
+"pu",
+"~3mol",
+"{\\mathrm{~^{3}mol}}"
+],
+[
+"pu",
+"~\\mu12",
+"{\\mathrm{~\\mu^{12}}}"
+],
+[
+"pu",
+"~\\pmkg/^-1(^oC",
+"{\\mathrm{~\\pmkg}\\,/\\,^{-1}(~\\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"~s)123456",
+"{\\mathrm{~s)^{123456}}}"
+],
+[
+"pu",
+"°C",
+"{\\mathrm{{}^{\\circ}C}}"
+],
+[
+"pu",
+"°C*~\\mu(",
+"{\\mathrm{{}^{\\circ}C}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{~\\mu(}}"
+],
+[
+"pu",
+"°C.^-1",
+"{\\mathrm{{}^{\\circ}C}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{^^{-1}}}"
+],
+[
+"pu",
+"°Ce-s{",
+"{\\mathrm{{}^{\\circ}Ce-s{}}"
+],
+[
+"pu",
+"°Cs(3mol/1.5",
+"{\\mathrm{{}^{\\circ}Cs(^{3}mol}\\,/\\,1.5}"
+],
+[
+"pu",
+"°Cx10^3Ks*^-1",
+"{\\mathrm{{}^{\\circ}Cx^{10}^^{3}Ks}\\mkern1mu{\\cdot}\\mkern1mu \\mathrm{^^{-1}}}"
+],
+[
+"pu",
+"°C°C-}\\mu^2}",
+"{\\mathrm{{}^{\\circ}C{}^{\\circ}C-}\\mu^{2}}}}"
+]
+]

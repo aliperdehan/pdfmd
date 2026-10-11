@@ -41,6 +41,53 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.7 — 2026-10-11
+
+Pre-edit state: commit `0749bd4` (v3.28.6).
+
+Stage 6 A begins: one converter for mhchem's `\ce` and `\pu` that every output will use. In this version it is
+added and tested on its own; no build uses it yet.
+
+### Added
+
+- **`pdfmd_mhchem/`, a Python port of mhchemParser 4.2.1.** This is Martin Hensel's parser of mhchem's `\ce` and
+  `\pu`, the one MathJax and KaTeX use. `to_tex("H2O")` gives the TeX LaTeX's mhchem makes of `\ce{H2O}`.
+  - It is a translation of the TypeScript, statement by statement, so it parses as mhchem does. That covers the
+    bond-or-charge rules, arrows with labels, isotopes, states, oxidation numbers and `\pu`'s digit groups.
+  - It keeps mhchemParser's Apache License 2.0 (`pdfmd_mhchem/LICENSE`, the notice in `parser.py`). pdfmd's licence
+    line becomes `MIT AND Apache-2.0`.
+  - The wheel ships it, and so does `scripts/build_zipapp.py`'s `pdfmd.pyz`.
+  - No new dependency: node is used only to check the port in development.
+  - Decided with the author: a port inside pdfmd under its own licence, rather than an optional package of its own.
+    No Python port existed anywhere, and an optional one would have meant keeping a second parser as the fallback.
+
+Why: the audit of the LaTeX filter's own Lua translator compared 388 distinct `\ce` from real lab reports with
+mhchem:
+- 372 come out alike;
+- 9 come out wrong (a bond at the end read as a charge, `-COO-` → COO⁻; an arrow's label left as text,
+  `->[NaBH4]`; `...` as `···`);
+- 7 cannot be read at all (`^15N`, `PP_i`, `(CH2O)_n`, `H_nA`).
+
+Checked:
+
+| Inputs | Same TeX as the JavaScript original |
+|---|---|
+| mhchemParser's own test suite | 117 of 117 |
+| `\ce` of real lab reports | 388 of 388 |
+| random strings of chemistry tokens, errors included (5000 `\ce`, 2000 `\pu`) | 7000 of 7000 |
+
+### Tests
+
+- `tests/test_mhchem.py` checks the port against fixtures holding the original's answers:
+  - `tests/fixtures/mhchem/upstream.json`: mhchem's own tests;
+  - `documents.json`: the real formulas, chemistry only;
+  - `odd.json`: 800 of the random inputs with the 7 mhchem rejects.
+
+  It also has examples, the licence notice, and `AgainstTheOriginal`, which compares 3000 fresh random inputs with
+  the JavaScript itself. That last test is development only: it runs with `PDFMD_MHCHEM_NODE` set to a
+  `node_modules` folder that has `mhchemparser@4.2.1`, and is skipped otherwise.
+- Full suite: Pandoc 3.12, 1016 tests OK; Pandoc 3.1.3, 1016 OK (the node check skipped).
+
 ## v3.28.6 — 2026-10-11
 
 Pre-edit state: commit `d111afc` (v3.28.5).

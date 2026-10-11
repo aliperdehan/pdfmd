@@ -1730,3 +1730,7 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 ## License
 
 [MIT](https://github.com/aliperdehan/pdfmd/blob/main/LICENSE)
+
+`pdfmd_mhchem/` is a Python port of Martin Hensel's
+[mhchemParser](https://github.com/mhchem/mhchemParser) (the parser of mhchem's `\ce` and `\pu` that MathJax and KaTeX
+use) and keeps its [Apache License 2.0](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd_mhchem/LICENSE).
