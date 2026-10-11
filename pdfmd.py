@@ -1314,7 +1314,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.1"
+PDFMD_VERSION = "3.28.2"
 import argparse
 import csv
 import filecmp
@@ -5090,7 +5090,9 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
         kinds: dict[str, int] = {}
         for item in left:
             kinds[item["kind"]] = kinds.get(item["kind"], 0) + 1
-        print(f"WARN  {md_path}: LaTeX the Word output could not express: "
+        target = (getattr(arguments, "context", None) or {}).get("target", "docx")
+        name = {"docx": "Word", "odt": "OpenDocument", "typst": "Typst", "html": "HTML"}.get(target, target)
+        print(f"WARN  {md_path}: LaTeX the {name} output could not express: "
               + ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items())), file=sys.stderr)
         if verbose:
             for item in left[:20]:
@@ -5116,7 +5118,8 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         latex = str(options.get("latex", "auto" if target in ("docx", "odt") else "")).casefold()
         if not latex and target in ("typst", "html") and raw_takes(md_path, metadata_files, target, "tex"):
             latex = "auto"                  # the raw option has this output take LaTeX: the route that draws what it can
-        # Word and ODF always; Typst and HTML only when the document asks (`office: {latex: auto}`) or LaTeX failed
+        # Word and ODF always; Typst and HTML files only when the document asks (`office: {latex: auto}`); a Typst,
+        # WeasyPrint or Calibre PDF when office_fallback_wanted says so (force_filter)
         wanted = target in ("docx", "odt") or force_filter or latex in ("auto", "images")
         if (module is not None and target in ("docx", "odt", "typst", "html") and wanted
                 and latex not in ("off", "false", "no")
@@ -5236,15 +5239,54 @@ def raw_takes(md_path: Path, metadata_files: list[Path], family: str, syntax: st
     return bool(table and syntax in table.get(family, []))
 
 
+# LaTeX a Typst or HTML writer drops: a raw ```{=latex} block, a command in the text (Pandoc reads `\ce{H2O}` as raw
+# LaTeX), and chemistry or units in math (texmath knows no \ce or \SI: Pandoc prints the TeX). Front matter and code
+# are not looked at.
+RAW_TEX_FENCE_RE = re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{=(?:latex|tex)\}")
+TEXT_COMMAND_RE = re.compile(r"\\[A-Za-z@]+")
+MATH_SPAN_RE = re.compile(r"\$\$.*?\$\$|\$[^$\n]+\$", re.DOTALL)
+MATH_ONLY_LATEX_RE = re.compile(r"\\(?:ce|pu|SI|si|qty|num|unit|ang|SIrange|qtyrange|numrange)(?![A-Za-z])")
+
+
+def latex_failed(failed_families: set) -> bool:
+    """Whether a LaTeX engine failed earlier in this chain. The loop records an engine by its TeX family (luatex, xetex,
+    pdftex: ENGINE_FAMILY); the check looked for engine names, so it never held and a Typst or WeasyPrint run after
+    LaTeX failed did not get the LaTeX filter (v3.24.x to v3.28.1)."""
+    latex_families = {ENGINE_FAMILY.get(engine, engine) for engine in LATEX_ENGINES}
+    return any(name in latex_families or name in LATEX_ENGINES for name in failed_families)
+
+
+def latex_dropped(paths: list[Path]) -> bool:
+    """Whether the documents say something in LaTeX that a Typst or HTML writer would drop (see TEXT_COMMAND_RE)."""
+    for path in paths:
+        _, body = split_front_matter(read_text_best_effort(path))
+        if RAW_TEX_FENCE_RE.search(body):
+            return True
+        body = strip_code_text(body)
+        if any(MATH_ONLY_LATEX_RE.search(math) for math in MATH_SPAN_RE.findall(body)):
+            return True
+        if TEXT_COMMAND_RE.search(MATH_SPAN_RE.sub("", body)):
+            return True
+    return False
+
+
 def office_fallback_wanted(md_path: Path, metadata_files: list[Path], failed_families: set,
-                           family: str = "") -> bool:
+                           family: str = "", sources: list[Path] | tuple = ()) -> bool:
     """Whether a Typst/WeasyPrint run should go through the LaTeX filter: a LaTeX engine has failed already, or the
-    document says `office: {latex: auto}` for it, or its `raw` option has this family (`typst`, `html`) take LaTeX."""
-    if any(family_name in ("lualatex", "xelatex", "pdflatex", "tex", "latexmk", "tectonic") for family_name in failed_families):
+    document says `office: {latex: auto}` for it, or its `raw` option has this family (`typst`, `html`) take LaTeX.
+    With no `raw` setting for the family, whenever the document (`sources`, its parts too) has LaTeX the writer would
+    drop (v3.28.2: a named `-e typst` or `-e weasyprint` printed "Water is and" for "Water is \\ce{H2O} and", and
+    left out every tikzpicture, without a word)."""
+    if latex_failed(failed_families):
         return True
     if str(office_options(md_path, metadata_files).get("latex", "")).casefold() in ("auto", "images"):
         return True
-    return bool(family) and raw_takes(md_path, metadata_files, family, "tex")
+    if not family:
+        return False
+    table = resolve_raw(md_path, metadata_files)
+    if table and family in table:
+        return "tex" in table[family]
+    return latex_dropped(list(sources) or [md_path])
 
 
 def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False):
@@ -16177,19 +16219,23 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
-                    cmd += typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
+                    cmd += weasyprint_math_args(engine, pandoc_options)
+                    # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
+                    # label for is a link Typst would stop on
+                    last_filters = typst_filter_args(engine)
                     page_options = lambda: calibre_page_options(md_path, metadata_files, variables)
                     if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
-                            md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html")):
-                        # LaTeX failed (or the document asks; Calibre always, like LibreOffice): what the document
-                        # says in LaTeX becomes native or a picture instead of nothing. Calibre is only ever
-                        # named, so its references get LaTeX's numbers like a Word file's (`office: {labels}`).
+                            md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html",
+                            [md_path, *parts_inputs])):
+                        # LaTeX failed, or the document has LaTeX this writer would drop (Calibre always, like
+                        # LibreOffice): it becomes native or a picture instead of nothing. References take LaTeX's
+                        # numbers as in a Word file (`office: {labels}`), unless LaTeX is what failed.
                         with office_reference(md_path, metadata_files, variables, "typst" if engine == "typst" else "html",
                                               output, pandoc_options, no_auto, note,
-                                              labels=None if engine == "calibre" else "off",
+                                              labels="off" if latex_failed(failed_families) else None,
                                               force_filter=True) as office_arguments:
                             if office_arguments.filter_arguments:
-                                cmd += office_arguments.filter_arguments
+                                cmd += office_arguments.filter_arguments + last_filters
                                 answer = run_engine_command(
                                     cmd, engine, output,
                                     lambda command, target: run_office_pandoc(command, target, office_arguments,
@@ -16197,6 +16243,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                     page_options, verbose)
                                 office_finish(office_arguments, md_path, verbose)
                                 return answer
+                    cmd += last_filters
 
                     def run_pandoc(command: list[str], target: Path):
                         log_cmd(command, pandoc_cwd, verbose)
@@ -20415,25 +20462,30 @@ def main() -> None:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                             hoist_code_header(cmd)
                             keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
+                        cmd += weasyprint_math_args(engine, pandoc_options)    # as for one document (v3.28.2)
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)
                             return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd,
                                                   env=tex_search_env(files[0].parent, pandoc_cwd))
                         report_page = lambda: calibre_page_options(files[0], metadata_files, variables)
-                        if engine == "calibre":
+                        if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
+                                files[0], metadata_files, failed_families, "typst" if engine == "typst" else "html",
+                                list(files))):
                             # as for one document (LaTeX made native or drawn), without LaTeX's label numbers:
                             # those would be the first chapter's alone
-                            with office_reference(files[0], metadata_files, variables, "html", output, pandoc_options,
+                            with office_reference(files[0], metadata_files, variables,
+                                                  "typst" if engine == "typst" else "html", output, pandoc_options,
                                                   report_no_auto, report_note, labels="off",
                                                   force_filter=True) as office_arguments:
-                                cmd += office_arguments.filter_arguments
+                                cmd += office_arguments.filter_arguments + typst_filter_args(engine)
                                 runner = ((lambda command, target: run_office_pandoc(
                                               command, target, office_arguments, pandoc_cwd, args.verbose))
                                           if office_arguments.filter_arguments else run_report_pandoc)
                                 result = run_engine_command(cmd, engine, output, runner, report_page, args.verbose)
                                 office_finish(office_arguments, files[0], args.verbose)
                         else:
+                            cmd += typst_filter_args(engine)
                             result = run_engine_command(cmd, engine, output, run_report_pandoc, report_page,
                                                         args.verbose)
                     if result.returncode == 0:

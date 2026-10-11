@@ -6,6 +6,9 @@
 -- label to a heading, a div, a span, a figure and a table with an id (Pandoc 3.1.3 and 3.12 alike); a code block, an
 -- image, inline code and a link keep theirs only in the AST, so a link to one of those is made text as well.
 --
+-- A label on two elements stops Typst too ("label <x> occurs multiple times", v3.28.2: a lab report through pdfmd's
+-- LaTeX filter, where a drawn figure environment and its own label both carried it): the first keeps it, one WARN.
+--
 -- Pictures, with a Pandoc before 3.2 building a PDF: it runs Typst in its own working folder (a discovered metadata
 -- file's, not always the document's) without fetching the pictures first, so a relative path is looked for there. Each
 -- is made the absolute path of the file found on the resource path (pdfmd gives Typst --root=/ with such a Pandoc).
@@ -19,13 +22,27 @@ local function decoded(text)
 end
 
 local function plain_missing_links(doc)
-  local labels = {}
+  local labels, repeated = {}, {}
   local function collect(element)
-    if element.identifier and element.identifier ~= "" then labels[element.identifier] = true end
+    local identifier = element.identifier
+    if not identifier or identifier == "" then return nil end
+    if labels[identifier] then
+      repeated[#repeated + 1] = identifier
+      element.identifier = ""
+      return element
+    end
+    labels[identifier] = true
   end
-  local collector = {}
+  local collector = {traverse = "topdown"}            -- in the order of the document: the first one keeps its label
   for name in pairs(LABELLED) do collector[name] = collect end
-  doc:walk(collector)
+  doc = doc:walk(collector)
+  if #repeated > 0 then
+    local shown = {}
+    for index = 1, math.min(#repeated, 5) do shown[index] = repeated[index] end
+    io.stderr:write(string.format("WARN  typst: %d label%s on more than one element (%s%s): only the first keeps it, "
+      .. "Typst stops on a label used twice\n", #repeated, #repeated == 1 and "" or "s", table.concat(shown, ", "),
+      #repeated > 5 and string.format(" and %d more", #repeated - 5) or ""))
+  end
 
   local missing, order = {}, {}
   doc = doc:walk({Link = function(link)

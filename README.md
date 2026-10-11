@@ -685,9 +685,10 @@ quick way to see what is left to give a recipe (see the profile below).
 (Pandoc's own behaviour). `office: {labels: off}` skips the PDF build (numbers are then counted).
 
 The same filter serves the other outputs when LaTeX is the problem: **the soffice fallback** (the Word file above, then LibreOffice: `pdfmd -e soffice report.md` is the `.docx` as LibreOffice draws it) now
-keeps the page size, margins and fonts, shows equations and draws what LaTeX can; a **Typst or WeasyPrint run after LaTeX
-failed** gets what the document says in LaTeX as native text or pictures instead of nothing; and HTML, Typst and
-WeasyPrint builds do it on request (`pdfmd-options: {office: {latex: auto}}`).
+keeps the page size, margins and fonts, shows equations and draws what LaTeX can. A **Typst or WeasyPrint PDF** (named
+with `-e`, or after LaTeX failed) gets what the document says in LaTeX as native text or pictures instead of nothing,
+whenever it has LaTeX they would drop; `raw: {typst: [typst]}` (or `office: {latex: off}`) keeps Pandoc's own behaviour.
+HTML and Typst *files* (`-o x.html`, `--to typst`) do it on request (`pdfmd-options: {office: {latex: auto}}`).
 
 ### Stopping part-way
 

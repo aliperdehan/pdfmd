@@ -84,6 +84,16 @@ class Filter(unittest.TestCase):
         self.assertIn('href="#nope"', done.stdout)
         self.assertNotIn("WARN", done.stderr)
 
+    def test_a_label_used_twice_is_kept_by_the_first_element(self):
+        # v3.28.2: "label <fig:tlc> occurs multiple times" stopped a lab report through the LaTeX filter
+        source = self.directory / "twice.md"
+        source.write_text("::: {#x}\nFirst.\n:::\n\n# Second {#x}\n\n[link](#x)\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-t", "typst", "--lua-filter", str(TYPST_LUA)], capture_output=True,
+                              text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.count("<x>"), 2)                 # the div's label and the link to it
+        self.assertIn("1 label on more than one element (x)", done.stderr)
+
 
 @unittest.skipUnless(PANDOC and TYPST, "needs Pandoc and Typst")
 class CommandLine(unittest.TestCase):

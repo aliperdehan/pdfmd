@@ -41,6 +41,64 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.2 — 2026-10-11
+
+Pre-edit state: commit `13529ad` (v3.28.1). The author's choice: Typst and WeasyPrint named with `-e` run the LaTeX
+filter, like Calibre, rather than only warning about what they drop.
+
+### Changed
+
+- **A Typst or WeasyPrint PDF no longer drops the document's LaTeX.** The LaTeX filter now runs whenever the document
+  has LaTeX these engines would drop, whether they were named (`-e typst`, `-e weasyprint`, `pdf-engine:`) or reached
+  in the chain. The filter makes `\ce`, `\SI` and `\cref` native and draws the rest with LaTeX, or lists what it could
+  not. Before this, `-e weasyprint` on "Water is \ce{H2O} and" printed "Water is and", and every tikzpicture was left
+  out, without a word (Pandoc only noted the `\ce` it found inside math).
+  - **What counts** (`latex_dropped`): a raw ```` ```{=latex} ```` block, a LaTeX command in the text, or chemistry and
+    units inside math (`\ce`, `\SI`, `\si`, `\qty`, `\num`..., which texmath does not know). Front matter and code are
+    not looked at. A document with only ordinary math is built as before: the filter rewrites math for Word (a long
+    display is broken at its equals signs, `$5$` becomes text), and that is not wanted where nothing would be lost.
+  - **References** take LaTeX's numbers, as in a Word file (`office: {labels}`, `auto` by default: one cached LaTeX
+    build of the document when it refers to labels), unless LaTeX is what failed. In `-r` report mode, labels stay
+    off, as for Calibre.
+  - **How to keep Pandoc's own behaviour:** `raw: {typst: [typst]}` (or `html:`) says what that family takes and
+    decides first; `office: {latex: off}` and `--no-auto officelatex` turn the filter off. HTML and Typst *files*
+    (`-o x.html`, `--to typst`) still use it only on request (`office: {latex: auto}`).
+- **`typst.lua` runs last, after the LaTeX filter**, so the references the filter makes are checked as well. LR4-5
+  stopped Typst on 18 references to figures and tables it had no label for, and on a label carried twice
+  (`fig:tlc`, a drawn figure environment and its own label). `typst.lua` now also keeps a label on its first
+  element only, with one WARN, as it already made links to missing labels text.
+- **Report mode (`-r`)** gets the filter on the same terms, `typst.lua` (it had neither) and WeasyPrint's plain
+  math (since v3.27.12 for one document; a report printed each formula twice as flat text).
+- The filter's warning names the output: "LaTeX the Typst output could not express" (it said "Word" for every
+  output).
+
+### Fixed
+
+- **A Typst or WeasyPrint run after LaTeX failed never got the filter** (since v3.24.x). The engine loop records a
+  failed engine by its TeX family (`luatex`, `xetex`, `pdftex`), and the check looked for engine names (`lualatex`...),
+  so it never matched. A document whose LaTeX build failed came out of Typst with its `\ce{H2O}` gone ("Water is here.",
+  checked on 3.28.1). Now "Water is H2O here.".
+
+Checked through pdfmd: `-e typst` and `-e weasyprint` on a document with `\ce` in text and in math and two
+tikzpictures with no `\usepackage{tikz}`. Both print H2O and CO2 and warn that the two pictures could not be drawn
+(before: "Water is and", no warning). A document whose LaTeX fails goes on to Typst with its chemistry kept. LR4-5 with
+`-e typst` (copy) builds in 19 s with the numbers and pictures cached: 31 pages and 10714 words, against 24
+pages, 9917 words and no scheme or figure on 3.28.1 (LaTeX: 29 pages, 12069 words). Typst sets `$\ce{CO2}$` as "C O2" (spaced letters in math); that is for the `\ce` converter
+(stage 6 A), next.
+
+### Tests
+
+- `tests/test_office_latex.py`:
+  - a named `-e typst` draws the tikzpicture and prints H2O, unless `raw: {typst: [typst]}` says Typst takes no LaTeX;
+  - Typst after a failed LaTeX gets the filter (fails on 3.28.1);
+  - `latex_dropped` on what counts (`\ce` in text, `\ce`/`\si` in math, a raw block, an environment) and what does not
+    (ordinary math, header-includes in the front matter, code);
+  - `office_fallback_wanted` lets the `raw` option decide first, and `latex_failed` knows the TeX families.
+- `tests/test_engine_filters.py`: a label on a div and on a heading is kept by the div, with one WARN (Pandoc
+  3.12 and 3.1.3).
+- Full suite: Pandoc 3.12, 987 tests OK (14 skipped). Pandoc 3.1.3, 986 OK (23 skipped) and 1 failure:
+  v3.28.1's caption test, whose `{#tbl:t}` Pandoc before 3.8.2 does not read as the table's label (v3.28.3).
+
 ## v3.28.1 — 2026-10-11
 
 Pre-edit state: commit `a2566ad` (v3.28.0).

@@ -512,3 +512,63 @@ class OtherOutputs(unittest.TestCase):
         info = subprocess.run(["pdfinfo", str(root / "d.pdf")], capture_output=True, text=True).stdout
         self.assertIn("A4", info)
         self.assertTrue(list((root / "cache").rglob("*.svg")))
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_a_named_typst_draws_the_latex_without_being_asked(self):
+        # v3.28.2: `-e typst` printed "Water ." and left the tikzpicture out, without a word
+        root = self.folder()
+        done = self.run_pdfmd(root, "-e", "typst")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("H2O", text.replace("\n", ""))
+        self.assertTrue(list((root / "cache").rglob("*.svg")))
+        said_no = self.folder("pdfmd-options:\n  raw: {typst: [typst]}\n")    # the document says Typst takes no LaTeX
+        self.assertEqual(self.run_pdfmd(said_no, "-e", "typst").returncode, 0)
+        self.assertFalse(list((said_no / "cache").rglob("*.svg")))
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_typst_after_latex_failed_gets_the_filter(self):
+        # the failed engines are recorded by TeX family (luatex, xetex, pdftex), which the check did not know: the
+        # 3.24.x fallback never ran
+        root = self.folder()
+        source = root / "d.md"
+        source.write_text(source.read_text(encoding="utf-8").replace("After.", "After. \\undefinedcommandxyz"),
+                          encoding="utf-8")
+        done = self.run_pdfmd(root, "-e", "")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("(typst;", done.stdout)
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("H2O", text.replace("\n", ""))
+
+
+class DroppedLatex(unittest.TestCase):
+    """Which documents a Typst or HTML writer would lose LaTeX from (pdfmd.latex_dropped, v3.28.2)."""
+
+    def dropped(self, text: str) -> bool:
+        import pdfmd
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.md"
+            path.write_text(text, encoding="utf-8")
+            return pdfmd.latex_dropped([path])
+
+    def test_what_counts(self):
+        self.assertTrue(self.dropped("Water \\ce{H2O}.\n"))
+        self.assertTrue(self.dropped("Gas $\\ce{CO2}$ and $5\\,\\si{mL}$.\n"))
+        self.assertTrue(self.dropped("```{=latex}\n\\vspace{1cm}\n```\n"))
+        self.assertTrue(self.dropped("\\begin{tikzpicture}\\draw (0,0) circle (1);\\end{tikzpicture}\n"))
+
+    def test_what_does_not(self):
+        self.assertFalse(self.dropped("Plain text, $\\alpha + \\beta = \\gamma$ and $$\\int_0^1 x\\,dx$$.\n"))
+        self.assertFalse(self.dropped("---\nheader-includes: |\n  \\usepackage{mhchem}\n---\n\nText.\n"))
+        self.assertFalse(self.dropped("Use `\\newline` or\n\n```tex\n\\section{x}\n```\n"))
+
+    def test_the_raw_option_decides_first_and_a_failed_latex_counts(self):
+        import pdfmd
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.md"
+            path.write_text("---\npdfmd-options:\n  raw: {typst: [typst]}\n---\n\nWater \\ce{H2O}.\n", encoding="utf-8")
+            self.assertFalse(pdfmd.office_fallback_wanted(path, [], set(), "typst", [path]))
+            self.assertTrue(pdfmd.office_fallback_wanted(path, [], set(), "html", [path]))     # html not mentioned
+            self.assertTrue(pdfmd.office_fallback_wanted(path, [], {"luatex"}, "typst", [path]))
+        self.assertTrue(pdfmd.latex_failed({"xetex"}))
+        self.assertFalse(pdfmd.latex_failed({"typst", "weasyprint"}))
