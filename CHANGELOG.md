@@ -41,6 +41,83 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.5 — 2026-10-11
+
+Pre-edit state: commit `9f7fd88` (v3.28.4).
+
+### Fixed
+
+- **A Word, OpenDocument or PowerPoint file held folders of the machine that built it.**
+  - **Custom properties:** Pandoc writes every metadata key it does not know into the file's custom properties
+    (File › Properties). pdfmd hands its Lua filters their settings that way:
+    - the LaTeX filter's `pdfmd-office-path`, `-profile`, `-fragments`, `-labels`, `-report` and `-preamble`;
+    - the diagram and raw filters' `pdfmd-raw-cache` (the cache folder, with or without the LaTeX filter, `.pptx`
+      included).
+
+    So a file passed on carried the home folder, with the user's name in it, and temporary paths. These keys, and
+    every other `pdfmd-` key (`pdfmd-options` included: settings for pdfmd, not properties of the document), are now
+    taken out of the finished file. The document's own keys stay, numbered from 2 again as Word numbers them.
+  - **Picture descriptions:** Pandoc also writes a picture's source into its description in Word and PowerPoint. For
+    a picture the LaTeX filter drew, that is a file in pdfmd's cache (19 pictures in LR4-5). A description naming a
+    file under pdfmd's cache, the temporary folder or the home folder now keeps the file's name alone. A relative path
+    of the document's own (`tlc/contour/plate-3_contour.png`) is left as it is.
+  - **Where:** one step after every office build (`office_finish`), the LaTeX filter's or not, `-r` included; an
+    `.odt`'s `mimetype` stays first and uncompressed.
+  - **Files already sent:** a `.docx` or `.odt` made with the LaTeX filter before this version has these paths in its
+    properties; one with a mermaid/dot/d2 block, a `.pptx` too.
+- **A house style's cover took the title and author out of a PDF's properties.** nulabreport's office profile draws
+  its own cover and takes `title` and `author` out of the metadata, so that the writer does not print them a second
+  time. The LaTeX filter now keeps what the document had (or `title-meta`/`author-meta`, which a partial build's
+  filter leaves), as plain text with LaTeX read (`\emph{trans}` is "trans"), and hands it on per output:
+  - **HTML** (Calibre, WeasyPrint): `pagetitle` and `author-meta`, as raw HTML. Pandoc writes its own literally, but
+    wraps a metadata value at 72 columns, and WeasyPrint kept those line breaks in the PDF's Title.
+  - **Typst:** `#set document(title: ..., author: ...)` at the start of the body. In `header-includes` it would be
+    undone: Pandoc 3.12's template sets `document(title: none)` after them. Typst takes it after content from 0.12
+    on (before, the build would stop), so pdfmd passes it only when `typst --version` says 0.12 or later. It is also
+    left out in columns, where Pandoc 3.1.3's template puts the body in a container that Typst refuses it in.
+  - **Word and OpenDocument:** the filter's report, from which pdfmd fills an empty Title and Author (several authors
+    `A; B`). LibreOffice's PDF takes them from there.
+
+Checked through pdfmd, LR4-5 (`title:` with `\emph{trans}`, one author):
+
+| Output | Title, before | Title, after (all with the author) |
+|---|---|---|
+| `-e calibre` | `report`, by `Unknown` | the full title, "trans-" kept |
+| `-e weasyprint` | `report` | the same |
+| `-e typst` | none | the same |
+| `-e soffice` | none | the same |
+| `.docx`, `.odt` (Pandoc 3.12, and 3.1.3) | empty | the same |
+| `report#discussion`, Calibre | `.report.pdfmd-section-h79hcvt9` (a temporary file's name), by `Unknown` | `... Reduction of -Cinnamaldehyde ...` (see below) |
+
+- A scan of every part of each `.docx`/`.odt` finds no folder and no `pdfmd-` key. The only `pdfmd-` strings left
+  are the names `media/pdfmd-N.svg` of the drawn pictures' SVGs.
+- The `.docx`'s links still all reach a bookmark (42 of 42, Pandoc 3.12 and 3.1.3).
+- `-r` to `.docx`, `.odt` and `.pptx`: the same.
+- The LibreOffice PDF's Info has no other key.
+
+Not fixed here:
+- A partial build's title loses "trans": nulabreport's filter leaves `title-meta` flattened by
+  `pandoc.utils.stringify`, which drops raw LaTeX. That is nulabreport's fix to make.
+- The LaTeX PDF's own Title has the same gap ("Reduction of -Cinnamaldehyde"), from before this version.
+- `-e typst` with Pandoc 3.1.3 stops on `#cite("key")`, which Typst 0.15 no longer takes. This is also the case
+  with v3.28.4.
+
+### Tests
+
+- `tests/test_office_latex.py`, new class `Properties`, through a cover profile that takes the title and authors out:
+  - a `.docx` and an `.odt` keep the title and authors in their properties and hold no folder or `pdfmd-` key;
+  - HTML's `<title>` and author meta, a long title on one line;
+  - Typst's `#set document`, only when pdfmd says the Typst takes it and not in columns;
+  - a document that keeps its own title is left alone;
+  - a partial build's `title-meta`;
+  - no `pdfmd-` key in a `.docx` or `.pptx` with the LaTeX filter off (a mermaid block);
+  - `finish_properties` fills only what is empty;
+  - a picture's folder out of its description;
+  - a Calibre PDF's Title and Author.
+- On `9f7fd88`'s code seven of the eight fail. The one that passes checks what must not change: a document keeping
+  its own title.
+- Full suite: Pandoc 3.12, 1006 tests OK; Pandoc 3.1.3, 1006 OK.
+
 ## v3.28.4 — 2026-10-11
 
 Pre-edit state: commit `fd9f00d` (v3.28.3).

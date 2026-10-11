@@ -33,6 +33,7 @@ local labels, crefnames, caption_sep, cref_capital = {}, {}, ". ", true
 local counters_by = {equation = 0, figure = 0, table = 0}
 local left_over = {}      -- {kind=, tex=}
 local counters = {math = 0, native = 0}
+local properties = {}     -- {title=, author=}: what a profile's cover took out (keep_properties)
 
 ---------------------------------------------------------------------------
 -- small helpers
@@ -1500,6 +1501,7 @@ function Meta(meta)
   if meta["pdfmd-office-mode"] then settings.mode = stringify(meta["pdfmd-office-mode"]) end
   if meta["pdfmd-office-fragments"] then settings.fragments = stringify(meta["pdfmd-office-fragments"]) end
   if meta["pdfmd-office-wanted"] then settings.wanted = stringify(meta["pdfmd-office-wanted"]) end
+  settings.typst_document = meta["pdfmd-office-typst-document"] ~= nil
   if meta["pdfmd-office-labels"] then
     local file = io.open(stringify(meta["pdfmd-office-labels"]), "r")
     if file then
@@ -1521,7 +1523,7 @@ local function write_report()
   local file = io.open(settings.report, "w")
   if not file then return end
   file:write(pandoc.json and pandoc.json.encode and pandoc.json.encode({
-    left_over = left_over, math = counters.math, native = counters.native}) or "")
+    left_over = left_over, math = counters.math, native = counters.native, properties = properties}) or "")
   file:close()
 end
 
@@ -1584,14 +1586,91 @@ local function odt_anchors(doc)
   return doc:walk({Table = anchor, Figure = anchor, Div = anchor})
 end
 
+-- The title and authors a reader sees in a file's properties (v3.28.5): a PDF's Title and Author, an HTML page's
+-- title, a Word or OpenDocument file's properties. A house style's profile that draws its own cover (nulabreport's)
+-- takes `title` and `author` out of the metadata, as the writer would print them a second time, and a partial build's
+-- filter may leave only `title-meta`: a Calibre or WeasyPrint PDF was then titled after the file ("report", by
+-- "Unknown"), a Typst PDF, a Word and an OpenDocument file had none. What the document had is kept for its properties:
+-- in HTML as `pagetitle` and `author-meta` (Pandoc writes them into the page's head, where Calibre and WeasyPrint read
+-- them); in Typst as a `set document` at the start of the body, after the template's own (which says "no title"), when
+-- pdfmd says the Typst there takes it (0.12 and later) and the body is not in columns (Pandoc 3.1.3's template sets
+-- them as a container, where Typst refuses it); for Word and OpenDocument in the report, from which pdfmd writes them
+-- into the file's properties (`properties`, declared at the top for write_report).
+
+-- a metadata value as one line of plain text: LaTeX left raw in it read by Pandoc's LaTeX reader first
+local function plain(value)
+  if value == nil then return nil end
+  local kind = pandoc.utils.type(value)
+  if kind == "string" then return trim(value) ~= "" and trim(value) or nil end
+  if kind ~= "Inlines" and kind ~= "Blocks" then return nil end
+  local function read(raw)
+    if raw.format ~= "tex" and raw.format ~= "latex" then return {} end
+    local ok, parsed = pcall(pandoc.read, raw.text, "latex")
+    return ok and pandoc.Str(stringify(parsed.blocks)) or {}
+  end
+  local walked = kind == "Inlines" and pandoc.Plain(value):walk({RawInline = read})
+    or pandoc.Div(value):walk({RawInline = read, RawBlock = function() return {} end})
+  local text = trim((stringify(walked):gsub("%s+", " ")))
+  return text ~= "" and text or nil
+end
+
+local function author_list(value)
+  if value == nil then return nil end
+  local list = pandoc.utils.type(value) == "List" and value or {value}
+  local names = {}
+  for _, author in ipairs(list) do
+    local name = pandoc.utils.type(author) == "table" and plain(author.name) or plain(author)
+    if name then names[#names + 1] = name end
+  end
+  return #names > 0 and names or nil
+end
+
+local function typst_string(text) return '"' .. text:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"' end
+
+local function html_text(text)
+  return (text:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"))
+end
+
+local function keep_properties(doc, before)
+  local meta = doc.meta
+  local title = meta.title == nil and plain(before.title or meta["title-meta"]) or nil
+  local authors = meta.author == nil and author_list(before.author or meta["author-meta"]) or nil
+  properties = {title = title, author = authors}
+  if FORMAT:match("^html") then
+    -- raw, as Pandoc's own are literal: text in a template variable is wrapped at 72 columns, and WeasyPrint kept the
+    -- line breaks of a long <title> in the PDF's Title
+    if title and meta.pagetitle == nil then meta.pagetitle = pandoc.MetaInlines({pandoc.RawInline("html", html_text(title))}) end
+    if authors and meta["author-meta"] == nil then
+      local list = pandoc.MetaList({})
+      for _, name in ipairs(authors) do list:insert(pandoc.MetaInlines({pandoc.RawInline("html", html_text(name))})) end
+      meta["author-meta"] = list
+    end
+  elseif FORMAT:match("^typst") and settings.typst_document and (title or authors) then
+    local variables = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.variables or {}
+    local columns = meta.columns ~= nil and stringify(meta.columns) or variables.columns and tostring(variables.columns)
+    if columns == nil or trim(columns) == "1" then
+      local fields = {}
+      if title then fields[#fields + 1] = "title: " .. typst_string(title) end
+      if authors then
+        local quoted = {}
+        for _, name in ipairs(authors) do quoted[#quoted + 1] = typst_string(name) end
+        fields[#fields + 1] = "author: (" .. table.concat(quoted, ", ") .. ",)"
+      end
+      doc.blocks:insert(1, pandoc.RawBlock("typst", "#set document(" .. table.concat(fields, ", ") .. ")"))
+    end
+  end
+  return doc
+end
+
 function Pandoc(doc)
   current_meta = doc.meta
+  local before = {title = doc.meta.title, author = doc.meta.author}
   if profile.pandoc then
     local ok, result = pcall(profile.pandoc, doc, helpers)
     if ok and result then doc = result
     elseif not ok then io.stderr:write("[pdfmd] the office profile's pandoc hook failed: " .. tostring(result) .. "\n") end
   end
-  doc = odt_anchors(drop_repeated_anchors(doc))
+  doc = keep_properties(odt_anchors(drop_repeated_anchors(doc)), before)
   write_report()
   if settings.mode == "collect" and settings.wanted then
     local file = io.open(settings.wanted, "w")

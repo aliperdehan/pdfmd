@@ -678,3 +678,147 @@ class DroppedLatex(unittest.TestCase):
             self.assertTrue(pdfmd.office_fallback_wanted(path, [], {"luatex"}, "typst", [path]))
         self.assertTrue(pdfmd.latex_failed({"xetex"}))
         self.assertFalse(pdfmd.latex_failed({"typst", "weasyprint"}))
+
+
+# a house style's cover, as nulabreport draws it: the title and authors taken out of the metadata (v3.28.5)
+COVER_PROFILE = ('return {pandoc = function(doc)\n'
+                 '  doc.meta.title = nil; doc.meta.author = nil\n'
+                 '  doc.blocks:insert(1, pandoc.Para({pandoc.Str("COVER")}))\n'
+                 '  return doc\nend}\n')
+# a straight quote and a backslash (in code: Pandoc's smart quotes would curl them) for the Typst string's escapes
+COVERED = ("---\ntitle: 'Reduction of \\emph{trans}-Cinnamaldehyde, `\"a\\b\"`'\n"
+           'author: ["A. One", "B. Two"]\n---\n\nBody with \\textbf{bold}.\n')
+COVERED_TITLE = 'Reduction of trans-Cinnamaldehyde, "a\\b"'
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Properties(unittest.TestCase):
+    """The title and authors a house style's cover took out stay in the file's properties, and pdfmd's own settings
+    (folders of the machine that built it) are not among them (v3.28.5)."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = Path(self.folder.name)
+        (self.root / "office.lua").write_text(COVER_PROFILE, encoding="utf-8")
+        (self.root / "d.md").write_text(COVERED, encoding="utf-8")
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=self.root,
+                              capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"),
+                                   "XDG_CONFIG_HOME": str(self.root / "config"), "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return done
+
+    def filtered(self, writer: str, *arguments: str) -> str:
+        done = subprocess.run(["pandoc", "d.md", "-t", writer, "-s", "--lua-filter", str(FILTER), "-M",
+                               f"pdfmd-office-profile={self.root / 'office.lua'}", "-M", "pdfmd-office-latex=auto",
+                               *arguments], cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def assert_private(self, path: Path):
+        with zipfile.ZipFile(path) as archive:
+            for name in archive.namelist():
+                text = archive.read(name).decode("utf-8", "replace")
+                self.assertNotIn("pdfmd-office", text, name)
+                self.assertNotIn("pdfmd-raw", text, name)
+                self.assertNotIn(str(self.root.resolve()), text, name)
+                self.assertNotIn(tempfile.gettempdir(), text, name)
+
+    def test_word_and_opendocument(self):
+        self.pdfmd("d.md", "-o", "d.docx")
+        with zipfile.ZipFile(self.root / "d.docx") as archive:
+            core = archive.read("docProps/core.xml").decode()
+            self.assertIn("COVER", archive.read("word/document.xml").decode())
+        self.assertIn(f"<dc:title>{COVERED_TITLE}</dc:title>", core)
+        self.assertIn("<dc:creator>A. One; B. Two</dc:creator>", core)
+        self.assert_private(self.root / "d.docx")
+        self.pdfmd("d.md", "-o", "d.odt")
+        meta = zipfile.ZipFile(self.root / "d.odt").read("meta.xml").decode()
+        self.assertIn(f"<dc:title>{COVERED_TITLE}</dc:title>", meta)
+        self.assertIn("<meta:initial-creator>A. One; B. Two</meta:initial-creator>", meta)
+        self.assert_private(self.root / "d.odt")
+        self.assertEqual(zipfile.ZipFile(self.root / "d.odt").infolist()[0].filename, "mimetype")
+
+    def test_html_and_typst(self):
+        page = self.filtered("html5")
+        self.assertIn(f"<title>{COVERED_TITLE.replace(chr(34), '&quot;')}</title>", page)
+        self.assertIn('<meta name="author" content="A. One" />', page)
+        self.assertIn('<meta name="author" content="B. Two" />', page)
+        wanted = '#set document(title: "Reduction of trans-Cinnamaldehyde, \\"a\\\\b\\"", author: ("A. One", "B. Two",))'
+        self.assertIn(wanted, self.filtered("typst", "-M", "pdfmd-office-typst-document=true"))
+        self.assertNotIn("#set document(", self.filtered("typst"))          # pdfmd did not say the Typst takes it
+        # in columns Pandoc 3.1.3's template puts the body in a container, where Typst refuses a document set rule
+        self.assertNotIn("#set document(", self.filtered("typst", "-M", "pdfmd-office-typst-document=true",
+                                                         "-V", "columns=2"))
+        # a long title on one line, as Pandoc writes its own (WeasyPrint kept the line breaks in the PDF's Title)
+        (self.root / "d.md").write_text(COVERED.replace(
+            "title: '", "title: '" + " ".join(["Long"] * 30) + " "), encoding="utf-8")
+        self.assertRegex(self.filtered("html5"), r"<title>(Long ){30}Reduction[^\n]*</title>")
+
+    def test_a_document_that_keeps_its_title_is_left_alone(self):
+        (self.root / "office.lua").write_text("return {}\n", encoding="utf-8")
+        self.assertNotIn("#set document(", self.filtered("typst", "-M", "pdfmd-office-typst-document=true"))
+        self.assertEqual(self.filtered("html5").count("<title>"), 1)
+
+    def test_a_partial_builds_title_meta(self):
+        # nulabreport.lua leaves only `title-meta` when it builds one part
+        (self.root / "office.lua").write_text("return {}\n", encoding="utf-8")
+        (self.root / "d.md").write_text("---\ntitle-meta: Part of a report\n---\n\nBody.\n", encoding="utf-8")
+        self.assertIn("<title>Part of a report</title>", self.filtered("html5"))
+
+    def test_none_of_pdfmds_settings_in_a_file_without_the_latex_filter(self):
+        # the diagram filter's cache folder was a custom property of a Word or PowerPoint file, the filter on or off
+        (self.root / "office.lua").unlink()
+        (self.root / "d.md").write_text("---\ntitle: T\nkeep: this\npdfmd-options:\n  office: {latex: off}\n---\n\n"
+                                        "```mermaid\ngraph TD; A-->B\n```\n", encoding="utf-8")
+        for name in ("d.docx", "d.pptx"):
+            self.pdfmd("d.md", "-o", name, "--no-cache")
+            custom = zipfile.ZipFile(self.root / name).read("docProps/custom.xml").decode()
+            self.assertNotIn("pdfmd-", custom)
+            self.assertIn('pid="2" name="keep"', custom)          # the document's own key stays, numbered from 2
+            self.assert_private(self.root / name)
+
+    def test_finish_properties_fills_only_what_is_empty(self):
+        from pdfmd_office import finish_properties
+        (self.root / "e.md").write_text("---\ntitle: Own\npdfmd-x: /somewhere\n---\n\nBody.\n", encoding="utf-8")
+        subprocess.run(["pandoc", "e.md", "-o", "e.docx"], cwd=self.root, check=True)
+        self.assertTrue(finish_properties(self.root / "e.docx", "Other", ["Someone"]))
+        with zipfile.ZipFile(self.root / "e.docx") as archive:
+            core = archive.read("docProps/core.xml").decode()
+            self.assertNotIn("pdfmd-x", archive.read("docProps/custom.xml").decode())
+        self.assertIn("<dc:title>Own</dc:title>", core)
+        self.assertIn("<dc:creator>Someone</dc:creator>", core)
+        self.assertFalse(finish_properties(self.root / "e.docx", "Other", ["Someone"]))     # nothing left to do
+
+    def test_a_pictures_folder_is_not_in_its_description(self):
+        # Pandoc writes a picture's source into a Word picture's description: for a picture the LaTeX filter drew, a
+        # file in pdfmd's cache, the home folder spelled out
+        from pdfmd_office import finish_properties
+        (self.root / "cache").mkdir()
+        (self.root / "cache" / "drawn.png").write_bytes(TINY_PNG)
+        (self.root / "e.md").write_text(f"![A dot]({(self.root / 'cache' / 'drawn.png').as_posix()})\n", encoding="utf-8")
+        subprocess.run(["pandoc", "e.md", "-o", "e.docx"], cwd=self.root, check=True)
+        before = zipfile.ZipFile(self.root / "e.docx").read("word/document.xml").decode()
+        self.assertIn((self.root / "cache").as_posix(), before)
+        self.assertTrue(finish_properties(self.root / "e.docx", folders=[str(self.root / "cache")]))
+        after = zipfile.ZipFile(self.root / "e.docx").read("word/document.xml").decode()
+        self.assertNotIn((self.root / "cache").as_posix(), after)
+        self.assertIn('descr="drawn.png"', after)
+        self.assertIn("A dot", after)                       # the description a reader sees stays
+
+    def test_a_calibre_pdf(self):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        if not shutil.which("ebook-convert"):
+            self.skipTest("needs Calibre")
+        self.pdfmd("d.md", "-e", "calibre", "-o", "d.pdf")
+        info = pypdf.PdfReader(str(self.root / "d.pdf")).metadata
+        self.assertEqual(info.get("/Title"), COVERED_TITLE)        # was "d", by "Unknown"
+        self.assertIn("A. One", info.get("/Author", ""))

@@ -148,6 +148,14 @@ Tables in an HTML engine's PDF (v3.28.3):
     WeasyPrint's rules go into `header-includes`, so an --include-in-header of your own replaces them, as it
     replaces the document's.
 
+A file's properties (v3.28.5):
+    A Word, OpenDocument or PowerPoint file carries none of pdfmd's own settings among its custom properties (Pandoc
+    writes every metadata key it does not know there, and pdfmd hands its filters folders of this machine that way:
+    `pdfmd-office-path`, `pdfmd-raw-cache`), and a Word or PowerPoint picture's description names a file of pdfmd's
+    cache, the temporary folder or the home folder by its name alone. When a house style's cover takes the title and
+    authors out of the metadata (nulabreport), the file's properties keep them: a Calibre, WeasyPrint, Typst (0.12 and
+    later) or LibreOffice PDF's Title and Author, a Word or OpenDocument file's Title and Author.
+
 Links Typst would stop on (v3.27.11):
     LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
     PDF or a .typ file) pdfmd_lua/typst.lua runs last and makes such a link its text, with one WARN naming the anchors.
@@ -1324,7 +1332,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.4"
+PDFMD_VERSION = "3.28.5"
 import argparse
 import csv
 import filecmp
@@ -5083,14 +5091,43 @@ class OfficeArguments(list):
     context: dict = {}
 
 
-def office_finish(arguments, md_path: Path, verbose: bool) -> None:
-    """After the Pandoc run: say what the LaTeX filter could not make native."""
-    report = getattr(arguments, "report", None)
-    if report is None or not report.is_file():
+def office_properties(arguments, md_path: Path, data: dict) -> None:
+    """A Word, OpenDocument or PowerPoint file's properties, the LaTeX filter's or not (v3.28.5): none of pdfmd's own
+    settings (`pdfmd-office-path`, `pdfmd-raw-cache`: folders of this machine) among its custom properties, no folder
+    of this machine in a picture's description (the name of the file alone), and the title and authors a house style's
+    cover took out of the metadata in an empty Title and Author."""
+    output = ((getattr(arguments, "context", None) or {}).get("output"))
+    module = office_module()
+    if module is None or output is None or Path(output).suffix.lower() not in (".docx", ".odt", ".pptx") \
+            or not Path(output).is_file():
         return
+    kept = data.get("properties") if isinstance(data.get("properties"), dict) else {}
+    title = kept.get("title") if isinstance(kept.get("title"), str) else None
+    authors = [name for name in kept.get("author") or [] if isinstance(name, str)] if isinstance(
+        kept.get("author"), list) else []
+    # a picture pdfmd drew is a file in its cache, and Pandoc writes its source into a Word picture's description
+    folders = []
+    for folder in (Path.home(), cache_root(), Path(tempfile.gettempdir())):
+        folders += [str(folder), str(folder.resolve())]
     try:
-        data = json.loads(report.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        module.finish_properties(Path(output), title, authors, folders)
+    except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
+        print(f"WARN  {md_path}: could not finish the properties of {Path(output).name} ({error})", file=sys.stderr)
+
+
+def office_finish(arguments, md_path: Path, verbose: bool) -> None:
+    """After the Pandoc run: the file's properties finished (office_properties), and what the LaTeX filter could not
+    make native said."""
+    report = getattr(arguments, "report", None)
+    data: dict = {}
+    if report is not None and report.is_file():
+        try:
+            loaded = json.loads(report.read_text(encoding="utf-8"))
+            data = loaded if isinstance(loaded, dict) else {}
+        except (OSError, ValueError):
+            pass
+    office_properties(arguments, md_path, data)
+    if not data:
         return
     left = data.get("left_over") or []
     done = int(data.get("math", 0)) + int(data.get("native", 0))
@@ -5122,7 +5159,7 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         arguments = OfficeArguments(reference_arguments)
         arguments.scratch = Path(scratch)
         arguments.context = {"md_path": md_path, "metadata_files": metadata_files, "variables": variables,
-                             "no_auto": no_auto, "target": target, "note": note}
+                             "no_auto": no_auto, "target": target, "note": note, "output": output}
         module = office_module()
         options = office_options(md_path, metadata_files, no_auto)
         latex = str(options.get("latex", "auto" if target in ("docx", "odt") else "")).casefold()
@@ -5143,6 +5180,10 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                 note("OFFICE", f"{md_path}: profile {display_path(profile)}")
             arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'images' if latex == 'images' else 'auto'}",
                                           "-M", f"pdfmd-office-report={arguments.report}"]
+            if target == "typst" and typst_version() >= (0, 12):
+                # a title a house style's cover took out goes back into the PDF's properties by a `set document` in
+                # the body, which Typst takes there from 0.12 on (before, only at the very start: the build would stop)
+                arguments.filter_arguments += ["-M", "pdfmd-office-typst-document=true"]
             if labels is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]
             # where a file the document pulls in (\input, a package's chemicals.tex) may be: its own folder, the
@@ -14824,6 +14865,12 @@ def engine_version_line(engine: str) -> str:
     except OSError:
         return ""
     return out.splitlines()[0] if out else ""
+
+
+def typst_version() -> tuple[int, ...]:
+    """The version of the `typst` on PATH, (0,) when there is none or it says something else."""
+    found = re.search(r"(\d+(?:\.\d+)+)", engine_version_line("typst"))
+    return tuple(int(part) for part in found.group(1).split(".")) if found else (0,)
 
 
 def sha1_file(path: Path) -> str | None:

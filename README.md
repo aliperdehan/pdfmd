@@ -56,6 +56,7 @@ turns that knowledge into defaults:
   given a Word recipe; what is left (tikz, chemfig, math Pandoc cannot convert) is drawn by LaTeX in the document's
   own preamble and embedded as vector pictures. `pdfmd-options: {office: {latex: auto|images|off}}`, `--no-auto
   officelatex` and `pdfmd --setup` switch it (see [Word and OpenDocument output](#word-and-opendocument-output)).
+  The file's properties hold the document's title and authors, and nothing of the machine that built it.
 - **It handles every script and emoji.** Text the main font cannot draw (Arabic,
   Hebrew, Chinese, Japanese, Korean, Greek, Cyrillic with Kazakh letters, Indic and
   more) is set run by run in an installed font for its script, emoji become colour
