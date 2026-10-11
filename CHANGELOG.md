@@ -41,6 +41,60 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.3 — 2026-10-11
+
+Pre-edit state: commit `cb7adde` (v3.28.2).
+
+### Fixed
+
+- **"Table 1. Table 1: A table" with a Pandoc before 3.8.2.** Up to 3.8.2 a table caption's `{#tbl:x}` is caption text,
+  not the table's identifier. pandoc-crossref (0.3.16 with Pandoc 3.1.3) numbers the caption and puts the label on a
+  Div around the table, so v3.28.1's check, which reads the table's own identifier, did not see it. The LaTeX filter
+  now takes its number back when such a Div holds the table and crossref has numbered the caption. The table still
+  counts, and a Div's label alone takes no number away. This was found by the full suite on Pandoc 3.1.3, where
+  v3.28.1's simulated test could not work (the test now needs 3.8.2). It was checked with the real pandoc-crossref
+  0.3.16 built for Pandoc 3.1.3.
+- **Captions in a Calibre or WeasyPrint PDF.** Pandoc's own page style is for a screen. It makes a table a full-width
+  block that scrolls sideways (`display: block; overflow-x: auto`) and lets a word break anywhere.
+  - Calibre (3.28.0) cut a caption off at the width of a narrow table: "Table 1: Label", "Table 2: Secon".
+  - WeasyPrint (since it became an engine) set the caption a syllable a line.
+  - While that style is in (no `--css` of your own), a table is now a table again. It sits at its natural width,
+    centred, as LaTeX's longtable sets it.
+  - Calibre's caption is up to 4in wide (longtable's `\LTcapwidth`); a narrower table widens to it.
+  - WeasyPrint has no `max-content` width, so its caption is as wide as the table. The table is at least 4in wide,
+    and the caption is centred and breaks between words.
+  - A numbered equation (the LaTeX filter's three-cell table) spans the line with its number at the margin, without
+    a table's rules. Before, it shrank to its content.
+  - Calibre gets these rules in its `--extra-css`, only when the page's `<head>` has Pandoc's table style.
+    WeasyPrint gets them from `pdfmd_lua/weasyprint.lua`, in `header-includes`, so the document's own
+    header-includes stay. An `--include-in-header` replaces them, as it replaces the document's own.
+  - Decided here: natural width rather than Pandoc's `width: 100%`, as the LaTeX PDF has it. Column widths a document
+    gives (a long pipe-table divider) were already lost under Pandoc's style in both engines (the inner table is
+    `auto` wide) and still are; honouring them is left to the CSS stage.
+
+Checked through pdfmd:
+- Pandoc 3.1.3 with pandoc-crossref 0.3.16, a `{#tbl:t}` table to `.docx`: "Table 1: Labelled", "Table 2: Second".
+  The same document with `-e calibre`.
+- A narrow table with a long caption, a wide table and a numbered `equation`, with `-e calibre` and `-e weasyprint`
+  on Pandoc 3.12 and 3.1.3. Looked at the rendered pages; `pdftotext` reads every caption whole.
+- The filter adds its style with Pandoc's own, keeps a document's `header-includes` (one or a list), and adds
+  nothing with `--css` or `document-css: false`, on both Pandocs.
+
+### Tests
+
+- `tests/test_office_latex.py`: the label on a Div around the table, as crossref puts it before Pandoc 3.8.2 (every
+  Pandoc). The simulated `{#tbl:t}` caption test needs 3.8.2. The new test spells its no-break spaces as ` `; the
+  older ones in the file carry them as invisible characters.
+- `tests/test_calibre.py`: the table style only while Pandoc's own is in; a narrow table's caption is whole in the PDF.
+- `tests/test_engine_filters.py`: weasyprint.lua's style (not with `--css`, not for Typst, the document's
+  header-includes kept); a narrow table's caption is whole in a WeasyPrint PDF.
+- The five new tests fail on 3.28.2's code (four failures, one error).
+- Full suite: Pandoc 3.12, 992 tests OK (14 skipped); Pandoc 3.1.3, 992 OK (24 skipped).
+
+Also checked: LR4-5 with `-e calibre` is 28 pages instead of 35, with the same text (about 10,800 words). Under
+Pandoc's style each table and equation was one unbreakable block (a scrolling element is printed whole), so it
+jumped to the next page and left half-empty pages. Tables now break across pages, the header row repeated.
+
 ## v3.28.2 — 2026-10-11
 
 Pre-edit state: commit `13529ad` (v3.28.1). The author's choice: Typst and WeasyPrint named with `-e` run the LaTeX

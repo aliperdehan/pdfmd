@@ -192,6 +192,7 @@ class Documents(unittest.TestCase):
 
     TABLES = "| a |\n|---|\n| 1 |\n\n: {numbered} {{#tbl:t}}\n\n| b |\n|---|\n| 2 |\n\n: Second\n"
 
+    @needs_pandoc(3, 8, 2, why="a table caption's {#tbl:t} is the table's label from 3.8.2")
     def test_a_caption_pandoc_crossref_numbered_is_not_numbered_again(self):
         # it read "Table 1: Table 1: Labelled" in every Word file, LibreOffice and Calibre PDF (v3.28.1)
         text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Table 1: Labelled")))
@@ -201,6 +202,16 @@ class Documents(unittest.TestCase):
         text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Tab. 1: Labelled"),
                                                         "-M", "tableTitle=Tab."))
         self.assertNotIn("Table 1. Tab.", text)
+
+    def test_the_label_on_a_div_around_the_table_as_crossref_puts_it_before_pandoc_3_8_2(self):
+        # pandoc-crossref 0.3.16 with Pandoc 3.1.3: Div {#tbl:t} [Table "" "Table 1: Labelled"] (v3.28.3)
+        wrapped = "::: {{#tbl:t}}\n| a |\n|---|\n| 1 |\n\n: {numbered}\n:::\n\n| b |\n|---|\n| 2 |\n\n: Second\n"
+        text = re.sub(r"<[^>]+>", "", self.document_xml(wrapped.format(numbered="Table 1: Labelled")))
+        self.assertIn("Table 1: Labelled", text)                     # crossref's own words have a plain space
+        self.assertNotIn("Table 1. Table", text)                 # the filter's number has a no-break space
+        self.assertIn("Table 2. Second", text)
+        text = re.sub(r"<[^>]+>", "", self.document_xml(wrapped.format(numbered="Labelled")))
+        self.assertIn("Table 1. Labelled", text)                # a div's label alone numbers nothing away
 
     def test_a_crossref_label_without_crossref_is_still_numbered(self):
         text = re.sub(r"<[^>]+>", "", self.document_xml(self.TABLES.format(numbered="Labelled")))

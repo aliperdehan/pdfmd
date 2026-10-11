@@ -1387,6 +1387,28 @@ function Table(el)
   return number_caption(el, "table") or (sized and el or nil)
 end
 
+-- Before Pandoc 3.8.2 a table's `{#tbl:x}` is caption text, not its identifier: pandoc-crossref numbers the caption and
+-- puts the label on a Div around the table. The Div is walked after the table, so the number given there is taken back
+-- here (v3.28.3; it still read "Table 1. Table 1: A table").
+function Div(el)
+  if off() or #el.content ~= 1 or el.identifier == "" then return nil end
+  local inner = el.content[1]
+  local kind = (inner.t == "Table" and "table") or (inner.t == "Figure" and "figure") or nil
+  if not kind or (inner.identifier or "") ~= "" or not inner.caption or #inner.caption.long == 0 then return nil end
+  local first = inner.caption.long[1]
+  local ours = (first.t == "Plain" or first.t == "Para") and first.content[1] or nil
+  local prefix = caption_label(kind) .. "\u{00A0}"
+  if not ours or ours.t ~= "Str" or ours.text:sub(1, #prefix) ~= prefix
+      or ours.text:sub(-#caption_sep) ~= caption_sep then
+    return nil
+  end
+  local rest = first:clone()
+  rest.content:remove(1)
+  if not crossref_numbered(el, kind, rest) then return nil end
+  first.content:remove(1)
+  return el
+end
+
 -- LaTeX in `header-includes` (and the include-before/after keys) is the document's preamble, not content:
 -- Pandoc's filters walk the metadata too, so without this each such block was drawn as a fragment and
 -- failed ("can be used only in preamble"). The Word, ODF, HTML and Typst writers do not use it anyway.
@@ -1497,6 +1519,6 @@ end
 return {
   {Meta = Meta},
   {Math = Math, RawInline = RawInline, Image = asset_image},
-  {RawBlock = RawBlock, Para = Para, Figure = Figure, Table = Table},
+  {RawBlock = RawBlock, Para = Para, Figure = Figure, Table = Table, Div = Div},
   {Pandoc = Pandoc},
 }

@@ -138,6 +138,16 @@ Math in WeasyPrint (v3.27.12):
     `-e weasyprint` pdfmd gives Pandoc --math-method=plain (unless the command line chooses the math) and
     pdfmd_lua/weasyprint.lua says once that the math is text. A direct .html page with MathML goes to a browser first.
 
+Tables in an HTML engine's PDF (v3.28.3):
+    Pandoc's own page style is for a screen: a table is a full-width block that scrolls sideways, and a word may
+    break anywhere. On paper Calibre cut a caption off at the width of a narrow table and WeasyPrint set it a syllable
+    a line. While that style is in (no --css of your own), a table is a table again, at its natural width and
+    centred as LaTeX sets it; Calibre's caption is up to 4in wide as in LaTeX. WeasyPrint has no max-content width:
+    its caption is as wide as the table, which is at least 4in, and breaks between words. A numbered equation (the
+    LaTeX filter's three-cell table) spans the line with its number at the margin, without a table's rules.
+    WeasyPrint's rules go into `header-includes`, so an --include-in-header of your own replaces them, as it
+    replaces the document's.
+
 Links Typst would stop on (v3.27.11):
     LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
     PDF or a .typ file) pdfmd_lua/typst.lua runs last and makes such a link its text, with one WARN naming the anchors.
@@ -1314,7 +1324,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.2"
+PDFMD_VERSION = "3.28.3"
 import argparse
 import csv
 import filecmp
@@ -11275,7 +11285,8 @@ def typst_filter_args(writer: str) -> list[str]:
 def weasyprint_math_args(engine: str, pandoc_options: list[str]) -> list[str]:
     """For WeasyPrint (v3.27.12), which does not draw MathML (Pandoc's default HTML math printed each formula twice as
     flat text): Pandoc's plain math, simple formulas in Unicode and the others as TeX, unless the command line chooses
-    the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text."""
+    the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text and (v3.28.3) keeps a table's
+    caption whole."""
     if engine != "weasyprint":
         return []
     out = [] if any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options) else html_math_args("plain")
@@ -15294,6 +15305,15 @@ CALIBRE_OPTIONS = ("--disable-font-rescaling", "--pdf-default-font-size", "16", 
 # near-black text on an off-white page, which Calibre prints as a grey tint (it does not apply `@media print`)
 CALIBRE_CSS = ("html { color-scheme: light; color: black; background-color: white; }\n"
                "body { max-width: none; margin: 0; padding: 0; background-color: transparent; }\n")
+# and its tables are full-width blocks that scroll sideways (`display: block; overflow-x: auto`): on paper a caption was
+# cut off at the width of a narrow table ("Table 1: Labe"). While that style is in, a table is a table at its natural
+# width, centred, and its caption up to 4in wide, as LaTeX's longtable sets them (v3.28.3). A numbered equation (the
+# LaTeX filter's three-cell table) spans the line, its number at the margin, without the rules of a table.
+PANDOC_TABLE_STYLE_RE = re.compile(r"\btable\s*\{[^{}]*overflow-x:\s*auto")
+CALIBRE_TABLE_CSS = ("table { display: table; width: auto; overflow: visible; margin-left: auto; margin-right: auto; }\n"
+                     "table caption { width: max-content; max-width: 4in; margin-left: auto; margin-right: auto; }\n"
+                     'table[data-custom-style="PdfmdEquation"] { width: 100%; }\n'
+                     'table[data-custom-style="PdfmdEquation"] tbody { border: none; }\n')
 
 
 @contextmanager
@@ -15345,7 +15365,8 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     if binary is None:
         return subprocess.CompletedProcess(["ebook-convert"], 1, "", "Calibre's ebook-convert was not found")
     css = html.with_name("pdfmd-calibre.css")
-    css.write_text(CALIBRE_CSS, encoding="utf-8")
+    head = html.read_text(encoding="utf-8", errors="replace").split("</head>", 1)[0]
+    css.write_text(CALIBRE_CSS + (CALIBRE_TABLE_CSS if PANDOC_TABLE_STYLE_RE.search(head) else ""), encoding="utf-8")
     produced = html.with_name("document.pdf")
     cmd = [binary, str(html), str(produced), *CALIBRE_OPTIONS, "--extra-css", str(css), *page_options]
     environment = dict(os.environ)

@@ -111,6 +111,24 @@ class Commands(unittest.TestCase):
                                    "--pdf-page-margin-bottom", "72"])
 
 
+NARROW_TABLE = "| a |\n|---|\n| 1 |\n\n: A rather long caption for a narrow table, set whole\n"
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class TableStyle(unittest.TestCase):
+    def test_only_while_pandocs_own_style_is_in(self):
+        # v3.28.3: Pandoc's `table { display: block; overflow-x: auto }` cut a caption off at a narrow table's width
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "doc.md").write_text(NARROW_TABLE, encoding="utf-8")
+            (Path(folder) / "own.css").write_text("", encoding="utf-8")
+            for extra, expected in (([], True), (["--css", "own.css"], False)):
+                page = subprocess.run(["pandoc", "doc.md", "-s", "-t", "html5", *extra], cwd=folder, capture_output=True,
+                                      text=True, encoding="utf-8").stdout
+                head = page.split("</head>", 1)[0]
+                self.assertEqual(bool(pdfmd.PANDOC_TABLE_STYLE_RE.search(head)), expected, extra)
+        self.assertIn('data-custom-style="PdfmdEquation"', pdfmd.CALIBRE_TABLE_CSS)
+
+
 @unittest.skipUnless(shutil.which("pandoc") and pdfmd.resolve_calibre(), "needs Pandoc and Calibre")
 class Builds(unittest.TestCase):
     def test_a_document(self):
@@ -136,6 +154,23 @@ class Builds(unittest.TestCase):
             text = "".join(page.extract_text() for page in reader.pages)
             self.assertIn("More words.", text)
             self.assertEqual(len(reader.pages), 1)      # no page break before each section, 12pt text
+
+    def test_a_caption_is_not_cut_off_at_its_tables_width(self):
+        # v3.28.3: it read "Table 1: A rather / long / caption / for a / narrow" and the rest of each line was gone
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "doc.md").write_text("---\ntitle: Trial\n---\n\n" + NARROW_TABLE, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
+                                  cwd=root, capture_output=True, text=True,
+                                  env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"),
+                                       "XDG_CONFIG_HOME": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            text = " ".join("".join(page.extract_text() for page in pypdf.PdfReader(str(root / "doc.pdf")).pages).split())
+            self.assertIn("A rather long caption for a narrow table, set whole", text)
 
 
 if __name__ == "__main__":

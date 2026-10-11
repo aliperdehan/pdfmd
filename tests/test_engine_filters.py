@@ -27,6 +27,7 @@ PANDOC = shutil.which("pandoc")
 TYPST = shutil.which("typst")
 WEASYPRINT = shutil.which("weasyprint")
 TYPST_LUA = ROOT / "pdfmd_lua" / "typst.lua"
+WEASYPRINT_LUA = ROOT / "pdfmd_lua" / "weasyprint.lua"
 
 DOCUMENT = """\
 # Head {#h}
@@ -83,6 +84,25 @@ class Filter(unittest.TestCase):
         done = self.convert("html")
         self.assertIn('href="#nope"', done.stdout)
         self.assertNotIn("WARN", done.stderr)
+
+    def test_weasyprint_gets_a_table_style_while_pandocs_own_is_in(self):
+        # v3.28.3: Pandoc's screen style set a narrow table's caption a syllable a line in WeasyPrint
+        source = self.directory / "styled.md"
+        source.write_text("---\nheader-includes: |\n  ```{=html}\n  <meta name=\"own\" content=\"kept\">\n  ```\n---\n\n"
+                          "| a |\n|---|\n| 1 |\n\n: Caption\n", encoding="utf-8")
+        (self.directory / "own.css").write_text("", encoding="utf-8")
+
+        def page(*extra: str) -> str:
+            done = subprocess.run([PANDOC, str(source), "-s", "-t", "html5", "--lua-filter", str(WEASYPRINT_LUA), *extra],
+                                  capture_output=True, text=True, encoding="utf-8", cwd=self.directory)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stdout
+
+        plain = page()
+        self.assertIn("min-width: 4in", plain)
+        self.assertIn('name="own"', plain)                           # the document's own header-includes stay
+        self.assertNotIn("min-width: 4in", page("--css", "own.css"))  # a stylesheet of one's own replaces Pandoc's
+        self.assertNotIn("min-width: 4in", page("-t", "typst"))
 
     def test_a_label_used_twice_is_kept_by_the_first_element(self):
         # v3.28.2: "label <fig:tlc> occurs multiple times" stopped a lab report through the LaTeX filter
@@ -173,6 +193,14 @@ class WeasyPrintMath(unittest.TestCase):
         done = self.build("---\ntitle: M\n---\n\nJust words.\n")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotIn("typeset math", done.stdout + done.stderr)
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_a_narrow_tables_caption_breaks_between_words(self):
+        # v3.28.3: "Ta / ble / 1: / A / rat / her" at the width of a one-column table
+        done = self.build("---\ntitle: M\n---\n\n| a |\n|---|\n| 1 |\n\n: A rather long caption for a narrow table\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("A rather long caption for a narrow table", " ".join(text.split()))
 
 
 if __name__ == "__main__":
