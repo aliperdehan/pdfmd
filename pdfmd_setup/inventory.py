@@ -88,7 +88,7 @@ FLAGS: dict[str, str | Omitted] = {
     "preset": "options.preset", "global_metadata": "options.global-metadata", "presets": CMD,
     "split": RUN, "split_depth": RUN, "list_parts": CMD,
     "no_auto": "options.no-auto",
-    "verbose": RUN, "no_citeproc": RUN, "full_paths": RUN, "debug": RUN, "open": RUN, "keep_aux": RUN, "watch": RUN,
+    "verbose": RUN, "no_citeproc": RUN, "full_paths": RUN, "debug": RUN, "open": RUN, "bopen": RUN, "keep_aux": RUN, "watch": RUN,
     "stamp": "options.stamp.enabled", "no_stamp": "options.stamp.enabled", "stamp_mode": "options.stamp.mode",
     "stamp_store": "options.stamp.store",
     "history_to_file": CMD, "history_to_notes": CMD, "history": CMD, "history_all": CMD, "history_diff": CMD,

@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.19"
+PDFMD_VERSION = "3.28.20"
 import argparse
 import csv
 import filecmp
@@ -14473,6 +14473,48 @@ def default_output_path(path: Path, target_format: str) -> Path:
     return path.with_suffix(FORMAT_EXTENSION.get(target_format, f".{target_format}"))
 
 
+# --bopen SPEC (v3.28.20): which of a batch's finished files are opened. A spec is a comma list of selectors, each with
+# any whole number N from 1: fN the first N, lN the last N, flN the first half and the last half (the first gets the odd
+# one: fl15 = 8 + 7), eN every Nth (the Nth, the 2Nth ...), all (or no spec). The files chosen by any selector open, once
+# each, in the order the batch lists them.
+BOPEN_RE = re.compile(r"^(?:(?P<all>all|a)|(?P<kind>fl|f|l|e)(?P<n>[0-9]+))$", re.IGNORECASE)
+BOPEN_HELP = "all, fN (first N), lN (last N), flN (first half and last half), eN (every Nth); joined by commas: f2,l3"
+
+
+def parse_bopen(spec: str) -> list[tuple[str, int]]:
+    """The selectors of a --bopen spec as (kind, N); kind is all, f, l, fl or e. Stops with the grammar when it is not one."""
+    selectors: list[tuple[str, int]] = []
+    for word in re.split(r"[,;]", re.sub(r"\s+", "", str(spec))):
+        if not word:
+            continue
+        found = BOPEN_RE.match(word)
+        if not found or (found.group("n") is not None and int(found.group("n")) < 1):
+            raise SystemExit(f"--bopen {spec!r}: {word!r} is not a selector. A spec is {BOPEN_HELP}")
+        selectors.append(("all", 0) if found.group("all") else (found.group("kind").lower(), int(found.group("n"))))
+    if not selectors:
+        raise SystemExit(f"--bopen {spec!r}: empty. A spec is {BOPEN_HELP}")
+    return selectors
+
+
+def bopen_indices(spec: str, count: int) -> list[int]:
+    """The positions (0-based, in order) of ``count`` files that ``spec`` selects."""
+    chosen: set[int] = set()
+    for kind, number in parse_bopen(spec):
+        if kind == "all":
+            chosen.update(range(count))
+        elif kind == "f":
+            chosen.update(range(min(number, count)))
+        elif kind == "l":
+            chosen.update(range(max(0, count - number), count))
+        elif kind == "fl":
+            first = (number + 1) // 2
+            chosen.update(range(min(first, count)))
+            chosen.update(range(max(0, count - (number - first)), count))
+        else:
+            chosen.update(range(number - 1, count, number))
+    return sorted(chosen)
+
+
 def open_file(path: Path) -> None:
     """Open a finished file with the platform's default viewer, for --open."""
     if sys.platform == "win32":
@@ -20428,6 +20470,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Implies --verbose. Use this instead of guessing which engine to force "
                              "with --engine when a document's rendered output doesn't match what the "
                              "Markdown predicts and the short reason alone isn't enough to tell why")
+    parser.add_argument("--bopen", nargs="?", const="all", default=None, metavar="SPEC",
+                        help="in a batch (-b), open the finished files when it is done, which of them SPEC says: "
+                             + BOPEN_HELP + " (fl15 = 8 first and 7 last; no SPEC = all). In a single-file build it is --open")
     parser.add_argument("--open", action="store_true",
                         help="open the finished file (via macOS 'open', Linux 'xdg-open' or Windows' default app) once "
                              "conversion succeeds. Applies to single-file and report/book mode, "
@@ -20703,6 +20748,16 @@ def main() -> None:
     parser, hidden = command_line_parser()
     args, pandoc_options = parser.parse_known_args()
     refuse_disabled(args, hidden, parser)
+    if args.bopen is not None:
+        try:
+            parse_bopen(args.bopen)
+        except SystemExit:
+            if not Path(args.bopen).exists():
+                raise
+            args.path = [Path(args.bopen), *(args.path or [])]       # `--bopen notes`: the folder, not a spec
+            args.bopen = "all"
+        if not args.batch:
+            args.open = True
     if hidden or args.disabled:
         os.environ[DISABLED_OK_ENV] = "1"          # pdfmd's own child processes are not refused again
     if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
@@ -21626,9 +21681,9 @@ def main() -> None:
             preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
             announce_preambles(preambles)
             return preambles
-        if args.open:
-            print("WARN  --open is ignored in batch mode (-b); it would open every converted file",
-                 file=sys.stderr)
+        if args.open and args.bopen is None:
+            print("WARN  --open is ignored in batch mode (-b); it would open every converted file "
+                  "(--bopen SPEC opens the ones you say)", file=sys.stderr)
         def file_metadata_and_engines(file):
             # metadata_for(file) is looked up once and reused for both the
             # engine restriction (which may now fall through to this same
@@ -21833,6 +21888,15 @@ def main() -> None:
         print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{built_name(result)}{engine_label(result)}")
         if error:
             print(error)
+    if args.batch and args.bopen is not None:
+        built = [Path(result.output) for result in results
+                 if result[1] and getattr(result, "output", None) is not None and Path(result.output).is_file()]
+        picked = [built[index] for index in bopen_indices(args.bopen, len(built))]
+        for path in picked:
+            open_file(path)
+        if picked:
+            print(f"OPENED  {len(picked)} of {len(built)} ({args.bopen}): " + ", ".join(path.name for path in picked[:6])
+                  + (f", +{len(picked) - 6} more" if len(picked) > 6 else ""))
     if native_auto and not failures:
         offer_native_upgrade()
     if not failures:

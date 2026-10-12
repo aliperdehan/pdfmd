@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.20 — 2026-10-13
+
+Pre-edit state: commit `2e7e0a3` (v3.28.19).
+
+### Added
+
+- **`--bopen [SPEC]` opens some of a batch's finished files when the batch is done.** `--open` is still ignored in a batch
+  (it would open every file) and its warning now points here. A SPEC is a comma list of selectors, each with any whole
+  number N from 1 (nothing is fixed at 15 or 10): `fN` the first N, `lN` the last N, `flN` the first half and the last half
+  (the first gets the odd one: `fl15` is 8 + 7), `eN` every Nth file (the Nth, the 2Nth ...), `all`; no SPEC means all.
+  The union opens, each file once, in the order the batch lists them (not the order parallel workers finish), only files
+  that were built; `OPENED  3 of 6 (f2,l1): d1.html, d2.html, d6.html` says which. A SPEC that is not one stops before
+  anything is built and prints the grammar. In a single-file or report build `--bopen` is `--open`. A folder written right
+  after a bare `--bopen` (`pdfmd --bopen notes -b`) is taken as the folder, not as a SPEC.
+- Tests: `tests/test_bopen.py` (the selectors, bad specs, a batch with a fake opener on PATH, with and without `-j`).
+
+---
+
 ## v3.28.19 — 2026-10-13
 
 Pre-edit state: commit `ad3f1f0` (v3.28.18).
