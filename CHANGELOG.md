@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.17 — 2026-10-13
+
+Pre-edit state: commit `cd7cd52` (v3.28.16).
+
+### Fixed
+
+- **A document with only raw blocks no longer gets the code font.** `has_code_spans()` took any backtick for code, so a
+  ```` ```{=latex} ```` block, a `` `x`{=latex} `` span, or a ```` ```{=pdfmd} ```` block made the build say `has code but no
+  monofont set` and apply the default code font. Raw content in any format (`{=latex}`, `{=html}`, `{=typst}`, `{=pdfmd}`...) is
+  now left out of the test; a fence with the class `pdfmd` and no `=` (```` ```{pdfmd} ````) is ordinary code. Unchanged: real
+  inline code, fenced code and `~~~` fences still count, and so does a raw block that is never closed.
+- **`csl: apa` finds `apa.csl`.** The embedder (`--attach-source`, `--embed-metadata`) looked for the style under the name as
+  written only, so the global metadata's `csl: apa` printed `WARN not embedded: apa (not found ... Pandoc's csl/ folder)` on
+  every build although `apa.csl` is in Pandoc's `csl/` folder (Pandoc itself adds the suffix). It now tries the name, then the
+  name with `.csl`, in each folder it looks in. And a style it cannot find is no longer a warning when the document cites
+  nothing (no `bibliography`, no `@key`): the global metadata sets a style for every document.
+- Tests: `tests/test_rawcode.py` (eleven spellings, the verbose `AUTO MONOFONT` line with and without code, the style lookup
+  and the citing condition).
+
+---
+
 ## v3.28.16 — 2026-10-12
 
 Pre-edit state: commit `1209178` (v3.28.15).

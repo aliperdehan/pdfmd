@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.16"
+PDFMD_VERSION = "3.28.17"
 import argparse
 import csv
 import filecmp
@@ -8661,12 +8661,20 @@ def has_monofont(md_path: Path, variables: list[str], metadata_files=()) -> bool
     return has_font_setting("monofont", md_path, variables, metadata_files)
 
 
+# Raw content (v3.28.17): ```{=latex} ... ``` and `x`{=html}, in any format, is not code -- Pandoc hands it to the
+# writer as it is, and `{=pdfmd}` blocks are the same shape. A plain ```{pdfmd} fence (no `=`) is ordinary code.
+RAW_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})[ \t]*\{=[^}\n]*\}[ \t]*\n.*?\n[ \t]*(?P=fence)[ \t]*$",
+                          re.MULTILINE | re.DOTALL)
+RAW_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1\{=[^}\s]+\}", re.DOTALL)
+
+
 def has_code_spans(text: str) -> bool:
     """Detect inline code or fenced code blocks -- the only things Pandoc's
     LaTeX writer actually sets in the monofont. A bare backtick covers both
-    (a fence is just 3+ backticks), plus the rarer ``~~~`` fence style.
+    (a fence is just 3+ backticks), plus the rarer ``~~~`` fence style; raw
+    blocks and spans (`{=latex}`, `{=html}`, `{=typst}`, `{=pdfmd}` ...) are not code.
     """
-    text = EMBED_BLOCK_RE.sub("", text)  # an embedded block's own fence is not code
+    text = RAW_SPAN_RE.sub("", RAW_FENCE_RE.sub("", EMBED_BLOCK_RE.sub("", text)))
     return "`" in text or bool(re.search(r"(?m)^\s{0,3}~~~", text))
 
 
@@ -14032,12 +14040,24 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             if directory not in search:
                 search.append(directory)
         data_dir = pandoc_user_data_dir()
+
+        def cites_anything() -> bool:
+            if merged.get("bibliography") or merged.get("references"):
+                return True
+            keys = used_citation_keys([body, json.dumps(merged, default=str, ensure_ascii=False)])
+            return keys is None or bool(keys)
         for key, name in references:
             reference = Path(name)
             # A CSL style is also looked up in Pandoc's own user data folder (csl/).
             where = search + ([data_dir / "csl", data_dir] if key == "csl" and data_dir else [])
-            found = reference if reference.is_absolute() and reference.is_file() else next(
-                ((directory / reference) for directory in where if (directory / reference).is_file()), None)
+            # `csl: apa` is `apa.csl` (Pandoc adds the suffix too): the name as written first, then with .csl
+            names = [reference] + ([Path(name + ".csl")] if key == "csl" and not name.lower().endswith(".csl") else [])
+            found = next((candidate for candidate in names if candidate.is_absolute() and candidate.is_file()), None)
+            if found is None and not reference.is_absolute():
+                found = next(((directory / candidate) for candidate in names for directory in where
+                              if (directory / candidate).is_file()), None)
+            if found is None and key == "csl" and not cites_anything():
+                continue            # a style nothing cites with is not worth a warning (the global metadata sets one)
             if found is None:
                 bib_problems.append(f"{name} (not found in the document's folders"
                                     + (" or Pandoc's csl/ folder" if key == "csl" else "") + ")")
