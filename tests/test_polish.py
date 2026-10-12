@@ -279,7 +279,9 @@ class FinishedPdf(unittest.TestCase):
     def test_all_together_with_the_source_attached(self):
         reader, _ = self.run_pdfmd("doc.md", "-e", "inkmd", "--bookmarks", "--attach-links", "--attach-source",
                                    "--pdf-author", "A")
-        self.assertEqual({"linked/data.csv", "pdfmd-manifest.json", "pdfmd-source.md"}, set(reader.attachments))
+        # the linked file is also a file the text reads: stored with the source (v3.28.15), beside the --attach-links copy
+        self.assertEqual({"linked/data.csv", "files/data.csv", "pdfmd-manifest.json", "pdfmd-source.md"},
+                         set(reader.attachments))
         self.assertEqual(len(self.titles(reader)), 4)
         self.assertEqual(reader.metadata["/Author"], "A")
 

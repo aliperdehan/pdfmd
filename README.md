@@ -777,14 +777,15 @@ file you can edit again. Ask for it, on the command line or in the document:
 
 ```sh
 pdfmd report --attach-source     # the source goes into report.pdf as an attachment
-pdfmd report --bundle            # ... and the data and files its LaTeX reads
+pdfmd report --bundle            # ... and the image files too (the data and LaTeX inputs are carried anyway)
 pdfmd --restore report.pdf       # write the folder back into report.restored/
 ```
 
 ```yaml
 pdfmd-options:
   attach-source: true            # alias: embed-source
-  bundle: true                   # or `all`: the whole folder, not just what the text points at
+  bundle: sources                # the default: the files the text reads, no images
+                                 # `true`: and the images · `all`: the whole folder · `false`: the source alone
   bundle-packages: true          # also your own LaTeX packages (see below)
   strip-comments: true           # the default for the attached copy; see "Comments"
   attach-bibliography: used      # or `all`
@@ -805,13 +806,16 @@ style, a compound library, a shared bibliography and parts.
   a plain attach needs no bundle for them: a JPEG comes back byte for byte, a PNG
   as the same pixels (alpha kept), and an SVG or PDF figure as a vector PDF
   (`fig.svg` becomes `fig.pdf`, and the restored Markdown follows).
-- **`--bundle` is for what the PDF does not draw:** CSV data, LaTeX included
-  with `\input`, listings. They are stored as separate attachments (`files/...`),
-  found from the text, the preamble and, in turn, from the files found; also
-  those only your own TeX tree resolves (`\input{library}` from `texmf-home`).
-  `--bundle all` takes the whole folder except output and housekeeping. Over
-  100 MB (`bundle-max-mb`) only the source is attached. Data whose file name a
-  macro builds cannot be found: use `all`.
+- **The files the text reads travel with it.** CSV data, LaTeX included with `\input`, listings: stored as
+  separate attachments (`files/...`), found from the text, the preamble and, in turn, from the files found;
+  also those only your own TeX tree resolves (`\input{library}` from `texmf-home`). A restored report builds
+  again; only images are left out (the PDF has them). Over 100 MB (`bundle-max-mb`) only the source is
+  attached. `bundle: false` (or `--no-bundle`) keeps the source alone; `--bundle` (`bundle: true`) stores the
+  image files too, `--bundle all` the whole folder except output and housekeeping. Data whose file name a
+  macro builds cannot be found: use `all`. A Markdown output (`--keep-source`) has no PDF to take pictures
+  from and keeps the source alone unless you ask.
+- **`--restore` and `--unpack` stay short.** They count what they write by folder; `--verbose` lists every
+  file, and `--restore --list` always does.
 - **Your own LaTeX packages** (a house style in `texmf-home`) are recorded with
   their version, and `--restore` tells you what is missing; `--bundle-packages`
   stores them too (with what they `\input` and the graphics they name).

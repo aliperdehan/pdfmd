@@ -614,7 +614,16 @@ Stopping early (--stop-at, v3.19.0):
     --unpack leave it out with one line naming its keys. A metadata file from outside
     the document's folder comes back in outside/, with the -y list that layers it.
 
-    --bundle [all] / --no-bundle, `pdfmd-options: {bundle: true | all}` (v3.22.2)
+    (v3.28.15) A PDF with its source attached also carries, without any bundle setting,
+    the files the text reads and never the images: `bundle: sources`, the new default
+    (the LaTeX files it \\inputs, the data its macros read, listings; the PDF itself
+    holds the pictures and --restore takes them out of it, those only an \\input'ed
+    .tex draws included), so a restored report builds again. `bundle: false` /
+    --no-bundle keeps the source alone; `true` adds the image files; a Markdown output
+    (--keep-source) is not given the default. --restore and --unpack count what they
+    write by folder, and --verbose lists each file (--restore --list always does).
+
+    --bundle [sources|all] / --no-bundle, `pdfmd-options: {bundle: sources | true | all | false}` (v3.22.2)
     store, beside the source, the files it cannot carry, each as its own
     attachment (`files/PATH`; no archive, so any tool lists or extracts one):
     `--bundle` the images and data the text and the preamble point at -- found
@@ -1343,7 +1352,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.14"
+PDFMD_VERSION = "3.28.15"
 import argparse
 import csv
 import filecmp
@@ -1373,6 +1382,7 @@ from functools import lru_cache
 import logging
 import math
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -13473,12 +13483,23 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             (target / name).write_bytes(files[name])
         else:
             write_text_lf((target / name), files[name])
+    # Each file on its own line with --verbose; otherwise counted by kind, and only what needs a look
+    # (an edited file, a filter this machine does not know, the global metadata) in full (v3.28.15)
+    kinds: dict[str, int] = {}
     for note in notes:
-        print(note)
+        label = note.split()[0]
+        urgent = label == "GLOBAL" or "MISMATCH" in note or "no hash" in note or "NOT known" in note
+        if LISTING_VERBOSE or urgent:
+            print(note)
+        if label != "GLOBAL":
+            word = {"BIBLIO": "bibliography", "CSL": "csl"}.get(label, label.lower())
+            kinds[word] = kinds.get(word, 0) + 1
     kept = len(files) - len(fresh)
     if files:
         print(f"UNPACKED  {len(fresh)} file{'s' if len(fresh) != 1 else ''} into {display_path(target)}"
-              + (f" ({kept} already there, identical)" if kept else ""))
+              + (f" ({kept} already there, identical)" if kept else "")
+              + (f"  ({', '.join(f'{word} {count}' for word, count in kinds.items())})"
+                 if kinds and not LISTING_VERBOSE else ""))
     if slim:
         if files and target.resolve() != default_target.resolve():
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
@@ -16775,6 +16796,8 @@ ATTACH_CLI: bool | None = None
 # --bundle [all] / --no-bundle: None (the document decides), "off", "referenced", "all".
 BUNDLE_CLI: str | None = None
 BUNDLE_MAX_MB = 100
+# --verbose: --restore and --unpack list every file instead of counting them by folder (v3.28.15)
+LISTING_VERBOSE = False
 # --attach-bibliography used|all (None: the document's pdfmd-options decide).
 BIB_ATTACH_CLI: str | None = None
 # --bundle-packages / --no-bundle-packages (None: the document decides).
@@ -16824,15 +16847,27 @@ def option_flag_number(value) -> float | None:
 
 
 def resolve_bundle(md_path: Path, metadata_files: list[Path]) -> str | None:
-    """``None`` (no bundle), "referenced" (the images and data the text points at)
-    or "all" (everything in the document's folder worth keeping): the command
-    line, else `pdfmd-options.bundle` (true / "all" / false)."""
+    """``None`` (no bundle), "sources" (the files the text reads: LaTeX inputs and data, never images),
+    "referenced" (those and the images) or "all" (everything in the document's folder worth keeping):
+    the command line, else `pdfmd-options.bundle` (sources / true / all / false)."""
     if BUNDLE_CLI is not None:
         return None if BUNDLE_CLI == "off" else BUNDLE_CLI
     value = first_pdfmd_option(md_path, metadata_files, "bundle")
-    if str(value).strip().casefold() == "all":
-        return "all"
+    word = str(value).strip().casefold()
+    if word in ("all", "sources", "referenced"):
+        return word
+    if word == "source":
+        return "sources"
     return "referenced" if option_flag(value) else None
+
+
+def attached_bundle_mode(md_path: Path, metadata_files: list[Path], is_pdf: bool) -> str | None:
+    """The bundle a source is attached with. Said (--bundle, --no-bundle, pdfmd-options.bundle): that. Not
+    said: for a PDF, "sources" (v3.28.15: a restored report builds again, which needed `bundle: referenced`
+    before and the images with it); for a Markdown output (--keep-source), none."""
+    if BUNDLE_CLI is not None or first_pdfmd_option(md_path, metadata_files, "bundle") is not None:
+        return resolve_bundle(md_path, metadata_files)
+    return "sources" if is_pdf else None
 
 
 def relative_posix(base: Path, path: Path) -> str:
@@ -16894,6 +16929,8 @@ TEX_INPUT_RE = re.compile(r"\\(?:input|include|InputIfFileExists)\s*\{([^}]+)\}"
 PROVIDES_RE = re.compile(r"\\Provides(?:Package|Class|File)\s*\{[^}]*\}\s*\[([^\]]*)\]")
 GRAPHIC_RE = re.compile(r"\\includegraphics\*?\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}")
 GRAPHIC_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg")
+# Files "sources" mode (v3.28.15) never stores: the PDF holds the pictures, and --restore takes them out of it
+BUNDLE_IMAGE_SUFFIXES = GRAPHIC_SUFFIXES + (".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif")
 TEX_SOURCE_SUFFIXES = (".tex", ".sty", ".cls", ".def", ".cfg", ".clo", ".ltx", ".bbx", ".cbx")
 TEX_TREE_SCAN_LIMIT = 200
 
@@ -17023,13 +17060,14 @@ def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Pat
 
 def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
                  represented: set[Path], output: Path, data_names: list[str],
-                 base: Path | None = None) -> tuple[list[Path], list[str]]:
+                 base: Path | None = None, pictures: list[Path] | None = None) -> tuple[list[Path], list[str]]:
     """The files to store beside the source (the source carries the Markdown,
     metadata, preamble, filters, bibliography and CSL itself): the images and data
     the text and the preamble point at, and what the text files among them point at
-    in turn ("referenced"), or every file in the document's folder that is not output
-    or housekeeping ("all"). Returns (files inside the folder, names of referenced
-    files outside it)."""
+    in turn ("referenced"), the same without the images ("sources": the PDF holds
+    those; the ones inside the folder go to ``pictures``), or every file in the
+    document's folder that is not output or housekeeping ("all"). Returns (files
+    inside the folder, names of referenced files outside it)."""
     base = Path(os.path.abspath(base or md_path.parent))
     found: list[Path] = []
     outside: list[str] = []
@@ -17037,6 +17075,10 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
     def add(path: Path) -> bool:
         path = Path(os.path.abspath(path))
         if path in represented or path == Path(os.path.abspath(output)) or path in found:
+            return False
+        if mode == "sources" and path.suffix.lower() in BUNDLE_IMAGE_SUFFIXES:
+            if pictures is not None and path not in pictures and path.is_relative_to(base):
+                pictures.append(path)
             return False
         if path.name in data_names and path.suffix.lower() in (".bib", ".csl", ".bibtex"):
             return False                                 # already embedded in the source
@@ -17307,13 +17349,18 @@ def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf
 
 
 def requirement_lines(manifest: dict) -> list[str]:
+    """What a rebuild needs that the PDF does not carry, one line a kind (packages, graphics), then the fonts
+    and (--verbose) what made the PDF."""
     needs = manifest.get("requirements") or {}
     lines = []
+    missing: dict[str, list[str]] = {}
     for item in needs.get("tex") or []:
         if not item.get("stored"):
             version = f" ({item['version']})" if item.get("version") else ""
-            lines.append(f"NEEDS     {item['kind']} {item['name']}{version}: from the author's own TeX tree, not stored "
-                         "(install it, or build with bundle-packages)")
+            missing.setdefault(item["kind"], []).append(f"{item['name']}{version}")
+    for kind, names in missing.items():
+        lines.append(f"NEEDS     {kind}{'s' if len(names) != 1 else ''} {', '.join(names)}: from the author's own TeX "
+                     "tree, not stored (install it, or build with bundle-packages)")
     if needs.get("fonts"):
         lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
     made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
@@ -17322,6 +17369,18 @@ def requirement_lines(manifest: dict) -> list[str]:
     if any(made):
         lines.append(f"MADE WITH {', '.join(item for item in made if item)}")
     return lines
+
+
+def folder_counts(names: list[str]) -> str:
+    """File names counted by their first folder: ``report.md, metadata/ 5, ir/ 24`` (the files of the top
+    level by name, up to three, else counted)."""
+    top = [name for name in names if "/" not in name]
+    folders: dict[str, int] = {}
+    for name in names:
+        if "/" in name:
+            folders[name.split("/", 1)[0]] = folders.get(name.split("/", 1)[0], 0) + 1
+    shown = top if len(top) <= 3 else [f"{len(top)} files"]
+    return ", ".join([*shown, *(f"{folder}/ {count}" for folder, count in folders.items())])
 
 
 def report_common_folder(files: list[Path]) -> Path:
@@ -17370,14 +17429,21 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                                            report=report, base=base)
     extras: dict[str, bytes] = {}
     origins: dict[str, str] = {}
-    mode = resolve_bundle(md_path, metadata_files)
+    mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
     header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
     deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base)
     if mode:
         represented = {Path(os.path.abspath(base / item["path"]))
                        for item in [*manifest["chunks"], *manifest["layout"]]}
+        pictures: list[Path] = []
         found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
-                                      manifest["data_files"], base)
+                                      manifest["data_files"], base, pictures)
+        # A picture only an \input'ed .tex draws is recorded like the text's own, so --restore can take it out of the PDF
+        for picture in pictures:
+            entry = {"path": relative_posix(base, picture), "sha256": hashlib.sha256(picture.read_bytes()).hexdigest(),
+                     "size": picture.stat().st_size}
+            if entry["path"] not in {image["path"] for image in manifest["images"]}:
+                manifest["images"].append(entry)
         packages = resolve_bundle_packages(md_path, metadata_files)
         from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
                      and not (base / dep["name"]).exists()]
@@ -17457,8 +17523,8 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     stored = {item["path"] for item in kept}
     unstored = [image["path"] for image in manifest["images"] if image["path"] not in stored]
     if unstored and verbose:
-        print(f"NOTE  images the text points at are recorded, not stored (--bundle stores them): "
-              f"{', '.join(unstored)}")
+        print(f"NOTE  images the text points at are recorded, not stored (the PDF holds them; "
+              f"`--bundle referenced` stores the files): {', '.join(unstored)}")
     if manifest.get("outside"):
         print(f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
     for line in requirement_lines(manifest):
@@ -17778,6 +17844,42 @@ def extract_pdf_images(pdf_path: Path, images: list[dict], skip: set[str]) -> tu
         if target != name:
             renamed[name] = target
     return out, renamed, failed
+
+
+def rewrite_tex_image_paths(text: str, renamed: dict[str, str], folder: str = "") -> str:
+    """``text`` (LaTeX) with the \\includegraphics paths in ``renamed`` pointing at their new names. A path in a
+    stored .tex is read as the file wrote it (``folder``: where that file sits, relative to the document) and
+    as the document's own, with or without the extension."""
+    if not renamed:
+        return text
+
+    def swap(match: "re.Match[str]") -> str:
+        target = match.group(1).strip()
+        for base in ((folder + "/") if folder else "", ""):
+            joined = posixpath.normpath(base + target)
+            for key, new in renamed.items():
+                if joined in (key, str(PurePosixPath(key).with_suffix(""))):
+                    kept = new if base == "" else posixpath.relpath(new, folder or ".")
+                    if joined == key or PurePosixPath(target).suffix:
+                        return match.group(0).replace(target, kept, 1)
+                    return match.group(0).replace(target, str(PurePosixPath(kept).with_suffix("")), 1)
+        return match.group(0)
+
+    return GRAPHIC_RE.sub(swap, text)
+
+
+def restored_image_paths(name: str, content: "str | bytes", renamed: dict[str, str]) -> "str | bytes":
+    """A restored file's content with the image paths in ``renamed`` updated: Markdown text, and the .tex a bundle stored."""
+    lower = name.lower()
+    if isinstance(content, str) and lower.endswith((".md", ".markdown")):
+        return rewrite_image_paths(content, renamed)
+    if isinstance(content, bytes) and lower.endswith(".tex"):
+        try:
+            folder = str(PurePosixPath(name).parent) if "/" in name else ""
+            return rewrite_tex_image_paths(content.decode("utf-8"), renamed, folder).encode("utf-8")
+        except UnicodeDecodeError:
+            return content
+    return content
 
 
 def rewrite_image_paths(text: str, renamed: dict[str, str]) -> str:
@@ -18167,17 +18269,31 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
           f"{comments_note(manifest)})")
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
+    # The files are counted by folder unless --verbose or --list asks for each (v3.28.15)
+    compact = not LISTING_VERBOSE and not list_only
     for line in requirement_lines(manifest):
-        print(line)
+        if not (compact and line.startswith("MADE WITH")):
+            print(line)
     extras = manifest.get("extras") or []
     stored = {item["path"] for item in extras}
+    absent: list[str] = []
     for image in manifest.get("images") or []:
         if image["path"] not in stored:
-            print(f"IMAGE     {image['path']}  ("
-                  + ("taken out of the PDF's own picture" if image.get("pdf") and is_pdf
-                     else "recorded, not in the PDF" if is_pdf else "recorded, not stored in the Markdown") + ")")
+            from_pdf = bool(image.get("pdf") and is_pdf)
+            if compact and not from_pdf:
+                absent.append(image["path"])
+            elif not compact:
+                print(f"IMAGE     {image['path']}  ("
+                      + ("taken out of the PDF's own picture" if from_pdf
+                         else "recorded, not in the PDF" if is_pdf else "recorded, not stored in the Markdown") + ")")
+    if absent:
+        print(f"IMAGE     {len(absent)} not in the PDF" + ("" if is_pdf else " or the Markdown")
+              + f" (put the file{'s' if len(absent) != 1 else ''} back beside the document if the build needs "
+              f"{'them' if len(absent) != 1 else 'it'}): " + ", ".join(absent[:3])
+              + (f" and {len(absent) - 3} more (--verbose)" if len(absent) > 3 else ""))
     for item in extras:
-        print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
+        if not compact:
+            print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
     if list_only:
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
@@ -18213,9 +18329,7 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
     for name, new in renamed.items():
         print(f"IMAGE     {name} comes back as {new} (the PDF holds the drawing, not the original file)")
     if renamed:
-        files = {name: (rewrite_image_paths(content, renamed) if isinstance(content, str)
-                        and name.lower().endswith((".md", ".markdown")) else content)
-                 for name, content in files.items()}
+        files = {name: restored_image_paths(name, content, renamed) for name, content in files.items()}
     clashes = [item for item in files if (target / item).exists()]
     if clashes:
         raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; nothing was written "
@@ -18227,8 +18341,12 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
             destination.write_bytes(content)
         else:
             write_text_lf(destination, content)
-        print(f"RESTORED  {item}")
-    print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}")
+        if not compact:
+            print(f"RESTORED  {item}")
+    print(f"RESTORED  {len(files)} file{'s' if len(files) != 1 else ''} into {display_path(target)}"
+          + (f"  ({folder_counts(list(files))}"
+             + (f"; {len(pictures)} picture{'s' if len(pictures) != 1 else ''} taken out of the PDF" if pictures else "")
+             + ")" if compact else ""))
     if manifest.get("mode") == "report":
         print(f"NOTE  this PDF came from a -r/--report build: `pdfmd -r {display_path(target)}` builds it again")
     filters = [item for item in files if item.lower().endswith(".lua")]
@@ -19554,12 +19672,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "text, `>` escaped). A document sets it with pdfmd-options.keep-source")
     parser.add_argument("--no-keep-source", dest="keep_source", action="store_const", const=False,
                         help="keep nothing, even where a document's pdfmd-options.keep-source asks for it")
-    parser.add_argument("--bundle", nargs="?", const="referenced", choices=("referenced", "all"), default=None,
-                        help="with the source, attach the files it cannot carry: 'referenced' (default) the "
-                             "images and data the text and preamble point at, 'all' every file in the "
+    parser.add_argument("--bundle", nargs="?", const="referenced", choices=("sources", "referenced", "all"), default=None,
+                        help="with the source, attach the files it cannot carry: 'sources' (what an attached "
+                             "PDF gets without this flag) the LaTeX inputs and data the text and preamble "
+                             "read, never images (the PDF holds those and --restore takes them out), "
+                             "'referenced' (default for --bundle alone) those and the image files, 'all' every file in the "
                              "document's folder except output and housekeeping (hidden files, .aux/.log, "
                              "backups). Implies --attach-source; --restore puts them back. A document sets it "
-                             "with pdfmd-options.bundle (true | all); pdfmd-options.bundle-max-mb (default "
+                             "with pdfmd-options.bundle (sources | true | all | false); pdfmd-options.bundle-max-mb (default "
                              f"{BUNDLE_MAX_MB}) caps the size")
     parser.add_argument("--bundle-packages", dest="bundle_packages", action="store_true", default=None,
                         help="with --bundle, also store the LaTeX packages and classes of your own TeX tree "
@@ -19568,7 +19688,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "and restore tells what is missing. A document sets it with "
                              "pdfmd-options.bundle-packages")
     parser.add_argument("--no-bundle", dest="bundle", action="store_const", const="off",
-                        help="attach no files beside the source, even where a document's pdfmd-options.bundle asks")
+                        help="attach the source alone, with no files beside it (no LaTeX inputs, no data), even where a document's "
+                             "pdfmd-options.bundle asks")
     parser.add_argument("--bookmarks", action="store_true",
                         help="add PDF bookmarks from the Markdown headings when the engine made none "
                              "(ideas from mdpdf; always on under the `mdpdf` command)")
@@ -20150,7 +20271,7 @@ def run_watch(source: Path, argv: list[str]) -> None:
 # (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
 # --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
 # `global` main() sets is covered.
-WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS")
+WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "LISTING_VERBOSE")
 
 
 def worker_state() -> dict:
@@ -20268,6 +20389,8 @@ def main() -> None:
     KEEP_SOURCE_CLI = args.keep_source
     HYBRID_CLI = args.hybrid
     BUNDLE_CLI = args.bundle
+    global LISTING_VERBOSE
+    LISTING_VERBOSE = bool(args.verbose)
     global PAPER_CLI
     PAPER_CLI = args.paper
     INKMD_CLI.clear()

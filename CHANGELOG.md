@@ -41,6 +41,45 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.15 — 2026-10-12
+
+Pre-edit state: commit `ae5bc6d` (v3.28.14).
+
+### Changed
+
+- **A PDF with its source attached now carries what the text reads, without the images (`bundle: sources`).**
+  Before, `--restore` of a report built with `attach-source` alone stopped at `\input{schemes/...}`: the
+  `.tex` files and the data a macro reads came only with `bundle: referenced`, which stores the pictures too.
+  - New third state of the `bundle` setting (`--bundle sources`, `pdfmd-options.bundle: sources`) and the new
+    default when the source is attached and `bundle` is not set. `bundle: false` / `--no-bundle` keeps the
+    source alone as before; `bundle: true` / `--bundle` (referenced) adds the image files; `all` is unchanged.
+  - Images are not stored: the PDF holds every picture it drew and `--restore` takes them out of it. A
+    picture only an `\input`ed `.tex` draws is now recorded in the manifest like the text's own, so it comes
+    back too; a picture that comes back under another name (`fig.svg` becomes `fig.pdf`) is renamed in the
+    stored `.tex` as well, not only in the Markdown.
+  - A Markdown output (`--keep-source`) has no PDF to take pictures from and does not get the default.
+  - **Behaviour change for every `attach-source` user:** the attachment grows by the data the document reads
+    (LR4-5: 1.00 MB, with `referenced`: 1.65 MB, now 1.2 MB, 25 files; LR6: 0.5 MB, 28 files). A PDF built
+    before this version has none of it and restores as before.
+- **`--restore` and `--unpack` stay short.** They count what they write by folder (`RESTORED  44 files into
+  rest6b  (report.md, parts/ 9, metadata/ 6, ir/ 5 ...)`) instead of printing a line per file; an edited file,
+  a filter this machine does not know and the global metadata still get their own line. `--verbose` gives
+  the old listing; `--restore --list` always does. LR6 restore: 89 lines before, 12 now. Pictures the PDF does
+  not hold are one line, not one each; the packages and graphics a rebuild needs from the author's TeX tree
+  are one `NEEDS`/`NOTE` line a kind (six lines became two on every attach).
+
+### Checked
+
+- LR4-5 and LR6, each built from a copy, restored, and the restored folder built with lualatex: same page
+  count and no difference in the text (29 pages, 12,069 words; 14 pages, 5,717 words); the three TLC pictures
+  came out of the PDF.
+
+### Tests
+
+- `test_attach`: the default stores the inputs and data and not the images; `bundle: false` and `off`; the
+  referenced mode; a Markdown output gets no default; a renamed picture inside a stored `.tex`; the compact
+  and verbose restore and `--list`. `test_polish` expects the linked file stored with the source.
+
 ## v3.28.14 — 2026-10-12
 
 Pre-edit state: commit `4ea4176` (v3.28.13).

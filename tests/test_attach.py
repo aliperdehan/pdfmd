@@ -670,6 +670,79 @@ class BundleReach(unittest.TestCase):
         self.assertEqual({name for name in attached if name.startswith("files/")},
                          {"files/tex/fig.tex", "files/tex/raw.tex", "files/data/x.csv"})
 
+    def scheme_report(self) -> Path:
+        """A report whose LaTeX input draws a picture and whose macro reads a CSV."""
+        for name, content in (("schemes/ester.tex", "\\includegraphics{schemes/ester-pic}\\n"),
+                              ("schemes/ester-pic.png", "PNG"), ("ir/a.csv", "x,y\n1,2\n"),
+                              ("tlc/p.jpg", "JPG"), ("unrelated.bin", "nope")):
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text(content, encoding="utf-8")
+        document = self.root / "r.md"
+        document.write_text("---\ntitle: T\n---\n\n![tlc](tlc/p.jpg)\n\n```{=latex}\n\\input{schemes/ester}\n"
+                            "\\irpanel{ir/a.csv}\n```\n", encoding="utf-8")
+        return document
+
+    def test_an_attached_pdf_stores_the_inputs_and_data_but_never_images(self):
+        attached = self.attach(self.scheme_report())
+        self.assertEqual({name for name in attached if name.startswith("files/")},
+                         {"files/schemes/ester.tex", "files/ir/a.csv"})
+        manifest = json.loads(attached["pdfmd-manifest.json"])
+        self.assertEqual(manifest["bundle"], "sources")
+        # the picture only the stored .tex draws is recorded like the text's own, so a restore can take it out of the PDF
+        self.assertEqual(sorted(image["path"] for image in manifest["images"]),
+                         ["schemes/ester-pic.png", "tlc/p.jpg"])
+
+    def test_bundle_false_keeps_the_source_alone_and_referenced_adds_the_images(self):
+        document = self.scheme_report()
+        pdfmd.BUNDLE_CLI = "off"
+        self.assertEqual({name for name in self.attach(document) if name.startswith("files/")}, set())
+        pdfmd.BUNDLE_CLI = None
+        document.write_text(document.read_text(encoding="utf-8").replace("title: T", "title: T\npdfmd-options:\n  bundle: false"),
+                            encoding="utf-8")
+        self.assertEqual({name for name in self.attach(document) if name.startswith("files/")}, set())
+        pdfmd.BUNDLE_CLI = "referenced"
+        self.assertIn("files/tlc/p.jpg", self.attach(document))
+
+    def test_restore_counts_the_files_by_folder_and_verbose_lists_each(self):
+        document = self.scheme_report()
+        self.attach(document)
+        pdf = document.with_suffix(".pdf")
+        compact = io.StringIO()
+        with contextlib.redirect_stdout(compact):
+            pdfmd.restore_from_pdf(pdf, self.root / "c")
+        text = compact.getvalue()
+        self.assertRegex(text, r"RESTORED  3 files into .*\(r\.md, ir/ 1, schemes/ 1\)")
+        self.assertNotIn("RESTORED  schemes/ester.tex", text)
+        self.assertNotIn("FILE      ", text)
+        listed = io.StringIO()
+        pdfmd.LISTING_VERBOSE = True
+        try:
+            with contextlib.redirect_stdout(listed):
+                pdfmd.restore_from_pdf(pdf, self.root / "v")
+        finally:
+            pdfmd.LISTING_VERBOSE = False
+        self.assertIn("RESTORED  schemes/ester.tex", listed.getvalue())
+        self.assertIn("FILE      ir/a.csv", listed.getvalue())
+        shown = io.StringIO()                                # --list is a listing: every file, nothing written
+        with contextlib.redirect_stdout(shown):
+            pdfmd.restore_from_pdf(pdf, self.root / "l", list_only=True)
+        self.assertIn("FILE      schemes/ester.tex", shown.getvalue())
+        self.assertFalse((self.root / "l").exists())
+
+    def test_a_markdown_output_keeps_its_source_alone_unless_a_bundle_is_asked_for(self):
+        document = self.scheme_report()
+        self.assertIsNone(pdfmd.attached_bundle_mode(document, [], False))
+        self.assertEqual(pdfmd.attached_bundle_mode(document, [], True), "sources")
+
+    def test_a_picture_that_comes_back_under_a_new_name_is_renamed_in_the_stored_tex(self):
+        text = "\\includegraphics[width=3cm]{schemes/a.svg} \\includegraphics{b.gif} \\includegraphics{other.png}\n"
+        renamed = {"schemes/a.svg": "schemes/a.pdf", "b.gif": "b.png"}
+        out = pdfmd.rewrite_tex_image_paths(text, renamed, "")
+        self.assertEqual(out, "\\includegraphics[width=3cm]{schemes/a.pdf} \\includegraphics{b.png} \\includegraphics{other.png}\n")
+        # a path written relative to the .tex file's own folder
+        self.assertEqual(pdfmd.rewrite_tex_image_paths("\\includegraphics{a.svg}", renamed, "schemes"),
+                         "\\includegraphics{a.pdf}")
+
     def test_report_chapters_keep_their_front_matter_and_places(self):
         (self.root / "ch").mkdir()
         first, second = self.root / "ch" / "one.md", self.root / "ch" / "two.md"
@@ -867,8 +940,17 @@ class PicturesFromThePdf(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             pdfmd.restore_from_pdf(pdf, out)
-        self.assertIn("recorded, not in the PDF", buffer.getvalue())
+        self.assertIn("1 not in the PDF", buffer.getvalue())
+        self.assertIn("gone.png", buffer.getvalue())
         self.assertFalse((out / "gone.png").exists())
+        listed = io.StringIO()                              # --verbose: one line a picture, as before
+        pdfmd.LISTING_VERBOSE = True
+        try:
+            with contextlib.redirect_stdout(listed):
+                pdfmd.restore_from_pdf(pdf, self.root / "out2")
+        finally:
+            pdfmd.LISTING_VERBOSE = False
+        self.assertIn("recorded, not in the PDF", listed.getvalue())
 
     def test_rewrite_image_paths(self):
         text = "![a](x/v.svg) ![b](<x/v.svg> \"t\") <img src=\"x/v.svg\"> [link](x/v.svg) ![c](x/other.svg)\n"
