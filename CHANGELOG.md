@@ -41,6 +41,17 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.27 — 2026-10-13
+
+Pre-edit state: commit `180f3f1` (v3.28.26).
+
+### Fixed
+
+- Choosing the global metadata for a document that cannot be read (not there yet, not UTF-8) no longer stops the build with an
+  error: the config's `preset` / `global-metadata` alone decide (v3.28.19 read the document's own `pdfmd-options` first).
+
+---
+
 ## v3.28.26 — 2026-10-13
 
 Pre-edit state: commit `1c9c169` (v3.28.25).

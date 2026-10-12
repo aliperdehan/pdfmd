@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.26"
+PDFMD_VERSION = "3.28.27"
 import argparse
 import csv
 import filecmp
@@ -11561,10 +11561,13 @@ def chosen_global_metadata(document: Path | None, local_files: list[Path]) -> Pa
         return True if (preset is not None or enabled is not None) else None
     chosen = decide(PRESET_CLI, GLOBAL_METADATA_CLI)
     if chosen is None:
-        if document is not None:
-            preset = first_pdfmd_option(document, local_files, "preset")
-            enabled = first_pdfmd_option(document, local_files, "global-metadata")
-        else:
+        try:
+            if document is not None:
+                preset = first_pdfmd_option(document, local_files, "preset")
+                enabled = first_pdfmd_option(document, local_files, "global-metadata")
+            else:
+                preset, enabled = config_options().get("preset"), config_options().get("global-metadata")
+        except (OSError, UnicodeDecodeError):            # a document that is not there (yet): the config alone decides
             preset, enabled = config_options().get("preset"), config_options().get("global-metadata")
         if isinstance(enabled, str):
             enabled = False if enabled.strip().casefold() in PRESET_OFF else True if enabled.strip().casefold() in PRESET_DEFAULT else None
