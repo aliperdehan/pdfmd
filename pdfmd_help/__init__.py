@@ -25,7 +25,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
         "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-source",
         "--no-attach-source", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
-        "--slim", "--trust-embedded", "--hybrid")),
+        "--slim", "--trust-embedded", "--hybrid", "--check-source")),
     "tables": ("tables as CSV files, and back", (
         "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv-rows", "--csv-cols", "--table-numbers", "--table-names",
         "--tables-dir", "--tables-inline", "--dry-run")),

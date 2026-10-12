@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.21"
+PDFMD_VERSION = "3.28.22"
 import argparse
 import csv
 import filecmp
@@ -18599,6 +18599,68 @@ def restore_target_name(name: str) -> PurePosixPath | None:
     return path
 
 
+def check_source_command(paths: list[Path], recursive: bool = False) -> bool:
+    """`--check-source [PDF or FOLDER ...]` (v3.28.22): which PDFs carry their source, read from the attachment list alone,
+    without building anything. A folder means the PDFs in it (all below it with --recursive); no argument, the working
+    folder. True when every PDF does."""
+    if pypdf is None:
+        print("--check-source needs pypdf (pip install pypdf)", file=sys.stderr)
+        return False
+    pdfs: list[Path] = []
+    for path in (paths or [Path.cwd()]):
+        if path.is_dir():
+            pdfs += sorted((path.rglob("*.pdf") if recursive else path.glob("*.pdf")), key=lambda item: natural_key(item.name))
+        elif path.suffix.lower() == ".pdf" and path.is_file():
+            pdfs.append(path)
+        else:
+            print(f"WARN  {display_path(path)}: not a PDF or a folder", file=sys.stderr)
+    carrying = 0
+    missing: list[str] = []
+    for pdf in pdfs:
+        name = display_path(pdf)
+        try:
+            attachments = read_pdf_attachments(pdf)
+        except Exception as error:  # noqa: BLE001
+            print(f"{'ERROR':<9} {name}  not readable as a PDF ({str(error)[:60]})")
+            missing.append(name)
+            continue
+        beside = [pdf.with_suffix(suffix) for suffix in (".md", ".markdown", ".qmd") if pdf.with_suffix(suffix).is_file()]
+        if ATTACH_MANIFEST in attachments:
+            try:
+                manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                manifest = {}
+            text = attachments.get(manifest.get("source") or ATTACH_SOURCE)
+            facts = [str(manifest.get("name") or "source")]
+            if text is not None:
+                facts.append(f"{text.decode('utf-8', errors='replace').count(chr(10))} lines")
+                if manifest.get("sha256") and sha256_text(text.decode("utf-8", errors="replace")) != manifest["sha256"]:
+                    facts.append("the attached text was edited after the build")
+            if manifest.get("pdfmd"):
+                facts.append(f"pdfmd {manifest['pdfmd']}")
+            newer = [item.name for item in beside if item.stat().st_mtime > pdf.stat().st_mtime + 1]
+            if newer:
+                facts.append(f"{newer[0]} beside it is newer")
+            print(f"{'SOURCE':<9} {name}  " + ", ".join(facts))
+            carrying += 1
+            continue
+        odf = next((item for item in sorted(attachments) if item.startswith("Original.") and item[9:] in HYBRID_MIME), None)
+        if odf is not None:
+            print(f"{'HYBRID':<9} {name}  carries {odf} (LibreOffice opens this PDF as it)")
+            carrying += 1
+            continue
+        missing.append(name)
+        hint = (f"{beside[0].name} is beside it: pdfmd {beside[0].name} --attach-source" if beside
+                else f"no {pdf.stem}.md beside it")
+        print(f"{'NONE':<9} {name}  {hint}")
+    if not pdfs:
+        print("No PDF here.")
+        return True
+    total = f"{len(pdfs)} PDF{'s' if len(pdfs) != 1 else ''}"
+    print(f"CHECK     {total}: {carrying} with the source" + (f", {len(missing)} without" if missing else ""))
+    return not missing
+
+
 def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = False) -> int:
     """--restore: write back the layout a PDF's attached source records. Never
     overwrites (it stops, writing nothing, if a file is already there). Exit
@@ -20340,6 +20402,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-V", "--var", action="append", default=[], dest="variable", metavar="KEY=VALUE")
     parser.add_argument("-y", "--metadata-file", nargs="*", default=None, metavar="FILE",
                         help="metadata YAML file(s), 'all', or bare -y to disable discovery")
+    parser.add_argument("--check-source", "--sources", dest="check_source", action="store_true",
+                        help="say which PDFs carry their source (a PDF or a folder of them, default the working folder; "
+                             "--recursive goes below it): reads only the attachment list, builds nothing. Exit 1 when one "
+                             "does not. `pdfmd FILE.pdf --restore --list` shows what one carries")
     parser.add_argument("--preset", metavar="NAME", default=None,
                         help="take the global metadata from another file than metadata.yaml: NAME (or NAME.yaml) in the "
                              "presets/ folder beside the config file, or a path; `default` is metadata.yaml, `none` no "
@@ -20923,6 +20989,8 @@ def main() -> None:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.presets:
         raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
+    if args.check_source:
+        raise SystemExit(0 if check_source_command(list(args.path or []), args.recursive) else 1)
     if args.setup is not None:
         raise SystemExit(0 if setup_command(args.setup) else 1)
     if args.install:

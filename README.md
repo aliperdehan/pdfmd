@@ -789,7 +789,19 @@ file you can edit again. Ask for it, on the command line or in the document:
 pdfmd report --attach-source     # the source goes into report.pdf as an attachment
 pdfmd report --bundle            # ... and the image files too (the data and LaTeX inputs are carried anyway)
 pdfmd --restore report.pdf       # write the folder back into report.restored/
+pdfmd --check-source             # which PDFs in this folder carry their source (a file or folder works too)
 ```
+
+```console
+$ pdfmd --check-source
+NONE      WA1.pdf  no WA1.md beside it
+SOURCE    WA3.pdf  WA3.md, 52 lines, pdfmd 3.28.22
+NONE      WA5.pdf  WA5.md is beside it: pdfmd WA5.md --attach-source
+CHECK     3 PDFs: 1 with the source, 2 without
+```
+
+`--check-source` (alias `--sources`) only reads the attachment list, so it is quick on a whole folder; it notes a
+Markdown file beside the PDF that is newer than the build, and exits 1 when a PDF has no source.
 
 ```yaml
 pdfmd-options:

@@ -69,7 +69,7 @@ FLAGS: dict[str, str | Omitted] = {
     "install": CMD, "translit": "translit", "fallback": "options.fallback", "missing": "options.missing",
     "check_fonts": CMD, "show_config": CMD, "text_to_markdown": "options.text-to-markdown",
     "setup": CMD, "disabled": Omitted("run", "uses switched-off features for one run"), "init_config": CMD, "uninstall": CMD, "init_reference": CMD, "completion": CMD, "init": CMD,
-    "check": CMD, "check_ignore": "options.check-ignore", "check_docx": CMD, "edit": CMD,
+    "check": CMD, "check_source": CMD, "check_ignore": "options.check-ignore", "check_docx": CMD, "edit": CMD,
     "raw": "options.raw", "no_raw": "options.raw",
     "pagebreak": "options.pagebreak", "no_pagebreak": "options.pagebreak",
     "raw_for": Omitted("document", "per output family: pdfmd-options.raw as a mapping"),

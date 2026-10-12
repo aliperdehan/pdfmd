@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.22 — 2026-10-13
+
+Pre-edit state: commit `7627683` (v3.28.21).
+
+### Added
+
+- **`pdfmd --check-source [PDF or FOLDER ...]` (alias `--sources`) says which PDFs carry their source.** It reads only the
+  attachment list of each PDF, builds nothing, and takes no argument (the working folder), a folder (`--recursive`
+  goes below it) or PDF files. One line each: `SOURCE  a.pdf  a.md, 52 lines, pdfmd 3.28.22` (with a note when the attached
+  text no longer matches its recorded hash, or when a Markdown file of the same name beside the PDF is newer than it),
+  `HYBRID` for a LibreOffice hybrid PDF, `NONE  b.pdf  b.md is beside it: pdfmd b.md --attach-source` or `no b.md beside it`,
+  `ERROR` for a file that is not a PDF; then `CHECK  5 PDFs: 2 with the source, 3 without`. Exit status 1 when one has none.
+  (`--check` was taken by the document checker, `--edit` by the editor.)
+- Tests: `tests/test_check_source.py`.
+
+---
+
 ## v3.28.21 — 2026-10-13
 
 Pre-edit state: commit `96cd623` (v3.28.20).
