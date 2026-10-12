@@ -682,7 +682,8 @@ and long names, with bookmarks and attached links on, several inputs combined in
 one PDF) and `inkmd` (inkmd's -o, --page-size and the flags above, `-e inkmd`
 unless an engine is named; it reads standard input when no file is given and writes
 the PDF to standard output for `-o -`, or when standard output is not a terminal
-and no -o is given). Their page-size default is pdfmd's own, not Letter.
+and no -o is given). Their page-size default is pdfmd's own, not Letter. `batchmd`
+is `pdfmd -b` on one folder, the current one when none is named.
 
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
@@ -1338,7 +1339,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.11"
+PDFMD_VERSION = "3.28.12"
 import argparse
 import csv
 import filecmp
@@ -18798,6 +18799,23 @@ def inkmd_main() -> None:
             sys.stdout.buffer.write(made.read_bytes())
             sys.stdout.buffer.flush()
         raise SystemExit(code)
+
+
+def batchmd_translate(argv: list[str]) -> list[str]:
+    """The ``batchmd`` command is ``pdfmd -b``: batch mode over one folder. With no folder named, the
+    current one (``pdfmd -b`` alone refuses). Every argument stays where it was, as a pdfmd option."""
+    out = list(argv)
+    if not any(token in ("-h", "--help", "--version") for token in out):
+        named, _ = build_parser().parse_known_args(out)
+        if not named.path:
+            out.append(".")
+    return ["--batch", *out]
+
+
+def batchmd_main() -> None:
+    """Entry point of the ``batchmd`` command: ``pdfmd -b``, with pdfmd's own options."""
+    sys.argv[1:] = batchmd_translate(sys.argv[1:])
+    main()
 
 
 def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: bool, font: str,

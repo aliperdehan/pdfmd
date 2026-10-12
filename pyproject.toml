@@ -56,6 +56,8 @@ pdfmd-cli = "pdfmd:main"
 mdpdf = "pdfmd:mdpdf_main"
 # inkmd's own command line, answered by pdfmd with its built-in renderer; see inkmd_main.
 inkmd = "pdfmd:inkmd_main"
+# `pdfmd -b` on one folder (the current one by default), the name of the first script; see batchmd_main.
+batchmd = "pdfmd:batchmd_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]

@@ -169,6 +169,48 @@ class InkmdKeys(unittest.TestCase):
             self.assertEqual(done.stdout, b"")
 
 
+class BatchmdKeys(unittest.TestCase):
+    def translate(self, *arguments):
+        return pdfmd.batchmd_translate(list(arguments))
+
+    def test_batch_mode_is_added_and_the_current_folder_is_the_default(self):
+        self.assertEqual(self.translate(), ["--batch", "."])
+        self.assertEqual(self.translate("-e", "inkmd"), ["--batch", "-e", "inkmd", "."])
+
+    def test_a_named_folder_is_kept(self):
+        self.assertEqual(self.translate("notes"), ["--batch", "notes"])
+        self.assertEqual(self.translate("-e", "lualatex", "notes"), ["--batch", "-e", "lualatex", "notes"])
+
+    def test_a_value_is_not_mistaken_for_a_folder(self):
+        self.assertEqual(self.translate("-e", "lualatex"), ["--batch", "-e", "lualatex", "."])
+        self.assertEqual(self.translate("--header", "a,b"), ["--batch", "--header", "a,b", "."])
+
+    def test_help_and_version_pass_through_unchanged(self):
+        self.assertEqual(self.translate("--help"), ["--batch", "--help"])
+        self.assertEqual(self.translate("-h"), ["--batch", "-h"])
+        self.assertEqual(self.translate("--version"), ["--batch", "--version"])
+
+    def test_the_entry_point_exists(self):
+        self.assertIn('batchmd = "pdfmd:batchmd_main"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    @unittest.skipIf(pypdf is None, "pypdf not installed")
+    def test_the_batchmd_command_line_builds_every_file_in_the_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "a.md").write_text("# A\n\nFirst.\n", encoding="utf-8")
+            (root / "b.md").write_text("# B\n\nSecond.\n", encoding="utf-8")
+            empty = root / "empty-bin"
+            empty.mkdir()
+            code = ("import sys; sys.path.insert(0, %r); import pdfmd; sys.argv[0] = 'batchmd'; pdfmd.batchmd_main()"
+                    % str(ROOT))
+            done = subprocess.run([sys.executable, "-c", code, "-e", "inkmd"], cwd=root,
+                                  env={**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"},
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            for name in ("a.pdf", "b.pdf"):
+                self.assertTrue((root / name).read_bytes().startswith(b"%PDF-"), name)
+
+
 @unittest.skipIf(pypdf is None, "pypdf not installed")
 class FinishedPdf(unittest.TestCase):
     def setUp(self):

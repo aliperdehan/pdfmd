@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.12 — 2026-10-12
+
+Pre-edit state: commit `9b6f91f` (the changelog's batchmd and pan-tec history, docs only).
+
+A persona for batch mode: the `batchmd` command, the first script's name, is `pdfmd -b`.
+
+### Added
+
+- **`batchmd` command: `pdfmd -b` under the name of the first script.** Like `mdpdf` and `inkmd`, it is a second
+  console script (`pyproject.toml`, `batchmd = "pdfmd:batchmd_main"`) that does what pdfmd does with batch mode.
+  - Every `.md` in the folder becomes its own PDF beside it, with pdfmd's options as usual (`-e`, `--header`, ...).
+  - With no folder named it takes the current one. `pdfmd -b` alone still refuses ("Batch mode requires one directory
+    path"); `pdfmd` itself is unchanged, since it is a shared dependency.
+  - `batchmd_translate()` is the whole translation: it adds `-b`, and `.` when the parse finds no folder. The parse
+    uses pdfmd's own parser, so a value such as the `lualatex` of `-e lualatex` is not taken for a folder.
+  - `--help` and `--version` pass through unchanged.
+
+### Tests
+
+- `tests/test_polish.py` `BatchmdKeys`: the translation (`-b` added, `.` as the default folder, values and named
+  folders kept, `--help` and `--version` untouched), the entry point, and an end-to-end run of
+  `pdfmd.batchmd_main()` with `argv[0]` set to `batchmd` and an empty PATH that writes two PDFs.
+- Checked by hand: `batchmd` and `pdfmd -b notes` on the same two-file folder give the same PDFs and the same
+  build lines (only the path shown differs: `alpha.md` against `notes/alpha.md`).
+
+---
+
 ## v3.28.11 — 2026-10-12
 
 Pre-edit state: commit `fed3b3d` (v3.28.10).
@@ -7080,6 +7107,24 @@ file; the scripts did not carry them.
   `Converting NAME.md to NAME.pdf...` for each file, reports a failed file and
   goes on, and ends with `Batch conversion completed!`. Margin and font were
   already two of the defaults pdfmd still has.
+
+---
+
+## v0.1.1 — 2026-10-08 (`pan-tec`)
+
+[chat] The author's own edit of the function, in `~/dev/sh/functions/pan-tec.zsh` (outside this repository), dated by that
+file's last change. Diffed against the v0.1.0 function from the Gemini chat: the same command line, plus the changes below.
+
+### Added
+
+- A header comment: `# pan-tec <pandoc args...> — pandoc with the tectonic PDF engine, quiet output`.
+- A check that `tectonic` is on the PATH before pandoc runs. Without it the function prints `pan-tec: tectonic not found`
+  to standard error and returns 1, instead of pandoc failing on the engine later.
+
+### Unchanged
+
+- The pandoc line itself: `pandoc "$@" --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`. The `--chatter=minimal`
+  is the value the Gemini chat only suggested (see v0.1.0); this file is the author's working copy of it.
 
 ---
 

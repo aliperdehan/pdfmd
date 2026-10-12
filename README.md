@@ -932,9 +932,9 @@ stamped or backed up unless you ask (`stamp=True`, `backup=True`). A failure rai
 `variables=` a dict of Pandoc variables, `extra_args=` anything else the command line takes, `cwd=` the folder it runs
 in and `timeout=` seconds.
 
-### Other command names: `mdpdf` and `inkmd`
+### Other command names: `mdpdf`, `inkmd` and `batchmd`
 
-pdfmd also installs `mdpdf` and `inkmd` commands that take those tools' own keys
+pdfmd also installs `mdpdf`, `inkmd` and `batchmd` commands that take those tools' own keys
 and do what they did, with pdfmd behind them:
 
 ```sh
@@ -942,7 +942,13 @@ mdpdf -o out.pdf -f ",,{page}" -a "Name" -p A4 chapter1.md chapter2.md
 inkmd notes.md -o notes.pdf --page-size a4 --family times
 cat notes.md | inkmd > notes.pdf            # standard input and output, like inkmd
 inkmd notes.md -e lualatex                   # naming another engine uses it instead
+batchmd ~/notes                              # every .md in the folder, as pdfmd -b ~/notes
+batchmd -e inkmd                             # the current folder, with the built-in renderer
 ```
+
+`batchmd` is `pdfmd -b`: each Markdown file in the folder becomes its own PDF beside it.
+It takes the current folder when you name none (`pdfmd -b` alone refuses), and every
+other option is pdfmd's.
 
 `mdpdf` turns bookmarks and attached links on and combines several inputs into one
 PDF. `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
