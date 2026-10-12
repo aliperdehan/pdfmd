@@ -41,6 +41,80 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.13 — 2026-10-12
+
+Pre-edit state: commit `08c8076` (v3.28.12).
+
+A report in parts restored from its PDF built its title page only. This happened when the report's folder had a
+`metadata.yaml` and the machine that built it had a global metadata file (`pdfmd --setup`). Three faults behind it,
+each fixed:
+
+### Fixed
+
+- **The global metadata outranked the folder's own in the attached source.** Since v3.27.17 a build gives Pandoc
+  the global file first, as the lowest layer. The attached source (and `--to assembled`) still merged the files in
+  list order, where it comes last. So a key both files set took the global value in the source: the author's LR6
+  carried `csl: apa` though its PDF was typeset with the folder's `nu-labreport.csl`. The merge now follows
+  Pandoc's order, `--metadata-precedence first` included, for metadata keys and `pdfmd-options` alike.
+- **The restore wrote the global file into `NAME.unpacked/`.** A build reads only that folder's YAML when it is
+  there, so the restored `metadata/metadata.yaml` was never read. The global file belongs to the machine, not the
+  document:
+  - the attached source marks it: `origin.global` in the front matter, `"global": true` in the manifest's layout
+    entry;
+  - the manifest no longer stores the global file's text, and names the file `../pdfmd/metadata.yaml`. Its real
+    path relative to the document told how deep the folder sat, and from a folder outside the home folder it
+    held the user's name;
+  - `--restore` and `--unpack` leave it out and print one line naming its keys ("not restored: a build here uses
+    this machine's own");
+  - a PDF made before this release is recognised by its layout path, a `pdfmd/metadata.yaml` outside the
+    document's folder.
+- **The restore wrote a rebuilt `metadata.yaml`, without `parts`.** It compared the stored text with the
+  rebuilt one, which differed by the misattributed `csl`, so it refused the stored text and wrote the rebuilt
+  one. It had already left `parts: auto` out of the document, because the stored text said it. Now:
+  - when the attached source's hash matches, the stored text is the file the build read, and it comes back as
+    written;
+  - the comparison remains for an edited source;
+  - whether `parts` goes into the document is decided from the metadata files actually written.
+- **Matching the metadata pieces.** `--restore` now matches them to the layout by their label, in the order the
+  build listed them, so a label made unique as `folder-metadata.yaml` finds its file too.
+- **A metadata file from outside the document's folder** (`-y ../shared.yaml`) no longer goes to `NAME.unpacked/`
+  when the folder has its own metadata files. There it would hide them. It goes to `outside/`, with one WARN giving
+  the `-y` list that layers it as before.
+- **A bibliography or CSL file** goes beside the first metadata file inside the folder, not beside the global
+  file.
+
+The author's `report.pdf` of LR6, restored again:
+- `metadata/metadata.yaml` comes back byte for byte, comments and `parts: auto` included;
+- there is no `report.unpacked/`;
+- one NOTE: `csl, colorlinks: from pdfmd's global metadata`;
+- `--to latex` has all nine parts and the numeric citations of the original (`[1, sec. 22.2]`, "1. Palleros").
+
+The full build then stops at `\input{schemes/esterification.tex}`: the PDF carries the text and the `tables/` CSVs
+but not the files the report `\input`s or plots. That is by design, and `bundle: referenced` carries them.
+
+A document built with no global metadata file gets a byte-identical attachment (source and manifest).
+
+LR4-5 (nulabreport, lualatex) built with v3.28.12 and with this release:
+- same PDF text, same 29 pages;
+- the attached source now says `csl: nu-labreport.csl` and embeds that style (1,927 lines), in place of `csl: apa`;
+- every such build printed `WARN  not embedded: apa (not found ...)`, and that WARN is gone;
+- the front matter's keys keep their order, and only the winning value changed.
+
+### Tests
+
+- `tests/test_attach.py` `GlobalMetadataRestore`, with a global file in a folder called `pdfmd`:
+  - the folder's key wins in the source, the layout marks the global file and the manifest keeps only the folder's
+    text;
+  - the restore gives the folder's `metadata.yaml` back as written, adds no `parts` to the document and no
+    `report.unpacked/`;
+  - a PDF made as v3.28.11 made them (unmarked global, its value credited with the folder's key) restores to a
+    folder whose HTML build has the part's text and the folder's subtitle;
+  - `--unpack` leaves the global file out with its GLOBAL line;
+  - a `-y` file from outside goes to `outside/` with the `-y` list.
+  - All four fail on v3.28.12.
+
+---
+
 ## v3.28.12 — 2026-10-12
 
 Pre-edit state: commit `9b6f91f` (the changelog's batchmd and pan-tec history, docs only).

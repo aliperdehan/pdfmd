@@ -828,6 +828,10 @@ style, a compound library, a shared bibliography and parts.
   comments and quoting included; `--restore` of such a PDF is a full source
   copy. The data files of `.csv` blocks (`tables/*.csv`) are always stored
   with the source.
+- **Your global metadata (`pdfmd --setup`) stays yours.** It counts in the
+  source below the document's own files, as in a build, but `--restore` does
+  not write it back. It names its keys instead, and a build of the restored
+  folder uses the global metadata of the machine it runs on.
 - **Only the bibliography entries you cite** are attached (and what they
   cross-reference), not a shared file of hundreds; `attach-bibliography: all`
   keeps it whole, and `nocite: '@*'` keeps every entry.

@@ -609,6 +609,10 @@ Stopping early (--stop-at, v3.19.0):
     (restore says so). A picture the PDF does not hold (TikZ, pgfplots) is only
     recorded. Raw LaTeX `\\includegraphics{...}` in the Markdown or the preamble counts
     like a Markdown image (v3.22.8); one in a stored .tex file is stored with --bundle.
+    (v3.28.13) The global metadata file (pdfmd --setup) is the building machine's, not
+    the document's: the source layers it lowest, as a build does, and --restore and
+    --unpack leave it out with one line naming its keys. A metadata file from outside
+    the document's folder comes back in outside/, with the -y list that layers it.
 
     --bundle [all] / --no-bundle, `pdfmd-options: {bundle: true | all}` (v3.22.2)
     store, beside the source, the files it cannot carry, each as its own
@@ -1339,7 +1343,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.12"
+PDFMD_VERSION = "3.28.13"
 import argparse
 import csv
 import filecmp
@@ -13368,6 +13372,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     options: dict = {}
     embedded: list = []
     origin = None
+    global_keys: list | None = None
     kept_header = ""
     preamble_unpacked = metadata_unpacked = False
     if front and yaml is not None:
@@ -13399,7 +13404,13 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             preamble_unpacked = True
         if "metadata" in embedded:
             if origin and isinstance(origin.get("files"), dict) and origin["files"]:
-                labels = list(origin["files"])
+                # pdfmd's global metadata (pdfmd --setup) is the building machine's: a build of the
+                # unpacked document gets this machine's own, as every document does (v3.28.13)
+                labels = [label for label in origin["files"] if label != origin.get("global")]
+                if origin.get("global") in origin["files"]:
+                    global_keys = origin["files"][origin["global"]]
+                    notes.append(f"GLOBAL    {', '.join(global_keys) or 'nothing'}: from pdfmd's global metadata "
+                                 "(pdfmd --setup), not written out; a build uses this machine's own")
                 for index, label in enumerate(labels, 1):
                     piece: dict = {}
                     sub_options: dict = {}
@@ -13428,7 +13439,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
                 notes.append("METADATA  metadata.yaml  (the merged front matter: this file records no "
                              "origin of its keys, so it can't be told from the document's own)")
             metadata_unpacked = bool(origin and origin.get("files"))
-    if not files:
+    if not files and not global_keys:
         print(f"NOTHING   {display_path(path)} embeds nothing to unpack")
         return 1
     def same_on_disk(name: str) -> bool:
@@ -13445,7 +13456,8 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     if clashes:
         raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}, different from "
                          "what the file embeds; nothing was written (remove them, or give another -o folder)")
-    target.mkdir(parents=True, exist_ok=True)
+    if files:
+        target.mkdir(parents=True, exist_ok=True)
     fresh = [name for name in files if not (target / name).exists()]
     for name in fresh:
         (target / name).parent.mkdir(parents=True, exist_ok=True)
@@ -13456,10 +13468,11 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     for note in notes:
         print(note)
     kept = len(files) - len(fresh)
-    print(f"UNPACKED  {len(fresh)} file{'s' if len(fresh) != 1 else ''} into {display_path(target)}"
-          + (f" ({kept} already there, identical)" if kept else ""))
+    if files:
+        print(f"UNPACKED  {len(fresh)} file{'s' if len(fresh) != 1 else ''} into {display_path(target)}"
+              + (f" ({kept} already there, identical)" if kept else ""))
     if slim:
-        if target.resolve() != default_target.resolve():
+        if files and target.resolve() != default_target.resolve():
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
                   f"{display_path(target)} it will not, unless you move it there", file=sys.stderr)
         slim_assembled(path, text, front, data, options, kept_header, blocks,
@@ -13797,21 +13810,35 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     owner: dict[str, str] = {}
     labels: list[str] = []
     option_labels: list[str] = []
+    label_of: dict[Path, str] = {}
+    global_label = None
     if "metadata" in kinds:
         for metadata_file in plan.metadata_files:
             label = metadata_file.name
             while label in labels:
                 label = f"{metadata_file.parent.name}-{label}"
             labels.append(label)
+            label_of[metadata_file] = label
+        if global_metadata_file() in label_of:
+            global_label = label_of[global_metadata_file()]
+        # The files in the order a build layers them (v3.28.13): the global metadata file (pdfmd --setup) lowest,
+        # as Pandoc gets it. In list order it came last, so its keys beat the folder's own metadata.yaml here.
+        for metadata_file in pandoc_metadata_order(list(plan.metadata_files)):
             data = metadata_file_yaml(metadata_file)
-            options = data.pop("pdfmd-options", None)
+            data.pop("pdfmd-options", None)
+            for key in data:
+                owner[key] = label_of[metadata_file]
+            merged.update(data)
+        # the keys in the order they are written in the files, as listed (only which value wins changed)
+        written = [key for metadata_file in plan.metadata_files for key in metadata_file_yaml(metadata_file)
+                   if key != "pdfmd-options"]
+        merged = {key: merged[key] for key in dict.fromkeys(written)}
+        for metadata_file in metadata_files_by_priority(plan.metadata_files):
+            options = metadata_file_yaml(metadata_file).get("pdfmd-options")
             if isinstance(options, dict):
                 file_options.append({key: value for key, value in options.items()
                                      if key not in FILE_ONLY_OPTION_KEYS})
-                option_labels.append(label)
-            for key in data:
-                owner[key] = label
-            merged.update(data)
+                option_labels.append(label_of[metadata_file])
     document = dict(document)
     document_options = document.pop("pdfmd-options", None)
     for key in document:
@@ -13900,6 +13927,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
                     or (key == "lua-filter" and "lua" in kinds)):
                 continue
             (origin["document"] if label == "document" else origin["files"][label]).append(f"pdfmd-options.{key}")
+        if global_label is not None:
+            # --unpack and --restore leave this one out: it is the building machine's, not the document's
+            origin["global"] = global_label
         options["origin"] = origin
     embedded_now = [kind for kind in EMBED_KINDS if kind in kinds and not (
         (kind == "lua" and plan.lua_mode in ("ref", "off")) or (kind == "preamble" and not plan.preamble_files)
@@ -16739,6 +16769,8 @@ BIB_ATTACH_CLI: str | None = None
 BUNDLE_PACKAGES_CLI: bool | None = None
 EXTRA_PREFIX = "files/"
 RESTORED_SUFFIX = ".restored"
+# How an attached source's manifest names pdfmd's global metadata file (v3.28.13; marked "global": true)
+GLOBAL_LAYOUT_PATH = "../pdfmd/metadata.yaml"
 RAW_REFERENCE_RES = (
     re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}"),
     re.compile(r"\\(?:input|include)\{([^}]+)\}"),
@@ -17072,7 +17104,13 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
         for kind, paths in (("metadata", plan.metadata_files), ("preamble", plan.preamble_files),
                             ("lua", plan.lua_filters)):
             if kind in plan.kinds:
-                layout.extend({"kind": kind, "path": layout_path(base, item)} for item in paths)
+                # global: pdfmd's global metadata (pdfmd --setup), which --restore leaves to the machine (v3.28.13).
+                # Its path relative to the document told how deep the folder was, and from outside the home
+                # folder it held the user's name: a neutral one now (`..`, so no restore writes it anywhere)
+                layout.extend({"kind": kind, "path": GLOBAL_LAYOUT_PATH, "global": True}
+                              if kind == "metadata" and item == global_metadata_file()
+                              else {"kind": kind, "path": layout_path(base, item)}
+                              for item in paths)
         if "hst" in plan.kinds and plan.hst_file is not None:
             layout.append({"kind": "hst", "path": relative_posix(base, plan.hst_file)})
     images = []
@@ -17087,6 +17125,8 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
     metadata_texts: dict[str, str] = {}
     if plan is not None and "metadata" in plan.kinds and "metadata" not in stripped:
         for item in plan.metadata_files:
+            if item == global_metadata_file():
+                continue
             try:
                 metadata_texts[layout_path(base, item)] = item.read_text(encoding="utf-8-sig")
             except (OSError, UnicodeDecodeError):
@@ -18214,10 +18254,11 @@ def restore_from_markdown(path: Path, out_dir: Path | None, list_only: bool = Fa
     return restore_attachments(path, attachments, out_dir, list_only)
 
 
-def restore_front_matter(text: str, manifest: dict) -> str:
+def restore_front_matter(text: str, manifest: dict, parts_held: bool = False) -> str:
     """The restored document's front matter without the bookkeeping embedding
     added to `pdfmd-options` (what was embedded, and the no-auto kinds that kept
-    discovery from finding it again): the document's own no-auto, if it had one."""
+    discovery from finding it again): the document's own no-auto, if it had one.
+    ``parts_held``: a restored metadata file says `pdfmd-options.parts` itself."""
     front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
     if not front or yaml is None:
         return text
@@ -18231,7 +18272,7 @@ def restore_front_matter(text: str, manifest: dict) -> str:
     if not isinstance(options, dict):
         options = data["pdfmd-options"] = {}
     options.pop("embedded", None)
-    if manifest.get("parts") and "parts" not in options and not metadata_texts_hold_parts(manifest):
+    if manifest.get("parts") and "parts" not in options and not parts_held:
         options["parts"] = manifest["parts"]    # it came from a metadata file, which is not carried
     if "no-auto" in options:
         original = manifest.get("no_auto")
@@ -18255,12 +18296,15 @@ def restore_front_matter(text: str, manifest: dict) -> str:
     return f"---\n{dumped}---\n" + text[front.end():]
 
 
-def original_metadata_text(manifest: dict, entry: dict, rebuilt: str) -> str:
-    """A metadata file as it was written, with its comments, when the attachment kept its text and the rebuilt
+def original_metadata_text(manifest: dict, entry: dict, rebuilt: str, unedited: bool = False) -> str:
+    """A metadata file as it was written, with its comments, when the attachment kept its text and either the
+    attached source is unedited (its hash matches: the text is the file the build read, v3.28.13) or the rebuilt
     file reads as the same data (else the rebuilt one: the text of a file that has changed meaning is not it)."""
     original = (manifest.get("metadata_texts") or {}).get(entry["path"])
     if original is None or yaml is None or entry.get("kind") != "metadata":
         return rebuilt
+    if unedited:
+        return original
     try:
         return original if without_parts(yaml.safe_load(original)) == without_parts(yaml.safe_load(rebuilt)) else rebuilt
     except yaml.YAMLError:
@@ -18274,18 +18318,41 @@ def without_parts(data):
     return {**data, "pdfmd-options": {key: value for key, value in data["pdfmd-options"].items() if key != "parts"}}
 
 
-def metadata_texts_hold_parts(manifest: dict) -> bool:
-    """Whether a stored metadata file already says `pdfmd-options.parts` (so the restored document need not)."""
+def text_holds_parts(text: str) -> bool:
+    """Whether a metadata file's text says `pdfmd-options.parts` (so the restored document need not)."""
     if yaml is None:
         return False
-    for text in (manifest.get("metadata_texts") or {}).values():
-        try:
-            data = yaml.safe_load(text)
-        except yaml.YAMLError:
-            continue
-        if isinstance(data, dict) and isinstance(data.get("pdfmd-options"), dict) and "parts" in data["pdfmd-options"]:
-            return True
-    return False
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    return isinstance(data, dict) and isinstance(data.get("pdfmd-options"), dict) and "parts" in data["pdfmd-options"]
+
+
+def is_global_layout_entry(entry: dict) -> bool:
+    """Whether a manifest's layout entry is pdfmd's global metadata file (pdfmd --setup): marked since v3.28.13;
+    before, it shows as a metadata file outside the document's folder named pdfmd/metadata.yaml."""
+    if entry.get("kind") != "metadata":
+        return False
+    if entry.get("global"):
+        return True
+    path = PurePosixPath(str(entry.get("path", "")).replace("\\", "/"))
+    return (restore_target_name(str(path)) is None and path.name.casefold() == "metadata.yaml"
+            and path.parent.name.casefold() == "pdfmd")
+
+
+def assembled_origin(text: str) -> dict:
+    """An assembled text's `pdfmd-options.origin` ({} when it records none)."""
+    front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if not front or yaml is None:
+        return {}
+    try:
+        data = yaml.safe_load(front.group("yaml"))
+    except yaml.YAMLError:
+        return {}
+    options = data.get("pdfmd-options") if isinstance(data, dict) else None
+    origin = options.get("origin") if isinstance(options, dict) else None
+    return origin if isinstance(origin, dict) else {}
 
 
 def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) -> dict[str, str]:
@@ -18293,6 +18360,7 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
     attached assembled text: --unpack --slim does the splitting of the embedded
     metadata, preamble, filters and bibliography; the manifest says where each
     sat, where a part began, and what a part's own front matter was."""
+    origin = assembled_origin(merged)
     work = Path(mkdtemp(prefix="pdfmd-restore-"))
     try:
         assembled = work / "x.md"
@@ -18308,11 +18376,82 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
                     found[item.relative_to(unpacked).as_posix()] = item.read_text(encoding="utf-8")
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    layout = [dict(entry) for entry in manifest.get("layout") or []]
+    metadata_entries = [entry for entry in layout if entry["kind"] == "metadata"]
+    if not metadata_entries:
+        found.pop("metadata.yaml", None)       # no metadata file existed: the keys stay in the document
+    # The metadata pieces --unpack names after the files' labels, in the order the build listed the files,
+    # which is the layout's order too (v3.28.13: a label made unique as `folder-name.yaml` matches as well)
+    labels = list(origin.get("files") or {})
+    by_label = dict(zip(labels, metadata_entries)) if len(labels) == len(metadata_entries) else {}
+    unedited = sha256_text(merged) == manifest.get("sha256")
+    extras: dict[str, str] = {}
+    strays: list[tuple[str, str, dict | None]] = []
+    global_keys = (origin.get("files") or {}).get(origin.get("global")) or []
+    for name, content in found.items():
+        is_yaml = name.lower().endswith((".yaml", ".yml"))
+        match = None
+        if is_yaml and by_label:
+            match = by_label.get(name) or by_label.get(re.sub(r"^\d\d-", "", name))
+        if match is None:
+            base = PurePosixPath(re.sub(r"^\d\d-", "", PurePosixPath(name).name))
+            match = next((entry for entry in layout
+                          if PurePosixPath(entry["path"]).name == base.name and not entry.get("used")), None)
+        if match is not None and is_global_layout_entry(match):
+            # the building machine's global metadata (a PDF made before v3.28.13 carries it as a file):
+            # not the document's, and in NAME.unpacked/ it hid the folder's own metadata files
+            match["used"] = True
+            if not global_keys and yaml is not None:
+                try:
+                    loaded = yaml.safe_load(content)
+                except yaml.YAMLError:
+                    loaded = None
+                global_keys = list(loaded) if isinstance(loaded, dict) else []
+            continue
+        if match is not None:
+            match["used"] = True
+            where = restore_target_name(match["path"])
+            content = original_metadata_text(manifest, match, content, unedited)
+        elif name in (manifest.get("data_files") or []):
+            # A bibliography or CSL file: the metadata names it, and pdfmd looks for it beside
+            # the first metadata file (then the document), so it goes there.
+            metadata_entry = next((entry for entry in metadata_entries if not is_global_layout_entry(entry)
+                                   and restore_target_name(entry["path"])), None)
+            folder = PurePosixPath(metadata_entry["path"]).parent if metadata_entry else PurePosixPath(".")
+            where = restore_target_name(str(folder / name))
+        else:
+            where = None
+        if where is None and is_yaml:
+            strays.append((name, content, match))
+            continue
+        if match is not None and match["kind"] == "metadata":
+            match["restored"] = str(where)
+        extras[str(where) if where else f"{main_name.stem}.unpacked/{name}"] = content
+    own = [entry for entry in metadata_entries if entry.get("restored")]
+    moved: list[str] = []
+    for name, content, entry in strays:
+        if not own:
+            extras[f"{main_name.stem}.unpacked/{name}"] = content    # found there by itself: nothing else to hide
+            continue
+        # NAME.unpacked/'s YAML is all the metadata a build reads, so there it would hide the folder's own files
+        where = "outside/" + re.sub(r"^\d\d-", "", name)
+        extras[where] = content
+        if entry is not None:
+            entry["restored"] = where
+        moved.append(where + (f" (was {entry['path']})" if entry is not None else ""))
+    if moved:
+        order = " ".join(f"-y {item['restored']}" for item in metadata_entries if item.get("restored"))
+        print(f"WARN  {', '.join(moved)}: metadata from outside the document's folder, where no build finds it by "
+              f"itself; build with {order} to layer it as before", file=sys.stderr)
+    if global_keys:
+        print(f"NOTE  {', '.join(str(key) for key in global_keys)}: from pdfmd's global metadata (pdfmd --setup) on "
+              "the machine that built it; not restored: a build here uses this machine's own")
     # The document itself: the assembled marker is how a build knew the text was
     # finished, so it goes (a restored file is a source again).
     text = ASSEMBLED_COMMENT_RE.sub("", text)
     text = re.sub(r"^pdfmd-assembled:[ \t]*(?:true|yes|on)[ \t]*\n", "", text, count=1, flags=re.MULTILINE)
-    text = restore_front_matter(text.rstrip("\n") + "\n", manifest)
+    held = any(text_holds_parts(extras[entry["restored"]]) for entry in own)
+    text = restore_front_matter(text.rstrip("\n") + "\n", manifest, held)
     files: dict[str, str] = {}
     chunks = manifest.get("chunks") or []
     if len(chunks) > 1:
@@ -18332,28 +18471,8 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
             files[str(where)] = (header + piece) if index == 0 else (chunk.get("head", "") + piece)
     else:
         files[str(main_name)] = text
-    layout = [dict(entry) for entry in manifest.get("layout") or []]
-    if not any(entry["kind"] == "metadata" for entry in layout):
-        found.pop("metadata.yaml", None)       # no metadata file existed: the keys stay in the document
-    for name, content in found.items():
-        base = PurePosixPath(re.sub(r"^\d\d-", "", PurePosixPath(name).name))
-        match = next((entry for entry in layout
-                      if PurePosixPath(entry["path"]).name == base.name and not entry.get("used")), None)
-        if match is not None:
-            match["used"] = True
-            where = restore_target_name(match["path"])
-            content = original_metadata_text(manifest, match, content)
-        elif name in (manifest.get("data_files") or []):
-            # A bibliography or CSL file: the metadata names it, and pdfmd looks for it beside
-            # the first metadata file (then the document), so it goes there.
-            metadata_entry = next((entry for entry in layout if entry["kind"] == "metadata"), None)
-            folder = PurePosixPath(metadata_entry["path"]).parent if metadata_entry else PurePosixPath(".")
-            where = restore_target_name(str(folder / name))
-        else:
-            where = None
-        files[str(where) if where else f"{main_name.stem}.unpacked/{name}"] = content
+    files.update(extras)
     return files
-
 
 
 # --- Finishing the built PDF: bookmarks, running header/footer, linked files ----------------

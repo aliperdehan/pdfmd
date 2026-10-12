@@ -7,6 +7,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +20,10 @@ try:
     import pypdf
 except ImportError:                                  # pragma: no cover
     pypdf = None
+try:
+    import yaml
+except ImportError:                                  # pragma: no cover
+    yaml = None
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -360,6 +366,140 @@ class AttachAndRestore(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual((self.root / "d.restored" / "d.md").read_text(encoding="utf-8"), "Text.\n")
+
+
+@unittest.skipIf(pypdf is None, "pypdf not installed")
+class GlobalMetadataRestore(unittest.TestCase):
+    """v3.28.13: a report in parts whose folder has a metadata.yaml, built on a machine with a global metadata file
+    (pdfmd --setup). The global file beat the folder's own in the attached source, the restore wrote it into
+    report.unpacked/ (whose YAML is all a build reads) and put back a rewritten metadata.yaml without `parts`: the
+    restored report built its title page only."""
+
+    LOCAL = ("# The house settings.\nsubtitle: Folder Subtitle   # the folder's own\nlang: en-GB\n"
+             "pdfmd-options:\n  parts: auto\n  strip-comments: false\n")
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        config = self.root / "home" / "pdfmd"          # the global file's own folder is called pdfmd, as for real
+        config.mkdir(parents=True)
+        (config / "config.yaml").write_text("options: {}\n", encoding="utf-8")
+        self.global_file = config / "metadata.yaml"
+        self.global_file.write_text("# global\nsubtitle: Global Subtitle\ncolorlinks: true\n", encoding="utf-8")
+        old = os.environ.get("PDFMD_CONFIG")
+        os.environ["PDFMD_CONFIG"] = str(config / "config.yaml")
+        pdfmd.load_config.cache_clear()
+
+        def back():
+            os.environ["PDFMD_CONFIG"] = old if old is not None else ""
+            pdfmd.load_config.cache_clear()
+        self.addCleanup(back)
+        self.project = self.root / "project"
+        (self.project / "metadata").mkdir(parents=True)
+        (self.project / "parts").mkdir()
+        self.local = self.project / "metadata" / "metadata.yaml"
+        self.local.write_text(self.LOCAL, encoding="utf-8")
+        self.scaffold = self.project / "report.md"
+        self.scaffold.write_text("---\ntitle: T\n---\n", encoding="utf-8")
+        self.part = self.project / "parts" / "10-a.md"
+        self.part.write_text("# A\n\nThe text of the part.\n", encoding="utf-8")
+
+    def attach(self) -> Path:
+        pdf = blank_pdf(self.project / "report.pdf")
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(self.scaffold, pdf, [self.part], [self.local, self.global_file],
+                                              [], None, False)
+        return pdf
+
+    def restore(self, pdf: Path, out: Path) -> str:
+        shown = io.StringIO()
+        with contextlib.redirect_stdout(shown), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(pdfmd.restore_from_pdf(pdf, out), 0)
+        return shown.getvalue()
+
+    def test_the_folders_metadata_wins_in_the_source_and_comes_back_as_written(self):
+        attachments = pdfmd.read_pdf_attachments(self.attach())
+        manifest = json.loads(attachments[pdfmd.ATTACH_MANIFEST])
+        source = attachments[pdfmd.ATTACH_SOURCE].decode("utf-8")
+        self.assertIn("subtitle: Folder Subtitle", source)
+        self.assertNotIn("Global Subtitle", source)
+        self.assertIn("colorlinks: true", source)                       # what the folder does not say still counts
+        [global_entry] = [entry for entry in manifest["layout"] if entry.get("global")]
+        self.assertEqual(global_entry["path"], "../pdfmd/metadata.yaml")   # not where it is: that told the home folder
+        self.assertEqual(list(manifest["metadata_texts"]), ["metadata/metadata.yaml"])   # not the global file's text
+        out = self.root / "out"
+        shown = self.restore(self.attach(), out)
+        self.assertFalse((out / "report.unpacked").exists())
+        self.assertEqual((out / "metadata" / "metadata.yaml").read_text(encoding="utf-8"), self.LOCAL)
+        self.assertNotIn("parts", (out / "report.md").read_text(encoding="utf-8"))   # metadata.yaml says it
+        self.assertEqual((out / "parts" / "10-a.md").read_text(encoding="utf-8"), "# A\n\nThe text of the part.\n")
+        self.assertIn("NOTE  colorlinks: from pdfmd's global metadata", shown)
+
+    def test_a_pdf_made_before_the_fix_restores_a_folder_that_builds(self):
+        # what v3.28.11 attached: the global file unmarked, its text stored, its value credited with the folder's key
+        pdf = self.attach()
+        attachments = pdfmd.read_pdf_attachments(pdf)
+        manifest = json.loads(attachments[pdfmd.ATTACH_MANIFEST])
+        source = attachments[pdfmd.ATTACH_SOURCE].decode("utf-8")
+        global_path = pdfmd.layout_path(self.project, self.global_file)        # ../home/pdfmd/metadata.yaml
+        for entry in manifest["layout"]:
+            if entry.pop("global", False):
+                entry["path"] = global_path
+        manifest["metadata_texts"][global_path] = self.global_file.read_text(encoding="utf-8")
+        front = re.match(r"^---\n(.*?)\n---\n", source, re.DOTALL)
+        data = yaml.safe_load(front.group(1))
+        origin = data["pdfmd-options"]["origin"]
+        global_label = origin.pop("global")
+        origin["files"]["metadata.yaml"].remove("subtitle")
+        origin["files"][global_label].insert(0, "subtitle")
+        data["subtitle"] = "Global Subtitle"
+        source = "---\n" + yaml.safe_dump(data, sort_keys=False, allow_unicode=True) + "---\n" + source[front.end():]
+        manifest["sha256"] = pdfmd.sha256_text(source)
+        old = blank_pdf(self.root / "old.pdf")
+        pdfmd.write_pdf_attachments(old, {pdfmd.ATTACH_MANIFEST: json.dumps(manifest).encode(),
+                                          pdfmd.ATTACH_SOURCE: source.encode("utf-8")})
+        out = self.root / "old-out"
+        shown = self.restore(old, out)
+        self.assertFalse((out / "report.unpacked").exists())
+        self.assertEqual((out / "metadata" / "metadata.yaml").read_text(encoding="utf-8"), self.LOCAL)
+        self.assertNotIn("parts", (out / "report.md").read_text(encoding="utf-8"))
+        self.assertIn("subtitle", shown.split("global metadata")[0])
+        if shutil.which("pandoc") is None:
+            return
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "-t", "html", "-o", "r.html",
+                               "--standalone", "--no-stamp", "--no-backup"], cwd=out, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": str(self.global_file.with_name("config.yaml"))})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (out / "r.html").read_text(encoding="utf-8")
+        self.assertIn("The text of the part.", html)
+        self.assertIn("Folder Subtitle", html)
+
+    def test_unpack_leaves_the_global_metadata_to_the_machine(self):
+        attachments = pdfmd.read_pdf_attachments(self.attach())
+        assembled = self.project / "report.assembled.md"
+        assembled.write_bytes(attachments[pdfmd.ATTACH_SOURCE])
+        shown = io.StringIO()
+        with contextlib.redirect_stdout(shown):
+            pdfmd.unpack_assembled(assembled, None)
+        folder = self.project / "report.assembled.unpacked"
+        self.assertEqual(sorted(item.name for item in folder.glob("*.yaml")), ["metadata.yaml"])
+        self.assertIn("GLOBAL    colorlinks", shown.getvalue())
+
+    def test_a_metadata_file_from_outside_does_not_hide_the_folders_own(self):
+        shared = self.root / "shared" / "extra.yaml"
+        shared.parent.mkdir()
+        shared.write_text("keywords: [a]\n", encoding="utf-8")
+        pdf = blank_pdf(self.project / "report.pdf")
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(self.scaffold, pdf, [self.part], [self.local, shared], [], None, False)
+        out = self.root / "outside-out"
+        warned = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(warned):
+            pdfmd.restore_from_pdf(pdf, out)
+        self.assertFalse((out / "report.unpacked").exists())
+        self.assertEqual((out / "outside" / "extra.yaml").read_text(encoding="utf-8"), "keywords: [a]\n")
+        self.assertIn("-y metadata/metadata.yaml -y outside/extra.yaml", warned.getvalue())
 
 
 if __name__ == "__main__":
