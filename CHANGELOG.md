@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.26 — 2026-10-13
+
+Pre-edit state: commit `1c9c169` (v3.28.25).
+
+### Fixed
+
+- **`pdfmd --install tui|math|emoji|translit|batchocr` works on a Python the system manages (PEP 668).** On Homebrew's and
+  Debian's Python pip refuses ("externally-managed-environment") and the install failed with "pip failed". pdfmd now sees
+  that message and installs the same packages with `pip install --upgrade --target` into its own folder,
+  `data_root()/python/X.Y` (`~/.local/share/pdfmd/python/3.14`), says so (`NOTE  this Python is managed by the system`), and
+  adds that folder to the end of `sys.path` at start-up, before the optional modules are imported (so the system's own
+  packages win). Any other pip failure is reported as before and not retried.
+- **The doctor no longer tells you to install the romanization packs when they are installed.** It said
+  `pdfmd --install translit for Chinese and the rest` whatever was there; now, when the packs are installed and only off, it says
+  `ready, off until you turn them on: --translit all` and lists them.
+- **`pdfmd.pyz` (the zipapp) lacked `pdfmd_edit`, `pdfmd_help` and `pdfmd_raw`**: `--edit`, `--help` topics and raw-block
+  conversion were missing from it. `scripts/build_zipapp.py` lists the same packages as `pyproject.toml`, and a test
+  (`test_packaging`) fails when the two lists, or the package folders, differ.
+- Tests: `tests/test_install_python.py` (the folder, the start-up path, the fallback and not retrying other failures, the doctor).
+
+---
+
 ## v3.28.25 — 2026-10-13
 
 Pre-edit state: commit `04d057d` (v3.28.24).

@@ -102,6 +102,16 @@ class PyprojectTests(unittest.TestCase):
         for name in ("LICENSE", "assets/fonts/DejaVuSans.ttf", "assets/fonts/DejaVuSans-LICENSE.txt"):
             self.assertTrue((ROOT / "pdfmd_inkmd" / name).is_file(), name)
 
+    def test_the_zipapp_and_the_wheel_ship_the_same_packages(self):
+        # build_zipapp.py's list once lacked pdfmd_edit, pdfmd_help and pdfmd_raw (found in v3.28.26)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_zipapp", ROOT / "scripts" / "build_zipapp.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(sorted(module.PACKAGES), sorted(self.setuptools["packages"]))
+        folders = sorted(path.name for path in ROOT.glob("pdfmd_*") if (path / "__init__.py").is_file())
+        self.assertEqual(sorted(self.setuptools["packages"]), folders)
+
     def test_the_changelog_starts_with_the_current_version(self):
         headings = re.findall(r"^## v(\d+\.\d+\.\d+)\b", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
         self.assertEqual(headings[0], pdfmd.PDFMD_VERSION)

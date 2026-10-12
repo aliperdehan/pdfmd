@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.25"
+PDFMD_VERSION = "3.28.26"
 import argparse
 import csv
 import filecmp
@@ -1412,6 +1412,21 @@ import tempfile
 from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
 from textwrap import dedent
 from typing import Iterator
+
+
+def own_python_folder() -> Path:
+    """Where `pdfmd --install` puts Python packages when the Python it runs from is managed by the system (PEP 668:
+    Homebrew, Debian), one folder per Python version, beside pdfmd's other tools (data_root())."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "pdfmd" / "python" / f"{sys.version_info[0]}.{sys.version_info[1]}"
+
+
+# behind the Python's own packages, before the optional ones below are imported
+if own_python_folder().is_dir() and str(own_python_folder()) not in sys.path:
+    sys.path.append(str(own_python_folder()))
 
 try:
     import yaml
@@ -4635,8 +4650,15 @@ def doctor_report(deep: bool = False) -> bool:
         line(bool(cjk) or "cjk-sc" in installed, "Chinese/Japanese/Korean font" + (f": {cjk[0]}" if cjk else ""),
              "pdfmd --install fonts:cjk-sc  (cjk-jp, cjk-kr...)", "a CJK font (only needed for documents in those scripts)")
         packs = sorted(TRANSLIT_PACKS)
-        line(None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "")
-                   + "  (--translit list; pdfmd --install translit for Chinese and the rest)")
+        rest = [pack for pack in module.translit.PACKS if pack not in TRANSLIT_PACKS]
+        ready = sorted(pack for pack in rest if module.translit.available(pack))
+        if ready and len(ready) == len(rest):
+            hint = f"  (ready, off until you turn them on: --translit all; {', '.join(ready)})"
+        elif ready:
+            hint = f"  (--translit list; ready, off until turned on: {', '.join(ready)}; pdfmd --install translit for the rest)"
+        else:
+            hint = "  (--translit list; pdfmd --install translit for Chinese and the rest)"
+        line(None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "") + hint)
 
     print("\nReading PDFs (PDF to Markdown):")
     reader = find_batchocr()
@@ -6467,7 +6489,20 @@ def install_extra(kind: str) -> bool:
     command = [sys.executable, "-m", "pip", "install", *specs]
     print(f"INSTALL  {kind} ({INSTALL_SIZES[kind]}): " + " ".join(shlex.quote(part) for part in command))
     try:
-        completed = subprocess.run(command)
+        completed = subprocess.run(command, stderr=subprocess.PIPE, text=True)
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        if completed.returncode != 0 and "externally-managed-environment" in (completed.stderr or ""):
+            # PEP 668 (Homebrew's or Debian's Python): not the system's packages, pdfmd's own folder (v3.28.26)
+            folder = own_python_folder()
+            command = [sys.executable, "-m", "pip", "install", "--upgrade", "--target", str(folder), *specs]
+            print(f"NOTE  this Python is managed by the system (PEP 668); installing into pdfmd's own folder {display_path(folder)}: "
+                  + " ".join(shlex.quote(part) for part in command))
+            folder.mkdir(parents=True, exist_ok=True)
+            completed = subprocess.run(command)
+            if completed.returncode == 0 and str(folder) not in sys.path:
+                sys.path.append(str(folder))
+                importlib.invalidate_caches()
     except OSError as error:
         print(f"Could not run pip ({error}).", file=sys.stderr)
         return False

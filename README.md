@@ -141,6 +141,11 @@ sudo pacman -S python-pipx pandoc-cli typst texlive   # Arch
 
 On any Linux, `pdfmd --install full` (Pandoc and Typst) needs no package manager and no root.
 
+The extras that are Python packages (`pdfmd --install math`, `tui`, `translit`, `batchocr` ...) go into the Python pdfmd runs
+from; when that Python is managed by the system (Homebrew's, Debian's: "externally-managed-environment", PEP 668) pdfmd puts
+them in its own folder instead, `~/.local/share/pdfmd/python/3.14` (one per Python version), which it adds to the end of
+the module path when it starts. Nothing is installed into the system's Python.
+
 ```powershell
 py -m pip install --user pipx; py -m pipx ensurepath          # Windows
 winget install --id JohnMacFarlane.Pandoc; winget install --id Typst.Typst
