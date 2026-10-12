@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.20"
+PDFMD_VERSION = "3.28.21"
 import argparse
 import csv
 import filecmp
@@ -8735,9 +8735,9 @@ def has_monofont(md_path: Path, variables: list[str], metadata_files=()) -> bool
 # writer as it is, and `{=pdfmd}` blocks are the same shape. A plain ```{pdfmd} fence (no `=`) is ordinary code.
 # The fence is any run of three or more backticks (or tildes) -- a longer one lets the block hold shorter ones -- and
 # the closing line is a run of at least as many.
-RAW_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>(?P<c>[`~])(?P=c){2,})[ \t]*\{=[^}\n]*\}[ \t]*\n.*?\n[ \t]*(?P=fence)(?P=c)*[ \t]*$",
+CODE_RAW_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>(?P<c>[`~])(?P=c){2,})[ \t]*\{=[^}\n]*\}[ \t]*\n.*?\n[ \t]*(?P=fence)(?P=c)*[ \t]*$",
                           re.MULTILINE | re.DOTALL)
-RAW_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1\{=[^}\s]+\}", re.DOTALL)
+CODE_RAW_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1\{=[^}\s]+\}", re.DOTALL)
 
 
 def has_code_spans(text: str) -> bool:
@@ -8746,7 +8746,7 @@ def has_code_spans(text: str) -> bool:
     (a fence is just 3+ backticks), plus the rarer ``~~~`` fence style; raw
     blocks and spans (`{=latex}`, `{=html}`, `{=typst}`, `{=pdfmd}` ...) are not code.
     """
-    text = RAW_SPAN_RE.sub("", RAW_FENCE_RE.sub("", EMBED_BLOCK_RE.sub("", text)))
+    text = CODE_RAW_SPAN_RE.sub("", CODE_RAW_FENCE_RE.sub("", EMBED_BLOCK_RE.sub("", text)))
     return "`" in text or bool(re.search(r"(?m)^\s{0,3}~~~", text))
 
 

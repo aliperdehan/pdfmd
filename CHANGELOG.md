@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.21 — 2026-10-13
+
+Pre-edit state: commit `96cd623` (v3.28.20).
+
+### Fixed
+
+- **v3.28.17 broke raw LaTeX in headers and pdfmd-options.** Its code-font test defined `RAW_FENCE_RE` a second time,
+  further down in `pdfmd.py`, and so replaced the pattern that `raw_latex_only()` and `pandoc_header_includes()` use to read
+  raw blocks: a fenced ```` ```{=latex} ```` header was no longer seen (`tests/test_header_includes.py`, three tests, caught by
+  the full suite of v3.28.18, not by the modules run before it). The code-font test's patterns are `CODE_RAW_FENCE_RE` and
+  `CODE_RAW_SPAN_RE` now; nothing else changes. v3.28.17 to v3.28.20 carry the bug.
+
+---
+
 ## v3.28.20 — 2026-10-13
 
 Pre-edit state: commit `2e7e0a3` (v3.28.19).
