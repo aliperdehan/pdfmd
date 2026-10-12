@@ -41,6 +41,48 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.14 — 2026-10-12
+
+Pre-edit state: commit `4ea4176` (v3.28.13).
+
+### Fixed
+
+- **A font named in a metadata file was replaced by pdfmd's default.** `has_mainfont()` and `has_monofont()`
+  read only `-V` and the document's own front matter.
+  - So a `metadata.yaml` that said `mainfont: Georgia` and `monofont: Menlo` still built in STIX Two Text and
+    JetBrains Mono: pdfmd's `-V mainfont=` and `-V monofont=` beat metadata in Pandoc.
+  - The global metadata of `pdfmd --setup`, whose menu offers the main and the code font, was overridden the same
+    way.
+  - Both now also read the metadata files the document gets (`has_font_setting()`), at every site: a single build,
+    the `.tex` route, `-r` reports, `--check-fonts`.
+  - A font the metadata names now counts as the document's own: pdfmd no longer swaps it for another script's
+    font, as it never swapped one named in the front matter.
+  - nulabreport's `metadata.yaml` names pdfmd's own defaults, which is why the bug did not show there. Its builds
+    no longer report `MONOFONT` ("has code but no monofont set") for a monofont the file sets.
+
+### Changed
+
+- **pdfmd's own main font is named like its other defaults.** `AUTO MAINFONT  doc.md: no mainfont set; using STIX
+  Two Text` (in the one-line summary: `MAINFONT`). Before, it was said only when the font was swapped for the
+  document's script, while the margin and the code font were always named.
+- **A decision is reported once per build.** A build that tries a second engine repeated each `AUTO` line.
+
+Checked:
+- LR4-5: the generated `.tex` and `.typ` are identical to v3.28.13's.
+- A `metadata.yaml` with `mainfont: Georgia` and `monofont: Menlo`, built with lualatex and with Typst on Pandoc
+  3.12 and 3.1.3: the PDF now has Georgia (and Menlo with lualatex). It had STIX Two Text and JetBrains Mono.
+- Kazakh text with `mainfont: STIX Two Text` in `metadata.yaml`, as nulabreport has it:
+  - before, the whole document was set in Noto Serif;
+  - now STIX Two Text stays, and the words with letters it lacks are set in Noto Serif;
+  - every letter is drawn, with lualatex and with Typst.
+
+### Tests
+
+- `tests/test_setup.py`: a folder `metadata.yaml`'s `mainfont` and the global file's `monofont` reach the
+  `.tex`, with no MAINFONT or MONOFONT note. Without either, both notes are given. Fails on v3.28.13.
+
+---
+
 ## v3.28.13 — 2026-10-12
 
 Pre-edit state: commit `08c8076` (v3.28.12).

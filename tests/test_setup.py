@@ -153,6 +153,37 @@ class Plain(unittest.TestCase):
                 os.environ["PDFMD_CONFIG"] = old
             pdfmd.load_config.cache_clear()
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
+    def test_fonts_a_metadata_file_names_are_not_replaced_by_pdfmds_defaults(self):
+        # v3.28.14: pdfmd's -V mainfont/-V monofont overrode a metadata file's own (the global one's too)
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))
+        self.addCleanup(__import__("shutil").rmtree, directory, True)
+        config, project = directory / "config", directory / "project"
+        config.mkdir()
+        project.mkdir()
+        (config / "config.yaml").write_text("options: {}\n", encoding="utf-8")
+        (config / "metadata.yaml").write_text("monofont: Global Mono\n", encoding="utf-8")
+        (project / "metadata.yaml").write_text("mainfont: Folder Serif\n", encoding="utf-8")
+        (project / "a.md").write_text("---\ntitle: T\n---\n\nSome `code`.\n", encoding="utf-8")
+        (project / "b.md").write_text("---\ntitle: T\n---\n\nSome `code`.\n", encoding="utf-8")
+
+        def build(name: str, config_file: str) -> tuple[str, str]:
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), name, "--to", "latex", "-o", "out.tex",
+                                   "--no-stamp", "--no-backup"], cwd=project, capture_output=True, text=True,
+                                  env={**os.environ, "PDFMD_CONFIG": config_file})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stdout, (project / "out.tex").read_text(encoding="utf-8")
+
+        shown, tex = build("a.md", str(config / "config.yaml"))
+        self.assertIn("\\setmainfont[]{Folder Serif}", tex)
+        self.assertIn("\\setmonofont[]{Global Mono}", tex)
+        self.assertNotIn("MAINFONT", shown)
+        self.assertNotIn("MONOFONT", shown)
+        (project / "metadata.yaml").unlink()
+        shown, tex = build("b.md", "")
+        self.assertIn("MAINFONT", shown)                 # pdfmd's own default, named like its other defaults
+        self.assertIn("MONOFONT", shown)
+
     def test_a_later_metadata_file_wins_as_in_pandoc(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))
         self.addCleanup(__import__("shutil").rmtree, directory, True)

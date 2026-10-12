@@ -1343,7 +1343,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.13"
+PDFMD_VERSION = "3.28.14"
 import argparse
 import csv
 import filecmp
@@ -7456,6 +7456,9 @@ def mainfont_choice(md_paths: list[Path], metadata_files: list[Path], variables:
             return chosen
     if cli_font:
         return cli_font
+    if not document_font and note:
+        # pdfmd's own default, named like every other default it applies (v3.28.14; it was silent)
+        note("MAINFONT", f"{md_paths[0]}: no mainfont set; using {base}")
     return None if document_font else base
 
 
@@ -7501,7 +7504,7 @@ def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) 
     paths = [md_path]
     mode, missing_mode = fallback_settings(md_path, metadata_files)
     notes: list[tuple] = []
-    document_font = has_mainfont(md_path, variables)
+    document_font = has_mainfont(md_path, variables, metadata_files)
     main = (mainfont_choice(paths, metadata_files, variables, None, document_font,
                             not auto_disabled(no_auto, "mainfont"), no_auto, lambda *a: notes.append(a))
             or document_font_setting("mainfont", paths, metadata_files, variables)
@@ -8076,12 +8079,21 @@ def find_markdown(value: Path, recursive: bool = False) -> Path:
     raise FileNotFoundError(f"Could not find Markdown file for '{value}'. Available: {available or 'none'}")
 
 
-def has_mainfont(md_path: Path, variables: list[str]) -> bool:
-    if any(variable.startswith("mainfont=") for variable in variables):
+def has_mainfont(md_path: Path, variables: list[str], metadata_files=()) -> bool:
+    return has_font_setting("mainfont", md_path, variables, metadata_files)
+
+
+def has_font_setting(key: str, md_path: Path, variables: list[str], metadata_files=()) -> bool:
+    """Whether the document names this font itself: with -V, in its front matter, or in a metadata file it gets
+    (the folder's metadata.yaml, the global one of pdfmd --setup). Until v3.28.14 only the first two counted, so
+    pdfmd's own default (`-V mainfont=STIX Two Text`, `-V monofont=JetBrains Mono`) overrode a metadata file's."""
+    if any(variable.startswith(f"{key}=") for variable in variables):
         return True
     text = md_path.read_text(encoding="utf-8-sig")
     front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
-    return bool(front_matter and re.search(r"^mainfont\s*:", front_matter.group(1), re.MULTILINE))
+    if front_matter and re.search(rf"^{key}\s*:", front_matter.group(1), re.MULTILINE):
+        return True
+    return any(metadata_file_yaml(path).get(key) not in (None, "") for path in metadata_files)
 
 
 LATEX_GEOMETRY_RE = re.compile(r"\\usepackage(?:\[[^\]]*\])?\{[^}]*\bgeometry\b[^}]*\}|\\geometry\s*\{")
@@ -8507,12 +8519,8 @@ def fix_typst_margin(text: str, is_metadata: bool = False) -> str:
     return prefix + fixed_block + suffix
 
 
-def has_monofont(md_path: Path, variables: list[str]) -> bool:
-    if any(variable.startswith("monofont=") for variable in variables):
-        return True
-    text = md_path.read_text(encoding="utf-8-sig")
-    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
-    return bool(front_matter and re.search(r"^monofont\s*:", front_matter.group(1), re.MULTILINE))
+def has_monofont(md_path: Path, variables: list[str], metadata_files=()) -> bool:
+    return has_font_setting("monofont", md_path, variables, metadata_files)
 
 
 def has_code_spans(text: str) -> bool:
@@ -15971,8 +15979,12 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     stamp_overrides = stamp_overrides or {}
     parts_inputs = list(extra_inputs or [])
     auto_summary: list[str] = []
+    noted: set[tuple[str, str]] = set()
 
     def note(kind: str, detail: str) -> None:
+        if (kind, detail) in noted:          # the same decision, made again for the next engine
+            return
+        noted.add((kind, detail))
         if verbose:
             print(f"AUTO {kind}  {detail}")
         else:
@@ -16216,7 +16228,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             # instead, since there is no compile output here to inspect for
             # a retry to react to.
             is_tex_target = target_format in TEX_STANDALONE_FORMATS
-            document_font = has_mainfont(md_path, variables)
+            document_font = has_mainfont(md_path, variables, metadata_files)
             mainfont_auto = not auto_disabled(no_auto, "mainfont")
             tablewidth_auto = not auto_disabled(no_auto, "tablewidth")
             standalone_auto = (not auto_disabled(no_auto, "standalone")
@@ -16230,7 +16242,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                               and not has_geometry(md_path, variables, metadata_files, preamble_files or []))
             monofont_needed = (not auto_disabled(no_auto, "monofont")
                               and any_code_spans
-                              and not has_monofont(md_path, variables))
+                              and not has_monofont(md_path, variables, metadata_files))
             if is_tex_target and geometry_needed:
                 note("MARGIN", f"{md_path}: no geometry/margin set; "
                               f"using geometry:margin={DEFAULT_MARGIN} on LaTeX-family targets")
@@ -16416,7 +16428,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             flush_summary()
             return md_path, result.returncode == 0 and not ascii_problem, ascii_problem or result.stderr[-3000:]
 
-        document_font = has_mainfont(md_path, variables)
+        document_font = has_mainfont(md_path, variables, metadata_files)
         explicit_font = document_font or bool(font)
         mainfont_auto = not auto_disabled(no_auto, "mainfont")
         tablewidth_auto = not auto_disabled(no_auto, "tablewidth")
@@ -16432,7 +16444,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                           f"read (geometry: is) -- using geometry:{','.join(margin_options)}")
         monofont_needed = (not auto_disabled(no_auto, "monofont")
                           and any_code_spans
-                          and not has_monofont(md_path, variables))
+                          and not has_monofont(md_path, variables, metadata_files))
         if monofont_needed:
             note("MONOFONT", f"{md_path}: has code but no monofont set; "
                             f"using {default_monofont()} on LaTeX-family engines")
@@ -20743,7 +20755,7 @@ def main() -> None:
                     if (report_pdf_meta_options["pdf_metadata"] and is_tex_target
                         and stamp_scope_matches(report_pdf_meta_options, output)) else None
                 )
-                report_document_font = is_tex_target and has_mainfont(files[0], variables)
+                report_document_font = is_tex_target and has_mainfont(files[0], variables, metadata_files)
                 report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
                 report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
                                           and not has_standalone_option(pandoc_options))
@@ -20761,7 +20773,7 @@ def main() -> None:
                                          f"geometry:{','.join(report_margin_options)}")
                 report_monofont_needed = (is_tex_target and not auto_disabled(report_no_auto, "monofont")
                                           and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
-                                          and not has_monofont(files[0], variables))
+                                          and not has_monofont(files[0], variables, metadata_files))
                 if report_monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {default_monofont()} on LaTeX-family targets")
@@ -20893,7 +20905,7 @@ def main() -> None:
                                          f"geometry:{','.join(margin_options)}")
                 monofont_needed = (not auto_disabled(report_no_auto, "monofont")
                                   and any(has_code_spans(file.read_text(encoding="utf-8-sig")) for file in files)
-                                  and not has_monofont(files[0], variables))
+                                  and not has_monofont(files[0], variables, metadata_files))
                 if monofont_needed:
                     report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                            f"using {default_monofont()} on LaTeX-family engines")
