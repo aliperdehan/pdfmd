@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.18"
+PDFMD_VERSION = "3.28.19"
 import argparse
 import csv
 import filecmp
@@ -6569,7 +6569,16 @@ def setup_command(screen: str = "") -> bool:
         print(f"--setup takes plain or fancy, not {screen!r}.", file=sys.stderr)
         return False
     import copy
-    files = {"config": path, "metadata": path.with_name("metadata.yaml")}
+    metadata_path = path.with_name("metadata.yaml")
+    if PRESET_CLI is not None:
+        name = re.sub(r"\.ya?ml$", "", PRESET_CLI.strip())
+        if not name or name.casefold() in PRESET_OFF or re.search(r"[/\\]", name) or name.startswith("~"):
+            print(f"--setup --preset takes the name of a preset (lab, or lab.yaml), or default, not {PRESET_CLI!r}.",
+                  file=sys.stderr)
+            return False
+        if name.casefold() not in PRESET_DEFAULT:
+            metadata_path = path.with_name("presets") / f"{name}.yaml"
+    files = {"config": path, "metadata": metadata_path}
     stores: dict = {}
     texts: dict = {}
     for name, file in files.items():
@@ -6583,7 +6592,8 @@ def setup_command(screen: str = "") -> bool:
                 return False
             stores[name] = loaded if isinstance(loaded, dict) else {}
     original = copy.deepcopy(stores)
-    saved = module.run(stores, NO_AUTO_KINDS, str(path), screen or None, flag_names=flag_names(),
+    shown_path = str(path) if metadata_path.name == "metadata.yaml" else f"{path}  (global metadata rows: {metadata_path.parent.name}/{metadata_path.name})"
+    saved = module.run(stores, NO_AUTO_KINDS, shown_path, screen or None, flag_names=flag_names(),
                        flag_topics=flag_topics())
     if not saved:
         print("Nothing saved.")
@@ -6840,13 +6850,16 @@ class AutoLog:
     def record_file(self, kind: str, path: Path, verbose: bool) -> None:
         """A file pdfmd picked up (AUTO YAML / AUTO TEX): FOUND, but the global metadata is a default."""
         if verbose:
-            if kind == "YAML" and path == global_metadata_file():
-                print(f"AUTO {kind}  {display_path(path)}  (the global metadata of pdfmd --setup)")
+            if kind == "YAML" and is_global_metadata(path):
+                print(f"AUTO {kind}  {display_path(path)}  "
+                      + ("(the global metadata of pdfmd --setup)" if preset_name(path) == "default"
+                         else f"(the preset {preset_name(path)} of pdfmd --setup)"))
             else:
                 print(f"AUTO {kind}  {display_path(path)}")
             return
-        if kind == "YAML" and path == global_metadata_file():
-            self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata")
+        if kind == "YAML" and is_global_metadata(path):
+            self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata" if preset_name(path) == "default"
+                                                  else f"preset {preset_name(path)}")
         else:
             self.items[("FOUND", f"{kind} {path}")] = (self.RANK[kind], display_path(path))
 
@@ -7694,7 +7707,7 @@ def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) 
     if module is None or index is None:
         print("The fonts check is part of the pdfmd_unicode package, which is not installed here.")
         return False
-    found = find_metadata(md_path.parent, None, document_stem=md_path.stem)
+    found = find_metadata(md_path.parent, None, document_stem=md_path.stem, document=md_path)
     metadata_files = ([found] if isinstance(found, Path) else found if isinstance(found, list) else [])
     paths = [md_path]
     mode, missing_mode = fallback_settings(md_path, metadata_files)
@@ -10113,7 +10126,7 @@ def history_documents(args) -> list[Path]:
 
 
 def linked_metadata(document: Path, requested) -> list[Path]:
-    found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
+    found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem, document=document)
     return [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
 
 
@@ -10438,7 +10451,8 @@ def history_command(args) -> int:
             print(f"ERROR  {error}", file=sys.stderr)
             return 1
         text = document.read_text(encoding="utf-8-sig")
-        metadata = find_metadata(document.parent.resolve(), args.metadata_file, document_stem=document.stem)
+        metadata = find_metadata(document.parent.resolve(), args.metadata_file, document_stem=document.stem,
+                                 document=document)
         linked = [] if metadata is AUTO_METADATA_DISABLED or metadata is None else (metadata if isinstance(metadata, list) else [metadata])
         path = history_file(document, linked, existing=args.history_to_notes)
         if args.history_to_file:
@@ -10942,7 +10956,7 @@ def tables_command(args) -> int:
         text = document.read_text(encoding="utf-8")
         owner = scaffolds.get(document, document)       # the report a part is built into: its folder and reader
         base = owner.parent
-        found = find_metadata(base.resolve(), args.metadata_file, document_stem=owner.stem)
+        found = find_metadata(base.resolve(), args.metadata_file, document_stem=owner.stem, document=owner)
         linked = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
         reader = (args.from_format or "markdown") if auto_disabled(args.no_auto, "reader") \
             else (resolve_from_format(owner, args.from_format, linked)[0] or "markdown")
@@ -11191,6 +11205,115 @@ def global_metadata_file() -> Path | None:
     return candidate if candidate is not None and candidate.is_file() else None
 
 
+# -- Presets: other global metadata files to choose from (v3.28.19) ------------------------------------------------
+# `presets/NAME.yaml` beside the config file is a global metadata file like `metadata.yaml` (which is the preset
+# `default`): `--preset lab`, `pdfmd-options: {preset: lab}` (or lab.yaml; a path works too) takes it instead,
+# `--preset none` / `--no-global-metadata` / `pdfmd-options: {global-metadata: false}` takes none. The command line
+# wins, then the document's own pdfmd-options, its metadata files', then the config file's `options`.
+PRESET_CLI: str | None = None                  # --preset (set in main)
+GLOBAL_METADATA_CLI: bool | None = None        # --global-metadata / --no-global-metadata (set in main)
+PRESET_OFF = ("none", "off", "false", "no")
+PRESET_DEFAULT = ("default", "on", "true", "yes")
+
+
+def presets_dir() -> Path | None:
+    config = config_path()
+    return None if config is None else config.with_name("presets")
+
+
+def list_presets() -> list[Path]:
+    folder = presets_dir()
+    return sorted((item for item in folder.glob("*.y*ml") if item.suffix in (".yaml", ".yml")),
+                  key=lambda item: item.name.casefold()) if folder is not None and folder.is_dir() else []
+
+
+def preset_name(path: Path) -> str:
+    return "default" if path.parent != presets_dir() else path.stem
+
+
+def is_global_metadata(path) -> bool:
+    """Whether ``path`` is pdfmd's global metadata (`metadata.yaml` beside the config file) or one of its presets."""
+    config = config_path()
+    if config is None or path is None:
+        return False
+    folder = Path(os.path.abspath(config.parent))
+    where = Path(os.path.abspath(path))
+    return ((where.parent == folder and where.name == "metadata.yaml")
+            or (where.parent == folder / "presets" and where.suffix in (".yaml", ".yml")))
+
+
+def preset_file(value: str, base: Path | None = None) -> Path | None:
+    """The file a preset value names: `default`, a name in presets/ (with or without .yaml), or a path (relative to
+    ``base``, the document's folder, else to the working folder). Stops with the names there are for one that is none."""
+    name = str(value).strip()
+    if name.casefold() in PRESET_DEFAULT:
+        return global_metadata_file()
+    folder = presets_dir()
+    if folder is not None and not re.search(r"[/\\]", name) and not name.startswith("~"):
+        for candidate in (name, f"{name}.yaml", f"{name}.yml"):
+            if (folder / candidate).is_file():
+                return folder / candidate
+    else:
+        path = Path(name).expanduser()
+        for candidate in ([path] if path.is_absolute() else [(base or Path.cwd()) / path, Path.cwd() / path]):
+            if candidate.is_file():
+                return Path(os.path.abspath(candidate))
+    known = ", ".join(preset_name(item) for item in list_presets()) or "none yet"
+    raise SystemExit(f"unknown preset {name!r} (the presets/ folder beside the config file has: {known}; "
+                     "`none` takes no global metadata; pdfmd --presets lists them)")
+
+
+def presets_report(path: Path | None = None) -> bool:
+    """`--presets [DOCUMENT]`: the global metadata files there are, and which one a build here would use."""
+    config = config_path()
+    if config is None:
+        print("The config file is switched off (PDFMD_CONFIG is empty): there is no global metadata.")
+        return False
+    default = global_metadata_file()
+    rows = [("default", default, "metadata.yaml" if default else "metadata.yaml (not there yet: pdfmd --setup writes it)")]
+    rows += [(preset_name(item), item, f"presets/{item.name}") for item in list_presets()]
+    document = Path(path) if path is not None and Path(path).is_file() else None
+    try:
+        local = find_local_metadata((document.parent if document else Path.cwd()).resolve(), None,
+                                    document_stem=document.stem if document else None)
+        local = [] if local is AUTO_METADATA_DISABLED or local is None else (local if isinstance(local, list) else [local])
+        used = chosen_global_metadata(document, local)
+    except (SystemExit, FileNotFoundError, ValueError) as error:
+        print(f"WARN  {error}", file=sys.stderr)
+        used = None
+    for name, file, where in rows:
+        keys = [("options" if key == "pdfmd-options" else key) for key in metadata_file_yaml(file)] if file else []
+        shown = ", ".join(keys[:6]) + (f" +{len(keys) - 6}" if len(keys) > 6 else "")
+        print(f"{'*' if used is not None and file is not None and file == used else ' '} {name:<14} {where}"
+              + (f"  ({shown})" if shown else ""))
+    print("  (* is the one a build here would use; none marked: no global metadata)" if used is None
+          else "  (* is the one a build here would use)")
+    return True
+
+
+def chosen_global_metadata(document: Path | None, local_files: list[Path]) -> Path | None:
+    """The global metadata file this document gets: None when it gets none. See the section above for the order."""
+    def decide(preset, enabled):
+        if enabled is False or (preset is not None and str(preset).strip().casefold() in PRESET_OFF):
+            return False
+        if preset is not None and str(preset).strip() and str(preset).strip().casefold() not in PRESET_DEFAULT:
+            return preset_file(preset, document.parent if document is not None else None)
+        return True if (preset is not None or enabled is not None) else None
+    chosen = decide(PRESET_CLI, GLOBAL_METADATA_CLI)
+    if chosen is None:
+        if document is not None:
+            preset = first_pdfmd_option(document, local_files, "preset")
+            enabled = first_pdfmd_option(document, local_files, "global-metadata")
+        else:
+            preset, enabled = config_options().get("preset"), config_options().get("global-metadata")
+        if isinstance(enabled, str):
+            enabled = False if enabled.strip().casefold() in PRESET_OFF else True if enabled.strip().casefold() in PRESET_DEFAULT else None
+        chosen = decide(preset, enabled if isinstance(enabled, bool) else None)
+    if chosen is False:
+        return None
+    return chosen if isinstance(chosen, Path) else global_metadata_file()
+
+
 METADATA_PRECEDENCE_CLI: str | None = None    # --metadata-precedence (set in main)
 METADATA_PRECEDENCES = ("later", "first")
 
@@ -11216,9 +11339,7 @@ def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
     folder's own metadata.yaml). With `--metadata-precedence first` the others go in reverse, so that the first wins
     in Pandoc too (v3.27.22). The list itself keeps the global file last (Pandoc runs in the folder of its first
     entry); what pdfmd reads out of the files itself follows this order too (metadata_files_by_priority)."""
-    extra = global_metadata_file()
-    if extra is None or extra not in metadata_files:
-        extra = None
+    extra = next((path for path in metadata_files if is_global_metadata(path)), None)
     local = [path for path in metadata_files if path != extra]
     if len(local) > 1 and metadata_precedence() == "first":
         local.reverse()
@@ -11235,12 +11356,14 @@ def metadata_files_by_priority(metadata_files) -> list[Path]:
 
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                   document_class: str | None = None,
-                  document_stem: str | None = None) -> Path | list[Path] | object | None:
+                  document_stem: str | None = None, document: Path | None = None) -> Path | list[Path] | object | None:
     """Choose metadata files (see find_local_metadata), with the global metadata file last when the files were
     found automatically (not named with -y). It is the lowest in priority: pandoc_metadata_order gives it to Pandoc
     first."""
     found = find_local_metadata(directory, requested, report, document_class, document_stem)
-    extra = global_metadata_file() if requested is None else None
+    extra = None
+    if requested is None and found is not AUTO_METADATA_DISABLED:
+        extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
     if extra is None or found is AUTO_METADATA_DISABLED:
         return found
     if found is None:
@@ -11673,7 +11796,7 @@ def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list
     if requested is None:
         requested = option_names(frontmatter_pdfmd_options(document), "yaml") or None
     try:
-        found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem)
+        found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem, document=document)
     except (FileNotFoundError, ValueError):
         return []
     if found is None or found is AUTO_METADATA_DISABLED:
@@ -14043,8 +14166,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
                 label = f"{metadata_file.parent.name}-{label}"
             labels.append(label)
             label_of[metadata_file] = label
-        if global_metadata_file() in label_of:
-            global_label = label_of[global_metadata_file()]
+        global_label = next((label for item, label in label_of.items() if is_global_metadata(item)), None)
         # The files in the order a build layers them (v3.28.13): the global metadata file (pdfmd --setup) lowest,
         # as Pandoc gets it. In list order it came last, so its keys beat the folder's own metadata.yaml here.
         for metadata_file in pandoc_metadata_order(list(plan.metadata_files)):
@@ -17384,7 +17506,7 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
                 # Its path relative to the document told how deep the folder was, and from outside the home
                 # folder it held the user's name: a neutral one now (`..`, so no restore writes it anywhere)
                 layout.extend({"kind": kind, "path": GLOBAL_LAYOUT_PATH, "global": True}
-                              if kind == "metadata" and item == global_metadata_file()
+                              if kind == "metadata" and is_global_metadata(item)
                               else {"kind": kind, "path": layout_path(base, item)}
                               for item in paths)
         if "hst" in plan.kinds and plan.hst_file is not None:
@@ -17401,7 +17523,7 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
     metadata_texts: dict[str, str] = {}
     if plan is not None and "metadata" in plan.kinds and "metadata" not in stripped:
         for item in plan.metadata_files:
-            if item == global_metadata_file():
+            if is_global_metadata(item):
                 continue
             try:
                 metadata_texts[layout_path(base, item)] = item.read_text(encoding="utf-8-sig")
@@ -19677,7 +19799,7 @@ def direct_route(path: Path, target_format: str, from_format: str | None, no_aut
 def direct_defaults(source: Path, metadata_request: list[str] | None) -> dict:
     """The settings `--apply-defaults` gives a direct document: those of the metadata files found for it."""
     import pdfmd_direct.defaults as defaults
-    found = find_metadata(source.parent.resolve(), metadata_request, document_stem=source.stem)
+    found = find_metadata(source.parent.resolve(), metadata_request, document_stem=source.stem, document=source)
     files = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
     return defaults.collect([metadata_file_yaml(item) for item in files])
 
@@ -20176,6 +20298,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-V", "--var", action="append", default=[], dest="variable", metavar="KEY=VALUE")
     parser.add_argument("-y", "--metadata-file", nargs="*", default=None, metavar="FILE",
                         help="metadata YAML file(s), 'all', or bare -y to disable discovery")
+    parser.add_argument("--preset", metavar="NAME", default=None,
+                        help="take the global metadata from another file than metadata.yaml: NAME (or NAME.yaml) in the "
+                             "presets/ folder beside the config file, or a path; `default` is metadata.yaml, `none` no "
+                             "global metadata at all. Also `pdfmd-options: {preset: lab}`. With --setup it is the file the "
+                             "'Every document' rows edit (made if it is not there). The presets there are: --presets")
+    parser.add_argument("--global-metadata", action=argparse.BooleanOptionalAction, default=None,
+                        help="--no-global-metadata: build without the global metadata of pdfmd --setup (and its presets), "
+                             "--global-metadata: with it, whatever a document's `pdfmd-options: {global-metadata: false}` "
+                             "or the config says. Also `options: {global-metadata: false}` in --setup")
+    parser.add_argument("--presets", action="store_true",
+                        help="list the presets (global metadata files, see --preset) and the one a build here would use")
     parser.add_argument("--metadata-precedence", choices=METADATA_PRECEDENCES, default=None,
                         help="which of two metadata files wins a key both set, pdfmd-options too: later (default, as "
                              "Pandoc takes them) or first. The document's own front matter beats both, the global "
@@ -20649,6 +20782,7 @@ def main() -> None:
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
     global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, METADATA_PRECEDENCE_CLI
+    global PRESET_CLI, GLOBAL_METADATA_CLI
     CITEPROC_DISABLED = args.no_citeproc
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
@@ -20679,6 +20813,7 @@ def main() -> None:
     CACHE_PLOTS_CLI = args.cache_plots or None
     SEED_LABELS_CLI = args.seed_labels
     METADATA_PRECEDENCE_CLI = args.metadata_precedence
+    PRESET_CLI, GLOBAL_METADATA_CLI = args.preset, args.global_metadata
     global CACHE_LOCATION_CLI
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
@@ -20731,6 +20866,8 @@ def main() -> None:
         raise SystemExit(init_vscode_command(args))
     if args.show_config or args.init_config:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
+    if args.presets:
+        raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
     if args.setup is not None:
         raise SystemExit(0 if setup_command(args.setup) else 1)
     if args.install:
@@ -21017,7 +21154,7 @@ def main() -> None:
             if metadata_request is None:
                 metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or None
             metadata = find_metadata(metadata_directory.resolve(), metadata_request, report=True,
-                                     document_class=document_class, document_stem=files[0].stem)
+                                     document_class=document_class, document_stem=files[0].stem, document=files[0])
         except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
@@ -21446,7 +21583,7 @@ def main() -> None:
                 requested = option_names(frontmatter_pdfmd_options(file), "yaml") or None
             metadata_by_dir[cache_key] = find_metadata(directory, requested,
                                                         document_class=document_class,
-                                                        document_stem=file.stem)
+                                                        document_stem=file.stem, document=file)
             discovered = metadata_by_dir[cache_key]
             if args.metadata_file is None and discovered is not None and discovered is not AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]

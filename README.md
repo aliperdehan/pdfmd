@@ -1609,6 +1609,13 @@ say in `pdfmd-options:` or its front matter, for every document:
 - *global metadata* (a `metadata.yaml` beside the config file, below anything a document's own folder says): author, language,
   paper size, font size, page geometry, main and code font, line spacing, coloured links, table of contents, and for
   citations the bibliography file, the CSL style and linked citations;
+  The global metadata can be switched off (`--no-global-metadata`, `pdfmd-options: {global-metadata: false}`, or
+  the *Use the global metadata* row; `--global-metadata` turns it back on for one run) and replaced by a **preset**: another
+  file, `presets/NAME.yaml` beside the config file. `--preset lab` (or `lab.yaml`, or a path), `pdfmd-options: {preset: lab}`
+  in a document or a folder's metadata, or the *Which set of global metadata* row chooses it; `--preset none` takes no global
+  metadata, `default` is `metadata.yaml`. `pdfmd --setup --preset lab` edits that preset's rows (it makes the file), and
+  `pdfmd --presets` lists them and marks the one a build here would use. The command line wins, then the document, then the
+  folder's metadata, then the config.
 - characters a font lacks or none draws, fonts for other scripts, romanization packs;
 - the citation engine; output (the PDF engine, the default output format, defaults for `.typ` and `.html` files);
   HTML (full page, one file, style sheet, math method); tables (the rows, columns, cut and delimiter of `.csv` tables,

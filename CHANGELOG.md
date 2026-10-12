@@ -41,6 +41,36 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.19 — 2026-10-13
+
+Pre-edit state: commit `ad3f1f0` (v3.28.18).
+
+### Added
+
+- **The global metadata can be switched off, and swapped for a preset.** Until now the global `metadata.yaml` of
+  `pdfmd --setup` went into every build and only an empty `PDFMD_CONFIG` removed it.
+  - `--no-global-metadata` / `--global-metadata`, `pdfmd-options: {global-metadata: false}` (a document, or a folder's
+    metadata) and `options: {global-metadata: false}` (the config; the *Use the global metadata above* row of `--setup`).
+    The command line beats the document, which beats the folder's metadata, which beats the config. (`--global` was
+    taken: `--init-backups --global`.)
+  - **Presets:** a file `presets/NAME.yaml` (or `.yml`) beside the config file is global metadata like `metadata.yaml`
+    (the preset `default`). `--preset NAME` (the name with or without `.yaml`, or a path), `pdfmd-options: {preset: NAME}`,
+    `options: {preset: NAME}` (the *Which set of global metadata* row) choose it; `--preset none` takes none. A name that
+    is no preset stops the build and lists the ones there are. `pdfmd --setup --preset NAME` edits that file's rows (made if
+    absent); `pdfmd --presets [DOCUMENT]` lists the presets, marking the one a build there would use.
+  - A preset shows as `preset NAME` on the `DEFAULTS` line and `(the preset NAME of pdfmd --setup)` with `--verbose`.
+    `--restore` / `--unpack` leave a preset to the machine as they do the global metadata (every global file is recognised
+    by where it is, not by its name).
+- Tests: `tests/test_presets.py` (every layer and spelling, the switch, the unknown name, `--presets`, `--setup --preset`).
+
+### Fixed
+
+- **Esc works in the full-screen `pdfmd --setup`.** On the main screen it did nothing (only `q` left); it now steps back out
+  of a list and then out of the screen (asking first when something is unsaved), and in the prompt of a text row it
+  cancels. The metadata rows say they are saved in `metadata.yaml` for every document, which the screen did not.
+
+---
+
 ## v3.28.18 — 2026-10-13
 
 Pre-edit state: commit `b4691e5` (v3.28.17).

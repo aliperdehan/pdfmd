@@ -76,6 +76,8 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
             if setting.section != section:
                 section = setting.section
                 lines.append(("class:section", f"\n {section}\n"))
+                if setting.store == "metadata":
+                    lines.append(("class:help", "  (saved as metadata.yaml: every document gets these, below its own metadata)\n"))
             style = "class:cursor" if index == state["row"] else ""
             if index == state["row"]:
                 state["line"] = sum(text.count("\n") for _, text in lines)
@@ -84,7 +86,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         current = rows()[state["row"]]
         lines.append(("class:help", f"\n {current.help}\n"))
         lines.append(("class:help", "\n up/down move   space/right next value   left previous   r default   enter: choose list"
-                                     "\n d features switched off   o what is not here and why   s save and quit   q quit"))
+                                     "\n d features switched off   o what is not here and why   s save and quit   q or esc quit"))
         if state["message"]:
             lines.append(("class:warn", f"\n {state['message']}"))
         return lines
@@ -164,11 +166,15 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         else:
             cycle(setting, 1)
 
-    @keys.add("escape")
+    @keys.add("escape", eager=True)
     def _escape(event):
+        """Esc steps back: out of a list, then out of the screen (it asks first when something is unsaved)."""
         if leaving():
             return
-        state["sub"] = None
+        if state["sub"] is not None:
+            state["sub"] = None
+            return
+        _quit(event)
 
     @keys.add("d")
     def _features(event):
@@ -248,6 +254,13 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
 def _prompt(setting: Setting, now: str):
     from prompt_toolkit import prompt
     try:
-        return prompt(f"{setting.title} ({setting.help or 'empty or - = back to the default'}): ", default=now)
+        from prompt_toolkit.key_binding import KeyBindings
+        cancel = KeyBindings()
+
+        @cancel.add("escape", eager=True)
+        def _cancel(event):
+            event.app.exit(exception=EOFError)
+        return prompt(f"{setting.title} ({setting.help or 'empty or - = back to the default'}; esc = cancel): ",
+                      default=now, key_bindings=cancel)
     except (EOFError, KeyboardInterrupt):
         return None

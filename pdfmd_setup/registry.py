@@ -62,6 +62,7 @@ UNSET = {
     "options.csv.rows": "10", "options.csv.cols": "7",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
+    "options.preset": "metadata.yaml", "options.global-metadata": "on",
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
@@ -138,6 +139,13 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("linestretch", "Line spacing", "A factor: 1.15, 1.5.", "Every document (global metadata)", "metadata", "number"),
         choice("colorlinks", "Coloured links", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("toc", "Table of contents", on_off, "", "", "Every document (global metadata)", "metadata"),
+        choice("options.global-metadata", "Use the global metadata above", on_off, "",
+               "Off: no document gets the rows above (nor a preset). Per run: --no-global-metadata / --global-metadata; "
+               "per document: pdfmd-options.global-metadata.", "Every document (global metadata)"),
+        text("options.preset", "Which set of global metadata",
+             "A preset: a file in the presets/ folder beside the config (lab, or lab.yaml), or a path; `none` = no global "
+             "metadata. Edit one with `pdfmd --setup --preset lab`. Per run: --preset.",
+             "Every document (global metadata)"),
         # -- fonts and characters
         choice("options.fallback", "Characters the font lacks",
                (("word", "set the whole word in another font"), ("char", "set just those characters in another font"),
