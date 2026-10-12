@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.29 — 2026-10-13
+
+Pre-edit state: commit `41badfc` (v3.28.28).
+
+### Fixed
+
+- **v3.28.25 broke the report route (`-r`) for a PDF build.** Its KaTeX size read `report_tex_font` at a place where the
+  variable is not set yet (`UnboundLocalError`), which stopped every report build with a Traceback (three tests of
+  `test_header_includes` and `test_budget`, found by the full suite of v3.28.27, not by the modules run with 3.28.25). The
+  report's body font for the size is `-f`, else the `mainfont:` the document or its metadata names. v3.28.25 to v3.28.28
+  carry the bug. A test builds a WeasyPrint report with a named font.
+
+---
+
 ## v3.28.28 — 2026-10-13
 
 Pre-edit state: commit `94d9dd9` (v3.28.27).

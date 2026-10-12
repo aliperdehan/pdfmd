@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.28"
+PDFMD_VERSION = "3.28.29"
 import argparse
 import csv
 import filecmp
@@ -21924,7 +21924,7 @@ def main() -> None:
                         # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
                         report_last = typst_filter_args(engine) + weasyprint_math_args(
                             engine, pandoc_options,
-                            report_tex_font or document_font_setting("mainfont", list(files), metadata_files, variables))
+                            args.font or document_font_setting("mainfont", list(files), metadata_files, variables))
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)

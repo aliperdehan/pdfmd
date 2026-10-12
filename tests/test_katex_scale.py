@@ -81,6 +81,18 @@ class Build(unittest.TestCase):
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("pdfmd-katex-scale=1.07", done.stdout + done.stderr)
 
+    def test_a_weasyprint_report_builds_and_passes_the_size_of_a_named_font(self):
+        # v3.28.25 read a variable the report route had not set (an UnboundLocalError, found by the full suite)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "a.md").write_text("---\ntitle: T\nmainfont: STIX Two Text\n---\n\n# One\n\n$x^2$\n", encoding="utf-8")
+            (root / "b.md").write_text("# Two\n\nText.\n", encoding="utf-8")
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "-r", ".", "-e", "weasyprint", "-o", "r.pdf",
+                                   "--verbose"], cwd=root, env=env, capture_output=True, text=True, timeout=300)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("pdfmd-katex-scale=1.07", done.stdout + done.stderr)
+
 
 if __name__ == "__main__":
     import unittest.mock  # noqa: F401
