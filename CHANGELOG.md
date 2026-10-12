@@ -41,6 +41,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.25 — 2026-10-13
+
+Pre-edit state: commit `04d057d` (v3.28.24).
+
+### Changed
+
+- **KaTeX's formulas in a WeasyPrint PDF are sized to the body font.** KaTeX sets math at 1.21em, tuned for a text face with
+  a large x-height; in a document in STIX Two Text (x-height 0.473 em) or Libertinus (0.429) the formulas stood out. pdfmd
+  now reads the body font's x-height (the OS/2 `sxHeight` of the font file fontconfig finds) and gives the formulas the
+  `font-size` of x-height / 0.442 em: STIX Two Text 1.07, Noto Serif 1.21 (as before), Times New Roman 1.01, Georgia 1.09,
+  Libertinus Serif 0.97, kept between 0.85 and 1.4. The body font is the one pdfmd chose, or `mainfont:` of the document or its
+  metadata files, or `-f`/`-V mainfont=`; a font that is not installed or has no recorded x-height leaves KaTeX's own size.
+  It is `-V pdfmd-katex-scale=` for `pdfmd_lua/weasyprint.lua`, which writes `html .katex { font-size: ...em }` into the page's
+  header, kept even when a `--css` file or `document-css: false` replaces the page style.
+- Tests: `tests/test_katex_scale.py` (a font built in the test, the size and its bounds, a font fontconfig does not have, a
+  real WeasyPrint build).
+
+---
+
 ## v3.28.24 — 2026-10-13
 
 Pre-edit state: commit `a1c3982` (v3.28.23).

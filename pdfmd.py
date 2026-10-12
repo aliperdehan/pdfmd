@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.24"
+PDFMD_VERSION = "3.28.25"
 import argparse
 import csv
 import filecmp
@@ -12167,7 +12167,56 @@ def typst_filter_args(writer: str) -> list[str]:
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
-def weasyprint_math_args(engine: str, pandoc_options: list[str]) -> list[str]:
+KATEX_X_HEIGHT = 0.442       # KaTeX_Main's x-height per em (v3.28.25: the size that matches a body font's is its x-height / this)
+
+
+def sfnt_x_height(path: Path, index: int = 0) -> float | None:
+    """A font file's x-height as a fraction of its em (OS/2 sxHeight / head unitsPerEm), None when the file has none."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    try:
+        base = 0
+        if data[:4] == b"ttcf":
+            base = struct.unpack(">I", data[12 + 4 * index:16 + 4 * index])[0]
+        tables = {}
+        count = struct.unpack(">H", data[base + 4:base + 6])[0]
+        for number in range(count):
+            at = base + 12 + 16 * number
+            tables[data[at:at + 4]] = struct.unpack(">II", data[at + 8:at + 16])[0]
+        units = struct.unpack(">H", data[tables[b"head"] + 18:tables[b"head"] + 20])[0]
+        os2 = tables[b"OS/2"]
+        version = struct.unpack(">H", data[os2:os2 + 2])[0]
+        height = struct.unpack(">h", data[os2 + 86:os2 + 88])[0] if version >= 2 else 0
+    except (struct.error, KeyError, IndexError):
+        return None
+    return height / units if height > 0 and units > 0 else None
+
+
+@lru_cache(maxsize=None)
+def katex_scale(family: str | None) -> float | None:
+    """The `font-size` (in em of the body) that gives KaTeX's formulas the body font's x-height: x-height / 0.442 (STIX Two
+    Text 1.07, Noto Serif 1.21, Times 1.01, Georgia 1.09, Libertinus 0.97), kept within 0.85 and 1.4; None when the font is
+    not known or has no x-height recorded (KaTeX keeps its own 1.21em)."""
+    fc_match = which("fc-match")
+    if not family or not fc_match:
+        return None
+    try:
+        done = subprocess.run([fc_match, "-f", "%{family}\n%{file}\n%{index}", family], capture_output=True, text=True,
+                              timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = done.stdout.splitlines()
+    if done.returncode != 0 or len(lines) < 3 or family.casefold() not in lines[0].casefold():
+        return None                                  # fontconfig answered with another font: the family is not installed
+    height = sfnt_x_height(Path(lines[1]), int(lines[2]) if lines[2].isdigit() else 0)
+    if height is None:
+        return None
+    return round(min(1.4, max(0.85, height / KATEX_X_HEIGHT)), 2)
+
+
+def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str | None = None) -> list[str]:
     """For WeasyPrint (v3.27.12), which does not draw MathML (Pandoc's default HTML math printed each formula twice as
     flat text): Pandoc's plain math, simple formulas in Unicode and the others as TeX, unless the command line chooses
     the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text and (v3.28.3) keeps a table's
@@ -12189,6 +12238,9 @@ def weasyprint_math_args(engine: str, pandoc_options: list[str]) -> list[str]:
         node, folder = runtime
         out += ["-V", f"pdfmd-katex={folder}", "-V", f"pdfmd-katex-url={folder.as_uri()}",
                 "-V", f"pdfmd-katex-node={node}"]
+        scale = katex_scale(body_font)
+        if scale is not None:
+            out += ["-V", f"pdfmd-katex-scale={scale}"]
     return out + ["--lua-filter", str(shipped)]
 
 
@@ -17273,7 +17325,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(lua_filter)]
                     # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
-                    last_filters = typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
+                    last_filters = typst_filter_args(engine) + weasyprint_math_args(
+                        engine, pandoc_options,
+                        selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables))
                     page_options = lambda: calibre_page_options(md_path, metadata_files, variables)
                     if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html",
@@ -21830,7 +21884,9 @@ def main() -> None:
                             hoist_code_header(cmd)
                             keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                         # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
-                        report_last = typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
+                        report_last = typst_filter_args(engine) + weasyprint_math_args(
+                            engine, pandoc_options,
+                            report_tex_font or document_font_setting("mainfont", list(files), metadata_files, variables))
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)

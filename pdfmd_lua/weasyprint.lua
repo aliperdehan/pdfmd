@@ -34,9 +34,20 @@ local TABLE_STYLE = "<style>\n"
   .. 'table[data-custom-style="PdfmdEquation"] tbody { border: none; }\n'
   .. "</style>"
 
+-- KaTeX sets its formulas at 1.21em; pdfmd gives the size that matches the body font's x-height (`pdfmd-katex-scale`,
+-- in em of the body: x-height / 0.442) when it knows the font. Placed with the page's own style, so a --css file or
+-- `document-css: false` keeps it: it is about the formulas, not the page.
+local function katex_style()
+  local scale = tonumber(variable("pdfmd-katex-scale") or "")
+  if variable("pdfmd-katex") == nil or scale == nil then return "" end
+  return string.format("<style>\nhtml .katex { font-size: %sem; }\n</style>\n", tostring(scale))
+end
+
 local function Meta(meta)
-  if variables.css or meta["document-css"] == false then return nil end
-  local style = pandoc.MetaBlocks({pandoc.RawBlock("html", TABLE_STYLE)})
+  local extra = katex_style()
+  local css = not (variables.css or meta["document-css"] == false)
+  if not css and extra == "" then return nil end
+  local style = pandoc.MetaBlocks({pandoc.RawBlock("html", (css and TABLE_STYLE or "") .. (css and "\n" or "") .. extra)})
   local includes = meta["header-includes"]
   if includes == nil then
     meta["header-includes"] = pandoc.MetaList({style})
