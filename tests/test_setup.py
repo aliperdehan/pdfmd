@@ -177,12 +177,13 @@ class Plain(unittest.TestCase):
         shown, tex = build("a.md", str(config / "config.yaml"))
         self.assertIn("\\setmainfont[]{Folder Serif}", tex)
         self.assertIn("\\setmonofont[]{Global Mono}", tex)
-        self.assertNotIn("MAINFONT", shown)
-        self.assertNotIn("MONOFONT", shown)
+        self.assertNotIn("font STIX", shown)             # neither font is a default: the metadata names them
+        self.assertNotIn("code in", shown)
+        self.assertIn("global metadata (monofont)", shown)
         (project / "metadata.yaml").unlink()
         shown, tex = build("b.md", "")
-        self.assertIn("MAINFONT", shown)                 # pdfmd's own default, named like its other defaults
-        self.assertIn("MONOFONT", shown)
+        self.assertIn("font STIX Two Text", shown)       # pdfmd's own default, named like its other defaults
+        self.assertIn("code in JetBrains Mono", shown)
 
     def test_a_later_metadata_file_wins_as_in_pandoc(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))

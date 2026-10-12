@@ -227,7 +227,7 @@ class PreambleWithAPicture(Folder):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "-e", "lualatex"], capture_output=True,
                               text=True, encoding="utf-8", cwd=self.directory, env={**os.environ, "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("AUTO TEX", done.stdout)
+        self.assertRegex(done.stdout, r"FOUND .*preamble\.tex")
 
 
 if __name__ == "__main__":

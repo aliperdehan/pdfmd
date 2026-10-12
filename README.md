@@ -12,9 +12,15 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
 
 ```console
 $ pdfmd lecture
-AUTO: READER TITLE MARGIN MONOFONT. Use --verbose to see in full
+FOUND     metadata/metadata.yaml, metadata/preamble.tex
+DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono
+AUTO: READER TITLE. Use --verbose to see in full
 OK    lecture.md
 ```
+
+`FOUND` is what pdfmd picked up from the folder, `DEFAULTS` what it applied because nothing said otherwise
+(the global metadata of `pdfmd --setup` too), and the `AUTO:` line the other decisions it made. Each line is cut at
+the width of a screen (`+3 more (--verbose)`); `--verbose` prints every decision with its reason.
 
 In a folder with a single Markdown file you do not even need the name: `cd` into the folder and run `pdfmd`. It finds
 the file, its metadata, preamble and filters, and writes the PDF beside it (with several Markdown files it asks for
@@ -980,9 +986,8 @@ pdfmd slides -p                   # Beamer slides; each heading starts a slide
 
 ```console
 $ pdfmd notes -b
-AUTO: READER TITLE MARGIN MONOFONT. Use --verbose to see in full
-AUTO: MARGIN. Use --verbose to see in full
-AUTO: MARGIN. Use --verbose to see in full
+DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono
+AUTO: READER TITLE. Use --verbose to see in full
 OK    notes/lecture.md
 OK    notes/week1.md
 OK    notes/week2.md
@@ -998,7 +1003,7 @@ subfolders, and `-o DIR` to collect the PDFs somewhere else.
 $ pdfmd book -r -o book.pdf
 OK    book/01-intro.md
 OK    book/02-methods.md
-AUTO: MARGIN. Use --verbose to see in full
+DEFAULTS  margin 1in, font STIX Two Text
 OK    REPORT  book.pdf
 ```
 

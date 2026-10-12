@@ -623,6 +623,11 @@ Stopping early (--stop-at, v3.19.0):
     (--keep-source) is not given the default. --restore and --unpack count what they
     write by folder, and --verbose lists each file (--restore --list always does).
 
+    (v3.28.16) A build's decisions are three lines: FOUND (the metadata, preamble, filter and
+    parts picked up), DEFAULTS (the global metadata, margin, fonts and packages applied because
+    nothing said otherwise) and `AUTO: KINDS` (the rest), each cut at 110 characters;
+    --verbose prints each with its reason (AUTO YAML, AUTO TEX ...). See AutoLog.
+
     --bundle [sources|all] / --no-bundle, `pdfmd-options: {bundle: sources | true | all | false}` (v3.22.2)
     store, beside the source, the files it cannot carry, each as its own
     attachment (`files/PATH`; no archive, so any tool lists or extracts one):
@@ -1352,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.15"
+PDFMD_VERSION = "3.28.16"
 import argparse
 import csv
 import filecmp
@@ -6756,9 +6761,132 @@ def find_preambles(directory: Path, document_stem: str, options: list[str]) -> l
             if is_latex_preamble(path)]
 
 
+class AutoLog:
+    """What pdfmd decided for the build in hand, shown in three lines (v3.28.16) rather than one a decision.
+
+    ``FOUND`` is what it picked up from the folder (metadata files, a preamble, a Lua filter, the parts),
+    ``DEFAULTS`` what it applied because nothing said otherwise (the global metadata of ``pdfmd --setup``, the
+    margin, the fonts, the packages it adds), and ``AUTO: KINDS`` the decisions that have no short form. A line is
+    cut at ``WIDTH`` characters ("+N more (--verbose)"): the screen is not for the catalogue. ``--verbose`` prints
+    each decision with its reason, as it happens, as before. In a batch a line equal to the one before it is not
+    printed again."""
+
+    WIDTH = 110
+    HEADINGS = ("FOUND", "DEFAULTS")
+    # A decision that is one of a kind per build (the later one replaces the earlier); the others are listed each
+    ONE_OF = frozenset({"PARTS", "MARGIN", "MAINFONT", "MONOFONT"})
+    # The order a line lists its items in, whichever was found first: the files, then the parts; the global
+    # metadata, then margin, fonts, packages
+    RANK = {"YAML": 0, "TEX": 1, "LUA": 2, "PARTS": 3, "GLOBAL": 0, "MARGIN": 1, "MAINFONT": 2, "MONOFONT": 3,
+            "TEXPACKAGES": 4}
+
+    def __init__(self) -> None:
+        self.items: dict[tuple[str, str], tuple[int, str]] = {}
+        self.other: list[str] = []
+        self.shown: dict[str, str] = {}
+        self.dedupe = False
+        self.quiet = False
+
+    def reset(self, dedupe: bool = False) -> None:
+        self.items.clear()
+        self.other.clear()
+        self.shown.clear()
+        self.dedupe = dedupe
+
+    @staticmethod
+    def classify(kind: str, detail: str) -> tuple[str, str] | None:
+        """(heading, short text) of a decision that has a short form, from the words it was announced with."""
+        if kind == "PARTS":
+            found = re.search(r"(\d+) parts?\b", detail)
+            return ("FOUND", f"{found.group(1)} part{'s' if found.group(1) != '1' else ''}") if found else None
+        if kind == "LUA":
+            return "FOUND", Path(detail).name or detail
+        if kind == "MARGIN":
+            found = re.search(r"no geometry/margin set; using geometry:margin=(\S+)", detail)
+            return ("DEFAULTS", f"margin {found.group(1)}") if found else None
+        if kind == "MAINFONT":
+            found = (re.search(r"no mainfont set; using (.+)$", detail)
+                     or re.search(r": (.+?) instead of ", detail))
+            return ("DEFAULTS", f"font {found.group(1)}") if found else None
+        if kind == "MONOFONT":
+            found = re.search(r"no monofont set; using (.+?) on ", detail)
+            return ("DEFAULTS", f"code in {found.group(1)}") if found else None
+        if kind == "TEXPACKAGES":
+            found = re.match(r"loads (.+?) unless the preamble does", detail)
+            return ("DEFAULTS", f"packages {found.group(1)}") if found else None
+        return None
+
+    def record(self, kind: str, detail: str, verbose: bool, heading: str | None = None,
+               short: str | None = None) -> None:
+        """One decision: printed at once with ``verbose``, else kept for ``flush``."""
+        if verbose:
+            print(f"AUTO {kind}  {detail}")
+            return
+        if heading is None:
+            found = self.classify(kind, detail)
+            heading, short = found if found else (None, None)
+        if heading is None:
+            if kind not in self.other:
+                self.other.append(kind)
+            return
+        self.items[(heading, kind if kind in self.ONE_OF else short)] = (self.RANK.get(kind, 9), short)
+
+    def record_file(self, kind: str, path: Path, verbose: bool) -> None:
+        """A file pdfmd picked up (AUTO YAML / AUTO TEX): FOUND, but the global metadata is a default."""
+        if verbose:
+            if kind == "YAML" and path == global_metadata_file():
+                print(f"AUTO {kind}  {display_path(path)}  (the global metadata of pdfmd --setup)")
+            else:
+                print(f"AUTO {kind}  {display_path(path)}")
+            return
+        if kind == "YAML" and path == global_metadata_file():
+            keys = [("options" if key == "pdfmd-options" else key) for key in metadata_file_yaml(path)]
+            shown = ", ".join(keys[:2]) + (f" +{len(keys) - 2}" if len(keys) > 2 else "")
+            self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"],
+                                                  f"global metadata ({shown})" if keys else "global metadata")
+        else:
+            self.items[("FOUND", f"{kind} {path}")] = (self.RANK[kind], display_path(path))
+
+    def fit(self, heading: str, parts: list[str]) -> str:
+        prefix = f"{heading:<10}"
+        line = prefix + ", ".join(parts)
+        if len(line) <= self.WIDTH:
+            return line
+        for count in range(len(parts) - 1, 0, -1):
+            cut = prefix + ", ".join(parts[:count]) + f", +{len(parts) - count} more (--verbose)"
+            if len(cut) <= self.WIDTH:
+                return cut
+        return prefix + parts[0] + f", +{len(parts) - 1} more (--verbose)"
+
+    def flush(self) -> None:
+        """Print what was recorded since the last flush, FOUND, DEFAULTS, then the decisions without a short form."""
+        if self.quiet:
+            self.items.clear()
+            self.other.clear()
+            return
+        for heading in self.HEADINGS:
+            parts = [text for _, text in sorted((value for (group, _), value in self.items.items() if group == heading),
+                                                key=lambda value: value[0])]
+            if parts:
+                line = self.fit(heading, parts)
+                if not (self.dedupe and self.shown.get(heading) == line):
+                    print(line)
+                self.shown[heading] = line
+        if self.other:
+            line = f"AUTO: {' '.join(self.other)}. Use --verbose to see in full"
+            if not (self.dedupe and self.shown.get("AUTO") == line):
+                print(line)
+            self.shown["AUTO"] = line
+        self.items.clear()
+        self.other.clear()
+
+
+AUTO_LOG = AutoLog()
+
+
 def announce_preambles(preambles: list[Path]) -> None:
     for preamble in preambles:
-        print(f"AUTO TEX   {display_path(preamble)}")
+        AUTO_LOG.record_file("TEX", preamble, VERBOSE_OUTPUT)
     if len(preambles) > 1:
         print("WARN  Multiple preambles discovered; later files may override earlier definitions.",
               file=sys.stderr)
@@ -13489,7 +13617,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     for note in notes:
         label = note.split()[0]
         urgent = label == "GLOBAL" or "MISMATCH" in note or "no hash" in note or "NOT known" in note
-        if LISTING_VERBOSE or urgent:
+        if VERBOSE_OUTPUT or urgent:
             print(note)
         if label != "GLOBAL":
             word = {"BIBLIO": "bibliography", "CSL": "csl"}.get(label, label.lower())
@@ -13499,7 +13627,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
         print(f"UNPACKED  {len(fresh)} file{'s' if len(fresh) != 1 else ''} into {display_path(target)}"
               + (f" ({kept} already there, identical)" if kept else "")
               + (f"  ({', '.join(f'{word} {count}' for word, count in kinds.items())})"
-                 if kinds and not LISTING_VERBOSE else ""))
+                 if kinds and not VERBOSE_OUTPUT else ""))
     if slim:
         if files and target.resolve() != default_target.resolve():
             print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
@@ -15999,22 +16127,17 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     # isn't the report itself and writes no BUILD NOTES stamp.
     stamp_overrides = stamp_overrides or {}
     parts_inputs = list(extra_inputs or [])
-    auto_summary: list[str] = []
     noted: set[tuple[str, str]] = set()
 
     def note(kind: str, detail: str) -> None:
         if (kind, detail) in noted:          # the same decision, made again for the next engine
             return
         noted.add((kind, detail))
-        if verbose:
-            print(f"AUTO {kind}  {detail}")
-        else:
-            auto_summary.append(kind)
+        AUTO_LOG.record(kind, detail, verbose)
 
     def flush_summary() -> None:
-        if not verbose and auto_summary:
-            kinds = " ".join(dict.fromkeys(auto_summary))
-            print(f"AUTO: {kinds}. Use --verbose to see in full")
+        if not verbose:
+            AUTO_LOG.flush()
 
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     cli_no_auto = no_auto
@@ -16797,7 +16920,7 @@ ATTACH_CLI: bool | None = None
 BUNDLE_CLI: str | None = None
 BUNDLE_MAX_MB = 100
 # --verbose: --restore and --unpack list every file instead of counting them by folder (v3.28.15)
-LISTING_VERBOSE = False
+VERBOSE_OUTPUT = False
 # --attach-bibliography used|all (None: the document's pdfmd-options decide).
 BIB_ATTACH_CLI: str | None = None
 # --bundle-packages / --no-bundle-packages (None: the document decides).
@@ -18270,7 +18393,7 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
     # The files are counted by folder unless --verbose or --list asks for each (v3.28.15)
-    compact = not LISTING_VERBOSE and not list_only
+    compact = not VERBOSE_OUTPUT and not list_only
     for line in requirement_lines(manifest):
         if not (compact and line.startswith("MADE WITH")):
             print(line)
@@ -20045,12 +20168,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "discovering what's otherwise unset. Same KIND names work in a document's "
                              "own pdfmd-options.no-auto front matter (see the module docstring)")
     parser.add_argument("-v", "--verbose", action="store_true",
-                        help="show each AUTO decision's full explanation as it happens. Default is "
-                             "a single condensed 'AUTO: KIND KIND ...' line per document (naming "
-                             "only the reader/title/margin/mainfont/monofont/lua kinds that actually "
-                             "fired) so a normal run stays quiet; AUTO YAML/TEX/ENGINE/MD are "
-                             "unaffected by this flag and always print in full, since they're rarer "
-                             "and already name a specific file/engine rather than a generic default")
+                        help="show each decision pdfmd made, with its reason, as it happens (AUTO YAML, AUTO TEX, "
+                             "AUTO MARGIN ...). Default is three short lines: FOUND (the metadata, preamble, "
+                             "filter and parts it picked up), DEFAULTS (what it applied because nothing said "
+                             "otherwise: the global metadata of --setup, margin, fonts, packages), and "
+                             "'AUTO: KIND KIND' for the rest, each cut at the screen's width. AUTO ENGINE and "
+                             "AUTO MD always print in full")
     parser.add_argument("--no-citeproc", action="store_true",
                         help="don't add --citeproc automatically when the document uses @citation "
                              "syntax (by default pdfmd adds it, so citations and the bibliography "
@@ -20271,7 +20394,7 @@ def run_watch(source: Path, argv: list[str]) -> None:
 # (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
 # --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
 # `global` main() sets is covered.
-WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "LISTING_VERBOSE")
+WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "VERBOSE_OUTPUT")
 
 
 def worker_state() -> dict:
@@ -20281,6 +20404,7 @@ def worker_state() -> dict:
 
 def restore_worker_state(state: dict) -> None:
     globals().update(state)
+    AUTO_LOG.quiet = True      # the parent prints what a batch found; a worker's summary would repeat per file (v3.28.16)
 
 
 # Whole features switched off (v3.27.8): `disabled: [history, tables]` in config.yaml (pdfmd --setup, d) names topics of
@@ -20389,8 +20513,9 @@ def main() -> None:
     KEEP_SOURCE_CLI = args.keep_source
     HYBRID_CLI = args.hybrid
     BUNDLE_CLI = args.bundle
-    global LISTING_VERBOSE
-    LISTING_VERBOSE = bool(args.verbose)
+    global VERBOSE_OUTPUT
+    VERBOSE_OUTPUT = bool(args.verbose)
+    AUTO_LOG.reset(dedupe=bool(args.batch) or len(args.path or []) > 1)
     global PAPER_CLI
     PAPER_CLI = args.paper
     INKMD_CLI.clear()
@@ -20777,13 +20902,9 @@ def main() -> None:
         # front matter below -- a report can't mix per-chapter overrides
         # in one Pandoc invocation.
         report_no_auto = effective_no_auto(files[0], args.no_auto)
-        report_auto_summary: list[str] = []
 
         def report_note(kind: str, detail: str) -> None:
-            if args.verbose:
-                print(f"AUTO {kind}  {detail}")
-            else:
-                report_auto_summary.append(kind)
+            AUTO_LOG.record(kind, detail, args.verbose)
 
         try:
             document_class = (frontmatter_value(files[0], "documentclass")
@@ -21179,11 +21300,12 @@ def main() -> None:
             print(f"SKIP  {display_path(file)}")
         if metadata is not AUTO_METADATA_DISABLED:
             for metadata_file in metadata_files:
-                label = "AUTO YAML" if args.metadata_file is None else "YAML"
-                print(f"{label}  {display_path(metadata_file)}")
-        if not args.verbose and report_auto_summary:
-            kinds = " ".join(dict.fromkeys(report_auto_summary))
-            print(f"AUTO: {kinds}. Use --verbose to see in full")
+                if args.metadata_file is None:
+                    AUTO_LOG.record_file("YAML", metadata_file, args.verbose)
+                else:
+                    print(f"YAML  {display_path(metadata_file)}")
+        if not args.verbose:
+            AUTO_LOG.flush()
         print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
               + engine_label(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"])))
         if result.stderr:
@@ -21230,7 +21352,7 @@ def main() -> None:
             if args.metadata_file is None and discovered is not None and discovered is not AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]
                 for path in paths:
-                    print(f"AUTO YAML  {display_path(path)}")
+                    AUTO_LOG.record_file("YAML", path, args.verbose)
         value = metadata_by_dir[cache_key]
         return None if value is AUTO_METADATA_DISABLED else value
     if args.batch:
@@ -21291,7 +21413,10 @@ def main() -> None:
                 for file in files:
                     need_engines(file_target(file))
                     metadata, file_engines = file_metadata_and_engines(file)
-                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, preamble_for(file), file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained))
+                    file_preambles = preamble_for(file)
+                    if not args.verbose:
+                        AUTO_LOG.flush()           # what the parent found for this file, before its worker's output
+                    futures.append(executor.submit(convert_one, file, output, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained))
                 results = [future.result() for future in as_completed(futures)]
                 results.sort(key=lambda result: result[0].name.casefold())
         else:

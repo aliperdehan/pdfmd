@@ -41,6 +41,44 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.16 — 2026-10-12
+
+Pre-edit state: commit `1209178` (v3.28.15).
+
+### Changed
+
+- **A build says what it decided in three lines: `FOUND`, `DEFAULTS`, `AUTO:`.** Before, a metadata file, the
+  global metadata of `pdfmd --setup` and a preamble were a line each (`AUTO YAML`, `AUTO TEX`), the Lua filter,
+  the parts, the margin and the code font were folded into one `AUTO: KINDS` line, and the default main font was
+  not said at all (until 3.28.14). The global metadata looked like a file pdfmd had found in the folder.
+  ```
+  FOUND     metadata/metadata.yaml, metadata/preamble.tex, nulabreport.lua, 9 parts
+  DEFAULTS  global metadata (colorlinks, csl +1), margin 1in, font STIX Two Text, code in JetBrains Mono
+  OK    report.md  (lualatex)
+  ```
+  - `FOUND`: what pdfmd picked up from the folder (metadata files, preamble, Lua filter, parts).
+    `DEFAULTS`: what it applied because nothing said otherwise (the global metadata with its first two keys, the
+    margin, the main font, the code font, the packages it adds). `AUTO: KINDS`: the decisions with no short form
+    (reader, title, standalone, Unicode ...), as before.
+  - **The screen is not for the catalogue:** a line is cut at 110 characters (`+3 more (--verbose)`), a default
+    that did not take effect is not listed, and a build prints at most these three lines before its `OK`.
+    LR4-5: 4 lines (`AUTO YAML` x2, `AUTO:`) became 3; with a preamble and code: 4 became 3.
+  - **`--verbose` is unchanged in words** (`AUTO YAML`, `AUTO TEX`, `AUTO LUA`, `AUTO MARGIN` ... each with its
+    reason): nulabreport's manual quotes them. The global metadata's line says `(the global metadata of pdfmd
+    --setup)`.
+  - **A batch** (`-b`, several files) prints a `FOUND` or `DEFAULTS` line again only when it differs from the
+    last; with `-j N` the parent prints `FOUND` and the global metadata and the workers print none.
+    A report (`-r`) uses the same lines before its `OK  REPORT`.
+  - `AUTO: PARTS` is gone from the default output: the parts are in `FOUND` (`9 parts`). nulabreport's manual
+    says to look for `AUTO: PARTS`; that sentence needs `FOUND ... 9 parts` (or `--verbose` and `AUTO PARTS`).
+- An explicit `-y FILE` still prints as `YAML  FILE` (you named it, so it is not a decision).
+
+### Tests
+
+- `test_autolog`: the cut with a count, the sorting into the lines, one item per decision, a batch not repeating
+  a line, verbose as before; end to end: three lines and `OK`, verbose words, a batch, `-j 2`.
+  `test_header_includes` reads `FOUND ... preamble.tex`.
+
 ## v3.28.15 — 2026-10-12
 
 Pre-edit state: commit `ae5bc6d` (v3.28.14).

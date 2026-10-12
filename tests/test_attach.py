@@ -715,12 +715,12 @@ class BundleReach(unittest.TestCase):
         self.assertNotIn("RESTORED  schemes/ester.tex", text)
         self.assertNotIn("FILE      ", text)
         listed = io.StringIO()
-        pdfmd.LISTING_VERBOSE = True
+        pdfmd.VERBOSE_OUTPUT = True
         try:
             with contextlib.redirect_stdout(listed):
                 pdfmd.restore_from_pdf(pdf, self.root / "v")
         finally:
-            pdfmd.LISTING_VERBOSE = False
+            pdfmd.VERBOSE_OUTPUT = False
         self.assertIn("RESTORED  schemes/ester.tex", listed.getvalue())
         self.assertIn("FILE      ir/a.csv", listed.getvalue())
         shown = io.StringIO()                                # --list is a listing: every file, nothing written
@@ -944,12 +944,12 @@ class PicturesFromThePdf(unittest.TestCase):
         self.assertIn("gone.png", buffer.getvalue())
         self.assertFalse((out / "gone.png").exists())
         listed = io.StringIO()                              # --verbose: one line a picture, as before
-        pdfmd.LISTING_VERBOSE = True
+        pdfmd.VERBOSE_OUTPUT = True
         try:
             with contextlib.redirect_stdout(listed):
                 pdfmd.restore_from_pdf(pdf, self.root / "out2")
         finally:
-            pdfmd.LISTING_VERBOSE = False
+            pdfmd.VERBOSE_OUTPUT = False
         self.assertIn("recorded, not in the PDF", listed.getvalue())
 
     def test_rewrite_image_paths(self):
