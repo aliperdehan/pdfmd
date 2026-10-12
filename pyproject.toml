@@ -63,7 +63,7 @@ packages = ["pdfmd_check", "pdfmd_chem", "pdfmd_direct", "pdfmd_edit", "pdfmd_fl
 
 [tool.setuptools.package-data]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
-pdfmd_lua = ["*.lua", "*.tex"]
+pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]
 pdfmd_mhchem = ["LICENSE"]
 pdfmd_office = ["*.lua"]
 pdfmd_templates = ["data/*/*", "data/*/*/*"]

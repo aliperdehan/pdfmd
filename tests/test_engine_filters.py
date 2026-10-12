@@ -1,17 +1,21 @@
 """The filters pdfmd adds for one engine: pdfmd_lua/typst.lua (v3.27.11: links to anchors the document does not have,
-pictures with an older Pandoc) and pdfmd_lua/weasyprint.lua (v3.27.12: math WeasyPrint cannot draw)."""
+pictures with an older Pandoc) and pdfmd_lua/weasyprint.lua (v3.27.12: math WeasyPrint cannot draw; v3.28.11: typeset
+by KaTeX when `pdfmd --install math:katex` put it in place)."""
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 import zlib
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -28,6 +32,9 @@ TYPST = shutil.which("typst")
 WEASYPRINT = shutil.which("weasyprint")
 TYPST_LUA = ROOT / "pdfmd_lua" / "typst.lua"
 WEASYPRINT_LUA = ROOT / "pdfmd_lua" / "weasyprint.lua"
+NODE = shutil.which("node")
+# the KaTeX this machine has (`pdfmd --install math:katex`), for the tests that typeset with it
+KATEX = pdfmd.katex_runtime()
 
 DOCUMENT = """\
 # Head {#h}
@@ -164,6 +171,114 @@ class WeasyPrintArguments(unittest.TestCase):
         arguments = pdfmd.weasyprint_math_args("weasyprint", ["--mathml"])
         self.assertFalse([item for item in arguments if item.startswith("--math")])
         self.assertIn("--lua-filter", arguments)
+        self.assertFalse([item for item in arguments if item.startswith("pdfmd-katex")])
+
+    def test_katex_and_node_are_named_to_the_filter(self):
+        folder = Path(tempfile.mkdtemp(prefix="pdfmd-katex-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        with mock.patch.object(pdfmd, "katex_runtime", return_value=("/opt/node/bin/node", folder)):
+            arguments = pdfmd.weasyprint_math_args("weasyprint", [])
+            chosen = pdfmd.weasyprint_math_args("weasyprint", ["--math-method=mathml"])
+        self.assertIn(f"pdfmd-katex={folder}", arguments)
+        self.assertIn(f"pdfmd-katex-url={folder.as_uri()}", arguments)
+        self.assertIn("pdfmd-katex-node=/opt/node/bin/node", arguments)
+        self.assertEqual(arguments[-2:], ["--lua-filter", str(WEASYPRINT_LUA)])
+        if pdfmd.pandoc_has_option("--math-method"):
+            self.assertIn("--math-method=plain", arguments)         # what KaTeX does not reach stays text
+        self.assertFalse([item for item in chosen if item.startswith("pdfmd-katex")])
+
+
+class KatexInstall(unittest.TestCase):
+    """The pieces of `pdfmd --install math:katex` that need no network."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-katex-install-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+
+    def package(self, names: list[str]) -> Path:
+        archive = self.directory / "katex.tgz"
+        with tarfile.open(archive, "w:gz") as bundle:
+            for name in names:
+                data = name.encode()
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                bundle.addfile(member, io.BytesIO(data))
+        return archive
+
+    def test_only_the_script_stylesheet_fonts_mhchem_and_licence_are_kept(self):
+        archive = self.package(["package/LICENSE", "package/README.md", "package/package.json",
+                                "package/dist/katex.min.js", "package/dist/katex.js", "package/dist/katex.min.css",
+                                "package/dist/katex.mjs", "package/dist/fonts/KaTeX_Main-Regular.woff2",
+                                "package/dist/fonts/KaTeX_Main-Regular.ttf", "package/dist/contrib/mhchem.min.js",
+                                "package/dist/contrib/copy-tex.min.js", "package/src/katex.ts", "../escape.js"])
+        target = self.directory / "data" / "katex" / "0.18.9"
+        target.mkdir(parents=True)
+        (target / "old.js").write_text("left from before", encoding="utf-8")
+        pdfmd.unpack_katex(archive, target)
+        kept = sorted(path.relative_to(target).as_posix() for path in target.rglob("*") if path.is_file())
+        self.assertEqual(kept, ["LICENSE", "contrib/mhchem.min.js", "fonts/KaTeX_Main-Regular.ttf",
+                                "fonts/KaTeX_Main-Regular.woff2", "katex.min.css", "katex.min.js"])
+        self.assertFalse((self.directory / "escape.js").exists())
+        self.assertFalse(target.with_name("0.18.9.part").exists())
+
+    def test_a_package_without_fonts_is_refused(self):
+        archive = self.package(["package/dist/katex.min.js", "package/dist/katex.min.css"])
+        target = self.directory / "katex" / "0.18.9"
+        with self.assertRaises(OSError):
+            pdfmd.unpack_katex(archive, target)
+        self.assertFalse(target.exists())
+        self.assertFalse(target.with_name("0.18.9.part").exists())
+
+    def test_the_pinned_release_else_the_newest_installed(self):
+        root = self.directory / "pdfmd" / "katex"
+        for version in ("0.9.0", "0.16.11", "0.10.2"):
+            (root / version).mkdir(parents=True)
+            for name in ("katex.min.js", "katex.min.css"):
+                (root / version / name).write_text("", encoding="utf-8")
+        (root / "1.0.0").mkdir()                                    # incomplete: not a candidate
+        with mock.patch.object(pdfmd, "data_root", return_value=self.directory / "pdfmd"):
+            self.assertEqual(pdfmd.katex_folder(), root / "0.16.11")
+            (root / pdfmd.KATEX_VERSION).mkdir()
+            for name in ("katex.min.js", "katex.min.css"):
+                (root / pdfmd.KATEX_VERSION / name).write_text("", encoding="utf-8")
+            self.assertEqual(pdfmd.katex_folder(), root / pdfmd.KATEX_VERSION)
+            with mock.patch.object(pdfmd, "which", return_value=None):
+                self.assertIsNone(pdfmd.katex_runtime())             # KaTeX without node: no typesetting
+        with mock.patch.object(pdfmd, "data_root", return_value=self.directory / "nothing"):
+            self.assertIsNone(pdfmd.katex_folder())
+
+    def test_nodes_release_names(self):
+        self.assertEqual(pdfmd.node_asset_name("v24.21.0", "Darwin", "arm64"), "node-v24.21.0-darwin-arm64.tar.xz")
+        self.assertEqual(pdfmd.node_asset_name("v24.21.0", "Linux", "x86_64"), "node-v24.21.0-linux-x64.tar.xz")
+        self.assertEqual(pdfmd.node_asset_name("v24.21.0", "Windows", "AMD64"), "node-v24.21.0-win-x64.zip")
+        self.assertIsNone(pdfmd.node_asset_name("v24.21.0", "FreeBSD", "x86_64"))
+
+    def test_node_is_taken_from_its_bin_folder(self):
+        archive = self.directory / "node.tar.xz"
+        with tarfile.open(archive, "w:xz") as bundle:
+            for name, data in (("node-v1/lib/node_modules/x/node", b"not this"), ("node-v1/bin/node", b"this")):
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                bundle.addfile(member, io.BytesIO(data))
+        target = pdfmd.extract_executable(archive, "node", self.directory / "bin", inside="bin")
+        self.assertEqual(target.read_bytes(), b"this")
+
+    def test_the_kind_is_math_katex(self):
+        self.assertEqual(pdfmd.install_kind("math:katex"), "math:katex")
+        self.assertEqual(pdfmd.install_kind("math"), "math")
+        with self.assertRaises(Exception):
+            pdfmd.install_kind("math:mathjax")
+
+    def test_weasyprints_css_complaints_are_dropped(self):
+        said = ("WARNING: Ignored `text-rendering: optimizeLegibility` at 22:7, unknown property.\n"
+                "WARNING: Expected a media type, got '(max-width: 600px)'\n"
+                "WARNING: Invalid media type ' (max-width: 600px) ' the whole @media rule was ignored at 25:5.\n"
+                "WARNING: Ignored `width:min-content` at 1:5629, invalid value.\n"
+                "WARNING: Failed to load image at 'file:///x.png': No such file\n"
+                "WARN  weasyprint: KaTeX could not typeset 1 of 2 formulas\n")
+        self.assertEqual(pdfmd.WEASYPRINT_CSS_NOISE.sub("", said),
+                         "WARNING: Failed to load image at 'file:///x.png': No such file\n"
+                         "WARN  weasyprint: KaTeX could not typeset 1 of 2 formulas\n")
 
 
 @unittest.skipUnless(PANDOC and WEASYPRINT, "needs Pandoc and WeasyPrint")
@@ -174,8 +289,10 @@ class WeasyPrintMath(unittest.TestCase):
 
     def build(self, text: str) -> subprocess.CompletedProcess:
         (self.directory / "doc.md").write_text(text, encoding="utf-8")
+        nothing = str(self.directory / "no-data")                   # no KaTeX installed: math as text
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "weasyprint"], capture_output=True,
-                              text=True, encoding="utf-8", cwd=self.directory, env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+                              text=True, encoding="utf-8", cwd=self.directory,
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1", "XDG_DATA_HOME": nothing, "LOCALAPPDATA": nothing})
 
     def test_math_is_text_once_and_said_once(self):
         done = self.build("---\ntitle: M\n---\n\nSee $\\alpha_i \\le \\beta$ and $x^2 + \\frac{a}{b}$.\n")
@@ -183,6 +300,8 @@ class WeasyPrintMath(unittest.TestCase):
         said = done.stdout + done.stderr
         self.assertEqual(said.count("WeasyPrint does not typeset math"), 1)
         self.assertIn("2 formulas are printed as text", said)
+        self.assertIn("pdfmd --install math:katex", said)
+        self.assertNotIn("WARNING: Ignored", said)                  # WeasyPrint's CSS complaints (v3.28.11)
         if shutil.which("pdftotext"):
             text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True,
                                   text=True).stdout
@@ -201,6 +320,70 @@ class WeasyPrintMath(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
         self.assertIn("A rather long caption for a narrow table", " ".join(text.split()))
+
+
+
+@unittest.skipUnless(PANDOC and WEASYPRINT and KATEX, "needs Pandoc, WeasyPrint, node and `pdfmd --install math:katex`")
+class WeasyPrintKatex(unittest.TestCase):
+    """v3.28.11: with KaTeX installed, a WeasyPrint PDF's math is typeset in KaTeX's fonts."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-weasy-katex-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+
+    def build(self, text: str, *extra: str) -> subprocess.CompletedProcess:
+        (self.directory / "doc.md").write_text(text, encoding="utf-8")
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "weasyprint", *extra],
+                              capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+
+    def fonts(self) -> str:
+        return subprocess.run(["pdffonts", str(self.directory / "doc.pdf")], capture_output=True, text=True).stdout
+
+    def text(self) -> str:
+        return subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+
+    @unittest.skipUnless(shutil.which("pdffonts") and shutil.which("pdftotext"), "needs Poppler")
+    def test_math_is_typeset_without_a_word_said(self):
+        done = self.build("---\ntitle: K\n---\n\nSee $\\frac{a}{b} \\neq \\vec{v}$ and\n\n"
+                          "$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}$$\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        said = done.stdout + done.stderr
+        self.assertNotIn("typeset math", said)
+        self.assertNotIn("KaTeX could not", said)
+        self.assertNotIn("WARNING: Ignored", said)
+        self.assertIn("KaTeX_Main", self.fonts())
+        self.assertIn("KaTeX_Size", self.fonts())                  # the big sum sign
+        self.assertNotIn("\\frac", self.text())
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_a_formula_katex_cannot_read_is_text_and_said_once(self):
+        done = self.build("---\ntitle: K\n---\n\nGood $x^2$, bad $\\nosuchmacro{y}$.\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        said = done.stdout + done.stderr
+        self.assertEqual(said.count("KaTeX could not typeset 1 of 2 formulas"), 1, said)
+        self.assertIn("\\nosuchmacro", said)
+        self.assertIn("\\nosuchmacro{y}", self.text())
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_chemistry_in_math_is_converted_first(self):
+        done = self.build("---\ntitle: K\n---\n\nWater $\\ce{2H2 + O2 -> 2H2O}$.\n", "-v")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("\\ce", self.text())
+        self.assertNotIn("KaTeX could not", done.stdout + done.stderr)
+        # KaTeX's own mhchem would hide the order: the command line shows it, the LaTeX filter first
+        command = next(line for line in (done.stdout + done.stderr).splitlines()
+                       if line.startswith("CMD") and "weasyprint.lua" in line)
+        self.assertLess(command.index("office.lua"), command.index("weasyprint.lua"))
+
+    @unittest.skipUnless(shutil.which("pdfinfo") and shutil.which("pdffonts"), "needs Poppler")
+    def test_a_formula_in_the_title_stays_in_the_pdfs_title(self):
+        # typeset, it is raw HTML, which the page's <title> (the PDF's Title) leaves out: "Energy  here"
+        done = self.build("---\ntitle: Energy $E = mc^2$ here\n---\n\nWords.\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        info = subprocess.run(["pdfinfo", str(self.directory / "doc.pdf")], capture_output=True, text=True).stdout
+        self.assertIn("Energy E = mc^2 here", info)
+        self.assertIn("KaTeX_Main", self.fonts())                  # on the page, typeset
 
 
 if __name__ == "__main__":

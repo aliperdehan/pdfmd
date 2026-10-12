@@ -41,7 +41,7 @@ function M.latex_of(value)
 end
 
 -- an equation can be shown: not in plain text or Markdown (a formula there is text), nor in an HTML page whose math
--- is plain (WeasyPrint's)
+-- is plain (WeasyPrint's), unless KaTeX typesets it there (v3.28.11, pdfmd_lua/weasyprint.lua)
 function M.math_renders()
   if FORMAT:match("^plain") or FORMAT:match("^gfm") or FORMAT:match("^commonmark") or FORMAT:match("^markdown")
       or FORMAT == "asciidoc" or FORMAT == "rst" or FORMAT == "org" then
@@ -50,7 +50,8 @@ function M.math_renders()
   if not (FORMAT:match("^html") or FORMAT:match("^epub")) then return true end
   local method = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.html_math_method
   method = type(method) == "table" and method.method or method
-  return method ~= "plain"
+  local variables = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.variables or {}
+  return method ~= "plain" or variables["pdfmd-katex"] ~= nil
 end
 
 -- the runs of an answer: text with its ordinary spaces as spaces, sub- and superscripts

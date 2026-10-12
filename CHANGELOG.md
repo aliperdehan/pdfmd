@@ -41,6 +41,80 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.11 — 2026-10-12
+
+Pre-edit state: commit `fed3b3d` (v3.28.10).
+
+Stage 6 A2, first step: math in WeasyPrint's PDFs.
+
+### Added
+
+- **`pdfmd --install math:katex`: WeasyPrint's PDFs typeset their math.** WeasyPrint does not draw MathML, so since
+  v3.27.12 a formula was Pandoc's plain text (`αᵢ ≤ β`, or its TeX).
+  - With KaTeX in place, `pdfmd_lua/weasyprint.lua` sends every formula to KaTeX in one node call
+    (`pdfmd_lua/katex.cjs`) and puts KaTeX's HTML in its place. The page links KaTeX's stylesheet and fonts, and
+    WeasyPrint prints them as a browser does: fractions, roots, matrices, `cases`, stretchy and labelled arrows,
+    `\tag` numbers.
+  - Chemistry is converted first: the filter now runs last, after the LaTeX filter, so `$\ce{...}$` reaches KaTeX
+    as pdfmd_chem's plain math. A labelled arrow, which was text, is an equation again.
+  - Pandoc's math stays plain, so a formula the filter does not reach prints as text, never as MathML.
+  - A formula KaTeX cannot read (a macro from the LaTeX preamble, a `\tag` inline) stays text, with one WARN for all
+    of them that names the first and why. `\textmu` is defined for it.
+  - What WeasyPrint gets wrong in KaTeX's own stylesheet is set right: `\neq` lost its "=" (a flexbox column) and
+    `\vec` its arrow (an absolutely placed picture in a box of no width).
+  - A formula in the title or an author's name is typeset on the page, and the PDF's Title and Author keep its TeX,
+    as without KaTeX: typeset, it was raw HTML, which the page's `<title>` leaves out ("Energy  here").
+  - `--math-method=...` on the command line keeps Pandoc's math, as before.
+- **The install** puts KaTeX 0.18.9 in `data_root()/katex/0.18.9`: the npm package, checked against a SHA-256 pinned
+  in pdfmd, of which only the script, the stylesheet, the fonts, mhchem and the licence are kept (1.5 MB). Without
+  node on PATH it also fetches node's newest long-term-support release for this machine from nodejs.org, checked
+  against the SHA-256 listed there, into pdfmd's tools folder, as for Typst (about 30 MB to download, 120 MB on disk;
+  the author's choice over a pip package of V8 or only pointing to a package manager). It ends by typesetting one
+  formula. A KaTeX left by an older pdfmd is used until the new one is installed.
+- **`--doctor`** and **`--check-dependencies`** say whether WeasyPrint's math is typeset (KaTeX's version, node)
+  or text, with the command that changes it. The WARN for math printed as text names it too.
+
+### Fixed
+
+- **A WeasyPrint build that worked printed WeasyPrint's complaints about CSS** (`WARNING: Ignored
+  text-rendering...`, `Invalid media type...`): four lines for Pandoc's own page style, and twenty more for KaTeX's.
+  They are left out unless `--verbose`. Every other WeasyPrint warning stays.
+- **The WARN for math as text counted the formulas before the LaTeX filter**, so an `equation` block it turns into a
+  formula was not counted (LR4-5: 45 said, 52 printed as text). It now counts what is printed.
+
+Checked:
+- **No KaTeX, no change:** LR4-5 with `-e weasyprint` gives the same text as v3.28.10 (31 pages), with the CSS
+  complaints gone and the count above.
+- **LR4-5 with KaTeX:** all 52 formulas typeset, none left as TeX (v3.28.10 had TeX on 3 pages), in KaTeX's fonts;
+  equations (5) and (6) numbered at the margin.
+- **15,214 distinct formulas** from the author's course and lab-report documents through KaTeX 0.18.9: 169 errors,
+  123 of them siunitx's `\si` (pdfmd_chem converts it first in a real build) and 23 `\textmu` (now defined); the
+  rest are macros from preambles and broken TeX. 101 of them, chosen to cover 140 different commands, printed by
+  WeasyPrint and read through: each as its source says. A page of accents found the two stylesheet faults above.
+- **A labelled arrow in text** (`\ce{A ->[\Delta] B}`) is an equation with Δ over the arrow with KaTeX, and
+  "A ⟶ (Δ) B" without it, as before.
+- **The install**, run for real: KaTeX's package checked and unpacked (64 files); with no node on PATH, node v24.21.0
+  for macOS arm64 fetched, checked and run. A test page through `-e weasyprint` on Pandoc 3.12 and 3.1.3, alone and
+  with `-r`; `--math-method=plain` still gives text.
+- **Packaging:** the wheel and `pdfmd.pyz` hold `pdfmd_lua/katex.cjs`.
+
+### Tests
+
+- `tests/test_engine_filters.py`:
+  - `KatexInstall`: what the package keeps (and nothing from outside it), a package without fonts refused, the
+    pinned release else the newest installed, node's release names, node taken from its `bin` folder, the
+    `math:katex` kind, WeasyPrint's CSS complaints dropped and the rest kept;
+  - `WeasyPrintArguments`: KaTeX and node named to the filter, with plain math, and not when the command line chooses
+    the math;
+  - `WeasyPrintKatex` (with node and KaTeX installed): typeset in KaTeX's fonts with nothing said, a formula KaTeX
+    cannot read is text with one WARN, `\ce` in math converted first (the command line has the LaTeX filter before
+    this one: KaTeX's own mhchem would hide the order), a formula in the title kept in the PDF's Title;
+  - `WeasyPrintMath` builds with no KaTeX, and its WARN names `pdfmd --install math:katex`.
+- `tests/test_table_widths.py`: the package data now includes `*.cjs`, and `katex.cjs` is there.
+- Full suite, with KaTeX in place: Pandoc 3.12, 1051 tests; Pandoc 3.1.3, 1051. Each had one failure, the packaging
+  test above (it still expected the old package-data line), which now passes. The modules that build with WeasyPrint
+  (154 tests) pass again with no KaTeX.
+
 ## v3.28.10 — 2026-10-12
 
 Pre-edit state: commit `b2a5eb9` (v3.28.9).

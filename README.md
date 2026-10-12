@@ -289,6 +289,9 @@ OK    notes.md
   where the built-in renderer and every engine that can draw colour emoji
   (Typst) find it; without it emoji print as `[rocket]`-style labels in the
   built-in renderer.
+- `pdfmd --install math:katex` is for WeasyPrint's PDFs, not the built-in
+  renderer: KaTeX typesets their math (see "WeasyPrint does not typeset math
+  itself" below).
 - `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
   real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
   / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about
@@ -1417,9 +1420,15 @@ OK    paper.md  (typst; lualatex, xelatex failed)
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.
 
-WeasyPrint does not typeset math. A Markdown document built with `-e weasyprint` (or one that falls back to it) gets
-Pandoc's plain math, simple formulas in Unicode (`αᵢ ≤ β`) and the others as their TeX, with one `WARN`; Typst or a
-LaTeX engine typesets them. A math option of your own (`--mathml`, `--math-method=...`) is kept.
+WeasyPrint does not typeset math itself. With KaTeX in place, `pdfmd --install math:katex` (KaTeX's files, about
+1.5 MB, pinned and checked against their SHA-256, in `~/.local/share/pdfmd/katex`; and node, when there is none on
+your PATH: node's own release from nodejs.org, about 30 MB, checked the same way, into pdfmd's tools folder), a
+Markdown document built with `-e weasyprint` (or one that falls back to it) has its math typeset by KaTeX before
+WeasyPrint prints it: fractions, roots, matrices, stretchy arrows, `\ce` reactions, in KaTeX's own fonts. A formula
+KaTeX cannot read (a macro from your LaTeX preamble, say) stays text, with one `WARN` for all of them. Without KaTeX
+the math is Pandoc's plain math, simple formulas in Unicode (`αᵢ ≤ β`) and the others as their TeX, with one `WARN`;
+Typst or a LaTeX engine typesets them. A math option of your own (`--mathml`, `--math-method=...`) is kept, and
+`--doctor` says which of the two you get.
 
 A link to an anchor the document does not have (`[see 13.5](#135-your-own-defaults)` quoted from another document) is
 only a warning for LaTeX and HTML, but Typst stops on it. For Typst, PDF or `.typ`, such a link becomes its text, and

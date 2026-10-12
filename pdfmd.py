@@ -133,10 +133,14 @@ Page breaks (v3.27.13, off unless asked since v3.27.15):
     TeX spellings itself (PAGE_BREAK_RE, PAGE_BREAK_COMMENT_RE); tests/test_pagebreak.py holds the one list both are
     checked against.
 
-Math in WeasyPrint (v3.27.12):
+Math in WeasyPrint (v3.27.12, v3.28.11):
     WeasyPrint does not draw MathML, Pandoc's default HTML math: each formula printed twice as flat text. For
     `-e weasyprint` pdfmd gives Pandoc --math-method=plain (unless the command line chooses the math) and
     pdfmd_lua/weasyprint.lua says once that the math is text. A direct .html page with MathML goes to a browser first.
+    With KaTeX (`pdfmd --install math:katex`: KaTeX's files, pinned and checked, and node's own release when there is
+    no node) the filter typesets the math instead: one node call (pdfmd_lua/katex.cjs) gives each formula as KaTeX's
+    HTML, the page links KaTeX's stylesheet and fonts, and WeasyPrint prints it as a browser does; a formula KaTeX
+    cannot read stays text, with one WARN. `--math-method=...` on the command line keeps Pandoc's math.
 
 Tables in an HTML engine's PDF (v3.28.3):
     Pandoc's own page style is for a screen: a table is a full-width block that scrolls sideways, and a word may
@@ -1334,7 +1338,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.10"
+PDFMD_VERSION = "3.28.11"
 import argparse
 import csv
 import filecmp
@@ -2874,6 +2878,10 @@ def dependency_report() -> bool:
     quarto = which("quarto")
     print(f"{'OK  ' if quarto else 'MISS'}  quarto (only needed for .qmd files)"
          + (f"  ({quarto})" if quarto else ""))
+    if which("weasyprint"):
+        runtime = katex_runtime()
+        print(f"{'OK  ' if runtime else 'MISS'}  KaTeX (math in WeasyPrint's PDFs"
+              + (f": {runtime[1].name}, node {runtime[0]})" if runtime else "; pdfmd --install math:katex)"))
     print("Native renderers (no Pandoc needed; plainer output, Markdown only):")
     print(f"{'OK  ' if inkmd_vendored() else 'MISS'}  inkmd  (built in; no math, footnotes become endnotes)")
     if sys.version_info < (3, 11):
@@ -4554,6 +4562,11 @@ def doctor_report(deep: bool = False) -> bool:
     soffice = resolve_soffice()
     line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
     line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre needs it)"))
+    if which("weasyprint"):
+        runtime = katex_runtime()
+        line(bool(runtime), "math in WeasyPrint's PDFs: " + (f"typeset by KaTeX {runtime[1].name} (node {runtime[0]})"
+                                                             if runtime else "printed as text, no KaTeX"),
+             "pdfmd --install math:katex", "KaTeX, for math in WeasyPrint's PDFs (WeasyPrint itself prints it as text)")
     try:
         import pdfmd_direct as direct
         browsers = [name for name in direct.BROWSER_NAMES if direct.find_browser(name, which)]
@@ -6014,16 +6027,20 @@ def download_file(url: str, destination: Path, sha256: str | None) -> None:
         raise OSError(f"SHA-256 mismatch for {url}: expected {sha256}, got {digest.hexdigest()}")
 
 
-def extract_executable(archive: Path, wanted: str, destination: Path) -> Path:
-    """Write the one file called ``wanted`` out of a .zip / .tar.xz into ``destination``."""
+def extract_executable(archive: Path, wanted: str, destination: Path, inside: str = "") -> Path:
+    """Write the one file called ``wanted`` out of a .zip / .tar.xz into ``destination``; with ``inside`` (`bin`), the
+    one in a folder of that name."""
+    def chosen(name: str) -> bool:
+        path = PurePosixPath(name)
+        return path.name == wanted and (not inside or path.parent.name == inside)
+
     if archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as bundle:
-            member = next((name for name in bundle.namelist() if PurePosixPath(name).name == wanted), None)
+            member = next((name for name in bundle.namelist() if chosen(name)), None)
             data = bundle.read(member) if member else None
     else:
         with tarfile.open(archive) as bundle:
-            found = next((item for item in bundle.getmembers()
-                          if item.isfile() and PurePosixPath(item.name).name == wanted), None)
+            found = next((item for item in bundle.getmembers() if item.isfile() and chosen(item.name)), None)
             data = bundle.extractfile(found).read() if found else None
     if data is None:
         raise OSError(f"{wanted} is not in {archive.name}")
@@ -6072,6 +6089,196 @@ def install_typst() -> bool:
     return True
 
 
+# -- KaTeX: math WeasyPrint can print (v3.28.11) ------------------------------------------------------------------------
+# WeasyPrint does not draw MathML. KaTeX, run with node before WeasyPrint, writes each formula as HTML set in its own
+# fonts, which WeasyPrint prints as a browser does (pdfmd_lua/weasyprint.lua runs pdfmd_lua/katex.cjs). `pdfmd --install
+# math:katex` puts this release's files in data_root()/katex/<version> (the npm package, checked against the SHA-256
+# below: the script, the stylesheet, the fonts, mhchem, the licence) and, when there is no node on PATH, node's own
+# release for this machine into pdfmd's tools folder, as for Typst.
+KATEX_VERSION = "0.18.9"
+KATEX_SHA256 = "78174318fa53363e4321ac3c10b39d3598aaa73a92dc75362eb08b16f6705782"
+KATEX_PACKAGE = f"https://registry.npmjs.org/katex/-/katex-{KATEX_VERSION}.tgz"
+KATEX_KEPT = ("katex.min.js", "katex.min.css", "contrib/mhchem.min.js")
+NODE_DIST = "https://nodejs.org/dist"
+NODE_TARGETS = {
+    ("linux", "x86_64"): "linux-x64", ("linux", "aarch64"): "linux-arm64",
+    ("darwin", "x86_64"): "darwin-x64", ("darwin", "aarch64"): "darwin-arm64",
+    ("windows", "x86_64"): "win-x64", ("windows", "aarch64"): "win-arm64",
+}
+
+
+def katex_folder() -> Path | None:
+    """The KaTeX files pdfmd installed: this release's, else the newest other one there (an older pdfmd's)."""
+    root = data_root() / "katex"
+
+    def complete(folder: Path) -> bool:
+        return (folder / "katex.min.js").is_file() and (folder / "katex.min.css").is_file()
+
+    if complete(root / KATEX_VERSION):
+        return root / KATEX_VERSION
+    try:
+        found = [folder for folder in root.iterdir() if complete(folder)]
+    except OSError:
+        return None
+    return max(found, key=lambda folder: tuple(int(part) for part in re.findall(r"\d+", folder.name)), default=None)
+
+
+def katex_runtime() -> tuple[str, Path] | None:
+    """(node, the KaTeX folder) when math in a WeasyPrint PDF can be typeset, else None."""
+    folder = katex_folder()
+    node = which("node") if folder is not None else None
+    return (node, folder) if node else None
+
+
+def node_install_hint() -> str:
+    if sys.platform == "darwin":
+        return "brew install node"
+    if sys.platform == "win32":
+        return "winget install OpenJS.NodeJS.LTS"
+    return "sudo apt install nodejs (or your package manager)"
+
+
+def node_asset_name(version: str, system: str | None = None, machine: str | None = None) -> str | None:
+    """The file name of node's release archive for this machine (`node-v24.21.0-darwin-arm64.tar.xz`), or None."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    target = NODE_TARGETS.get((system, machine))
+    if target is None:
+        return None
+    return f"node-{version}-{target}.zip" if system == "windows" else f"node-{version}-{target}.tar.xz"
+
+
+def install_node() -> bool:
+    """node's newest long-term-support release for this machine into tools_directory(), checked against the SHA-256
+    nodejs.org lists for it."""
+    headers = {"User-Agent": f"pdfmd/{PDFMD_VERSION}"}
+    try:
+        with open_url(urllib.request.Request(f"{NODE_DIST}/index.json", headers=headers), 30) as response:
+            version = next(str(item["version"]) for item in json.load(response) if item.get("lts"))
+        name = node_asset_name(version)
+        if name is None:
+            print(f"No node release is listed for {platform.system()} {platform.machine()}. Install node yourself: "
+                  f"{node_install_hint()}", file=sys.stderr)
+            return False
+        with open_url(urllib.request.Request(f"{NODE_DIST}/{version}/SHASUMS256.txt", headers=headers), 30) as response:
+            sums = response.read().decode("utf-8", "replace")
+        sha256 = next((line.split()[0] for line in sums.splitlines() if line.split()[1:] == [name]), None)
+    except (OSError, ValueError, KeyError, StopIteration) as error:
+        print(f"Could not read node's release list ({error}). Install node yourself: {node_install_hint()}",
+              file=sys.stderr)
+        return False
+    url = f"{NODE_DIST}/{version}/{name}"
+    print(f"INSTALL  node {version} (about 30 MB download, 120 MB on disk): {url}")
+    executable = "node.exe" if name.endswith(".zip") else "node"
+    try:
+        with NamedTemporaryFile(suffix=".zip" if name.endswith(".zip") else ".tar.xz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            download_file(url, archive, sha256)
+            print(f"SHA-256 verified ({sha256[:12]}..., as listed by nodejs.org for this release)" if sha256
+                  else "NOTE  no checksum was available for this download, so it could not be verified")
+            target = extract_executable(archive, executable, tools_directory(),
+                                        inside="" if executable == "node.exe" else "bin")
+        finally:
+            archive.unlink(missing_ok=True)
+    except (OSError, tarfile.TarError, zipfile.BadZipFile, ImportError) as error:
+        print(f"Could not install node ({error}). Install it yourself: {node_install_hint()}", file=sys.stderr)
+        return False
+    use_managed_tools()
+    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
+    if ran.returncode != 0:
+        print(f"node was downloaded to {target} but does not run here ({ran.stderr.strip() or ran.returncode}). "
+              f"Install it yourself: {node_install_hint()}", file=sys.stderr)
+        return False
+    print(f"Installed node {ran.stdout.strip()} in {tools_directory()} (used when no other node is on PATH; delete "
+          "the file to remove it).")
+    return True
+
+
+def unpack_katex(archive: Path, target: Path) -> None:
+    """KaTeX's npm package into ``target``: KATEX_KEPT, the fonts and the licence, nothing else."""
+    staging = target.with_name(target.name + ".part")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    with tarfile.open(archive, "r:gz") as bundle:
+        for member in bundle.getmembers():
+            parts = PurePosixPath(member.name).parts
+            if not member.isfile() or ".." in parts or len(parts) < 2 or parts[0] != "package":
+                continue
+            if parts[1:] == ("LICENSE",):
+                relative = parts[1:]
+            elif parts[1] == "dist" and ("/".join(parts[2:]) in KATEX_KEPT
+                                         or (len(parts) == 4 and parts[2] == "fonts")):
+                relative = parts[2:]
+            else:
+                continue
+            handle = bundle.extractfile(member)
+            if handle is None:
+                continue
+            destination = staging.joinpath(*relative)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(handle.read())
+    if not all((staging / name).is_file() for name in KATEX_KEPT[:2]) or not list((staging / "fonts").glob("*.woff2")):
+        shutil.rmtree(staging, ignore_errors=True)
+        raise OSError(f"{archive.name} does not have KaTeX's script, stylesheet and fonts")
+    if target.exists():
+        shutil.rmtree(target)
+    staging.replace(target)
+
+
+def katex_works(node: str, folder: Path) -> str | None:
+    """None when node typesets a formula with the KaTeX in ``folder`` through pdfmd_lua/katex.cjs, else why not."""
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return "pdfmd_lua, the folder of pdfmd's filters, is not installed beside pdfmd.py"
+    script = pdfmd_lua.FILTERS / "katex.cjs"
+    request = json.dumps({"dir": str(folder), "items": [{"tex": "x^2", "display": False}]})
+    try:
+        ran = subprocess.run([node, str(script)], input=request, capture_output=True, text=True, encoding="utf-8",
+                             timeout=60)
+        answer = json.loads(ran.stdout)[0] if ran.returncode == 0 else {"error": ran.stderr.strip()[-300:]}
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
+        return str(error)
+    return None if "katex" in str(answer.get("html", "")) else str(answer.get("error") or answer)
+
+
+def install_katex() -> bool:
+    """`pdfmd --install math:katex`: KaTeX's files, and node when there is none, so that WeasyPrint typesets math."""
+    target = data_root() / "katex" / KATEX_VERSION
+    print(f"INSTALL  KaTeX {KATEX_VERSION} (about 1.5 MB): {KATEX_PACKAGE}")
+    try:
+        with NamedTemporaryFile(suffix=".tgz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            download_file(KATEX_PACKAGE, archive, KATEX_SHA256)
+            unpack_katex(archive, target)
+        finally:
+            archive.unlink(missing_ok=True)
+    except (OSError, tarfile.TarError) as error:
+        print(f"Could not install KaTeX ({error}).", file=sys.stderr)
+        return False
+    print(f"SHA-256 verified ({KATEX_SHA256[:12]}..., pinned in pdfmd for KaTeX {KATEX_VERSION})")
+    node = which("node")
+    if node is None:
+        print(f"NOTE  KaTeX runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+              f"would do too: {node_install_hint()})")
+        if not install_node():
+            return False
+        node = which("node")
+        if node is None:
+            return False
+    problem = katex_works(node, target)
+    if problem:
+        print(f"KaTeX was installed in {target} but node ({node}) could not typeset with it: {problem}",
+              file=sys.stderr)
+        return False
+    print(f"Installed KaTeX {KATEX_VERSION} in {target} (delete the folder to remove it): a PDF made by WeasyPrint "
+          f"now typesets its math, with node {node}.")
+    return True
+
+
 def translit_report() -> bool:
     """`--translit list`: the packs, which are on, which could work."""
     module = unicode_module()
@@ -6093,9 +6300,11 @@ def translit_report() -> bool:
 def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]`."""
     kind = value.partition(":")[0]
-    if kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr")):
+    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math"))
+            or (kind == "math" and ":" in value and value != "math:katex")):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
-                                         "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz)")
+                                         "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
+                                         "math:katex is KaTeX, for math in WeasyPrint's PDFs)")
     return value
 
 
@@ -6219,6 +6428,8 @@ def install_extra(kind: str) -> bool:
         return install_extra("pandoc") and install_extra("typst")
     if kind == "typst":
         return install_typst()
+    if kind == "math:katex":
+        return install_katex()
     if kind == "ocr" or kind.startswith("ocr:"):
         return install_ocr_languages(kind.partition(":")[2])
     if kind == "emoji" or kind == "fonts" or kind.startswith("fonts:"):
@@ -11394,16 +11605,25 @@ def weasyprint_math_args(engine: str, pandoc_options: list[str]) -> list[str]:
     """For WeasyPrint (v3.27.12), which does not draw MathML (Pandoc's default HTML math printed each formula twice as
     flat text): Pandoc's plain math, simple formulas in Unicode and the others as TeX, unless the command line chooses
     the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text and (v3.28.3) keeps a table's
-    caption whole."""
+    caption whole. With KaTeX and node (v3.28.11, `pdfmd --install math:katex`) the filter typesets the math instead:
+    the variables name KaTeX's folder and node. Last of the filters, after the LaTeX filter's \\ce in math."""
     if engine != "weasyprint":
         return []
-    out = [] if any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options) else html_math_args("plain")
+    chosen = any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options)
+    out = [] if chosen else html_math_args("plain")
     try:
         import pdfmd_lua
     except ImportError:
         return out
     shipped = pdfmd_lua.path("weasyprint")
-    return out + (["--lua-filter", str(shipped)] if shipped is not None else [])
+    if shipped is None:
+        return out
+    runtime = None if chosen or not (pdfmd_lua.FILTERS / "katex.cjs").is_file() else katex_runtime()
+    if runtime is not None:
+        node, folder = runtime
+        out += ["-V", f"pdfmd-katex={folder}", "-V", f"pdfmd-katex-url={folder.as_uri()}",
+                "-V", f"pdfmd-katex-node={node}"]
+    return out + ["--lua-filter", str(shipped)]
 
 
 @contextmanager
@@ -15498,13 +15718,23 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
+# WeasyPrint's CSS parser names each property and media query it ignores. Pandoc's page style and KaTeX's stylesheet
+# are written for browsers, so a good build printed a screenful of them (v3.28.11); --verbose still shows them.
+WEASYPRINT_CSS_NOISE = re.compile(r"(?m)^WARNING: (?:Ignored `[^`\n]*` at \d+:\d+, (?:unknown property|invalid value)\."
+                                  r"|Expected a media type, got .*|Invalid media type .* rule was ignored at \d+:\d+\.)"
+                                  r"[ \t]*(?:\n|$)")
+
+
 def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, page_options,
                        verbose: bool) -> subprocess.CompletedProcess:
     """Run one engine's Pandoc command: `run_pandoc(command, target)` as it is, or for "calibre" into an HTML
     page that ebook-convert then prints (`page_options()` gives its paper, margins and language). Pandoc's own
-    warnings are kept in the result."""
+    warnings are kept in the result; WeasyPrint's about the CSS it ignores only with --verbose."""
     with calibre_html_command(cmd, engine) as (command, html):
         result = run_pandoc(command, html or output)
+        if engine == "weasyprint" and result.returncode == 0 and not verbose and result.stderr:
+            result = subprocess.CompletedProcess(result.args, 0, result.stdout,
+                                                 WEASYPRINT_CSS_NOISE.sub("", result.stderr))
         if html is None or result.returncode != 0:
             return result
         printed = run_calibre(html, output, page_options(), verbose)
@@ -16362,10 +16592,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:
                         cmd += ["--lua-filter", str(lua_filter)]
-                    cmd += weasyprint_math_args(engine, pandoc_options)
                     # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
-                    # label for is a link Typst would stop on
-                    last_filters = typst_filter_args(engine)
+                    # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
+                    last_filters = typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
                     page_options = lambda: calibre_page_options(md_path, metadata_files, variables)
                     if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html",
@@ -19285,7 +19514,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
                              "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
                              "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
-                             "Python 3.11+), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
+                             "Python 3.11+), 'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
+                             "about 30 MB: WeasyPrint's PDFs then typeset math), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
                              "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
                              "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "
@@ -20612,7 +20842,8 @@ def main() -> None:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                             hoist_code_header(cmd)
                             keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
-                        cmd += weasyprint_math_args(engine, pandoc_options)    # as for one document (v3.28.2)
+                        # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
+                        report_last = typst_filter_args(engine) + weasyprint_math_args(engine, pandoc_options)
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)
@@ -20628,14 +20859,14 @@ def main() -> None:
                                                   "typst" if engine == "typst" else "html", output, pandoc_options,
                                                   report_no_auto, report_note, labels="off",
                                                   force_filter=True) as office_arguments:
-                                cmd += office_arguments.filter_arguments + typst_filter_args(engine)
+                                cmd += office_arguments.filter_arguments + report_last
                                 runner = ((lambda command, target: run_office_pandoc(
                                               command, target, office_arguments, pandoc_cwd, args.verbose))
                                           if office_arguments.filter_arguments else run_report_pandoc)
                                 result = run_engine_command(cmd, engine, output, runner, report_page, args.verbose)
                                 office_finish(office_arguments, files[0], args.verbose)
                         else:
-                            cmd += typst_filter_args(engine)
+                            cmd += report_last
                             result = run_engine_command(cmd, engine, output, run_report_pandoc, report_page,
                                                         args.verbose)
                     if result.returncode == 0:

@@ -95,7 +95,8 @@ class Packaging(unittest.TestCase):
         self.assertIsNone(pdfmd_lua.path("nope"))
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"pdfmd_lua"', pyproject)
-        self.assertIn('pdfmd_lua = ["*.lua", "*.tex"]', pyproject)
+        self.assertIn('pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]', pyproject)     # *.cjs: katex.cjs (v3.28.11)
+        self.assertTrue((pdfmd_lua.FILTERS / "katex.cjs").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_lone_pdfmd_py_still_builds_without_the_package(self):
