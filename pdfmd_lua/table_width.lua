@@ -170,7 +170,21 @@ local function has_default(colspecs)
   return false
 end
 
+-- pdfmd asks to hear about a table it had to resize (PDFMD_TABLEWIDTH_LOG: a file it reads afterwards); nothing
+-- is written when the variable is not set, or for a table that already fits
+local tables_seen = 0           -- the table's place in the document: engines tried one after the other count it once
+local function report()
+  local path = os.getenv("PDFMD_TABLEWIDTH_LOG")
+  if path == nil or path == "" then return end
+  local handle = io.open(path, "a")
+  if handle then
+    handle:write(tables_seen .. "\n")
+    handle:close()
+  end
+end
+
 local function rebalance(tbl)
+  tables_seen = tables_seen + 1
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
   if tbl.attr.attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
@@ -199,6 +213,7 @@ local function rebalance(tbl)
   for i, spec in ipairs(tbl.colspecs) do
     tbl.colspecs[i] = {spec[1], widths[i] / sum}
   end
+  report()
   return tbl
 end
 

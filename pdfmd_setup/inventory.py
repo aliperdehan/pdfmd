@@ -168,6 +168,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "reader": "options.reader",
     "seed-labels": "options.seed-labels",
     "metadata-precedence": "options.metadata-precedence",
+    "found-style": "options.found-style", "ok-delimiter": "options.ok-delimiter",
     "stamp.enabled": "options.stamp.enabled", "stamp.mode": "options.stamp.mode", "stamp.store": "options.stamp.store",
     "stamp.restored-note": "options.stamp.restored-note", "stamp.restored_note": "options.stamp.restored-note",
     "stamp.packages": "options.stamp.packages", "stamp.scope": "options.stamp.scope",

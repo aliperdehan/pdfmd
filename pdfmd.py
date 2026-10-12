@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.17"
+PDFMD_VERSION = "3.28.18"
 import argparse
 import csv
 import filecmp
@@ -6771,14 +6771,14 @@ class AutoLog:
     each decision with its reason, as it happens, as before. In a batch a line equal to the one before it is not
     printed again."""
 
-    WIDTH = 110
+    WIDTH = 110                          # the width of a line when the output is not a terminal
     HEADINGS = ("FOUND", "DEFAULTS")
     # A decision that is one of a kind per build (the later one replaces the earlier); the others are listed each
     ONE_OF = frozenset({"PARTS", "MARGIN", "MAINFONT", "MONOFONT"})
     # The order a line lists its items in, whichever was found first: the files, then the parts; the global
     # metadata, then margin, fonts, packages
     RANK = {"YAML": 0, "TEX": 1, "LUA": 2, "PARTS": 3, "GLOBAL": 0, "MARGIN": 1, "MAINFONT": 2, "MONOFONT": 3,
-            "TEXPACKAGES": 4}
+            "TEXPACKAGES": 4, "TITLE": 5, "TABLEWIDTH": 6}
 
     def __init__(self) -> None:
         self.items: dict[tuple[str, str], tuple[int, str]] = {}
@@ -6814,6 +6814,12 @@ class AutoLog:
         if kind == "TEXPACKAGES":
             found = re.match(r"loads (.+?) unless the preamble does", detail)
             return ("DEFAULTS", f"packages {found.group(1)}") if found else None
+        if kind == "TITLE":
+            return "DEFAULTS", "title from heading"
+        if kind == "TABLEWIDTH":
+            found = re.search(r"(\d+) wide tables?", detail)
+            count = int(found.group(1)) if found else 1
+            return "DEFAULTS", f"balanced {count} wide table{'s' if count != 1 else ''}"
         return None
 
     def record(self, kind: str, detail: str, verbose: bool, heading: str | None = None,
@@ -6840,21 +6846,50 @@ class AutoLog:
                 print(f"AUTO {kind}  {display_path(path)}")
             return
         if kind == "YAML" and path == global_metadata_file():
-            keys = [("options" if key == "pdfmd-options" else key) for key in metadata_file_yaml(path)]
-            shown = ", ".join(keys[:2]) + (f" +{len(keys) - 2}" if len(keys) > 2 else "")
-            self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"],
-                                                  f"global metadata ({shown})" if keys else "global metadata")
+            self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata")
         else:
             self.items[("FOUND", f"{kind} {path}")] = (self.RANK[kind], display_path(path))
+
+    def width(self) -> int:
+        """The line width: the terminal's own when stdout is one (v3.28.18), else ``WIDTH``."""
+        try:
+            if sys.stdout.isatty():
+                return max(60, shutil.get_terminal_size((self.WIDTH, 24)).columns)
+        except (OSError, ValueError, AttributeError):
+            pass
+        return self.WIDTH
+
+    @staticmethod
+    def grouped(parts: list[str]) -> list[str]:
+        """``metadata/a.yaml``, ``metadata/b.tex`` -> ``metadata: a.yaml + b.tex`` (v3.28.18): files that share a folder
+        are listed under it once, in the place of the first. A folder with one file keeps its path."""
+        folders: dict[str, list[str]] = {}
+        for part in parts:
+            if re.search(r"[/\\]", part):
+                folder, name = re.split(r"[/\\](?=[^/\\]*$)", part)
+                folders.setdefault(folder, []).append(name)
+        done: set[str] = set()
+        result: list[str] = []
+        for part in parts:
+            if re.search(r"[/\\]", part):
+                folder, _ = re.split(r"[/\\](?=[^/\\]*$)", part)
+                if len(folders[folder]) > 1:
+                    if folder not in done:
+                        done.add(folder)
+                        result.append(f"{folder}: " + " + ".join(folders[folder]))
+                    continue
+            result.append(part)
+        return result
 
     def fit(self, heading: str, parts: list[str]) -> str:
         prefix = f"{heading:<10}"
         line = prefix + ", ".join(parts)
-        if len(line) <= self.WIDTH:
+        width = self.width()
+        if len(line) <= width:
             return line
         for count in range(len(parts) - 1, 0, -1):
             cut = prefix + ", ".join(parts[:count]) + f", +{len(parts) - count} more (--verbose)"
-            if len(cut) <= self.WIDTH:
+            if len(cut) <= width:
                 return cut
         return prefix + parts[0] + f", +{len(parts) - 1} more (--verbose)"
 
@@ -6868,6 +6903,8 @@ class AutoLog:
             parts = [text for _, text in sorted((value for (group, _), value in self.items.items() if group == heading),
                                                 key=lambda value: value[0])]
             if parts:
+                if heading == "FOUND" and str(config_options().get("found-style", "group")).strip().casefold() != "path":
+                    parts = self.grouped(parts)
                 line = self.fit(heading, parts)
                 if not (self.dedupe and self.shown.get(heading) == line):
                     print(line)
@@ -7328,9 +7365,29 @@ def lua_filter_file(name: str, prefix: str) -> Iterator[Path]:
 
 @contextmanager
 def table_width_filter() -> Iterator[Path]:
-    """pdfmd_lua/table_width.lua, for --lua-filter."""
+    """pdfmd_lua/table_width.lua, for --lua-filter. The filter appends a line to PDFMD_TABLEWIDTH_LOG for every table
+    it resizes; tablewidth_note() reads that back (v3.28.18)."""
+    log = Path(tempfile.gettempdir()) / f"pdfmd-tablewidth-{os.getpid()}.log"
+    log.unlink(missing_ok=True)
+    os.environ["PDFMD_TABLEWIDTH_LOG"] = str(log)
     with lua_filter_file(TABLE_WIDTH_LUA_FILTER, "pdfmd-tablewidth-") as path:
         yield path
+
+
+def tablewidth_note(md_path, note) -> None:
+    """Say that the table-width filter resized tables in the build just made, once (AUTO TABLEWIDTH), and forget it."""
+    name = os.environ.get("PDFMD_TABLEWIDTH_LOG")
+    if not name:
+        return
+    log = Path(name)
+    try:
+        count = len(set(log.read_text(encoding="utf-8").split()))
+        log.unlink(missing_ok=True)
+    except OSError:
+        return
+    if count:
+        note("TABLEWIDTH", f"{md_path}: {count} wide table{'s' if count != 1 else ''} had no column widths and would "
+                           "run past the margin; pdfmd balanced the columns (--no-auto tablewidth stops it)")
 
 
 # -- Script-aware font fallback (v3.23.0) ----------------------------------------
@@ -8663,7 +8720,9 @@ def has_monofont(md_path: Path, variables: list[str], metadata_files=()) -> bool
 
 # Raw content (v3.28.17): ```{=latex} ... ``` and `x`{=html}, in any format, is not code -- Pandoc hands it to the
 # writer as it is, and `{=pdfmd}` blocks are the same shape. A plain ```{pdfmd} fence (no `=`) is ordinary code.
-RAW_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})[ \t]*\{=[^}\n]*\}[ \t]*\n.*?\n[ \t]*(?P=fence)[ \t]*$",
+# The fence is any run of three or more backticks (or tildes) -- a longer one lets the block hold shorter ones -- and
+# the closing line is a run of at least as many.
+RAW_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>(?P<c>[`~])(?P=c){2,})[ \t]*\{=[^}\n]*\}[ \t]*\n.*?\n[ \t]*(?P=fence)(?P=c)*[ \t]*$",
                           re.MULTILINE | re.DOTALL)
 RAW_SPAN_RE = re.compile(r"(`+)(?:(?!\1).)+?\1\{=[^}\s]+\}", re.DOTALL)
 
@@ -14983,9 +15042,9 @@ class Built(tuple):
     """convert_one's `(path, ok, message)`, carrying the engine too (a tuple subclass: three-way unpacking and pickling
     through a process pool both keep working)."""
 
-    def __new__(cls, items, engine: str | None = None, failed=()):
+    def __new__(cls, items, engine: str | None = None, failed=(), output=None):
         self = super().__new__(cls, items)
-        self.engine, self.failed = engine, list(failed)
+        self.engine, self.failed, self.output = engine, list(failed), output
         return self
 
 
@@ -14996,6 +15055,25 @@ def engine_label(result) -> str:
         return ""
     failed = getattr(result, "failed", [])
     return f"  ({engine}" + (f"; {', '.join(failed)} failed" if failed else "") + ")"
+
+
+def ok_delimiter() -> str:
+    """What stands between the source and the file in `OK    report.md > report.pdf` (`options.ok-delimiter`)."""
+    value = config_options().get("ok-delimiter")
+    return ">" if value is None or not str(value).strip() else str(value).strip()
+
+
+def built_name(result) -> str:
+    """` > report.pdf` for the closing line: the file a successful build wrote, by its name when it sits beside the
+    source, else by its path; nothing when the build wrote no one file."""
+    output = getattr(result, "output", None)
+    if output is None or not result[1]:
+        return ""
+    try:
+        beside = Path(output).parent.resolve() == Path(result[0]).parent.resolve()
+    except OSError:
+        beside = False
+    return f" {ok_delimiter()} {Path(output).name if beside else display_path(Path(output))}"
 
 
 WARNING_LINE_RE = re.compile(r"^\s*(?:WARN\b|\[WARNING\])")
@@ -16156,6 +16234,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         AUTO_LOG.record(kind, detail, verbose)
 
     def flush_summary() -> None:
+        tablewidth_note(md_path, note)
         if not verbose:
             AUTO_LOG.flush()
 
@@ -16882,7 +16961,7 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
     if result[1] and problems and resolve_strict(md_path, metadata_files):
         result = (result[0], False, strict_message(problems))
-    return Built(result, BUILD["engine"], BUILD["failed"])
+    return Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"])
 
 
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":
@@ -21614,7 +21693,7 @@ def main() -> None:
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
-        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{engine_label(result)}")
+        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{built_name(result)}{engine_label(result)}")
         if error:
             print(error)
     if native_auto and not failures:

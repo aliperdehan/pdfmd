@@ -28,6 +28,12 @@ CASES = [
     ("a fenced block", "```python\nx\n```\n", True),
     ("raw block, then inline code", "```{=latex}\n\\x\n```\n\nuse `y`", True),
     ("a raw block never closed", "```{=latex}\n\\x\n", True),
+    ("a raw block in five backticks holding shorter fences", "`````{=latex}\n````something ```really``` odd````\n```\n`````\n", False),
+    ("a raw block in four backticks holding a three-backtick line", "````{=html}\n```\n<b>\n```\n````\n", False),
+    ("a raw block closed by a longer fence", "```{=latex}\n\\x\n`````\n", False),
+    ("an inline raw span in two backticks holding one", "`` `some inline command` ``{=typst} text", False),
+    ("an inline raw span in three backticks", "``` a`b ```{=latex}", False),
+    ("code after a raw block in five backticks", "`````{=latex}\n\\x\n`````\n\n```\ncode\n```\n", True),
 ]
 
 

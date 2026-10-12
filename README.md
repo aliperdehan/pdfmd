@@ -12,15 +12,19 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
 
 ```console
 $ pdfmd lecture
-FOUND     metadata/metadata.yaml, metadata/preamble.tex
-DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono
-AUTO: READER TITLE. Use --verbose to see in full
-OK    lecture.md
+FOUND     metadata: metadata.yaml + preamble.tex
+DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono, title from heading
+AUTO: READER. Use --verbose to see in full
+OK    lecture.md > lecture.pdf  (lualatex)
 ```
 
 `FOUND` is what pdfmd picked up from the folder, `DEFAULTS` what it applied because nothing said otherwise
-(the global metadata of `pdfmd --setup` too), and the `AUTO:` line the other decisions it made. Each line is cut at
-the width of a screen (`+3 more (--verbose)`); `--verbose` prints every decision with its reason.
+(the global metadata of `pdfmd --setup`, the title taken from a leading `# ` heading, a wide table whose columns it
+balanced), and the `AUTO:` line the other decisions it made. Files of one folder are listed under it once
+(`metadata: metadata.yaml + preamble.tex`; `--setup` can list each with its path instead). Each line is cut at the
+width of the terminal (110 characters when the output is piped): `+3 more (--verbose)`. `--verbose` prints every
+decision with its reason. The closing line names the file the build made, `OK    lecture.md > lecture.pdf`; `--setup`
+sets what stands between the two.
 
 In a folder with a single Markdown file you do not even need the name: `cd` into the folder and run `pdfmd`. It finds
 the file, its metadata, preamble and filters, and writes the PDF beside it (with several Markdown files it asks for
@@ -272,7 +276,7 @@ $ pdfmd notes.md
 NOTE  Pandoc was not found: building with the built-in renderer (inkmd). The output is plain ...
 NATIVE  notes.md via inkmd
 WARN  native (inkmd): notes.md: 2 math expression(s) set as plain text (Unicode, sub/superscripts, display math centred); ...
-OK    notes.md
+OK    notes.md > notes.pdf
 ```
 
 - **[inkmd](https://github.com/eagredev/inkmd)**, written by Dylan Moir (MIT
@@ -986,11 +990,11 @@ pdfmd slides -p                   # Beamer slides; each heading starts a slide
 
 ```console
 $ pdfmd notes -b
-DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono
-AUTO: READER TITLE. Use --verbose to see in full
-OK    notes/lecture.md
-OK    notes/week1.md
-OK    notes/week2.md
+DEFAULTS  margin 1in, font STIX Two Text, code in JetBrains Mono, title from heading
+AUTO: READER. Use --verbose to see in full
+OK    notes/lecture.md > lecture.pdf
+OK    notes/week1.md > week1.pdf
+OK    notes/week2.md > week2.pdf
 ```
 
 `-b` converts every `.md` in the folder into its own PDF, in parallel
@@ -1416,7 +1420,7 @@ AUTO READER  lecture.md: no YAML front matter; reading as gfm
 AUTO TITLE  lecture.md: promoted leading '# ' heading to Pandoc title metadata
 AUTO MARGIN  lecture.md: no geometry/margin set; using geometry:margin=1in on LaTeX-family engines
 AUTO MONOFONT  lecture.md: has code but no monofont set; using JetBrains Mono on LaTeX-family engines
-OK    lecture.md  (lualatex)
+OK    lecture.md > lecture.pdf  (lualatex)
 ```
 
 The second `CMD` line is the font fallback at work: STIX Two Text was
@@ -1433,7 +1437,7 @@ build that quietly fell back to Typst does not look like one that did not:
 $ pdfmd paper
 WARN  paper.md: lualatex failed (! Undefined control sequence.); trying xelatex...
 WARN  paper.md: xelatex failed (! Undefined control sequence.); trying typst...
-OK    paper.md  (typst; lualatex, xelatex failed)
+OK    paper.md > paper.pdf  (typst; lualatex, xelatex failed)
 ```
 
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those

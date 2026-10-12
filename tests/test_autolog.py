@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -67,6 +68,42 @@ class Lines(unittest.TestCase):
         self.assertEqual(buffer.getvalue(), "AUTO MAINFONT  d.md: no mainfont set; using STIX Two Text\n")
 
 
+class Layout(unittest.TestCase):
+    def test_files_of_one_folder_are_listed_under_it_once(self):
+        log = pdfmd.AutoLog()
+        self.assertEqual(log.grouped(["metadata/metadata.yaml", "metadata/preamble.tex", "nulabreport.lua", "9 parts"]),
+                         ["metadata: metadata.yaml + preamble.tex", "nulabreport.lua", "9 parts"])
+        self.assertEqual(log.grouped(["a/x.yaml", "b/y.tex"]), ["a/x.yaml", "b/y.tex"])        # one each: the path stays
+        self.assertEqual(log.grouped(["a/x.yaml", "top.lua", "a/y.tex"]), ["a: x.yaml + y.tex", "top.lua"])
+
+    def test_the_title_and_a_resized_table_are_defaults(self):
+        log = pdfmd.AutoLog()
+        log.record("TITLE", "d.md: promoted leading '# ' heading to Pandoc title metadata", False)
+        log.record("TABLEWIDTH", "d.md: 2 wide tables had no column widths and would run past the margin", False)
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            log.flush()
+        self.assertEqual(buffer.getvalue().splitlines(), ["DEFAULTS  title from heading, balanced 2 wide tables"])
+
+    def test_the_line_follows_the_terminal_when_there_is_one(self):
+        log = pdfmd.AutoLog()
+        parts = [f"file-number-{index}.yaml" for index in range(12)]
+        self.assertEqual(log.width(), log.WIDTH)                             # not a terminal here
+        original = pdfmd.sys.stdout
+        try:
+            class Terminal(io.StringIO):
+                def isatty(self):
+                    return True
+            pdfmd.sys.stdout = Terminal()
+            with unittest.mock.patch("shutil.get_terminal_size", return_value=os.terminal_size((70, 24))):
+                self.assertEqual(log.width(), 70)
+                self.assertLessEqual(len(log.fit("FOUND", parts)), 70)
+            with unittest.mock.patch("shutil.get_terminal_size", return_value=os.terminal_size((400, 24))):
+                self.assertEqual(log.fit("FOUND", parts), "FOUND     " + ", ".join(parts))
+        finally:
+            pdfmd.sys.stdout = original
+
+
 class Builds(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -89,11 +126,11 @@ class Builds(unittest.TestCase):
 
     def test_a_default_build_is_three_lines_and_the_ok_line(self):
         lines = self.run_pdfmd("d.md", "--to", "latex")
-        self.assertEqual(lines[0], "FOUND     metadata/metadata.yaml, metadata/preamble.tex")
-        self.assertTrue(lines[1].startswith("DEFAULTS  global metadata (colorlinks, csl +1), margin 1in"), lines[1])
+        self.assertEqual(lines[0], "FOUND     metadata: metadata.yaml + preamble.tex")
+        self.assertTrue(lines[1].startswith("DEFAULTS  global metadata, margin 1in"), lines[1])
         self.assertIn("font STIX Two Text", lines[1])
         self.assertIn("code in JetBrains Mono", lines[1])
-        self.assertEqual(lines[-1], "OK    d.md")
+        self.assertEqual(lines[-1], "OK    d.md > d.tex")
         self.assertLessEqual(len(lines), 4, lines)
         self.assertTrue(all(len(line) <= 110 for line in lines), lines)
         self.assertFalse(any(line.startswith("AUTO YAML") for line in lines))
@@ -104,6 +141,24 @@ class Builds(unittest.TestCase):
         self.assertIn("AUTO TEX", text)
         self.assertIn("(the global metadata of pdfmd --setup)", text)
         self.assertIn("AUTO MAINFONT  ", text)
+
+    def test_a_wide_table_is_announced_and_a_narrow_one_is_not(self):
+        wide = "| a | b |\n|---|---|\n| " + "word " * 60 + " | " + "text " * 50 + " |\n"
+        (self.doc / "w.md").write_text("---\ntitle: T\n---\n\n" + wide, encoding="utf-8")
+        (self.doc / "n.md").write_text("---\ntitle: T\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
+        self.assertIn("balanced 1 wide table", "\n".join(self.run_pdfmd("w.md", "--to", "latex")))
+        self.assertNotIn("balanced", "\n".join(self.run_pdfmd("n.md", "--to", "latex")))
+        self.assertIn("AUTO TABLEWIDTH", "\n".join(self.run_pdfmd("w.md", "--to", "latex", "--verbose")))
+
+    def test_the_closing_line_names_the_file_and_the_delimiter_is_a_setting(self):
+        self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[-1], "OK    d.md > d.tex")
+        (self.root / "home" / "config.yaml").write_text("options:\n  ok-delimiter: '->'\n", encoding="utf-8")
+        self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[-1], "OK    d.md -> d.tex")
+
+    def test_found_style_path_lists_each_file_with_its_path(self):
+        (self.root / "home" / "config.yaml").write_text("options:\n  found-style: path\n", encoding="utf-8")
+        self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[0],
+                         "FOUND     metadata/metadata.yaml, metadata/preamble.tex")
 
     def test_a_batch_prints_one_found_and_one_defaults_line(self):
         for name in ("e.md", "f.md"):

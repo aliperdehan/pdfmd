@@ -179,7 +179,7 @@ class Plain(unittest.TestCase):
         self.assertIn("\\setmonofont[]{Global Mono}", tex)
         self.assertNotIn("font STIX", shown)             # neither font is a default: the metadata names them
         self.assertNotIn("code in", shown)
-        self.assertIn("global metadata (monofont)", shown)
+        self.assertIn("global metadata", shown)
         (project / "metadata.yaml").unlink()
         shown, tex = build("b.md", "")
         self.assertIn("font STIX Two Text", shown)       # pdfmd's own default, named like its other defaults

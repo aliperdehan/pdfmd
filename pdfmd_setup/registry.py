@@ -61,6 +61,7 @@ UNSET = {
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.rows": "10", "options.csv.cols": "7",
     "disabled": "nothing switched off",
+    "options.ok-delimiter": ">",
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
@@ -324,6 +325,13 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
                 "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
                 "--no-pagebreak.", "Universal markup"),
+        # -- what a build prints
+        choice("options.found-style", "How the FOUND line lists the files it picked up",
+               (("group", "files of one folder together: metadata: metadata.yaml + preamble.tex"),
+                ("path", "each with its path: metadata/metadata.yaml, metadata/preamble.tex")), "group",
+               "Only this setting; a document does not change it.", "Messages"),
+        text("options.ok-delimiter", "What stands between the source and the file in the closing line",
+             "OK    report.md > report.pdf. Any short text: >, ->, =>.", "Messages"),
         # -- checks and limits
         choice("options.strict", "A warning fails the build", on_off, "",
                "The output is kept; the exit status is 1. Per run: --strict / --no-strict.", "Checks and limits"),

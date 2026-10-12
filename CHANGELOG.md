@@ -41,6 +41,41 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.18 — 2026-10-13
+
+Pre-edit state: commit `b4691e5` (v3.28.17).
+
+### Changed
+
+- **The closing line names the file the build made: `OK    report.md > report.pdf  (lualatex)`.** The file is given by
+  its name when it sits beside the source, by its path when it does not (`-o`, `--out-dir`); a build that wrote no one
+  file keeps the old line. What stands between the two is `options.ok-delimiter` (`--setup`; default `>`).
+- **`FOUND` lists the files of one folder under it once:** `FOUND     metadata: metadata.yaml + preamble.tex, nulabreport.lua, 9 parts`.
+  A folder with one file keeps its path. `options.found-style: path` (`--setup`) gives every file with its path as before.
+- **`DEFAULTS`:** the global metadata is `global metadata` (the key list is gone; `--verbose` still names the file and
+  says it is the global one), and two more decisions moved in from the `AUTO:` line: `title from heading` (a leading
+  `# ` heading taken as the title) and `balanced 2 wide tables` (below).
+- **The line follows the terminal.** When stdout is a terminal the `FOUND`/`DEFAULTS` lines are cut at its width
+  (`+3 more (--verbose)`), 110 characters when the output is piped or a batch runs in parallel.
+
+### Added
+
+- **The table-width filter says so when it fires.** It was passed to every LaTeX-family build and said nothing when it
+  resized a table. `pdfmd_lua/table_width.lua` now appends the table's place in the document to the file named by
+  `PDFMD_TABLEWIDTH_LOG` (set by pdfmd for its own runs), only for a table that had no column widths and would have run
+  past the margin; pdfmd counts them once however many engines were tried: `DEFAULTS  ... balanced 1 wide table`,
+  `AUTO TABLEWIDTH` with `--verbose`. A table that fits, or has widths of its own, is still left alone and unannounced.
+
+### Fixed
+
+- A raw fence of any length is raw: ```` `````{=latex} ```` holding shorter fences, a closing fence longer than the
+  opening one, and an inline span in two or three backticks around a single one (`` `` `x` ``{=typst} ``) all stay out of the
+  code-font test of v3.28.17.
+- Tests: `Layout` and four build tests in `tests/test_autolog.py` (grouping, title and table in DEFAULTS, the terminal width,
+  the resized-table line, the delimiter and the path style), six more fence cases in `tests/test_rawcode.py`.
+
+---
+
 ## v3.28.17 — 2026-10-13
 
 Pre-edit state: commit `cd7cd52` (v3.28.16).

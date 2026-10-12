@@ -92,7 +92,7 @@ class CommandLine(unittest.TestCase):
         self.write("doc.md", "# Hi\n\nText\n")
         done = self.run_pdfmd("doc.md", bare=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertRegex(done.stdout, r"(?m)^OK    doc\.md  \((inkmd|md2pdf)\)$")
+        self.assertRegex(done.stdout, r"(?m)^OK    doc\.md > doc\.pdf  \((inkmd|md2pdf)\)$")
 
     def test_strict_applies_to_the_built_in_renderer_too(self):
         self.write("doc.md", "---\ntitle: T\nlang: en\ncustom: 1\n---\n\n# Hi\n\nText\n")
