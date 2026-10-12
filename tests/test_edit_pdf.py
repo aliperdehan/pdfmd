@@ -63,6 +63,19 @@ class EditPdf(unittest.TestCase):
         self.assertEqual(backups[0].read_bytes(), before)
         self.assertEqual(list(self.root.glob(".*.edit.tmp")), [])
 
+    def test_what_a_build_writes_beside_the_source_is_not_an_edit(self):
+        # backups (a .backups folder) are written into the restored folder by every build: one save, one build
+        (self.root / "report.md").write_text(
+            "---\ntitle: R\npdfmd-options:\n  backup:\n    enabled: true\n---\n\n# Intro\n\nFirst paragraph.\n", encoding="utf-8")
+        (self.root / "stays.py").write_text(      # an editor that edits at once and stays open while the build runs
+            "import sys, time\nfrom pathlib import Path\nPath(sys.argv[1]).open('a', encoding='utf-8')"
+            ".write('\\nADDED PARAGRAPH here.\\n')\ntime.sleep(float(sys.argv[2]) if len(sys.argv) > 2 else 50)\n", encoding="utf-8")
+        pdf = self.build()
+        done = self.run_pdfmd("--edit", "report.pdf", "--editor", f"{sys.executable} {self.root / 'stays.py'}")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout.count("BUILT "), 1, done.stdout)
+        self.assertIn("ADDED PARAGRAPH", self.text(pdf))
+
     def test_no_change_leaves_the_pdf_alone(self):
         pdf = self.build()
         before = pdf.read_bytes()

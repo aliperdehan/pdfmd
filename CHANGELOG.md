@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.28 — 2026-10-13
+
+Pre-edit state: commit `94d9dd9` (v3.28.27).
+
+### Fixed
+
+- **`pdfmd --edit FILE.pdf --editor CMD` no longer rebuilds in a loop when the build writes beside the source.** The watch
+  compared the restored folder with its state before the build, so a file the build itself wrote (a backup in `.backups/`, a
+  stamp history, a document-local cache) counted as a new edit and started another build, until the editor closed. A hidden
+  file or folder is now never an edit, and the folder is read again after each build so that what the build wrote is not
+  one either. (v3.28.23's test used an editor that ended at once, which left the loop no time to show; the new test keeps the
+  editor open while the build runs, and fails without the fix.)
+
+---
+
 ## v3.28.27 — 2026-10-13
 
 Pre-edit state: commit `180f3f1` (v3.28.26).

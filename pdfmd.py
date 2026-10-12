@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.27"
+PDFMD_VERSION = "3.28.28"
 import argparse
 import csv
 import filecmp
@@ -10305,9 +10305,10 @@ def tree_stamp(folder: Path, ignore: set[Path]) -> dict[str, float]:
     stamp: dict[str, float] = {}
     for item in folder.rglob("*"):
         try:
-            if item.is_file() and item not in ignore and not item.name.startswith("."):
+            # a hidden file or folder (.backups, .cache) is what a build writes beside the source, not an edit
+            if item.is_file() and item not in ignore and not any(part.startswith(".") for part in item.relative_to(folder).parts):
                 stamp[str(item)] = item.stat().st_mtime_ns
-        except OSError:
+        except (OSError, ValueError):
             pass
     return stamp
 
@@ -10396,10 +10397,9 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
                     time.sleep(WATCH_INTERVAL)
                     if process.poll() is not None and time.monotonic() - started > 3:
                         break                                    # the editor ended (one that hands over at once keeps us here)
-                    now = tree_stamp(folder, {made})
-                    if now != seen:
-                        seen = now
+                    if tree_stamp(folder, {made}) != seen:
                         ok, said, _ = build(document)
+                        seen = tree_stamp(folder, {made})            # what the build itself wrote is not a new edit
                         print(f"{'BUILT' if ok else 'FAILED':<9} {made.name}" + ("" if ok else "\n" + said[-600:]))
             except KeyboardInterrupt:
                 print()
