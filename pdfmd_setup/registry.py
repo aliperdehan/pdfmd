@@ -74,7 +74,7 @@ TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian
 
 AUTO_HELP = {
     "reader": "read Markdown without front matter as GitHub-flavoured", "title": "promote a leading `# Title`",
-    "margin": "1-inch margins", "mainfont": "a default main font", "monofont": "a default code font",
+    "margin": "1-inch margins", "mainfont": "a default main font", "monofont": "a default code font", "mathfont": "the math font that goes with the default main font",
     "font": "both font defaults", "tablewidth": "balance wide table columns", "metadata": "metadata.yaml discovery",
     "yaml": "metadata.yaml discovery", "preamble": "preamble.tex discovery", "tex": "preamble.tex discovery",
     "lua": "Lua filter discovery", "files": "metadata, preamble and filter discovery", "standalone": "--standalone",

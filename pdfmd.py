@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.23"
+PDFMD_VERSION = "3.28.24"
 import argparse
 import csv
 import filecmp
@@ -1604,10 +1604,10 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures", "remotecsl",
+    "draftpictures", "remotecsl", "mathfont",
 })
 NO_AUTO_ALIASES = {
-    "font": frozenset({"mainfont", "monofont"}),
+    "font": frozenset({"mainfont", "monofont", "mathfont"}),
     "yaml": frozenset({"metadata"}),
     "tex": frozenset({"preamble"}),
     "files": frozenset({"metadata", "preamble", "lua"}),
@@ -6784,10 +6784,10 @@ class AutoLog:
     WIDTH = 110                          # the width of a line when the output is not a terminal
     HEADINGS = ("FOUND", "DEFAULTS")
     # A decision that is one of a kind per build (the later one replaces the earlier); the others are listed each
-    ONE_OF = frozenset({"PARTS", "MARGIN", "MAINFONT", "MONOFONT"})
+    ONE_OF = frozenset({"PARTS", "MARGIN", "MAINFONT", "MATHFONT", "MONOFONT"})
     # The order a line lists its items in, whichever was found first: the files, then the parts; the global
     # metadata, then margin, fonts, packages
-    RANK = {"YAML": 0, "TEX": 1, "LUA": 2, "PARTS": 3, "GLOBAL": 0, "MARGIN": 1, "MAINFONT": 2, "MONOFONT": 3,
+    RANK = {"YAML": 0, "TEX": 1, "LUA": 2, "PARTS": 3, "GLOBAL": 0, "MARGIN": 1, "MAINFONT": 2, "MATHFONT": 2.5, "MONOFONT": 3,
             "TEXPACKAGES": 4, "TITLE": 5, "TABLEWIDTH": 6}
 
     def __init__(self) -> None:
@@ -6818,6 +6818,9 @@ class AutoLog:
             found = (re.search(r"no mainfont set; using (.+)$", detail)
                      or re.search(r": (.+?) instead of ", detail))
             return ("DEFAULTS", f"font {found.group(1)}") if found else None
+        if kind == "MATHFONT":
+            found = re.search(r"no mathfont set; using (.+?) to go with ", detail)
+            return ("DEFAULTS", f"math in {found.group(1)}") if found else None
         if kind == "MONOFONT":
             found = re.search(r"no monofont set; using (.+?) on ", detail)
             return ("DEFAULTS", f"code in {found.group(1)}") if found else None
@@ -7472,6 +7475,59 @@ def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
         if other is not None:
             args += ["-V", f"{kind}options={option}={{{Path(other.path).name}}}"]
     return args
+
+
+# The math font that goes with a text font (v3.28.24). unicode-math sets formulas in Latin Modern Math (Typst: New
+# Computer Modern Math) unless told otherwise, so a document in STIX Two Text had formulas that did not match its body. A
+# row is (the text font pdfmd chooses, the math fonts that go with it: the first one installed is used; several spellings
+# of one family, as fontconfig and Typst name them).
+MATH_COMPANIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("STIX Two Text", ("STIX Two Math",)),
+    ("DejaVu Serif", ("DejaVu Math TeX Gyre",)),
+    ("Libertinus Serif", ("Libertinus Math",)),
+    ("New Computer Modern", ("New Computer Modern Math", "NewComputerModern Math")),
+    ("TeX Gyre Termes", ("TeX Gyre Termes Math",)),
+    ("TeX Gyre Pagella", ("TeX Gyre Pagella Math",)),
+)
+_TEMPLATE_VARIABLES: dict[tuple[str, str], bool] = {}
+
+
+def template_has_variable(writer: str, variable: str) -> bool:
+    """Whether Pandoc's default template for ``writer`` reads ``$variable$`` (Pandoc 3.1.3's Typst one has no mathfont)."""
+    key = (writer, variable)
+    if key not in _TEMPLATE_VARIABLES:
+        try:
+            done = subprocess.run(["pandoc", "-D", writer], capture_output=True, text=True, timeout=60)
+            _TEMPLATE_VARIABLES[key] = done.returncode == 0 and f"$if({variable})$" in done.stdout
+        except (OSError, subprocess.SubprocessError):
+            _TEMPLATE_VARIABLES[key] = False
+    return _TEMPLATE_VARIABLES[key]
+
+
+def math_companion(main_font: str) -> str | None:
+    """The installed math font that goes with ``main_font``, None when there is none (or the font is not in the table)."""
+    for text_font, candidates in MATH_COMPANIONS:
+        if text_font.casefold() == main_font.casefold():
+            return next((name for name in candidates if not system_font_missing(name)), None)
+    return None
+
+
+def mathfont_args(main_font: str | None, md_path: Path, metadata_files: list[Path], variables: list[str],
+                  cli_font: str | None, no_auto: list[str] | None, engine: str | None, note=None) -> list[str]:
+    """`-V mathfont=<companion>` when pdfmd chose the main font itself (no -f, no mainfont: or mathfont: in the document or
+    its metadata files), the companion math font is installed, and the engine can use it (lualatex, xelatex, tectonic, Typst
+    with a Pandoc whose template knows mathfont; not pdfLaTeX; ``engine`` None is a LaTeX file that any engine builds)."""
+    if (not main_font or cli_font or auto_disabled(no_auto, "mathfont")
+            or has_mainfont(md_path, variables, metadata_files) or has_font_setting("mathfont", md_path, variables, metadata_files)):
+        return []
+    if engine is not None and engine not in ("lualatex", "xelatex", "tectonic", "typst"):
+        return []
+    companion = math_companion(main_font)
+    if companion is None or (engine == "typst" and not template_has_variable("typst", "mathfont")):
+        return []
+    if note:
+        note("MATHFONT", f"{md_path}: no mathfont set; using {companion} to go with {main_font}")
+    return ["-V", f"mathfont={companion}"]
 
 
 def document_font_args(md_paths: list[Path], metadata_files: list[Path], variables: list[str]) -> list[str]:
@@ -16448,6 +16504,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             first_font = nativebib_font
             if first_font:
                 cmd += font_args("mainfont", first_font)
+                cmd += mathfont_args(first_font, md_path, metadata_files, variables, font or None, no_auto, None, note)
             else:
                 cmd += document_font_args([md_path], metadata_files, variables)
             if geometry_needed:
@@ -16892,6 +16949,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     first_font = tex_first_font
                     if first_font:
                         cmd += font_args("mainfont", first_font)
+                        cmd += mathfont_args(first_font, md_path, metadata_files, variables, font or None, no_auto, None, note)
                     else:
                         cmd += document_font_args([md_path, *parts_inputs], metadata_files, variables)
                     if geometry_needed:
@@ -17133,6 +17191,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             cmd += ["-V", f"codefont={family}"]
                     if selected_font:
                         cmd += font_args("mainfont", selected_font, engine in LATEX_ENGINES)
+                        cmd += mathfont_args(selected_font, md_path, metadata_files, variables, font or None, no_auto,
+                                             engine, note)
                     elif engine in LATEX_ENGINES:
                         cmd += document_font_args([md_path, *parts_inputs], metadata_files, variables)
                     if fallback and not any(variable.startswith("mainfontfallback=") for variable in variables):
@@ -21591,6 +21651,8 @@ def main() -> None:
                         report_first_font = report_tex_font
                         if report_first_font:
                             cmd += font_args("mainfont", report_first_font)
+                            cmd += mathfont_args(report_first_font, files[0], metadata_files, variables, args.font or None,
+                                                 report_no_auto, None, report_note)
                         else:
                             cmd += document_font_args(list(files), metadata_files, variables)
                         if report_geometry_needed:

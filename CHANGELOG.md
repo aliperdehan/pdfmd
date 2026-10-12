@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.24 — 2026-10-13
+
+Pre-edit state: commit `a1c3982` (v3.28.23).
+
+### Added
+
+- **Formulas are set in the math font that goes with the body font.** unicode-math (LuaLaTeX, XeLaTeX) and Typst set
+  math in Latin Modern Math / New Computer Modern Math unless a `mathfont` is given, so a document in pdfmd's default STIX
+  Two Text had formulas in another typeface. When pdfmd chose the main font itself, it now passes `-V mathfont=` with the
+  companion: STIX Two Text → STIX Two Math, DejaVu Serif → DejaVu Math TeX Gyre, Libertinus Serif → Libertinus Math, New
+  Computer Modern → New Computer Modern Math (as fontconfig or Typst spells it), TeX Gyre Termes/Pagella → their Math fonts,
+  each only when installed. Not added: when `-f`, `mainfont:` (front matter, metadata files, `-V`) names the text font or
+  `mathfont:` names the math font; for pdfLaTeX, latexmk and WeasyPrint; for Typst when Pandoc's template has no `mathfont`
+  (Pandoc 3.1.3). `--no-auto mathfont` (or `--no-auto font`) stops it; `DEFAULTS` says `math in STIX Two Math`
+  (`AUTO MATHFONT` with `--verbose`). It applies to single documents, `--to latex` and reports.
+- Tests: `tests/test_mathfont.py` (the table, the engines, what the user named, the switches, the DEFAULTS words, and the
+  LaTeX file of a real build).
+
+---
+
 ## v3.28.23 — 2026-10-13
 
 Pre-edit state: commit `6a9ce06` (v3.28.22).
