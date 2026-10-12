@@ -418,6 +418,21 @@ Ctrl-G go to a line, Ctrl-K / Ctrl-U cut and paste a line, Ctrl-Z / Ctrl-Y undo 
 when there are unsaved changes); F1 lists them. Options given beside it (`pdfmd --edit lecture -e lualatex`) are used
 for the build, and a name that does not exist yet starts a new file. It is deliberately rough: a base for what comes later.
 
+**Edit a PDF in place.** A PDF that carries its source (`--attach-source`; `pdfmd --check-source` says which do) can be
+edited and rebuilt where it lies:
+
+```sh
+pdfmd --edit report.pdf                          # the built-in editor, on the source restored into a temporary folder
+pdfmd --edit report.pdf --editor "code --wait"   # your own: the folder is watched and rebuilt on every save
+```
+
+You edit the restored source; Ctrl-B (or each save with `--editor`) builds it there, and when you leave, `report.pdf` is
+replaced by the rebuilt one, which carries the source again, and the old one is kept in `.backups/` beside it. Nothing
+changes when you leave without editing, or when the last version does not build. The options of the first build are the
+ones the document and its metadata record; the command-line ones are the ones you give now, and the global metadata of
+`pdfmd --setup` is this machine's (a rebuild on another one can differ). `--editor CMD` also works on a Markdown file
+(a watch that rebuilds on every save, until the editor closes), and `pdfmd --setup` keeps a default editor.
+
 ### In VS Code
 
 `pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, check, extract tables; Terminal > Run

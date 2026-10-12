@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.22"
+PDFMD_VERSION = "3.28.23"
 import argparse
 import csv
 import filecmp
@@ -10198,14 +10198,166 @@ def init_vscode_command(args) -> int:
     return 0
 
 
+def editor_command(args) -> list[str] | None:
+    """The external editor of `--editor CMD` (or `options.editor`), as a command; None for the built-in one."""
+    value = args.editor if args.editor is not None else config_options().get("editor")
+    if value is None or not str(value).strip():
+        return None
+    try:
+        return shlex.split(str(value))
+    except ValueError as error:
+        raise SystemExit(f"--editor {value!r}: {error}")
+
+
+def tree_stamp(folder: Path, ignore: set[Path]) -> dict[str, float]:
+    """The modification times of the files under ``folder`` (what a watch compares), leaving ``ignore`` out."""
+    stamp: dict[str, float] = {}
+    for item in folder.rglob("*"):
+        try:
+            if item.is_file() and item not in ignore and not item.name.startswith("."):
+                stamp[str(item)] = item.stat().st_mtime_ns
+        except OSError:
+            pass
+    return stamp
+
+
+def deliver_edited_pdf(built: Path, pdf: Path) -> Path:
+    """Put the rebuilt PDF in place of ``pdf``, keeping the old one in `.backups/` beside it; the new file is written
+    beside it first and renamed over it, so a failure leaves the old PDF as it was. Returns the backup."""
+    folder = pdf.parent / ".backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    backup = folder / f"{pdf.stem}.{datetime.now().strftime('%Y%m%d-%H%M%S')}{pdf.suffix}"
+    shutil.copy2(pdf, backup)
+    staged = pdf.with_name(f".{pdf.name}.edit.tmp")
+    shutil.copy2(built, staged)
+    os.replace(staged, pdf)
+    return backup
+
+
+def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
+    """`pdfmd --edit FILE.pdf` (v3.28.23): a PDF that carries its source, edited and rebuilt in place. The source is
+    restored into a temporary folder; the built-in editor (Ctrl-B builds there) or the `--editor CMD` you name (the
+    folder is watched, and rebuilt on every save) works on it; when you leave, the PDF is replaced by the rebuilt one
+    (the old one goes to `.backups/`), carrying the source again. The options of the original build are the ones the
+    document and its metadata files record; the command-line ones are the ones you give now."""
+    if pypdf is None:
+        print("ERROR  --edit on a PDF needs pypdf (pip install pypdf).", file=sys.stderr)
+        return 1
+    pdf = pdf.resolve()
+    try:
+        attachments = read_pdf_attachments(pdf)
+    except Exception as error:  # noqa: BLE001
+        print(f"ERROR  {display_path(pdf)}: not readable as a PDF ({error})", file=sys.stderr)
+        return 1
+    if ATTACH_MANIFEST not in attachments:
+        print(f"ERROR  {display_path(pdf)} carries no pdfmd source, so there is nothing to edit "
+              "(pdfmd --check-source says which PDFs do; build with --attach-source)", file=sys.stderr)
+        return 1
+    external = editor_command(args)
+    if external is None:
+        try:
+            import pdfmd_edit
+        except ImportError:
+            print("ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
+            return 1
+        if not pdfmd_edit.available():
+            print("ERROR  --edit needs prompt_toolkit (pdfmd --install tui), or name an editor: --editor \"code --wait\"",
+                  file=sys.stderr)
+            return 1
+    work = Path(tempfile.mkdtemp(prefix="pdfmd-edit-"))
+    try:
+        folder = work / "source"
+        if restore_from_pdf(pdf, folder) != 0:
+            return 1
+        manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
+        document = folder / str(manifest.get("name") or "")
+        if not document.is_file():
+            found = sorted(folder.rglob("*.md"))
+            if not found:
+                print("ERROR  the restored folder has no Markdown file to edit.", file=sys.stderr)
+                return 1
+            document = found[0]
+        made = document.with_suffix(".pdf")
+        state = {"built": None, "ok": False}
+
+        def digest() -> str:
+            return hashlib.sha256(document.read_bytes()).hexdigest()
+
+        original = digest()
+
+        def build(path: Path):
+            done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", str(path)],
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=path.parent)
+            state["built"], state["ok"] = digest(), done.returncode == 0 and made.exists()
+            return state["ok"], (done.stdout + done.stderr).strip(), made if state["ok"] else None
+
+        if external is None:
+            import pdfmd_edit
+            pdfmd_edit.run(document, build=build, opener=open_file)
+        else:
+            print(f"EDIT      {shlex.join(external)} {document.name}   (the folder is watched: every save rebuilds; "
+                  "Ctrl+C, or quitting the editor, finishes)")
+            process = subprocess.Popen([*external, str(document)])
+            started = time.monotonic()
+            seen = tree_stamp(folder, {made})
+            try:
+                while True:
+                    time.sleep(WATCH_INTERVAL)
+                    if process.poll() is not None and time.monotonic() - started > 3:
+                        break                                    # the editor ended (one that hands over at once keeps us here)
+                    now = tree_stamp(folder, {made})
+                    if now != seen:
+                        seen = now
+                        ok, said, _ = build(document)
+                        print(f"{'BUILT' if ok else 'FAILED':<9} {made.name}" + ("" if ok else "\n" + said[-600:]))
+            except KeyboardInterrupt:
+                print()
+        if digest() == original:
+            print("No change: the PDF is as it was.")
+            return 0
+        if state["built"] != digest():
+            ok, said, _ = build(document)                         # edited after the last build
+            if not ok:
+                print(f"ERROR  the last version does not build; {display_path(pdf)} is as it was.\n{said[-800:]}",
+                      file=sys.stderr)
+                return 1
+        elif not state["ok"]:
+            print(f"ERROR  the last build failed; {display_path(pdf)} is as it was.", file=sys.stderr)
+            return 1
+        if sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT"):
+            try:
+                answer = input(f"Replace {pdf.name} with the rebuilt one (the old one goes to .backups/)? [Y/n] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = "n"
+            if answer in ("n", "no"):
+                kept = pdf.with_name(f"{pdf.stem}.edited{pdf.suffix}")
+                shutil.copy2(made, kept)
+                print(f"SAVED     {kept.name}  ({pdf.name} was not changed)")
+                return 0
+        backup = deliver_edited_pdf(made, pdf)
+        print(f"REPLACED  {pdf.name}  (rebuilt with its source; the old one: {display_path(backup)})")
+        return 0
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def edit_command(args) -> int:
-    """`pdfmd --edit [FILE]`: the small full-screen editor (pdfmd_edit), building with the options given beside it."""
+    """`pdfmd --edit [FILE]`: the small full-screen editor (pdfmd_edit), building with the options given beside it.
+    With a PDF that carries its source, or with `--editor CMD`, see edit_pdf_command / the watch below."""
+    given = {str(item) for item in args.path or []}
+    passed = [item for item in sys.argv[1:] if item != "--edit" and item not in given]
+    if args.editor is not None:
+        passed = [item for index, item in enumerate(passed) if item != "--editor" and item != args.editor
+                  and not item.startswith("--editor=")]
+    if len(args.path or []) == 1 and args.path[0].suffix.lower() == ".pdf":
+        return edit_pdf_command(args, args.path[0], passed)
+    external = editor_command(args)
     try:
         import pdfmd_edit
     except ImportError:
         print("ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
-    if not pdfmd_edit.available():
+    if external is None and not pdfmd_edit.available():
         print("ERROR  --edit needs prompt_toolkit: run `pdfmd --install tui`.", file=sys.stderr)
         return 1
     if len(args.path or []) > 1:
@@ -10220,8 +10372,6 @@ def edit_command(args) -> int:
         else:
             print(f"ERROR  {error}", file=sys.stderr)
             return 1
-    given = {str(item) for item in args.path or []}
-    passed = [item for item in sys.argv[1:] if item != "--edit" and item not in given]
 
     def build(path: Path):
         done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, str(path)],
@@ -10229,6 +10379,25 @@ def edit_command(args) -> int:
         made = path.with_suffix(".pdf")
         return done.returncode == 0, (done.stdout + done.stderr).strip(), made if done.returncode == 0 and made.exists() else None
 
+    if external is not None:
+        # an editor of your own on a Markdown file: pdfmd -w beside it (rebuild on every save) until it is closed
+        process = subprocess.Popen([*external, str(document)])
+        watcher = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), *passed, "--watch", str(document)],
+                                   cwd=document.parent)
+        try:
+            while True:
+                time.sleep(WATCH_INTERVAL)
+                if process.poll() is not None and watcher.poll() is None:
+                    time.sleep(3)
+                    if process.poll() is not None:
+                        break
+                if watcher.poll() is not None:
+                    break
+        except KeyboardInterrupt:
+            pass
+        finally:
+            watcher.terminate()
+        return 0
     return pdfmd_edit.run(document, build=build, opener=open_file)
 
 
@@ -20302,6 +20471,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
+    parser.add_argument("--editor", metavar="CMD", default=None,
+                        help="with --edit: an editor of your own instead of the built-in one (\"code --wait\", \"vim\"); "
+                             "the file is watched and rebuilt on every save. On a PDF that carries its source the "
+                             "restored source is what it opens. Also `options: {editor: CMD}` in --setup")
     parser.add_argument("--edit", action="store_true",
                         help="edit FILE (default: the Markdown file of this folder) in a small full-screen editor "
                              "with the build one key away (Ctrl-B; F1 lists the keys). Alpha. Needs "

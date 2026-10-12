@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.23 — 2026-10-13
+
+Pre-edit state: commit `6a9ce06` (v3.28.22).
+
+### Added
+
+- **`pdfmd --edit FILE.pdf` edits a PDF that carries its source and rebuilds it in place.** The source is restored
+  (as `--restore` does) into a temporary folder; the built-in editor of `--edit` works on it (Ctrl-B builds there, the
+  original PDF is not touched), or the editor of `--editor CMD` (`"code --wait"`, `vim`; also `options.editor` in `--setup`),
+  in which case the folder is watched and every save rebuilds it, as `-w` does. On leaving: no change, or a last version that
+  does not build, leaves the PDF as it was; otherwise the old PDF is copied to `.backups/NAME.TIMESTAMP.pdf` and the rebuilt
+  one (made with `--attach-source`, so it carries the edited source) is renamed over it, after a `[Y/n]` question in a terminal
+  (`n` writes `NAME.edited.pdf` instead). The options of the first build are the ones the document and its metadata
+  files record; the command-line ones are the ones given with `--edit`. The global metadata stays the machine's (3.28.13).
+- **`--editor CMD` on a Markdown file** (`pdfmd --edit report.md --editor vim`): the editor, and `pdfmd -w` beside it until
+  the editor closes. The built-in editor is still the default and still needs prompt_toolkit.
+- Tests: `tests/test_edit_pdf.py` (a fake editor that appends a paragraph: the PDF is replaced, carries the new text and the
+  new source, the old one is in `.backups/`; no change; a PDF without a source is refused).
+
+---
+
 ## v3.28.22 — 2026-10-13
 
 Pre-edit state: commit `7627683` (v3.28.21).
