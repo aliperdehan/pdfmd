@@ -54,7 +54,7 @@ def fetch(url: str, directory: Path, *, max_age_days: float = 7, timeout: float 
     fails. Only PNG, JPEG, SVG and PDF are kept (what a LaTeX build can use, SVG after conversion)."""
     key = hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
     old = _cached(directory, key)
-    if old is not None and time.time() - old.stat().st_mtime < max_age_days * 86400:
+    if old is not None and max_age_days > 0 and time.time() - old.stat().st_mtime < max_age_days * 86400:
         return old, "", False
     try:
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "image/*,application/pdf"})

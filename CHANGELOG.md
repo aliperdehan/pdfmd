@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.24 — 2026-10-14
+
+Pre-edit state: commit `231dc98` (v3.29.23).
+
+### Fixed
+
+- **CI of the 3.29.15 push failed on Windows (3.10)** in `test_images.Remote.test_an_old_copy_is_fetched_again_and_kept_if_that_fails`
+  (no release came of it: 3.29.8 is the last on PyPI): a remote picture fetched with `max_age_days=0` was "less than 0 days old" when
+  the file's modification time was a few milliseconds ahead of `time.time()`, which Windows' clocks allow, so the second fetch used the
+  copy. An age of 0 (or less) now means "always fetch again" (`pdfmd_images/remote.py`), whatever the clocks say; the default 7 days is
+  untouched. The same push's Calibre workflow did not run (the YAML of 3.29.22).
+
 ## v3.29.23 — 2026-10-14
 
 Pre-edit state: commit `6719049` (v3.29.22).
