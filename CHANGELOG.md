@@ -41,6 +41,29 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.4 — 2026-10-14
+
+Pre-edit state: commit `12c3aab` (v3.29.3).
+
+### Added
+
+- **`pdfmd --install calibre`** (queue item F). In a terminal on macOS with Homebrew or on Windows with winget it offers `brew
+  install --cask calibre` / `winget install --id calibre.calibre -e` first (`[Y/n/d]`: `d` downloads it instead; the package
+  manager is never run unasked, and not at all with `PDFMD_NO_PROMPT` or without a terminal). Otherwise it downloads Calibre's
+  release file for the machine (`calibre_asset_pattern`: `calibre-X.Y.Z.dmg` on macOS, `-x86_64.txz` / `-arm64.txz` on Linux;
+  the names carry the version, so they are matched by pattern) and checks it against the SHA-256 GitHub's API lists for it; with
+  no digest listed (offline, a rate limit) nothing is downloaded unchecked. macOS: `hdiutil attach -nobrowse -readonly` on a
+  scratch mount point, `ditto` of `calibre.app` into `~/Applications` (never `/Applications`; `resolve_calibre` already
+  looks there), detached again in a `finally`. Linux: the archive (checked member by member to stay inside the folder, links
+  included: `safe_unpack_tar`) goes to `data_root()/calibre/<version>`, which `resolve_calibre` now searches (`calibre_own_folders`,
+  newest first); no `calibre_postinstall` (it writes desktop files and may want root). Either way `ebook-convert --version` runs
+  to check. Windows is not unpacked (the installer wants admin rights; the MSI route was not tried): winget or calibre-ebook.com.
+  An installed Calibre is left alone (`OK    Calibre is already installed`). Calibre is GPLv3 and is run, never bundled. The
+  messages that say Calibre was not found, and `--doctor`, name the command. Not tested on this machine: the Linux archive
+  (its listing was read: `ebook-convert` is at the top of it; the unpack is tested with a small stand-in) and Windows.
+  `tests/test_install_calibre.py` (a fake release listing; a stand-in `.txz`; on macOS a real disk image made with `hdiutil
+  create` holding a stand-in `calibre.app`).
+
 ## v3.29.3 — 2026-10-14
 
 Pre-edit state: commit `c34dc91` (v3.29.2).

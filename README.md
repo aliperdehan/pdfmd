@@ -221,6 +221,13 @@ prints it, before the rough built-in renderers, with the document's paper and ma
 none of Pandoc's syntax, and says so (`NOTE`, `WARN`). `-e calibre` or `-e native` without Pandoc picks it; with Pandoc,
 `-e calibre` is the HTML route above.
 
+`pdfmd --install calibre` (v3.29) gets Calibre when it is missing (190 to 360 MB). In a terminal on a Mac or Windows it offers
+`brew install --cask calibre` or `winget install --id calibre.calibre -e` first. Otherwise (or on answering `d`) pdfmd downloads the
+release file for your machine and checks it against the SHA-256 GitHub lists for it, and refuses a download whose checksum is not
+listed: on macOS it opens the disk image read-only and copies `calibre.app` into `~/Applications`, on Linux (x86-64, ARM)
+it unpacks the archive into pdfmd's data folder (no root, no desktop entries), and either way runs `ebook-convert --version`
+to check. Windows: `winget`, or the installer from calibre-ebook.com. Calibre is a program pdfmd runs, never one it contains.
+
 A browser prints a Markdown document too (v3.29): `-e edge`, `-e chrome`, `-e chromium` or `-e brave` (or `-e browser` for the
 first one installed) has Pandoc write one self-contained HTML page and the browser, headless, print it with the document's
 paper and margins (`papersize`, `geometry`, `margin`: as `@page`) and 12pt text. The math is MathML, which the browser draws

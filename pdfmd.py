@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.3"
+PDFMD_VERSION = "3.29.4"
 import argparse
 import atexit
 import csv
@@ -2781,6 +2781,15 @@ def resolve_soffice() -> str | None:
     return None
 
 
+def calibre_own_folders() -> list[Path]:
+    """The Calibre folders `pdfmd --install calibre` unpacked (data_root()/calibre/<version>), newest first."""
+    try:
+        found = [folder for folder in (data_root() / "calibre").iterdir() if folder.is_dir()]
+    except OSError:
+        return []
+    return sorted(found, key=lambda folder: tuple(int(part) for part in re.findall(r"\d+", folder.name)), reverse=True)
+
+
 def resolve_calibre() -> str | None:
     """Calibre's `ebook-convert`: on PATH (Linux packages, Homebrew's cask), else where the installers put it
     without touching PATH (the macOS app bundle, `%ProgramFiles%\\Calibre2` on Windows). `PDFMD_CALIBRE` names the file
@@ -2791,7 +2800,7 @@ def resolve_calibre() -> str | None:
     found = which("ebook-convert")
     if found:
         return found
-    places: list[Path] = []
+    places: list[Path] = [folder / "ebook-convert" for folder in calibre_own_folders()]      # `pdfmd --install calibre` (Linux)
     if sys.platform == "darwin":
         places += [Path(folder) / "calibre.app" / "Contents" / "MacOS" / "ebook-convert"
                    for folder in ("/Applications", Path.home() / "Applications")]
@@ -2901,8 +2910,9 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
             return [requested]
         if requested == "calibre":
             raise SystemExit(f"{label} requested Calibre, but its ebook-convert was not found (on PATH, in "
-                             "calibre.app or in Calibre2 under Program Files). Install Calibre: `brew install --cask "
-                             "calibre`, `winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
+                             "calibre.app or in Calibre2 under Program Files). Install Calibre: `pdfmd --install calibre`, "
+                             "`brew install --cask calibre`, `winget install calibre.calibre`, your package manager, or "
+                             "calibre-ebook.com.")
         raise SystemExit(
             f"Requested PDF engine '{requested}' was not found on PATH. "
             "Install it or choose one listed by --check-dependencies."
@@ -3086,10 +3096,11 @@ INSTALL_SPECS = {
     "tui": ["prompt_toolkit>=3"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "diagram", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
 INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
+                 "calibre": "190 to 360 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
@@ -4778,7 +4789,7 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()
     line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
-    line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it)"))
+    line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it; `pdfmd --install calibre`)"))
     if which("weasyprint"):
         jax, runtime = mathjax_runtime(), katex_runtime()
         if jax and runtime:
@@ -6928,6 +6939,192 @@ def install_diagram(which_one: str = "") -> bool:
     return done
 
 
+# -- Calibre (v3.29.3): `pdfmd --install calibre` ------------------------------------------------------------------------
+# Calibre (GPLv3) is a program pdfmd runs, never one it contains; it is fetched on request only. Nothing is installed
+# without being asked, and a download is refused unless GitHub lists its SHA-256. macOS: the release's disk image is
+# mounted read-only and calibre.app copied into ~/Applications (where resolve_calibre looks). Linux: the release's .txz is
+# unpacked into data_root()/calibre/<version> (no root, no desktop files). Windows: winget (the installer wants admin
+# rights, which pdfmd does not take). The package manager is offered first (brew, winget) in a terminal.
+CALIBRE_REPOSITORY = "kovidgoyal/calibre"
+
+
+def calibre_asset_pattern(system: str | None = None, machine: str | None = None) -> str | None:
+    """The regular expression of Calibre's release file for this machine (`calibre-9.16.0.dmg`), or None."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    if system == "darwin":
+        return r"calibre-[\d.]+\.dmg"
+    if system == "linux" and machine in ("x86_64", "aarch64"):
+        return r"calibre-[\d.]+-" + ("arm64" if machine == "aarch64" else "x86_64") + r"\.txz"
+    return None
+
+
+def calibre_release_asset(pattern: str, release: dict | None = None) -> tuple[str, str, str] | None:
+    """(file name, URL, SHA-256) of the latest release's file matching `pattern`, None when GitHub lists no such file or
+    no digest for it (the API is the only source of the checksum: no download is made without one)."""
+    if release is None:
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
+        if os.environ.get("GITHUB_TOKEN"):
+            headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+        try:
+            request = urllib.request.Request(f"https://api.github.com/repos/{CALIBRE_REPOSITORY}/releases/latest", headers=headers)
+            with open_url(request, 30) as response:
+                release = json.load(response)
+        except (OSError, ValueError):
+            return None
+    for asset in release.get("assets", []):
+        if re.fullmatch(pattern, str(asset.get("name", ""))):
+            digest = str(asset.get("digest") or "")
+            if digest.startswith("sha256:"):
+                return asset["name"], asset["browser_download_url"], digest.split(":", 1)[1]
+    return None
+
+
+def calibre_package_manager() -> list[str] | None:
+    """The command of the system's package manager that installs Calibre and needs no administrator password, or None."""
+    if sys.platform == "darwin" and which("brew"):
+        return ["brew", "install", "--cask", "calibre"]
+    if sys.platform == "win32" and which("winget"):
+        return ["winget", "install", "--id", "calibre.calibre", "-e"]
+    return None
+
+
+def calibre_install_hint() -> str:
+    if sys.platform == "darwin":
+        return "brew install --cask calibre"
+    if sys.platform == "win32":
+        return "winget install --id calibre.calibre -e"
+    return "sudo apt install calibre (or your package manager), or calibre-ebook.com/download_linux"
+
+
+def safe_unpack_tar(archive: Path, target: Path) -> None:
+    """Unpack a .tar.xz into `target`, refusing a member that would land outside it (absolute, `..`, a link out)."""
+    root = target.resolve()
+    with tarfile.open(archive) as bundle:
+        for member in bundle.getmembers():
+            destination = (root / member.name).resolve()
+            if destination != root and root not in destination.parents:
+                raise OSError(f"{archive.name}: {member.name} would be written outside the folder")
+            if member.issym() or member.islnk():
+                link = (destination.parent / member.linkname).resolve() if member.issym() else (root / member.linkname).resolve()
+                if link != root and root not in link.parents:
+                    raise OSError(f"{archive.name}: {member.name} links outside the folder")
+        target.mkdir(parents=True, exist_ok=True)
+        bundle.extractall(target)
+
+
+def install_calibre_dmg(image: Path, applications: Path) -> Path:
+    """Mount Calibre's disk image read-only and copy calibre.app into `applications` (replacing a copy there);
+    returns the app's ebook-convert."""
+    mount = Path(mkdtemp(prefix="pdfmd-calibre-dmg-"))
+    attached = False
+    try:
+        done = subprocess.run(["hdiutil", "attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint", str(mount), str(image)],
+                              capture_output=True, text=True)
+        if done.returncode != 0:
+            raise OSError("hdiutil could not open the disk image: " + (done.stderr.strip().splitlines() or ["?"])[-1])
+        attached = True
+        app = mount / "calibre.app"
+        if not app.is_dir():
+            raise OSError("calibre.app is not in the disk image")
+        applications.mkdir(parents=True, exist_ok=True)
+        destination = applications / "calibre.app"
+        if destination.exists():
+            shutil.rmtree(destination)
+        copied = subprocess.run(["ditto", str(app), str(destination)], capture_output=True, text=True)
+        if copied.returncode != 0:
+            raise OSError("ditto could not copy calibre.app: " + (copied.stderr.strip().splitlines() or ["?"])[-1])
+    finally:
+        if attached:
+            if subprocess.run(["hdiutil", "detach", str(mount)], capture_output=True).returncode != 0:
+                subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True)
+        shutil.rmtree(mount, ignore_errors=True)
+    return destination / "Contents" / "MacOS" / "ebook-convert"
+
+
+def install_calibre(fetch=None, release: dict | None = None, applications: Path | None = None,
+                    interactive: bool | None = None, find=None) -> bool:
+    """`pdfmd --install calibre`. `fetch(url, destination, sha256)`, `release` (GitHub's JSON), `applications` (macOS),
+    `interactive` and `find` (what says Calibre is there) are for the tests."""
+    present = (find or resolve_calibre)()
+    if present:
+        print(f"OK    Calibre is already installed: {present}")
+        return True
+    if interactive is None:
+        interactive = sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT")
+    manager = calibre_package_manager()
+    if manager and interactive:
+        command_text = " ".join(manager)
+        try:
+            answer = input(f"Install Calibre with `{command_text}`? [Y/n/d = download it myself] ").strip().casefold()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        if answer in ("", "y", "yes"):
+            try:
+                ran = subprocess.run(manager).returncode == 0
+            except OSError as error:
+                print(f"Could not run {manager[0]} ({error}).", file=sys.stderr)
+                ran = False
+            if ran:
+                found = resolve_calibre()
+                if found:
+                    print(f"Installed Calibre: {found}")
+                    return True
+            print(f"{command_text} did not give a Calibre pdfmd can find.", file=sys.stderr)
+            return False
+        if answer not in ("d", "download"):
+            return False
+    if sys.platform == "win32" or calibre_asset_pattern() is None:
+        print(f"pdfmd does not unpack Calibre on this system ({platform.system()} {platform.machine()}): "
+              f"{calibre_install_hint()}", file=sys.stderr)
+        return False
+    pattern = calibre_asset_pattern()
+    asset = calibre_release_asset(pattern, release)
+    if asset is None:
+        print("GitHub lists no Calibre download for this machine with a SHA-256 (offline, or a rate limit?), so none is made "
+              f"unchecked. Install it with {calibre_install_hint()}", file=sys.stderr)
+        return False
+    name, url, sha256 = asset
+    version = re.search(r"calibre-([\d.]+?)(?:-|\.dmg|\.txz)", name)
+    version_text = version.group(1) if version else "latest"
+    print(f"INSTALL  Calibre {version_text} ({INSTALL_SIZES['calibre']}): {url}")
+    fetch = fetch or download_file
+    with NamedTemporaryFile(suffix=Path(name).suffix, delete=False) as temporary:
+        archive = Path(temporary.name)
+    try:
+        fetch(url, archive, sha256)
+        print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)")
+        if sys.platform == "darwin":
+            target = install_calibre_dmg(archive, applications or Path.home() / "Applications")
+        else:
+            folder = data_root() / "calibre" / version_text
+            if folder.exists():
+                shutil.rmtree(folder)
+            safe_unpack_tar(archive, folder)
+            target = folder / "ebook-convert"
+    except (OSError, tarfile.TarError) as error:
+        print(f"Could not install Calibre ({error}). Install it yourself: {calibre_install_hint()}", file=sys.stderr)
+        return False
+    finally:
+        archive.unlink(missing_ok=True)
+    environment = dict(os.environ)
+    if sys.platform != "win32":
+        environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+    try:
+        ran = subprocess.run([str(target), "--version"], capture_output=True, text=True, timeout=120, env=environment)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Calibre was unpacked to {target} but does not run here: {error}", file=sys.stderr)
+        return False
+    if ran.returncode != 0:
+        print(f"Calibre was unpacked to {target} but does not run here: {ran.stderr.strip()[-300:]}", file=sys.stderr)
+        return False
+    print(f"Installed {ran.stdout.strip().splitlines()[0] if ran.stdout.strip() else 'Calibre'} at {target} "
+          f"(pdfmd finds it there; delete {'calibre.app' if sys.platform == 'darwin' else 'the folder'} to remove it).")
+    return True
+
+
 def translit_report() -> bool:
     """`--translit list`: the packs, which are on, which could work."""
     module = unicode_module()
@@ -7083,6 +7280,8 @@ def install_extra(kind: str) -> bool:
         return install_katex()
     if kind == "math:mathjax":
         return install_mathjax()
+    if kind == "calibre":
+        return install_calibre()
     if kind == "diagram" or kind.startswith("diagram:"):
         return install_diagram(kind.partition(":")[2])
     if kind == "ocr" or kind.startswith("ocr:"):
@@ -17776,7 +17975,7 @@ def start_calibre_job(args, goal: str, target_format: str, pandoc_options: list[
                          f"{'-b' if args.batch else '-r' if args.report else '-p'} (yet)")
     if resolve_calibre() is None:
         raise SystemExit(f"{target_format} is written by Calibre's ebook-convert, which was not found (on PATH, in calibre.app "
-                         "or in Calibre2 under Program Files). Install Calibre: `brew install --cask calibre`, "
+                         "or in Calibre2 under Program Files). Install Calibre: `pdfmd --install calibre`, `brew install --cask calibre`, "
                          "`winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
     if goal in CALIBRE_SHARED_FORMATS and goal != "epub":
         print(f"NOTE  -e calibre: {goal} is made by Calibre from an EPUB; without -e calibre Pandoc writes it from the "
@@ -20374,7 +20573,7 @@ def route_ebook_input(args) -> None:
     if book.suffix.lower() != ".epub":
         if resolve_calibre() is None:
             raise SystemExit(f"{book.name} is read through Calibre's ebook-convert, which was not found (on PATH, in calibre.app "
-                             "or in Calibre2 under Program Files). Install Calibre: `brew install --cask calibre`, "
+                             "or in Calibre2 under Program Files). Install Calibre: `pdfmd --install calibre`, `brew install --cask calibre`, "
                              "`winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
         epub = scratch / "book.epub"
         # no cover page of Calibre's own making (an SVG title page and a picture the book never had) in the text
@@ -22283,7 +22482,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
                              "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
                              "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "
-                             "alone), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
+                             "alone), 'calibre' (Calibre, 190 to 360 MB: ebooks as output and input; offers Homebrew or winget "
+                             "in a terminal, else downloads the release checked against GitHub's SHA-256: a disk image into "
+                             "~/Applications on macOS, an archive into pdfmd's data folder on Linux), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
                              "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
                              "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "
