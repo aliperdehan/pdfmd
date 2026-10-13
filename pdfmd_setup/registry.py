@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off",
@@ -359,6 +359,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
                 "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
                 "--no-pagebreak.", "Universal markup"),
+        choice("options.show-comments", "Show the <!-- comments --> of the text in the output", on_off, "",
+               "Each comment becomes a box labelled Comment (LaTeX, Typst, HTML), a real Word comment (docx). pdfmd's own "
+               "markers stay invisible. Per run: --show-comments / --no-show-comments.", "Universal markup"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`. Per run: --markup / "

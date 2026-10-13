@@ -1613,6 +1613,14 @@ numbering of letters and a counter reset). It matters for a document that number
 numbers Typst gets nothing and LaTeX's `\appendix` changes nothing visible. Other writers keep their own numbering and say once
 that the lettering is not made.
 
+**Showing the comments of the text** (v3.29, `show-comments`). An `<!-- HTML comment -->` is invisible in every output. With
+`pdfmd-options: {show-comments: true}` (or `--show-comments` for one run, `--no-show-comments` to switch it off; also a row in
+`pdfmd --setup`) each one is shown: a box labelled *Comment* in LaTeX, Typst, HTML, EPUB and the HTML engines' PDFs, a real Word
+comment in a `.docx` (anchored on the paragraph after it, so Word's review pane lists them), `[comment: ...]` in italics for one
+inside a paragraph. The Markdown family (`--to gfm`, `markdown`) keeps the comment as it is; OpenDocument and PowerPoint drop
+it, with a note once. pdfmd's own markers stay invisible (`<!-- pdfmd: ... -->`, `<!-- pagebreak -->`, `<!-- toc -->`,
+`<!-- appendix -->`), and so does an empty comment. It is off unless asked and is not one of the kinds `markup: true` turns on.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

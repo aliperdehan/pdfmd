@@ -21,6 +21,10 @@
 -- appendix   a raw \appendix, <!-- appendix -->, or a heading with the class .appendix (it starts the appendix): the sections after it
 --            are lettered (A, B ... A.1). LaTeX \appendix, Typst a heading numbering of letters; only for a document that numbers
 --            its sections (--number-sections). Other writers keep the headings and say once that the lettering is not made.
+-- comments   an HTML comment (<!-- ... -->), shown instead of dropped (off unless `pdfmd-options: show-comments`): a box labelled Comment
+--            in LaTeX, Typst, HTML and EPUB; a real Word comment in docx (anchored on the paragraph after it); a bracketed note for
+--            an inline one; Markdown-family writers keep the comment as it is; OpenDocument and PowerPoint drop it, with a note once.
+--            pdfmd's own markers (<!-- pdfmd: ... -->, <!-- pagebreak -->, <!-- toc -->, <!-- appendix -->) stay invisible.
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
 --            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
 local enabled = nil
@@ -36,9 +40,9 @@ local CALLOUT = {
   attention = "warning",
   failure = "caution", fail = "caution", missing = "caution", danger = "caution", error = "caution", bug = "caution",
 }
-local TITLE = {note = "Note", tip = "Tip", important = "Important", warning = "Warning", caution = "Caution"}
-local EDGE = {note = "0969DA", tip = "1A7F37", important = "8250DF", warning = "9A6700", caution = "CF222E"}
-local TINT = {note = "EEF5FD", tip = "EDF7F0", important = "F4EFFC", warning = "FBF4E3", caution = "FDEEEF"}
+local TITLE = {note = "Note", tip = "Tip", important = "Important", warning = "Warning", caution = "Caution", comment = "Comment"}
+local EDGE = {note = "0969DA", tip = "1A7F37", important = "8250DF", warning = "9A6700", caution = "CF222E", comment = "6E7781"}
+local TINT = {note = "EEF5FD", tip = "EDF7F0", important = "F4EFFC", warning = "FBF4E3", caution = "FDEEEF", comment = "F3F4F6"}
 
 local CALLOUT_CSS = "<style>\n.callout { margin: 1em 0; padding: .5em 1em; border-left: 4px solid #888; break-inside: avoid; }\n"
   .. ".callout > p:first-child { margin-top: 0; } .callout > p:last-child { margin-bottom: 0; }\n"
@@ -493,6 +497,107 @@ local function appendix_pass(blocks)
   return nil
 end
 
+
+-- ---- comments --------------------------------------------------------------------------------------------------------
+local comment_told = false
+local comment_id = 0
+local QUIET = {pagebreak = true, ["page-break"] = true, newpage = true, ["new-page"] = true, toc = true, appendix = true}
+
+-- the text of an HTML comment that is meant to be shown, else nil (an empty one, pdfmd's own and the markers of the other kinds are not)
+local function comment_text(raw)
+  if raw.format:lower() ~= "html" and raw.format:lower() ~= "html5" then return nil end
+  local text = raw.text:gsub("^%s+", ""):gsub("%s+$", "")
+  local inner = text:match("^<!%-%-(.-)%-%->$")
+  if not inner then return nil end
+  inner = inner:gsub("^%s+", ""):gsub("%s+$", "")
+  local lower = inner:lower()
+  if inner == "" or lower:match("^pdfmd") or QUIET[lower] then return nil end
+  return inner
+end
+
+local function comment_inlines(text)
+  local inlines = pandoc.Inlines({})
+  local first = true
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    if not first then inlines[#inlines + 1] = pandoc.SoftBreak() end
+    first = false
+    for word in line:gmatch("%S+") do
+      if #inlines > 0 and inlines[#inlines].t ~= "SoftBreak" then inlines[#inlines + 1] = pandoc.Space() end
+      inlines[#inlines + 1] = pandoc.Str(word)
+    end
+  end
+  return inlines
+end
+
+local function word_comment(text)
+  comment_id = comment_id + 1
+  local id = tostring(comment_id)
+  local start = pandoc.Span(comment_inlines(text), pandoc.Attr("", {"comment-start"}, {{"id", id}, {"author", "Markdown comment"}}))
+  local finish = pandoc.Span({}, pandoc.Attr("", {"comment-end"}, {{"id", id}}))
+  return start, finish
+end
+
+local function show_comments(blocks)
+  local format = FORMAT or ""
+  if format:match("markdown") or format:match("^gfm") or format:match("^commonmark") then return nil end
+  local out, changed, index = pandoc.Blocks({}), false, 1
+  while index <= #blocks do
+    local block = blocks[index]
+    local text = block.t == "RawBlock" and comment_text(block) or nil
+    if text then
+      changed = true
+      if format:match("^docx") then
+        local start, finish = word_comment(text)
+        local following = blocks[index + 1]
+        if following and (following.t == "Para" or following.t == "Plain") then
+          local inlines = pandoc.Inlines({start})
+          inlines:extend(following.content)
+          inlines[#inlines + 1] = finish
+          out[#out + 1] = pandoc.Para(inlines)
+          index = index + 1
+        else
+          out[#out + 1] = pandoc.Para({start, finish})
+        end
+      elseif format:match("^latex") or format:match("^typst") or format:match("^html") or format:match("^epub") then
+        out:extend(make_callout("comment", pandoc.Inlines({pandoc.Str("Comment")}), pandoc.Blocks({pandoc.Para(comment_inlines(text))})))
+      else
+        if not comment_told then
+          comment_told = true
+          io.stderr:write("NOTE  markup: comments are not shown in " .. format .. "\n")
+        end
+      end
+    else
+      out[#out + 1] = block
+    end
+    index = index + 1
+  end
+  if changed then return out end
+  return nil
+end
+
+local function show_inline_comments(inlines)
+  local format = FORMAT or ""
+  if format:match("markdown") or format:match("^gfm") or format:match("^commonmark") then return nil end
+  local out, changed = pandoc.Inlines({}), false
+  for _, item in ipairs(inlines) do
+    local text = item.t == "RawInline" and comment_text(item) or nil
+    if text then
+      changed = true
+      if format:match("^docx") then
+        local start, finish = word_comment(text)
+        out[#out + 1] = start
+        out[#out + 1] = finish
+      elseif format:match("^latex") or format:match("^typst") or format:match("^html") or format:match("^epub") then
+        out[#out + 1] = pandoc.Emph({pandoc.Str("[comment: " .. text:gsub("%s+", " ") .. "]")})
+      end
+    else
+      out[#out + 1] = item
+    end
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   no_named_pages = doc.meta["pdfmd-no-named-pages"] ~= nil
   local enabled_list = doc.meta["pdfmd-markup"]
@@ -510,8 +615,12 @@ function Pandoc(doc)
       return make_callout(kind, title, body)
     end,
     Inlines = function(inlines)
-      if not on("highlight") or (FORMAT or ""):match("^markdown") then return nil end
-      return highlight_runs(inlines)
+      local after
+      if on("comments") and enabled ~= nil and enabled["comments"] then after = show_inline_comments(inlines) end
+      if on("highlight") and not (FORMAT or ""):match("^markdown") then
+        after = highlight_runs(after or inlines) or after
+      end
+      return after
     end,
     Span = function(span)
       -- Pandoc 3.12 with +mark (or a Span written by hand) keeps the class: <mark> in HTML-like writers, the writer's own elsewhere
@@ -523,6 +632,9 @@ function Pandoc(doc)
       local after = tex_environments(blocks)
       if on("center") then
         after = center_pairs(after or blocks) or after
+      end
+      if on("comments") and enabled ~= nil and enabled["comments"] then
+        after = show_comments(after or blocks) or after
       end
       return after
     end,

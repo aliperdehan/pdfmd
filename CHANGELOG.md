@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.21 — 2026-10-14
+
+Pre-edit state: commit `5b521b0` (v3.29.20).
+
+### Added
+
+- **`show-comments`** (queue item 5d; the author, 2026-10-10: "`--show-comments`, a `--setup` row and `pdfmd-options: show-comments`; OFF by
+  default"). An HTML comment, invisible until now, is shown (`pdfmd_lua/markup.lua`, kind `comments`, which no `markup:` list names and
+  `markup: true` does not turn on): LaTeX, Typst, HTML and EPUB a box labelled Comment (the callout machinery, in a grey: the
+  header file defines the box once for both kinds), docx a **real Word comment** (`comment-start` / `comment-end` spans, anchored on
+  the paragraph after the comment; Pandoc 3.12 and 3.1.3 both write `word/comments.xml`), an inline comment `[comment: ...]` in
+  italics; the Markdown family keeps the comment; OpenDocument and PowerPoint drop it with a note once. Left invisible: `<!-- pdfmd:
+  ... -->`, `<!-- pdfmd-... -->`, the page-break words, `toc`, `appendix`, an empty comment. `--show-comments` / `--no-show-comments`,
+  `pdfmd-options.show-comments`, a `--setup` row under *Universal markup*, inventory and help entries. The author's open
+  questions were decided as the defaults above (a box, real Word comments): say if the look should differ. Not done: ODT annotations
+  (Pandoc writes none), the built-in renderer. `tests/test_show_comments.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.20 — 2026-10-14
 
 Pre-edit state: commit `4aa8c25` (v3.29.19).

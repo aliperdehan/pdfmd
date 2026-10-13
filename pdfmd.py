@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.20"
+PDFMD_VERSION = "3.29.21"
 import argparse
 import atexit
 import csv
@@ -2400,13 +2400,30 @@ def markup_value(value) -> list[str]:
     return [kind for kind in MARKUP_KINDS if kind in words]
 
 
+SHOW_COMMENTS_CLI: dict = {"on": None}
+
+
+def show_comments_on(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the <!-- comments --> of the text are shown in the output (v3.29.21): `--show-comments` / `--no-show-comments`,
+    else `pdfmd-options.show-comments`. Off by default, and not one of the `markup: true` kinds."""
+    if SHOW_COMMENTS_CLI["on"] is not None:
+        return bool(SHOW_COMMENTS_CLI["on"])
+    value = first_pdfmd_option(md_path, metadata_files, "show-comments")
+    return value is True or str(value).strip().casefold() in ("true", "yes", "on", "1")
+
+
 def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
-    """The kinds of universal markup this build carries: the command line's, else pdfmd-options'."""
-    if MARKUP_CLI["off"]:
-        return []
-    if MARKUP_CLI["kinds"] is not None:
-        return markup_value(MARKUP_CLI["kinds"] or True)
-    return markup_value(first_pdfmd_option(md_path, metadata_files, "markup"))
+    """The kinds of universal markup this build carries: the command line's, else pdfmd-options'; with the comments
+    (`comments`, which no list names) when they are to be shown."""
+    kinds: list[str] = []
+    if not MARKUP_CLI["off"]:
+        if MARKUP_CLI["kinds"] is not None:
+            kinds = markup_value(MARKUP_CLI["kinds"] or True)
+        else:
+            kinds = markup_value(first_pdfmd_option(md_path, metadata_files, "markup"))
+    if show_comments_on(md_path, metadata_files):
+        kinds.append("comments")
+    return kinds
 
 
 def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -2432,6 +2449,7 @@ MARKUP_CALLOUT_HEADER = r"""% pdfmd: the box of a callout (pdfmd-options: markup
 \definecolor{pdfmd-important}{HTML}{8250DF}
 \definecolor{pdfmd-warning}{HTML}{9A6700}
 \definecolor{pdfmd-caution}{HTML}{CF222E}
+\definecolor{pdfmd-comment}{HTML}{6E7781}
 \IfFileExists{tcolorbox.sty}{\def\pdfmdhastcolorbox{1}}{}
 \ifdefined\pdfmdhastcolorbox
   \usepackage{tcolorbox}\tcbuselibrary{breakable}
@@ -2468,7 +2486,8 @@ MARKUP_LANDSCAPE_HEADER = r"""% pdfmd: landscape pages (pdfmd-options: markup: l
 """
 
 # the LaTeX definitions each kind of markup needs (the kinds not here need none)
-MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER, "landscape": MARKUP_LANDSCAPE_HEADER}
+MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "comments": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER,
+                  "landscape": MARKUP_LANDSCAPE_HEADER}
 
 
 def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -2476,7 +2495,7 @@ def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -
     of pdfmd's own (a filter's `header-includes` is dropped by every other header file of pdfmd's), or []."""
     files = sources if isinstance(sources, list) else [sources]
     kinds = markup_kinds(files[0], metadata_files) if files else []
-    pieces = [MARKUP_HEADERS[kind] for kind in kinds if kind in MARKUP_HEADERS]
+    pieces = list(dict.fromkeys(MARKUP_HEADERS[kind] for kind in kinds if kind in MARKUP_HEADERS))     # the box is one piece
     if not pieces:
         return []
     text = "\n".join(pieces)
@@ -23086,6 +23105,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "text; highlight (==text==) marks it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
                              "{.appendix}) letters the sections after it; bare: all kinds. Off by default; also "
                              "pdfmd-options.markup (true or a list) and pdfmd --setup")
+    parser.add_argument("--show-comments", action="store_true", default=None,
+                        help="show the <!-- comments --> of the text in the output instead of dropping them: a box labelled "
+                             "Comment (LaTeX, Typst, HTML, EPUB), a real Word comment (docx); the Markdown family keeps them as "
+                             "they are. pdfmd's own markers (<!-- pdfmd: ... -->, <!-- pagebreak -->) stay invisible. Off by "
+                             "default; also pdfmd-options.show-comments and pdfmd --setup")
+    parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
+                        help="do not show comments in this run, whatever pdfmd-options.show-comments says")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
@@ -23705,6 +23731,7 @@ def main() -> None:
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
     PAGEBREAK_CLI.update({"kinds": args.pagebreak, "off": args.no_pagebreak})
     MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
+    SHOW_COMMENTS_CLI["on"] = args.show_comments
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:
