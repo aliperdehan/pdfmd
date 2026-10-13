@@ -1593,6 +1593,12 @@ break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (plain text wh
 keep the text and say once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
 punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or `true` for all; `--markup highlight` for one run.
 
+**Blocks kept on one page** (v3.29, `markup: keep`). A fenced `::: keep` (also `nobreak`, `keep-together`), a div with
+`style="break-inside: avoid"` and, for writers that are not LaTeX, a raw `\begin{samepage}` ... `\end{samepage}` hold what they
+contain on one page where it fits: LaTeX's `samepage` environment, Typst's `#block(breakable: false)[...]`, a `break-inside:
+avoid` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text and say once that it is not held.
+`--markup keep` for one run.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

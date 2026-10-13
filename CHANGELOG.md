@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.18 — 2026-10-14
+
+Pre-edit state: commit `06b727d` (v3.29.17).
+
+### Added
+
+- **Universal markup, the sixth kind: `keep`**. `::: keep` (also `nobreak`, `keep-together`), a `<div style="break-inside: avoid">` and a
+  raw `\begin{samepage}` ... `\end{samepage}` become LaTeX's `samepage`, Typst's `#block(breakable: false)[...]`, an HTML/EPUB
+  `break-inside: avoid` div; Word and OpenDocument keep the text with one note. The raw TeX environments the reader keeps as one block
+  (for `center` too) are now read by one function (`tex_environments`), for the kinds that are on. Opt-in with the rest of `markup`.
+  `tests/test_markup_keep.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.17 — 2026-10-14
 
 Pre-edit state: commit `5f4f3e4` (v3.29.16).

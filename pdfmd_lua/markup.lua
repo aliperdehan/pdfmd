@@ -12,6 +12,9 @@
 -- center     <center>...</center>, <div align="center">, <div style="text-align: center">, ::: center, and a raw \begin{center}...
 --            \end{center} (for the writers that are not LaTeX): LaTeX the center environment, Typst #align(center)[...], HTML and
 --            EPUB a text-align div. Word and OpenDocument keep the text as it is and say so once (they have no centring to give a block).
+-- keep       ::: keep (also nobreak, keep-together), a div with style="break-inside: avoid", a raw \begin{samepage}...\end{samepage}:
+--            the blocks stay on one page. LaTeX the samepage environment, Typst #block(breakable: false)[...], HTML a break-inside
+--            div; Word and OpenDocument keep the text with a note once.
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
 --            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
 local enabled = nil
@@ -233,15 +236,6 @@ local function center_pairs(blocks)
     elseif not latex and raw_is(block, "^te?x?$", "^\\begin{center}$") then close_pattern = {"^te?x?$", "^\\end{center}$"}
     elseif not latex and raw_is(block, "^latex$", "^\\begin{center}$") then close_pattern = {"^latex$", "^\\end{center}$"} end
     local last
-    if not latex and block.t == "RawBlock" and (block.format:lower() == "tex" or block.format:lower() == "latex") then
-      -- the reader keeps a whole \begin{center} ... \end{center} as one raw block: its text is read as Markdown
-      local inner_text = block.text:match("^%s*\\begin{center}(.-)\\end{center}%s*$")
-      if inner_text then
-        out:extend(make_center(pandoc.read(inner_text, "markdown").blocks))
-        index, changed = index + 1, true
-        goto continue
-      end
-    end
     if close_pattern then
       for position = index + 1, #blocks do
         if raw_is(blocks[position], close_pattern[1], close_pattern[2]) then last = position; break end
@@ -256,7 +250,6 @@ local function center_pairs(blocks)
       out[#out + 1] = block
       index = index + 1
     end
-    ::continue::
   end
   if changed then return out end
   return nil
@@ -338,6 +331,64 @@ local function highlight_runs(inlines)
   return nil
 end
 
+
+-- ---- keep ------------------------------------------------------------------------------------------------------------
+local keep_told = false
+
+local function is_keep_div(div)
+  for _, class in ipairs(div.classes) do
+    if class == "keep" or class == "nobreak" or class == "keep-together" then return true end
+  end
+  return (div.attributes["style"] or ""):lower():match("break%-inside%s*:%s*avoid") ~= nil
+end
+
+local function make_keep(blocks)
+  local format = FORMAT or ""
+  local out = pandoc.Blocks({})
+  if format:match("^latex") then
+    out[#out + 1] = pandoc.RawBlock("latex", "\\begin{samepage}")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("latex", "\\end{samepage}")
+  elseif format:match("^typst") then
+    out[#out + 1] = pandoc.RawBlock("typst", "#block(breakable: false)[")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("typst", "]")
+  elseif format:match("^html") or format:match("^epub") then
+    out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {}, {{"style", "break-inside: avoid"}}))
+  else
+    if not keep_told and (format == "docx" or format == "odt" or format == "pptx") then
+      keep_told = true
+      io.stderr:write("NOTE  markup: keeping blocks together is not applied to " .. format .. "; the text is kept as it is\n")
+    end
+    out:extend(blocks)
+  end
+  return out
+end
+
+
+-- a raw TeX environment the reader kept as one block (\begin{center} ... \end{center}) for a writer that is not LaTeX: its text is
+-- read as Markdown and made the writer's own, for the kinds that are on
+local ENVIRONMENTS = {center = {"center", make_center}, samepage = {"keep", make_keep}}
+
+local function tex_environments(blocks)
+  if (FORMAT or ""):match("^latex") then return nil end
+  local out, changed = pandoc.Blocks({}), false
+  for _, block in ipairs(blocks) do
+    local done = false
+    if block.t == "RawBlock" and (block.format:lower() == "tex" or block.format:lower() == "latex") then
+      local name, inner = block.text:match("^%s*\\begin{(%a+)}(.-)\\end{%1}%s*$")
+      local entry = name and ENVIRONMENTS[name]
+      if entry and on(entry[1]) then
+        out:extend(entry[2](pandoc.read(inner, "markdown").blocks))
+        changed, done = true, true
+      end
+    end
+    if not done then out[#out + 1] = block end
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
@@ -364,12 +415,18 @@ function Pandoc(doc)
       end
     end,
     Blocks = function(blocks)
-      if not on("center") then return nil end
-      return center_pairs(blocks)
+      local after = tex_environments(blocks)
+      if on("center") then
+        after = center_pairs(after or blocks) or after
+      end
+      return after
     end,
     Div = function(div)
       if on("center") and is_center_div(div) then
         return make_center(div.content)
+      end
+      if on("keep") and is_keep_div(div) then
+        return make_keep(div.content)
       end
       if not on("callouts") then return nil end
       local kind, title, body = callout_of_div(div)
