@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.45 — 2026-10-13
+
+Pre-edit state: commit `b61d1ba` (v3.28.44).
+
+### Changed
+
+- The attached source's manifest is **format 2** (it was 1 since v3.22). v3.28.38 to v3.28.44 changed what a PDF carries (the
+  chain of folders, text files as blocks of the source with line markers, `eol: crlf`, files above the document's folder) while
+  the number stayed 1, so an older pdfmd restored such a PDF with warnings and half of its files. A pdfmd that reads up to 1 now
+  stops with `was made by a newer pdfmd (pdfmd X, attachment format 2; this pdfmd Y reads up to 1); upgrade pdfmd to restore it`,
+  and this one restores both 1 and 2 (checked both ways with a PDF made by v3.28.44 and one made now).
+  `tests/test_attach_format.py`.
+
 ## v3.28.44 — 2026-10-13
 
 Pre-edit state: commit `4fd2bf7` (v3.28.43).

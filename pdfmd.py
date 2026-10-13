@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.44"
+PDFMD_VERSION = "3.28.45"
 import argparse
 import csv
 import filecmp
@@ -18312,7 +18312,10 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
 # oneself; a PDF travels). Engine-independent (pypdf, after the build), and
 # nothing is attached unless asked for: the source holds everything the author
 # wrote, comments and drafts included.
-ATTACH_FORMAT = 1
+# The manifest's `format`: 1 = the layout of v3.22 to v3.28.37 (files as attachments); 2 = v3.28.38 and later (the chain of
+# folders, text files as blocks of the source with line markers, `eol: crlf`, `..` files). A pdfmd that reads up to 1 refuses a
+# 2 with "upgrade pdfmd" instead of restoring half of it; this one reads both.
+ATTACH_FORMAT = 2
 ATTACH_MANIFEST = "pdfmd-manifest.json"
 ATTACH_SOURCE = "pdfmd-source.md"
 ATTACH_KEYS = ("attach-source", "embed-source")
@@ -19997,8 +20000,9 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
                                  odf_name: str | None = None, single: bool = False) -> int:
     manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
     if manifest.get("format", 0) > ATTACH_FORMAT:
-        raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (attachment format "
-                         f"{manifest.get('format')}); upgrade pdfmd to restore it")
+        raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (pdfmd {manifest.get('pdfmd', '?')}, attachment "
+                         f"format {manifest.get('format')}; this pdfmd {PDFMD_VERSION} reads up to {ATTACH_FORMAT}); "
+                         "upgrade pdfmd to restore it")
     is_pdf = pdf_path.suffix.lower() == ".pdf"
     merged = attachments.get(manifest.get("source", ATTACH_SOURCE), b"").decode("utf-8")
     status = 0
