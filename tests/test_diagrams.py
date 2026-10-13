@@ -255,6 +255,38 @@ class Diagrams(unittest.TestCase):
         self.assertIn("<pre", (self.directory / "doc.html").read_text(encoding="utf-8"))
         self.assertNotIn("WARN", done.stdout + done.stderr)
 
+    def test_a_tools_own_chatter_stays_out_of_the_build_and_its_complaint_is_shown(self):
+        # v3.28.33: D2 says "success: ..." on stderr every time it draws; what it says when it cannot is what helps
+        noisy = '#!/bin/sh\necho "d2 $*" >> "$STUB_LOG"\nfor last; do :; done\nprintf \'%s\' \'' + SVG + '\' > "$last"\n' \
+                'echo "success: successfully compiled in.d2 to $last in 4ms" >&2\n'
+        self.install(d2=noisy, **{"rsvg-convert": RSVG})
+        self.write("```d2\nx -> y\n```\n")
+        done = self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("successfully compiled", done.stdout + done.stderr)
+        self.assertIn("data:image/svg+xml;base64,", (self.directory / "doc.html").read_text(encoding="utf-8"))
+        broken = '#!/bin/sh\necho "err: failed to compile in.d2: in.d2:1:3: unexpected token" >&2\nexit 1\n'
+        self.install(d2=broken)
+        self.write("```d2\nx -> \n```\n", "bad.md")
+        done = self.run_pdfmd("bad.md", "-t", "html", "-o", "bad.html")
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("a d2 diagram could not be drawn (err: failed to compile in.d2: in.d2:1:3: unexpected token)",
+                      done.stdout + done.stderr)
+
+    def test_a_graphviz_that_writes_only_svg_is_converted_for_a_pdf(self):
+        # the WebAssembly Graphviz of `pdfmd --install diagram:dot` has no Cairo: -Tpdf fails, -Tsvg is converted
+        svg_only = GRAPHVIZ.replace("  -Tpdf)", "  -Tpdf) exit 1 ;;\n  -Tnever)").replace("-Tpng) printf", "-Tpng) exit 1 ;;\n  -Tnever2) printf")
+        self.install(dot=svg_only, **{"rsvg-convert": RSVG})
+        self.write("```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "--to", "latex", "-o", "doc.tex")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("could not be drawn", done.stdout + done.stderr)
+        calls = self.ran()
+        self.assertIn("dot -Tpdf", calls)
+        self.assertIn("dot -Tsvg", calls)
+        self.assertTrue(any(call.startswith("rsvg-convert") and "pdf" in call for call in calls), calls)
+        self.assertIn("includegraphics", (self.directory / "doc.tex").read_text(encoding="utf-8"))
+
     def test_a_caption_and_an_id_make_a_figure(self):
         self.install(dot=GRAPHVIZ)
         self.write('---\ntitle: T\n---\n\n```{.dot #fig:flow caption="The *flow* of it" width=50%}\ndigraph { a -> b }\n```\n')

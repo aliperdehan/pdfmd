@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.33 — 2026-10-13
+
+Pre-edit state: commit `ad111f0` (v3.28.32).
+
+### Added
+
+- **`pdfmd --install diagram`, `diagram:d2`, `diagram:dot`** (queue item s4; the author would not install them on the
+  machine, so everything was tried against a scratch data folder with a PATH that had neither tool). `diagram:d2` downloads D2's release
+  binary for this machine (macOS, Linux, Windows; amd64 and arm64) into pdfmd's tools folder, checked against the SHA-256 GitHub lists
+  for the asset, as `--install typst` does. Graphviz has no download of its own for macOS or Linux, so `diagram:dot` fetches
+  `@hpcc-js/wasm-graphviz` 1.29.2 (Graphviz 16.1 built to WebAssembly: one 2 MB script, pinned SHA-256 in pdfmd) and writes
+  `dot`, `neato`, `fdp`, `sfdp`, `circo`, `twopi`, `osage` and `patchwork` launchers that run `pdfmd_lua/graphviz.cjs` with node
+  (node comes the way it does for KaTeX; the launchers prefer pdfmd's own node, then the one on PATH). The tools folder is last on
+  PATH, so a Graphviz or D2 of yours always wins. The WebAssembly build writes SVG only (no Cairo): when `dot -Tpdf` or
+  `-Tpng` fails, `diagram.lua` now takes `-Tsvg` and converts it with `rsvg-convert` or `inkscape`, as it always did for D2.
+  Compared with the real `dot` 16.1 on one graph: the same layout, the drawing 2% wider (446 against 437 pt; the WebAssembly
+  build estimates the font's widths instead of measuring Times). The Windows launchers (`.cmd`) are written but untested.
+- **Checked against the real tools** (no stand-ins): `dot` 16.1 and `d2` 0.9.0 draw the same document (a dot graph with a
+  caption, a D2 diagram) into a LaTeX PDF, a Typst PDF, HTML (inline SVG) and Word (PNG), with rsvg-convert for the PDF and Word;
+  also with the scratch-installed D2 and the WebAssembly `dot` only on PATH.
+
+### Fixed
+
+- **D2's "success: successfully compiled ..." line came out in every build that drew a D2 diagram.** `diagram.lua` runs the
+  tool through `/bin/sh` with its stderr in a file (not on Windows), and shows that text only when the diagram could not be
+  drawn: the warning now says what the tool said (`err: failed to compile in.d2: ...`) where it used to say "run d2 on it to see".
+
 ## v3.28.32 — 2026-10-13
 
 Pre-edit state: commit `7864ff3` (v3.28.31).

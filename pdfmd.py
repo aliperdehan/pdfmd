@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.32"
+PDFMD_VERSION = "3.28.33"
 import argparse
 import csv
 import filecmp
@@ -2485,8 +2485,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
 
 # A fenced block written in a diagram language (pdfmd_lua/diagram.lua draws it): ```mermaid, ```{.d2 caption="..."}, ```dot
 DIAGRAM_BLOCK_RE = re.compile(r"(?mi)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{?[ \t]*\.?(?:mermaid|d2|dot|graphviz)\b")
-DIAGRAM_TOOLS = (("dot", "Graphviz", "brew install graphviz  |  apt install graphviz"),
-                 ("d2", "D2", "brew install d2  |  https://d2lang.com/tour/install"),
+DIAGRAM_TOOLS = (("dot", "Graphviz", "brew install graphviz  |  apt install graphviz  |  pdfmd --install diagram:dot"),
+                 ("d2", "D2", "brew install d2  |  pdfmd --install diagram:d2  |  https://d2lang.com/tour/install"),
                  ("mmdc", "Mermaid", "npm install -g @mermaid-js/mermaid-cli"))
 
 
@@ -2989,9 +2989,10 @@ INSTALL_SPECS = {
     "tui": ["prompt_toolkit>=3"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
+INSTALL_KINDS = ("pandoc", "typst", "full", "math", "diagram", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
 INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
+                 "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
@@ -6321,6 +6322,192 @@ def install_katex() -> bool:
     return True
 
 
+# -- Diagram tools: D2 and Graphviz (v3.28.32) --------------------------------------------------------------------------
+# A ```d2 or ```dot block is drawn by the tool that reads it (pdfmd_lua/diagram.lua). `pdfmd --install diagram:d2` puts
+# D2's own release binary in pdfmd's tools folder, as for Typst (GitHub lists a SHA-256 for every asset). Graphviz has no
+# download of its own for macOS or Linux, so `pdfmd --install diagram:dot` fetches @hpcc-js/wasm-graphviz (Graphviz built
+# to WebAssembly, one 2 MB script, the SHA-256 below) and writes `dot`, `neato`, ... launchers that run it with node
+# (pdfmd_lua/graphviz.cjs); node comes the way it does for KaTeX. It writes SVG only: for a PDF or a PNG diagram.lua
+# converts that SVG, as for D2, which takes rsvg-convert or inkscape. The tools folder is last on PATH, so a Graphviz or D2
+# you installed yourself is the one that runs.
+D2_REPOSITORY = "terrastruct/d2"
+D2_TARGETS = {
+    ("linux", "x86_64"): "linux-amd64", ("linux", "aarch64"): "linux-arm64",
+    ("darwin", "x86_64"): "macos-amd64", ("darwin", "aarch64"): "macos-arm64",
+    ("windows", "x86_64"): "windows-amd64", ("windows", "aarch64"): "windows-arm64",
+}
+GRAPHVIZ_VERSION = "1.29.2"
+GRAPHVIZ_SHA256 = "fbabf5f7a085f37009477d3585b2da1e4960f99dda54004e69c20553c8d172df"
+GRAPHVIZ_PACKAGE = f"https://registry.npmjs.org/@hpcc-js/wasm-graphviz/-/wasm-graphviz-{GRAPHVIZ_VERSION}.tgz"
+GRAPHVIZ_COMMANDS = ("dot", "neato", "fdp", "sfdp", "circo", "twopi", "osage", "patchwork")
+DIAGRAM_INSTALLS = ("d2", "dot")
+
+
+def d2_asset_name(tag: str, system: str | None = None, machine: str | None = None) -> str | None:
+    """The file name of D2's release archive for this machine at release ``tag`` (v0.9.0), or None."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    target = D2_TARGETS.get((system, machine))
+    return f"d2-{tag}-{target}.tar.gz" if target else None
+
+
+def github_latest_release(repository: str) -> dict:
+    """The latest release of a GitHub repository as the API gives it (tag_name, assets with their digests)."""
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
+    if os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    with open_url(urllib.request.Request(f"https://api.github.com/repos/{repository}/releases/latest",
+                                         headers=headers), 30) as response:
+        return json.load(response)
+
+
+def install_d2() -> bool:
+    """`pdfmd --install diagram:d2`: D2's release binary for this machine into tools_directory()."""
+    try:
+        release = github_latest_release(D2_REPOSITORY)
+        tag = str(release["tag_name"])
+        name = d2_asset_name(tag)
+        asset = next((item for item in release["assets"] if item["name"] == name), None) if name else None
+    except (OSError, ValueError, KeyError) as error:
+        print(f"Could not read D2's release list ({error}). Install it yourself: https://d2lang.com/tour/install",
+              file=sys.stderr)
+        return False
+    if asset is None:
+        print(f"No D2 release is listed for {platform.system()} {platform.machine()}; "
+              f"see https://github.com/{D2_REPOSITORY}/releases", file=sys.stderr)
+        return False
+    digest = str(asset.get("digest") or "")
+    sha256 = digest.split(":", 1)[1] if digest.startswith("sha256:") else None
+    print(f"INSTALL  D2 {tag} (about 17 MB download): {asset['browser_download_url']}")
+    executable = "d2.exe" if platform.system().lower() == "windows" else "d2"
+    try:
+        with NamedTemporaryFile(suffix=".tar.gz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            download_file(asset["browser_download_url"], archive, sha256)
+            print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
+                  else "NOTE  no checksum was available for this download, so it could not be verified")
+            target = extract_executable(archive, executable, tools_directory(), inside="bin")
+        finally:
+            archive.unlink(missing_ok=True)
+    except (OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+        print(f"Could not install D2 ({error}). Install it yourself: https://d2lang.com/tour/install", file=sys.stderr)
+        return False
+    use_managed_tools()
+    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
+    if ran.returncode != 0:
+        print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+        return False
+    print(f"Installed D2 {ran.stdout.strip()} in {tools_directory()} (used when no other d2 is on PATH; delete the file "
+          "to remove it). A PDF or Word diagram is converted from D2's SVG by rsvg-convert or inkscape.")
+    return True
+
+
+def unpack_graphviz(archive: Path, target: Path) -> None:
+    """wasm-graphviz's npm package into ``target``: dist/index.js, package.json and the licence, nothing else."""
+    staging = target.with_name(target.name + ".part")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    with tarfile.open(archive, "r:gz") as bundle:
+        for member in bundle.getmembers():
+            parts = PurePosixPath(member.name).parts
+            if not member.isfile() or ".." in parts or len(parts) < 2 or parts[0] != "package":
+                continue
+            if parts[1:] not in (("LICENSE",), ("package.json",), ("dist", "index.js")):
+                continue
+            handle = bundle.extractfile(member)
+            if handle is None:
+                continue
+            destination = staging.joinpath(*parts[1:])
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(handle.read())
+    if not (staging / "dist" / "index.js").is_file():
+        shutil.rmtree(staging, ignore_errors=True)
+        raise OSError(f"{archive.name} does not have wasm-graphviz's script")
+    if target.exists():
+        shutil.rmtree(target)
+    staging.replace(target)
+
+
+def write_graphviz_launchers(folder: Path, script: Path, destination: Path) -> list[Path]:
+    """`dot`, `neato`, ... in ``destination``, each running pdfmd_lua/graphviz.cjs (copied to ``folder``) with node:
+    the node beside the launcher (pdfmd's own), else the one on PATH."""
+    made = []
+    destination.mkdir(parents=True, exist_ok=True)
+    runner = folder / "graphviz.cjs"
+    shutil.copyfile(script, runner)
+    for name in GRAPHVIZ_COMMANDS:
+        if sys.platform == "win32":
+            path = destination / f"{name}.cmd"
+            path.write_text(f'@echo off\r\nset "NODE=node"\r\nif exist "%~dp0node.exe" set "NODE=%~dp0node.exe"\r\n'
+                            f'"%NODE%" "{runner}" --lib "{folder}" --engine {name} %*\r\n', encoding="utf-8")
+        else:
+            path = destination / name
+            path.write_text('#!/bin/sh\n# written by pdfmd --install diagram:dot (Graphviz as WebAssembly, run by node)\n'
+                            'here=$(cd "$(dirname "$0")" && pwd)\nnode="$here/node"\n[ -x "$node" ] || node=node\n'
+                            f'exec "$node" "{runner}" --lib "{folder}" --engine {name} "$@"\n', encoding="utf-8")
+            path.chmod(0o755)
+        made.append(path)
+    return made
+
+
+def install_graphviz() -> bool:
+    """`pdfmd --install diagram:dot`: Graphviz as WebAssembly, run by node (fetched when there is none)."""
+    try:
+        import pdfmd_lua
+    except ImportError:
+        print("ERROR  --install diagram:dot needs the pdfmd_lua package (a full install of pdfmd-cli).", file=sys.stderr)
+        return False
+    target = data_root() / "graphviz" / GRAPHVIZ_VERSION
+    print(f"INSTALL  Graphviz {GRAPHVIZ_VERSION} as WebAssembly (about 2 MB): {GRAPHVIZ_PACKAGE}")
+    try:
+        with NamedTemporaryFile(suffix=".tgz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            download_file(GRAPHVIZ_PACKAGE, archive, GRAPHVIZ_SHA256)
+            unpack_graphviz(archive, target)
+        finally:
+            archive.unlink(missing_ok=True)
+        launchers = write_graphviz_launchers(target, pdfmd_lua.FILTERS / "graphviz.cjs", tools_directory())
+    except (OSError, tarfile.TarError) as error:
+        print(f"Could not install Graphviz ({error}). Install it yourself: brew install graphviz | apt install graphviz",
+              file=sys.stderr)
+        return False
+    print(f"SHA-256 verified ({GRAPHVIZ_SHA256[:12]}..., pinned in pdfmd for wasm-graphviz {GRAPHVIZ_VERSION})")
+    if which("node") is None:
+        print(f"NOTE  Graphviz runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+              f"would do too: {node_install_hint()})")
+        if not install_node():
+            return False
+    use_managed_tools()
+    try:
+        ran = subprocess.run([str(launchers[0]), "-Tsvg"], input="digraph { a -> b }", capture_output=True, text=True,
+                             timeout=60, env={**os.environ, "PATH": os.pathsep.join(
+                                 [str(tools_directory()), os.environ.get("PATH", "")])})
+    except (OSError, subprocess.TimeoutExpired) as error:
+        ran = None
+        problem = str(error)
+    else:
+        problem = ran.stderr.strip()[-300:]
+    if ran is None or ran.returncode != 0 or "<svg" not in ran.stdout:
+        print(f"Graphviz was installed in {target} but did not draw a graph here: {problem}", file=sys.stderr)
+        return False
+    print(f"Installed Graphviz {GRAPHVIZ_VERSION} in {target}: `dot`, `neato` and the other layout commands are in "
+          f"{tools_directory()} (used when no other is on PATH; delete them and the folder to remove). They write SVG; a "
+          "PDF or Word diagram is converted from it by rsvg-convert or inkscape.")
+    return True
+
+
+def install_diagram(which_one: str = "") -> bool:
+    """`--install diagram` (both), `diagram:d2`, `diagram:dot`."""
+    wanted = [which_one] if which_one else list(DIAGRAM_INSTALLS)
+    done = True
+    for name in wanted:
+        done = (install_d2() if name == "d2" else install_graphviz()) and done
+    return done
+
+
 def translit_report() -> bool:
     """`--translit list`: the packs, which are on, which could work."""
     module = unicode_module()
@@ -6340,13 +6527,15 @@ def translit_report() -> bool:
 
 
 def install_kind(value: str) -> str:
-    """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]`."""
+    """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
     kind = value.partition(":")[0]
-    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math"))
-            or (kind == "math" and ":" in value and value != "math:katex")):
+    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram"))
+            or (kind == "math" and ":" in value and value != "math:katex")
+            or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
-                                         "math:katex is KaTeX, for math in WeasyPrint's PDFs)")
+                                         "math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
+                                         "diagram:dot draw ```d2 and ```dot blocks)")
     return value
 
 
@@ -6472,6 +6661,8 @@ def install_extra(kind: str) -> bool:
         return install_typst()
     if kind == "math:katex":
         return install_katex()
+    if kind == "diagram" or kind.startswith("diagram:"):
+        return install_diagram(kind.partition(":")[2])
     if kind == "ocr" or kind.startswith("ocr:"):
         return install_ocr_languages(kind.partition(":")[2])
     if kind == "emoji" or kind == "fonts" or kind.startswith("fonts:"):
@@ -20577,7 +20768,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
                              "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
                              "Python 3.11+), 'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
-                             "about 30 MB: WeasyPrint's PDFs then typeset math), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
+                             "about 30 MB: WeasyPrint's PDFs then typeset math), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
+                             "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "
+                             "alone), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
                              "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
                              "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "

@@ -1301,7 +1301,12 @@ Drawings are kept in the cache by their content, so a rebuild does not draw them
 (`{#fig:id}` with pandoc-crossref numbers it), `width=` sizes it, `engine=` picks the Graphviz layout (`dot`, `neato`,
 `fdp`, `sfdp`, `circo`, `twopi`), `theme=` the Mermaid theme, `layout=` the D2 layout (`dagre`, `elk`). A tool that is
 not installed leaves the block as code with one warning (`--strict` makes it an error) and says how to install it;
-a diagram the tool cannot parse stays as code too. `pdfmd --doctor` shows which tools are there, and
+a diagram the tool cannot parse stays as code too, and the warning gives the tool's own words. `pdfmd --install diagram:d2`
+puts D2's release binary (17 MB, checked against the SHA-256 GitHub lists) in pdfmd's tools folder, and `--install
+diagram:dot` Graphviz built to WebAssembly (2 MB, run by node, which pdfmd fetches when there is none): it writes only SVG,
+which pdfmd converts for a PDF or Word picture with `rsvg-convert` or `inkscape` (D2 needs the same), and it sizes labels
+by Graphviz's own estimate of the font, a couple of percent off the real tool's. A tool of your own on PATH is always the one
+that runs. `pdfmd --doctor` shows which tools are there, and
 `--no-auto diagrams` turns the whole thing off. The attributes need Pandoc's Markdown (a file with front matter); a file
 read as gfm takes the plain ```` ```dot ```` form. Mermaid needs Chrome (mermaid-cli downloads one); in a sandbox
 `PDFMD_MMDC_CONFIG=puppeteer.json` is handed to `mmdc -p`.

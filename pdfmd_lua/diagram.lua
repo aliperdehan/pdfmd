@@ -27,8 +27,8 @@ local family = FAMILY[FORMAT] or (FORMAT:match("^html") and "html") or nil
 local TOOL = {mermaid = "mmdc", d2 = "d2", dot = "dot", graphviz = "dot"}
 local HINT = {
   mmdc = "npm install -g @mermaid-js/mermaid-cli",
-  d2 = "brew install d2  (or https://d2lang.com/tour/install)",
-  dot = "brew install graphviz  |  apt install graphviz",
+  d2 = "brew install d2, or pdfmd --install diagram:d2",
+  dot = "brew install graphviz, apt install graphviz, or pdfmd --install diagram:dot",
 }
 local GRAPHVIZ_ENGINES = {dot = true, neato = true, fdp = true, sfdp = true, circo = true, twopi = true}
 local MERMAID_THEMES = {default = true, dark = true, forest = true, neutral = true}
@@ -101,8 +101,24 @@ local function wanted_format(tool)
   return nil
 end
 
+-- The tool's own message (D2 says "success: ..." on stderr every time, and what is wrong with a diagram when it is) is
+-- kept in a file where there is a shell to ask for that, and shown only when the diagram could not be drawn.
+local POSIX = package.config:sub(1, 1) == "/"
+local last_error = ""
+
 local function run_in(folder, command, args)
-  local ok = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(command, args, "") end)
+  local run, run_args = command, args
+  if POSIX then
+    run, run_args = "/bin/sh", {"-c", 'exec "$@" 2>pdfmd-tool.err', "sh", command}
+    for _, value in ipairs(args) do run_args[#run_args + 1] = value end
+  end
+  local ok = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(run, run_args, "") end)
+  if POSIX then
+    local handle = io.open(folder .. "/pdfmd-tool.err", "rb")
+    last_error = handle and handle:read("a") or ""
+    if handle then handle:close() end
+    last_error = last_error:gsub("^%s+", ""):gsub("%s+$", ""):match("[^\n]*") or ""
+  end
   return ok
 end
 
@@ -131,7 +147,16 @@ local function draw(tool, source, attributes, format)
       local args = {"-T" .. format}
       if format == "png" then args[#args + 1] = "-Gdpi=192" end
       local ok, data = pcall(pandoc.pipe, engine, args, source)
-      if ok and data and #data > 0 then made = write_file(target, data) end
+      if ok and data and #data > 0 then
+        made = write_file(target, data)
+      elseif format ~= "svg" then
+        -- a Graphviz without Cairo (pdfmd --install diagram:dot) writes only SVG: take that and convert it, as for D2
+        local svg_ok, svg = pcall(pandoc.pipe, engine, {"-Tsvg"}, source)
+        if svg_ok and svg and #svg > 0 and write_file(folder .. "/out.svg", svg)
+            and convert_svg(folder .. "/out.svg", folder .. "/out." .. format, format) then
+          made = write_file(target, read_file(folder .. "/out." .. format))
+        end
+      end
     elseif tool == "d2" then
       write_file(folder .. "/in.d2", source)
       local args = {}
@@ -189,7 +214,9 @@ local function diagram(block)
   for _, pair in ipairs(block.attributes) do attributes[pair[1]] = pair[2] end
   local file = draw(tool, block.text, attributes, format)
   if not file then
-    warn(tool .. block.text, "a " .. tool .. " diagram could not be drawn (does the source parse? run `" .. tool .. "` on it to see); it was left as code")
+    warn(tool .. block.text, "a " .. tool .. " diagram could not be drawn ("
+      .. (last_error ~= "" and last_error or "does the source parse? run `" .. tool .. "` on it to see")
+      .. "); it was left as code")
     return nil
   end
   local image_attributes = {}
