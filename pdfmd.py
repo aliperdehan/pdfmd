@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.41"
+PDFMD_VERSION = "3.28.42"
 import argparse
 import csv
 import filecmp
@@ -2796,6 +2796,16 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
     lets a front-matter-sourced request name itself instead of claiming to
     be a CLI flag it never was.
     """
+    if requested and "," in requested:
+        return engine_chain(requested, presentation, label)
+    if requested and requested.casefold() == "pandoc":
+        candidates = installed_engines() if which("pandoc") else []
+        if presentation:
+            candidates = [engine for engine in candidates if engine in LATEX_ENGINES]
+        if not candidates:
+            raise SystemExit(f"{label} named pandoc (every engine Pandoc drives), but none is installed. "
+                             "Run --check-dependencies for a status report.")
+        return candidates
     if requested:
         native = native_request(requested, presentation, label)
         if native is not None:
@@ -2859,6 +2869,29 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
         + ", ".join(PDF_ENGINES)
         + ". Run --check-dependencies for a status report."
     )
+
+
+def engine_chain(requested: str, presentation: bool, label: str) -> list[str]:
+    """``-e typst,calibre,lualatex`` (v3.28.42): the engines to try, in the order written. A word is an engine, an alias,
+    a family (tex, html, typst: its installed members in their usual order) or `pandoc` (every engine Pandoc drives).
+    Named means named: nothing outside the list is tried. A word whose engine is not installed is passed over with a
+    note when another one of the list is; the build stops only when none is."""
+    chain: list[str] = []
+    missing: list[str] = []
+    for word in (item.strip() for item in requested.split(",")):
+        if not word:
+            continue
+        try:
+            found = select_engines(word, presentation, label)
+        except SystemExit as error:
+            missing.append(f"{word}: {str(error).splitlines()[0]}")
+            continue
+        chain += [engine for engine in found if engine not in chain]
+    if not chain:
+        raise SystemExit(f"{label} names {requested}, and none of it can run:\n  " + "\n  ".join(missing))
+    for line in missing:
+        print(f"NOTE  {label}: {line}; the next in the list is tried", file=sys.stderr)
+    return chain
 
 
 def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
@@ -9559,24 +9592,27 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     decides whether metadata auto-discovery runs at all, so it cannot also
     depend on the metadata file that discovery itself would find.
     """
+    def words(value) -> str:
+        return ",".join(str(item) for item in value) if isinstance(value, (list, tuple)) else str(value)
+
     options = frontmatter_pdfmd_options(md_path)
     value = options.get("pdf-engine") or options.get("engine")
     if value is not None:
-        return str(value)
+        return words(value)
     own = frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
     if own is not None:
-        return own
+        return own.strip("[]")
     for metadata_file in metadata_files_by_priority(metadata_files):
         data = metadata_file_yaml(metadata_file)
         options = data.get("pdfmd-options")
         value = (options.get("pdf-engine") or options.get("engine")) if isinstance(options, dict) else None
         if value is None:
             top = data.get("pdf-engine") or data.get("engine")
-            value = str(top) if top is not None else None
+            value = words(top) if top is not None else None
         if value is not None:
-            return str(value)
+            return words(value)
     value = config_options().get("pdf-engine") or config_options().get("engine")
-    return str(value) if value is not None else None
+    return words(value) if value is not None else None
 
 
 # pdfmd-options.citation-engine: "citeproc" (the default -- a document only
@@ -21411,7 +21447,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "installed engine, overriding even a family restriction in front matter -- "
                              "use it to force output out of a document that would otherwise refuse to "
                              "leave its family. With neither a value nor front matter, the same full "
-                             "fallback chain applies by default")
+                             "fallback chain applies by default. A comma list is an ordered chain, tried in "
+                             "the order written and nothing else (-e typst,calibre,lualatex; a family word or "
+                             "`pandoc`, every engine Pandoc drives, expands in place); a pdf-engine: setting "
+                             "takes the same list")
     parser.add_argument("-t", "--to", dest="to", default=None, metavar="FORMAT",
                         help="Pandoc target format, e.g. html, latex (tex), typst, plain (txt), docx. "
                              "Default is pdf. An -o/--out filename with a recognized extension "

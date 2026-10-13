@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.42 — 2026-10-13
+
+Pre-edit state: commit `af5ef7a` (v3.28.41).
+
+### Added
+
+- **An ordered chain of engines** (the author approved the router's first stage). `-e typst,calibre,lualatex` tries the
+  engines in the order written and nothing else; a word is an engine or its alias, a family (`tex`, `html`, `typst`: its
+  installed members in their usual order, in place) or `pandoc` (every engine Pandoc drives, never Calibre). `pdf-engine:`
+  and `engine:` in `pdfmd-options`, the front matter, a metadata file and the config take the same list, as a comma string
+  or a YAML list. A word whose engine is not installed is passed over with a NOTE when another one of the list can run;
+  the build stops only when none can ("none of it can run", with each reason). A single engine, a family and no `-e` at all
+  are what they were (the default chain is unchanged: tests prove it); slides keep only the engines Beamer can use.
+
 ## v3.28.41 — 2026-10-13
 
 Pre-edit state: commit `1d745f8` (v3.28.40).
