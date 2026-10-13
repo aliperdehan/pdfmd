@@ -40,8 +40,10 @@ class Finding(unittest.TestCase):
                 self.assertEqual(pdfmd.resolve_calibre(), str(binary))
 
     def test_not_installed(self):
-        with mock.patch.object(pdfmd, "which", lambda name: None), mock.patch.object(pdfmd.sys, "platform", "linux"):
-            self.assertIsNone(pdfmd.resolve_calibre())
+        with tempfile.TemporaryDirectory() as data, mock.patch.dict(os.environ, {"XDG_DATA_HOME": data}), \
+                mock.patch.object(pdfmd, "which", lambda name: None), mock.patch.object(pdfmd.sys, "platform", "linux"):
+            os.environ.pop("PDFMD_CALIBRE", None)
+            self.assertIsNone(pdfmd.resolve_calibre())        # (pdfmd's own folder is under XDG_DATA_HOME: a real install must not count)
 
 
 class Choosing(unittest.TestCase):

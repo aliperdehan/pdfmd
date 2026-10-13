@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.12 — 2026-10-14
+
+Pre-edit state: commit `80d5388` (v3.29.11).
+
+### Fixed
+
+- **The Calibre workflow's first run on GitHub** (`.github/workflows/calibre.yml`, run on 3.29.8): `pdfmd --install calibre` worked on
+  both runners (Linux: the archive unpacked and `ebook-convert` found in pdfmd's data folder; macOS: the disk image), and the Calibre
+  test modules ran against the real thing, which found two things in the tests, not the product. `test_calibre.Finding.test_not_installed`
+  assumed no Calibre in pdfmd's own folder (it now points `XDG_DATA_HOME` at an empty one). And the no-Pandoc tests (empty `PATH`) met
+  a Pandoc anyway: `pdfmd --install pandoc` puts one in pdfmd's own tools folder, which pdfmd adds to `PATH` itself, so the workflow
+  now installs Pandoc with apt / Homebrew, where an empty `PATH` hides it.
+
 ## v3.29.11 — 2026-10-14
 
 Pre-edit state: commit `7c0a5c9` (v3.29.10).
