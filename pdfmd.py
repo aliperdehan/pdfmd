@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.34"
+PDFMD_VERSION = "3.28.35"
 import argparse
 import csv
 import filecmp
@@ -16110,7 +16110,7 @@ PLOT_CACHE_FORMAT = "2"
 PLOT_REQUEST_SEP = "@@|@@"
 # The protocol between pdfmd and a LaTeX package that caches its pictures (v3.28.34; nothing in pdfmd names a package).
 # A package opts in by mentioning `pdfmdCacheDir` in its style file. Then:
-#   * pdfmd writes `\def\pdfmdCacheDir{<folder>/}\def\pdfmdCacheVersion{2}` before the document; the package looks a picture up
+#   * pdfmd writes `\def\pdfmdCacheDir{<folder>/}\def\pdfmdCacheVersion{3}` before the document; the package looks a picture up
 #     by its own key as `<folder>/<key>.pdf` with its size in `<folder>/<key>.dim`, and on a miss typesets inline and
 #     appends `<key>@@|@@<macro>@@|@@<arguments>@@|@@<context>` as a line to `<job>.pdfmdreq`;
 #   * after the build pdfmd runs each request in a standalone job with the same preamble, `\pdfmdCacheRender` defined (no
@@ -16124,6 +16124,7 @@ LEGACY_CACHE_NAMES = {"dir": "LabPlotCacheDir", "render": "LabPlotRender", "requ
                       "wd": "Lab@pc@wd", "ht": "Lab@pc@ht", "dp": "Lab@pc@dp"}
 CACHE_HANDSHAKES = ("pdfmdCacheDir", LEGACY_CACHE_NAMES["dir"])
 PLOT_CTX_TWICE = "@@runs=2@@"   # in the plain part: the job runs twice (positions a picture remembers)
+PLOT_CTX_MARGIN = re.compile(r"@@margin=([0-9.]+(?:pt|bp|mm|cm|in|em|ex))@@")   # the page is the box plus this on every side (ink that overflows the box)
 PLOT_CTX_PLAIN = "@@plain@@"   # in a request's context: what follows is TeX with ordinary catcodes
 PLOT_CACHE_KEEP_DIRS = 8     # per document: the whole report, a few parts, a package changed and changed back
 CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
@@ -16374,6 +16375,9 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         ctx, _, plain = ctx.partition(PLOT_CTX_PLAIN)       # a scheme's settings need spaces kept: read outside expl3's catcodes
         passes = 2 if PLOT_CTX_TWICE in plain else 1       # a picture whose arrows point at its own nodes is typeset twice
         plain = plain.replace(PLOT_CTX_TWICE, "")
+        found_margin = PLOT_CTX_MARGIN.search(plain)
+        margin = found_margin.group(1) if found_margin else "0pt"
+        plain = PLOT_CTX_MARGIN.sub("", plain)
         job.write_text(
             f"\\def\\pdfmdCacheRender{{}}\\def\\{LEGACY_CACHE_NAMES['render']}{{}}\n" + preamble + "\\begin{document}\\makeatletter\n"
             "\\pagestyle{empty}\n\\ExplSyntaxOn\n" + ctx + "\n\\ExplSyntaxOff\n" + plain + "\n"
@@ -16383,11 +16387,16 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
                 f"\\string\\gdef\\string\\{name}{{\\the\\{box}\\z@}}"
                 for box, neutral in (("wd", "pdfmdCacheWd"), ("ht", "pdfmdCacheHt"), ("dp", "pdfmdCacheDp"))
                 for name in (neutral, LEGACY_CACHE_NAMES[box])) + "}\n"
+            f"\\immediate\\write\\dimf{{\\string\\gdef\\string\\pdfmdCacheMargin{{{margin}}}}}\n"
+            "\\ifdefined\\pdfmdCachePost\\immediate\\write\\dimf{\\string\\gdef\\string\\pdfmdCachePostStored"
+            "{\\unexpanded\\expandafter{\\pdfmdCachePost}}}\\fi\n"
             "\\immediate\\closeout\\dimf\n"
-            "\\pagewidth=\\wd\\z@ \\pageheight=\\dimexpr\\ht\\z@+\\dp\\z@\\relax\n"
+            + (f"\\pagewidth=\\dimexpr\\wd\\z@+2\\dimexpr{margin}\\relax \\pageheight=\\dimexpr\\ht\\z@+\\dp\\z@+2\\dimexpr{margin}\\relax\n"
+               if margin != "0pt" else "\\pagewidth=\\wd\\z@ \\pageheight=\\dimexpr\\ht\\z@+\\dp\\z@\\relax\n") +
             "\\hoffset=-1in \\voffset=-1in\n"
             "\\ifdefined\\ClearShipoutPictureBG\\ClearShipoutPictureBG\\fi\\ifdefined\\ClearShipoutPictureFG\\ClearShipoutPictureFG\\fi\n"
-            "\\shipout\\hbox{\\box\\z@}\n\\end{document}\n", encoding="utf-8")
+            + (f"\\shipout\\vbox{{\\kern{margin}\\hbox{{\\kern{margin}\\box\\z@\\kern{margin}}}\\kern{margin}}}\n"
+               if margin != "0pt" else "\\shipout\\hbox{\\box\\z@}\n") + "\\end{document}\n", encoding="utf-8")
         cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
                f"-output-directory={plot_dir}", str(job)]
         log_cmd(cmd, cwd, verbose)
@@ -20417,7 +20426,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                 os.utime(plot_dir)
                 prune_plot_directories(plot_dir)
                 validate_plot_entries(plot_dir, verbose, roots)
-                tex_path.write_text("\\def\\pdfmdCacheDir{%s/}\\def\\pdfmdCacheVersion{2}\\def\\%s{%s/}\n"
+                tex_path.write_text("\\def\\pdfmdCacheDir{%s/}\\def\\pdfmdCacheVersion{3}\\def\\%s{%s/}\n"
                                     % (plot_dir.as_posix(), LEGACY_CACHE_NAMES["dir"], plot_dir.as_posix()) + tex_text,
                                     encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,

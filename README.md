@@ -1145,13 +1145,15 @@ SHA-1 of the contents before every build). Off by default; `--no-cache` for one 
 (or deleting the folder) is always safe.
 
 *For a package author:* the protocol names no package. A style file that mentions `pdfmdCacheDir` takes part; pdfmd then
-defines `\pdfmdCacheDir` (the folder, with a trailing slash) and `\pdfmdCacheVersion` (2) before the document. The package looks
+defines `\pdfmdCacheDir` (the folder, with a trailing slash) and `\pdfmdCacheVersion` (3: the markers below are version 3) before the document. The package looks
 a picture up by its own key as `<folder>/<key>.pdf` with its size in `<key>.dim` (`\pdfmdCacheWd`, `Ht`, `Dp`), typesets
 inline on a miss, and appends `<key>@@|@@<macro>@@|@@<arguments>@@|@@<context>` to `<job>.pdfmdreq`. After the build pdfmd
 runs each request in a standalone job with the same preamble (`\pdfmdCacheRender` defined, so there is no lookup): the
 context, then `\setbox0\hbox{<macro><arguments>}`; that box is the page. A context may hold `@@plain@@` (what follows is read
-with ordinary catcodes, not expl3's: settings with spaces in their names) and `@@runs=2@@` (typeset twice, for a picture
-whose arrows point at its own nodes). nulabreport's first names (`\LabPlotCacheDir`, `.plotreq`, `\Lab@pc@wd`) still work as
+with ordinary catcodes, not expl3's: settings with spaces in their names), `@@runs=2@@` (typeset twice, for a picture
+whose arrows point at its own nodes) and `@@margin=56pt@@` (the page is the box plus that on every side, `\pdfmdCacheMargin` in
+the `.dim`: for ink that overflows its box, which you include shifted back). If the job defines `\pdfmdCachePost` after the
+box, its text comes back as `\pdfmdCachePostStored` in the `.dim`, for you to run on a hit (a global the picture changes). nulabreport's first names (`\LabPlotCacheDir`, `.plotreq`, `\Lab@pc@wd`) still work as
 aliases.
 
 **Where the cache lives.** By default in `~/.cache/pdfmd`, one folder per document.

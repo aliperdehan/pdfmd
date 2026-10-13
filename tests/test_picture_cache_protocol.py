@@ -86,6 +86,19 @@ class Render(unittest.TestCase):
         self.assertIn("\\ExplSyntaxOn\n\\textwidth=10pt\n\\ExplSyntaxOff\n\n\\setbox", job)
         self.assertTrue((plots / f"{key}.pdf").exists() and (plots / f"{key}.dim").exists())
 
+    def test_a_margin_makes_the_page_the_box_plus_that_on_every_side(self):
+        # ink that overflows the box (a label raised above it) must not be cut off
+        plots, key, done, failed = self.render("\\textwidth=10pt" + pdfmd.PLOT_CTX_PLAIN + "@@margin=56pt@@")
+        self.assertEqual((done, failed), (1, 0))
+        job = (plots / "job-1.tex").read_text(encoding="utf-8")
+        self.assertNotIn("@@", job)
+        self.assertIn("\\string\\gdef\\string\\pdfmdCacheMargin{56pt}", job)
+        self.assertIn("\\pagewidth=\\dimexpr\\wd\\z@+2\\dimexpr56pt\\relax", job)
+        self.assertIn("\\shipout\\vbox{\\kern56pt\\hbox{\\kern56pt\\box\\z@\\kern56pt}\\kern56pt}", job)
+        self.assertIn("\\ifdefined\\pdfmdCachePost", job)                 # a unit's side effects are stored for a hit
+        plain, _, _ = self.render("\\textwidth=10pt")[:3]
+        self.assertIn("\\shipout\\hbox{\\box\\z@}", (plain / "job-1.tex").read_text(encoding="utf-8"))   # no margin: the page as before
+
     def test_the_plain_part_is_read_outside_expl3_and_two_runs_can_be_asked_for(self):
         ctx = "\\textwidth=10pt" + pdfmd.PLOT_CTX_PLAIN + pdfmd.PLOT_CTX_TWICE + "\\setKV[x]{atom sep={1em}}"
         plots, key, done, failed = self.render(ctx)

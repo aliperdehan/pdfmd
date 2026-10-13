@@ -41,6 +41,33 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.35 — 2026-10-13
+
+Pre-edit state: commit `4b99efb` (v3.28.34).
+
+### Added
+
+- **Two more markers in a request's context, found by checking the scheme cache against the author's real reports** (LR1-2 to
+  LR6 and Pre-lab 7, in scratch copies; the new PDF has to be the old one). Building LR1-2 with schemes cached showed two faults
+  that no synthetic test had: the whole page below the scheme sat a fraction of a point lower, and a raised label (the H of
+  `\chemabove{N}{H}`) was cut off at the top of its picture. The causes are general:
+  - **ink outside the box.** A picture's box is not always its ink. `@@margin=56pt@@` makes the standalone page the box plus
+    that on every side, writes `\pdfmdCacheMargin` to the `.dim`, and the package includes the page shifted back by the margin,
+    so what overflowed the box overflows it again; a request without the marker is the exact page as before.
+  - **state a picture changes and a later one reads.** After the box, the job writes the package's `\pdfmdCachePost` (if it is
+    defined) to the `.dim` as `\pdfmdCachePostStored`, for the package to run when it finds the picture stored instead of
+    typesetting it. (chemfig keeps the greatest depth of the molecule names so far in a global; a scheme read it from an earlier one.)
+- The README's section for a package author describes both.
+- **What the checks said** (scratch copies of LR1-2, LR3, LR4-5, LR6 and Pre-lab 7, each built five ways: no cache,
+  rebuild cache only, plots cached with the scheme part switched off, everything cached): with schemes cached the PDF is the
+  one without them -- LR3, LR4-5, LR6 and Pre-lab 7 are identical to the pixel on every page (0 differing pixels in 14, 28, 29
+  and 7 pages), LR1-2 has the same text and 5 pixels on one page. The attached source (`--attach-source --bundle`) and
+  the `--merge` file are the same with and without the cache: the TeX of every scheme is in them, never a cached picture, and
+  the only line that differs is the build-history entry of the later build. What the checks showed that is NOT this work:
+  the rebuild cache alone (`--cache`) makes some pages differ from a `--no-cache` build (LR1-2: a paragraph on page 2 breaks
+  its lines elsewhere; LR3, LR6, Pre-lab 7: plot tick labels move by a rounding step), and the plot cache moves a few tick
+  labels of LR1-2 and Pre-lab 7 by the same step; both were there before.
+
 ## v3.28.34 — 2026-10-13
 
 Pre-edit state: commit `8e57bf0` (v3.28.33).
@@ -52,7 +79,7 @@ Pre-edit state: commit `8e57bf0` (v3.28.33).
   by name, tested it for `LabPlotCacheDir`, and wrote `\LabPlotCacheDir`, `\LabPlotRender`, `Lab@pc@wd` and `<job>.plotreq`.
   Now `picture_cache_styles` reads the packages the preamble loads (`\usepackage`, `\RequirePackage`, `\documentclass`) and
   takes in the style files that mention `pdfmdCacheDir`; their text keys the cache folder as nulabreport.sty's did. pdfmd
-  defines `\pdfmdCacheDir` and `\pdfmdCacheVersion` (2), the render jobs define `\pdfmdCacheRender`, write the size as
+  defines `\pdfmdCacheDir` and `\pdfmdCacheVersion` (3 from v3.28.35: the margin and the replay of a picture's side effects are version 3), the render jobs define `\pdfmdCacheRender`, write the size as
   `\pdfmdCacheWd`/`Ht`/`Dp`, and the requests may come in `<job>.pdfmdreq`. The old names are one table
   (`LEGACY_CACHE_NAMES`, a style that mentions `LabPlotCacheDir` still takes part) and are defined and read as well, so
   nulabreport 1.26-1.28 caches as before. The render job's `\ClearShipoutPicture...` calls are guarded now (they came
