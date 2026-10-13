@@ -6,7 +6,9 @@
 --            ::: note  ::: {.warning title="Careful"}  ::: callout-tip  (a fenced div; Quarto's title is its first heading)
 --            -> LaTeX a box (pdfmd's header file defines the pdfmdcallout environment: tcolorbox when installed, else a quote),
 --            Typst a tinted block, HTML/EPUB a div.callout with its style, every other writer a block quote with a bold title.
-local ALL = {callouts = true}
+-- toc        a paragraph that is [TOC], [[TOC]] or [[_TOC_]], <!-- toc -->, or a raw \tableofcontents (for the writers that are
+--            not LaTeX): the table of contents where it stands. LaTeX \tableofcontents, Typst #outline(), Word a TOC field
+--            (Word asks to update it when the file is opened), every other writer a list of links to the headings (to level 3).
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -113,6 +115,66 @@ local function make_callout(kind, title, body)
   return out
 end
 
+
+-- ---- toc -------------------------------------------------------------------------------------------------------------
+local TOC_DEPTH = 3
+
+local function is_toc_marker(block)
+  if block.t == "Para" or block.t == "Plain" then
+    local text = pandoc.utils.stringify(block):gsub("%s+", ""):lower()
+    return text == "[toc]" or text == "[[toc]]" or text == "[[_toc_]]" or text == "[_toc_]" or text == "{:toc}"
+  elseif block.t == "RawBlock" then
+    local format = block.format:lower()
+    local text = block.text:gsub("^%s+", ""):gsub("%s+$", "")
+    if format == "html" or format == "html5" then
+      local word = text:lower():match("^<!%-%-%s*(%a+)%s*%-%->$")
+      return word == "toc"
+    elseif format == "tex" or format == "latex" then
+      return text == "\\tableofcontents"
+    end
+  end
+  return false
+end
+
+-- a nested bullet list of links to the headings of `headers` ({level, id, inlines})
+local function toc_list(headers)
+  local function build(index, level)
+    local items = {}
+    while index <= #headers and headers[index].level >= level do
+      local header = headers[index]
+      local item = pandoc.Blocks({pandoc.Plain({pandoc.Link(header.inlines, "#" .. header.id)})})
+      index = index + 1
+      if index <= #headers and headers[index].level > header.level then
+        local nested
+        nested, index = build(index, headers[index].level)
+        item[#item + 1] = nested
+      end
+      items[#items + 1] = item
+    end
+    return pandoc.BulletList(items), index
+  end
+  local base = headers[1].level
+  for _, header in ipairs(headers) do if header.level < base then base = header.level end end
+  local list = build(1, base)
+  return list
+end
+
+local function make_toc(headers)
+  local format = FORMAT or ""
+  if format:match("^latex") then
+    return pandoc.Blocks({pandoc.RawBlock("latex", "\\tableofcontents")})
+  elseif format:match("^typst") then
+    return pandoc.Blocks({pandoc.RawBlock("typst", "#outline()")})
+  elseif format:match("^docx") then
+    return pandoc.Blocks({pandoc.RawBlock("openxml",
+      '<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-'
+      .. TOC_DEPTH .. '" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>'
+      .. 'Update this field to build the table of contents.</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>')})
+  end
+  if #headers == 0 then return pandoc.Blocks({}) end
+  return pandoc.Blocks({pandoc.Para({pandoc.Strong({pandoc.Str("Contents")})}), toc_list(headers)})
+end
+
 function Pandoc(doc)
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
@@ -136,6 +198,23 @@ function Pandoc(doc)
       return make_callout(kind, title, body)
     end,
   })
+  if on("toc") then
+    local headers = {}
+    walked:walk({Header = function(header)
+      if header.level <= TOC_DEPTH and header.identifier ~= "" then
+        headers[#headers + 1] = {level = header.level, id = header.identifier, inlines = header.content}
+      end
+    end})
+    local blocks = pandoc.Blocks({})
+    for _, block in ipairs(walked.blocks) do
+      if is_toc_marker(block) and not (block.t == "RawBlock" and (FORMAT or ""):match("^latex") and block.format:match("tex")) then
+        blocks:extend(make_toc(headers))
+      else
+        blocks[#blocks + 1] = block
+      end
+    end
+    walked.blocks = blocks
+  end
   local format = FORMAT or ""
   if used.callouts and (format:match("^html") or format:match("^epub")) then
     local before = walked.meta["include-before"]

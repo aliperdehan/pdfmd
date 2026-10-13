@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.14 — 2026-10-14
+
+Pre-edit state: commit `0e51139` (v3.29.13).
+
+### Added
+
+- **Universal markup, the third kind: `toc`**. A paragraph that is `[TOC]`, `[toc]`, `[[TOC]]` or `[[_TOC_]]` (which Pandoc reads as
+  `[[`, an emphasis, `]]`: matched on its text), `<!-- toc -->`, or a raw `\tableofcontents` for a writer that is not LaTeX, becomes the
+  table of contents in that place (`pdfmd_lua/markup.lua`): LaTeX `\tableofcontents` (a raw one is left as it is: Pandoc reruns LaTeX
+  and the contents are filled on the cache route and on `--no-cache`, tested), Typst `#outline()`, Word a TOC field (`w:dirty`: Word offers
+  to update it), every other writer a nested list of links to the headings to level 3 under a bold "Contents". Opt-in with the rest of
+  `markup` (`markup: [callouts, toc]`, `true`, `--markup toc`). Not done: a depth or title of its own, OpenDocument's own field.
+  `tests/test_markup_toc.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.13 — 2026-10-14
 
 Pre-edit state: commit `fec4094` (v3.29.12).

@@ -1574,6 +1574,13 @@ The five kinds are GitHub's (`note`, `tip`, `important`, `warning`, `caution`); 
 dropped. Off unless asked (the document, a metadata file, or `pdfmd --setup` under *Universal markup*); `--markup [KIND ...]` and
 `--no-markup` decide for one run. The built-in renderer (no Pandoc) does not read it yet, and there is no Word shaded box yet.
 
+**A table of contents where you put it** (v3.29, `markup: toc`). `[TOC]`, `[[_TOC_]]` and `<!-- toc -->` alone in a paragraph, or
+a raw `\tableofcontents` for a writer that is not LaTeX, become the contents at that place: LaTeX's `\tableofcontents` (filled in
+one build, with the page numbers), Typst's `#outline()`, a Word TOC field (Word offers to update it when the file is opened) and,
+for every other writer (HTML, EPUB, Markdown, OpenDocument ...), a nested list of links to the headings down to level 3, with a
+bold "Contents" above it. `markup: [callouts, toc]` or `markup: true` for both; `--markup toc` for one run. A marker inside a
+sentence is text.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

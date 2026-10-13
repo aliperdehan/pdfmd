@@ -91,6 +91,7 @@ AUTO_HELP = {
 # the kinds of pdfmd.MARKUP_KINDS, in its order
 MARKUP_CHOICES = (
     ("callouts", "> [!NOTE], > [!warning] Title, ::: note: a box (LaTeX, Typst), a styled div (HTML), a quote (the rest)"),
+    ("toc", "[TOC], [[_TOC_]], <!-- toc -->: the table of contents where it stands"),
 )
 
 
@@ -354,7 +355,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
                 "--no-pagebreak.", "Universal markup"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
-                "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`. Per run: --markup / "
+                "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
+                "contents go. Per run: --markup / "
                 "--no-markup.", "Universal markup"),
         # -- what a build prints
         choice("options.found-style", "How the FOUND line lists the files it picked up",

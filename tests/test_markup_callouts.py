@@ -124,8 +124,8 @@ class Options(unittest.TestCase):
     def test_values(self):
         self.assertEqual(pdfmd.markup_value(None), [])
         self.assertEqual(pdfmd.markup_value(False), [])
-        self.assertEqual(pdfmd.markup_value(True), ["callouts"])
-        self.assertEqual(pdfmd.markup_value("all"), ["callouts"])
+        self.assertEqual(pdfmd.markup_value(True), list(pdfmd.MARKUP_KINDS))
+        self.assertEqual(pdfmd.markup_value("all"), list(pdfmd.MARKUP_KINDS))
         self.assertEqual(pdfmd.markup_value(["callouts"]), ["callouts"])
         self.assertEqual(pdfmd.markup_value("off"), [])
 
@@ -139,7 +139,7 @@ class Options(unittest.TestCase):
                 self.assertEqual(pdfmd.markup_kinds(doc, []), [])
                 self.assertEqual(pdfmd.markup_filter_args(doc, []), [])
                 pdfmd.MARKUP_CLI.update({"off": False, "kinds": []})
-                self.assertEqual(pdfmd.markup_kinds(doc, []), ["callouts"])        # a bare --markup is all of them
+                self.assertEqual(pdfmd.markup_kinds(doc, []), list(pdfmd.MARKUP_KINDS))   # a bare --markup is all of them
             finally:
                 pdfmd.MARKUP_CLI.update({"kinds": None, "off": False})
             args = pdfmd.markup_filter_args(doc, [])
