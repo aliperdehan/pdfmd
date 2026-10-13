@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.40"
+PDFMD_VERSION = "3.28.41"
 import argparse
 import csv
 import filecmp
@@ -1620,7 +1620,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures", "remotecsl", "mathfont",
+    "draftpictures", "remotecsl", "mathfont", "css",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -13335,6 +13335,106 @@ def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: 
     return out
 
 
+# -- Style sheets (v3.28.41) -------------------------------------------------------------------------------------
+# A style sheet for the writers that read CSS (HTML, EPUB, the HTML engines' PDF: WeasyPrint and the rest, Calibre) is found
+# beside the document as `<name>.css` or `pdfmd.css`, named by `css:` in the front matter or a metadata file (Pandoc's own
+# key), by `pdfmd-options: {css: FILE | [..]}`, or given as `--css FILE`; the later ones come after the earlier ones in the
+# page, as in CSS. With `css-scope: all` (`--css-scope all`) the part of it that means something to the other writers is
+# read as well (`pdfmd_css`): the paper and its margins (`@page`), the body's font, size, line spacing and indent, the colour
+# of links and the font of code become the Pandoc variables LaTeX, Typst and the rest take, below what the document, its
+# metadata and the command line set. `--no-auto css` turns the search for `<name>.css` and `pdfmd.css` off.
+CSS_CLI: list[str] = []                  # --css FILE (repeatable)
+CSS_SCOPE_CLI: str | None = None         # --css-scope
+CSS_SCOPES = ("html", "all")
+
+
+def css_scope(md_path: Path, metadata_files: list[Path]) -> str:
+    """``html`` (a style sheet is for the writers that read CSS: the default) or ``all``: the command line, else
+    `pdfmd-options.css-scope`."""
+    value = CSS_SCOPE_CLI if CSS_SCOPE_CLI is not None else first_pdfmd_option(md_path, metadata_files, "css-scope")
+    value = str(value or "html").strip().casefold()
+    return value if value in CSS_SCOPES else "html"
+
+
+def css_names(value) -> list[str]:
+    return [str(item) for item in ([value] if isinstance(value, str) else value if isinstance(value, list) else [])
+            if str(item).strip()]
+
+
+def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None
+                ) -> tuple[list[Path], list[Path], list[Path]]:
+    """(found beside the document, named by `css:` of the front matter or a metadata file, named by pdfmd-options or the
+    command line): each in the order the page reads them, files that exist only (a missing one is a WARN)."""
+    def existing(names: list[str], origin: str) -> list[Path]:
+        found: list[Path] = []
+        for name in names:
+            path = (md_path.parent / name).resolve()
+            if path.is_file():
+                found.append(path)
+            else:
+                print(f"WARN  {origin}: the style sheet {name} was not found beside {display_path(md_path)}", file=sys.stderr)
+        return found
+
+    beside: list[Path] = []
+    if not auto_disabled(no_auto, "css"):
+        for folder in accessory_directories(md_path.parent, md_path.stem):
+            for name in (f"{md_path.stem}.css", "pdfmd.css"):
+                if (folder / name).is_file() and (folder / name).resolve() not in beside:
+                    beside.append((folder / name).resolve())
+    keys: list[str] = []
+    for item in metadata_files:
+        keys += css_names(metadata_file_yaml(item).get("css"))
+    try:
+        keys += css_names(front_matter_dict(md_path.read_text(encoding="utf-8-sig")).get("css"))
+    except OSError:
+        pass
+    named = css_names(first_pdfmd_option(md_path, metadata_files, "css")) + [str(Path(item)) for item in CSS_CLI]
+    return beside, existing(keys, "css:"), existing(named, "pdfmd-options.css / --css")
+
+
+def css_additions(md_path: Path, metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
+                  for_html: bool, note) -> tuple[list[str], list[str]]:
+    """(Pandoc options, -V variables) the style sheets of a document add. The options are `--css FILE` for an HTML-family
+    build, for the sheets Pandoc would not read itself (not `css:` of the metadata, which its template links). The
+    variables are what `css-scope: all` finds in them that nothing of the document sets."""
+    beside, keyed, named = css_sources(md_path, metadata_files, no_auto)
+    options: list[str] = []
+    if for_html:
+        for path in dict.fromkeys([*beside, *named]):
+            options += ["--css", str(path)]
+        if beside or named:
+            note("CSS", f"{', '.join(item.name for item in [*beside, *named])}: the HTML writers link it")
+    if css_scope(md_path, metadata_files) != "all":
+        if beside and not for_html:
+            note("CSS", f"{', '.join(item.name for item in beside)}: found; --css-scope all reads it for this writer too")
+        return options, []
+    sheets = list(dict.fromkeys([*beside, *keyed, *named]))
+    if not sheets:
+        return options, []
+    try:
+        import pdfmd_css
+    except ImportError:
+        return options, []
+    text = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in sheets)
+    translation = pdfmd_css.translate(text)
+    added: list[str] = []
+    geometry_set = has_geometry(md_path, list(variables), metadata_files)
+    for variable in translation.variables:
+        key = variable.split("=", 1)[0]
+        if key.startswith("geometry"):
+            if geometry_set:
+                continue
+        elif document_font_setting(key, [md_path], metadata_files, [*variables, *added]) is not None:
+            continue
+        added.append(variable)
+    for said, taken in translation.used:
+        if any(item in added for item in taken):                  # what the document sets is not said to come from the sheet
+            note("CSS", f"{', '.join(item.name for item in sheets)}: {said} -> {', '.join(taken)}")
+    if translation.ignored:
+        note("CSS", "not used: " + ", ".join(translation.ignored[:12]) + (" ..." if len(translation.ignored) > 12 else ""))
+    return options, added
+
+
 def strip_embedded_preamble(text: str) -> str:
     """``text`` without the LaTeX preamble an assembled file embeds at the
     head of its `header-includes` (everything up to PREAMBLE_END_MARK): for a
@@ -17279,6 +17379,15 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         noted.add((kind, detail))
         AUTO_LOG.record(kind, detail, verbose)
 
+    # the style sheets of the document (v3.28.41): linked for an HTML-family build, read for settings with css-scope: all
+    css_meta = [metadata_file] if isinstance(metadata_file, Path) else list(metadata_file or [])
+    html_family = (target_format in HTML_TARGETS or target_format.startswith("epub")
+                   or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" for item in engines)))
+    css_options, css_variables = css_additions(md_path, css_meta, variables, no_auto, html_family, note)
+    if css_options or css_variables:
+        pandoc_options = [*pandoc_options, *css_options]
+        variables = [*variables, *css_variables]
+
     def flush_summary() -> None:
         tablewidth_note(md_path, note)
         if not verbose:
@@ -21171,6 +21280,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "text cites (and what they cross-reference; all of them if it has "
                              "`nocite: '@*'`), 'all' the file as it is. A document sets it with "
                              "pdfmd-options.attach-bibliography")
+    parser.add_argument("--css", action="append", default=[], metavar="FILE",
+                        help="a style sheet for the HTML writers (HTML, EPUB, the HTML engines' PDF, Calibre), after the "
+                             "ones found beside the document (NAME.css, pdfmd.css) and named in its metadata (css:, "
+                             "pdfmd-options.css); repeat it for more. With --css-scope all it is read for the paper, "
+                             "margins, body font and size, line spacing, link colour and code font of the other writers too")
+    parser.add_argument("--css-scope", dest="css_scope", choices=CSS_SCOPES, default=None,
+                        help="what a style sheet is for: html (default) the writers that read CSS, all those and the "
+                             "settings LaTeX, Typst and Word take from the parts of it that say them (@page size and "
+                             "margin, body and a and code rules; @media print counts, @media screen does not), below "
+                             "what the document, its metadata and the command line set. A document sets it with "
+                             "pdfmd-options.css-scope")
     parser.add_argument("--attach-csl", dest="attach_csl", action="store_true", default=None,
                         help="also attach the citation style (.csl) the metadata names, with the source: it is not "
                              "attached by default (a style is 10-90 KB, apa.csl 86 KB, and the global metadata sets one "
@@ -21937,13 +22057,15 @@ def main() -> None:
         ASCII_CLI["on"] = ascii_asked
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
-    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
+    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
     STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
     KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
     BIB_ATTACH_CLI = args.attach_bibliography
     CSL_ATTACH_CLI = args.attach_csl
+    CSS_CLI[:] = args.css
+    CSS_SCOPE_CLI = args.css_scope
     ATTACH_CLI = args.attach_source
     KEEP_SOURCE_CLI = args.keep_source
     HYBRID_CLI = args.hybrid
@@ -22440,6 +22562,15 @@ def main() -> None:
                     if (report_pdf_meta_options["pdf_metadata"] and is_tex_target
                         and stamp_scope_matches(report_pdf_meta_options, output)) else None
                 )
+                # the style sheets of the first file (v3.28.41), as _convert_one_core does for a document
+                css_options, css_variables = css_additions(
+                    files[0], metadata_files, variables, report_no_auto,
+                    target_format in HTML_TARGETS or target_format.startswith("epub")
+                    or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" for item in engines)),
+                    report_note)
+                if css_options or css_variables:
+                    pandoc_options = [*pandoc_options, *css_options]
+                    variables = [*variables, *css_variables]
                 report_document_font = is_tex_target and has_mainfont(files[0], variables, metadata_files)
                 report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
                 report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")

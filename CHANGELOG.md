@@ -41,6 +41,27 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.41 — 2026-10-13
+
+Pre-edit state: commit `1d745f8` (v3.28.40).
+
+### Added
+
+- **A style sheet for the page** (the author approved the CSS design and asked that `css:` in the metadata or front matter
+  be picked up too). `pdfmd.css` or `<name>.css` beside a document (`--no-auto css` turns it off), `css:` of the front matter
+  or a metadata file (Pandoc's own key, which its HTML template already links), `pdfmd-options: {css: FILE | [..]}` (also in
+  the config, `pdfmd --setup` has a row), and `--css FILE` (now an option of pdfmd's own, repeatable) are the HTML writers'
+  sheets: HTML, EPUB, the HTML engines' PDF and Calibre link them, in that order.
+- **`css-scope: html | all`** (`--css-scope`, `pdfmd-options.css-scope`, a `--setup` row): with `all` the part of the sheet that
+  means something to LaTeX, Typst and Word is read as well (new package `pdfmd_css`, no new dependency): `@page` size
+  (A4/letter ..., landscape) and margin, the body's `font-family`, `font-size` (10, 11 or 12 pt), `line-height` and
+  `text-indent`, the colour of `a` (named or `#rrggbb`), the font of `code`/`pre`, as Pandoc variables **below** what the
+  document, its metadata and the command line set. `@media print` counts, `@media screen` and other conditions do not; the
+  last rule wins; `--verbose` says what each setting came from and names what was not used (headings, tables, the rest).
+  Headings are not translated for LaTeX, whose class or package already formats them: this v1 names them.
+- Checked: letter and 11 pt from a sheet in a LaTeX build, a sheet beside the document in a WeasyPrint PDF (its `@page` makes
+  the paper), and a document that sets its own paper, size and margin keeps them.
+
 ## v3.28.40 — 2026-10-13
 
 Pre-edit state: commit `fe59bbb` (v3.28.39).

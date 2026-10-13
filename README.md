@@ -1291,6 +1291,29 @@ line above it (or under its caption); the comment survives comment stripping, be
 A comment between a table and its caption would stop Pandoc from reading the caption as one, so there is no such
 position.
 
+### One style sheet for the page: `--css`, `pdfmd.css`, `css-scope`
+
+A `.css` file styles the writers that read CSS: HTML, EPUB, the PDF the HTML engines make (WeasyPrint and the rest) and
+Calibre. pdfmd finds `pdfmd.css` or `<name>.css` beside the document (and in its `metadata/` folder; `--no-auto css` turns the
+search off), takes `css:` from the front matter or a metadata file (Pandoc's own key), `pdfmd-options: {css: file.css}`
+(a name or a list; `pdfmd --setup` keeps one for every document) and `--css FILE`; they come in that order, the last after the
+others, as in CSS.
+
+```css
+@page { size: A4; margin: 2cm 2.5cm }                 /* paper and margins */
+body  { font-family: "STIX Two Text"; font-size: 11pt; line-height: 1.3; text-indent: 1.2em }
+a     { color: #0645AD }                              /* links */
+code, pre { font-family: "JetBrains Mono" }
+```
+
+With `css-scope: all` (`pdfmd-options`, or `--css-scope all`; the default is `html`) the sheet is read for the other writers
+too: those four rules become the paper, margins, font, size, line spacing, indent, link colour and code font that LaTeX,
+Typst and Word take, **below** what the document, its metadata and the command line set (`--verbose` says
+"body font-size 11pt -> fontsize=11pt" for each one it used, and names what it did not: headings, tables, anything else).
+Only rules that say it plainly count: `@page`, `html`/`body`/`:root`, `a`, `code`/`pre`; the last one wins; `@media print`
+counts as if it stood alone, `@media screen` and any other condition do not; a body size LaTeX has no class for (anything but 10,
+11 and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
+
 ### Code: wrapping and line numbers
 
 With a LaTeX engine a long line of code wraps at the margin instead of running off the page (a long path or option list

@@ -40,7 +40,7 @@ UNSET = {
     "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
     "options.attach-bibliography": "only the cited entries", "options.attach-csl": "off",
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
-    "options.html.self-contained": "off", "options.html.math": "MathML",
+    "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
     "options.line-numbers": "off", "options.line-number-step": "1",
     "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
@@ -198,6 +198,14 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "A whole page with <head> (--standalone), not a fragment to paste into one.", "HTML"),
         text("options.html.css", "Style sheet for HTML", "A .css file; an absolute path, or one read beside each document.",
              "HTML"),
+        text("options.css", "Style sheet for every document",
+             "A .css file (an absolute path, or one read beside each document): linked by the HTML writers, and with the "
+             "scope below read for the other writers too. A document's own pdfmd.css or NAME.css comes after it.", "HTML"),
+        choice("options.css-scope", "What a style sheet is for",
+               (("html", "the writers that read CSS"), ("all", "and the paper, margins, body font and size, line spacing, "
+                                                     "link colour and code font of LaTeX, Typst and Word")),
+               "", "`all` reads @page, body, a and code rules (@media print counts, @media screen does not), below what the "
+               "document, its metadata and the command line set. Per run: --css-scope.", "HTML"),
         choice("options.html.math", "Math in HTML",
                (("mathml", "MathML (no network)"), ("mathjax", "MathJax"), ("katex", "KaTeX"), ("webtex", "WebTeX images"),
                 ("plain", "plain text")), "", "", "HTML"),
