@@ -130,9 +130,11 @@ class Sources(unittest.TestCase):
         self.assertIn("files/keypkg-pdfmd.yaml", names)
         self.assertIn("files/key-logo.pdf", names)
         self.assertNotIn("files/key-other.pdf", names)                       # a graphic the package does not draw
-        self.assertIn("files/__up__/schemes/fig.tex", names)                 # no `..` in an attachment's name
+        self.assertNotIn("files/__up__/schemes/fig.tex", names)              # a sibling folder's text file: in the text too (v3.28.44)
         self.assertEqual(manifest["chain"], ["sub"])
-        self.assertIn("../schemes/fig.tex", {item["path"] for item in manifest["extras"]})
+        self.assertIn("../schemes/fig.tex", {item["path"] for item in manifest["extras"] if item.get("inline")})
+        needs = {item["name"]: item["stored"] for item in manifest["requirements"]["tex"]}
+        self.assertTrue(needs and all(needs.values()), needs)               # what is stored is not reported as missing
 
     def test_without_the_package_flag_only_the_data_is_stored(self):
         attachments, _ = self.attach(self.md, packages=False)
@@ -169,6 +171,146 @@ class Sources(unittest.TestCase):
             self.assertEqual(str(pdfmd.restore_target_name("../schemes/x.tex")), "schemes/x.tex")
             self.assertIsNone(pdfmd.restore_target_name("../../x.tex"))
         self.assertIsNone(pdfmd.restore_target_name("../x.tex"))
+
+
+class Outside(unittest.TestCase):
+    """v3.28.44: the text files of folders above the document's are blocks of the text too, and editable there."""
+
+    def test_a_file_above_the_folder_is_a_candidate_and_a_climb_in_the_middle_is_not(self):
+        data = b"a\n"
+        found = pdfmd.inline_candidates({"../schemes/x.tex": data, "../../y.csv": data, "a/../b.tex": data,
+                                         "../": data, "../x.pdf": data, "ok.tex": data})
+        self.assertEqual(sorted(found), ["../../y.csv", "../schemes/x.tex", "ok.tex"])
+
+    def test_a_file_with_windows_line_ends_is_text_with_eol_and_comes_back_byte_for_byte(self):
+        data = b"a,b\r\n1,2\r\n"
+        self.assertIn("../ir/a.csv", pdfmd.inline_candidates({"../ir/a.csv": data}))
+        self.assertNotIn("m.csv", pdfmd.inline_candidates({"m.csv": b"a\r\nb\n"}))      # mixed line ends: an attachment
+        self.assertNotIn("m.csv", pdfmd.inline_candidates({"m.csv": b"a\rb\n"}))
+        block = pdfmd.inline_blocks({"../ir/a.csv": data})
+        self.assertIn("eol: crlf", block)
+        self.assertNotIn("\r", block)
+        parsed = pdfmd.parse_embedded_blocks(block)[0]
+        self.assertEqual(parsed["bytes"], data)
+        self.assertEqual(parsed["declared"], parsed["sha256"])
+        edited = block.replace("1,2\n", "1,2\n3,4\n")
+        self.assertEqual(pdfmd.parse_embedded_blocks(edited)[0]["bytes"], b"a,b\r\n1,2\r\n3,4\r\n")
+
+    def test_unpack_keeps_a_sibling_and_a_local_file_of_one_name_apart_and_stays_in_its_folder(self):
+        text = ("---\ntitle: T\npdfmd-assembled: true\n---\n\nText.\n\n"
+                + pdfmd.inline_blocks({"../schemes/x.tex": b"up\n", "x.tex": b"here\n", "../../z.csv": b"z\n"}))
+        with tempfile.TemporaryDirectory() as folder:
+            md = Path(folder) / "d.md"
+            md.write_text(text, encoding="utf-8")
+            out = Path(folder) / "u"
+            with contextlib.redirect_stdout(io.StringIO()):
+                pdfmd.unpack_assembled(md, out)
+            self.assertEqual((out / "__up__" / "schemes" / "x.tex").read_text(), "up\n")
+            self.assertEqual((out / "x.tex").read_text(), "here\n")
+            self.assertEqual((out / "__up__" / "__up__" / "z.csv").read_text(), "z\n")
+            self.assertEqual(sorted(path.name for path in Path(folder).iterdir()), ["d.md", "u"])
+
+    def test_the_edit_folder_gets_the_sibling_files_from_the_text_as_it_is_now(self):
+        text = "---\ntitle: T\n---\n\nText.\n\n" + pdfmd.inline_blocks({"../schemes/x.tex": b"one\n", "own.tex": b"o\n"})
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            document = root / "sub" / "doc.md"
+            document.parent.mkdir()
+            document.write_text(text, encoding="utf-8")
+            manifest = {"chain": ["sub"]}
+            self.assertEqual(pdfmd.put_outside_blocks(document, root, manifest), ["../schemes/x.tex"])
+            self.assertEqual((root / "schemes" / "x.tex").read_text(), "one\n")
+            self.assertFalse((root / "sub" / "own.tex").exists())            # a file of the folder itself is the build's own business
+            self.assertEqual(pdfmd.put_outside_blocks(document, root, manifest), [])
+            document.write_text(text.replace("one\n", "two\n"), encoding="utf-8")
+            self.assertEqual(pdfmd.put_outside_blocks(document, root, manifest), ["../schemes/x.tex"])
+            self.assertEqual((root / "schemes" / "x.tex").read_text(), "two\n")
+
+    def test_a_build_beside_no_such_folder_says_where_the_file_is_and_writes_nothing_outside(self):
+        text = "---\ntitle: T\n---\n\nText.\n\n" + pdfmd.inline_blocks({"../schemes/x.tex": b"one\n"})
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            document = root / "sub" / "doc.md"
+            document.parent.mkdir()
+            document.write_text(text, encoding="utf-8")
+            shown = io.StringIO()
+            with contextlib.redirect_stderr(shown), pdfmd.embedded_resources(document):
+                pass
+            self.assertIn("../schemes/x.tex is held by the source", shown.getvalue())
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["sub"])
+            (root / "schemes").mkdir()
+            (root / "schemes" / "x.tex").write_text("real\n")
+            shown = io.StringIO()
+            with contextlib.redirect_stderr(shown), pdfmd.embedded_resources(document):
+                pass
+            self.assertEqual(shown.getvalue(), "")
+            self.assertEqual((root / "schemes" / "x.tex").read_text(), "real\n")      # never overwritten
+
+
+class Again(unittest.TestCase):
+    """v3.28.44: a source edited as one file (--edit) already holds its files as blocks; building it again does not repeat them."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name).resolve() / "work"
+        self.doc = self.root / "sub"
+        self.doc.mkdir(parents=True)
+        blocks = pdfmd.inline_blocks({"../schemes/x.tex": b"old\n", "own.tex": b"mine\n", "data.csv": b"a,b\n1,2\n"})
+        self.md = self.doc / "doc.md"
+        self.text = ("---\ntitle: T\n---\n\n```{=latex}\n\\input{../schemes/x}\n\\input{own}\n```\n\n"
+                     "::: {.csv file=\"data.csv\"}\n:::\n\n" + blocks)
+        self.md.write_text(self.text, encoding="utf-8")
+
+    def attach(self):
+        out = self.md.with_suffix(".pdf")
+        writer = pypdf.PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        with out.open("wb") as handle:
+            writer.write(handle)
+        pdfmd.BUNDLE_CLI = "referenced"
+        self.addCleanup(setattr, pdfmd, "BUNDLE_CLI", None)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return pdfmd.source_attachments(self.md, out, [], [], [], None)
+
+    def paths(self, merged):
+        return [place for block in pdfmd.parse_embedded_blocks(merged) if block["type"] == "file" for place in pdfmd.block_places(block)]
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_a_file_the_build_cannot_find_stays_the_block_it_is_and_is_not_repeated(self):
+        _, merged, manifest = self.attach()
+        self.assertEqual(sorted(self.paths(merged)), ["../schemes/x.tex", "data.csv", "own.tex"])
+        self.assertEqual(sorted(item["path"] for item in manifest["extras"] if item.get("inline")),
+                         ["../schemes/x.tex", "data.csv", "own.tex"])
+        self.assertEqual(pdfmd.strip_location_markers(merged).count("old\n```"), 1)
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_a_file_beside_the_document_replaces_its_block(self):
+        (self.root / "schemes").mkdir()
+        (self.root / "schemes" / "x.tex").write_text("new\n", encoding="utf-8")
+        _, merged, _ = self.attach()
+        self.assertEqual(sorted(self.paths(merged)), ["../schemes/x.tex", "data.csv", "own.tex"])
+        self.assertIn("new\n```", merged)
+        self.assertNotIn("old\n```", merged)
+
+    def test_a_style_or_bibliography_embedded_twice_keeps_the_first(self):
+        csl = pdfmd.render_embedded_block("csl", "s.csl", "<style/>\n", path="s.csl")
+        bib = pdfmd.render_embedded_block("bibliography", "r.bib", "@a{k}\n", path="r.bib")
+        text = "Text.\n\n" + csl + "\n" + bib + "\n" + csl
+        out = pdfmd.drop_duplicate_blocks(text)
+        self.assertEqual(out.count("type: csl"), 1)
+        self.assertEqual(out.count("type: bibliography"), 1)
+        self.assertEqual(pdfmd.drop_duplicate_blocks(out), out)
+
+    def test_dropping_a_block_leaves_the_rest_as_it_was(self):
+        blocks = pdfmd.inline_blocks({"a.tex": b"a\n", "b.tex": b"b\n"})
+        text = "Text.\n\n" + blocks + "\nEnd.\n"
+        out = pdfmd.drop_blocks(text, lambda fields: fields.get("path") == "a.tex")
+        self.assertIn("b\n```", out)
+        self.assertNotIn("a.tex", out)
+        self.assertEqual(len(pdfmd.parse_embedded_blocks(out)), 1)
+        self.assertNotIn("\n\n\n\n", out)
+        self.assertTrue(out.endswith("End.\n"))
 
 
 class Inline(unittest.TestCase):

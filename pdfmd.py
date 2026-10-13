@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.43"
+PDFMD_VERSION = "3.28.44"
 import argparse
 import csv
 import filecmp
@@ -10659,6 +10659,8 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         original = digest()
 
         def build(path: Path):
+            if single:
+                put_outside_blocks(document, folder, manifest)
             command = ([sys.executable, str(Path(__file__).resolve()), *passed, "-r", *map(str, chapters),
                         "--attach-source", "-o", str(made)] if chapters else
                        [sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", str(path)])
@@ -10724,6 +10726,32 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         return 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def put_outside_blocks(document: Path, folder: Path, manifest: dict) -> list[str]:
+    """For --edit of a single file: write the text files the source holds for folders above the document's
+    (`../schemes/x.tex`) where the document reads them, in the edit's own folder, from what the file says now. A build reads
+    them from there (a TeX search does not look above the working folder), so an edit of the block is the edit of the file."""
+    try:
+        text = document.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    written: list[str] = []
+    with restore_chain(manifest):
+        for block in parse_embedded_blocks(strip_location_markers(text)):
+            if block["type"] != "file":
+                continue
+            data = block["bytes"] if block.get("bytes") is not None else block["source"].encode("utf-8")
+            for place in [block["path"] or block["name"], *block.get("also", [])]:
+                where = restore_target_name(place) if outside_folder(place) else None
+                if where is None:
+                    continue
+                target = folder / where
+                if not target.is_file() or target.read_bytes() != data:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+                    written.append(place)
+    return written
 
 
 def source_carried(attachments: dict[str, bytes]) -> set[str]:
@@ -14228,6 +14256,13 @@ def render_embedded_block(kind: str, name: str, source: str, path: str | None = 
             f"{source.rstrip(chr(10))}\n{fence}\n")
 
 
+def is_crlf_text(data: bytes) -> bool:
+    """Whether every line end of ``data`` is CRLF and no other CR is in it: a file a block can hold as text (with
+    `eol: crlf`) and give back byte for byte."""
+    plain = data.replace(b"\r\n", b"")
+    return b"\r" not in plain and b"\n" not in plain and data.count(b"\r\n") > 0
+
+
 def render_embedded_file(name: str, path: str, data: bytes) -> str:
     """One referenced file as a `type: file` block: text as it is, anything else base64 (76 columns). ``path`` is where
     the document names it, which is where it is written back to."""
@@ -14239,9 +14274,12 @@ def render_embedded_file(name: str, path: str, data: bytes) -> str:
     name = re.sub(r"[\r\n]", " ", name)
     clean_path = re.sub(r"[\r\n]", " ", path)
     digest = hashlib.sha256(data).hexdigest()
+    windows = printable and "\r\n" in text and is_crlf_text(data)          # Windows line ends: text, with `eol: crlf`
+    if windows:
+        text = text.replace("\r\n", "\n")
     if printable and (not text or text.endswith("\n")) and "\r" not in text:
-        return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\nsha256: {digest}\n\n"
-                f"{text.rstrip(chr(10))}\n```\n")
+        return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\n{'eol: crlf' + chr(10) if windows else ''}"
+                f"sha256: {digest}\n\n{text.rstrip(chr(10))}\n```\n")
     encoded = base64.b64encode(data).decode("ascii")
     wrapped = "\n".join(encoded[index:index + 76] for index in range(0, len(encoded), 76))
     return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\nencoding: base64\nsha256: {digest}\n\n"
@@ -14280,13 +14318,68 @@ def first_block_start(text: str) -> int:
     return len(text)
 
 
+def block_places(block: dict) -> list[str]:
+    """Every path a `type: file` block stands for: its own and the `also:` ones."""
+    return [block["path"] or block["name"], *block.get("also", [])]
+
+
+def drop_blocks(text: str, doomed) -> str:
+    """``text`` without the `{=pdfmd}` blocks ``doomed(fields)`` says yes to (``fields``: the block's header lines as a
+    dict), and the line end and blank line each brought."""
+    out, last = [], 0
+    for match in EMBED_BLOCK_RE.finditer(text):
+        head = match.group("body").partition("\n\n")[0]
+        fields = {key.strip(): value.strip() for key, _, value in (line.partition(":") for line in head.splitlines())}
+        if doomed(fields):
+            out.append(text[last:match.start()])
+            last = match.end() + (1 if text[match.end():match.end() + 1] == "\n" else 0)
+            if text[last:last + 1] == "\n" and (not out[-1] or out[-1].endswith("\n\n")):
+                last += 1                                  # the blank line that parted it from the next
+    out.append(text[last:])
+    return "".join(out)
+
+
+def drop_duplicate_blocks(text: str) -> str:
+    """``text`` with the second block of one kind and name (a style or bibliography embedded again by a build of an edited
+    single file) taken out; the first stays."""
+    seen: set[tuple[str, str]] = set()
+
+    def again(fields: dict) -> bool:
+        if fields.get("type") not in ("bibliography", "csl"):
+            return False
+        key = (fields["type"], fields.get("path") or fields.get("name", ""))
+        if key in seen:
+            return True
+        seen.add(key)
+        return False
+    return drop_blocks(text, again)
+
+
+def outside_folder(name: str) -> bool:
+    """Whether a stored path climbs out of the document's folder (`../schemes/x.tex`)."""
+    return name.split("/")[0] == ".."
+
+
+def block_relative_path(name: str) -> str:
+    """A path for writing a `type: file` block under a folder that is not the document's (--unpack, the build's own
+    folder): the path as it is, with each `..` as `__up__` (as the attachment names do); an absolute one by its name."""
+    path = PurePosixPath(name.replace("\\", "/"))
+    if path.is_absolute() or not path.parts:
+        return path.name or "file"
+    return "/".join("__up__" if part == ".." else part for part in path.parts)
+
+
 def inline_candidates(extras: dict[str, bytes]) -> dict[str, bytes]:
-    """The stored files that go into the text instead: text files within the document's folder (a name with no `..`),
-    not too big, readable as UTF-8 with Unix line ends and no ``` in them."""
+    """The stored files that go into the text instead: text files within the document's folder or in a folder above it
+    (`../schemes/x.tex`: only `..` first, then names), not too big, readable as UTF-8 with Unix line ends and no ``` in them."""
     found: dict[str, bytes] = {}
     for name, data in extras.items():
-        if (name.lower().endswith(INLINE_SUFFIXES) and ".." not in name.split("/") and len(data) <= INLINE_LIMIT
-                and b"\r" not in data and b"\x00" not in data and b"```" not in data):
+        below = name.split("/")
+        while below and below[0] == "..":
+            below.pop(0)
+        if (name.lower().endswith(INLINE_SUFFIXES) and below and ".." not in below and "" not in below
+                and len(data) <= INLINE_LIMIT and (b"\r" not in data or is_crlf_text(data)) and b"\x00" not in data
+                and b"```" not in data):
             try:
                 data.decode("utf-8")
             except UnicodeDecodeError:
@@ -14435,6 +14528,8 @@ def parse_embedded_blocks(text: str) -> list[dict]:
                 data = b""
         elif fields.get("type") == "file":
             data = source.rstrip("\n").encode("utf-8") + (b"\n" if rest.strip() else b"")
+            if fields.get("eol") == "crlf":
+                data = data.replace(b"\n", b"\r\n")
             digest = hashlib.sha256(data).hexdigest()
         blocks.append({"type": fields.get("type", ""), "name": fields.get("name") or "filter.lua",
                        "path": fields.get("path"), "also": also,
@@ -14571,7 +14666,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
             mismatch = True
             state = "HASH MISMATCH: edited since it was written" if block["declared"] else "no hash recorded"
         for place in [block["path"] or block["name"], *block.get("also", [])]:
-            name = unique(safe_relative_path(place))
+            name = unique(block_relative_path(place))
             files[name] = block["bytes"] if block.get("bytes") is not None else block["source"]
             notes.append(f"FILE      {name}  ({state})")
     for block in history_blocks:
@@ -14822,14 +14917,25 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
         blocks = []
     if blocks:
         folder = Path(mkdtemp(prefix="pdfmd-resources-"))
+        away: list[str] = []
         for block in blocks:
             for name in [block["path"] or block["name"], *block.get("also", [])]:
+                if block["type"] == "file" and outside_folder(name):
+                    # a file of a folder above the document's: a TeX search does not look there (`../x` is read from the
+                    # working folder alone), so it is used where it sits, never written into somebody's folder
+                    if not (md_path.parent / name).is_file():
+                        away.append(name)
+                    continue
                 target = folder / safe_relative_path(name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if block.get("bytes") is not None:
                     target.write_bytes(block["bytes"])
                 else:
                     write_text_lf(target, block["source"])
+        if away:
+            print(f"NOTE  {', '.join(away[:3])}{' and %d more' % (len(away) - 3) if len(away) > 3 else ''} "
+                  f"{'is' if len(away) == 1 else 'are'} held by the source but not where the document reads "
+                  f"{'it' if len(away) == 1 else 'them'}: `pdfmd --restore` (or --edit) puts the folders back", file=sys.stderr)
         added.append(folder)
     unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
     if unpacked.is_dir():
@@ -18992,8 +19098,16 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     for name, data in csv_block_files(merged, base).items():
         if name not in extras:
             extras[name] = data
-    # The text files go into the source itself, after the text, where they can be edited (v3.28.39); the rest stay attachments
+    # A source that was edited as one file (--edit) already holds its files as blocks, and its embedded data again: a file
+    # found now replaces its block, one not found now (no copy beside the document) is carried on as the block it is
+    for block in parse_embedded_blocks(merged):
+        if block["type"] == "file":
+            for place in block_places(block):
+                if place not in extras and place in inline_candidates({place: block["bytes"]}):
+                    extras[place] = block["bytes"]
     inline = inline_candidates(extras)
+    merged = drop_blocks(merged, lambda fields: fields.get("type") == "file" and fields.get("path", fields.get("name")) in inline)
+    merged = drop_duplicate_blocks(merged)
     if inline:
         cut = first_block_start(merged)
         merged = merged[:cut].rstrip("\n") + "\n" + inline_blocks(inline) + ("\n" if cut < len(merged) else "") + merged[cut:]
@@ -19006,7 +19120,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                               for name, data in extras.items()]
     if is_pdf:
         match_images_to_pdf(output, [image for image in manifest["images"] if image["path"] not in extras], base)
-    manifest["requirements"] = attachment_requirements(merged, deps, {n for n in origins}, output if is_pdf else None)
+    manifest["requirements"] = attachment_requirements(merged, deps, set(extras), output if is_pdf else None)
     attachments = {
         ATTACH_SOURCE: merged.encode("utf-8"),
         ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
@@ -20150,7 +20264,7 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath,
             continue
         data = block["bytes"] if block.get("bytes") is not None else block["source"].encode("utf-8")
         for place in [block["path"] or block["name"], *block.get("also", [])]:
-            block_names.add(safe_relative_path(place))
+            block_names.add(block_relative_path(place))
             where = restore_target_name(place)
             if where is not None:
                 placed[str(where)] = data

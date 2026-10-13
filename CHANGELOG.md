@@ -41,6 +41,37 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.44 — 2026-10-13
+
+Pre-edit state: commit `4fd2bf7` (v3.28.43).
+
+### Changed
+
+- The text files of the folders **above** the document's (`../schemes/fig.tex`, `../ir/plain/x.csv`) are blocks of the attached
+  source's own text too, with the other text files after the text and with their `<!-- pdfmd-at: ... -->` line markers
+  (v3.28.39 left them as attachments named `files/__up__/...`). A Pre-lab 7 PDF: 10 attachments -> 6 (the logos, the package,
+  its helper, the manifest and the source), and the schemes and spectra are editable text. `--restore` puts them back
+  beside the document's folder as before.
+- A file with Windows line ends (CRLF all through) is held as text with an `eol: crlf` line in its block and comes back byte
+  for byte; the spectra of the Pre-lab were CRLF. A file with mixed line ends is still an attachment.
+- `--edit FILE.pdf` writes those files where the document reads them (in its own temporary folder) from what the file says
+  before every build, so an edit of a `../schemes/fig.tex` block is the edit of the file. A TeX search does not look
+  above the working folder, which is why this is written there.
+- A build of a Markdown source that holds such a block, in a folder that has no such file, says so (`pdfmd --restore` or
+  `--edit` puts the folders back) and writes nothing outside the document's folder; a file that is there is never replaced
+  by the block.
+- `--unpack` writes a `..` path as `__up__/...` under its output folder, so a sibling's file and the document's own file of
+  one name no longer collide (before, any path with `..` was written by its file name alone).
+
+### Fixed
+
+- `--edit` of a single file wrote every `type: file` block and the citation style **twice** into the rebuilt PDF's source (the
+  blocks the file held, then the ones the build made again: Pre-lab 7 grew from 6700 to 13000 lines). A file the build finds
+  replaces its block, one it does not find (no copy beside the document) stays the block it is, and a style or bibliography
+  embedded again keeps the first.
+- The "NEEDS graphics ...: not stored" note named files the PDF did carry (a logo or package found in the document's own
+  folder, as in a restored or edited source): what the attachments hold is no longer reported as missing.
+
 ## v3.28.43 — 2026-10-13
 
 Pre-edit state: commit `118c0e7` (v3.28.42).
