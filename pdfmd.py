@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.37"
+PDFMD_VERSION = "3.28.38"
 import argparse
 import csv
 import filecmp
@@ -4929,9 +4929,12 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
         options = [part.strip() for part in (match.group(1) or "").split(",") if part.strip()]
         loaded += [(part.strip(), options) for part in match.group(2).split(",") if part.strip()]
     located = kpsewhich_locate(sorted({package + ".sty" for package, _ in loaded}))
+    # beside the document first, as TeX itself looks (a restored source carries its package there)
+    here = [md_path.parent, *(item.parent for item in metadata_files), md_path.parent / ACCESSORY_DIRNAME]
     found: list[tuple[Path, str, list[str]]] = []
     for package, options in loaded:
-        path = located.get(package + ".sty")
+        path = next((folder / f"{package}.sty" for folder in here if (folder / f"{package}.sty").is_file()),
+                    located.get(package + ".sty"))
         if path and "texmf-dist" not in str(path) and "/texlive/" not in str(path):
             folder = path.resolve().parent
             if not any(item[0] == folder and item[1] == package for item in found):
@@ -10577,11 +10580,13 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
             return 1
         manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
         chapters: list[Path] = []
+        with restore_chain(manifest):
+            main_where = restore_target_name(str(manifest.get("name") or ""))
+            chapter_where = [restore_target_name(str(chunk.get("path") or "")) for chunk in manifest.get("chunks") or []]
         if manifest.get("mode") == "report":
             # a -r report is its chapters, in the order it was built: edit and rebuild them all as a report
             # (v3.28.31; before, the first chunk was built alone and replaced the whole book)
-            for chunk in manifest.get("chunks") or []:
-                where = restore_target_name(str(chunk.get("path") or ""))
+            for where in chapter_where:
                 if where is not None and (folder / where).is_file():
                     chapters.append(folder / where)
             if not chapters:
@@ -10590,7 +10595,7 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
             document = chapters[0]
             made = work / pdf.name
         else:
-            document = folder / str(manifest.get("name") or "")
+            document = folder / (main_where or PurePosixPath(""))
             if not document.is_file():
                 found = sorted(folder.rglob("*.md"))
                 if not found:
@@ -11648,6 +11653,12 @@ def pdf_metadata_header_file(snippet: str | None) -> Iterator[Path | None]:
         temporary_path.unlink(missing_ok=True)
 
 
+def is_package_helper_yaml(path: Path) -> bool:
+    """`<package>-pdfmd.yaml` and `<package>-office.yaml`: what a LaTeX package tells pdfmd (package_helper), not metadata.
+    A source restored with its package has them beside the document (v3.28.38)."""
+    return path.name.lower().endswith(("-pdfmd.yaml", "-pdfmd.yml", "-office.yaml", "-office.yml"))
+
+
 def yaml_autoinclude(path: Path) -> bool:
     """Return whether automatic discovery may select this YAML file."""
     text = path.read_text(encoding="utf-8-sig")
@@ -11888,12 +11899,14 @@ def find_local_metadata(directory: Path, requested: list[str] | None, report: bo
         if requested == ["all"]:
             candidates = [item for folder in search_dirs
                           for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
-                          if item.name.lower() != "defaults.yaml" and yaml_autoinclude(item)]
+                          if item.name.lower() != "defaults.yaml" and not is_package_helper_yaml(item)
+                          and yaml_autoinclude(item)]
             return order_metadata(candidates)
         return order_metadata([resolve_yaml(directory, value) for value in requested])
     candidates = [item for folder in search_dirs
                   for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
-                  if item.name.lower() != "defaults.yaml" and yaml_autoinclude(item)]
+                  if item.name.lower() != "defaults.yaml" and not is_package_helper_yaml(item)
+                          and yaml_autoinclude(item)]
     metadata = next((item for item in candidates if item.name.lower() == "metadata.yaml"), None)
     document_metadata = ([item for item in candidates
                           if document_stem and item.stem.casefold() == document_stem.casefold()]
@@ -14771,7 +14784,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         search: list[Path] = []
         for directory in ([plan.metadata_files[0].parent] if plan.metadata_files else []) + [
                 first.parent, *(item.parent for item in plan.metadata_files),
-                first.parent / ACCESSORY_DIRNAME, first.parent / f"{first.stem}{UNPACKED_SUFFIX}", Path.cwd()]:
+                first.parent / ACCESSORY_DIRNAME, first.parent / f"{first.stem}{UNPACKED_SUFFIX}", Path.cwd(),
+                *(item.resolve().parent for item in plan.metadata_files)]:     # a symlinked metadata file: its real folder, as the build's --resource-path
             if directory not in search:
                 search.append(directory)
         data_dir = pandoc_user_data_dir()
@@ -17930,6 +17944,12 @@ def attached_bundle_mode(md_path: Path, metadata_files: list[Path], is_pdf: bool
     return "sources" if is_pdf else None
 
 
+def extra_key(path: str) -> str:
+    """The attachment name of a stored file: `../schemes/x.tex` is `files/__up__/schemes/x.tex` (a viewer that saves an
+    attachment by its name must not climb out of its folder)."""
+    return EXTRA_PREFIX + "/".join("__up__" if part == ".." else part for part in path.split("/"))
+
+
 def relative_posix(base: Path, path: Path) -> str:
     # not resolve(): a symlinked metadata file is recorded where it sits, not where it points
     return Path(os.path.relpath(os.path.abspath(path), os.path.abspath(base))).as_posix()
@@ -18010,13 +18030,36 @@ def tex_distribution_roots() -> tuple[Path, ...]:
     return tuple(roots)
 
 
-@lru_cache(maxsize=None)
-def graphics_named_in(text: str) -> tuple[Path, ...]:
+GRAPHIC_ARGUMENT_RE = re.compile(r"\\(?:includegraphics|includepdf)\s*(?:\[[^\]]*\])?\s*\{([^{}]*)\}")
+MACRO_VALUE_RE = re.compile(r"\\(?:(?:re|provide)?newcommand\*?\s*\{\\([A-Za-z@]+)\}|def\\([A-Za-z@]+))\s*(?:\[\d\])?\s*\{([A-Za-z0-9][\w.-]{1,60})\}")
+
+
+def graphic_names_in(text: str) -> list[str]:
+    """The file names a package's text hands to \\includegraphics through a macro: the values the macros that sit in an
+    \\includegraphics argument are given by `\\(re)newcommand{\\LogoFile}{nu-logo}` (v3.28.38; before, any braced word of
+    the text that was also the name of a graphic on the TeX tree counted: a `titlepage` option was a `titlepage.pdf`)."""
+    macros = {name for argument in GRAPHIC_ARGUMENT_RE.findall(text) for name in re.findall(r"\\([A-Za-z@]+)", argument)}
+    values: dict[str, None] = {}
+    for first, second, value in MACRO_VALUE_RE.findall(text):
+        if (first or second) in macros and "." not in value:
+            values[value] = None
+    return list(values)
+
+
+def graphics_named_in(text: str, folders: tuple[Path, ...] = ()) -> tuple[Path, ...]:
     """Graphics of the user's own TeX tree that a package's text names without `\\includegraphics`
-    next to the name (`\\newcommand{\\LogoFile}{nu-logo}` ... `\\includegraphics{\\LogoFile}`): every
-    braced word is looked up with a graphic's extension, in one kpsewhich call."""
+    next to the name (`\\newcommand{\\LogoFile}{nu-logo}` ... `\\includegraphics{\\LogoFile}`): the names
+    graphic_names_in finds, looked up with a graphic's extension, in ``folders`` (where a stored package sits, in a
+    restored source) and in one kpsewhich call."""
+    words = sorted(graphic_names_in(text))[:3000]
+    local = [(folder / (word + suffix)).resolve() for folder in folders for word in words for suffix in GRAPHIC_SUFFIXES
+             if (folder / (word + suffix)).is_file()]
+    return tuple(dict.fromkeys([*local, *tex_tree_graphics(tuple(words))]))
+
+
+@lru_cache(maxsize=None)
+def tex_tree_graphics(words: tuple[str, ...]) -> tuple[Path, ...]:
     kpsewhich = which("kpsewhich")
-    words = sorted({word for word in re.findall(r"\{([A-Za-z0-9][\w.-]{2,60})\}", text) if "." not in word})[:3000]
     if not kpsewhich or not words:
         return ()
     names = [word + suffix for word in words for suffix in GRAPHIC_SUFFIXES]
@@ -18074,10 +18117,13 @@ def tex_names(text: str) -> list[tuple[str, tuple[str, ...]]]:
     return found
 
 
-def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Path) -> list[dict]:
+def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Path,
+                          include_local: bool = False) -> list[dict]:
     """The files of the user's own TeX tree that the LaTeX ``sources`` (and ``extra_texts``,
     e.g. a front matter header-includes) pull in, and those they pull in, as
-    {name, kind, path, version, sha256}: `name` is the file name a rebuild looks for."""
+    {name, kind, path, version, sha256}: `name` is the file name a rebuild looks for. ``include_local``: a package or class
+    that sits in the document's own folder counts too ("local": True, `name` its path from ``base``): a source that was
+    restored with its package must keep it when it is attached again (v3.28.38)."""
     deps: list[dict] = []
     seen: set[Path] = set()
     queue: list[tuple[Path | None, str]] = []
@@ -18092,10 +18138,12 @@ def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Pat
         origin, text = queue.pop(0)
         scanned += 1
         for kind, candidates in tex_names(text):
-            if any((folder / candidate).is_file() for candidate in candidates
-                   for folder in ([origin.parent] if origin else []) + [base]):
+            local = next(((folder / candidate) for candidate in candidates
+                          for folder in ([origin.parent] if origin else []) + [base] if (folder / candidate).is_file()), None)
+            if local is not None and not (include_local and kind in ("package", "class", "input")):
                 continue                                   # in the document's own folders: the folder's business
-            hit = next((found for found in (find_in_tex_tree(candidate) for candidate in candidates) if found), None)
+            hit = (Path(os.path.abspath(local)) if local is not None else
+                   next((found for found in (find_in_tex_tree(candidate) for candidate in candidates) if found), None))
             if hit is None or hit in seen:
                 continue
             seen.add(hit)
@@ -18104,23 +18152,65 @@ def tex_tree_dependencies(sources: list[Path], extra_texts: list[str], base: Pat
             except OSError:
                 continue
             provides = PROVIDES_RE.search(content[:20000])
-            deps.append({"name": hit.name, "kind": kind, "path": hit,
+            is_local = local is not None
+            deps.append({"name": relative_posix(base, hit) if is_local else hit.name, "kind": kind, "path": hit,
                          "version": " ".join(provides.group(1).split()) if provides else None,
-                         "sha256": hashlib.sha256(hit.read_bytes()).hexdigest()})
+                         "sha256": hashlib.sha256(hit.read_bytes()).hexdigest(), **({"local": True} if is_local else {})})
             if hit.suffix.lower() in TEX_SOURCE_SUFFIXES:
                 queue.append((hit, content))
                 if kind in ("package", "class"):
-                    for graphic in graphics_named_in(content):
+                    for graphic in graphics_named_in(content, (hit.parent,) if is_local else ()):
                         if graphic not in seen:
                             seen.add(graphic)
-                            deps.append({"name": graphic.name, "kind": "graphic", "path": graphic, "version": None,
-                                         "sha256": hashlib.sha256(graphic.read_bytes()).hexdigest()})
+                            graphic_local = is_local and graphic.is_relative_to(base)
+                            deps.append({"name": relative_posix(base, graphic) if graphic_local else graphic.name,
+                                         "kind": "graphic", "path": graphic, "version": None,
+                                         "sha256": hashlib.sha256(graphic.read_bytes()).hexdigest(),
+                                         **({"local": True} if graphic_local else {})})
     return deps
+
+
+def package_companions(deps: list[dict], base: Path) -> list[dict]:
+    """The file that belongs beside a stored package and tells pdfmd about it (v3.28.38): `<package>-pdfmd.yaml` (its
+    title-page keys, picture-cache names ...), as a dep of kind "companion". Without it a rebuilt source loses what the
+    package asks pdfmd for. Its Lua filter is not stored here: one the build applied is embedded in the source already, and
+    one it did not apply (a pre-lab does not) must not start to be applied by a rebuild. Its Word profile is for another
+    output."""
+    found: list[dict] = []
+    for dep in deps:
+        if dep["kind"] not in ("package", "class"):
+            continue
+        folder, stem = dep["path"].parent if dep.get("local") else dep["path"].resolve().parent, dep["path"].stem
+        for place in package_places(folder):
+            for name in (f"{stem}-pdfmd.yaml",):
+                candidate = place / name
+                local = Path(os.path.abspath(candidate)).is_relative_to(Path(os.path.abspath(base)))
+                stored = relative_posix(base, candidate) if local else name
+                if (candidate.is_file() and candidate.stat().st_size <= 2 * 1024 * 1024
+                        and not any(item["name"] == stored for item in found)):
+                    found.append({"name": stored, "kind": "companion", "path": candidate, "version": None,
+                                  "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                                  **({"local": True} if local else {})})
+    return found
+
+
+def bundle_reach(base: Path) -> Path | None:
+    """How far above the document's folder a source may keep files (v3.28.38): two folders up at most, never the home folder
+    or a folder above it (a pre-lab's `../schemes/x.tex`, `../ir/x.csv` are siblings of its folder; --restore puts the folder
+    back under the same sibling layout). None when there is no such folder."""
+    home = Path.home().resolve()
+    reach = None
+    for parent in list(base.parents)[:2]:
+        if len(parent.parts) < 3 or parent.resolve() == home or home.is_relative_to(parent.resolve()):
+            break
+        reach = parent
+    return reach
 
 
 def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
                  represented: set[Path], output: Path, data_names: list[str],
-                 base: Path | None = None, pictures: list[Path] | None = None) -> tuple[list[Path], list[str]]:
+                 base: Path | None = None, pictures: list[Path] | None = None,
+                 reach: Path | None = None) -> tuple[list[Path], list[str]]:
     """The files to store beside the source (the source carries the Markdown,
     metadata, preamble, filters, bibliography and CSL itself): the images and data
     the text and the preamble point at, and what the text files among them point at
@@ -18145,6 +18235,9 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
         try:
             path.relative_to(base)
         except ValueError:
+            if reach is not None and path.is_relative_to(reach):        # a sibling folder (`../schemes/x.tex`): see bundle_reach
+                found.append(path)
+                return True
             outside.append(str(path))
             return False
         found.append(path)
@@ -18500,22 +18593,31 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     origins: dict[str, str] = {}
     mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
     header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
-    deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base)
+    packages = resolve_bundle_packages(md_path, metadata_files)
+    deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base, packages)
     if mode:
         represented = {Path(os.path.abspath(base / item["path"]))
                        for item in [*manifest["chunks"], *manifest["layout"]]}
         pictures: list[Path] = []
         found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
-                                      manifest["data_files"], base, pictures)
+                                      manifest["data_files"], base, pictures, bundle_reach(base))
+        up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
+                                                    for item in found if not item.is_relative_to(base))), 0) \
+            if any(not item.is_relative_to(base) for item in found) else 0
+        if up:
+            # the folder comes back under the same sibling layout: its path from the folder `up` levels above
+            manifest["chain"] = list(base.relative_to(base.parents[up - 1]).parts)
         # A picture only an \input'ed .tex draws is recorded like the text's own, so --restore can take it out of the PDF
         for picture in pictures:
             entry = {"path": relative_posix(base, picture), "sha256": hashlib.sha256(picture.read_bytes()).hexdigest(),
                      "size": picture.stat().st_size}
             if entry["path"] not in {image["path"] for image in manifest["images"]}:
                 manifest["images"].append(entry)
-        packages = resolve_bundle_packages(md_path, metadata_files)
         from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
-                     and not (base / dep["name"]).exists()]
+                     and (dep.get("local") or not (base / dep["name"]).exists())]
+        if packages:
+            from_tree += [dep for dep in package_companions(from_tree, base)
+                          if dep.get("local") or not (base / dep["name"]).exists()]
         limit = float(option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
                       or BUNDLE_MAX_MB) * 1024 * 1024
         total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
@@ -18536,7 +18638,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             for dep in from_tree:
                 if dep["name"] not in extras:
                     extras[dep["name"]] = dep["path"].read_bytes()
-                    origins[dep["name"]] = "tex-tree"
+                    if not dep.get("local"):
+                        origins[dep["name"]] = "tex-tree"
             manifest["bundle"] = mode
             manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
                                    **({"from": origins[name]} if name in origins else {})}
@@ -18556,7 +18659,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     attachments = {
         ATTACH_SOURCE: merged.encode("utf-8"),
         ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
-        **{EXTRA_PREFIX + name: data for name, data in extras.items()}}
+        **{extra_key(name): data for name, data in extras.items()}}
     return attachments, merged, manifest
 
 
@@ -18839,8 +18942,24 @@ def samples_to_png(obj) -> bytes | None:
             colour, channels = 2, 3
         else:
             return None
-    rows = obj.get_data()
     stride = (width * channels * depth + 7) // 8
+    if obj.get("/SMask") is None:
+        # A PNG that LuaTeX or pdfTeX included is in the PDF as its own IDAT data (Flate with a PNG predictor): the same
+        # bytes make the PNG again. Decoding it here lost 1-bit pictures (pypdf unfilters them with a pixel of 0 bytes), and
+        # recompressing the rows is slower for nothing (v3.28.38).
+        params = obj.get("/DecodeParms")
+        params = params.get_object() if hasattr(params, "get_object") else params
+        if isinstance(params, list) and len(params) == 1:
+            params = params[0].get_object() if hasattr(params[0], "get_object") else params[0]
+        flate = obj.get("/Filter")
+        flate = flate[0] if isinstance(flate, list) and len(flate) == 1 else flate
+        if (str(flate) == "/FlateDecode" and hasattr(params, "get") and int(params.get("/Predictor", 1)) >= 10
+                and int(params.get("/Colors", 1)) == channels and int(params.get("/BitsPerComponent", 8)) == depth
+                and int(params.get("/Columns", 1)) == width and getattr(obj, "_data", None)):
+            return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, colour, 0, 0, 0))
+                    + (png_chunk(b"PLTE", palette) if palette else b"") + png_chunk(b"IDAT", bytes(obj._data))
+                    + png_chunk(b"IEND", b""))
+    rows = obj.get_data()
     if len(rows) < stride * height or width * height * channels * max(depth, 8) // 8 > DECODE_LIMIT:
         return None
     rows = rows[:stride * height]
@@ -19274,8 +19393,28 @@ def route_text_input(args, extra: list[str]) -> int | None:
     return None
 
 
+RESTORE_CHAIN: list[str] = []      # the folders from the one a restore writes into down to the document's (manifest "chain")
+
+
+@contextmanager
+def restore_chain(manifest: dict) -> Iterator[None]:
+    """While active, restore_target_name places a manifest path under the document's own folder, which sits ``chain``
+    below the folder a restore writes into: a source whose files are in sibling folders (`../schemes/x.tex`) comes back as
+    `schemes/x.tex` beside `<folder>/document.md`."""
+    saved = list(RESTORE_CHAIN)
+    chain = manifest.get("chain")
+    RESTORE_CHAIN[:] = [str(item) for item in chain] if isinstance(chain, list) else []
+    try:
+        yield
+    finally:
+        RESTORE_CHAIN[:] = saved
+
+
 def restore_target_name(name: str) -> PurePosixPath | None:
     """A path read from a PDF's manifest, safe to write under the target folder, or None."""
+    if RESTORE_CHAIN:
+        joined = posixpath.normpath(posixpath.join(*RESTORE_CHAIN, name.replace("\\", "/")))
+        name = joined if not joined.startswith("..") else ""
     path = PurePosixPath(name.replace("\\", "/"))
     if not path.parts or path.is_absolute() or ".." in path.parts or re.match(r"^[A-Za-z]:", path.parts[0]):
         return None
@@ -19383,6 +19522,12 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
                         odf_name: str | None = None) -> int:
     """The part of --restore that does not care where the source came from: a PDF's attachments or a Markdown file's
     kept source (``pdf_path`` is that file)."""
+    with restore_chain(json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))):
+        return restore_attachments_in_place(pdf_path, attachments, out_dir, list_only, odf_name)
+
+
+def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], out_dir: Path | None, list_only: bool,
+                                 odf_name: str | None = None) -> int:
     manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
     if manifest.get("format", 0) > ATTACH_FORMAT:
         raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (attachment format "
@@ -19435,7 +19580,7 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
     files: dict[str, str | bytes] = dict(layout_from_source(merged, manifest, name))
     for item in extras:
         where = restore_target_name(item["path"])
-        data = attachments.get(EXTRA_PREFIX + item["path"])
+        data = attachments.get(extra_key(item["path"]))
         if where is None or data is None:
             print(f"WARN  {item['path']}: {'not a path that can be restored' if where is None else 'missing from the PDF'}; skipped",
                   file=sys.stderr)

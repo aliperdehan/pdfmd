@@ -870,8 +870,16 @@ style, a compound library, a shared bibliography and parts.
   file, and `--restore --list` always does.
 - **Your own LaTeX packages** (a house style in `texmf-home`) are recorded with
   their version, and `--restore` tells you what is missing; `--bundle-packages`
-  stores them too (with what they `\input` and the graphics they name).
-  The TeX distribution's own packages, fonts and Pandoc are not carried.
+  stores them too: the style file, the `<package>-pdfmd.yaml` beside it (what the package tells pdfmd: its
+  title-page keys, its picture-cache names), what it `\input`s and the graphics it hands to `\includegraphics`
+  (a logo named by `\newcommand{\LogoFile}{logo}`, not every word that happens to be a file's name). A package that sits
+  in the document's own folder, as it does in a restored source, is kept when the source is attached again. Together
+  with `attach-csl` a report that sets both in its shared metadata rebuilds on a machine with nothing of yours
+  installed (checked in an empty home folder). The TeX distribution's own packages, fonts and Pandoc are not carried.
+- **Files in sibling folders** (`\input{../schemes/x.tex}`, a CSV in `../ir/`) are stored too, up to two folders above
+  the document's (never the home folder or above), and `--restore` puts the folder back in the same layout: the
+  document in `<folder>/<its folder's name>/`, the siblings beside it. A bibliography the metadata names by the real
+  folder of a symlinked metadata file (a shared `nulab.bib`) is embedded, pruned to the entries the text cites.
 - **Comments.** Notes to yourself do not travel: the attached source loses its
   `<!-- -->` comments, the LaTeX preamble's `%` comments, the text between a
   `.bib`'s entries, a CSL file's XML comments and the `#` comments of YAML

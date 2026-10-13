@@ -41,6 +41,41 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.38 — 2026-10-13
+
+Pre-edit state: commit `5dc15d5` (v3.28.37 and its test fixes).
+
+### Fixed
+
+- **A report rebuilds on its own from its PDF** (the author: "make the reports build on their own after embedding"). The
+  acceptance test is a restore into an EMPTY home folder (no `~/Library/texmf`, no Pandoc data folder, no pdfmd config) and a
+  rebuild there: Pre-lab 7 comes out identical to the pixel, and attached again keeps every file. What it took:
+  - `--bundle-packages` stores the package's `<package>-pdfmd.yaml` as well (a rebuild lost the title-page keys without it).
+    Its Lua filter is not stored by this: one the build applied is embedded already, and one it did not (a pre-lab) must not
+    start to be applied by a rebuild.
+  - The graphics a package draws are the file names that reach an `\includegraphics` through a macro
+    (`\newcommand{\LogoFile}{nu-logo}`), not every braced word that was also a graphic's name: `titlepage`, `equation` and
+    `sidefigure` (the manual's figures, 55 KB) had been stored with every report.
+  - A package, class or `\input` that already sits in the document's own folder is kept when the source is attached again (a
+    restored source lost its package the second time).
+  - The package scan finds a package beside the document first, as TeX does; `office_packages` read the TeX tree only.
+  - `<package>-pdfmd.yaml` and `<package>-office.yaml` beside a document are no longer taken for metadata files ("Multiple
+    YAML files found").
+  - A bibliography named by a symlinked metadata file is looked up in that file's real folder, as the build's
+    `--resource-path` does: a pre-lab's `nulab.bib` was "not found in the document's folders", so its source carried no
+    bibliography and a restored pre-lab did not build. It is pruned to the cited entries like any other (5 of 141).
+  - Files in sibling folders (`\input{../schemes/x.tex}`, `../ir/x.csv`) are stored, up to two folders above the document's
+    folder and never the home folder or above, as `files/__up__/schemes/x.tex` (an attachment's name must not climb);
+    the manifest's `chain` says which folders the document sat in, and `--restore` / `--edit` put it back under the same
+    layout (`<out>/<folder>/doc.md`, `<out>/schemes/x.tex`). Before, these were listed as "not stored, outside the
+    document's folder" and the restored source could not build.
+- **`--restore` gives a 1-bit picture back as it was.** A PNG that LuaTeX included sits in the PDF as its own IDAT data
+  (Flate with a PNG predictor); decoding it with pypdf unfiltered a 1-bit image with a pixel of 0 bytes and wrote the picture
+  back mostly black (LR1-2's four Palleros spectra, found by the empty-home rebuild: three pages differed). The same bytes
+  now make the PNG again, byte for byte the data the engine had, and nothing is recompressed.
+- nulabreport v1.28.7 sets `bundle-packages: true` and `attach-csl: true` (and, for pre-labs and General Chemistry reports,
+  `attach-source`) in its shared metadata files: about 90 KB more a PDF (the package packs 3:1, the citation style 6:1).
+
 ## v3.28.37 — 2026-10-13
 
 Pre-edit state: commit `0f75282` (v3.28.36).
