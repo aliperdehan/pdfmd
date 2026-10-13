@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.22 — 2026-10-14
+
+Pre-edit state: commit `171af5d` (v3.29.21).
+
+### Fixed
+
+- `.github/workflows/calibre.yml` was not valid YAML since 3.29.12: the name of the new Pandoc step had a colon followed by a space
+  ("... copy: the no-Pandoc tests ..."), so GitHub ran nothing ("a workflow file issue") on the 3.29.15 push. The name has none now,
+  and every workflow file was read with a YAML parser before this commit (they should be, before each one).
+
 ## v3.29.21 — 2026-10-14
 
 Pre-edit state: commit `5b521b0` (v3.29.20).
