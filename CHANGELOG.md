@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.25 — 2026-10-14
+
+Pre-edit state: commit `e4a8d53` (v3.29.24).
+
+### Added
+
+- **Universal markup, the ninth kind: `space`** (the last candidate of the plan's list that has a plain spelling). `\vspace{1cm}`,
+  `\vspace*{..}`, `\smallskip` / `\medskip` / `\bigskip` (3, 6, 12 pt), one or more `<br>` alone on a line (a paragraph of raw inlines:
+  an em each) and a raw `#v(1cm)` on a line of their own become LaTeX `\vspace{..}`, Typst `#v(..)`, an HTML/EPUB empty div of that
+  height, about one empty paragraph per 12 pt in Word and OpenDocument; the Markdown family keeps them. Opt-in with the rest of
+  `markup`. `tests/test_markup_space.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.24 — 2026-10-14
 
 Pre-edit state: commit `231dc98` (v3.29.23).

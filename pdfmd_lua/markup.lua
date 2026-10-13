@@ -18,6 +18,9 @@
 -- landscape  ::: landscape, a div with style="page: landscape", a raw \begin{landscape}...\end{landscape}: the blocks on landscape pages.
 --            LaTeX the landscape environment (pdfmd's header file loads pdflscape), Typst #page(flipped: true)[...], HTML a
 --            named page; Word and OpenDocument keep the text with a note once.
+-- space      vertical space on a line of its own: \vspace{1cm}, \vspace*{..}, \smallskip, \medskip, \bigskip, <br> (each one an em), a raw
+--            #v(1cm): LaTeX \vspace{..}, Typst #v(..), HTML an empty div of that height, Word and OpenDocument empty paragraphs (a
+--            line each, about), the Markdown family keeps what was written.
 -- appendix   a raw \appendix, <!-- appendix -->, or a heading with the class .appendix (it starts the appendix): the sections after it
 --            are lettered (A, B ... A.1). LaTeX \appendix, Typst a heading numbering of letters; only for a document that numbers
 --            its sections (--number-sections). Other writers keep the headings and say once that the lettering is not made.
@@ -598,6 +601,88 @@ local function show_inline_comments(inlines)
   return nil
 end
 
+
+-- ---- space -----------------------------------------------------------------------------------------------------------
+local SKIPS = {smallskip = "3pt", medskip = "6pt", bigskip = "12pt"}
+
+-- the length of a block that is only vertical space, else nil
+local function space_length(block)
+  if block.t == "Para" or block.t == "Plain" then
+    -- <br><br> alone on a line is a paragraph of raw inlines
+    local count = 0
+    for _, item in ipairs(block.content) do
+      if item.t == "RawInline" and item.format:lower():match("^html") and item.text:lower():match("^<br%s*/?>$") then
+        count = count + 1
+      elseif item.t ~= "Space" and item.t ~= "SoftBreak" then
+        return nil
+      end
+    end
+    return count > 0 and (count .. "em") or nil
+  end
+  if block.t ~= "RawBlock" then return nil end
+  local format = block.format:lower()
+  local text = block.text:gsub("^%s+", ""):gsub("%s+$", "")
+  if format == "tex" or format == "latex" then
+    local name = text:match("^\\(%a+)$")
+    if name and SKIPS[name] then return SKIPS[name] end
+    local length = text:match("^\\vspace%*?{%s*(%-?[%d%.]+%s*%a%a)%s*}$")
+    if length then return (length:gsub("%s+", "")) end
+  elseif format == "html" or format == "html5" then
+    local count, rest = 0, text:lower()
+    while true do
+      local after = rest:match("^<br%s*/?>%s*(.*)$")
+      if not after then break end
+      count, rest = count + 1, after
+    end
+    if count > 0 and rest == "" then return count .. "em" end
+  elseif format == "typst" then
+    local length = text:match("^#v%(%s*(%-?[%d%.]+%s*%a+)%s*%)$")
+    if length then return (length:gsub("%s+", "")) end
+  end
+  return nil
+end
+
+local function points_of(length)
+  local number, unit = length:match("^(%-?[%d%.]+)(%a+)$")
+  local value = tonumber(number)
+  if not value then return 12 end
+  local factor = ({pt = 1, bp = 1, mm = 2.845, cm = 28.45, ["in"] = 72.27, pc = 12, em = 12, ex = 6, px = 0.75})[unit] or 1
+  return value * factor
+end
+
+local function make_space(length)
+  local format = FORMAT or ""
+  if format:match("^latex") then
+    return pandoc.Blocks({pandoc.RawBlock("latex", "\\vspace{" .. length .. "}")})
+  elseif format:match("^typst") then
+    return pandoc.Blocks({pandoc.RawBlock("typst", "#v(" .. length .. ")")})
+  elseif format:match("^html") or format:match("^epub") then
+    return pandoc.Blocks({pandoc.Div({}, pandoc.Attr("", {}, {{"style", "height: " .. length}}))})
+  elseif format == "docx" or format == "odt" or format == "pptx" then
+    local lines = math.max(1, math.floor(points_of(length) / 12 + 0.5))
+    local out = pandoc.Blocks({})
+    for _ = 1, lines do out[#out + 1] = pandoc.Para({pandoc.Str("\u{a0}")}) end
+    return out
+  end
+  return nil
+end
+
+local function space_pass(blocks)
+  local out, changed = pandoc.Blocks({}), false
+  for _, block in ipairs(blocks) do
+    local length = space_length(block)
+    local made = length and make_space(length)
+    if made then
+      out:extend(made)
+      changed = true
+    else
+      out[#out + 1] = block
+    end
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   no_named_pages = doc.meta["pdfmd-no-named-pages"] ~= nil
   local enabled_list = doc.meta["pdfmd-markup"]
@@ -635,6 +720,9 @@ function Pandoc(doc)
       end
       if on("comments") and enabled ~= nil and enabled["comments"] then
         after = show_comments(after or blocks) or after
+      end
+      if on("space") then
+        after = space_pass(after or blocks) or after
       end
       return after
     end,

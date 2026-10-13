@@ -1619,6 +1619,12 @@ numbering of letters and a counter reset). It matters for a document that number
 numbers Typst gets nothing and LaTeX's `\appendix` changes nothing visible. Other writers keep their own numbering and say once
 that the lettering is not made.
 
+**Vertical space** (v3.29, `markup: space`). A line of its own that is `\vspace{1cm}` (or `\vspace*`), `\smallskip`, `\medskip`,
+`\bigskip` (3, 6 and 12 pt, as in LaTeX), one or more `<br>` (an em each) or a raw `#v(1cm)` becomes space in every format:
+`\vspace{..}` in LaTeX, `#v(..)` in Typst, an empty `div` of that height in HTML, EPUB and the HTML engines' PDFs, and a few empty
+paragraphs (about one per 12 pt) in Word and OpenDocument; the Markdown family keeps what was written. A `<br>` inside a line
+of text is a line break as before.
+
 **Showing the comments of the text** (v3.29, `show-comments`). An `<!-- HTML comment -->` is invisible in every output. With
 `pdfmd-options: {show-comments: true}` (or `--show-comments` for one run, `--no-show-comments` to switch it off; also a row in
 `pdfmd --setup`) each one is shown: a box labelled *Comment* in LaTeX, Typst, HTML, EPUB and the HTML engines' PDFs, a real Word
