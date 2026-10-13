@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.4"
+PDFMD_VERSION = "3.29.5"
 import argparse
 import atexit
 import csv
@@ -4727,24 +4727,26 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
         (folder / "sample.md").write_text(DEEP_SAMPLE, encoding="utf-8")
         environment = {**os.environ, "PDFMD_NO_PROMPT": "1"}
         environment.pop("PDFMD_STRICT", None)
-        for engine in engines:
-            output = folder / f"{engine}.pdf"
+        for entry in engines:
+            engine, _, ebook = entry.partition(":")            # "calibre:azw3" builds that ebook (v3.29.5), not a PDF
+            output = folder / f"{engine}.{ebook or 'pdf'}"
             started = time.monotonic()
             try:
                 done = subprocess.run([sys.executable, str(Path(__file__).resolve()), "sample.md", "-e", engine,
                                        "-o", output.name, "--no-backup", "--no-stamp"],
                                       capture_output=True, text=True, cwd=folder, env=environment, timeout=timeout)
             except subprocess.TimeoutExpired:
-                results.append((engine, False, f"no answer after {timeout} s"))
+                results.append((entry, False, f"no answer after {timeout} s"))
                 continue
             seconds = time.monotonic() - started
-            if done.returncode == 0 and output.is_file() and output.read_bytes().startswith(b"%PDF"):
-                results.append((engine, True, f"{seconds:.1f} s"))
+            if done.returncode == 0 and output.is_file() and (
+                    output.stat().st_size > 0 if ebook else output.read_bytes().startswith(b"%PDF")):
+                results.append((entry, True, f"{seconds:.1f} s"))
                 continue
             text = done.stdout + done.stderr
             found = re.search(r"failed \((.*?)\); (?:no more engines|trying)", text)
             lines = [line.strip() for line in text.splitlines() if line.strip()]
-            results.append((engine, False, found.group(1) if found else (lines[-1][:160] if lines else "no output")))
+            results.append((entry, False, found.group(1) if found else (lines[-1][:160] if lines else "no output")))
     return results
 
 
@@ -4884,11 +4886,18 @@ def doctor_report(deep: bool = False) -> bool:
     if deep:
         print("\nSmoke test (a small page with maths, code and a table, built with each engine):")
         candidates = [*engines, *(available_native_engines() if not (pandoc and engines) else [])]
+        if pandoc:           # the last resorts (v3.29.5): each browser and Calibre print the page, and Calibre writes an ebook
+            candidates += [engine for engine in automatic_engines() if engine in (*BROWSER_ENGINES, "calibre")]
+            if resolve_calibre():
+                candidates.append("calibre:azw3")
         if not candidates:
             line(False, "nothing to try: no engine is installed", "pdfmd --install typst", "a PDF engine")
         for name, built, detail in deep_checks(candidates):
-            line(built, f"{name}: " + (f"built a PDF in {detail}" if built else f"could not build it ({detail})"),
-                 f"pdfmd --setup, or rerun with: pdfmd sample.md -e {name} --debug", f"{name} is installed but cannot build a page")
+            engine_name, _, ebook = name.partition(":")
+            what = f"an {ebook.upper()} ebook" if ebook else "a PDF"
+            line(built, f"{name}: " + (f"built {what} in {detail}" if built else f"could not build it ({detail})"),
+                 f"pdfmd --setup, or rerun with: pdfmd sample.md -e {engine_name}{' -o sample.' + ebook if ebook else ''} --debug",
+                 f"{engine_name} is installed but cannot build a page")
 
     print("\nSettings and cache:")
     config = config_path()

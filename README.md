@@ -295,6 +295,8 @@ MISS  xelatex: could not build it (! LaTeX Error: File `stix2.sty' not found.)
 OK    typst: built a PDF in 1.1 s
 ```
 
+The last resorts are tried too (v3.29): an installed browser (`edge: built a PDF in 6.1 s`) and Calibre, which also writes a small
+ebook (`calibre:azw3: built an AZW3 ebook in 18.0 s`), so a missing Qt library shows here and not in the middle of a book.
 It takes a few seconds per engine (a minute or more if TeX has to fetch packages); without `--deep` nothing is built.
 
 ### Tab completion

@@ -1,0 +1,66 @@
+# The Calibre line (v3.29) against a real Calibre, which the main test run does not install (190 to 360 MB).
+# Its own workflow, so a Calibre release or a runner library that moves cannot stop a PyPI release: it runs on pushes that touch
+# the Calibre code and tests, once a week, and on request. It also tests `pdfmd --install calibre` (the Linux archive, the
+# macOS disk image) for real.
+name: Calibre
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pdfmd.py
+      - pdfmd_lua/ebook*.lua
+      - tests/test_calibre*.py
+      - tests/test_ebook_input.py
+      - tests/test_install_calibre.py
+      - .github/workflows/calibre.yml
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  calibre:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PDFMD_NO_PROMPT: "1"
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: The libraries Calibre's Qt needs on a bare Linux runner
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon0 libnss3 libxdamage1 libxcomposite1 \
+            libxrandr2 libxtst6 libfontconfig1 libglib2.0-0 || true
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2 || true
+      - run: pip install .
+      - run: pdfmd --install pandoc
+      - name: pdfmd --install calibre (the checksummed download, unpacked or mounted)
+        run: |
+          pdfmd --install calibre
+          python - <<'EOF2'
+          import pdfmd
+          found = pdfmd.resolve_calibre()
+          assert found, "pdfmd cannot find the Calibre it installed"
+          print(found)
+          EOF2
+      - name: Ebooks out and in, the Markdown reader and the PDF route, against the real thing
+        run: python -m unittest tests.test_calibre tests.test_calibre_targets tests.test_ebook_input tests.test_calibre_markdown tests.test_install_calibre -v
+      - name: A page and an ebook with the installed Calibre
+        run: |
+          printf -- '---\ntitle: Smoke\n---\n\n# One\n\nText with $x^2$.\n' > smoke.md
+          pdfmd smoke.md -e calibre -o smoke.pdf
+          pdfmd smoke.md -o smoke.azw3
+          pdfmd smoke.azw3 -o back.md
+          grep -q "Text with" back.md

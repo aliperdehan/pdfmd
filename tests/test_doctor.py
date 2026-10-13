@@ -64,6 +64,19 @@ class DoctorTests(unittest.TestCase):
         with mock.patch.object(pdfmd.subprocess, "run", side_effect=subprocess.TimeoutExpired("x", 1)):
             self.assertEqual(pdfmd.deep_checks(["typst"], timeout=1), [("typst", False, "no answer after 1 s")])
 
+    def test_deep_builds_an_ebook_for_an_entry_with_a_format(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+
+        def run(command, **kwargs):
+            self.assertEqual(command[command.index("-e") + 1], "calibre")
+            self.assertEqual(command[command.index("-o") + 1], "calibre.azw3")
+            (Path(kwargs["cwd"]) / "calibre.azw3").write_bytes(b"BOOKMOBI")
+            return subprocess.CompletedProcess(command, 0, "", "")
+        with mock.patch.object(pdfmd.subprocess, "run", side_effect=run):
+            (result,) = pdfmd.deep_checks(["calibre:azw3"])
+        self.assertEqual(result[:2], ("calibre:azw3", True))
+
 
 if __name__ == "__main__":
     unittest.main()

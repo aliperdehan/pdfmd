@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.5 — 2026-10-14
+
+Pre-edit state: commit `e2df84f` (v3.29.4).
+
+### Added
+
+- **`pdfmd --doctor --deep` tries the last resorts** (queue item G): each installed browser and Calibre build the small page
+  (`edge: built a PDF in 6.1 s`), and with Calibre an ebook is written and checked (`calibre:azw3: built an AZW3 ebook in
+  18.0 s`; `deep_checks` takes `engine:format` entries). A missing Qt library or a broken install shows there.
+  `tests/test_doctor.py`.
+- **A CI workflow with a real Calibre** (`.github/workflows/calibre.yml`, apart from the gating `test.yml` so that a Calibre
+  release or a runner library cannot stop a PyPI release): on Linux and macOS it runs `pdfmd --install calibre` (the archive
+  unpacked, the disk image mounted: the paths the unit tests only imitate), then the Calibre test modules against the real
+  `ebook-convert`, then builds a PDF and an AZW3 and reads the AZW3 back. On pushes that touch the Calibre code or tests, weekly
+  (Monday 04:17 UTC) and on request. Not run yet: its first run is on GitHub.
+
 ## v3.29.4 — 2026-10-14
 
 Pre-edit state: commit `12c3aab` (v3.29.3).
