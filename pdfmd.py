@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.25"
+PDFMD_VERSION = "3.29.26"
 import argparse
 import atexit
 import csv
@@ -7710,6 +7710,176 @@ SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by
 
 METADATA_HEADER = ("# pdfmd's global metadata, written by `pdfmd --setup`: every document gets these, below anything its own\n"
                    "# front matter and its folder's metadata files say.\n")
+
+
+# -- pdfmd --doc (v3.29.26): the documents of this version, offline ----------------------------------------------------
+# The build copies README.md, recipes.md, agents.md and CHANGELOG.md into the pdfmd_docs package (setup.py), so an installed pdfmd
+# has the documents of its own version; in a checkout they are the originals. `pdfmd --doc` lists them, `--doc NAME` shows one
+# (the Markdown when the output is not a terminal or with --print, else a web page it opens), `--doc NAME SECTION` a part of
+# one (a number counts the `##` headings), `--doc search WORD` finds the headings and lines that have the word, `--path` says
+# where the file is.
+DOCUMENTS = {
+    "readme": ("README.md", "README.md", "the manual: every feature, with examples"),
+    "recipes": ("recipes.md", "docs/recipes.md", "short worked examples"),
+    "agents": ("agents.md", "docs/agents.md", "a short guide for a program or an AI assistant that runs pdfmd"),
+    "changelog": ("CHANGELOG.md", "CHANGELOG.md", "what changed in every version"),
+}
+DOC_URL = "https://github.com/aliperdehan/pdfmd/blob/v{version}/{path}"
+
+
+def document_file(name: str) -> Path | None:
+    """The file of the document `name` (readme, recipes, agents, changelog): the bundled copy, else the checkout's own."""
+    packaged, checkout, _ = DOCUMENTS[name]
+    try:
+        import pdfmd_docs
+        found = Path(pdfmd_docs.__file__).resolve().parent / packaged
+        if found.is_file():
+            return found
+    except ImportError:
+        pass
+    found = Path(__file__).resolve().parent / checkout
+    return found if found.is_file() else None
+
+
+def document_headings(text: str) -> list[tuple[int, int, str]]:
+    """(line index, level, title) of each Markdown heading outside fenced code, in order."""
+    found: list[tuple[int, int, str]] = []
+    fence = ""
+    for index, line in enumerate(text.splitlines()):
+        marker = re.match(r"^\s*(`{3,}|~{3,})", line)
+        if marker:
+            fence = "" if fence and marker.group(1)[0] == fence[0] else (fence or marker.group(1))
+            continue
+        if not fence:
+            heading = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
+            if heading:
+                found.append((index, len(heading.group(1)), heading.group(2)))
+    return found
+
+
+def document_section(text: str, selector: str) -> tuple[str, str] | None:
+    """(heading, text) of the part of a document `selector` names: a number counts the `##` headings (1 is the first), else a
+    word the title has (the first heading that does, without regard to case); the part runs to the next heading of the same or
+    a higher level. None when there is none."""
+    headings = document_headings(text)
+    lines = text.splitlines()
+    chosen = None
+    if selector.isdigit():
+        second = [item for item in headings if item[1] == 2]
+        if 1 <= int(selector) <= len(second):
+            chosen = second[int(selector) - 1]
+    else:
+        wanted = selector.casefold()
+        chosen = next((item for item in headings if wanted in item[2].casefold()), None)
+    if chosen is None:
+        return None
+    start, level, title = chosen
+    end = next((index for index, item_level, _ in headings if index > start and item_level <= level), len(lines))
+    return title, "\n".join(lines[start:end]).rstrip() + "\n"
+
+
+def search_documents(words: list[str], limit: int = 40) -> list[str]:
+    """`name: Heading > Subheading (line N): the line` for each line of a document that has every word."""
+    wanted = [word.casefold() for word in words]
+    hits: list[str] = []
+    for name in DOCUMENTS:
+        path = document_file(name)
+        if path is None:
+            continue
+        text = path.read_text(encoding="utf-8")
+        headings = document_headings(text)
+        trail: dict[int, str] = {}
+        position = 0
+        for index, line in enumerate(text.splitlines()):
+            while position < len(headings) and headings[position][0] <= index:
+                _, level, title = headings[position]
+                trail = {key: value for key, value in trail.items() if key < level}
+                trail[level] = title
+                position += 1
+            if all(word in line.casefold() for word in wanted) and line.strip():
+                where = " > ".join(trail[key] for key in sorted(trail)) or "(top)"
+                hits.append(f"{name}: {where} (line {index + 1}): {line.strip()[:110]}")
+                if len(hits) >= limit:
+                    return hits
+    return hits
+
+
+def render_document(path: Path, title: str) -> Path | None:
+    """The document as a web page in pdfmd's cache (made once per version and file; by Pandoc), or None without Pandoc."""
+    if not which("pandoc"):
+        return None
+    target = cache_root() / "docs" / PDFMD_VERSION / (path.stem + ".html")
+    if target.is_file() and target.stat().st_mtime >= path.stat().st_mtime:
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    style = target.with_suffix(".css")
+    style.write_text("body { font-family: system-ui, sans-serif; line-height: 1.5; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }\n"
+                     "pre, code { font-family: ui-monospace, monospace; font-size: .9em; } pre { overflow-x: auto; background: #f4f4f4; "
+                     "padding: .6rem; } table { border-collapse: collapse; } td, th { border: 1px solid #ccc; padding: .2rem .5rem; }\n",
+                     encoding="utf-8")
+    command = ["pandoc", str(path), "-f", "gfm", "-s", "--toc", "--toc-depth=2", "--metadata", f"title={title}", "--css",
+               style.name, "-o", str(target)]
+    done = subprocess.run(command, capture_output=True, text=True, cwd=target.parent)
+    return target if done.returncode == 0 and target.is_file() else None
+
+
+def doc_command(words: list[str], print_only: bool, path_only: bool) -> int:
+    """`pdfmd --doc [NAME [SECTION]]`, `--doc search WORD ...`."""
+    if not words:
+        print(f"Documents of pdfmd {PDFMD_VERSION} (pdfmd --doc NAME; --print for the Markdown, --path for the file):")
+        for name, (_, _, what) in DOCUMENTS.items():
+            path = document_file(name)
+            size = f"{path.stat().st_size // 1024} KB" if path else "not bundled"
+            print(f"  {name:<10}{size:>12}  {what}")
+        print("  search WORD  the headings and lines that have the word (several words: all of them)")
+        return 0
+    first = words[0].casefold()
+    if first == "search":
+        if len(words) < 2:
+            print("pdfmd --doc search takes a word: pdfmd --doc search stamp", file=sys.stderr)
+            return 2
+        hits = search_documents(words[1:])
+        for hit in hits:
+            print(hit)
+        if not hits:
+            print(f"Nothing in the documents has {' '.join(words[1:])!r}.")
+        return 0 if hits else 1
+    if first not in DOCUMENTS:
+        print(f"pdfmd --doc: no document called {words[0]!r} (one of: {', '.join(DOCUMENTS)}, or search WORD)", file=sys.stderr)
+        return 2
+    path = document_file(first)
+    if path is None:
+        url = DOC_URL.format(version=PDFMD_VERSION, path=DOCUMENTS[first][1])
+        print(f"{first} is not bundled with this copy of pdfmd (a checkout without it, or a zipapp). It is online: {url}",
+              file=sys.stderr)
+        return 1
+    if path_only:
+        print(path)
+        return 0
+    text = path.read_text(encoding="utf-8")
+    if len(words) > 1:
+        found = document_section(text, " ".join(words[1:]))
+        if found is None:
+            print(f"pdfmd --doc {first}: no section {' '.join(words[1:])!r} (a number counts the ## headings; "
+                  "else a word of the title)", file=sys.stderr)
+            return 1
+        sys.stdout.write(found[1])
+        return 0
+    if print_only or not (sys.stdout.isatty() and sys.stdin.isatty()) or os.environ.get("PDFMD_NO_PROMPT"):
+        sys.stdout.write(text)
+        return 0
+    page = render_document(path, f"pdfmd {PDFMD_VERSION}: {first}")
+    if page is None:
+        print("NOTE  no Pandoc to make a web page with: showing the Markdown", file=sys.stderr)
+        sys.stdout.write(text)
+        return 0
+    if sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print(f"{page}\n{page.as_uri()}")
+        return 0
+    import webbrowser
+    if not webbrowser.open(page.as_uri()):
+        print(f"{page}\n{page.as_uri()}")
+    return 0
 
 
 def setup_command(screen: str = "") -> bool:
@@ -23077,6 +23247,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--setup", "--config", nargs="?", const="", metavar="SCREEN",
                         help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
                              "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file. --config is the same")
+    parser.add_argument("--doc", nargs="*", default=None, metavar="NAME",
+                        help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog); --doc NAME "
+                             "shows one (the Markdown when the output is not a terminal or with --print, else a web page it opens); "
+                             "--doc NAME SECTION shows a part (a number counts the ## headings, else a word of the title); "
+                             "--doc search WORD finds the lines that have it; --path says where the file is")
+    parser.add_argument("--print", dest="doc_print", action="store_true",
+                        help="with --doc: print the Markdown, whatever the output is")
+    parser.add_argument("--path", dest="doc_path", action="store_true",
+                        help="with --doc: print the path of the document's file and nothing else")
     parser.add_argument("--disabled", action="store_true",
                         help="use features the config switches off (`disabled:` in config.yaml, `pdfmd --setup` and d) "
                              "for this run, and show them in --help")
@@ -23824,6 +24003,10 @@ def main() -> None:
         raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
     if args.check_source:
         raise SystemExit(0 if check_source_command(list(args.path or []), args.recursive) else 1)
+    if args.doc is not None:
+        raise SystemExit(doc_command(args.doc, args.doc_print, args.doc_path))
+    if args.doc_print or args.doc_path:
+        raise SystemExit("--print and --path go with --doc: pdfmd --doc readme --print")
     if args.setup is not None:
         raise SystemExit(0 if setup_command(args.setup) else 1)
     if args.install:

@@ -299,6 +299,17 @@ The last resorts are tried too (v3.29): an installed browser (`edge: built a PDF
 ebook (`calibre:azw3: built an AZW3 ebook in 18.0 s`), so a missing Qt library shows here and not in the middle of a book.
 It takes a few seconds per engine (a minute or more if TeX has to fetch packages); without `--deep` nothing is built.
 
+### The documents of your version: `pdfmd --doc`
+
+`pdfmd --doc` lists the documents that came with the pdfmd you have, offline: `readme` (the manual), `recipes` (worked
+examples), `agents` (a short guide for a program or an AI assistant that runs pdfmd) and `changelog`. `pdfmd --doc readme`
+opens a web page of one in your browser (made once per version by Pandoc, kept in the cache); when the output is not a
+terminal, or with `--print`, it prints the Markdown instead, which is what a script or an assistant wants. `--doc readme 3`
+shows the third `##` section of it, `--doc readme tectonic` the first whose title has that word, `--doc search stamp history`
+the headings and lines that have every word (`agents: Running without a person > ... (line 41): ...`), and `--path` says where
+the file is. They are the documents of this version, copied into the package when it is built; a checkout reads the originals,
+and a zipapp has none (it says where they are online).
+
 ### Tab completion
 
 `pdfmd --completion bash|zsh|fish` prints a completion script, generated from the command

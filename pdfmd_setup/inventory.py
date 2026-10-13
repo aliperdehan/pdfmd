@@ -83,7 +83,7 @@ FLAGS: dict[str, str | Omitted] = {
     "table_numbers": RUN, "table_names": RUN, "tables_dir": RUN, "tables_inline": RUN, "dry_run": RUN,
     "line_numbers": "options.line-numbers", "no_code_wrap": "options.code-wrap",
     "apply_defaults": "options.apply-defaults", "hybrid": "options.hybrid",
-    "doctor": CMD, "deep": CMD, "check_dependencies": CMD,
+    "doctor": CMD, "deep": CMD, "check_dependencies": CMD, "doc": CMD, "doc_print": CMD, "doc_path": CMD,
     "jobs": RUN, "variable": RUN, "metadata_file": RUN, "ignore": RUN, "exclude_unnumbered": RUN, "section": RUN,
     "cache": "options.cache.aux", "cache_location": "options.cache.location", "cache_plots": "options.cache.plots",
     "seed_labels": "options.seed-labels", "clear_cache": CMD,

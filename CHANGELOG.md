@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.26 — 2026-10-14
+
+Pre-edit state: commit `ce218e3` (v3.29.25).
+
+### Added
+
+- **`pdfmd --doc`** (queue item 6, a first version): the documents of the pdfmd in hand, offline. `README.md`, `CHANGELOG.md`,
+  `docs/recipes.md` and a new short **agent guide** (`docs/agents.md`: the ten commands that matter, how to read the output lines and
+  the exit codes, running without a person, what to do when a build fails) are copied into a `pdfmd_docs` package by the build
+  (`setup.py`, `MANIFEST.in` for the sdist: nothing is duplicated in git; a checkout reads the originals). `--doc` lists them with their
+  size; `--doc NAME` shows one (a web page made by Pandoc once per version and opened, or the Markdown when the output is not a
+  terminal, with `--print`, or with `PDFMD_NO_PROMPT`); `--doc NAME SECTION` a part (a number counts the `##` headings, else a word of the
+  title; the part runs to the next heading of its level); `--doc search WORD ...` the lines that have every word, with their heading path;
+  `--path`. Tests: every `--flag` of the agent guide exists in `--help all` and every `pdfmd ...` command in it parses (`tests/test_doc.py`);
+  the build copy is tested with `setup.py build_py`. Not done: `--online`, a PDF of a document (use `pdfmd --doc readme --print | pdfmd`
+  by hand), render-safe copies (the README page links its remote badges as they are),
+  the `--help` footer pointing here, a check that every flag of `--help all` is in the README.
+
 ## v3.29.25 — 2026-10-14
 
 Pre-edit state: commit `e4a8d53` (v3.29.24).
