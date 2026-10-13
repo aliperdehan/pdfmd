@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.2"
+PDFMD_VERSION = "3.29.3"
 import argparse
 import atexit
 import csv
@@ -17791,6 +17791,8 @@ def start_calibre_job(args, goal: str, target_format: str, pandoc_options: list[
             EBOOK_MATH["mode"] = "images"
         elif goal in CALIBRE_MATH_TEXT or why:
             EBOOK_MATH.update({"mode": "text", "goal": goal, "why": why})
+        elif pandoc_options is not None:
+            pandoc_options += html_math_args("mathml")       # kept as MathML (Pandoc 3.1 writes an EPUB's math as plain text)
     job = {"tool": "calibre", "goal": goal, "final": args.out, "scratch": scratch, "open": args.open}
     args.to, args.out, args.engine, args.open = "epub", scratch / "document.epub", None, False
     return job

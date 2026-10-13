@@ -28,7 +28,10 @@ end
 return {
   {Link = function(link)
     local id = link.target:match("^#(.+)$")
-    if id then targets[id] = true end
+    if id then
+      targets[id] = true
+      targets[id:match("([^#]+)$")] = true            -- Pandoc 3.1 writes a link as #ch002.xhtml#target
+    end
   end},
   {
     Span = function(span)

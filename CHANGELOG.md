@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.3 — 2026-10-14
+
+Pre-edit state: commit `c34dc91` (v3.29.2).
+
+### Fixed
+
+- **A Calibre ebook with Pandoc 3.1 keeps its math as MathML** (the 3.1.3 suite of v3.29.0 failed three tests). Pandoc 3.1
+  writes an EPUB's formulas as plain text unless `--mathml` is given (newer Pandoc defaults to MathML); a Calibre job whose
+  target keeps MathML (`epub` through `-e calibre`, `htmlz`) now asks for it unless a math option of yours is on the command
+  line (`start_calibre_job`). `pdfmd_lua/ebook_input.lua` recognises Pandoc 3.1's `#ch002.xhtml#id` link form when it keeps the
+  anchors a link points at. The tests accept the `.svgz` pictures Pandoc 3.1 writes and its missing-title note.
+
 ## v3.29.2 — 2026-10-14
 
 Pre-edit state: commit `934899f` (v3.29.1).

@@ -221,7 +221,8 @@ class EbookFilter(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="pdfmd-ebook-lua-"))
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         out = folder / "o.epub"
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "epub", "-o", str(out), "--lua-filter", str(EBOOK_LUA), *meta],
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "epub", "-o", str(out), *pdfmd.html_math_args("mathml"),
+                               "--lua-filter", str(EBOOK_LUA), *meta],
                               input=text, capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         with zipfile.ZipFile(out) as archive:
@@ -245,7 +246,7 @@ class EbookFilter(unittest.TestCase):
     def test_without_the_mode_the_mathml_stays(self):
         pages, said = self.run_pandoc("Is $x^2$.\n")
         self.assertIn("<math", pages)
-        self.assertEqual(said, "")
+        self.assertNotIn("WARN  ", said)                                            # (Pandoc 3.1 adds a note on a missing title)
 
     def test_a_picture_title_that_names_the_cache_is_dropped_the_description_stays(self):
         pages, _ = self.run_pandoc('![LaTeX: x^2](data.svg "pdfmd:svg=/some/cache/x.svg;dp=1.5")\n\n![kept](data.svg "A title")\n')
@@ -395,7 +396,7 @@ class Build(unittest.TestCase):
         self.assertNotIn("pdfmd:", pages)                                            # not the cache path
         self.assertNotIn(str(Path.home()), pages)
         with zipfile.ZipFile(self.directory / "d.mobi") as archive:
-            self.assertTrue([name for name in archive.namelist() if name.endswith((".svg", ".png"))])
+            self.assertTrue([name for name in archive.namelist() if name.endswith((".svg", ".svgz", ".png"))])
 
     def test_an_engine_that_is_not_calibre_is_said_to_be_ignored(self):
         done = self.run_pdfmd("-e", "typst", "-o", "d.azw3")

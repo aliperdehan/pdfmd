@@ -104,8 +104,8 @@ class Build(unittest.TestCase):
         self.assertNotIn("index_split_000", text)                                    # an empty anchor nothing links to
         self.assertNotIn("calibre1", text)
         self.assertNotIn("mbp_pagebreak", text)
-        self.assertIn("_target}", text)                                              # a link points at this one
-        self.assertRegex(text, r"\[kept\]\(#[^)]*_target\)")
+        self.assertRegex(text, r"\{#(?:\S*_)?target\}")                              # a link points at this one
+        self.assertRegex(text, r"\[kept\]\(#[^)]*target\)")
         self.assertIn("**bold**", text.replace("[bold]{.bold}", "**bold**"))
 
     def test_a_mobi_goes_through_ebook_convert_to_an_epub(self):
