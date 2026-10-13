@@ -210,14 +210,22 @@ when none can. `pdf-engine:` in `pdfmd-options`, the front matter, a metadata fi
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own
 MathJax) and Calibre turns it into a PDF with the document's paper, margins, `fontsize:` and
 language, page numbers, and bookmarks from the headings. LaTeX in the document is made native
-or drawn as a picture, as for a Word file. Calibre is never tried on its own: only when you
-name it (`-e calibre`, or `pdf-engine: calibre` in `pdfmd-options:`).
+or drawn as a picture, as for a Word file. Calibre is not in the numbered chain: it comes first when you
+name it (`-e calibre`, or `pdf-engine: calibre` in `pdfmd-options:`), and (v3.29.1) it and the browsers
+(`-e edge`, `chrome`, `chromium`, `brave`: Pandoc's HTML page, printed headless) are tried last when no engine is named
+and LaTeX, Typst and the HTML engines have all failed, ahead of LibreOffice; `--doctor` lists them as last resorts.
+A comma list of your own never adds them (`-e pandoc` is every engine Pandoc drives, not these).
+
+With no Pandoc at all, Calibre reads the Markdown itself (v3.29): its own Markdown reader (tables, footnotes, fenced code, lists)
+prints it, before the rough built-in renderers, with the document's paper and margins. It has no math (formulas are text) and
+none of Pandoc's syntax, and says so (`NOTE`, `WARN`). `-e calibre` or `-e native` without Pandoc picks it; with Pandoc,
+`-e calibre` is the HTML route above.
 
 A browser prints a Markdown document too (v3.29): `-e edge`, `-e chrome`, `-e chromium` or `-e brave` (or `-e browser` for the
 first one installed) has Pandoc write one self-contained HTML page and the browser, headless, print it with the document's
 paper and margins (`papersize`, `geometry`, `margin`: as `@page`) and 12pt text. The math is MathML, which the browser draws
-itself; LaTeX in the document is made native or drawn as a picture, as for a Word file. Like Calibre, a browser is used only
-when you name it; an `.html` file already goes to one first when it has scripts or MathML.
+itself; LaTeX in the document is made native or drawn as a picture, as for a Word file. Like Calibre, a browser comes first when you
+name it and last when you do not (see above); an `.html` file already goes to one first when it has scripts or MathML.
 
 Calibre also writes ebooks (v3.29): `pdfmd book.md -o book.azw3` (or `--to azw3`) has Pandoc write an EPUB 3 (chapters,
 contents, the metadata, the math as MathML) and Calibre turn it into the target, `book.azw3` beside the document. The
@@ -234,6 +242,13 @@ its `\ce` and siunitx, as a Word file's pictures are (needs a LaTeX engine and P
 (`pdb`, `rb`, `snb`, `tcr`, `pmlz`, `txtz`, `rtf`, `txt`, `fb2`) get the formulas as text, the simple ones with their
 superscripts and the rest as TeX, with one `WARN` that counts them, and so does a picture target on a machine with no LaTeX.
 `epub` and `htmlz` keep the MathML. A `--mathml` or `--math-method` of your own is kept.
+
+An ebook can be the input too (v3.29): `pdfmd book.epub` builds `book.pdf` beside it, `pdfmd book.mobi -o book.md` writes its
+Markdown (with its pictures in `media/`) for you to edit, `pdfmd book.azw3 --to docx` a Word file. An EPUB is read by Pandoc;
+`mobi`, `azw`, `azw3`, `azw4`, `kepub`, `lit`, `lrf`, `pdb`, `prc`, `chm`, `snb`, `tcr`, `rb`, `pmlz`, `htmlz` and `txtz` first go
+through Calibre's `ebook-convert` into an EPUB (Calibre is needed for those, not for an EPUB). The closing line names the
+book. One book at a time, not with other files, `-b` or `-r`; a book with DRM, and an ebook of nothing but pictures (a comic),
+cannot be read. A formula a MOBI holds as a picture stays a picture.
 
 LibreOffice writes what Pandoc cannot too (v3.29): `pdfmd letter.md -o letter.doc` (Word 97) has Pandoc write the Word file (the
 same one `-o letter.docx` writes: your reference document, native equations and tables, pictures for what LaTeX alone can draw)

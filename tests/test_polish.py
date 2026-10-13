@@ -137,7 +137,7 @@ class InkmdKeys(unittest.TestCase):
         code = ("import sys; sys.path.insert(0, %r); import pdfmd; sys.argv[0] = 'inkmd'; pdfmd.inkmd_main()"
                 % str(ROOT))
         return subprocess.run([sys.executable, "-c", code, *arguments], cwd=folder, input=stdin,
-                              env={**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"}, capture_output=True)
+                              env={**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"}, capture_output=True)
 
     @unittest.skipIf(pypdf is None, "pypdf not installed")
     def test_standard_input_to_standard_output(self):
@@ -204,7 +204,7 @@ class BatchmdKeys(unittest.TestCase):
             code = ("import sys; sys.path.insert(0, %r); import pdfmd; sys.argv[0] = 'batchmd'; pdfmd.batchmd_main()"
                     % str(ROOT))
             done = subprocess.run([sys.executable, "-c", code, "-e", "inkmd"], cwd=root,
-                                  env={**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"},
+                                  env={**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"},
                                   capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             for name in ("a.pdf", "b.pdf"):
@@ -226,7 +226,7 @@ class FinishedPdf(unittest.TestCase):
     def run_pdfmd(self, *arguments):
         empty = self.root / "empty-bin"
         empty.mkdir(exist_ok=True)
-        environment = {**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"}
+        environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=self.root,
                               env=environment, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -290,7 +290,7 @@ class FinishedPdf(unittest.TestCase):
         empty = self.root / "empty-bin"
         empty.mkdir()
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "inkmd", "--header", "a,b"],
-                              cwd=self.root, env={**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"},
+                              cwd=self.root, env={**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"},
                               capture_output=True, text=True)
         self.assertIn("needs three comma-separated fields", done.stderr)
         self.assertTrue((self.root / "doc.pdf").is_file())
@@ -301,7 +301,7 @@ class FinishedPdf(unittest.TestCase):
         done = subprocess.run(
             [sys.executable, "-c", "import sys; sys.path.insert(0, %r); import pdfmd; sys.argv[0] = 'mdpdf'; pdfmd.mdpdf_main()"
              % str(ROOT), "-o", "made.pdf", "-f", ",,{page}", "-a", "N. Lorrain", "-p", "A4", "-e", "inkmd", "doc.md"],
-            cwd=self.root, env={**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"},
+            cwd=self.root, env={**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"},
             capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         reader = pypdf.PdfReader(self.root / "made.pdf")

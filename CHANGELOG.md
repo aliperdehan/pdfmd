@@ -41,6 +41,41 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.1 — 2026-10-14
+
+Pre-edit state: commit `8f5d4a1` (v3.29.0).
+
+### Changed
+
+- **The browsers and Calibre are last resorts of the automatic chain** (the author, 2026-10-13: wire them in once they work;
+  v3.29.0 made them work when named). With no `-e`, `select_engines` returns the installed numbered engines in their order
+  and, ahead of LibreOffice (whose page is the least like the document's), the installed browsers (Chrome, Chromium, Edge,
+  Brave) and then Calibre: a document that LaTeX, Typst and every HTML engine fail on still ends as a PDF, and the closing
+  line names the engine (`OK    d.md > d.pdf  (edge; lualatex, typst failed)`). Nothing changes where none is installed
+  or an engine is named; slides never use them; `-e pandoc` is still every engine Pandoc drives and never these; a comma list
+  names exactly what it names. `--doctor` prints `last resorts, after those: edge, calibre`. `tests/test_engine_chain.py`
+  (`Automatic`), `tests/test_calibre.py`.
+- **With no Pandoc and Calibre installed, Calibre reads the Markdown itself** (its Python-Markdown reader: tables, footnotes,
+  fenced code, lists, `extra, toc, sane_lists`), ahead of the rough built-in renderers, which stay its fallback (`NATIVE
+  d.md via calibre`; `OK    d.md > d.pdf  (calibre)`). It is the native tier's engine `calibre`: the text is normalised as for
+  inkmd (the front matter gone, the title and author as a heading and `--title`/`--authors`, math as plain text, footnotes as
+  endnotes, Pandoc's syntax removed), the page is the document's (`papersize`, `geometry`, `margin`, `lang`: else Letter
+  and 1in), and what it cannot honour is reported once each as for the others (`math expression(s) set as plain text`, `front-matter
+  keys not used`). With Pandoc, `-e calibre` is the HTML route of v3.28.0, unchanged (`is_native_engine`); `-e calibre` or
+  `-e native` without Pandoc picks it. `PDFMD_CALIBRE` names the `ebook-convert` file, or an empty value says there is
+  none (the tests of the no-Pandoc tier set it, so a Calibre on the machine does not leak in). `tests/test_calibre_markdown.py`.
+- **An ebook as input**: `pdfmd book.epub`, `book.mobi`, `.azw`, `.azw3`, `.azw4`, `.kepub`, `.lit`, `.lrf`, `.pdb`, `.prc`,
+  `.chm`, `.snb`, `.tcr`, `.rb`, `.pmlz`, `.htmlz`, `.txtz` (`EBOOK_INPUT_EXTENSIONS`). An EPUB goes straight to Pandoc; the
+  others through Calibre's `ebook-convert` to an EPUB first (`--no-default-epub-cover --no-svg-cover`: no cover page of
+  Calibre's own making). Pandoc turns the EPUB into Markdown with its pictures (`--extract-media=media`) in a scratch folder
+  (`route_ebook_input`, after `route_text_input` in `main`), and that Markdown is built as any file is: the output is named after the
+  book beside it (`book.pdf`; `-o` and `--to` as usual), the closing line names the book (`OK    book.mobi > book.pdf  (lualatex)`:
+  `DISPLAY_ALIAS` in `display_path`), and `pdfmd book.mobi -o book.md` keeps the Markdown for editing. One book at a time (not
+  with other files, `-b` or `-r`); a book with no Calibre says how to install it; DRM-protected books and ebooks that are only
+  pictures are not handled. A MOBI that holds its math as pictures keeps them as pictures. `tests/test_ebook_input.py`.
+- Not done: the math-aware order of the 3i spec (a document with math and no MathJax or KaTeX trying a browser or Calibre
+  before WeasyPrint); the chain is per run, not per document, and WeasyPrint, which prints most documents well, stays first.
+
 ## v3.29.0 — 2026-10-13
 
 Pre-edit state: commit `561044b` (v3.28.49). The converters write what Pandoc cannot (Calibre ebooks, LibreOffice `.doc`) and a browser is a PDF engine for Markdown.
@@ -53,7 +88,7 @@ Pre-edit state: commit `561044b` (v3.28.49). The converters write what Pandoc ca
   fonts, and the LaTeX filter of the Word route for LaTeX the page would drop) and `pdfmd_direct`'s headless browser prints it
   with the paper and margins the document asks for as `@page` (`papersize`, `geometry`, `margin`, `classoption`, read as for a
   Word file; else Letter and 1in) and Pandoc's screen style undone (the column, the padding, the grey page, narrow tables).
-  Like Calibre, only when named, never in the automatic chain; usable in a chain (`-e typst,edge`) and as
+  Named, a browser is tried first (v3.29.1 makes it and Calibre last resorts of the automatic chain); usable in a chain (`-e typst,edge`) and as
   `pdf-engine: edge`. Before, `-e edge` on a `.md` was refused (only a `.html` file went to a browser). On a Mac Edge's printing
   looked right on the math test page (accents, limits, matrices) with no correction of its own.
 - **LibreOffice writes `.doc`** (and, with `-e soffice` first on the command line, `rtf`, `odt`, `txt` and `epub`). `pdfmd letter.md -o

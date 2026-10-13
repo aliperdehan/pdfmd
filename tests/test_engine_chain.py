@@ -19,10 +19,12 @@ import pdfmd  # noqa: E402
 
 class Chain(unittest.TestCase):
     def select(self, requested, installed=("pandoc", "lualatex", "xelatex", "typst", "weasyprint"), calibre="/opt/bin/ebook-convert",
-               presentation=False):
+               presentation=False, browsers=None):
+        browsers = browsers or {}
         with mock.patch.object(pdfmd, "which", lambda name: f"/opt/bin/{name}" if name in installed else None), \
                 mock.patch.object(pdfmd, "resolve_calibre", lambda: calibre), \
-                mock.patch.object(pdfmd, "resolve_soffice", lambda: None):
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: None), \
+                mock.patch("pdfmd_direct.find_browser", lambda name, which=None: browsers.get(name)):
             return pdfmd.select_engines(requested, presentation)
 
     def test_the_order_written_is_the_order_tried(self):
@@ -55,8 +57,40 @@ class Chain(unittest.TestCase):
 
     def test_one_engine_and_no_request_are_what_they_were(self):
         self.assertEqual(self.select("typst"), ["typst"])
-        self.assertEqual(self.select(None), ["lualatex", "xelatex", "typst", "weasyprint"])
+        self.assertEqual(self.select(None, calibre=None), ["lualatex", "xelatex", "typst", "weasyprint"])
+        self.assertEqual(self.select(None), ["lualatex", "xelatex", "typst", "weasyprint", "calibre"])      # v3.29.1: a last resort
         self.assertEqual(self.select("html"), ["weasyprint"])
+
+
+class Automatic(unittest.TestCase):
+    """v3.29.1: with no -e, the browsers and Calibre are last resorts, ahead of LibreOffice."""
+
+    def chain(self, installed, calibre="/opt/bin/ebook-convert", browsers=None, soffice=None):
+        with mock.patch.object(pdfmd, "which", lambda name: f"/opt/bin/{name}" if name in installed else None), \
+                mock.patch.object(pdfmd, "resolve_calibre", lambda: calibre), \
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: soffice), \
+                mock.patch("pdfmd_direct.find_browser", lambda name, which=None: (browsers or {}).get(name)):
+            return pdfmd.select_engines(None, False)
+
+    def test_they_come_after_the_numbered_engines_and_before_libreoffice(self):
+        installed = ("pandoc", "lualatex", "typst", "weasyprint")
+        self.assertEqual(self.chain(installed, browsers={"edge": "/e", "brave": "/b"}),
+                         ["lualatex", "typst", "weasyprint", "edge", "brave", "calibre"])
+        self.assertEqual(self.chain(installed, browsers={"chrome": "/c"}, soffice="/opt/bin/soffice"),
+                         ["lualatex", "typst", "weasyprint", "chrome", "calibre", "soffice"])
+
+    def test_nothing_changes_where_they_are_not_installed(self):
+        installed = ("pandoc", "lualatex", "typst")
+        self.assertEqual(self.chain(installed, calibre=None), ["lualatex", "typst"])
+
+    def test_slides_never_use_them_and_pandoc_means_the_numbered_ones_only(self):
+        installed = ("pandoc", "lualatex", "typst", "weasyprint")
+        with mock.patch.object(pdfmd, "which", lambda name: f"/opt/bin/{name}" if name in installed else None), \
+                mock.patch.object(pdfmd, "resolve_calibre", lambda: "/c"), \
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: None), \
+                mock.patch("pdfmd_direct.find_browser", lambda name, which=None: "/b"):
+            self.assertEqual(pdfmd.select_engines(None, True), ["lualatex"])
+            self.assertEqual(pdfmd.select_engines("pandoc", False), ["lualatex", "typst", "weasyprint"])
 
 
 class Settings(unittest.TestCase):

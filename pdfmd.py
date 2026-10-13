@@ -261,8 +261,9 @@ Output formats:
     even a family restriction from either source -- the escape hatch when a
     family-restricted document needs output produced at all costs.
 
-    Calibre (v3.28.0) is an engine only when named: `-e calibre` (or
-    `ebook-convert`, or `pdf-engine: calibre`), never in the automatic chain.
+    Calibre (v3.28.0) is an engine when named: `-e calibre` (or `ebook-convert`, or `pdf-engine: calibre`); with no engine
+    named (v3.29.1) it, and the browsers (headless Chrome, Chromium, Edge, Brave), are last resorts after the numbered
+    engines and before LibreOffice (automatic_engines).
     Pandoc writes one standalone HTML page (MathML, pictures inlined, the
     same filters, citations and fonts as WeasyPrint gets) and Calibre's
     `ebook-convert` prints it; Calibre draws the math with its own MathJax.
@@ -281,6 +282,10 @@ Output formats:
     The math: a target that can show pictures gets each formula drawn by LaTeX (the Word route's `latex: images`; the
     EPUB's MathML is not drawn by a Kindle or a Kobo), a plain-text one gets the formulas as text with one WARN
     (pdfmd_lua/ebook.lua); epub and htmlz keep MathML.
+
+    An ebook as input (v3.29.1): `pdfmd book.epub` (or .mobi, .azw3, .kepub ...) reads the book as Markdown in a scratch folder
+    (Pandoc for an EPUB; Calibre's ebook-convert to an EPUB first for the others) and builds it as any file is, to
+    `book.pdf` beside the book; `-o book.md` keeps the Markdown.
 
     On LaTeX-family engines, a document with no geometry/margin setting at
     all (no -V, no `geometry:`/`margin:` in its own front matter, a linked
@@ -1370,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.0"
+PDFMD_VERSION = "3.29.1"
 import argparse
 import atexit
 import csv
@@ -1580,6 +1585,9 @@ SHOW_FULL_PATHS = False
 CITEPROC_DISABLED = False
 
 
+DISPLAY_ALIAS: dict[Path, Path] = {}
+
+
 def display_path(path: Path) -> str:
     """Format `path` for a user-facing AUTO/CMD message.
 
@@ -1592,6 +1600,11 @@ def display_path(path: Path) -> str:
     path -- e.g. to hand to another tool, or when cwd itself is ambiguous
     in a script's own log).
     """
+    if DISPLAY_ALIAS:                             # an ebook's Markdown in a scratch folder is shown as the book (v3.29.1)
+        try:
+            path = DISPLAY_ALIAS.get(path) or DISPLAY_ALIAS.get(path.resolve()) or path
+        except OSError:
+            pass
     if SHOW_FULL_PATHS:
         return str(path)
     # The folder is resolved, the file itself is not: a symlink (`metadata/metadata.yaml` pointing at
@@ -2680,8 +2693,8 @@ ENGINE_ALIASES = {
     "ebook-convert": "calibre",
     "google-chrome": "chrome", "msedge": "edge", "microsoft-edge": "edge", "brave-browser": "brave",
 }
-# Engines used only when named (-e calibre, pdf-engine: calibre): never part of the automatic chain above, and
-# no number of their own (the numbers are PDF_ENGINES' order in --check-dependencies).
+# Engines with no number of their own (-e calibre, pdf-engine: calibre; v3.29.1: the browsers too): last resorts of the
+# automatic chain (automatic_engines), not part of the numbered one above, and with no number of their own (the numbers are PDF_ENGINES' order in --check-dependencies).
 EXPLICIT_ENGINES = ("calibre",)
 # A browser prints a Markdown document too (v3.29.1; `-e edge`, `-e chrome`, `-e chromium`, `-e brave`, or the family word
 # `-e browser`): Pandoc writes one self-contained HTML page (MathML, which a browser draws itself) and the browser, headless,
@@ -2770,7 +2783,11 @@ def resolve_soffice() -> str | None:
 
 def resolve_calibre() -> str | None:
     """Calibre's `ebook-convert`: on PATH (Linux packages, Homebrew's cask), else where the installers put it
-    without touching PATH (the macOS app bundle, `%ProgramFiles%\\Calibre2` on Windows)."""
+    without touching PATH (the macOS app bundle, `%ProgramFiles%\\Calibre2` on Windows). `PDFMD_CALIBRE` names the file
+    instead, or an empty value says there is none (the tests of the no-Pandoc tier use it)."""
+    if "PDFMD_CALIBRE" in os.environ:
+        named = os.environ["PDFMD_CALIBRE"]
+        return named if named and Path(named).is_file() else None
     found = which("ebook-convert")
     if found:
         return found
@@ -2806,6 +2823,19 @@ def engine_executable(engine: str) -> str | None:
 def installed_engines() -> list[str]:
     """Return PDF engines that are currently executable, in fallback order."""
     return [engine for engine in PDF_ENGINES if engine_executable(engine)]
+
+
+def automatic_engines() -> list[str]:
+    """The chain of a build that names no engine (v3.29.1): the installed numbered engines in their order, and where those
+    all failed or are missing, the browsers (headless Chrome, Chromium, Edge, Brave) and Calibre, ahead of LibreOffice, whose
+    page is the least like the document's. They are last resorts: LaTeX, Typst and WeasyPrint still go first. `-e pandoc`
+    is every engine Pandoc drives and never these (a list of your own names them)."""
+    engines = installed_engines()
+    extras = [engine for engine in (*BROWSER_ENGINES, "calibre") if engine_executable(engine)]
+    if "soffice" in engines:
+        position = engines.index("soffice")
+        return [*engines[:position], *extras, *engines[position:]]
+    return [*engines, *extras]
 
 
 def select_engines(requested: str | None, presentation: bool, label: str = "--engine") -> list[str]:
@@ -2878,7 +2908,7 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
             "Install it or choose one listed by --check-dependencies."
         )
 
-    candidates = installed_engines() if which("pandoc") else []
+    candidates = automatic_engines() if which("pandoc") else []
     if presentation:
         # Pandoc's Beamer writer requires a TeX-family engine.
         candidates = [engine for engine in candidates if engine in LATEX_ENGINES]
@@ -3039,8 +3069,11 @@ def dependency_report() -> bool:
 # Pandoc and Typst or TeX"). The tier is chosen automatically only when no
 # Pandoc route exists; `-e inkmd` / `-e md2pdf` / `pdf-engine: inkmd` request
 # it explicitly, and a Pandoc build that fails never silently falls back to it.
-NATIVE_ENGINES = ("md2pdf", "inkmd")
-NATIVE_ALIASES = {"ink": "inkmd", "reportlab": "md2pdf", "pymd2pdf": "md2pdf"}
+# With no Pandoc, and Calibre installed (v3.29.1), Calibre reads the Markdown itself (its Python-Markdown reader: tables,
+# footnotes, fenced code, lists) and prints it: before the rough renderers below, which stay its fallback. It has no math
+# (formulas are text, as in inkmd) and none of Pandoc's syntax; what it cannot honour is reported as for the others.
+NATIVE_ENGINES = ("calibre", "md2pdf", "inkmd")
+NATIVE_ALIASES = {"ink": "inkmd", "reportlab": "md2pdf", "pymd2pdf": "md2pdf", "ebook-convert": "calibre"}
 NATIVE_SOURCE_SUFFIXES = frozenset({".md", ".markdown", ".mdown", ".mkd"})
 NATIVE_READERS = frozenset({"markdown", "md", "gfm", "commonmark", "commonmark_x", "markdown_strict"})
 # `pdfmd --install KIND` / `pdfmd-cli[KIND]`; the version ranges match the
@@ -3144,7 +3177,15 @@ def inkmd_emoji_font() -> Path | None:
     return font if font.is_file() else None
 
 
+def is_native_engine(engine: str) -> bool:
+    """Whether ``engine`` is one of the Pandoc-less renderers in this run: Calibre's own name is one only with no Pandoc (with
+    Pandoc, `-e calibre` is the HTML route)."""
+    return engine in NATIVE_ENGINES and (engine != "calibre" or not which("pandoc"))
+
+
 def native_available(engine: str) -> bool:
+    if engine == "calibre":
+        return not which("pandoc") and resolve_calibre() is not None      # with Pandoc, -e calibre is the HTML route
     return inkmd_vendored() if engine == "inkmd" else md2pdf_available()
 
 
@@ -3160,11 +3201,12 @@ def native_request(requested: str, presentation: bool, label: str) -> list[str] 
         engines = available_native_engines()
     else:
         name = NATIVE_ALIASES.get(name, name)
-        if name not in NATIVE_ENGINES:
+        if name not in NATIVE_ENGINES or (name == "calibre" and which("pandoc")):
             return None
         engines = [name] if native_available(name) else []
         if not engines:
             hint = ("needs Python 3.11 or newer" if name == "md2pdf" and sys.version_info < (3, 11)
+                    else "Calibre's ebook-convert was not found" if name == "calibre"
                     else 'install it with `pdfmd --install math` (or pip install "pdfmd-cli[math]")')
             raise SystemExit(f"{label} requested {name}, which is not available: {hint}.")
     if presentation:
@@ -4276,6 +4318,8 @@ def native_order(engines: list[str], source: NativeSource) -> list[str]:
     choice fails)."""
     if len(engines) == 1:
         return list(engines)
+    if "calibre" in engines:                              # no Pandoc and Calibre: its reader before the rough ones (v3.29.1)
+        return ["calibre", *[engine for engine in engines if engine != "calibre"]]
     wants_md2pdf = (source.has_footnotes or bool(source.math) or bool(scalar_text(source.metadata.get("title")))
                     or bool(author_names(source.metadata.get("author"))))
     if source.math and not matplotlib_available():
@@ -4358,6 +4402,8 @@ def report_messages(engine: str, messages: list[str], source: Path) -> None:
 def render_native(engine: str, md_path: Path, source: NativeSource, output: Path, verbose: bool) -> list[str]:
     """Render one normalised document with one native engine, or raise.
     Returns the renderer's own warnings, for the caller to report."""
+    if engine == "calibre":
+        return render_calibre_markdown(md_path, source, output, verbose)
     if engine == "inkmd":
         ink = load_inkmd()
         options: dict = {"page_size": native_paper(source.metadata), "base_dir": md_path.resolve().parent}
@@ -4383,6 +4429,67 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
     return messages
 
 
+CALIBRE_MARKDOWN_EXTENSIONS = "extra, toc, sane_lists"      # Python-Markdown's tables, footnotes, fenced code, attribute lists
+
+
+def calibre_page_options_for(metadata: dict) -> list[str]:
+    """ebook-convert's page from a document's metadata: the paper and margins it asks for (papersize, geometry, margin,
+    read as for a Word file), else Letter and DEFAULT_MARGIN; and its language. In points."""
+    module = office_module()
+    if module is None:
+        return []
+    spec = module.spec_from_metadata(metadata, None, "exact")
+    width, height = spec.page_size()
+    default = module.length_to_twips(DEFAULT_MARGIN) or 1440
+    points = lambda twips: f"{twips / 20:g}"
+    options = ["--custom-size", f"{points(width)}x{points(height)}", "--unit", "point"]
+    for side in ("left", "right", "top", "bottom"):
+        options += [f"--pdf-page-margin-{side}", points(spec.margins.get(side, default))]
+    if spec.lang:
+        options += ["--language", spec.lang]
+    return options
+
+
+def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, verbose: bool) -> list[str]:
+    """Print a normalised Markdown document with Calibre's own Markdown reader (v3.29.1): `ebook-convert` of the text written
+    to a scratch folder, with the title and author recorded and the paper of the document. Raises when it fails."""
+    binary = resolve_calibre()
+    if binary is None:
+        raise RuntimeError("Calibre's ebook-convert was not found")
+    scratch = Path(mkdtemp(prefix="pdfmd-calibre-md-"))
+    try:
+        page = scratch / "document.md"
+        page.write_text(source.text, encoding="utf-8")
+        produced = scratch / "document.pdf"
+        css = scratch / "pdfmd-calibre.css"
+        css.write_text(CALIBRE_CSS, encoding="utf-8")
+        options = list(CALIBRE_OPTIONS)
+        del options[options.index("--max-levels"):options.index("--max-levels") + 2]       # an option of the HTML reader only
+        cmd = [binary, str(page), str(produced), *options, "--extra-css", str(css),
+               "--markdown-extensions", CALIBRE_MARKDOWN_EXTENSIONS, "--input-encoding", "utf-8",
+               *calibre_page_options_for(source.metadata)]
+        title = scalar_text(source.metadata.get("title"))
+        authors = author_names(source.metadata.get("author"))
+        if title:
+            cmd += ["--title", title]
+        if authors:
+            cmd += ["--authors", " & ".join(authors)]
+        environment = dict(os.environ)
+        if sys.platform != "win32":
+            environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+        log_cmd(cmd, scratch, verbose)
+        done = subprocess.run(cmd, capture_output=True, text=True, cwd=scratch, env=environment)
+        if done.returncode != 0 or not produced.is_file():
+            said = [line for line in (done.stderr + "\n" + done.stdout).splitlines() if line.strip()]
+            raise RuntimeError("ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
+        output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(produced, output)
+        set_pdf_info(output, source.metadata, verbose, creator="Calibre")
+        return []
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def convert_native(md_path: Path, output: Path, engines: list[str], metadata_files: list[Path],
                    from_format: str | None, verbose: bool, debug: bool) -> tuple[bool, str]:
     """Markdown -> PDF with the native renderers; (ok, reason)."""
@@ -4394,7 +4501,9 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
     attempts: list[str] = []
     prepared: dict[str, tuple[NativeSource, dict[str, int]]] = {}
     for engine in engines:
-        prepared[engine] = normalise_gfm(text, engine, metadata_files, md_path.resolve().parent, md_path)
+        # Calibre's Markdown reader is told what inkmd is: no math, endnotes, no Pandoc syntax (v3.29.1)
+        prepared[engine] = normalise_gfm(text, "inkmd" if engine == "calibre" else engine, metadata_files,
+                                         md_path.resolve().parent, md_path)
     order = native_order(engines, prepared[engines[0]][0])
     for position, engine in enumerate(order):
         source, counts = prepared[engine]
@@ -4431,10 +4540,13 @@ def describe_native_changes(engine: str, md_path: Path, source: NativeSource, co
     if counts.get("citations"):
         say(f"{counts['citations']} citation(s) left as written (no citation processing without Pandoc)")
         native_lose("citations", counts["citations"])
-    if counts.get("footnotes") and engine == "inkmd":
+    if counts.get("footnotes") and engine in ("inkmd", "calibre"):
         say(f"{counts['footnotes']} footnote(s) turned into numbered notes at the end")
     if counts.get("math_text"):
-        if engine == "inkmd":
+        if engine == "calibre":
+            say(f"{counts['math_text']} math expression(s) set as plain text (Unicode, sub/superscripts, display math "
+                "centred); Calibre's Markdown reader cannot typeset math -- Pandoc does (`pdfmd --install pandoc`)")
+        elif engine == "inkmd":
             say(f"{counts['math_text']} math expression(s) set as plain text (Unicode, sub/superscripts, "
                 "display math centred); inkmd cannot typeset math -- `pdfmd --install math` does")
         else:
@@ -4457,7 +4569,9 @@ def describe_native_changes(engine: str, md_path: Path, source: NativeSource, co
 def native_run_note(engines: list[str]) -> None:
     """Printed once when the native tier was chosen automatically."""
     reason = "Pandoc was not found" if not which("pandoc") else "no PDF engine was found"
-    print(f"NOTE  {reason}: building with the built-in renderer ({' / '.join(engines)}). "
+    what = ("Calibre's Markdown reader (no math, none of Pandoc's syntax)" if engines and engines[0] == "calibre"
+            else "the built-in renderer")
+    print(f"NOTE  {reason}: building with {what} ({' / '.join(engines)}). "
           "The output is plain -- no LaTeX, preambles, filters or citation processing. "
           "Pandoc plus Typst or TeX gives the full result: `pdfmd --install full`, or "
           "`pdfmd --check-dependencies`.")
@@ -4654,6 +4768,9 @@ def doctor_report(deep: bool = False) -> bool:
     if engines:
         print(f"      used first: {engines[0]}" + ("" if any(e in LATEX_ENGINES for e in engines)
                                                else "  (no TeX: LaTeX packages and some math will not work)"))
+        last = [engine for engine in automatic_engines() if engine in (*BROWSER_ENGINES, "calibre")]
+        if last:
+            print(f"      last resorts, after those: {', '.join(last)}")
     if not pandoc or not engines:
         native = available_native_engines()
         line(bool(native), "built-in renderer: " + (", ".join(native) if native else "none"))
@@ -16747,7 +16864,7 @@ def select_wanted(mode: str, target_format: str, engines: list[str], presentatio
     if target_format in TEX_STANDALONE_FORMATS or target_format == ASSEMBLED_FORMAT:
         return False
     if target_format == "pdf":
-        return not any(engine in LATEX_ENGINES or engine in NATIVE_ENGINES for engine in engines)
+        return not any(engine in LATEX_ENGINES or is_native_engine(engine) for engine in engines)
     return True
 
 
@@ -17728,26 +17845,30 @@ def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
     return [Built((source, True, error), tool, output=final)]          # what Pandoc and its filters said stays
 
 
-def run_calibre_convert(source: Path, output: Path, verbose: bool) -> subprocess.CompletedProcess:
-    """`ebook-convert source output` (written beside the file first, so a failed run leaves nothing half-written). Qt runs
-    offscreen as for the PDF route."""
+def run_calibre_convert(source: Path, output: Path, verbose: bool, extra: list[str] | None = None) -> subprocess.CompletedProcess:
+    """`ebook-convert source output`, written into a scratch folder first (so a failed run leaves nothing half-written, and
+    nothing lands beside `source`). Qt runs offscreen as for the PDF route."""
     binary = resolve_calibre()
     if binary is None:
         return subprocess.CompletedProcess(["ebook-convert"], 1, "", "Calibre's ebook-convert was not found")
-    produced = source.with_name("calibre-output" + output.suffix)
-    cmd = [binary, str(source), str(produced)]
-    environment = dict(os.environ)
-    if sys.platform != "win32":
-        environment.setdefault("QT_QPA_PLATFORM", "offscreen")
-    log_cmd(cmd, source.parent, verbose)
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=source.parent, env=environment)
-    if result.returncode != 0 or not produced.is_file():
-        said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
-        return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
-                                           "ebook-convert failed: " + " | ".join(said[-3:] or ["no file written"]))
-    output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(produced, output)
-    return subprocess.CompletedProcess(cmd, 0, "", "")
+    scratch = Path(mkdtemp(prefix="pdfmd-ebook-convert-"))
+    try:
+        produced = scratch / ("calibre-output" + output.suffix)
+        cmd = [binary, str(source), str(produced), *(extra or [])]
+        environment = dict(os.environ)
+        if sys.platform != "win32":
+            environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+        log_cmd(cmd, source.parent, verbose)
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=scratch, env=environment)
+        if result.returncode != 0 or not produced.is_file():
+            said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
+            return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
+                                               "ebook-convert failed: " + " | ".join(said[-3:] or ["no file written"]))
+        output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(produced, output)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[str]) -> str:
@@ -18068,7 +18189,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         flush_summary()
         return md_path, ok, reason
 
-    native_engines = [engine for engine in engines if engine in NATIVE_ENGINES]
+    native_engines = [engine for engine in engines if is_native_engine(engine)]
     if target_format == "pdf" and native_engines:
         # The native tier (see the section after dependency_report()): no
         # Pandoc, no engine, none of the discovery below applies to it.
@@ -20221,6 +20342,58 @@ def pdf_read_target(args) -> tuple[str, Path | None]:
     return by_to or by_out or "md", out
 
 
+# An ebook as input (v3.29.1). Pandoc reads an EPUB but not a MOBI, an AZW3, a KEPUB, a LIT, an LRF ...; Calibre turns those
+# into an EPUB, and Pandoc turns the EPUB into Markdown (with its pictures) in a scratch folder: the document is then built as
+# any Markdown file is, to the PDF (or the format) named, beside the book. (An EPUB goes straight to Pandoc.) The Markdown
+# is the editable form: `pdfmd book.mobi -o book.md` keeps it. DRM-protected books and ebooks that are only pictures
+# (comics, scans: no text for Pandoc to read) are not handled.
+EBOOK_INPUT_EXTENSIONS = frozenset({".epub", ".mobi", ".azw", ".azw3", ".azw4", ".kepub", ".lit", ".lrf", ".pdb", ".prc",
+                                    ".chm", ".snb", ".tcr", ".rb", ".pmlz", ".htmlz", ".txtz"})
+
+
+def route_ebook_input(args) -> None:
+    """When the one input is an ebook, make its Markdown in a scratch folder and point the run at it (`args.path`), with the
+    output named after the book (`args.out`) unless -o gave one. Nothing when the inputs are not ebooks."""
+    paths = list(args.path or [])
+    books = [path for path in paths if path.suffix.lower() in EBOOK_INPUT_EXTENSIONS]
+    if not books:
+        return
+    if len(books) != len(paths) or len(books) > 1 or args.batch or args.report:
+        raise SystemExit("an ebook is built one at a time, by name: pdfmd book.mobi [-o book.pdf] (not with other files, -b or -r)")
+    named = books[0]
+    if not named.is_file():
+        raise SystemExit(f"{named}: no such file")
+    book = named.resolve()
+    if not which("pandoc"):
+        raise SystemExit(PANDOC_MISSING)
+    scratch = Path(mkdtemp(prefix="pdfmd-ebook-"))
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
+    epub = book
+    if book.suffix.lower() != ".epub":
+        if resolve_calibre() is None:
+            raise SystemExit(f"{book.name} is read through Calibre's ebook-convert, which was not found (on PATH, in calibre.app "
+                             "or in Calibre2 under Program Files). Install Calibre: `brew install --cask calibre`, "
+                             "`winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
+        epub = scratch / "book.epub"
+        # no cover page of Calibre's own making (an SVG title page and a picture the book never had) in the text
+        done = run_calibre_convert(book, epub, args.verbose, ["--no-default-epub-cover", "--no-svg-cover"])
+        if done.returncode != 0:
+            raise SystemExit(f"{book.name}: {done.stderr}")
+    markdown = scratch / (book.stem + ".md")
+    command = ["pandoc", str(epub), "-s", "-t", "markdown", "--wrap=none", "--extract-media=media", "-o", str(markdown)]
+    log_cmd(command, scratch, args.verbose)
+    made = subprocess.run(command, capture_output=True, text=True, cwd=scratch)
+    if made.returncode != 0 or not markdown.is_file():
+        raise SystemExit(f"{book.name}: Pandoc could not read it ({(made.stderr.strip().splitlines() or ['no output'])[-1]})")
+    print(f"BOOK      {book.name} read as Markdown ({markdown.stat().st_size // 1024 or 1} KB"
+          + (", with its pictures" if (scratch / "media").is_dir() else "") + ")")
+    if args.out is None:
+        target = (args.to.casefold() if args.to else "pdf")
+        args.out = named.with_suffix(FORMAT_EXTENSION.get(target, f".{target}"))
+    DISPLAY_ALIAS[markdown] = DISPLAY_ALIAS[markdown.resolve()] = named
+    args.path = [markdown]
+
+
 def route_pdf_input(args, extra: list[str]) -> int | None:
     """Handle a run whose inputs are PDFs; None when they are not."""
     paths = list(args.path or [])
@@ -22059,7 +22232,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "failed or is missing in the unrestricted chain, or on request. 'calibre' "
                              "(Calibre's ebook-convert: Pandoc -> one HTML page with MathML -> PDF) and the browsers "
                              "chrome, chromium, edge, brave (family word 'browser': headless, printing the same "
-                             "page) are used only when named, never in the automatic chain. With --to an "
+                             "page) are last resorts of the automatic chain, after the numbered engines, and "
+                             "are used first when named. With --to an "
                              "ebook or .doc, `-e calibre` / `-e soffice` also name the converter that writes "
                              "it. Meaningless (and ignored) when "
                              "--to targets another non-PDF format. Always wins over a document's own "
@@ -22872,6 +23046,7 @@ def main() -> None:
     routed = route_text_input(args, pandoc_options)
     if routed is not None:
         raise SystemExit(routed)
+    route_ebook_input(args)
     if not which("pandoc") and not native_possible(args):
         raise SystemExit(PANDOC_MISSING)
     paths = args.path or [Path.cwd()]
@@ -23040,7 +23215,7 @@ def main() -> None:
             # A document's default-output may not be PDF: only fail if one is.
             engines_error = error
     native_auto = (bool(engines) and not args.engine
-                   and all(engine in NATIVE_ENGINES for engine in engines))
+                   and all(is_native_engine(engine) for engine in engines))
     if native_auto:
         native_run_note(engines)
 

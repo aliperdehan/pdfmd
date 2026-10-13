@@ -289,7 +289,7 @@ class MathAsTextTests(unittest.TestCase):
 
 
 class EngineSelectionTests(unittest.TestCase):
-    def select(self, requested=None, presentation=False, pandoc=True, engines=(), md2pdf=False):
+    def select(self, requested=None, presentation=False, pandoc=True, engines=(), md2pdf=False, calibre=None):
         def which(name):
             return "/bin/" + name if (name == "pandoc" and pandoc) or name in engines else None
 
@@ -297,6 +297,8 @@ class EngineSelectionTests(unittest.TestCase):
         # bundle), so it must be mocked too or a real LibreOffice leaks in.
         with mock.patch.object(pdfmd, "which", which), \
                 mock.patch.object(pdfmd, "resolve_soffice", lambda: which("soffice")), \
+                mock.patch.object(pdfmd, "resolve_calibre", lambda: calibre), \
+                mock.patch("pdfmd_direct.find_browser", lambda name, which=None: None), \
                 mock.patch.object(pdfmd, "md2pdf_available", lambda: md2pdf):
             return pdfmd.select_engines(requested, presentation)
 
@@ -310,6 +312,11 @@ class EngineSelectionTests(unittest.TestCase):
 
     def test_pandoc_without_any_engine_falls_back_to_native(self):
         self.assertEqual(self.select(), ["inkmd"])
+
+    def test_a_calibre_is_a_last_resort_with_pandoc_and_the_first_reader_without(self):
+        self.assertEqual(self.select(calibre="/c"), ["calibre"])                       # v3.29.1: no engine, Calibre prints it
+        self.assertEqual(self.select(engines=("xelatex",), calibre="/c"), ["xelatex", "calibre"])
+        self.assertEqual(self.select(pandoc=False, calibre="/c"), ["calibre", "inkmd"])   # v3.29.1: its own Markdown reader
 
     def test_explicit_native_requests(self):
         self.assertEqual(self.select("inkmd", pandoc=False), ["inkmd"])
@@ -362,7 +369,7 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
     def run_pdfmd(self, *arguments, cwd):
         empty = Path(cwd) / "empty-bin"
         empty.mkdir(exist_ok=True)
-        environment = {**os.environ, "PATH": str(empty), "PDFMD_NO_PROMPT": "1"}
+        environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"}
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=cwd,
                               env=environment, capture_output=True, text=True)
 

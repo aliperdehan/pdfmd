@@ -49,14 +49,16 @@ class Choosing(unittest.TestCase):
         installed = {"pandoc", "lualatex", "typst"}
         with mock.patch.object(pdfmd, "which", lambda name: f"/opt/bin/{name}" if name in installed else None), \
                 mock.patch.object(pdfmd, "resolve_calibre", lambda: calibre), \
-                mock.patch.object(pdfmd, "resolve_soffice", lambda: None):
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: None), \
+                mock.patch("pdfmd_direct.find_browser", lambda name, which=None: None):
             return pdfmd.select_engines(requested, presentation)
 
-    def test_only_when_named(self):
+    def test_named_it_is_the_only_engine_and_unnamed_it_is_a_last_resort(self):
         self.assertEqual(self.select("calibre"), ["calibre"])
         self.assertEqual(self.select("ebook-convert"), ["calibre"])
-        self.assertEqual(self.select(None), ["lualatex", "typst"])      # never in the automatic chain
-        self.assertNotIn("calibre", pdfmd.PDF_ENGINES)
+        self.assertEqual(self.select(None), ["lualatex", "typst", "calibre"])      # v3.29.1: after the numbered engines
+        self.assertEqual(self.select(None, calibre=None), ["lualatex", "typst"])
+        self.assertNotIn("calibre", pdfmd.PDF_ENGINES)                              # and it has no number
 
     def test_not_installed_says_how_to_get_it(self):
         with self.assertRaises(SystemExit) as raised:

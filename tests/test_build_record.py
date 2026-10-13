@@ -82,6 +82,7 @@ class CommandLine(unittest.TestCase):
             empty = self.directory / "empty-bin"
             empty.mkdir(exist_ok=True)
             environment["PATH"] = str(empty)
+            environment["PDFMD_CALIBRE"] = ""
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
                               encoding="utf-8", cwd=self.directory, env=environment)
 
