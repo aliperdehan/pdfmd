@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.15"
+PDFMD_VERSION = "3.29.16"
 import argparse
 import atexit
 import csv
@@ -2378,7 +2378,7 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
 # carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
 # or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_KINDS = ("callouts", "toc")
+MARKUP_KINDS = ("callouts", "toc", "center")
 MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 
@@ -23049,7 +23049,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="carry spellings other Markdown dialects share into every output: callouts (> [!NOTE], "
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
-                             "of contents where it stands; bare: all kinds. Off by default; also "
+                             "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
+                             "text; bare: all kinds. Off by default; also "
                              "pdfmd-options.markup (true or a list) and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")

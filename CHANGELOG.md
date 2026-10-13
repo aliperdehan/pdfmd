@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.16 — 2026-10-14
+
+Pre-edit state: commit `6569136` (v3.29.15).
+
+### Added
+
+- **Universal markup, the fourth kind: `center`**. `<center>` ... `</center>` (a raw HTML pair around blocks), `<div align="center">`,
+  `<div style="text-align: center">`, a fenced `::: center` (also `centered`, `centering`) and, for writers other than LaTeX, a raw
+  `\begin{center}` ... `\end{center}` (which the reader keeps as one raw block: its text is read as Markdown) become LaTeX's `center`
+  environment, Typst's `#align(center)[...]`, an HTML/EPUB `text-align: center` div; Word and OpenDocument keep the text and say once
+  that centring is not applied. Opt-in with the rest of `markup`. Not done: an inline `<center>x</center>` in a paragraph, a Word
+  centring style. `tests/test_markup_center.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.15 — 2026-10-14
 
 Pre-edit state: commit `e2594ab` (v3.29.14).

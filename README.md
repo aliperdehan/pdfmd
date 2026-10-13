@@ -1581,6 +1581,12 @@ for every other writer (HTML, EPUB, Markdown, OpenDocument ...), a nested list o
 bold "Contents" above it. `markup: [callouts, toc]` or `markup: true` for both; `--markup toc` for one run. A marker inside a
 sentence is text.
 
+**Centred text** (v3.29, `markup: center`). `<center>` ... `</center>` around blocks (the closing tag in its own paragraph),
+`<div align="center">`, `<div style="text-align: center">`, a fenced `::: center` and, for writers that are not LaTeX, a raw
+`\begin{center}` ... `\end{center}` all centre what they hold: LaTeX's `center` environment, Typst's `#align(center)[...]`, a
+`text-align` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text as it is and say so once (no
+centring for a block there yet). `markup: [callouts, toc, center]` or `true` for all; `--markup center` for one run.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

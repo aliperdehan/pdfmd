@@ -9,6 +9,9 @@
 -- toc        a paragraph that is [TOC], [[TOC]] or [[_TOC_]], <!-- toc -->, or a raw \tableofcontents (for the writers that are
 --            not LaTeX): the table of contents where it stands. LaTeX \tableofcontents, Typst #outline(), Word a TOC field
 --            (Word asks to update it when the file is opened), every other writer a list of links to the headings (to level 3).
+-- center     <center>...</center>, <div align="center">, <div style="text-align: center">, ::: center, and a raw \begin{center}...
+--            \end{center} (for the writers that are not LaTeX): LaTeX the center environment, Typst #align(center)[...], HTML and
+--            EPUB a text-align div. Word and OpenDocument keep the text as it is and say so once (they have no centring to give a block).
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -175,6 +178,88 @@ local function make_toc(headers)
   return pandoc.Blocks({pandoc.Para({pandoc.Strong({pandoc.Str("Contents")})}), toc_list(headers)})
 end
 
+
+-- ---- center ----------------------------------------------------------------------------------------------------------
+local center_told = false
+
+local function make_center(blocks)
+  local format = FORMAT or ""
+  local out = pandoc.Blocks({})
+  if format:match("^latex") then
+    out[#out + 1] = pandoc.RawBlock("latex", "\\begin{center}")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("latex", "\\end{center}")
+  elseif format:match("^typst") then
+    out[#out + 1] = pandoc.RawBlock("typst", "#align(center)[")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("typst", "]")
+  elseif format:match("^html") or format:match("^epub") then
+    out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {}, {{"style", "text-align: center"}}))
+  else
+    if not center_told and (format == "docx" or format == "odt" or format == "pptx") then
+      center_told = true
+      io.stderr:write("NOTE  markup: centring is not applied to " .. format .. "; the text is kept as it is\n")
+    end
+    out:extend(blocks)
+  end
+  return out
+end
+
+local function is_center_div(div)
+  for _, class in ipairs(div.classes) do
+    if class == "center" or class == "centered" or class == "centering" then return true end
+  end
+  if (div.attributes["align"] or ""):lower() == "center" then return true end
+  return (div.attributes["style"] or ""):lower():match("text%-align%s*:%s*center") ~= nil
+end
+
+local function raw_is(block, format_pattern, text_pattern)
+  if block.t ~= "RawBlock" then return false end
+  local format = block.format:lower()
+  if not format:match(format_pattern) then return false end
+  return block.text:lower():gsub("^%s+", ""):gsub("%s+$", ""):match(text_pattern) ~= nil
+end
+
+-- the pairs <center> ... </center> (and \begin{center} ... \end{center} unless the writer is LaTeX) of one list of blocks
+local function center_pairs(blocks)
+  local latex = (FORMAT or ""):match("^latex") ~= nil
+  local out, changed, index = pandoc.Blocks({}), false, 1
+  while index <= #blocks do
+    local block = blocks[index]
+    local close_pattern
+    if raw_is(block, "^html", "^<center>$") then close_pattern = {"^html", "^</center>$"}
+    elseif not latex and raw_is(block, "^te?x?$", "^\\begin{center}$") then close_pattern = {"^te?x?$", "^\\end{center}$"}
+    elseif not latex and raw_is(block, "^latex$", "^\\begin{center}$") then close_pattern = {"^latex$", "^\\end{center}$"} end
+    local last
+    if not latex and block.t == "RawBlock" and (block.format:lower() == "tex" or block.format:lower() == "latex") then
+      -- the reader keeps a whole \begin{center} ... \end{center} as one raw block: its text is read as Markdown
+      local inner_text = block.text:match("^%s*\\begin{center}(.-)\\end{center}%s*$")
+      if inner_text then
+        out:extend(make_center(pandoc.read(inner_text, "markdown").blocks))
+        index, changed = index + 1, true
+        goto continue
+      end
+    end
+    if close_pattern then
+      for position = index + 1, #blocks do
+        if raw_is(blocks[position], close_pattern[1], close_pattern[2]) then last = position; break end
+      end
+    end
+    if last then
+      local inner = pandoc.Blocks({})
+      for position = index + 1, last - 1 do inner[#inner + 1] = blocks[position] end
+      out:extend(make_center(inner))
+      index, changed = last + 1, true
+    else
+      out[#out + 1] = block
+      index = index + 1
+    end
+    ::continue::
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
@@ -190,7 +275,14 @@ function Pandoc(doc)
       used.callouts = true
       return make_callout(kind, title, body)
     end,
+    Blocks = function(blocks)
+      if not on("center") then return nil end
+      return center_pairs(blocks)
+    end,
     Div = function(div)
+      if on("center") and is_center_div(div) then
+        return make_center(div.content)
+      end
       if not on("callouts") then return nil end
       local kind, title, body = callout_of_div(div)
       if not kind then return nil end
