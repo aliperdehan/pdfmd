@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.39"
+PDFMD_VERSION = "3.28.40"
 import argparse
 import csv
 import filecmp
@@ -10548,7 +10548,8 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
     restored into a temporary folder; the built-in editor (Ctrl-B builds there) or the `--editor CMD` you name (the
     folder is watched, and rebuilt on every save) works on it; when you leave, the PDF is replaced by the rebuilt one
     (the old one goes to `.backups/`), carrying the source again. The options of the original build are the ones the
-    document and its metadata files record; the command-line ones are the ones you give now."""
+    document and its metadata files record; the command-line ones are the ones you give now. A document is edited as the one
+    file its source is (v3.28.40: the metadata, preamble, text files, bibliography and style inside it); a -r book as its chapters."""
     if pypdf is None:
         print("ERROR  --edit on a PDF needs pypdf (pip install pypdf).", file=sys.stderr)
         return 1
@@ -10576,9 +10577,19 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
     work = Path(tempfile.mkdtemp(prefix="pdfmd-edit-"))
     try:
         folder = work / "source"
-        if restore_from_pdf(pdf, folder) != 0:
-            return 1
         manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
+        single = manifest.get("mode") != "report"
+        # one document: the source as the ONE file it is (metadata, preamble, text files, bibliography and style inside it);
+        # a report is its chapters, edited as files (v3.28.40)
+        if restore_from_pdf(pdf, folder, single=single) != 0:
+            return 1
+        if single:
+            unknown = [block["name"] for block in parse_embedded_blocks(attachments[manifest.get("source", ATTACH_SOURCE)]
+                                                                         .decode("utf-8"))
+                       if block["type"] == "lua-filter" and block["sha256"] not in trusted_hashes()]
+            if unknown and "--trust-embedded" not in passed:
+                print(f"NOTE  the source embeds the Lua filter {', '.join(unknown)}, which this machine's pdfmd has not "
+                      "written: a build skips it unless you add --trust-embedded (read it first)")
         chapters: list[Path] = []
         with restore_chain(manifest):
             main_where = restore_target_name(str(manifest.get("name") or ""))
@@ -10655,6 +10666,13 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         elif not state["ok"]:
             print(f"ERROR  the last build failed; {display_path(pdf)} is as it was.", file=sys.stderr)
             return 1
+        lost = source_lost(attachments, made)
+        if lost is not None and not lost.startswith("lost:"):
+            print(f"ERROR  {lost}; {display_path(pdf)} is as it was.", file=sys.stderr)
+            return 1
+        if lost:
+            print(f"WARN  the rebuilt PDF no longer carries {lost[5:].strip()} (nothing in the text points at "
+                  f"{'it' if ',' not in lost else 'them'} now?)", file=sys.stderr)
         if sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT"):
             try:
                 answer = input(f"Replace {pdf.name} with the rebuilt one (the old one goes to .backups/)? [Y/n] ").strip().lower()
@@ -10670,6 +10688,30 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         return 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def source_carried(attachments: dict[str, bytes]) -> set[str]:
+    """What a PDF's attached source carries, by name: its files (attachments and the text files held as blocks of its text)
+    and the embedded data blocks (bibliography, style, filters, history)."""
+    manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
+    names = {name[len(EXTRA_PREFIX):] for name in attachments if name.startswith(EXTRA_PREFIX)}
+    names |= {item["path"] for item in manifest.get("extras") or [] if item.get("inline")}
+    text = attachments.get(manifest.get("source", ATTACH_SOURCE), b"").decode("utf-8", errors="replace")
+    names |= {block["path"] or block["name"] for block in parse_embedded_blocks(text) if block["type"] != "file"}
+    return {name.replace("__up__", "..") for name in names}
+
+
+def source_lost(before: dict[str, bytes], rebuilt: Path) -> str | None:
+    """None when the rebuilt PDF carries its source and everything the old one carried; "lost: a, b" for what it no
+    longer carries; else the reason it carries no source."""
+    try:
+        after = read_pdf_attachments(rebuilt)
+    except Exception as error:  # noqa: BLE001
+        return f"the rebuilt PDF cannot be read ({error})"
+    if ATTACH_MANIFEST not in after or ATTACH_SOURCE not in after:
+        return "the rebuilt PDF does not carry its source"
+    lost = sorted(source_carried(before) - source_carried(after))
+    return f"lost: {', '.join(lost[:6])}{' and %d more' % (len(lost) - 6) if len(lost) > 6 else ''}" if lost else None
 
 
 def edit_command(args) -> int:
@@ -19647,7 +19689,7 @@ def check_source_command(paths: list[Path], recursive: bool = False) -> bool:
     return not missing
 
 
-def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = False) -> int:
+def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = False, single: bool = False) -> int:
     """--restore: write back the layout a PDF's attached source records. Never
     overwrites (it stops, writing nothing, if a file is already there). Exit
     status 1 if the attached text no longer matches its recorded hash."""
@@ -19679,19 +19721,21 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
         names = ", ".join(sorted(attachments)) or "no attachments at all"
         raise SystemExit(f"{display_path(pdf_path)} carries no pdfmd source ({names}); "
                          "build it with --attach-source or pdfmd-options.attach-source")
-    return restore_attachments(pdf_path, attachments, out_dir, list_only, odf_name)
+    return restore_attachments(pdf_path, attachments, out_dir, list_only, odf_name, single)
 
 
 def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: Path | None, list_only: bool,
-                        odf_name: str | None = None) -> int:
+                        odf_name: str | None = None, single: bool = False) -> int:
     """The part of --restore that does not care where the source came from: a PDF's attachments or a Markdown file's
-    kept source (``pdf_path`` is that file)."""
+    kept source (``pdf_path`` is that file). ``single``: the source as the one file it is (`--edit`), not split back
+    into the files it was made from: the text with its embedded metadata, preamble, text files, bibliography and style,
+    and beside it the files that are not part of the text (a package, files in sibling folders, pictures)."""
     with restore_chain(json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))):
-        return restore_attachments_in_place(pdf_path, attachments, out_dir, list_only, odf_name)
+        return restore_attachments_in_place(pdf_path, attachments, out_dir, list_only, odf_name, single)
 
 
 def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], out_dir: Path | None, list_only: bool,
-                                 odf_name: str | None = None) -> int:
+                                 odf_name: str | None = None, single: bool = False) -> int:
     manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
     if manifest.get("format", 0) > ATTACH_FORMAT:
         raise SystemExit(f"{display_path(pdf_path)} was made by a newer pdfmd (attachment format "
@@ -19741,8 +19785,8 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
     target = (out_dir or pdf_path.with_name(f"{pdf_path.stem}{RESTORED_SUFFIX}")).resolve()
-    files: dict[str, str | bytes] = dict(layout_from_source(
-        strip_location_markers(merged), manifest, name, sha256_text(merged) == manifest.get("sha256")))
+    files: dict[str, str | bytes] = ({str(name): with_location_markers(merged)} if single else dict(layout_from_source(
+        strip_location_markers(merged), manifest, name, sha256_text(merged) == manifest.get("sha256"))))
     for item in extras:
         if item.get("inline"):
             continue                                  # a block of the text: layout_from_source put it back

@@ -427,12 +427,17 @@ for the build, and a name that does not exist yet starts a new file. It is delib
 edited and rebuilt where it lies:
 
 ```sh
-pdfmd --edit report.pdf                          # the built-in editor, on the source restored into a temporary folder
+pdfmd --edit report.pdf                          # the built-in editor, on the source as one file in a temporary folder
 pdfmd --edit report.pdf --editor "code --wait"   # your own: the folder is watched and rebuilt on every save
 ```
 
-You edit the restored source; Ctrl-B (or each save with `--editor`) builds it there, and when you leave, `report.pdf` is
-replaced by the rebuilt one, which carries the source again, and the old one is kept in `.backups/` beside it. Nothing
+A document is edited as the ONE file its source is: the text with its metadata, preamble, bibliography and style, and the `.tex`
+and CSV files it reads, as blocks after the text (`<!-- pdfmd-at: ... -->` comments say on which line each one is); only what
+is not text (your package, pictures, files in sibling folders) is beside it. You edit that file; Ctrl-B (or each save with
+`--editor`) builds it, and when you leave, `report.pdf` is replaced by the rebuilt one, which carries the source again, and
+the old one is kept in `.backups/` beside it. Before it is replaced pdfmd checks that the rebuilt PDF still carries its source
+and everything the old one carried; a PDF without its source is refused (yours stays as it was), and what is missing is named.
+The temporary folder is removed when you leave. For the files it was made from, `pdfmd --restore report.pdf` (or `--unpack`). Nothing
 changes when you leave without editing, or when the last version does not build. The options of the first build are the
 ones the document and its metadata record; the command-line ones are the ones you give now, and the global metadata of
 `pdfmd --setup` is this machine's (a rebuild on another one can differ). A book built with `-r` is edited as a book: your editor gets every

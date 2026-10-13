@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.40 — 2026-10-13
+
+Pre-edit state: commit `fe59bbb` (v3.28.39).
+
+### Changed
+
+- **`--edit FILE.pdf` opens a document as one file** (the author: "edit a standalone single file by default, and use
+  `--unpack`/`--restore` for delocalised editing"). The attached source, which holds the metadata, preamble, filters,
+  bibliography, style and (v3.28.39) the `.tex` and CSV files as blocks of its text, is written as that one file, with fresh
+  line markers, into the temporary folder; the pieces that are not text (the package, pictures, files in sibling folders) are
+  beside it, as for any restore. Your editor (or the built-in one) gets the one file, each save rebuilds from it, and the
+  temporary folder is removed when you leave. A book built with `-r` is still edited as its chapter files.
+- **The rebuilt PDF is checked before it replaces yours.** It must carry its source (a PDF that does not is refused, yours is
+  untouched) and everything the old one carried (files, text files, bibliography, style, filters, history); what is missing is
+  named in a WARN. A Lua filter embedded in the source that this machine's pdfmd has not written is noted: a build skips it
+  unless `--trust-embedded` is among the options you give (read it first).
+- Checked on Pre-lab 7: a title edited in the one file shows in the rebuilt PDF, which carries the same ten attachments.
+
 ## v3.28.39 — 2026-10-13
 
 Pre-edit state: commit `7e1b094` (v3.28.38).
