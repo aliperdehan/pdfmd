@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.9 — 2026-10-14
+
+Pre-edit state: commit `f04a106` (v3.29.8).
+
+### Added
+
+- **`pdfmd-options: cover`** (the `cover` key of the Calibre line's plan, in a smaller form than planned). `cover: true` makes the
+  title block a page of its own: LaTeX gets `classoption: titlepage` (only for article, report, book and KOMA's classes), an
+  HTML-family PDF (WeasyPrint, a browser, Calibre) or an HTML page a page break after `#title-block-header`. `cover: picture.png`
+  (relative to the document) is the first page of a LaTeX or HTML-family PDF (LaTeX: at the start of the document, before
+  `\maketitle`, which Pandoc's `include-before` comes after) and the cover of an EPUB, so of a Kindle book made from it. One
+  filter for all of them, `pdfmd_lua/cover.lua`, called beside the title filter at every build site (`cover_filter_args`); Word,
+  OpenDocument, Typst and the rest get one `NOTE` that it was not applied (not done: a Word title page, a Typst one). A
+  picture that is not there is a WARN and no cover. Off by default; the `pdfmd_setup` inventory lists it as per-document.
+  `tests/test_cover.py`.
+
 ## v3.29.8 — 2026-10-14
 
 Pre-edit state: commit `9503d07` (v3.29.7).

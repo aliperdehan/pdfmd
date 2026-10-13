@@ -1399,6 +1399,15 @@ article class, and never over a document that formats its headings itself: a `ti
 `\section` of its own, in the preamble, the `header-includes` or a metadata file, is named in a `CSS` note and nothing is added
 (and when `titlesec` is not installed, one LaTeX warning says so). A family needs XeLaTeX or LuaLaTeX.
 
+### A cover: `cover`
+
+`pdfmd-options: {cover: true}` puts the title block (title, subtitle, author, date) on a page of its own and starts the text
+on the next (v3.29): LaTeX's `titlepage` class option (for the article, report and book classes and KOMA's; another class is
+left alone), and a page break after the title block of an HTML-family PDF (WeasyPrint, a browser, Calibre) or an HTML page.
+`cover: picture.png` (relative to the document) puts that picture on the first page of such a PDF, before the title, and is the
+cover of an EPUB, so of the Kindle book Calibre makes from it (Pandoc's own `cover-image:` does the same for an EPUB). A
+Word, OpenDocument or Typst file says once that the key was not applied. Off by default: the title block stays on page 1.
+
 ### Code: wrapping and line numbers
 
 With a LaTeX engine a long line of code wraps at the margin instead of running off the page (a long path or option list

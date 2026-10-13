@@ -115,6 +115,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "attach-bibliography": "options.attach-bibliography", "attach-bib": "options.attach-bibliography",
     "attach-csl": "options.attach-csl",
     "css": "options.css", "css-scope": "options.css-scope",
+    "cover": Omitted("document", "per document: a title page, or a picture for the first page / an EPUB's cover"),
     "attach-links": "options.attach-links",
     "attach-source": "options.attach-source", "embed-source": "options.attach-source",
     "backup.enabled": "options.backup.enabled", "backup.dir": "options.backup.dir",

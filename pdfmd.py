@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.8"
+PDFMD_VERSION = "3.29.9"
 import argparse
 import atexit
 import csv
@@ -2373,6 +2373,35 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
     if PAGEBREAK_CLI["kinds"] is not None:
         return pagebreak_value(PAGEBREAK_CLI["kinds"] or True)
     return pagebreak_value(first_pdfmd_option(md_path, metadata_files, "pagebreak"))
+
+
+def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """`pdfmd-options: {cover: true | PICTURE}` (v3.29.9) as pdfmd_lua/cover.lua and its metadata, or []: `true` is the title
+    block on a page of its own, a picture (relative to the document) is the first page, or the cover of an EPUB."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files:
+        return []
+    value = first_pdfmd_option(files[0], metadata_files, "cover")
+    if value is None or value is False or str(value).strip().casefold() in ("", "false", "no", "off", "0", "none"):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("cover")
+    if shipped is None:
+        return []
+    args = ["--lua-filter", str(shipped)]
+    if value is True or str(value).strip().casefold() in ("true", "yes", "on", "1", "title"):
+        metadata = effective_metadata(files[0], metadata_files, [])
+        klass = str(metadata.get("documentclass") or "article").strip()
+        args = ["-M", "pdfmd-cover=title", "-M", "pdfmd-cover-latex=" + ("1" if klass in ("article", "report", "book", "scrartcl", "scrreprt", "scrbook") else "0"), *args]
+        return args
+    picture = (files[0].parent / str(value).strip()).resolve()
+    if not picture.is_file():
+        print(f"WARN  {display_path(files[0])}: cover: {value} was not found beside the document; no cover is made", file=sys.stderr)
+        return []
+    return ["-M", "pdfmd-cover=image", "-M", f"pdfmd-cover-image={picture}", *args]
 
 
 def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -17965,6 +17994,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
+            cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
             cmd += select_filter_args(selection)
@@ -18473,6 +18503,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
+            cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
             cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
@@ -18940,6 +18971,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
+                cmd += cover_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
                                        flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                        preamble=list(preamble_files or []) if flat_markdown else None,
@@ -19188,6 +19220,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
+                    cmd += cover_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
                     cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
                     cmd += select_filter_args(selection)
@@ -23977,6 +24010,7 @@ def main() -> None:
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
+                    cmd += cover_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
                     cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                     if (any(contains_citations(file) for file in files)
@@ -24102,6 +24136,7 @@ def main() -> None:
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
+                        cmd += cover_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
                         cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
                         if (any(contains_citations(file) for file in files)
