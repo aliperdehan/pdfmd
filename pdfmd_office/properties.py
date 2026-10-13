@@ -75,7 +75,7 @@ def finish_properties(path: Path, title: str | None = None, authors: list[str] |
             value = found.group(2)
             if not any(value.startswith(prefix + separator) for prefix in prefixes for separator in "/\\"):
                 return found.group(0)
-            return f'{found.group(1)}="{re.split(r"[/\\]", value)[-1]}"'
+            return found.group(1) + '="' + re.split(r"[/\\]", value)[-1] + '"'
         return re.sub(r'\b(descr|title)="([^"]*)"', name_only, text)
 
     if kind == ".odt":

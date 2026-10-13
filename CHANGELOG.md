@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.32 — 2026-10-13
+
+Pre-edit state: commit `7864ff3` (v3.28.31).
+
+### Fixed
+
+- **Every Word, OpenDocument and PowerPoint build failed on Python 3.9 to 3.11** with `SyntaxError: f-string expression part
+  cannot include a backslash` in `pdfmd_office/properties.py`. The privacy fix of v3.28.5 (the cache path in a picture's
+  description becomes its file name) wrote `f'{...re.split(r"[/\\]", value)...}'`, which Python 3.12 accepts and older ones do
+  not; the suite runs on 3.14 here, so it went unseen until a build under macOS's own Python 3.9 failed. The line is a plain
+  concatenation now. Every other file was parsed on 3.9 and is clean. `tests/test_old_python_syntax.py` parses every source file
+  with each Python older than 3.12 it finds (this one when CI's matrix runs it on 3.9, macOS's own `/usr/bin/python3`, a
+  `python3.9`-`3.11` on PATH) and skips where there is none.
+
 ## v3.28.31 — 2026-10-13
 
 Pre-edit state: commit `1268739` (v3.28.30).
