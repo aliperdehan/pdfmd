@@ -1599,6 +1599,14 @@ contain on one page where it fits: LaTeX's `samepage` environment, Typst's `#blo
 avoid` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text and say once that it is not held.
 `--markup keep` for one run.
 
+**Landscape pages** (v3.29, `markup: landscape`). A fenced `::: landscape`, a div with `style="page: landscape"` and, for writers
+that are not LaTeX, a raw `\begin{landscape}` ... `\end{landscape}` put what they hold on pages turned sideways, the document
+going back to portrait after it: LaTeX with `pdflscape` (the page is rotated in the PDF; `lscape`, or no turning, when it is not
+installed), Typst with `#page(flipped: true)[...]`, WeasyPrint and the browsers with a named page (`@page landscape`: the browsers
+get the document's paper turned; WeasyPrint's is its own A4 unless your own `@page landscape` says otherwise). Calibre's PDF cannot
+name page types, and Word and OpenDocument have no sections made from here: they keep the text and say once that no landscape page
+was made. `--markup landscape` for one run.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

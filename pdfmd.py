@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.18"
+PDFMD_VERSION = "3.29.19"
 import argparse
 import atexit
 import csv
@@ -2378,7 +2378,7 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
 # carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
 # or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "keep")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "keep", "landscape")
 MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 
@@ -2458,8 +2458,17 @@ MARKUP_HIGHLIGHT_HEADER = r"""% pdfmd: highlighted text (pdfmd-options: markup: 
 \fi
 """
 
+MARKUP_LANDSCAPE_HEADER = r"""% pdfmd: landscape pages (pdfmd-options: markup: landscape)
+\IfFileExists{pdflscape.sty}{\def\pdfmdhaslscape{1}}{}
+\ifdefined\pdfmdhaslscape
+  \usepackage{pdflscape}
+\else
+  \IfFileExists{lscape.sty}{\usepackage{lscape}}{\newenvironment{landscape}{}{}}
+\fi
+"""
+
 # the LaTeX definitions each kind of markup needs (the kinds not here need none)
-MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER}
+MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER, "landscape": MARKUP_LANDSCAPE_HEADER}
 
 
 def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -18272,6 +18281,7 @@ def calibre_html_command(cmd: list[str], engine: str) -> Iterator[tuple[list[str
         command[position:position + 1] = ["-t", "html5", "--standalone",
                                           "--embed-resources" if pandoc_version() >= (2, 19) else "--self-contained"]
         command[command.index("-o") + 1] = str(html)
+        command += ["-M", "pdfmd-no-named-pages=1"]          # Calibre's PDF cannot name page types: markup: landscape says so
         if not any(item.startswith(HTML_MATH_OPTIONS) for item in command):
             command += html_math_args("mathml")
         yield command, html
@@ -18534,7 +18544,8 @@ def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[
     default = module.length_to_twips(DEFAULT_MARGIN) or 1440
     points = lambda twips: f"{twips / 20:g}pt"
     margins = " ".join(points(spec.margins.get(side, default)) for side in ("top", "right", "bottom", "left"))
-    return f"@page {{ size: {points(width)} {points(height)}; margin: {margins}; }}\n"
+    return (f"@page {{ size: {points(width)} {points(height)}; margin: {margins}; }}\n"
+            f"@page landscape {{ size: {points(height)} {points(width)} !important; }}\n")        # for markup: landscape, the same paper turned
 
 
 def run_browser_print(html: Path, output: Path, engine: str, page_css: str, verbose: bool) -> subprocess.CompletedProcess:
@@ -23072,7 +23083,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
-                             "text; highlight (==text==) marks it; keep (::: keep) holds blocks on one page; bare: all kinds. Off by default; also "
+                             "text; highlight (==text==) marks it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; bare: all kinds. Off by default; also "
                              "pdfmd-options.markup (true or a list) and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")

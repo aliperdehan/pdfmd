@@ -15,6 +15,9 @@
 -- keep       ::: keep (also nobreak, keep-together), a div with style="break-inside: avoid", a raw \begin{samepage}...\end{samepage}:
 --            the blocks stay on one page. LaTeX the samepage environment, Typst #block(breakable: false)[...], HTML a break-inside
 --            div; Word and OpenDocument keep the text with a note once.
+-- landscape  ::: landscape, a div with style="page: landscape", a raw \begin{landscape}...\end{landscape}: the blocks on landscape pages.
+--            LaTeX the landscape environment (pdfmd's header file loads pdflscape), Typst #page(flipped: true)[...], HTML a
+--            named page; Word and OpenDocument keep the text with a note once.
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
 --            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
 local enabled = nil
@@ -366,9 +369,51 @@ local function make_keep(blocks)
 end
 
 
+-- ---- landscape -------------------------------------------------------------------------------------------------------
+local landscape_told = false
+-- WeasyPrint (and a browser) go back to the first page type only when it has a name too: the rest of the page is `pdfmd-normal`
+local LANDSCAPE_CSS = "<style>\n@page landscape { size: landscape; }\n@page pdfmd-normal { }\nbody { page: pdfmd-normal; }\n"
+  .. ".pdfmd-landscape { page: landscape; }\n</style>"
+local landscape_used = false
+local no_named_pages = false          -- set by pdfmd for an engine whose pages cannot be named (Calibre)
+
+local function is_landscape_div(div)
+  for _, class in ipairs(div.classes) do
+    if class == "landscape" then return true end
+  end
+  return (div.attributes["style"] or ""):lower():match("page%s*:%s*landscape") ~= nil
+end
+
+local function make_landscape(blocks)
+  local format = FORMAT or ""
+  local out = pandoc.Blocks({})
+  if format:match("^latex") then
+    out[#out + 1] = pandoc.RawBlock("latex", "\\begin{landscape}")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("latex", "\\end{landscape}")
+  elseif format:match("^typst") then
+    out[#out + 1] = pandoc.RawBlock("typst", "#page(flipped: true)[")
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("typst", "]")
+  elseif (format:match("^html") or format:match("^epub")) and not no_named_pages then
+    landscape_used = true
+    out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {"pdfmd-landscape"}, {}))
+  elseif no_named_pages or format == "docx" or format == "odt" or format == "pptx" then
+    if not landscape_told then
+      landscape_told = true
+      io.stderr:write("NOTE  markup: landscape pages are not made in " .. (no_named_pages and "this PDF engine" or format)
+        .. "; the text is kept as it is\n")
+    end
+    out:extend(blocks)
+  else
+    out:extend(blocks)
+  end
+  return out
+end
+
 -- a raw TeX environment the reader kept as one block (\begin{center} ... \end{center}) for a writer that is not LaTeX: its text is
 -- read as Markdown and made the writer's own, for the kinds that are on
-local ENVIRONMENTS = {center = {"center", make_center}, samepage = {"keep", make_keep}}
+local ENVIRONMENTS = {center = {"center", make_center}, samepage = {"keep", make_keep}, landscape = {"landscape", make_landscape}}
 
 local function tex_environments(blocks)
   if (FORMAT or ""):match("^latex") then return nil end
@@ -389,7 +434,9 @@ local function tex_environments(blocks)
   return nil
 end
 
+
 function Pandoc(doc)
+  no_named_pages = doc.meta["pdfmd-no-named-pages"] ~= nil
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
     enabled = {}
@@ -428,6 +475,9 @@ function Pandoc(doc)
       if on("keep") and is_keep_div(div) then
         return make_keep(div.content)
       end
+      if on("landscape") and is_landscape_div(div) then
+        return make_landscape(div.content)
+      end
       if not on("callouts") then return nil end
       local kind, title, body = callout_of_div(div)
       if not kind then return nil end
@@ -453,9 +503,9 @@ function Pandoc(doc)
     walked.blocks = blocks
   end
   local format = FORMAT or ""
-  if used.callouts and (format:match("^html") or format:match("^epub")) then
+  if (used.callouts or landscape_used) and (format:match("^html") or format:match("^epub")) then
     local before = walked.meta["include-before"]
-    local style = pandoc.MetaBlocks({pandoc.RawBlock("html", CALLOUT_CSS)})
+    local style = pandoc.MetaBlocks({pandoc.RawBlock("html", (used.callouts and CALLOUT_CSS or "") .. (landscape_used and LANDSCAPE_CSS or ""))})
     if before == nil then
       walked.meta["include-before"] = pandoc.MetaList({style})
     elseif before.t == "MetaList" then

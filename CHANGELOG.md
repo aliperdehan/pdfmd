@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.19 — 2026-10-14
+
+Pre-edit state: commit `bcf99ef` (v3.29.18).
+
+### Added
+
+- **Universal markup, the seventh kind: `landscape`**. `::: landscape`, `<div style="page: landscape">` and, for writers other than
+  LaTeX, a raw `\begin{landscape}` ... `\end{landscape}` become LaTeX's `landscape` environment (the header file loads `pdflscape`,
+  else `lscape`, else an empty environment; checked: the PDF's page has `Rotate 90`), Typst's `#page(flipped: true)[...]`, and for HTML
+  engines a named page: `@page landscape { size: landscape }` and the rest of the document `@page pdfmd-normal {}` with
+  `body { page: pdfmd-normal }`, because WeasyPrint stays on the landscape page after it unless the portrait pages have a name too
+  (found on a hand-made page: 2 pages instead of 3). The browser route adds the document's own paper turned (`@page landscape { size:
+  H W !important }` in `browser_page_css`): without it Edge printed Letter landscape on an A4 document. Calibre's PDF cannot name
+  page types (its whole document turned landscape): `-M pdfmd-no-named-pages=1` on its HTML makes the filter keep the text with a note.
+  Word and OpenDocument keep the text with a note. Opt-in with the rest of `markup`. `tests/test_markup_landscape.py` (Pandoc
+  3.12 and 3.1.3; a WeasyPrint build checks portrait, landscape, portrait).
+
 ## v3.29.18 — 2026-10-14
 
 Pre-edit state: commit `06b727d` (v3.29.17).
