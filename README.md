@@ -368,6 +368,10 @@ OK    notes.md > notes.pdf
 - `pdfmd --install math:mathjax` (MathJax 4 and its STIX Two math font, about 12 MB to download, about 2 MB on
   disk) and `pdfmd --install math:katex` (KaTeX, about 1.5 MB) are for WeasyPrint's PDFs, not the built-in
   renderer: they typeset its math (see "WeasyPrint does not typeset math itself" below).
+- `pdfmd --install core:tex` (also `cortex`, about 50 MB) is the other core: **Pandoc and Tectonic**, the self-contained
+  LaTeX engine (its release from GitHub, checked against the SHA-256 GitHub lists, into pdfmd's own tools folder). Tectonic
+  fetches the TeX files a document needs from the network the first time, then works from its cache. `core:typst`
+  (or `core`) is `--install full` below. `pan-tec` (see "Other command names") runs pdfmd on it.
 - `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
   real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
   / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about

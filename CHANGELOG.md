@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.7 — 2026-10-14
+
+Pre-edit state: commit `3a1d68f` (v3.29.6).
+
+### Added
+
+- **`pdfmd --install core:tex`** (also `cortex`): the other core, **Pandoc and Tectonic** (the author's request, 2026-10-14: "it is
+  currently pandoc+typst, but pandoc+tectonic is a good alternative"). Pandoc is the real binary from PyPI as for `--install
+  pandoc`; Tectonic is the release file for the machine (`tectonic_asset_pattern`: macOS, Linux musl x86-64/ARM, Windows x86-64),
+  checked against the SHA-256 GitHub lists (nothing is downloaded without one), its `tectonic` placed in pdfmd's tools folder
+  (`install_tectonic`) and run once to check; it fetches the TeX files a document needs from the network the first time. `core:typst`
+  and `core` alone are `--install full` (Pandoc and Typst), so the two cores have one spelling. The versioned-file lookup is
+  `release_asset_matching` (Calibre's is built on it). Tested for real on macOS (the 22 MB download, the check, the run);
+  Linux and Windows files are chosen by name only. `tests/test_install_core_tex.py`; the `install-tools` CI job also installs
+  Tectonic on the three systems.
+
 ## v3.29.6 — 2026-10-14
 
 Pre-edit state: commit `7927841` (v3.29.5).

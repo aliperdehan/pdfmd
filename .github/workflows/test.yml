@@ -27,6 +27,13 @@ jobs:
       - run: pip install .                    # installs pdfmd like a user would
       - run: pdfmd --version
       - run: pdfmd --check-dependencies
+      - name: pdfmd --install core:tex puts a Tectonic that runs in the tools folder (v3.29.7)
+        run: |
+          python - <<'EOF'
+          import pdfmd
+          assert pdfmd.install_tectonic()
+          assert any(p.stem == "tectonic" for p in pdfmd.tools_directory().iterdir())
+          EOF
       - name: Build the examples
         working-directory: examples
         run: |

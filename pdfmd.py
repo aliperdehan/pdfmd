@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.6"
+PDFMD_VERSION = "3.29.7"
 import argparse
 import atexit
 import csv
@@ -3096,11 +3096,12 @@ INSTALL_SPECS = {
     "tui": ["prompt_toolkit>=3"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
+INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
 INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
-                 "calibre": "190 to 360 MB download",
+                 "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
+                 "cortex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 # Front-matter keys the native renderers act on; every other key is reported.
 NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", "keywords",
@@ -6970,14 +6971,20 @@ def calibre_asset_pattern(system: str | None = None, machine: str | None = None)
 
 
 def calibre_release_asset(pattern: str, release: dict | None = None) -> tuple[str, str, str] | None:
+    """(file name, URL, SHA-256) of Calibre's latest release's file matching `pattern` (see release_asset_matching)."""
+    return release_asset_matching(CALIBRE_REPOSITORY, pattern, release)
+
+
+def release_asset_matching(repository: str, pattern: str, release: dict | None = None) -> tuple[str, str, str] | None:
     """(file name, URL, SHA-256) of the latest release's file matching `pattern`, None when GitHub lists no such file or
-    no digest for it (the API is the only source of the checksum: no download is made without one)."""
+    no digest for it (the API is the only source of the checksum: no download is made without one). For releases whose
+    file names carry the version."""
     if release is None:
         headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
         if os.environ.get("GITHUB_TOKEN"):
             headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
         try:
-            request = urllib.request.Request(f"https://api.github.com/repos/{CALIBRE_REPOSITORY}/releases/latest", headers=headers)
+            request = urllib.request.Request(f"https://api.github.com/repos/{repository}/releases/latest", headers=headers)
             with open_url(request, 30) as response:
                 release = json.load(response)
         except (OSError, ValueError):
@@ -7134,6 +7141,68 @@ def install_calibre(fetch=None, release: dict | None = None, applications: Path 
     return True
 
 
+# -- Tectonic: the other core (v3.29.7) -----------------------------------------------------------------------------------
+# `pdfmd --install full` is Pandoc and Typst. `pdfmd --install core:tex` (also `cortex`) is Pandoc and Tectonic, the
+# self-contained LaTeX engine (one binary; it fetches the TeX files a document needs, once, from the network): the release
+# file for the machine, checked against the SHA-256 GitHub lists, its `tectonic` placed in pdfmd's tools folder.
+TECTONIC_REPOSITORY = "tectonic-typesetting/tectonic"
+TECTONIC_TARGETS = {
+    ("linux", "x86_64"): "x86_64-unknown-linux-musl", ("linux", "aarch64"): "aarch64-unknown-linux-musl",
+    ("darwin", "x86_64"): "x86_64-apple-darwin", ("darwin", "aarch64"): "aarch64-apple-darwin",
+    ("windows", "x86_64"): "x86_64-pc-windows-msvc",
+}
+
+
+def tectonic_asset_pattern(system: str | None = None, machine: str | None = None) -> str | None:
+    """The regular expression of Tectonic's release file for this machine (`tectonic-0.17.0-aarch64-apple-darwin.tar.gz`)."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    target = TECTONIC_TARGETS.get((system, machine))
+    if target is None:
+        return None
+    return r"tectonic-[\d.]+-" + re.escape(target) + (r"\.zip" if system == "windows" else r"\.tar\.gz")
+
+
+def install_tectonic(fetch=None, release: dict | None = None) -> bool:
+    """Download Tectonic's release binary for this machine into tools_directory()."""
+    pattern = tectonic_asset_pattern()
+    if pattern is None:
+        print(f"No Tectonic release is listed for {platform.system()} {platform.machine()}; "
+              f"see https://github.com/{TECTONIC_REPOSITORY}/releases", file=sys.stderr)
+        return False
+    asset = release_asset_matching(TECTONIC_REPOSITORY, pattern, release)
+    if asset is None:
+        print("GitHub lists no Tectonic download for this machine with a SHA-256 (offline, or a rate limit?), so none is made "
+              "unchecked. Install it with your package manager (brew install tectonic) or from tectonic-typesetting.github.io.",
+              file=sys.stderr)
+        return False
+    name, url, sha256 = asset
+    print(f"INSTALL  tectonic (10 to 22 MB download): {url}")
+    executable = "tectonic.exe" if name.endswith(".zip") else "tectonic"
+    with NamedTemporaryFile(suffix=".zip" if name.endswith(".zip") else ".tar.gz", delete=False) as temporary:
+        archive = Path(temporary.name)
+    try:
+        (fetch or download_file)(url, archive, sha256)
+        print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)")
+        target = extract_executable(archive, executable, tools_directory())
+    except (OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+        print(f"Could not install Tectonic ({error}). Install it yourself: brew install tectonic | "
+              "tectonic-typesetting.github.io", file=sys.stderr)
+        return False
+    finally:
+        archive.unlink(missing_ok=True)
+    use_managed_tools()
+    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
+    if ran.returncode != 0:
+        print(f"Tectonic was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+        return False
+    print(f"Installed {ran.stdout.strip()} in {tools_directory()} (used when no other Tectonic is on PATH; delete the file to "
+          "remove it). It fetches the TeX files a document needs from the network the first time (about 100 MB over time), "
+          "then works from its cache.")
+    return True
+
+
 def translit_report() -> bool:
     """`--translit list`: the packs, which are on, which could work."""
     module = unicode_module()
@@ -7155,13 +7224,14 @@ def translit_report() -> bool:
 def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
     kind = value.partition(":")[0]
-    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram"))
+    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core"))
+            or (kind == "core" and ":" in value and value not in ("core:tex", "core:typst"))
             or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax"))
             or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
-                                         "diagram:dot draw ```d2 and ```dot blocks)")
+                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex is Pandoc and Tectonic, core:typst Pandoc and Typst)")
     return value
 
 
@@ -7285,6 +7355,10 @@ def install_extra(kind: str) -> bool:
         return install_extra("pandoc") and install_extra("typst")
     if kind == "typst":
         return install_typst()
+    if kind in ("core", "core:typst"):
+        return install_extra("full")
+    if kind in ("core:tex", "cortex"):
+        return install_extra("pandoc") and install_tectonic()
     if kind == "math:katex":
         return install_katex()
     if kind == "math:mathjax":
@@ -22511,7 +22585,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
                              "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
                              "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "
-                             "alone), 'calibre' (Calibre, 190 to 360 MB: ebooks as output and input; offers Homebrew or winget "
+                             "alone), 'core:tex' (also 'cortex': Pandoc and Tectonic, the self-contained LaTeX engine, "
+                             "about 50 MB; 'core:typst' is 'full'), 'calibre' (Calibre, 190 to 360 MB: ebooks as output and input; offers Homebrew or winget "
                              "in a terminal, else downloads the release checked against GitHub's SHA-256: a disk image into "
                              "~/Applications on macOS, an archive into pdfmd's data folder on Linux), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
