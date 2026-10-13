@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.13 — 2026-10-14
+
+Pre-edit state: commit `fec4094` (v3.29.12).
+
+### Added
+
+- **Universal markup, the second kind: callouts** (queue item 5b; page breaks, `pagebreak.lua`, were the first). GitHub's and Obsidian's
+  `> [!NOTE]` / `> [!warning] Title` / `> [!tip]-`, a fenced `::: note` (or `{.warning title="..."}`), and Quarto's `::: callout-tip`
+  with its first heading as the title become each writer's own box (`pdfmd_lua/markup.lua`, one filter for every kind to come):
+  LaTeX the `pdfmdcallout` environment (a `tcolorbox` with the kind's colour, else an indented quote; **defined in a header file of
+  pdfmd's own** (`markup_header_args`), because a filter's `header-includes` are dropped by pdfmd's other header files: the cover
+  bug of 3.29.9), Typst a tinted block, HTML/EPUB `div.callout.callout-KIND` with a `<style>` in `include-before`, every other writer
+  a block quote with a bold title. Five kinds as GitHub has them; Obsidian's other names map to them; an unknown name is a note titled
+  with it. Opt-in like page breaks: `pdfmd-options.markup` (true, `all`, or a list of kinds), `--markup [KIND ...]`, `--no-markup`, a
+  `--setup` row under *Universal markup*, the inventory and help entries. Spellings were taken from `pandoc -t native` on 3.12 and
+  3.1.3 (identical; the `alerts` and `mark` extensions of 3.12 are off by default and 3.1.3 has neither, so the marker is read from the
+  block quote, and a Div with the class works as it is). Not done: the built-in renderer (no Pandoc), a Word shaded box. Next kinds
+  (each its own commit): a table of contents where `[TOC]` / `[[_TOC_]]` / `<!-- toc -->` / `\tableofcontents` stands, centring,
+  `==highlight==`, keep-together, appendix, landscape. `tests/test_markup_callouts.py`.
+
 ## v3.29.12 — 2026-10-14
 
 Pre-edit state: commit `80d5388` (v3.29.11).

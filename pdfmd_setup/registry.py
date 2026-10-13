@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off",
@@ -86,6 +86,12 @@ AUTO_HELP = {
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
     "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
 }
+
+
+# the kinds of pdfmd.MARKUP_KINDS, in its order
+MARKUP_CHOICES = (
+    ("callouts", "> [!NOTE], > [!warning] Title, ::: note: a box (LaTeX, Typst), a styled div (HTML), a quote (the rest)"),
+)
 
 
 # the families of pdfmd.PAGEBREAK_KINDS, in its order
@@ -347,6 +353,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
                 "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
                 "--no-pagebreak.", "Universal markup"),
+        Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
+                "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`. Per run: --markup / "
+                "--no-markup.", "Universal markup"),
         # -- what a build prints
         choice("options.found-style", "How the FOUND line lists the files it picked up",
                (("group", "files of one folder together: metadata: metadata.yaml + preamble.tex"),

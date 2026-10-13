@@ -1548,6 +1548,32 @@ It is off unless asked (the document, a metadata file, or `pdfmd --setup` under 
 [KIND ...]` and `--no-pagebreak` decide for one run. A spelling already in the output's own language stays as written,
 and slides leave a break out with a note. The built-in renderer (no Pandoc) reads the comment and TeX spellings anyway.
 
+**Callouts in every format** (v3.29, the first kind of *universal markup* after page breaks). GitHub's and Obsidian's
+`> [!NOTE]`, a fenced `::: note` and Quarto's `::: callout-tip` are a block quote or a div to Pandoc, and print as plain text.
+Ask for them and each becomes a box of the writer's own: LaTeX a `tcolorbox` (a plain indented quote when that package is not
+installed), Typst a tinted block, HTML, EPUB and the HTML engines' PDFs a `div.callout` with its style, every other writer
+(Word, OpenDocument, Markdown ...) a block quote with a bold title:
+
+```yaml
+pdfmd-options:
+  markup: callouts             # or: markup: true (every kind there is)
+```
+
+```markdown
+> [!warning] Mind the gap
+> The title is the rest of the first line, the body the lines after it.
+
+::: {.tip title="Another way"}
+A fenced div takes `note`, `tip`, `important`, `warning` or `caution` as its class, `title=` for the title.
+:::
+```
+
+The five kinds are GitHub's (`note`, `tip`, `important`, `warning`, `caution`); Obsidian's others map to them (`info`, `todo`,
+`example`, `abstract` to note; `success`, `check`, `hint` to tip; `question`, `help`, `faq` to important; `failure`, `danger`,
+`error`, `bug` to caution; `attention` to warning), and an unknown name is a note titled with it. A fold marker (`[!tip]-`) is
+dropped. Off unless asked (the document, a metadata file, or `pdfmd --setup` under *Universal markup*); `--markup [KIND ...]` and
+`--no-markup` decide for one run. The built-in renderer (no Pandoc) does not read it yet, and there is no Word shaded box yet.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

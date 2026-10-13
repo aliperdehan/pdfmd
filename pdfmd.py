@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.12"
+PDFMD_VERSION = "3.29.13"
 import argparse
 import atexit
 import csv
@@ -2373,6 +2373,90 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
     if PAGEBREAK_CLI["kinds"] is not None:
         return pagebreak_value(PAGEBREAK_CLI["kinds"] or True)
     return pagebreak_value(first_pdfmd_option(md_path, metadata_files, "pagebreak"))
+
+
+# Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
+# carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
+# or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
+MARKUP_KINDS = ("callouts",)
+MARKUP_CLI: dict = {"kinds": None, "off": False}
+
+
+def markup_value(value) -> list[str]:
+    """The kinds a `markup` value names, in MARKUP_KINDS order: true or `all` every one, false none, a list (or a
+    comma-separated string) those."""
+    if value is None or value is False:
+        return []
+    if value is True:
+        return list(MARKUP_KINDS)
+    items = value if isinstance(value, list) else str(value).replace(",", " ").split()
+    words = [str(item).strip().casefold() for item in items if str(item).strip()]
+    if any(word in ("all", "true", "yes", "on") for word in words):
+        return list(MARKUP_KINDS)
+    unknown = [word for word in words if word not in MARKUP_KINDS and word not in ("false", "no", "off", "none")]
+    if unknown:
+        print(f"WARN  markup: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a kind of universal markup "
+              f"({', '.join(MARKUP_KINDS)}, or all)", file=sys.stderr)
+    return [kind for kind in MARKUP_KINDS if kind in words]
+
+
+def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
+    """The kinds of universal markup this build carries: the command line's, else pdfmd-options'."""
+    if MARKUP_CLI["off"]:
+        return []
+    if MARKUP_CLI["kinds"] is not None:
+        return markup_value(MARKUP_CLI["kinds"] or True)
+    return markup_value(first_pdfmd_option(md_path, metadata_files, "markup"))
+
+
+def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter markup.lua`` with the kinds that take part (`-M pdfmd-markup=callouts`), when any."""
+    files = sources if isinstance(sources, list) else [sources]
+    kinds = markup_kinds(files[0], metadata_files) if files else []
+    if not kinds:
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("markup")
+    return ["-M", "pdfmd-markup=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+
+
+MARKUP_CALLOUT_HEADER = r"""% pdfmd: the box of a callout (pdfmd-options: markup: callouts)
+\makeatletter
+\@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
+\makeatother
+\definecolor{pdfmd-note}{HTML}{0969DA}
+\definecolor{pdfmd-tip}{HTML}{1A7F37}
+\definecolor{pdfmd-important}{HTML}{8250DF}
+\definecolor{pdfmd-warning}{HTML}{9A6700}
+\definecolor{pdfmd-caution}{HTML}{CF222E}
+\IfFileExists{tcolorbox.sty}{\def\pdfmdhastcolorbox{1}}{}
+\ifdefined\pdfmdhastcolorbox
+  \usepackage{tcolorbox}\tcbuselibrary{breakable}
+  \newtcolorbox{pdfmdcallout}[1]{breakable, colback=#1!6!white, colframe=#1, boxrule=0pt, leftrule=2.5pt, arc=0pt,
+    left=8pt, right=8pt, top=5pt, bottom=5pt}
+\else
+  \newenvironment{pdfmdcallout}[1]{\par\medskip\begin{quote}}{\end{quote}\medskip}
+\fi
+"""
+
+
+def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """`--include-in-header` for a LaTeX build's callouts: the pdfmdcallout environment, in a header file of pdfmd's own (a
+    filter's `header-includes` is dropped by every other header file of pdfmd's), or []."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or "callouts" not in markup_kinds(files[0], metadata_files):
+        return []
+    header = cache_root() / "tex" / f"packages-markup-{hashlib.sha1(MARKUP_CALLOUT_HEADER.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not header.is_file():
+            header.parent.mkdir(parents=True, exist_ok=True)
+            header.write_text(MARKUP_CALLOUT_HEADER, encoding="utf-8")
+    except OSError:
+        return []
+    return ["--include-in-header", str(header)]
 
 
 def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -18086,6 +18170,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -18595,6 +18680,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -19065,6 +19151,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
+                cmd += markup_filter_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
                 cmd += cover_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
@@ -19097,6 +19184,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                     cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                     cmd += cover_header_args([md_path, *parts_inputs], css_meta)
+                    cmd += markup_header_args([md_path, *parts_inputs], css_meta)
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -19315,6 +19403,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
+                    cmd += markup_filter_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
                     cmd += cover_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
@@ -19337,6 +19426,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                         cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                         cmd += cover_header_args([md_path, *parts_inputs], css_meta)
+                        cmd += markup_header_args([md_path, *parts_inputs], css_meta)
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -22955,6 +23045,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.pagebreak (true or a list) and pdfmd --setup")
     parser.add_argument("--no-pagebreak", action="store_true",
                         help="no page-break carrying for this run, whatever pdfmd-options.pagebreak says")
+    parser.add_argument("--markup", nargs="*", default=None, metavar="KIND",
+                        help="carry spellings other Markdown dialects share into every output: callouts (> [!NOTE], "
+                             "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
+                             "quote with a bold title (the rest); bare: all kinds. Off by default; also "
+                             "pdfmd-options.markup (true or a list) and pdfmd --setup")
+    parser.add_argument("--no-markup", action="store_true",
+                        help="no universal markup for this run, whatever pdfmd-options.markup says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
                         help="with --to gfm (flat Markdown) or --to txt: how subscripts and superscripts are written -- unicode "
                              "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "
@@ -23571,6 +23668,7 @@ def main() -> None:
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
     PAGEBREAK_CLI.update({"kinds": args.pagebreak, "off": args.no_pagebreak})
+    MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:
@@ -24106,6 +24204,7 @@ def main() -> None:
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
+                    cmd += markup_filter_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
                     cmd += cover_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
@@ -24232,6 +24331,7 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_header_file)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
+                        cmd += markup_filter_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
                         cmd += cover_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
@@ -24249,6 +24349,7 @@ def main() -> None:
                             cmd += tex_package_args(files, report_no_auto, report_note)
                             cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
                             cmd += cover_header_args(list(files), metadata_files)
+                            cmd += markup_header_args(list(files), metadata_files)
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
