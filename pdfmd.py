@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.36"
+PDFMD_VERSION = "3.28.37"
 import argparse
 import csv
 import filecmp
@@ -1847,8 +1847,8 @@ def no_auto_from_value(value) -> list[str] | None:
 
 def has_embedded_preamble(md_path: Path) -> bool:
     """Whether an assembled file carries its preamble inside `header-includes`
-    (--embed-metadata preamble). The front-matter macros a preamble expects
-    (DOCUMENT_LATEX_KEYS) are only emitted when a preamble exists, and one
+    (--embed-metadata preamble). The front-matter macros a package expects
+    (package_latex_keys) are only emitted when a preamble exists, and one
     embedded there counts as one."""
     kinds = frontmatter_pdfmd_options(md_path).get("embedded")
     return isinstance(kinds, list) and "preamble" in kinds
@@ -4866,7 +4866,9 @@ def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
 def package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
     """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
     (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
-    (front-matter key -> the macro it fills) and `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`)."""
+    (front-matter key -> the macro it fills), `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`), `lua:` (Lua
+    filters besides `<package>.lua`), `draft-skip:` (`commands:`, `spans:` a draft pass need not draw) and `picture-cache:`
+    (the names the package uses for the picture cache's protocol)."""
     if yaml is None:
         return None
     for candidate in (folder / f"{package}-pdfmd.yaml", folder / "pdfmd" / f"{package}-pdfmd.yaml", folder / "pdfmd" / "pdfmd.yaml"):
@@ -4885,6 +4887,29 @@ def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: l
     return [(folder, package) for folder, package, _ in office_packages(md_path, metadata_files, no_auto)]
 
 
+def header_includes_texts(md_path: Path, metadata_files: list[Path]) -> list[str]:
+    """The LaTeX a document gets from `header-includes:` -- its own front matter's and its metadata files' (a package may
+    be loaded there instead of in a preamble file: a pre-lab's metadata does that)."""
+    texts: list[str] = []
+
+    def collect(value) -> None:
+        if isinstance(value, str):
+            texts.append(value)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                collect(item)
+
+    for item in metadata_files:
+        collect(metadata_file_yaml(item).get("header-includes"))
+    try:
+        own = document_header_includes(md_path.read_text(encoding="utf-8-sig"))
+    except OSError:
+        own = None
+    if own:
+        texts.append(own)
+    return texts
+
+
 def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
                     ) -> list[tuple[Path, str, list[str]]]:
     """(folder, package name) of each LaTeX package the document's preamble loads that is not part of the TeX
@@ -4898,6 +4923,7 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
             texts.append(item.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
+    texts += header_includes_texts(md_path, metadata_files)
     loaded: list[tuple[str, list[str]]] = []
     for match in re.finditer(r"\\(?:usepackage|RequirePackage)(?:\[([^\]]*)\])?\{([^}]+)\}", "\n".join(texts)):
         options = [part.strip() for part in (match.group(1) or "").split(",") if part.strip()]
@@ -5017,8 +5043,8 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
 def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict,
                         packages: list[tuple[Path, str]] = ()) -> Path | None:
     """A house style's Word profile: `office: {profile: FILE}`, else `<name>-office.lua`, `office.lua` or
-    `nulabreport-office.lua` beside the document, in its metadata/ folder or beside its metadata files, else in
-    the config folder. A Lua file that says which of the style's own macros mean what in a Word file."""
+    `<package>-office.lua` (of a package the document loads) beside the document, in its metadata/ folder or beside its
+    metadata files, else in the config folder. A Lua file that says which of the style's own macros mean what in a Word file."""
     named = options.get("profile")
     if isinstance(named, str) and named.strip():
         path = Path(named).expanduser()
@@ -5030,7 +5056,7 @@ def find_office_profile(md_path: Path, metadata_files: list[Path], options: dict
     folders += [path.parent for path in metadata_files if path.parent not in folders]
     folders.append(config_root())
     for folder in folders:
-        for name in (f"{md_path.stem}-office.lua", "office.lua", "nulabreport-office.lua"):
+        for name in (f"{md_path.stem}-office.lua", "office.lua", *(f"{package}-office.lua" for _, package in packages)):
             if (folder / name).is_file():
                 return (folder / name).resolve()
     for folder, package in packages:
@@ -7369,33 +7395,15 @@ def document_header_includes(text: str) -> str | None:
     return None
 
 
-# Front-matter keys that are not pandoc variables but that a LaTeX preamble may
-# want. Each becomes \\renewcommand{\\<macro>}{<value>}, appended after the
-# preambles so the preamble can supply a default with \\newcommand.
-#
-# NOTE: this table is nulabreport's own vocabulary, kept only for packages that do not say so themselves.
-# The place for it is the package: `<package>-pdfmd.yaml` beside its .sty holds a `latex-keys:` mapping
-# (see package_latex_keys), which is read first and adds to or overrides these. Once nulabreport and
-# the documents around it ship that file, this table can go (a breaking change: a major bump).
-DOCUMENT_LATEX_KEYS = {
-    "experiment": "LabExperiment",
-    "group": "LabGroup",
-    # title-page fields (nulabreport's `titlepage` layout); all optional
-    "course": "LabCourse",
-    "section": "LabSection",
-    "instructor": "LabInstructor",
-    "performed": "LabPerformed",
-    "unknown": "LabUnknown",
-    "unknowns": "LabUnknown",  # same macro; either spelling works, whichever
-                                # reads right for a singular or plural value
-}
-
-
-def package_latex_keys(md_path: Path) -> dict[str, str]:
-    """{front-matter key: macro name} the LaTeX packages of the document's preamble ask for in their
-    `<package>-pdfmd.yaml` (`latex-keys:`)."""
+# Front-matter keys that are not pandoc variables but that a LaTeX package may want (package_latex_keys): each becomes
+# \\renewcommand{\\<macro>}{<value>}, appended after the preambles so the preamble can supply a default with \\newcommand.
+# A package says which in `<package>-pdfmd.yaml` beside its .sty (`latex-keys:`); until v3.28.37 one package's own
+# vocabulary was a table here as well, and is gone: pdfmd names no package.
+def package_latex_keys(md_path: Path, metadata_files: list[Path] | None = None) -> dict[str, str]:
+    """{front-matter key: macro name} the LaTeX packages of the document's preamble (or its metadata's header-includes)
+    ask for in their `<package>-pdfmd.yaml` (`latex-keys:`)."""
     keys: dict[str, str] = {}
-    for folder, package, _ in office_packages(md_path, [], None):
+    for folder, package, _ in office_packages(md_path, metadata_files or [], None):
         helper = package_helper(folder, package)
         wanted = helper[0].get("latex-keys") if helper else None
         if isinstance(wanted, dict):
@@ -7406,10 +7414,10 @@ def package_latex_keys(md_path: Path) -> dict[str, str]:
     return keys
 
 
-def document_latex_definitions(md_path: Path) -> str:
-    """Return \\renewcommand lines for the front-matter keys listed above and those of the document's packages."""
+def document_latex_definitions(md_path: Path, metadata_files: list[Path] | None = None) -> str:
+    """Return \\renewcommand lines for the front-matter keys of the document's packages."""
     lines = []
-    for key, macro in {**DOCUMENT_LATEX_KEYS, **package_latex_keys(md_path)}.items():
+    for key, macro in package_latex_keys(md_path, metadata_files).items():
         value = frontmatter_value(md_path, key)
         if value:
             lines.append(f"\\renewcommand{{\\{macro}}}{{{value}}}")
@@ -7417,13 +7425,13 @@ def document_latex_definitions(md_path: Path) -> str:
 
 
 @contextmanager
-def document_header_file(md_path: Path, active: bool) -> Iterator[Path | None]:
+def document_header_file(md_path: Path, active: bool, metadata_files: list[Path] | None = None) -> Iterator[Path | None]:
     """Yield a temporary .tex holding the document's own preamble additions."""
     if not active:
         yield None
         return
     try:
-        definitions = document_latex_definitions(md_path)
+        definitions = document_latex_definitions(md_path, metadata_files)
         includes = document_header_includes(md_path.read_text(encoding="utf-8-sig")) or ""
         if PREAMBLE_END_MARK in includes:
             # An embedded preamble (see EMBED_KINDS): definitions go after it.
@@ -7449,17 +7457,31 @@ def document_header_file(md_path: Path, active: bool) -> Iterator[Path | None]:
 
 
 
+def package_lua_names(md_path: Path, metadata_files: list[Path]) -> list[str]:
+    """The Lua filters a document's LaTeX packages bring: `<package>.lua` for each local package its preamble loads, and what
+    the package's `<package>-pdfmd.yaml` lists under `lua:` (v3.28.37; before, one package's name was written in pdfmd)."""
+    names: list[str] = []
+    for folder, package, _ in office_packages(md_path, metadata_files, None):
+        listed = [f"{package}.lua"]
+        helper = package_helper(folder, package)
+        extra = helper[0].get("lua") if helper else None
+        listed += [str(item) for item in ([extra] if isinstance(extra, str) else extra if isinstance(extra, list) else [])]
+        names += [name for name in listed if name not in names and "/" not in name and "\\" not in name]
+    return names
+
+
 def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
     """Find Pandoc Lua filters that belong to a document, without guessing.
 
-    Only two names are auto-applied: a filter matching the document's own stem
-    (report.md -> report.lua) and "nulabreport.lua" beside the document or its
-    metadata. Anything else has to be passed explicitly, so an unrelated .lua
-    file sitting in a folder can never silently change a render.
+    Only these names are auto-applied: a filter matching the document's own stem
+    (report.md -> report.lua) and the Lua filters of the LaTeX packages it loads
+    (package_lua_names: `<package>.lua`), beside the document or its metadata. Anything
+    else has to be passed explicitly, so an unrelated .lua file sitting in a folder can
+    never silently change a render.
     """
     directories: list[Path] = accessory_directories(md_path.parent, md_path.stem)
     directories += [metadata.parent for metadata in metadata_files]
-    wanted = (f"{md_path.stem}.lua", "nulabreport.lua")
+    wanted = (f"{md_path.stem}.lua", *package_lua_names(md_path, metadata_files))
     found: list[Path] = []
     seen: set[Path] = set()
     for directory in directories:
@@ -7478,7 +7500,7 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
 
 
 # -- Discovered Lua filters: noticed, not blocked (v3.26.11) -----------------------------------------------------
-# A Lua filter can run any command, and pdfmd runs `<name>.lua` and `nulabreport.lua` beside a document (and the files
+# A Lua filter can run any command, and pdfmd runs `<name>.lua` and a loaded package's `<package>.lua` beside a document (and the files
 # a document names in `pdfmd-options.lua-filter`) without being asked. So the first build with a filter pdfmd has not run
 # before prints a NOTE, and so does the first build after the file changed (path and SHA-256 are kept in
 # ~/.config/pdfmd/known-lua.txt); the filter still runs, so a filter you edit every day never gets in the way, and
@@ -15598,9 +15620,13 @@ PARTS_MARKER_DEFS = r"""\makeatletter
 DRAFT_FLAGS = {"lualatex": "-draftmode", "pdflatex": "-draftmode", "xelatex": "-no-pdf"}   # a pass without output
 # The draft pass only counts, so it does not draw (v3.27.23): a tikzpicture (pgfplots inside it too), \chemfig, a chemfig
 # \schemestart...\schemestop and an image cost most of a nulabreport report's pass and step no counter (a figure's
-# \caption is outside its picture). A picture is skipped up to its literal \end{tikzpicture}. When that \end is hidden
+# \caption is outside its picture). A picture is skipped up to its literal \end{tikzpicture}; the commands DRAFT_SKIP_COMMANDS
+# (one argument after any optional ones) and the spans DRAFT_SKIP_SPANS (a start macro up to its stop macro) are dropped, and a
+# package may add its own in `<package>-pdfmd.yaml` (`draft-skip:` with `commands:` and `spans:`). When that \end is hidden
 # in a macro, the skip meets \end{<the environment around the picture>} or \end{document} first: it says so in the log,
 # and build_label_scan runs the pass again with the pictures (draft_skip_problem). Needs LaTeX 2020-10 (\AddToHook).
+DRAFT_SKIP_COMMANDS = ("chemfig",)
+DRAFT_SKIP_SPANS = {"schemestart": "schemestop"}
 DRAFT_SKIP_PICTURES = r"""% pdfmd: a pass that only counts the numbers, so the pictures are not drawn
 \makeatletter
 \ifdefined\AddToHook
@@ -15619,18 +15645,42 @@ DRAFT_SKIP_PICTURES = r"""% pdfmd: a pass that only counts the numbers, so the p
 \def\pdfmd@cf{\@ifnextchar[\pdfmd@cfopt\pdfmd@cfarg}
 \def\pdfmd@cfopt[#1]{\@ifnextchar[\pdfmd@cfopt\pdfmd@cfarg}
 \long\def\pdfmd@cfarg#1{}
-\long\def\pdfmd@schemestart#1\schemestop{}
-\AtBeginDocument{%
+@@SPANS@@\AtBeginDocument{%
   \@ifundefined{tikzpicture}{}{\let\pdfmd@tikzpicture\tikzpicture\let\pdfmd@endtikzpicture\endtikzpicture
     \let\tikzpicture\pdfmd@tikz}%
-  \@ifundefined{chemfig}{}{\let\chemfig\pdfmd@chemfig}%
-  \@ifundefined{schemestart}{}{\let\schemestart\pdfmd@schemestart}%
-  \@ifundefined{Gin@setfile}{}{\setkeys{Gin}{draft}}}
+@@HOOKS@@  \@ifundefined{Gin@setfile}{}{\setkeys{Gin}{draft}}}
 \fi
 \makeatother
 """
 PART_COUNTER_RE = re.compile(r"^\\pdfmd@part\{([^{}]*)\}\{([^{}]*)\}\s*$")
 SEED_LABEL_RE = re.compile(r"^\\newlabel\{([^{}]*)\}(\{.*\})\s*$")
+
+
+def package_draft_skips(md_path: Path, metadata_files: list[Path]) -> tuple[list[str], dict[str, str]]:
+    """(commands, spans) the draft pass need not draw: DRAFT_SKIP_COMMANDS and DRAFT_SKIP_SPANS and what the packages the
+    document loads add in their `<package>-pdfmd.yaml` (`draft-skip:`); names are letters only."""
+    commands = list(DRAFT_SKIP_COMMANDS)
+    spans = dict(DRAFT_SKIP_SPANS)
+    for folder, package, _ in office_packages(md_path, metadata_files, None):
+        helper = package_helper(folder, package)
+        wanted = helper[0].get("draft-skip") if helper else None
+        if not isinstance(wanted, dict):
+            continue
+        for name in wanted.get("commands") or []:
+            if isinstance(name, str) and re.fullmatch(r"[A-Za-z]+", name) and name not in commands:
+                commands.append(name)
+        for start, stop in (wanted.get("spans") or {}).items() if isinstance(wanted.get("spans"), dict) else ():
+            if re.fullmatch(r"[A-Za-z]+", str(start)) and re.fullmatch(r"[A-Za-z]+", str(stop)):
+                spans.setdefault(str(start), str(stop))
+    return commands, spans
+
+
+def draft_skip_text(commands, spans) -> str:
+    """DRAFT_SKIP_PICTURES for these commands and spans."""
+    definitions = "".join(f"\\long\\def\\pdfmd@span@{start}#1\\{stop}{{}}\n" for start, stop in spans.items())
+    hooks = "".join(f"  \\@ifundefined{{{name}}}{{}}{{\\let\\{name}\\pdfmd@chemfig}}%\n" for name in commands)
+    hooks += "".join(f"  \\@ifundefined{{{start}}}{{}}{{\\let\\{start}\\pdfmd@span@{start}}}%\n" for start in spans)
+    return DRAFT_SKIP_PICTURES.replace("@@SPANS@@", definitions).replace("@@HOOKS@@", hooks)
 
 
 def draft_skip_problem(log: Path, aux: Path, text: str) -> str | None:
@@ -16052,7 +16102,8 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                     print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
 
         if quick:
-            draft_pass(whole.replace("\\begin{document}", DRAFT_SKIP_PICTURES + "\\begin{document}"))
+            draft_pass(whole.replace("\\begin{document}",
+                                     draft_skip_text(*package_draft_skips(md_path, metadata_list)) + "\\begin{document}"))
             problem = draft_skip_problem(scratch / "labels-scan.log", scratch / "labels-scan.aux", whole)
             if problem:
                 if verbose:
@@ -16083,7 +16134,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 # A package's picture macros (nulabreport >= 1.26.0, section 15b, was the first) look each whole
 # picture up by a key; on a hit they include the PDF stored here at the
 # stored size, on a miss they typeset as always and log the call to
-# <jobname>.plotreq. After the build pdfmd renders those logged calls, each in
+# <jobname>.pdfmdreq. After the build pdfmd renders those logged calls, each in
 # a small standalone job that loads the SAME preamble the document used (cut
 # from the generated .tex) and ships the picture out as a page of exactly its
 # size, ready for the next build. The finished PDF never depends on this having
@@ -16128,10 +16179,12 @@ PLOT_REQUEST_SEP = "@@|@@"
 #   * the context may carry two markers: PLOT_CTX_PLAIN splits it into a part read under expl3's catcodes and a part read with
 #     the ordinary ones (settings with spaces in their names); PLOT_CTX_TWICE asks for two runs (a picture whose arrows
 #     point at its own nodes: TikZ's remember picture needs the second run).
-# The names LEGACY_CACHE_NAMES are the first package's, kept as aliases: defined as well, read as well.
-LEGACY_CACHE_NAMES = {"dir": "LabPlotCacheDir", "render": "LabPlotRender", "requests": ".plotreq",
-                      "wd": "Lab@pc@wd", "ht": "Lab@pc@ht", "dp": "Lab@pc@dp"}
-CACHE_HANDSHAKES = ("pdfmdCacheDir", LEGACY_CACHE_NAMES["dir"])
+# A package that began before the protocol had neutral names says its own in `<package>-pdfmd.yaml` beside its style file
+# (`picture-cache:` with `dir`, `render`, `requests` (a file suffix) and `wd`, `ht`, `dp`: macro names): they are defined
+# and read as well (v3.28.37; until then the first package's names were a table here), and the helper counts as the
+# handshake too.
+CACHE_HANDSHAKE = "pdfmdCacheDir"
+CACHE_ALIAS_KEYS = ("dir", "render", "requests", "wd", "ht", "dp")
 PLOT_CTX_TWICE = "@@runs=2@@"   # in the plain part: the job runs twice (positions a picture remembers)
 PLOT_CTX_MARGIN = re.compile(r"@@margin=([0-9.]+(?:pt|bp|mm|cm|in|em|ex))@@")   # the page is the box plus this on every side (ink that overflows the box)
 PLOT_CTX_PLAIN = "@@plain@@"   # in a request's context: what follows is TeX with ordinary catcodes
@@ -16142,29 +16195,50 @@ CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
 PACKAGE_LOAD_RE = re.compile(r"\\(?:usepackage|RequirePackage|documentclass)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
 
 
-def picture_cache_styles(preamble: str) -> list[tuple[str, str]]:
-    """(name, text) of the style files the preamble loads that take part in the picture cache protocol (they mention
-    one of CACHE_HANDSHAKES), found by reading the packages it names: no package is named here."""
-    found: list[tuple[str, str]] = []
+def picture_cache_styles(preamble: str) -> list[tuple[str, str, dict[str, str]]]:
+    """(name, text, aliases) of the style files the preamble loads that take part in the picture cache protocol (they
+    mention CACHE_HANDSHAKE, or their package helper has a `picture-cache:` mapping, the aliases), found by reading the
+    packages it names: no package is named here."""
+    found: list[tuple[str, str, dict[str, str]]] = []
     for names in PACKAGE_LOAD_RE.findall(re.sub(r"(?m)(?<!\\)%.*$", "", preamble)):
         for name in (item.strip() for item in names.split(",")):
             if not name or name in {item[0] for item in found}:
                 continue
-            text = kpsewhich_text(name if name.endswith((".sty", ".cls")) else name + ".sty")
-            if text and any(word in text for word in CACHE_HANDSHAKES):
-                found.append((name, text))
+            path = kpsewhich_path(name if name.endswith((".sty", ".cls")) else name + ".sty")
+            text = read_text_or_none(path)
+            if text is None:
+                continue
+            helper = package_helper(path.resolve().parent, path.stem)      # as office_packages: through a symlink
+            wanted = helper[0].get("picture-cache") if helper else None
+            aliases = {key: str(value) for key, value in wanted.items()
+                       if key in CACHE_ALIAS_KEYS and re.fullmatch(r"\.?[A-Za-z@.]+", str(value))} \
+                if isinstance(wanted, dict) else {}
+            if CACHE_HANDSHAKE in text or aliases:
+                found.append((name, text, aliases))
     return found
 
 
-def kpsewhich_text(name: str) -> str | None:
+def cache_aliases(styles: list[tuple[str, str, dict[str, str]]]) -> dict[str, list[str]]:
+    """{protocol name: the aliases the participating packages gave it}."""
+    merged: dict[str, list[str]] = {key: [] for key in CACHE_ALIAS_KEYS}
+    for _, _, aliases in styles:
+        for key, value in aliases.items():
+            if value not in merged[key]:
+                merged[key].append(value)
+    return merged
+
+
+def kpsewhich_path(name: str) -> Path | None:
     kpsewhich = which("kpsewhich")
     if not kpsewhich:
         return None
     found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
-    if not found:
-        return None
+    return Path(found[0]) if found else None
+
+
+def read_text_or_none(path: Path | None) -> str | None:
     try:
-        return Path(found[0]).read_text(encoding="utf-8", errors="replace")
+        return path.read_text(encoding="utf-8", errors="replace") if path else None
     except OSError:
         return None
 
@@ -16368,8 +16442,10 @@ def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
 
 def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Path, preamble: str,
                          engine: str, cwd: Path, env: dict | None, roots: list[Path],
-                         verbose: bool) -> tuple[int, int]:
-    """Render each request not already stored; returns (rendered, failed)."""
+                         verbose: bool, aliases: dict[str, list[str]] | None = None) -> tuple[int, int]:
+    """Render each request not already stored; returns (rendered, failed). ``aliases``: the names a package gave the
+    protocol's (cache_aliases): its render macro is defined and its box sizes written under them too."""
+    aliases = aliases or {}
     import json
     from concurrent.futures import ThreadPoolExecutor
     todo = {key: value for key, value in requests.items()
@@ -16388,14 +16464,14 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         margin = found_margin.group(1) if found_margin else "0pt"
         plain = PLOT_CTX_MARGIN.sub("", plain)
         job.write_text(
-            f"\\def\\pdfmdCacheRender{{}}\\def\\{LEGACY_CACHE_NAMES['render']}{{}}\n" + preamble + "\\begin{document}\\makeatletter\n"
+            "\\def\\pdfmdCacheRender{}" + "".join(f"\\def\\{name}{{}}" for name in aliases.get("render", [])) + "\n" + preamble + "\\begin{document}\\makeatletter\n"
             "\\pagestyle{empty}\n\\ExplSyntaxOn\n" + ctx + "\n\\ExplSyntaxOff\n" + plain + "\n"
             "\\setbox\\z@\\hbox{" + macro + args + "}\n"
             "\\newwrite\\dimf\\immediate\\openout\\dimf=" + dim.name + "\n"
             "\\immediate\\write\\dimf{" + "".join(
                 f"\\string\\gdef\\string\\{name}{{\\the\\{box}\\z@}}"
                 for box, neutral in (("wd", "pdfmdCacheWd"), ("ht", "pdfmdCacheHt"), ("dp", "pdfmdCacheDp"))
-                for name in (neutral, LEGACY_CACHE_NAMES[box])) + "}\n"
+                for name in (neutral, *aliases.get(box, []))) + "}\n"
             f"\\immediate\\write\\dimf{{\\string\\gdef\\string\\pdfmdCacheMargin{{{margin}}}}}\n"
             "\\ifdefined\\pdfmdCachePost\\immediate\\write\\dimf{\\string\\gdef\\string\\pdfmdCachePostStored"
             "{\\unexpanded\\expandafter{\\pdfmdCachePost}}}\\fi\n"
@@ -16851,7 +16927,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     tex_path = Path(tex_path_str)
     try:
         with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], True) as prepared, \
-                document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text)) as header_file, \
+                document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text),
+                                         metadata_files) as header_file, \
                 pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
                 script_fallback([md_path], metadata_files, variables, preamble_files, nativebib_font, None,
                                 no_auto, note) as (fonts_header, fonts_filter):
@@ -17266,7 +17343,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                        typst_engine=(target_format == "typst"),
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
-                                         and is_tex_target) as header_file, \
+                                         and is_tex_target, metadata_files) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file, \
                     (script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
                                      tex_first_font, None, no_auto, note)
@@ -17517,7 +17594,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                        typst_engine=(engine == "typst")) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
-                                         and engine in LATEX_ENGINES) as header_file, \
+                                         and engine in LATEX_ENGINES, metadata_files) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
 
@@ -20422,12 +20499,14 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
         tex_env = tex_search_env(md_path.parent, pandoc_cwd)
         plot_dir = None
+        aliases: dict[str, list[str]] = {}
         preamble_text = ""
         if plots:
             tex_text = tex_path.read_text(encoding="utf-8")
             preamble_text = plot_preamble(tex_text.split("\\begin{document}")[0], own_headers)
             styles = picture_cache_styles(preamble_text)
-            sty_text = "\0".join(f"{name}\0{text}" for name, text in styles)
+            sty_text = "\0".join(f"{name}\0{text}" for name, text, _ in styles)
+            aliases = cache_aliases(styles)
             # the document's own cache folder: the aux cache's, or the one it would use when it is off
             plot_home = base if persistent else cache_directory(full_scaffold or md_path, cache_base, note)
             roots = [Path(os.path.abspath(pandoc_cwd)), Path(os.path.abspath(md_path.parent)), *user_tex_trees()]
@@ -20448,18 +20527,20 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                 os.utime(plot_dir)
                 prune_plot_directories(plot_dir)
                 validate_plot_entries(plot_dir, verbose, roots)
-                tex_path.write_text("\\def\\pdfmdCacheDir{%s/}\\def\\pdfmdCacheVersion{3}\\def\\%s{%s/}\n"
-                                    % (plot_dir.as_posix(), LEGACY_CACHE_NAMES["dir"], plot_dir.as_posix()) + tex_text,
+                tex_path.write_text("\\def\\pdfmdCacheDir{%s/}\\def\\pdfmdCacheVersion{3}\n" % plot_dir.as_posix()
+                                    + "".join("\\def\\%s{%s/}\n" % (name, plot_dir.as_posix())
+                                              for name in aliases.get("dir", [])) + tex_text,
                                     encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
                                         aux_dir=base, cwd=pandoc_cwd, env=tex_env)
         if ok and plot_dir is not None:
-            requests = {**read_plot_requests(base / f"{stem}{LEGACY_CACHE_NAMES['requests']}"),
-                        **read_plot_requests(base / f"{stem}.pdfmdreq")}
+            requests = {}
+            for suffix in (*aliases.get("requests", []), ".pdfmdreq"):
+                requests.update(read_plot_requests(base / f"{stem}{suffix}"))
             if requests:
                 started = time.time()
                 done, failed = render_plot_requests(requests, plot_dir, preamble_text, "lualatex",
-                                                    pandoc_cwd, tex_env, roots, verbose)
+                                                    pandoc_cwd, tex_env, roots, verbose, aliases)
                 if done or failed:
                     print(f"PLOTS  stored {done} plot{'s' if done != 1 else ''} for the next build "
                           f"({time.time() - started:.0f} s)" + (f"; {failed} failed (typeset inline, "
@@ -22018,7 +22099,7 @@ def main() -> None:
                                            doc_count=len(files),
                                            drop_embedded_preamble=not is_tex_target) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
-                                             and is_tex_target) as report_header_file, \
+                                             and is_tex_target, metadata_files) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file, \
                         (script_fallback(list(files), metadata_files, variables, report_preambles,
                                          report_tex_font, None, report_no_auto, report_note)
@@ -22171,7 +22252,7 @@ def main() -> None:
                             managed_fonts_css(engine) as report_fonts_css, \
                             document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
                                                             or bool(report_pdf_meta_snippet_text))
-                                                 and engine in LATEX_ENGINES) as report_header_file:
+                                                 and engine in LATEX_ENGINES, metadata_files) as report_header_file:
                         prepared_files = prepared[:len(files)]
                         prepared_metadata = prepared[len(files):]
                         cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]

@@ -41,6 +41,34 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.37 — 2026-10-13
+
+Pre-edit state: commit `0f75282` (v3.28.36).
+
+### Changed
+
+- **pdfmd no longer names any LaTeX package** (the author: "generally, nulabreport specific things should live in
+  nulabreport's own pdfmd metadata file, so it is portable to anything"). What a package brings is found by reading the
+  packages the document loads (its preamble files, its `header-includes:` and its metadata's) and the `<package>-pdfmd.yaml`
+  beside each style file. Four things were written in pdfmd and are now data:
+  - the title-page key table (`experiment`, `group`, `performed` ... -> `\LabExperiment` ...) was a table here; it is the
+    package's `latex-keys:` only (it already could be);
+  - the Lua filter: `<package>.lua` for each local package the document loads, beside the document or its metadata, and
+    whatever the helper lists under `lua:`; `nulabreport.lua` was a literal name. The Word profile is
+    `<package>-office.lua` of a loaded package, not `nulabreport-office.lua`;
+  - what a draft pass need not draw: `chemfig` and `\schemestart...\schemestop` are two small tables
+    (`DRAFT_SKIP_COMMANDS`, `DRAFT_SKIP_SPANS`) that a helper extends under `draft-skip:` (`commands:`, `spans:`), so a
+    circuit package would add its own;
+  - the picture cache's first names (`LabPlotCacheDir`, `.plotreq`, `Lab@pc@wd` ...) are the helper's `picture-cache:`
+    (`dir`, `render`, `requests`, `wd`, `ht`, `dp`), defined and read as aliases; a helper with that block takes part in the
+    cache like a style file that mentions `pdfmdCacheDir`. **A package that used its own names needs that block**: without
+    it the cache is inert (nulabreport v1.28.6 has it).
+- **A package loaded from `header-includes` is found.** The package scan read preamble files only, so a pre-lab (which loads
+  its package from the metadata's `header-includes`) got none of the package's Word profile, Lua filter or title-page keys.
+  Now it does: Pre-lab 7's Word file has the house header, title table and styles the full reports have. The `.tex` and the
+  Word file of LR1-2, LR3, LR4-5 and LR6 are identical to the old code's (checked), the pre-lab's `.tex` too; a package's
+  Lua filter is applied only when pdfmd can see the package is loaded (`--no-auto preamble` now drops it as well).
+
 ## v3.28.36 — 2026-10-13
 
 Pre-edit state: commit `b4ab613` (v3.28.35).
@@ -111,7 +139,7 @@ Pre-edit state: commit `8e57bf0` (v3.28.33).
   whose arrows point at its own nodes uses TikZ's `remember picture`, which needs the second run). A request without
   them runs as before. The tests drive `render_plot_requests` with a stand-in engine, and `picture_cache_styles`
   with a package in a TEXMFHOME of the test's own.
-- Where this came from: a scheme cache for nulabreport (v1.29.0, its own repository) uses both: on its Pre-lab 7 a warm
+- Where this came from: a scheme cache for nulabreport (v1.28.5, its own repository) uses both: on its Pre-lab 7 a warm
   rebuild takes 17 s of CPU instead of 24 s, with the same pages and five of seven pages pixel-identical (the other two
   differ by under 0.04% of their pixels: anti-aliasing at the edges of cached pictures).
 

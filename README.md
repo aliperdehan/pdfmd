@@ -671,6 +671,13 @@ office:
   reference-doc: house.dotx
 ```
 
+The same file can list `lua:` (Lua filters beside the document besides `<package>.lua`, which a document that loads the
+package gets by name anyway), `draft-skip:` (`commands:` that take one argument and `spans:` of a start macro up to its stop
+macro, which the label scan's draft pass need not draw, as it skips `chemfig`) and `picture-cache:` (the macro names and the
+request-file suffix a package used for the picture cache before the protocol had neutral names, see "For a package author").
+pdfmd names no package: all of this is found by reading the packages a document loads, in its preamble files or its
+`header-includes:`.
+
 ```yaml
 pdfmd-options:
   office:
