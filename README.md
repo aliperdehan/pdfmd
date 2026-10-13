@@ -311,7 +311,7 @@ OK    notes.md > notes.pdf
   where the built-in renderer and every engine that can draw colour emoji
   (Typst) find it; without it emoji print as `[rocket]`-style labels in the
   built-in renderer.
-- `pdfmd --install math:mathjax` (MathJax 4 and its STIX Two math font, about 12 MB to download, about 3 MB on
+- `pdfmd --install math:mathjax` (MathJax 4 and its STIX Two math font, about 12 MB to download, about 2 MB on
   disk) and `pdfmd --install math:katex` (KaTeX, about 1.5 MB) are for WeasyPrint's PDFs, not the built-in
   renderer: they typeset its math (see "WeasyPrint does not typeset math itself" below).
 - `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
@@ -1568,16 +1568,15 @@ When LaTeX itself stops, the warning also says where: Pandoc reports a line of t
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.
 
 WeasyPrint does not typeset math itself. With MathJax in place, `pdfmd --install math:mathjax` (MathJax 4.1's TeX input
-and HTML output and the STIX Two math font, which goes with pdfmd's default body font: about 12 MB to download, about 3 MB
+and HTML output and the STIX Two math font, which goes with pdfmd's default body font: about 12 MB to download, about 2 MB
 on disk in `~/.local/share/pdfmd/mathjax`, each package pinned and checked against its SHA-256; and node, when there is
 none on your PATH: node's own release from nodejs.org, about 30 MB, checked the same way, into pdfmd's tools folder), a
 Markdown document built with `-e weasyprint` (or one that falls back to it) has its math typeset by MathJax before
 WeasyPrint prints it: fractions, roots, matrices, accents, limits, stretchy arrows and braces, `\ce` reactions, in the
-math font that goes with the body font (STIX Two Math for STIX Two Text; `math:mathjax:newcm,termes,pagella,dejavu` adds
-the fonts of New Computer Modern, TeX Gyre Termes, TeX Gyre Pagella and DejaVu Serif bodies; any other body gets STIX
-Two Math, sized to the body's x-height). WeasyPrint draws some of MathJax's output a little off (an accent three points
-over its letter, a fraction's denominator too low, a bar that ran past its letter); pdfmd's own style rules put that
-right. A formula MathJax cannot read goes to KaTeX when `pdfmd --install math:katex` has put it in place (a `NOTE` says
+STIX Two Math, sized to the body font's x-height when the body is not STIX Two Text. (MathJax's other math fonts, New
+Computer Modern, TeX Gyre Termes and Pagella and DejaVu, are not offered yet: their tall delimiters built from pieces came
+out broken in WeasyPrint.) WeasyPrint draws some of MathJax's output a little off (an accent three points over its letter, a
+fraction's denominator too low, a bar that ran past its letter); pdfmd's own style rules put that right. A formula MathJax cannot read goes to KaTeX when `pdfmd --install math:katex` has put it in place (a `NOTE` says
 how many), and a formula neither reads (a macro from your LaTeX preamble, say) stays text, with one `WARN` for all of
 them. KaTeX alone, without MathJax, does what it did: `--no-auto mathjax` asks for that. Without either, the math is
 Pandoc's plain math, simple formulas in Unicode (`αᵢ ≤ β`) and the others as their TeX, with one `WARN`; Typst or a

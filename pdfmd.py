@@ -141,10 +141,10 @@ Math in WeasyPrint (v3.27.12, v3.28.11, v3.28.46):
     no node) the filter typesets the math instead: one node call (pdfmd_lua/katex.cjs) gives each formula as KaTeX's
     HTML, the page links KaTeX's stylesheet and fonts, and WeasyPrint prints it as a browser does; a formula KaTeX
     cannot read stays text, with one WARN. `--math-method=...` on the command line keeps Pandoc's math.
-    With MathJax 4 too (`pdfmd --install math:mathjax[:FONT,...]`: the npm packages, pinned and checked, and the math font
-    that goes with the body font) MathJax is asked first (pdfmd_lua/mathjax.cjs: CHTML and its stylesheet, with a few
-    rules that undo WeasyPrint's misplacing of stacked glyph boxes), KaTeX takes the formulas it cannot read, and the
-    rest stays text. `--no-auto mathjax` leaves the math to KaTeX.
+    With MathJax 4 too (`pdfmd --install math:mathjax`: the npm packages, pinned and checked, and the STIX Two math font)
+    MathJax is asked first (pdfmd_lua/mathjax.cjs: CHTML and its stylesheet, with a few rules that undo WeasyPrint's
+    misplacing of stacked glyph boxes), KaTeX takes the formulas it cannot read, and the rest stays text.
+    `--no-auto mathjax` leaves the math to KaTeX.
 
 Tables in an HTML engine's PDF (v3.28.3):
     Pandoc's own page style is for a screen: a table is a full-width block that scrolls sideways, and a word may
@@ -1362,7 +1362,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.47"
+PDFMD_VERSION = "3.28.48"
 import argparse
 import csv
 import filecmp
@@ -6409,23 +6409,19 @@ def install_katex() -> bool:
 # MathJax 4 typesets the math of a WeasyPrint PDF first, KaTeX takes the formulas it cannot read, and what neither reads
 # stays text. `pdfmd --install math:mathjax` puts this release's files in data_root()/mathjax/<version>/node_modules/@mathjax
 # (the npm packages below, each checked against its SHA-256 pinned here: the bundle's TeX input and CHTML output, and the
-# STIX Two math font, which goes with pdfmd's default body font; `math:mathjax:newcm,termes,pagella,dejavu` adds the math
-# fonts of the other bodies in MATH_COMPANIONS), and node as for KaTeX. pdfmd_lua/mathjax.cjs renders; Apache-2.0.
+# STIX Two math font, which goes with pdfmd's default body font), and node as for KaTeX. pdfmd_lua/mathjax.cjs renders;
+# Apache-2.0. Only STIX Two is offered: MathJax's New Computer Modern, TeX Gyre Termes, TeX Gyre Pagella and DejaVu fonts
+# were measured too (the margin that undoes WeasyPrint's misplacing is the font's ascent-descent excess plus 0.03em in
+# each, as in STIX Two), but a tall delimiter built from pieces (`\left[` over three rows) came out broken in WeasyPrint,
+# so they wait for a fix of that. A font is one entry in each of the three tables below.
 MATHJAX_VERSION = "4.1.3"
 MATHJAX_REGISTRY = "https://registry.npmjs.org/@mathjax"
 MATHJAX_SOURCE_SHA256 = "4611bed26b338dfc4b5757b8ed2d7ba82a85bcbd05d2729fb3465fba17b8896c"
-MATHJAX_FONT_SHA256 = {
-    "stix2": "664c8c40d739a231016cd6108cb6401166151772913e82b802bdd4b64812acf5",
-    "newcm": "87d7b869c6a2a6169d9a53acc4eab6c846a9cbe11752738226461bb5070c8b88",
-    "termes": "7b0e2c13d89703cbd5d0074525ba5f88a280183c3539251546940dcfb5a44f6f",
-    "pagella": "c28d88afe4e8fac9e930d6c297114e5ff5a3f72d043cd24cd623d8bcc8468a34",
-    "dejavu": "70dc992d68d6976d8b058841e8ee2fbe7ae161578d239216bf22c02ca7e1c42f",
-}
-MATHJAX_FONT_SIZES = {"stix2": "4.8 MB", "newcm": "13.9 MB", "termes": "3.1 MB", "pagella": "3.7 MB", "dejavu": "2.1 MB"}
+MATHJAX_FONT_SHA256 = {"stix2": "664c8c40d739a231016cd6108cb6401166151772913e82b802bdd4b64812acf5"}
+MATHJAX_FONT_SIZES = {"stix2": "4.8 MB"}
 MATHJAX_DEFAULT_FONT = "stix2"
-# the text font -> the MathJax math font that goes with it (the table of MATH_COMPANIONS; Libertinus has none)
-MATHJAX_FONT_FOR = {"stix two text": "stix2", "dejavu serif": "dejavu", "new computer modern": "newcm",
-                    "tex gyre termes": "termes", "tex gyre pagella": "pagella"}
+# the text font -> the MathJax math font that goes with it (a body that is not here gets STIX Two's, sized to its x-height)
+MATHJAX_FONT_FOR = {"stix two text": "stix2"}
 MATHJAX_BUNDLE_KEPT = ("node-main.cjs", "node-main.js", "node-main.mjs", "node-main-setup.cjs", "package.json", "core.js",
                        "loader.js", "startup.js", "require.mjs", "output/chtml.js")
 MATHJAX_BUNDLE_FOLDERS = ("input/tex", "adaptors")
@@ -6576,16 +6572,10 @@ def ensure_node(what: str) -> str | None:
     return node
 
 
-def install_mathjax(font_names: str = "") -> bool:
-    """`pdfmd --install math:mathjax[:FONT[,FONT]]`: MathJax's files and the STIX Two math font (and the named ones), and
-    node when there is none, so that WeasyPrint's PDFs have their math typeset by MathJax."""
-    fonts = (MATHJAX_DEFAULT_FONT, *(name for name in dict.fromkeys(part.strip() for part in font_names.split(","))
-                                     if name and name != MATHJAX_DEFAULT_FONT))
-    unknown = [name for name in fonts if name not in MATHJAX_FONT_SHA256]
-    if unknown:
-        print(f"No MathJax math font named {', '.join(unknown)}: choose from {', '.join(MATHJAX_FONT_SHA256)}",
-              file=sys.stderr)
-        return False
+def install_mathjax() -> bool:
+    """`pdfmd --install math:mathjax`: MathJax's files and the STIX Two math font, and node when there is none, so that
+    WeasyPrint's PDFs have their math typeset by MathJax."""
+    fonts = (MATHJAX_DEFAULT_FONT,)
     target = data_root() / "mathjax" / MATHJAX_VERSION
     size = ", ".join(f"{name} {MATHJAX_FONT_SIZES[name]}" for name in fonts)
     print(f"INSTALL  MathJax {MATHJAX_VERSION} and the math fonts {', '.join(fonts)} (downloads: 7.5 MB and {size}; "
@@ -6816,10 +6806,7 @@ def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
     kind = value.partition(":")[0]
     if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram"))
-            or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax")
-                and not value.startswith("math:mathjax:"))
-            or (value.startswith("math:mathjax:") and not all(name in MATHJAX_FONT_SHA256
-                                                              for name in value.split(":", 2)[2].split(",")))
+            or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax"))
             or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
@@ -6950,8 +6937,8 @@ def install_extra(kind: str) -> bool:
         return install_typst()
     if kind == "math:katex":
         return install_katex()
-    if kind == "math:mathjax" or kind.startswith("math:mathjax:"):
-        return install_mathjax(kind.partition(":")[2].partition(":")[2])
+    if kind == "math:mathjax":
+        return install_mathjax()
     if kind == "diagram" or kind.startswith("diagram:"):
         return install_diagram(kind.partition(":")[2])
     if kind == "ocr" or kind.startswith("ocr:"):
@@ -21834,8 +21821,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
                              "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
                              "Python 3.11+), 'math:mathjax' (MathJax 4 and its STIX Two math font, about 12 MB to download, and node "
-                             "when there is none, about 30 MB: WeasyPrint's PDFs then have their math typeset by MathJax; "
-                             "math:mathjax:newcm,termes,pagella,dejavu adds the fonts of other body fonts), "
+                             "when there is none, about 30 MB: WeasyPrint's PDFs then have their math typeset by MathJax), "
                              "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
                              "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
                              "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "

@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.48 — 2026-10-13
+
+Pre-edit state: commit `cd2c629` (v3.28.47).
+
+### Changed
+
+- **MathJax: only the STIX Two math font is offered.** v3.28.46 also let `math:mathjax:newcm,termes,pagella,dejavu` add the
+  math fonts of other body fonts. Checked before anything was published, with the five fonts side by side against Chromium on
+  the 36 shapes: the margin that undoes WeasyPrint's misplacing is each font's ascent-over-descent excess plus 0.03em (STIX
+  Two 0.262 -> 0.29em; New Computer Modern 0.306, Termes 0.282, Pagella 0.226, DejaVu 0.292), and with it every shape but one is
+  within 0.5 pt in all five. The one is a tall delimiter built from pieces (`\left[` over a three-row matrix): its bracket
+  breaks in WeasyPrint in the other four fonts (a gap in the middle; up to 7 pt off) while STIX Two Math draws it from a
+  single glyph. So `pdfmd --install math:mathjax` fetches MathJax and STIX Two Math only (12 MB), a body font that is not STIX
+  Two Text gets it sized to its x-height, and a font is one row of three tables when its brackets are fixed.
+- The `overflow: hidden` on `mjx-stretchy-v` is gone (it did nothing in STIX Two and was one cause of the gap); the one on
+  `mjx-stretchy-h` stays (an `\overline` or an arrow ran past its width without it).
+
+### Checked
+
+- Accents against LaTeX (STIX Two Math, 11 pt) after the fix: `\hat` +0.4, `\bar` 0.0, `\tilde` +0.2, `\vec` -0.2,
+  `\dot` -0.1 pt (before: +3.0 to +3.6 pt).
+
 ## v3.28.47 — 2026-10-13
 
 Pre-edit state: commit `9f624a5` (v3.28.46).

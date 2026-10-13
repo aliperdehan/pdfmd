@@ -79,9 +79,10 @@ class Install(unittest.TestCase):
 
     def test_every_archive_is_checked_against_its_pinned_sha256(self):
         calls: list = []
-        pdfmd.install_mathjax_files(self.directory / "m", ("stix2", "termes"), self.fetcher(calls))
+        with mock.patch.dict(pdfmd.MATHJAX_FONT_SHA256, {"termes": "7" * 64}):
+            pdfmd.install_mathjax_files(self.directory / "m", ("stix2", "termes"), self.fetcher(calls))
         self.assertEqual([item[1] for item in calls], [pdfmd.MATHJAX_SOURCE_SHA256, pdfmd.MATHJAX_FONT_SHA256["stix2"],
-                                                       pdfmd.MATHJAX_FONT_SHA256["termes"]])
+                                                       "7" * 64])
         self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", item[1]) for item in calls))
         self.assertEqual(calls[0][0], "https://registry.npmjs.org/@mathjax/src/-/src-4.1.3.tgz")
         self.assertEqual(calls[1][0], "https://registry.npmjs.org/@mathjax/mathjax-stix2-font/-/mathjax-stix2-font-4.1.3.tgz")
@@ -91,10 +92,11 @@ class Install(unittest.TestCase):
         target = self.directory / "m"
         pdfmd.install_mathjax_files(target, ("stix2",), self.fetcher(calls))
         calls.clear()
-        pdfmd.install_mathjax_files(target, ("stix2", "pagella"), self.fetcher(calls))
-        self.assertEqual([item[0].rsplit("/", 1)[1] for item in calls],
-                         ["src-4.1.3.tgz", "mathjax-pagella-font-4.1.3.tgz"])        # stix2 was there: not fetched again
-        self.assertEqual(pdfmd.mathjax_fonts(target), ["stix2", "pagella"])
+        with mock.patch.dict(pdfmd.MATHJAX_FONT_SHA256, {"pagella": "9" * 64}):
+            pdfmd.install_mathjax_files(target, ("stix2", "pagella"), self.fetcher(calls))
+            self.assertEqual([item[0].rsplit("/", 1)[1] for item in calls],
+                             ["src-4.1.3.tgz", "mathjax-pagella-font-4.1.3.tgz"])    # stix2 was there: not fetched again
+            self.assertEqual(pdfmd.mathjax_fonts(target), ["stix2", "pagella"])
 
     def test_a_package_with_nothing_pdfmd_needs_is_an_error(self):
         def fetch(url, destination, sha256):
@@ -116,36 +118,30 @@ class Install(unittest.TestCase):
             with mock.patch.object(pdfmd, "which", return_value=None):
                 self.assertIsNone(pdfmd.mathjax_runtime())                            # MathJax without node: nothing
 
-    def test_the_kind_takes_fonts_and_nothing_else(self):
+    def test_the_kind_is_math_mathjax_and_nothing_longer(self):
         self.assertEqual(pdfmd.install_kind("math:mathjax"), "math:mathjax")
-        self.assertEqual(pdfmd.install_kind("math:mathjax:newcm,termes"), "math:mathjax:newcm,termes")
-        for bad in ("math:mathjax:", "math:mathjax:nosuch", "math:mathjaxx", "math:mathjax:stix2,nosuch"):
+        for bad in ("math:mathjax:", "math:mathjax:newcm", "math:mathjaxx"):
             with self.assertRaises(Exception, msg=bad):
                 pdfmd.install_kind(bad)
         self.assertEqual(pdfmd.install_kind("math:katex"), "math:katex")
 
-    def test_an_unknown_font_stops_before_any_download(self):
-        with mock.patch.object(pdfmd, "download_file") as download:
-            self.assertFalse(pdfmd.install_mathjax("nosuch"))
-        download.assert_not_called()
-
     def test_the_pinned_names_are_the_ones_the_table_uses(self):
-        self.assertEqual(set(pdfmd.MATHJAX_FONT_FOR.values()) | {"stix2"}, set(pdfmd.MATHJAX_FONT_SHA256))
+        self.assertEqual(set(pdfmd.MATHJAX_FONT_FOR.values()) | {pdfmd.MATHJAX_DEFAULT_FONT}, set(pdfmd.MATHJAX_FONT_SHA256))
         self.assertEqual(set(pdfmd.MATHJAX_FONT_SIZES), set(pdfmd.MATHJAX_FONT_SHA256))
 
 
 class FontChoice(unittest.TestCase):
     def test_the_font_that_goes_with_the_body_when_it_is_installed(self):
-        installed = ["stix2", "termes", "newcm"]
-        self.assertEqual(pdfmd.mathjax_font_for("STIX Two Text", installed), ("stix2", True))
-        self.assertEqual(pdfmd.mathjax_font_for("TeX Gyre Termes", installed), ("termes", True))
-        self.assertEqual(pdfmd.mathjax_font_for("new computer modern", installed), ("newcm", True))
+        self.assertEqual(pdfmd.mathjax_font_for("STIX Two Text", ["stix2"]), ("stix2", True))
+        self.assertEqual(pdfmd.mathjax_font_for("stix two text", ["stix2"]), ("stix2", True))
+        with mock.patch.dict(pdfmd.MATHJAX_FONT_FOR, {"tex gyre termes": "termes"}):        # the table's shape, for a later font
+            self.assertEqual(pdfmd.mathjax_font_for("TeX Gyre Termes", ["stix2", "termes"]), ("termes", True))
+            self.assertEqual(pdfmd.mathjax_font_for("TeX Gyre Termes", ["stix2"]), ("stix2", False))    # not installed
 
     def test_another_body_gets_stix_two_scaled_and_a_missing_font_falls_back(self):
-        self.assertEqual(pdfmd.mathjax_font_for("Georgia", ["stix2", "termes"]), ("stix2", False))
+        self.assertEqual(pdfmd.mathjax_font_for("Georgia", ["stix2"]), ("stix2", False))
         self.assertEqual(pdfmd.mathjax_font_for(None, ["stix2"]), ("stix2", False))
-        self.assertEqual(pdfmd.mathjax_font_for("TeX Gyre Pagella", ["stix2"]), ("stix2", False))     # not installed
-        self.assertEqual(pdfmd.mathjax_font_for("Georgia", ["newcm"]), ("newcm", False))                # the only one there
+        self.assertEqual(pdfmd.mathjax_font_for("Georgia", ["newcm"]), ("newcm", False))              # the only one there
         self.assertIsNone(pdfmd.mathjax_font_for("STIX Two Text", []))
 
 
@@ -254,7 +250,8 @@ class Filter(unittest.TestCase):
         self.assertNotIn('class="kx"', out)
         self.assertNotIn("katex.min.css", out)                                    # KaTeX was not needed: not linked
         self.assertIn("/* mathjax css */", out)
-        for rule in ("mjx-c { margin-top: -0.29em; }", "mjx-stretchy-h > mjx-ext", "mjx-under > mjx-mo > mjx-box"):
+        for rule in ("mjx-c { margin-top: -0.29em; }", "mjx-stretchy-h > mjx-ext { overflow: hidden; }",
+                     "mjx-under > mjx-mo > mjx-box"):
             self.assertIn(rule, out)
         self.assertEqual(said, "")
 

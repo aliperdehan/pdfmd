@@ -74,11 +74,12 @@ local KATEX_FIXES = ".katex .katex-vbox { display: inline-block; }\n.katex .kate
 -- takes the line's metrics from the font that draws the glyph (0.262em of ascent over descent in STIX Two Math), so each
 -- box stood that much too tall above its baseline and everything MathJax stacks (an accent, a limit, a fraction's
 -- denominator, a root, an \underset) sat 0.3em too far apart: a hat floated 3pt over its letter at 11pt. A negative top
--- margin takes the excess off (0.29em matches Chromium to 0.3pt on the 36 shapes tried). WeasyPrint draws no `clip-path`,
--- which cuts a stretchy bar, arrow or brace to its width, so an overflow does (an \overline ran past its letter); the
--- bar of \underline sits inside a box of its own that wants 0.2em.
+-- margin takes the excess off (0.29em, the excess plus 0.03em, matches Chromium to 0.3pt on the 36 shapes tried in STIX Two
+-- Math; the other MathJax fonts want their own excess plus 0.03em, and are not offered yet: a tall delimiter built from
+-- pieces breaks in them). WeasyPrint draws no `clip-path`, which cuts a stretchy bar, arrow or brace to its width, so an
+-- overflow does (an \overline ran past its letter); the bar of \underline sits inside a box of its own that wants 0.2em.
 local MATHJAX_FIXES = "mjx-c { margin-top: -0.29em; }\n"
-  .. "mjx-stretchy-h > mjx-ext, mjx-stretchy-v > mjx-ext { overflow: hidden; }\n"
+  .. "mjx-stretchy-h > mjx-ext { overflow: hidden; }\n"
   .. "mjx-under > mjx-mo > mjx-box { margin-top: -0.2em; }\n"
 
 local plain_math = pandoc.WriterOptions({html_math_method = "plain"})
