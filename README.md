@@ -890,14 +890,21 @@ style, a compound library, a shared bibliography and parts.
   installed (checked in an empty home folder). The TeX distribution's own packages, fonts and Pandoc are not carried.
 - **The text files are in the source's text.** The `.tex` files a document reads and its CSV data are blocks of the
   attached `pdfmd-source.md`, after the text (`.tex` first, then the data) and before the bibliography and style at the
-  very end, so one file holds everything you edit; the pictures, your package and files in sibling folders stay separate
-  attachments. `<!-- pdfmd-at: ... -->` comments say on which line each block is (an index after the front matter and one
+  very end, so one file holds everything you edit; the pictures and your package stay separate attachments (and a file
+  that is not text, or too big, or whose line ends are mixed). `<!-- pdfmd-at: ... -->` comments say on which line each block is (an index after the front matter and one
   before each part of the text that names a file); pdfmd writes them whenever it writes the source and removes them
   wherever it reads one, so they never reach a build and a restore gives back your text as it was.
 - **Files in sibling folders** (`\input{../schemes/x.tex}`, a CSV in `../ir/`) are stored too, up to two folders above
-  the document's (never the home folder or above), and `--restore` puts the folder back in the same layout: the
-  document in `<folder>/<its folder's name>/`, the siblings beside it. A bibliography the metadata names by the real
+  the document's (never the home folder or above), as blocks of the text like the rest (their path starts with `..`),
+  and `--restore` puts the folder back in the same layout: the document in `<folder>/<its folder's name>/`, the siblings
+  beside it. A file with Windows line ends (CRLF all through) is a block with an `eol: crlf` line and comes back byte for
+  byte. `pdfmd --edit report.pdf` writes those files where the document reads them before every build, so editing a
+  block is editing the file; a build of the source file alone (no `--edit`) never writes outside its own folder and
+  says so when a file it reads from there is missing. A bibliography the metadata names by the real
   folder of a symlinked metadata file (a shared `nulab.bib`) is embedded, pruned to the entries the text cites.
+- **A newer source is refused, not half restored.** The manifest has a format number (2 since v3.28.45, when the chain of
+  folders, the text files as blocks and the `..` files came in). A pdfmd that reads up to 1 stops with `was made by a
+  newer pdfmd (...); upgrade pdfmd to restore it`, and this one restores both 1 and 2.
 - **Comments.** Notes to yourself do not travel: the attached source loses its
   `<!-- -->` comments, the LaTeX preamble's `%` comments, the text between a
   `.bib`'s entries, a CSL file's XML comments and the `#` comments of YAML

@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.47 — 2026-10-13
+
+Pre-edit state: commit `9f624a5` (v3.28.46).
+
+### Changed
+
+- **README brought up to date with the unpushed 3.27 and 3.28 commits** (the author: every change keeps the README current;
+  PyPI shows it as the project's page). An audit of each changelog entry since v3.26.20 against the README found it already
+  describing the settings menu, `--merge`, the CSV caps, the page-break kinds, the presets and the global metadata, `-e
+  calibre` and the engine chain, the style sheet and `css-scope`, `--edit` of a PDF, `--bopen` with `eN` and `sN`,
+  `--check-source`, the picture cache, `--install diagram`, KaTeX and MathJax. What it had wrong or lacked, now in the
+  attached-source section: sibling-folder text files are blocks of the source too (it said they stayed attachments), a CRLF
+  file is a block with `eol: crlf` and comes back byte for byte, `--edit` writes those files where the document reads them,
+  and the manifest's format number is 2, so an older pdfmd refuses a newer source instead of restoring half of it.
+
 ## v3.28.46 — 2026-10-13
 
 Pre-edit state: commit `21cf89d` (v3.28.45).
