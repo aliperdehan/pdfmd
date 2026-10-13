@@ -1135,13 +1135,24 @@ from the last full build; without the cache they are counted from the
 sources, above). It never skips a build: Pandoc and
 LaTeX still process the whole document from the current sources and package
 every time, so a change shows in the next build. `cache: {plots: true}` (or
-`--cache-plots`, with nulabreport >= 1.26.0) additionally stores each plot as a
+`--cache-plots`; LuaLaTeX) additionally stores each whole picture of a package that takes part
+(nulabreport's plots and chemical schemes do) as a
 PDF in the document's cache folder and reuses it (a part built alone uses the whole
 document's, unless its preamble differs by more than the title) until the package,
 the preamble, the engine, TeX Live's packages (a `tlmgr update`) or a file the plot
 read changes (its data file, a file of the package's own: checked by
 SHA-1 of the contents before every build). Off by default; `--no-cache` for one build; `pdfmd --clear-cache`
 (or deleting the folder) is always safe.
+
+*For a package author:* the protocol names no package. A style file that mentions `pdfmdCacheDir` takes part; pdfmd then
+defines `\pdfmdCacheDir` (the folder, with a trailing slash) and `\pdfmdCacheVersion` (2) before the document. The package looks
+a picture up by its own key as `<folder>/<key>.pdf` with its size in `<key>.dim` (`\pdfmdCacheWd`, `Ht`, `Dp`), typesets
+inline on a miss, and appends `<key>@@|@@<macro>@@|@@<arguments>@@|@@<context>` to `<job>.pdfmdreq`. After the build pdfmd
+runs each request in a standalone job with the same preamble (`\pdfmdCacheRender` defined, so there is no lookup): the
+context, then `\setbox0\hbox{<macro><arguments>}`; that box is the page. A context may hold `@@plain@@` (what follows is read
+with ordinary catcodes, not expl3's: settings with spaces in their names) and `@@runs=2@@` (typeset twice, for a picture
+whose arrows point at its own nodes). nulabreport's first names (`\LabPlotCacheDir`, `.plotreq`, `\Lab@pc@wd`) still work as
+aliases.
 
 **Where the cache lives.** By default in `~/.cache/pdfmd`, one folder per document.
 Folders get moved (a lab report from Downloads into OneDrive), and a cache keyed by

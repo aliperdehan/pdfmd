@@ -1033,8 +1033,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     pass itself if a number moved). Build with --no-cache, or `pdfmd DOC
     --clear-cache` first, when verifying a change to the package itself.
 
-    Plot cache (`cache: {plots: true}`, --cache-plots; nulabreport >= 1.26.0,
-    LuaLaTeX): nulabreport's whole plot pictures are stored as PDFs in the
+    Picture cache (`cache: {plots: true}`, --cache-plots; LuaLaTeX; a package opts in by mentioning `pdfmdCacheDir`
+    in its style file, the protocol is described above PLOT_CTX_TWICE; nulabreport >= 1.26.0 is the first): the
+    package's whole pictures (plots, chemical schemes) are stored as PDFs in the
     document's cache folder after the build that first typesets them, and the
     next build (a part built alone too, unless its preamble differs by more
     than the title) includes them at their exact size
@@ -1357,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.33"
+PDFMD_VERSION = "3.28.34"
 import argparse
 import csv
 import filecmp
@@ -16070,8 +16071,8 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 
 
 # -- Plot cache (pdfmd-options: {cache: {plots: true}}, --cache-plots) --------
-# nulabreport's plot macros (nulabreport >= 1.26.0, section 15b) look each whole
-# plot picture up by a key; on a hit they include the PDF stored here at the
+# A package's picture macros (nulabreport >= 1.26.0, section 15b, was the first) look each whole
+# picture up by a key; on a hit they include the PDF stored here at the
 # stored size, on a miss they typeset as always and log the call to
 # <jobname>.plotreq. After the build pdfmd renders those logged calls, each in
 # a small standalone job that loads the SAME preamble the document used (cut
@@ -16081,7 +16082,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 #
 # What stops it going stale, since a stale plot would be worse than a slow one:
 #   * the directory is keyed by a hash of everything the picture can depend on
-#     apart from its own arguments -- the package (nulabreport.sty), the
+#     apart from its own arguments -- the packages' style files, the
 #     document's whole preamble (fonts, settings, preamble.tex, header-includes),
 #     the engine's version, when TeX Live's packages last changed (its package
 #     database, rewritten by every `tlmgr update`), and this cache's format -- so a
@@ -16107,8 +16108,42 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 # drawn once and reused at its next build: eight are kept per document.
 PLOT_CACHE_FORMAT = "2"
 PLOT_REQUEST_SEP = "@@|@@"
+# The protocol between pdfmd and a LaTeX package that caches its pictures (v3.28.34; nothing in pdfmd names a package).
+# A package opts in by mentioning `pdfmdCacheDir` in its style file. Then:
+#   * pdfmd writes `\def\pdfmdCacheDir{<folder>/}\def\pdfmdCacheVersion{2}` before the document; the package looks a picture up
+#     by its own key as `<folder>/<key>.pdf` with its size in `<folder>/<key>.dim`, and on a miss typesets inline and
+#     appends `<key>@@|@@<macro>@@|@@<arguments>@@|@@<context>` as a line to `<job>.pdfmdreq`;
+#   * after the build pdfmd runs each request in a standalone job with the same preamble, `\pdfmdCacheRender` defined (no
+#     lookup then): the context, then `\setbox0\hbox{<macro><arguments>}`, the page is that box; its size goes to the .dim
+#     file as `\gdef\pdfmdCacheWd`, `Ht` and `Dp` (a macro name each, in points);
+#   * the context may carry two markers: PLOT_CTX_PLAIN splits it into a part read under expl3's catcodes and a part read with
+#     the ordinary ones (settings with spaces in their names); PLOT_CTX_TWICE asks for two runs (a picture whose arrows
+#     point at its own nodes: TikZ's remember picture needs the second run).
+# The names LEGACY_CACHE_NAMES are the first package's, kept as aliases: defined as well, read as well.
+LEGACY_CACHE_NAMES = {"dir": "LabPlotCacheDir", "render": "LabPlotRender", "requests": ".plotreq",
+                      "wd": "Lab@pc@wd", "ht": "Lab@pc@ht", "dp": "Lab@pc@dp"}
+CACHE_HANDSHAKES = ("pdfmdCacheDir", LEGACY_CACHE_NAMES["dir"])
+PLOT_CTX_TWICE = "@@runs=2@@"   # in the plain part: the job runs twice (positions a picture remembers)
+PLOT_CTX_PLAIN = "@@plain@@"   # in a request's context: what follows is TeX with ordinary catcodes
 PLOT_CACHE_KEEP_DIRS = 8     # per document: the whole report, a few parts, a package changed and changed back
 CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
+
+
+PACKAGE_LOAD_RE = re.compile(r"\\(?:usepackage|RequirePackage|documentclass)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
+
+
+def picture_cache_styles(preamble: str) -> list[tuple[str, str]]:
+    """(name, text) of the style files the preamble loads that take part in the picture cache protocol (they mention
+    one of CACHE_HANDSHAKES), found by reading the packages it names: no package is named here."""
+    found: list[tuple[str, str]] = []
+    for names in PACKAGE_LOAD_RE.findall(re.sub(r"(?m)(?<!\\)%.*$", "", preamble)):
+        for name in (item.strip() for item in names.split(",")):
+            if not name or name in {item[0] for item in found}:
+                continue
+            text = kpsewhich_text(name if name.endswith((".sty", ".cls")) else name + ".sty")
+            if text and any(word in text for word in CACHE_HANDSHAKES):
+                found.append((name, text))
+    return found
 
 
 def kpsewhich_text(name: str) -> str | None:
@@ -16336,23 +16371,31 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         key, (macro, args, ctx) = item
         job = plot_dir / f"r-{key}.tex"
         dim = plot_dir / f"r-{key}.dim"      # renamed to {key}.dim LAST: the commit marker
+        ctx, _, plain = ctx.partition(PLOT_CTX_PLAIN)       # a scheme's settings need spaces kept: read outside expl3's catcodes
+        passes = 2 if PLOT_CTX_TWICE in plain else 1       # a picture whose arrows point at its own nodes is typeset twice
+        plain = plain.replace(PLOT_CTX_TWICE, "")
         job.write_text(
-            "\\def\\LabPlotRender{}\n" + preamble + "\\begin{document}\\makeatletter\n"
-            "\\pagestyle{empty}\n\\ExplSyntaxOn\n" + ctx + "\n\\ExplSyntaxOff\n"
+            f"\\def\\pdfmdCacheRender{{}}\\def\\{LEGACY_CACHE_NAMES['render']}{{}}\n" + preamble + "\\begin{document}\\makeatletter\n"
+            "\\pagestyle{empty}\n\\ExplSyntaxOn\n" + ctx + "\n\\ExplSyntaxOff\n" + plain + "\n"
             "\\setbox\\z@\\hbox{" + macro + args + "}\n"
             "\\newwrite\\dimf\\immediate\\openout\\dimf=" + dim.name + "\n"
-            "\\immediate\\write\\dimf{\\string\\gdef\\string\\Lab@pc@wd{\\the\\wd\\z@}"
-            "\\string\\gdef\\string\\Lab@pc@ht{\\the\\ht\\z@}"
-            "\\string\\gdef\\string\\Lab@pc@dp{\\the\\dp\\z@}}\n"
+            "\\immediate\\write\\dimf{" + "".join(
+                f"\\string\\gdef\\string\\{name}{{\\the\\{box}\\z@}}"
+                for box, neutral in (("wd", "pdfmdCacheWd"), ("ht", "pdfmdCacheHt"), ("dp", "pdfmdCacheDp"))
+                for name in (neutral, LEGACY_CACHE_NAMES[box])) + "}\n"
             "\\immediate\\closeout\\dimf\n"
             "\\pagewidth=\\wd\\z@ \\pageheight=\\dimexpr\\ht\\z@+\\dp\\z@\\relax\n"
             "\\hoffset=-1in \\voffset=-1in\n"
-            "\\ClearShipoutPictureBG\\ClearShipoutPictureFG\n"
+            "\\ifdefined\\ClearShipoutPictureBG\\ClearShipoutPictureBG\\fi\\ifdefined\\ClearShipoutPictureFG\\ClearShipoutPictureFG\\fi\n"
             "\\shipout\\hbox{\\box\\z@}\n\\end{document}\n", encoding="utf-8")
         cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
                f"-output-directory={plot_dir}", str(job)]
         log_cmd(cmd, cwd, verbose)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+        for _ in range(passes - 1):
+            if result.returncode != 0:
+                break
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
         produced = plot_dir / f"r-{key}.pdf"
         ok = result.returncode == 0 and produced.exists() and dim.exists()
         if ok:
@@ -20352,14 +20395,16 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         if plots:
             tex_text = tex_path.read_text(encoding="utf-8")
             preamble_text = plot_preamble(tex_text.split("\\begin{document}")[0], own_headers)
-            sty_text = kpsewhich_text("nulabreport.sty") or ""
+            styles = picture_cache_styles(preamble_text)
+            sty_text = "\0".join(f"{name}\0{text}" for name, text in styles)
             # the document's own cache folder: the aux cache's, or the one it would use when it is off
             plot_home = base if persistent else cache_directory(full_scaffold or md_path, cache_base, note)
             roots = [Path(os.path.abspath(pandoc_cwd)), Path(os.path.abspath(md_path.parent)), *user_tex_trees()]
             if engines[0] != "lualatex":
                 note("CACHE", "plots: only LuaLaTeX is supported; plot cache skipped")
-            elif "LabPlotCacheDir" not in sty_text:
-                note("CACHE", "plots: this nulabreport.sty has no plot cache (needs v1.26.0); skipped")
+            elif not styles:
+                note("CACHE", "plots: no package the document loads takes part in the picture cache "
+                              "(its style file mentions pdfmdCacheDir); skipped")
             elif " " in str(plot_home):
                 note("CACHE", "plots: the cache folder's path has a space; plot cache skipped")
             else:
@@ -20372,12 +20417,14 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                 os.utime(plot_dir)
                 prune_plot_directories(plot_dir)
                 validate_plot_entries(plot_dir, verbose, roots)
-                tex_path.write_text("\\def\\LabPlotCacheDir{%s/}\n" % plot_dir.as_posix() + tex_text,
+                tex_path.write_text("\\def\\pdfmdCacheDir{%s/}\\def\\pdfmdCacheVersion{2}\\def\\%s{%s/}\n"
+                                    % (plot_dir.as_posix(), LEGACY_CACHE_NAMES["dir"], plot_dir.as_posix()) + tex_text,
                                     encoding="utf-8")
         ok, reason = compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
                                         aux_dir=base, cwd=pandoc_cwd, env=tex_env)
         if ok and plot_dir is not None:
-            requests = read_plot_requests(base / f"{stem}.plotreq")
+            requests = {**read_plot_requests(base / f"{stem}{LEGACY_CACHE_NAMES['requests']}"),
+                        **read_plot_requests(base / f"{stem}.pdfmdreq")}
             if requests:
                 started = time.time()
                 done, failed = render_plot_requests(requests, plot_dir, preamble_text, "lualatex",
@@ -20987,7 +21034,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "the document, so it travels with it). Also `pdfmd-options: {cache: {location: "
                              "document}}` or the config file")
     parser.add_argument("--cache-plots", action="store_true",
-                        help="also cache nulabreport's plots (needs nulabreport >= 1.26.0, LuaLaTeX): each "
+                        help="also cache the pictures of a package that takes part in the picture cache (nulabreport >= 1.26.0 does; LuaLaTeX): each "
                              "plot is stored as a PDF after the build that first typesets it and reused by "
                              "the next, until the package, the preamble, the engine or the plot's data "
                              "file changes (pdfmd-options: {cache: {plots: true}} does this by default)")

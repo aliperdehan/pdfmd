@@ -41,6 +41,35 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.34 — 2026-10-13
+
+Pre-edit state: commit `8e57bf0` (v3.28.33).
+
+### Changed
+
+- **The picture cache's protocol names no package** (the author: "keep things neutral so it can scale to any package imaginable
+  ... nulabreport specific things should live in nulabreport's own files"). Until now pdfmd looked for `nulabreport.sty`
+  by name, tested it for `LabPlotCacheDir`, and wrote `\LabPlotCacheDir`, `\LabPlotRender`, `Lab@pc@wd` and `<job>.plotreq`.
+  Now `picture_cache_styles` reads the packages the preamble loads (`\usepackage`, `\RequirePackage`, `\documentclass`) and
+  takes in the style files that mention `pdfmdCacheDir`; their text keys the cache folder as nulabreport.sty's did. pdfmd
+  defines `\pdfmdCacheDir` and `\pdfmdCacheVersion` (2), the render jobs define `\pdfmdCacheRender`, write the size as
+  `\pdfmdCacheWd`/`Ht`/`Dp`, and the requests may come in `<job>.pdfmdreq`. The old names are one table
+  (`LEGACY_CACHE_NAMES`, a style that mentions `LabPlotCacheDir` still takes part) and are defined and read as well, so
+  nulabreport 1.26-1.28 caches as before. The render job's `\ClearShipoutPicture...` calls are guarded now (they came
+  with one package's preamble). The README has a section for a package author.
+
+### Added
+
+- **Two markers in a request's context**, for a package whose pictures depend on more than expl3 can carry:
+  `@@plain@@` splits the context into the part read under expl3's catcodes (as before) and a part read with the ordinary
+  ones (chemfig's settings have spaces in their names, which expl3 drops), and `@@runs=2@@` runs the job twice (a picture
+  whose arrows point at its own nodes uses TikZ's `remember picture`, which needs the second run). A request without
+  them runs as before. The tests drive `render_plot_requests` with a stand-in engine, and `picture_cache_styles`
+  with a package in a TEXMFHOME of the test's own.
+- Where this came from: a scheme cache for nulabreport (v1.29.0, its own repository) uses both: on its Pre-lab 7 a warm
+  rebuild takes 17 s of CPU instead of 24 s, with the same pages and five of seven pages pixel-identical (the other two
+  differ by under 0.04% of their pixels: anti-aliasing at the edges of cached pictures).
+
 ## v3.28.33 — 2026-10-13
 
 Pre-edit state: commit `ad111f0` (v3.28.32).
