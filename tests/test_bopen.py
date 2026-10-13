@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ class Spec(unittest.TestCase):
             self.assertIn("fN", str(caught.exception))
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
 @unittest.skipIf(sys.platform == "win32", "uses a fake opener on PATH")
 class Batch(unittest.TestCase):
     def setUp(self):

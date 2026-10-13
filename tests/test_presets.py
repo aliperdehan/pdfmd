@@ -4,6 +4,7 @@ swapped for a preset (presets/NAME.yaml beside the config file: --preset, pdfmd-
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,9 +51,11 @@ class Presets(unittest.TestCase):
         (self.doc / "out.tex").unlink()
         return next((name for name in ("Default Author", "Lab Author", "Course Author") if name in text), "nobody")
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_the_default_is_metadata_yaml(self):
         self.assertEqual(self.author(), "Default Author")
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_a_preset_by_the_command_line_with_or_without_the_suffix(self):
         self.assertEqual(self.author("--preset", "lab"), "Lab Author")
         self.assertEqual(self.author("--preset", "lab.yaml"), "Lab Author")
@@ -60,6 +63,7 @@ class Presets(unittest.TestCase):
         self.assertEqual(self.author("--preset", "default"), "Default Author")
         self.assertEqual(self.author("--preset", str(self.home / "presets" / "lab.yaml")), "Lab Author")
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_a_preset_by_the_document_the_folder_and_the_config(self):
         self.write("d.md", "---\npdfmd-options:\n  preset: lab.yaml\n---\n\n# A\n\nText.\n")
         self.assertEqual(self.author(), "Lab Author")
@@ -71,6 +75,7 @@ class Presets(unittest.TestCase):
         self.assertEqual(self.author("--preset", "course"), "Course Author")           # the command line wins
         (self.home / "config.yaml").unlink()
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_the_global_metadata_can_be_switched_off_and_on_again(self):
         self.assertEqual(self.author("--no-global-metadata"), "nobody")
         self.assertEqual(self.author("--preset", "none"), "nobody")
@@ -82,12 +87,14 @@ class Presets(unittest.TestCase):
         self.assertEqual(self.author("--global-metadata"), "Default Author")
         (self.home / "config.yaml").unlink()
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_an_unknown_preset_stops_and_names_the_ones_there_are(self):
         done = self.run_pdfmd("d.md", "--to", "latex", "--preset", "nowhere", ok=False)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("unknown preset 'nowhere'", done.stdout + done.stderr)
         self.assertIn("lab", done.stdout + done.stderr)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
     def test_the_closing_lines_name_the_preset(self):
         done = self.run_pdfmd("d.md", "--to", "latex", "--preset", "lab")
         self.assertIn("preset lab", done.stdout)

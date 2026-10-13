@@ -41,6 +41,17 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.49 — 2026-10-13
+
+Pre-edit state: commit `1f5c789` (v3.28.48).
+
+### Fixed
+
+- **CI's native job failed on 20 tests that run a Pandoc build** (the job has no Pandoc by design): `test_autolog.Builds`,
+  `test_bopen.Batch`, `test_rawcode.Builds` and six of `test_presets.Presets` were written without the skip that every
+  other module with a Pandoc build has. They are skipped now when `pandoc` is not on PATH; nothing else changed. The first push of
+  3.28.48 therefore published nothing (the tests gate the release).
+
 ## v3.28.48 — 2026-10-13
 
 Pre-edit state: commit `cd2c629` (v3.28.47).

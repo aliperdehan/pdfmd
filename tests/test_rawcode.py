@@ -44,6 +44,7 @@ class Detection(unittest.TestCase):
                 self.assertEqual(pdfmd.has_code_spans(text), expected)
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
 class Builds(unittest.TestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix="pdfmd-rawcode-"))

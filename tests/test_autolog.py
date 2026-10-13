@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -104,6 +105,7 @@ class Layout(unittest.TestCase):
             pdfmd.sys.stdout = original
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc (the CI native job has none)")
 class Builds(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
