@@ -189,12 +189,17 @@ class Building(Folder):
 
     def test_a_report_takes_the_first_chapters_macro_values(self):
         # v3.27.26: experiment: in the front matter sets \LabExperiment (document_latex_definitions) in a -r PDF too
-        self.write("preamble.tex", "\\newcommand{\\LabExperiment}{N/A}\n")
+        # v3.28.37: the key is the package's own (its pdfmd helper), found by reading the preamble's \usepackage
+        package = self.directory / "tex" / "keypkg"
+        package.mkdir(parents=True)
+        (package / "keypkg.sty").write_text("\\ProvidesPackage{keypkg}\n\\newcommand{\\LabExperiment}{N/A}\n", encoding="utf-8")
+        (package / "keypkg-pdfmd.yaml").write_text("latex-keys:\n  experiment: LabExperiment\n", encoding="utf-8")
+        self.write("preamble.tex", "\\usepackage{keypkg}\n")
         self.write("one.md", "---\ntitle: R\nexperiment: 7\n---\n\n# One\n\nExperiment \\LabExperiment{} done.\n")
         self.write("two.md", "# Two\n\nMore.\n")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "-r", "one.md", "two.md", "-o", "r.pdf",
                                "-e", "lualatex"], capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
-                              env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1", "TEXINPUTS": f"{self.directory / 'tex'}//:"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         text = subprocess.run(["pdftotext", str(self.directory / "r.pdf"), "-"], capture_output=True, text=True).stdout
         self.assertIn("Experiment 7 done", " ".join(text.split()))

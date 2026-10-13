@@ -414,10 +414,11 @@ class PackageHelper(unittest.TestCase):
         tex = self.build("pdfmd", "latex-keys: {mykey: \\MyKey}\n")
         self.assertIn("\\renewcommand{\\MyKey}{Seven}", tex)
 
-    def test_a_package_without_the_file_changes_nothing_and_the_built_in_keys_still_work(self):
+    def test_a_package_without_the_file_changes_nothing_and_pdfmd_has_no_keys_of_its_own(self):
+        # until v3.28.37 `experiment:` etc. were a table in pdfmd; a package says its own keys now
         tex = self.build("", "", front="title: T\nmykey: Seven\nexperiment: Titration\n")
         self.assertNotIn("\\renewcommand{\\MyKey}", tex)
-        self.assertIn("\\renewcommand{\\LabExperiment}{Titration}", tex)
+        self.assertNotIn("\\renewcommand{\\LabExperiment}", tex)
 
     def test_the_office_section_supplies_word_defaults(self):
         sys.path.insert(0, str(ROOT))
