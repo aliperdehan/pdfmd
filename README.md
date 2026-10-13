@@ -1811,7 +1811,10 @@ files, the folder settings (the nearest folder first, then the ones above it), y
 `inherit: false` in a folder's file stops the walk upward there. A folder cannot set what belongs to this computer (`translit`,
 `setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
 until it says `enabled: true`, as in the global file. A build lists the folder files it used on its `FOUND` line
-(`--verbose`: `AUTO SETTINGS`). Writing the file from `pdfmd --setup DIR`, and carrying it in an attached source, are not done yet.
+(`--verbose`: `AUTO SETTINGS`). A folder's options cannot name code (a Lua filter or a preamble is read from the document's own
+front matter only), a `.pdfmd/config.yaml` owned by another user (a shared `/tmp`) is not read, and a path in it (`css: house.css`)
+is relative to the document, as everywhere, not to the folder file. Writing the file from `pdfmd --setup DIR`, and carrying it in
+an attached source, are not done yet.
 
 ```yaml
 translit: [greek, hangul]

@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.10"
+PDFMD_VERSION = "3.29.11"
 import argparse
 import atexit
 import csv
@@ -2402,6 +2402,33 @@ def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
         print(f"WARN  {display_path(files[0])}: cover: {value} was not found beside the document; no cover is made", file=sys.stderr)
         return []
     return ["-M", "pdfmd-cover=image", "-M", f"pdfmd-cover-image={picture}", *args]
+
+
+def cover_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """`--include-in-header` for a LaTeX build's picture cover (`cover: picture.png`): the picture on the first page, before
+    \\maketitle. A header file of pdfmd's own, last, like the packages: a filter's `header-includes` would be dropped by
+    every other one of pdfmd's (the code header, the packages, a house preamble), which only a document's own survive."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files:
+        return []
+    value = first_pdfmd_option(files[0], metadata_files, "cover")
+    if value is None or value is True or str(value).strip().casefold() in (
+            "", "false", "no", "off", "0", "none", "true", "yes", "on", "1", "title"):
+        return []
+    picture = (files[0].parent / str(value).strip()).resolve()
+    if not picture.is_file():
+        return []                      # cover_filter_args says so
+    path_text = picture.as_posix()
+    text = ("% pdfmd: the cover picture (pdfmd-options: cover)\n\\usepackage{graphicx}\n\\AtBeginDocument{\\thispagestyle{empty}"
+            "\\noindent\\includegraphics[width=\\linewidth,height=\\textheight,keepaspectratio]{" + path_text + "}\\clearpage}\n")
+    header = cache_root() / "tex" / f"packages-cover-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not header.is_file():
+            header.parent.mkdir(parents=True, exist_ok=True)
+            header.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    return ["--include-in-header", str(header)]
 
 
 def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -14936,8 +14963,10 @@ def option_flag(value) -> bool | None:
 # `.pdfmd/config.yaml` in the document's folder or any folder above it: the same `options:` as the global config, for what is
 # under that folder. Nearest first; a layer that says `inherit: false` ends the walk upward; they sit between the document's
 # metadata files and the global config (the author's layer order). Only `options:` is read from a folder: `translit`, `setup-ui`
-# and `disabled` are this machine's and are ignored there, with a WARN. Nothing a folder says runs code that a discovered
-# file would not (a Lua filter or a preamble named there goes the same trust path as one found beside the document).
+# and `disabled` are this machine's and are ignored there, with a WARN. A folder's options cannot name code: the keys that
+# name a Lua filter or a preamble (`lua-filter`, `preamble`) are read from the document's own front matter only, and the
+# engine is chosen from pdfmd's list. A file owned by another user (a shared /tmp) is not read. Paths in a folder's options
+# (`css: house.css`) are relative to the document, as everywhere, not to the folder file.
 FOLDER_SETTINGS = ".pdfmd/config.yaml"
 FOLDER_WARNED: set[str] = set()
 
@@ -14953,6 +14982,11 @@ def folder_layer_files(folder: str) -> tuple[tuple[str, dict], ...]:
         path = candidate / FOLDER_SETTINGS
         try:
             if not path.is_file():
+                continue
+            if hasattr(os, "getuid") and path.stat().st_uid not in (os.getuid(), 0):
+                if str(path) not in FOLDER_WARNED:
+                    FOLDER_WARNED.add(str(path))
+                    print(f"WARN  {path}: belongs to another user; not read", file=sys.stderr)
                 continue
             data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
@@ -19062,6 +19096,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target:
                     cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                     cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
+                    cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -19301,6 +19336,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
                         cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
+                        cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -24212,6 +24248,7 @@ def main() -> None:
                         if engine in LATEX_ENGINES:
                             cmd += tex_package_args(files, report_no_auto, report_note)
                             cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
+                            cmd += cover_header_args(list(files), metadata_files)
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:

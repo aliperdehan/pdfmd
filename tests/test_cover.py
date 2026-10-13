@@ -98,6 +98,23 @@ class Build(unittest.TestCase):
         self.assertIn('id="pdfmd-cover"', page)
         self.assertLess(page.index('id="pdfmd-cover"'), page.index("title-block-header\">"))
 
+    def test_the_picture_survives_pdfmd_s_own_header_files(self):
+        # a document with code gets pdfmd's own --include-in-header (code_wrap.tex), which drops metadata header-includes
+        (self.root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  cover: c.png\n---\n\n# One\n\n```python\nprint(1)\n```\n",
+                                        encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--no-stamp", "--to", "latex", "-o", "d.tex"],
+                              cwd=self.root, env=self.env, capture_output=True, text=True, timeout=300)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.root / "d.tex").read_text(encoding="utf-8")
+        self.assertIn("\\AtBeginDocument{\\thispagestyle{empty}", text)
+        self.assertIn("fvextra", text)                                               # the code header is there too
+
+    def test_the_html_page_break_survives_an_include_in_header_of_your_own(self):
+        (self.root / "mine.html").write_text("<!-- mine -->\n", encoding="utf-8")
+        done = self.run_pdfmd("cover: true", "--to", "html", "-s", "-H", "mine.html", "-o", "d.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("#title-block-header { break-after: page", (self.root / "d.html").read_text(encoding="utf-8"))
+
     def test_a_picture_is_the_cover_of_an_epub(self):
         done = self.run_pdfmd("cover: c.png", "-o", "d.epub")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

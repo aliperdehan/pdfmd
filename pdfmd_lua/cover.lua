@@ -37,11 +37,7 @@ function Meta(meta)
   if mode == "image" then
     if image == "" then return nil end
     if latex then
-      -- Pandoc's template sets \maketitle before include-before: the picture goes in at the start of the document instead
-      local path = image:gsub("\\", "/")
-      append(meta, "header-includes", pandoc.MetaBlocks({pandoc.RawBlock("latex",
-        "\\usepackage{graphicx}\\AtBeginDocument{\\thispagestyle{empty}\\noindent\\includegraphics[width=\\linewidth,height=\\textheight,keepaspectratio]{"
-        .. path .. "}\\clearpage}")}))
+      return nil         -- pdfmd's own header file does it (cover_header_args): metadata header-includes are dropped by pdfmd's others
     else
       local picture = pandoc.Image({}, image, "", pandoc.Attr("", {}, {{"width", "100%"}}))
       append(meta, "include-before", pandoc.MetaBlocks({
@@ -50,7 +46,7 @@ function Meta(meta)
   elseif latex then
     if plain(meta["pdfmd-cover-latex"]) ~= "0" then append(meta, "classoption", pandoc.MetaString("titlepage")) end
   else
-    append(meta, "header-includes", pandoc.MetaBlocks({pandoc.RawBlock("html",
+    append(meta, "include-before", pandoc.MetaBlocks({pandoc.RawBlock("html",
       "<style>#title-block-header { break-after: page; page-break-after: always; text-align: center; padding-top: 6cm; }</style>")}))
   end
   return meta

@@ -91,6 +91,15 @@ class Layers(unittest.TestCase):
         self.layer("a", "options:\n  stamp: {mode: history}\n")
         self.assertFalse(pdfmd.frontmatter_stamp(self.doc, [])["enabled"] if pdfmd.frontmatter_stamp(self.doc, []) else False)
 
+    @unittest.skipUnless(hasattr(os, "getuid"), "POSIX owners")
+    def test_a_file_of_another_user_is_not_read(self):
+        self.layer("a", "options:\n  fallback: char\n")
+        pdfmd.folder_layer_files.cache_clear()
+        err = io.StringIO()
+        with mock.patch.object(pdfmd.os, "getuid", lambda: os.stat(self.root).st_uid + 12345), contextlib.redirect_stderr(err):
+            self.assertEqual(self.value("fallback"), "global")
+        self.assertIn("belongs to another user", err.getvalue())
+
     def test_the_labels(self):
         self.layer("a", "options:\n  fallback: char\n")
         labels = [where for where, _ in pdfmd.option_sources(self.doc, [])]

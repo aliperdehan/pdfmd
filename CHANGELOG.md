@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.11 — 2026-10-14
+
+Pre-edit state: commit `7c0a5c9` (v3.29.10).
+
+### Fixed
+
+- **A picture cover vanished from a LaTeX document with code** (3.29.9): the filter put it in the metadata's `header-includes`, which
+  every `--include-in-header` file of pdfmd's own (the code header, the packages, a house preamble) replaces; only a document's
+  own survive that. The picture now goes in a header file of pdfmd's own (`cover_header_args`, beside `css_heading_args`), and the
+  HTML page break of `cover: true` is a `<style>` in `include-before`, which a `-H` of your own does not replace. Tests build both
+  with a code block and with `-H` (they would have passed on the broken code with a plain document: the advisor's catch).
+- **Folder settings** (3.29.10): a `.pdfmd/config.yaml` owned by another user is not read (the walk reaches a shared `/tmp`, whose
+  folder another user may have written); a WARN says so. The comment on what a folder's options may name was wrong in its claim of
+  a trust path: no key read from a folder names a Lua filter or a preamble (those are read from the document's own front matter
+  only), so there is none to route; the comment and the README say that, and that a path in a folder's options is relative to the
+  document, not to the folder file. A search of the author's home and `~/dev` (four levels) found no `.pdfmd` folder.
+
 ## v3.29.10 — 2026-10-14
 
 Pre-edit state: commit `34808ef` (v3.29.9).
