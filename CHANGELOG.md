@@ -41,6 +41,67 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.0 — 2026-10-13
+
+Pre-edit state: commit `561044b` (v3.28.49). The converters write what Pandoc cannot (Calibre ebooks, LibreOffice `.doc`) and a browser is a PDF engine for Markdown.
+
+### Added
+
+- **A browser prints a Markdown document**: `-e edge`, `-e chrome`, `-e chromium`, `-e brave`, or the family word `-e browser` (the
+  installed ones in that order; aliases `msedge`, `microsoft-edge`, `google-chrome`, `brave-browser`). Pandoc writes the same
+  one self-contained HTML page the Calibre route does (MathML, which a browser draws itself, the same filters, citations,
+  fonts, and the LaTeX filter of the Word route for LaTeX the page would drop) and `pdfmd_direct`'s headless browser prints it
+  with the paper and margins the document asks for as `@page` (`papersize`, `geometry`, `margin`, `classoption`, read as for a
+  Word file; else Letter and 1in) and Pandoc's screen style undone (the column, the padding, the grey page, narrow tables).
+  Like Calibre, only when named, never in the automatic chain; usable in a chain (`-e typst,edge`) and as
+  `pdf-engine: edge`. Before, `-e edge` on a `.md` was refused (only a `.html` file went to a browser). On a Mac Edge's printing
+  looked right on the math test page (accents, limits, matrices) with no correction of its own.
+- **LibreOffice writes `.doc`** (and, with `-e soffice` first on the command line, `rtf`, `odt`, `txt` and `epub`). `pdfmd letter.md -o
+  letter.doc` has Pandoc write the Word file (the one `-o letter.docx` writes: reference document, native equations and tables,
+  pictures for what LaTeX alone can draw) into a scratch folder and headless LibreOffice convert it (Word 97 is a format
+  Pandoc does not write). A format Pandoc writes itself goes through LibreOffice only when asked, with a NOTE; a
+  `pdf-engine: soffice` in front matter or the config is a PDF setting. `-e soffice` with a target it does not write (`.tex`)
+  stops and lists what it does. One document at a time (`-b`, `-r`, `-p` stop with that said); no LibreOffice: the error says
+  where it was looked for and how to install it. `run_soffice_convert` takes the target; the job, its checks and its closing
+  line are the Calibre ones' (`finish_convert_job`).
+- **Calibre writes ebooks** (the author: start the Calibre line, one `+0.0.1` per item after this). `pdfmd book.md -o book.azw3`
+  or `--to azw3` has Pandoc write an EPUB 3 into a scratch folder (chapters, contents, the metadata, the math as MathML; the
+  same filters, citations and fonts as any EPUB) and `ebook-convert` turn it into the target, `book.azw3` beside the document
+  (`-o` names it, or a folder; no suffix gets the format's). Twelve targets only Calibre writes: `azw3`, `mobi`, `kepub`,
+  `lit`, `lrf`, `pdb`, `rb`, `snb`, `tcr`, `pmlz`, `htmlz`, `txtz`. Each was converted back to text with ebook-convert 9.14 and
+  the heading, the words, the list and the table were there. `-o file.EXT` knows them all by their suffix.
+- **`-e calibre` for a target Pandoc writes too**: `epub`, `docx`, `rtf`, `txt`, `fb2` are Calibre's only when `-e calibre` (or
+  `-e ebook-convert,...`: Calibre first) is on the **command line**, with a NOTE that Pandoc's own route has more of the
+  format's features; a `pdf-engine: calibre` in front matter or the config is a PDF setting and does not move a docx to Calibre.
+  `-e calibre` with a target it cannot write (`.tex`, `.html`, `.md`) stops and lists what Calibre writes. A target only
+  Calibre writes with another engine named prints `WARN  --engine is ignored for --to azw3: Calibre writes it`.
+- **Math in an ebook.** The EPUB has the formulas as MathML, which a Kindle or a Kobo does not draw and a MOBI, a Palm book
+  or an RTF file has no place for (a MOBI made from it simply lost them: "Inline  and water ."). So the targets that can
+  show pictures (`azw3`, `mobi`, `kepub`, `lit`, `lrf`, and `docx` through Calibre) get each formula drawn by LaTeX as a
+  picture, in the document's own preamble, by the route of a Word file (`latex: images`, cached; `\ce` and siunitx converted);
+  the picture keeps `LaTeX: x^2` as its description and the tooltip that named a folder of this machine's cache is dropped
+  (`pdfmd_lua/ebook.lua`). The plain formats (`pdb`, `rb`, `snb`, `tcr`, `pmlz`, `txtz`, and `rtf`, `txt`, `fb2` through
+  Calibre) get the formulas as text, the simple ones with their superscripts and the rest as TeX, with one WARN that counts
+  them; so does a picture target when there is no LaTeX engine or no `pdftocairo` (the WARN says why). `epub` and `htmlz`
+  keep the MathML. A math option of your own (`--mathml`, `--math-method=...`) is kept as it is.
+- One document at a time: `-b`, `-r` and `-p` with such a target stop with that said. No Calibre: the error names the target,
+  where `ebook-convert` is looked for and how to install Calibre. `--doctor` says which formats need it.
+
+### Fixed
+
+- **`-o book.azw3` (any suffix pdfmd did not know) wrote a PDF under that name**; the same for `.mobi`, `.kepub` and the
+  rest. A suffix that is none of pdfmd's formats still does what it did (a PDF), except these twelve.
+
+### Not done (the next items of the Calibre line)
+
+- Calibre and the browsers in the automatic chain, direct `.md` through Calibre,
+  ebooks as input, `pdfmd --install calibre`.
+- A batch or a report to ebooks.
+
+Tests: `tests/test_browser_engine.py` (selection, the page as CSS, a build with a stand-in browser that writes a PDF and logs the page it
+was given); `tests/test_calibre_targets.py` (the decisions, the job, a build with a stand-in for `ebook-convert` that copies the EPUB
+it is given, `ebook.lua` through Pandoc, and a real Calibre where there is one: `BOOKMOBI` at byte 60 of an AZW3 and a MOBI).
+
 ## v3.28.49 — 2026-10-13
 
 Pre-edit state: commit `1f5c789` (v3.28.48).

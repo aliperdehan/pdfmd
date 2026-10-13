@@ -213,6 +213,34 @@ language, page numbers, and bookmarks from the headings. LaTeX in the document i
 or drawn as a picture, as for a Word file. Calibre is never tried on its own: only when you
 name it (`-e calibre`, or `pdf-engine: calibre` in `pdfmd-options:`).
 
+A browser prints a Markdown document too (v3.29): `-e edge`, `-e chrome`, `-e chromium` or `-e brave` (or `-e browser` for the
+first one installed) has Pandoc write one self-contained HTML page and the browser, headless, print it with the document's
+paper and margins (`papersize`, `geometry`, `margin`: as `@page`) and 12pt text. The math is MathML, which the browser draws
+itself; LaTeX in the document is made native or drawn as a picture, as for a Word file. Like Calibre, a browser is used only
+when you name it; an `.html` file already goes to one first when it has scripts or MathML.
+
+Calibre also writes ebooks (v3.29): `pdfmd book.md -o book.azw3` (or `--to azw3`) has Pandoc write an EPUB 3 (chapters,
+contents, the metadata, the math as MathML) and Calibre turn it into the target, `book.azw3` beside the document. The
+twelve targets only Calibre writes are `azw3`, `mobi`, `kepub`, `lit`, `lrf`, `pdb`, `rb`, `snb`, `tcr`, `pmlz`, `htmlz`
+and `txtz`; each was converted back to text to check that its words, list and table are there. (Before v3.29 `-o
+book.azw3` wrote a PDF under that name.) `epub`, `docx`, `rtf`, `txt` and `fb2` Pandoc writes itself, with more of its own
+features (styles, tables, footnotes); they go through Calibre only when `-e calibre` is on the command line (a
+`pdf-engine: calibre` is a PDF setting), with a NOTE. `-e calibre` with another target (`.tex`, `.html`, `.md`) stops and
+lists what Calibre writes. One document at a time, not `-b` or `-r`.
+
+The math of an ebook: a Kindle or a Kobo does not draw MathML, and a MOBI has no place for it. `azw3`, `mobi`, `kepub`, `lit`
+and `lrf` (and `docx` through Calibre) get each formula drawn by LaTeX as a picture, in the document's own preamble and with
+its `\ce` and siunitx, as a Word file's pictures are (needs a LaTeX engine and Poppler's `pdftocairo`); the plain formats
+(`pdb`, `rb`, `snb`, `tcr`, `pmlz`, `txtz`, `rtf`, `txt`, `fb2`) get the formulas as text, the simple ones with their
+superscripts and the rest as TeX, with one `WARN` that counts them, and so does a picture target on a machine with no LaTeX.
+`epub` and `htmlz` keep the MathML. A `--mathml` or `--math-method` of your own is kept.
+
+LibreOffice writes what Pandoc cannot too (v3.29): `pdfmd letter.md -o letter.doc` (Word 97) has Pandoc write the Word file (the
+same one `-o letter.docx` writes: your reference document, native equations and tables, pictures for what LaTeX alone can draw)
+and headless LibreOffice turn it into `.doc`. `rtf`, `odt`, `txt` and `epub` go through LibreOffice only with `-e soffice` (or
+`-e libreoffice`, `-e office`) first on the command line, with a NOTE; without it Pandoc writes them from the document itself,
+which is the better file. `-e soffice` with another target (`.tex`, `.md`) lists what it writes.
+
 For everything at once, `pdfmd --doctor` is one page on the Markdown-to-PDF tools, fonts
 and emoji, PDF reading (batchocr, Tesseract, Poppler, OCR languages), your config file and
 the cache, ending with the command that fixes each missing piece:

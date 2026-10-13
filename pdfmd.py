@@ -273,6 +273,14 @@ Output formats:
     filter of the Word route (made native, or drawn by LaTeX as a picture,
     references numbered by a LaTeX build per `office: {labels}`), as for
     LibreOffice. Found on PATH, in calibre.app or in Program Files\\Calibre2.
+    Calibre as a writer (v3.29.0): `-o book.azw3` / `--to azw3` (azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz,
+    txtz: the twelve only Calibre writes) has Pandoc write an EPUB 3 in a scratch folder and `ebook-convert` make the ebook
+    from it; epub, docx, rtf, txt and fb2 go the same way only with `-e calibre` on the command line. One document at a
+    time. LibreOffice writes `.doc` (and rtf, odt, txt, epub with `-e soffice` first) from Pandoc's Word file the same way.
+    A browser is an engine too (v3.29.0): `-e edge|chrome|chromium|brave|browser` has it print the HTML page headless.
+    The math: a target that can show pictures gets each formula drawn by LaTeX (the Word route's `latex: images`; the
+    EPUB's MathML is not drawn by a Kindle or a Kobo), a plain-text one gets the formulas as text with one WARN
+    (pdfmd_lua/ebook.lua); epub and htmlz keep MathML.
 
     On LaTeX-family engines, a document with no geometry/margin setting at
     all (no -V, no `geometry:`/`margin:` in its own front matter, a linked
@@ -1362,8 +1370,9 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.49"
+PDFMD_VERSION = "3.29.0"
 import argparse
+import atexit
 import csv
 import filecmp
 from glob import glob as expand_glob
@@ -2669,10 +2678,16 @@ ENGINE_ALIASES = {
     "13": "pdfroff", "roff": "pdfroff",
     "14": "soffice", "libreoffice": "soffice", "office": "soffice",
     "ebook-convert": "calibre",
+    "google-chrome": "chrome", "msedge": "edge", "microsoft-edge": "edge", "brave-browser": "brave",
 }
 # Engines used only when named (-e calibre, pdf-engine: calibre): never part of the automatic chain above, and
 # no number of their own (the numbers are PDF_ENGINES' order in --check-dependencies).
 EXPLICIT_ENGINES = ("calibre",)
+# A browser prints a Markdown document too (v3.29.1; `-e edge`, `-e chrome`, `-e chromium`, `-e brave`, or the family word
+# `-e browser`): Pandoc writes one self-contained HTML page (MathML, which a browser draws itself) and the browser, headless,
+# prints it with the page the document asks for. Only when named, like Calibre; `.html` files already went to a browser
+# first when they have scripts or MathML (pdfmd_direct).
+BROWSER_ENGINES = ("chrome", "chromium", "edge", "brave")
 LATEX_ENGINES = frozenset({"lualatex", "xelatex", "pdflatex", "latexmk", "tectonic", "context"})
 PREAMBLE_FILENAMES = ("preamble.tex", "latex-preamble.tex")
 
@@ -2718,6 +2733,7 @@ ENGINE_GROUPS: dict[str, tuple[str, ...]] = {
     "html": ("weasyprint", "wkhtmltopdf", "pagedjs-cli", "prince"),
     "typst": ("typst",),
     "office": ("soffice",),
+    "browser": BROWSER_ENGINES,
 }
 
 
@@ -2778,6 +2794,12 @@ def engine_executable(engine: str) -> str | None:
     """
     if engine == "calibre":
         return resolve_calibre()
+    if engine in BROWSER_ENGINES:
+        try:
+            import pdfmd_direct as direct
+        except ImportError:
+            return None
+        return direct.find_browser(engine, which)
     return resolve_soffice() if engine == "soffice" else which(engine)
 
 
@@ -4639,7 +4661,7 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()
     line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
-    line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre needs it)"))
+    line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it)"))
     if which("weasyprint"):
         jax, runtime = mathjax_runtime(), katex_runtime()
         if jax and runtime:
@@ -5332,12 +5354,15 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
         module = office_module()
         options = office_options(md_path, metadata_files, no_auto)
         latex = str(options.get("latex", "auto" if target in ("docx", "odt") else "")).casefold()
+        ebook = target == "epub" and EBOOK_MATH.get("mode") == "images"      # v3.29.1: an ebook's math drawn as pictures
+        if ebook:
+            latex, labels = "images", "off"
         if not latex and target in ("typst", "html") and raw_takes(md_path, metadata_files, target, "tex"):
             latex = "auto"                  # the raw option has this output take LaTeX: the route that draws what it can
         # Word and ODF always; Typst and HTML files only when the document asks (`office: {latex: auto}`); a Typst,
         # WeasyPrint or Calibre PDF when office_fallback_wanted says so (force_filter)
         wanted = target in ("docx", "odt") or force_filter or latex in ("auto", "images")
-        if (module is not None and target in ("docx", "odt", "typst", "html") and wanted
+        if (module is not None and (target in ("docx", "odt", "typst", "html") or ebook) and wanted
                 and latex not in ("off", "false", "no")
                 and not auto_disabled(no_auto, "officelatex")):
             arguments.report = Path(scratch) / "report.json"
@@ -5384,6 +5409,8 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
             arguments.filter_arguments += ["-M", f"pdfmd-office-chem-cache={Path(scratch) / 'chem.json'}"]
             # last: other filters (a house style's own) have shaped the document by then
             arguments.filter_arguments += ["--lua-filter", str(Path(module.__file__).parent / "office.lua")]
+            if ebook:
+                arguments.filter_arguments += ebook_filter_args()
         yield arguments
 
 
@@ -15667,6 +15694,8 @@ FORMAT_EXTENSION = {
 # separate --to. Batch mode has no per-file filename to read, so it only
 # responds to an explicit --to. Deliberately only the unambiguous, commonly
 # typed extensions -- anything else should be requested with --to instead.
+# the targets only Calibre writes (v3.29.0; see calibre_goal): `-o book.azw3` names one
+CALIBRE_ONLY_FORMATS = ("azw3", "mobi", "kepub", "lit", "lrf", "pdb", "rb", "snb", "tcr", "pmlz", "htmlz", "txtz")
 EXTENSION_FORMAT = {
     ".html": "html", ".htm": "html",
     ".tex": "latex",
@@ -15676,6 +15705,8 @@ EXTENSION_FORMAT = {
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
     ".json": "json", ".pdf": "pdf",
+    **{"." + name: name for name in CALIBRE_ONLY_FORMATS},
+    ".doc": "doc",                                                    # LibreOffice writes it (v3.29.1; see soffice_goal)
 }
 
 
@@ -17311,8 +17342,8 @@ OFFICE_INPUT_EXTENSIONS = frozenset({
 })
 
 
-def run_soffice_convert(input_path: Path, output: Path, verbose: bool) -> tuple[bool, str]:
-    """Convert one file to PDF via headless LibreOffice, into ``output``.
+def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: str = "pdf") -> tuple[bool, str]:
+    """Convert one file to PDF (or ``target``: doc, rtf, odt, txt, epub: v3.29.1) via headless LibreOffice, into ``output``.
 
     Runs entirely in a scratch directory (both the conversion's own
     output and its throwaway --env:UserInstallation profile), deleted
@@ -17328,12 +17359,12 @@ def run_soffice_convert(input_path: Path, output: Path, verbose: bool) -> tuple[
         profile_dir = scratch / "profile"
         cmd = [binary, "--headless", "--norestore",
               f"-env:UserInstallation=file://{profile_dir}",
-              "--convert-to", "pdf", "--outdir", str(scratch), str(input_path)]
+              "--convert-to", "txt:Text" if target == "txt" else target, "--outdir", str(scratch), str(input_path)]
         log_cmd(cmd, input_path.parent, verbose)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=input_path.parent)
-        produced = scratch / f"{input_path.stem}.pdf"
+        produced = scratch / f"{input_path.stem}.{target}"
         if result.returncode != 0 or not produced.exists():
-            reason = result.stderr.strip() or result.stdout.strip() or "soffice failed to produce a PDF"
+            reason = result.stderr.strip() or result.stdout.strip() or f"soffice failed to produce a {target}"
             return False, reason.splitlines()[-1]
         output.parent.mkdir(parents=True, exist_ok=True)
         if produced.resolve() != output.resolve():
@@ -17463,14 +17494,14 @@ def calibre_html_command(cmd: list[str], engine: str) -> Iterator[tuple[list[str
     """The Pandoc command of one engine run, and for "calibre" where it writes instead of the PDF: the same
     command (filters, citations, metadata, fonts) with `--pdf-engine=calibre` turned into a standalone,
     self-contained HTML5 page with MathML, in a scratch folder that is gone afterwards."""
-    if engine != "calibre":
+    if engine != "calibre" and engine not in BROWSER_ENGINES:
         yield cmd, None
         return
     scratch = Path(mkdtemp(prefix="pdfmd-calibre-"))
     try:
         html = scratch / "document.html"
         command = list(cmd)
-        position = command.index("--pdf-engine=calibre")
+        position = command.index(f"--pdf-engine={engine}")
         command[position:position + 1] = ["-t", "html5", "--standalone",
                                           "--embed-resources" if pandoc_version() >= (2, 19) else "--self-contained"]
         command[command.index("-o") + 1] = str(html)
@@ -17525,6 +17556,236 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
+# Calibre as a WRITER (v3.29.0). `pdfmd book.md -o book.azw3` (or `--to azw3`) makes the ebook Calibre makes from the
+# document: Pandoc writes an EPUB 3 into a scratch folder (chapters, contents, metadata, the math as MathML), and
+# ebook-convert turns that into the target. Twelve targets only Calibre writes; five more (epub, docx, rtf, txt, fb2) Pandoc
+# writes itself, so they go through Calibre only when `-e calibre` is on the command line (a `pdf-engine: calibre` is a PDF
+# setting). Every one was round-tripped through ebook-convert 9.14 to text (heading, words, list and table survive). Before
+# v3.29.0 `-o book.azw3` wrote a PDF under that name. One document at a time: not `-b`, not `-r`.
+CALIBRE_SHARED_FORMATS = ("epub", "docx", "rtf", "txt", "fb2")
+CALIBRE_TARGET_ALIASES = {"plain": "txt", "epub2": "epub", "epub3": "epub"}
+# What becomes of the math (v3.29.1). The EPUB Pandoc writes has MathML, which a Kindle or a Kobo does not draw and a
+# MOBI, a Palm or an RTF file has no place for: a target with pictures gets each formula drawn by LaTeX as a picture (the
+# route of a Word file, `latex: images`), the plain-text ones the formulas as text with a WARN; epub and htmlz keep MathML.
+CALIBRE_MATH_PICTURES = ("azw3", "mobi", "kepub", "lit", "lrf", "docx")
+CALIBRE_MATH_TEXT = ("pdb", "rb", "snb", "tcr", "pmlz", "txtz", "rtf", "txt", "fb2")
+EBOOK_MATH: dict = {"mode": None}            # while a Calibre job runs: "images" (see office_reference) or "text" (+ goal, why)
+
+
+def ebook_filter_args() -> list[str]:
+    """`--lua-filter ebook.lua` for the EPUB of a Calibre job (pdfmd_lua/ebook.lua): the pictures' titles that name this
+    machine's cache are dropped; in "text" mode each formula becomes text and a WARN says so once."""
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("ebook")
+    if shipped is None:
+        return []
+    args: list[str] = []
+    if EBOOK_MATH.get("mode") == "text":
+        args += ["-M", f"pdfmd-ebook={EBOOK_MATH.get('goal', 'the ebook')}", "-M", "pdfmd-ebook-math=text"]
+        if EBOOK_MATH.get("why"):
+            args += ["-M", f"pdfmd-ebook-why={EBOOK_MATH['why']}"]
+    return args + ["--lua-filter", str(shipped)]
+
+
+def math_pictures_possible() -> str | None:
+    """None when LaTeX can draw formulas as pictures (a LaTeX engine and Poppler's pdftocairo), else why not."""
+    module = office_module()
+    if module is None:
+        return "pdfmd_office is not installed"
+    if not module.fragments.tools_available():
+        return "drawing them needs pdftocairo (Poppler)"
+    if not [engine for engine in installed_engines() if engine in ("lualatex", "xelatex", "pdflatex")]:
+        return "there is no LaTeX engine (lualatex, xelatex or pdflatex)"
+    return None
+
+
+# LibreOffice as a writer (v3.29.1): `-o letter.doc` (Word 97, which Pandoc does not write) is made from the Word file Pandoc
+# writes, by headless LibreOffice; rtf, odt, txt and epub go the same way only with `-e soffice` first on the command line
+# (Pandoc writes them itself, and an odt or an rtf from the document is the better file).
+SOFFICE_ONLY_FORMATS = ("doc",)
+SOFFICE_SHARED_FORMATS = ("rtf", "odt", "txt", "epub")
+
+
+def soffice_asked_first(requested: str | None) -> bool:
+    """Whether the command line's `-e` puts LibreOffice first (`-e soffice`, `-e libreoffice`, `-e office,typst`)."""
+    first = (requested or "").split(",")[0].strip().casefold()
+    return bool(first) and ENGINE_ALIASES.get(first, first) == "soffice"
+
+
+def soffice_goal(requested: str | None, target_format: str) -> str | None:
+    """The format LibreOffice is to write for this target (`doc`, `rtf` ...), None when the build is not its. `doc` is always
+    its; rtf, odt, txt and epub when `-e` names LibreOffice first; any other target with `-e soffice` is an error that names
+    what it writes (PDF is the engine's own business)."""
+    name = CALIBRE_TARGET_ALIASES.get(target_format.casefold(), target_format.casefold())
+    if name in SOFFICE_ONLY_FORMATS:
+        return name
+    if target_format == "pdf" or not soffice_asked_first(requested):
+        return None
+    if name in SOFFICE_SHARED_FORMATS:
+        return name
+    raise SystemExit(f"-e soffice writes PDF, {', '.join(SOFFICE_SHARED_FORMATS)} and {', '.join(SOFFICE_ONLY_FORMATS)}, "
+                     f"not {target_format}")
+
+
+def calibre_asked_first(requested: str | None) -> bool:
+    """Whether the command line's `-e` puts Calibre first (`-e calibre`, `-e ebook-convert,typst`)."""
+    first = (requested or "").split(",")[0].strip().casefold()
+    return bool(first) and ENGINE_ALIASES.get(first, first) == "calibre"
+
+
+def calibre_goal(requested: str | None, target_format: str) -> str | None:
+    """The format Calibre is to write for this target (`azw3`, `docx` ...), None when the build is not Calibre's. A target
+    only Calibre writes is always its; one Pandoc writes too is Calibre's when `-e` names Calibre first; any other target
+    with `-e calibre` is an error that names what Calibre writes."""
+    name = CALIBRE_TARGET_ALIASES.get(target_format.casefold(), target_format.casefold())
+    if name in CALIBRE_ONLY_FORMATS:
+        return name
+    if target_format == "pdf" or not calibre_asked_first(requested):
+        return None
+    if name in CALIBRE_SHARED_FORMATS:
+        return name
+    raise SystemExit(f"-e calibre writes PDF, {', '.join(CALIBRE_SHARED_FORMATS)} and {', '.join(CALIBRE_ONLY_FORMATS)}, "
+                     f"not {target_format}")
+
+
+def start_calibre_job(args, goal: str, target_format: str, pandoc_options: list[str] | None = None) -> dict:
+    """What a Calibre target needs before the build: the checks, a scratch folder, and `args` pointed at the EPUB 3 that
+    Pandoc writes there (the build then runs as for any EPUB). Returns the job for finish_calibre_job."""
+    if args.batch or args.report or args.presentation:
+        raise SystemExit(f"{goal} is made through Calibre one document at a time: not with "
+                         f"{'-b' if args.batch else '-r' if args.report else '-p'} (yet)")
+    if resolve_calibre() is None:
+        raise SystemExit(f"{target_format} is written by Calibre's ebook-convert, which was not found (on PATH, in calibre.app "
+                         "or in Calibre2 under Program Files). Install Calibre: `brew install --cask calibre`, "
+                         "`winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
+    if goal in CALIBRE_SHARED_FORMATS and goal != "epub":
+        print(f"NOTE  -e calibre: {goal} is made by Calibre from an EPUB; without -e calibre Pandoc writes it from the "
+              "document itself, with more of its own features (styles, tables, footnotes)", file=sys.stderr)
+    scratch = Path(mkdtemp(prefix="pdfmd-calibre-target-"))
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
+    EBOOK_MATH.clear()
+    EBOOK_MATH["mode"] = None
+    if not any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options or []):       # a math option of yours is kept
+        why = math_pictures_possible() or "" if goal in CALIBRE_MATH_PICTURES else ""
+        if goal in CALIBRE_MATH_PICTURES and not why:
+            EBOOK_MATH["mode"] = "images"
+        elif goal in CALIBRE_MATH_TEXT or why:
+            EBOOK_MATH.update({"mode": "text", "goal": goal, "why": why})
+    job = {"tool": "calibre", "goal": goal, "final": args.out, "scratch": scratch, "open": args.open}
+    args.to, args.out, args.engine, args.open = "epub", scratch / "document.epub", None, False
+    return job
+
+
+def start_soffice_job(args, goal: str, target_format: str) -> dict:
+    """The same for a LibreOffice target (v3.29.1): `args` pointed at the Word file Pandoc writes in a scratch folder."""
+    if args.batch or args.report or args.presentation:
+        raise SystemExit(f"{goal} is made through LibreOffice one document at a time: not with "
+                         f"{'-b' if args.batch else '-r' if args.report else '-p'} (yet)")
+    if resolve_soffice() is None:
+        raise SystemExit(f"{target_format} is written by LibreOffice, which was not found (checked PATH, 'libreoffice' and the "
+                         "standard macOS app bundle). Install it: `brew install --cask libreoffice`, "
+                         "`winget install TheDocumentFoundation.LibreOffice`, your package manager, or libreoffice.org.")
+    if goal in SOFFICE_SHARED_FORMATS:
+        print(f"NOTE  -e soffice: {goal} is made by LibreOffice from the Word file Pandoc writes; without -e soffice Pandoc "
+              "writes it from the document itself", file=sys.stderr)
+    scratch = Path(mkdtemp(prefix="pdfmd-soffice-target-"))
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
+    job = {"tool": "soffice", "goal": goal, "final": args.out, "scratch": scratch, "open": args.open,
+           "intermediate": "document.docx"}
+    args.to, args.out, args.engine, args.open = "docx", scratch / "document.docx", None, False
+    return job
+
+
+def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
+    """The file: the converter (Calibre's ebook-convert of the EPUB, or LibreOffice of the Word file) run on what the build
+    wrote, into the file asked for (named after the document beside it when `-o` gave none; a folder given gets that
+    name in it). The result list for the closing line."""
+    source, ok, error = results[0]
+    if not ok:
+        return results
+    ext = "." + job["goal"]
+    final = job["final"]
+    if final is None:
+        final = Path(source).with_suffix(ext)
+    elif final.is_dir():
+        final = final / (Path(source).stem + ext)
+    elif not final.suffix:
+        final = final.with_suffix(ext)
+    tool = job.get("tool", "calibre")
+    if tool == "soffice":
+        worked, why = run_soffice_convert(job["scratch"] / job["intermediate"], final, verbose, job["goal"])
+        if not worked:
+            return [Built((source, False, f"soffice failed: {why}"), "soffice")]
+    else:
+        done = run_calibre_convert(job["scratch"] / "document.epub", final, verbose)
+        if done.returncode != 0:
+            return [Built((source, False, done.stderr), "calibre")]
+    if job["open"]:
+        open_file(final)
+    return [Built((source, True, error), tool, output=final)]          # what Pandoc and its filters said stays
+
+
+def run_calibre_convert(source: Path, output: Path, verbose: bool) -> subprocess.CompletedProcess:
+    """`ebook-convert source output` (written beside the file first, so a failed run leaves nothing half-written). Qt runs
+    offscreen as for the PDF route."""
+    binary = resolve_calibre()
+    if binary is None:
+        return subprocess.CompletedProcess(["ebook-convert"], 1, "", "Calibre's ebook-convert was not found")
+    produced = source.with_name("calibre-output" + output.suffix)
+    cmd = [binary, str(source), str(produced)]
+    environment = dict(os.environ)
+    if sys.platform != "win32":
+        environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+    log_cmd(cmd, source.parent, verbose)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=source.parent, env=environment)
+    if result.returncode != 0 or not produced.is_file():
+        said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
+        return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
+                                           "ebook-convert failed: " + " | ".join(said[-3:] or ["no file written"]))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(produced, output)
+    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[str]) -> str:
+    """The page a browser prints, as CSS: `@page` with the paper and margins the document asks for (papersize, geometry,
+    margin, classoption, read as for a Word file), else Letter and DEFAULT_MARGIN like the LaTeX engines. In points."""
+    module = office_module()
+    if module is None:
+        return ""
+    spec = module.spec_from_metadata(effective_metadata(md_path, metadata_files, variables), None, "exact")
+    width, height = spec.page_size()
+    default = module.length_to_twips(DEFAULT_MARGIN) or 1440
+    points = lambda twips: f"{twips / 20:g}pt"
+    margins = " ".join(points(spec.margins.get(side, default)) for side in ("top", "right", "bottom", "left"))
+    return f"@page {{ size: {points(width)} {points(height)}; margin: {margins}; }}\n"
+
+
+def run_browser_print(html: Path, output: Path, engine: str, page_css: str, verbose: bool) -> subprocess.CompletedProcess:
+    """Print the page with headless `engine` (chrome, chromium, edge, brave) into `output`: the page gets the paper and
+    margins as `@page` and the print style of CALIBRE_CSS (Pandoc's own is for a screen). The browser writes into a scratch
+    folder first, so a failed run leaves no half-written PDF."""
+    try:
+        import pdfmd_direct as direct
+    except ImportError:
+        return subprocess.CompletedProcess(["browser"], 1, "", "pdfmd_direct, the folder of pdfmd's browser support, is missing")
+    executable = direct.find_browser(engine, which)
+    if executable is None:
+        return subprocess.CompletedProcess([engine], 1, "", f"{engine} was not found")
+    text = html.read_text(encoding="utf-8", errors="replace")
+    head = text.split("</head>", 1)[0]
+    style = CALIBRE_CSS + (CALIBRE_TABLE_CSS if PANDOC_TABLE_STYLE_RE.search(head) else "") + page_css
+    page = html.with_name("document-print.html")
+    page.write_text(text.replace("</head>", f"<style>\n{style}</style>\n</head>", 1) if "</head>" in text
+                    else f"<style>\n{style}</style>\n{text}", encoding="utf-8")
+    ok, reason, _ = direct.render_html(page, output, [(engine, executable)],
+                                       log=lambda command, cwd: log_cmd(command, cwd, verbose))
+    return subprocess.CompletedProcess([engine], 0 if ok else 1, "", "" if ok else f"{engine} failed: {reason}")
+
+
 # WeasyPrint's CSS parser names each property and media query it ignores. Pandoc's page style and KaTeX's stylesheet
 # are written for browsers, so a good build printed a screenful of them (v3.28.11); --verbose still shows them.
 WEASYPRINT_CSS_NOISE = re.compile(r"(?m)^WARNING: (?:Ignored `[^`\n]*` at \d+:\d+, (?:unknown property|invalid value)\."
@@ -17544,7 +17805,8 @@ def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, pa
                                                  WEASYPRINT_CSS_NOISE.sub("", result.stderr))
         if html is None or result.returncode != 0:
             return result
-        printed = run_calibre(html, output, page_options(), verbose)
+        printed = (run_browser_print(html, output, engine, page_options(), verbose) if engine in BROWSER_ENGINES
+                   else run_calibre(html, output, page_options(), verbose))
         return subprocess.CompletedProcess(printed.args, printed.returncode, result.stdout,
                                            (result.stderr or "") + printed.stderr)
 
@@ -17759,7 +18021,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     # the style sheets of the document (v3.28.41): linked for an HTML-family build, read for settings with css-scope: all
     css_meta = [metadata_file] if isinstance(metadata_file, Path) else list(metadata_file or [])
     html_family = (target_format in HTML_TARGETS or target_format.startswith("epub")
-                   or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" for item in engines)))
+                   or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" or item in BROWSER_ENGINES for item in engines)))
     css_options, css_variables = css_additions(md_path, css_meta, variables, no_auto, html_family, note)
     if css_options or css_variables:
         pandoc_options = [*pandoc_options, *css_options]
@@ -18179,6 +18441,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                                 else find_preambles(md_path.parent, md_path.stem, []))),
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
                 cmd += typst_filter_args(target_format)
+                if target_format == "epub" and EBOOK_MATH.get("mode") == "text":
+                    cmd += ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
                 if flat_target:
                     cmd += flat_filter_args(flat, target_format)       # last: it sees what every other filter made
                 ascii_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-ascii-") if ascii_on else None
@@ -18419,8 +18683,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         engine, pandoc_options,
                         selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)
-                    page_options = lambda: calibre_page_options(md_path, metadata_files, variables)
-                    if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
+                    page_options = lambda: (browser_page_css(md_path, metadata_files, variables) if engine in BROWSER_ENGINES
+                                            else calibre_page_options(md_path, metadata_files, variables))
+                    if engine == "calibre" or engine in BROWSER_ENGINES or (engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html",
                             [md_path, *parts_inputs])):
                         # LaTeX failed, or the document has LaTeX this writer would drop (Calibre always, like
@@ -21792,10 +22057,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "a last-resort fallback for Markdown/Pandoc input -- Pandoc -> .docx -> "
                              "headless LibreOffice -- tried only after every tex/typst/html engine has "
                              "failed or is missing in the unrestricted chain, or on request. 'calibre' "
-                             "(Calibre's ebook-convert: Pandoc -> one HTML page with MathML -> PDF) is used "
-                             "only when named, never in the automatic chain. Meaningless "
-                             "(and ignored) when "
-                             "--to targets a non-PDF format. Always wins over a document's own "
+                             "(Calibre's ebook-convert: Pandoc -> one HTML page with MathML -> PDF) and the browsers "
+                             "chrome, chromium, edge, brave (family word 'browser': headless, printing the same "
+                             "page) are used only when named, never in the automatic chain. With --to an "
+                             "ebook or .doc, `-e calibre` / `-e soffice` also name the converter that writes "
+                             "it. Meaningless (and ignored) when "
+                             "--to targets another non-PDF format. Always wins over a document's own "
                              "pdf-engine/engine front-matter key (see below). A bare -e (no value) "
                              "explicitly requests the full, unrestricted fallback chain across every "
                              "installed engine, overriding even a family restriction in front matter -- "
@@ -21806,7 +22073,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "`pandoc`, every engine Pandoc drives, expands in place); a pdf-engine: setting "
                              "takes the same list")
     parser.add_argument("-t", "--to", dest="to", default=None, metavar="FORMAT",
-                        help="Pandoc target format, e.g. html, latex (tex), typst, plain (txt), docx. "
+                        help="Pandoc target format, e.g. html, latex (tex), typst, plain (txt), docx; or an ebook only "
+                             "Calibre writes: azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz, txtz. "
                              "Default is pdf. An -o/--out filename with a recognized extension "
                              "(single-file/report modes only, e.g. -o notes.html) implies this too; "
                              "an explicit --to always wins. No PDF engine is involved, or required "
@@ -22738,6 +23006,21 @@ def main() -> None:
     if args.presentation and target_format != "pdf" and stop_at != "tex":
         raise SystemExit("-p/--presentation always produces a PDF (via Beamer); "
                          "it can't be combined with --to/-o for another format")
+    convert_job = None
+    if stop_at is None:
+        goal = calibre_goal(args.engine, target_format)
+        if goal:
+            if args.engine is not None and not calibre_asked_first(args.engine):
+                print(f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
+            convert_job = start_calibre_job(args, goal, target_format, pandoc_options)
+            target_format = "epub"
+        else:
+            goal = soffice_goal(args.engine, target_format)
+            if goal:
+                if args.engine is not None and not soffice_asked_first(args.engine):
+                    print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
+                convert_job = start_soffice_job(args, goal, target_format)
+                target_format = "docx"
     if args.engine is not None and target_format != "pdf" and stop_at != "markdown":
         print(f"WARN  --engine is ignored for "
               f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
@@ -22961,7 +23244,7 @@ def main() -> None:
                 css_options, css_variables = css_additions(
                     files[0], metadata_files, variables, report_no_auto,
                     target_format in HTML_TARGETS or target_format.startswith("epub")
-                    or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" for item in engines)),
+                    or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" or item in BROWSER_ENGINES for item in engines)),
                     report_note)
                 if css_options or css_variables:
                     pandoc_options = [*pandoc_options, *css_options]
@@ -23214,8 +23497,9 @@ def main() -> None:
                             log_cmd(command, pandoc_cwd, args.verbose)
                             return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd,
                                                   env=tex_search_env(files[0].parent, pandoc_cwd))
-                        report_page = lambda: calibre_page_options(files[0], metadata_files, variables)
-                        if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
+                        report_page = lambda: (browser_page_css(files[0], metadata_files, variables) if engine in BROWSER_ENGINES
+                                             else calibre_page_options(files[0], metadata_files, variables))
+                        if engine == "calibre" or engine in BROWSER_ENGINES or (engine in ("typst", "weasyprint") and office_fallback_wanted(
                                 files[0], metadata_files, failed_families, "typst" if engine == "typst" else "html",
                                 list(files))):
                             # as for one document (LaTeX made native or drawn), without LaTeX's label numbers:
@@ -23563,6 +23847,8 @@ def main() -> None:
                       "than the number of the heading before it (--seed-labels draft counts them exactly)")
         if args.open and results[0][1]:
             open_file(output)
+    if convert_job is not None:
+        results = finish_convert_job(convert_job, results, args.verbose)
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
