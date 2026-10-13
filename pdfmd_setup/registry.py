@@ -79,7 +79,7 @@ AUTO_HELP = {
     "yaml": "metadata.yaml discovery", "preamble": "preamble.tex discovery", "tex": "preamble.tex discovery",
     "lua": "Lua filter discovery", "files": "metadata, preamble and filter discovery", "standalone": "--standalone",
     "texdirect": "compile .tex directly with LaTeX", "officedirect": "convert office files with LibreOffice",
-    "svg": "convert SVG images for LaTeX", "remoteimages": "fetch and keep remote images", "pdfimages": "show PDF images in HTML builds (as SVG)", "texpackages": "load mhchem/siunitx when \\ce or \\SI needs it", "draftpictures": "skip the pictures in the draft pass for part numbers", "remotecsl": "fetch a csl: style named by URL", "typstdirect": "build .typ files with Typst directly", "htmldirect": "build .html files with WeasyPrint or a browser directly",
+    "svg": "convert SVG images for LaTeX", "remoteimages": "fetch and keep remote images", "pdfimages": "show PDF images in HTML builds (as SVG)", "texpackages": "load mhchem/siunitx when \\ce or \\SI needs it", "draftpictures": "skip the pictures in the draft pass for part numbers", "remotecsl": "fetch a csl: style named by URL", "mathjax": "MathJax for the math of WeasyPrint PDFs (KaTeX or text instead)", "typstdirect": "build .typ files with Typst directly", "htmldirect": "build .html files with WeasyPrint or a browser directly",
     "crossref": "pandoc-crossref for @fig: references", "citationengine": "citeproc / biblatex choice",
     "csvtable": "tables from CSV files", "papersize": "fix `pagesize:` to `papersize:`", "parts": "report/book parts",
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",

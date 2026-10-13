@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.46 — 2026-10-13
+
+Pre-edit state: commit `21cf89d` (v3.28.45).
+
+### Added
+
+- **MathJax 4 typesets the math of a WeasyPrint PDF** (`pdfmd --install math:mathjax[:FONT[,FONT]]`), ahead of KaTeX. The
+  install fetches MathJax's npm package (7.5 MB) and the math font package that goes with pdfmd's default body font (STIX Two
+  Math, 4.8 MB), each checked against its SHA-256 pinned in pdfmd (the registry's own sha512 agrees), keeps what pdfmd runs
+  (about 3 MB on disk, in `data_root()/mathjax/4.1.3/node_modules/@mathjax`) and fetches node as it does for KaTeX.
+  `math:mathjax:newcm,termes,pagella,dejavu` adds the fonts of the other bodies in the table of v3.28.24 (New Computer Modern,
+  TeX Gyre Termes, TeX Gyre Pagella, DejaVu Serif; Libertinus has none). `pdfmd_lua/mathjax.cjs` renders every formula in one
+  node call; a formula it cannot read goes to KaTeX in a second call (a NOTE says how many), and what neither reads stays
+  text with one WARN. The math font is the one that goes with the body font; another body gets STIX Two Math sized to its
+  x-height (`pdfmd-body-xheight`, within 0.85 and 1.4). `--no-auto mathjax` leaves the math to KaTeX or text; `--doctor` and
+  `--check-dependencies` list MathJax and KaTeX. Installing into a scratch `XDG_DATA_HOME` is how the tests run it.
+  `tests/test_mathjax.py` (installer, font table, variables, the filter with a stand-in for node, and a real build where
+  MathJax is installed); `tests/test_engine_filters.py`'s KaTeX builds say `--no-auto mathjax`.
+
+### Fixed
+
+- **WeasyPrint put MathJax's stacked math too far apart.** Measured against Chromium and LaTeX (STIX Two Math, 11 pt): an
+  accent (`\hat`, `\bar`, `\tilde`, `\vec`, `\dot`) floated 3.0 to 3.6 pt over its letter (0.65 to 0.75 of an x-height; the
+  gap to the letter was 4 pt where LaTeX leaves 0.5 to 1.1), limits and `\overset` 1.6 pt, `\underset` and `\underbrace`
+  2 to 5 pt too low, a fraction's denominator 2.2 pt too low, a root's bar 3 pt too high, and an `\overline` ran past its
+  letter. Cause: MathJax sets every glyph in an inline box of no width and no content height whose font stack starts with
+  a font of zero ascent and descent (so that the baseline is the box's bottom); WeasyPrint takes the line's metrics from the
+  font that draws the glyph (STIX's ascent exceeds its descent by 0.262 em), so every box stood that much too tall above its
+  baseline. `weasyprint.lua` adds `mjx-c { margin-top: -0.29em }` (0.28 to 0.30 matches Chromium to 0.3 pt on 36 shapes), an
+  `overflow: hidden` on the stretchy bars and braces (WeasyPrint draws no `clip-path`, which cut them to their width), and 0.2em for
+  `\underline`'s bar. Left: a fraction's bar is 0.7 pt low and a little thick. `tests/test_mathjax.py` fails without the rule
+  (the accent is 3.9 pt off) and passes with it (0.4 pt).
+
 ## v3.28.45 — 2026-10-13
 
 Pre-edit state: commit `b61d1ba` (v3.28.44).

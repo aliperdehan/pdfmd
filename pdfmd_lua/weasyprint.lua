@@ -9,6 +9,11 @@
 -- page links KaTeX's stylesheet and fonts. A formula KaTeX cannot read stays plain text, with one WARN for all of them.
 -- Pandoc's math stays plain, so a formula this filter does not reach prints as text, never as MathML.
 --
+-- MathJax (v3.28.46). With MathJax (`pdfmd --install math:mathjax`) and node, pdfmd sets `pdfmd-mathjax` (its folder),
+-- `pdfmd-mathjax-font` (the math font that goes with the body font) and `pdfmd-mathjax-node`, and MathJax is asked first,
+-- in one node call (mathjax.cjs): its HTML and stylesheet replace the formula. What MathJax cannot read goes to KaTeX in a
+-- second call when KaTeX is there (a NOTE says how many), and what neither reads stays plain text, with one WARN.
+--
 -- Tables (v3.28.3). Pandoc's own page style is for a screen: a table is a full-width block that scrolls sideways, and
 -- a word may break anywhere. WeasyPrint set the caption of a narrow table a syllable a line. While that style is in
 -- (no --css, `document-css` not false), a style in `header-includes` makes a table a table again, centred as LaTeX
@@ -64,6 +69,18 @@ end
 -- lost the "=", and \vec's arrow, an absolutely placed picture in a box of no width, was not drawn
 local KATEX_FIXES = ".katex .katex-vbox { display: inline-block; }\n.katex .katex-overlay svg { position: static; }\n"
 
+-- What WeasyPrint gets wrong in MathJax's CHTML. Every glyph is an inline-block `mjx-c` of no width and no content height,
+-- whose font stack starts with a font of zero ascent and descent, so that its baseline is the box's bottom. WeasyPrint
+-- takes the line's metrics from the font that draws the glyph (0.262em of ascent over descent in STIX Two Math), so each
+-- box stood that much too tall above its baseline and everything MathJax stacks (an accent, a limit, a fraction's
+-- denominator, a root, an \underset) sat 0.3em too far apart: a hat floated 3pt over its letter at 11pt. A negative top
+-- margin takes the excess off (0.29em matches Chromium to 0.3pt on the 36 shapes tried). WeasyPrint draws no `clip-path`,
+-- which cuts a stretchy bar, arrow or brace to its width, so an overflow does (an \overline ran past its letter); the
+-- bar of \underline sits inside a box of its own that wants 0.2em.
+local MATHJAX_FIXES = "mjx-c { margin-top: -0.29em; }\n"
+  .. "mjx-stretchy-h > mjx-ext, mjx-stretchy-v > mjx-ext { overflow: hidden; }\n"
+  .. "mjx-under > mjx-mo > mjx-box { margin-top: -0.2em; }\n"
+
 local plain_math = pandoc.WriterOptions({html_math_method = "plain"})
 
 -- a formula as Pandoc's plain math writes it (Unicode where it can, else its TeX)
@@ -83,6 +100,28 @@ local function katex(items)
   local decoded, answers = pcall(pandoc.json.decode, out, false)
   if not decoded or type(answers) ~= "table" or #answers ~= #items then return nil, "no answer from katex.cjs" end
   return answers
+end
+
+-- MathJax's answer for each formula and its stylesheet (one node call), or nil and why when it could not run
+local function mathjax(items)
+  local here = (PANDOC_SCRIPT_FILE or ""):gsub("[^/\\]*$", "")
+  local request = pandoc.json.encode({dir = variable("pdfmd-mathjax"), font = variable("pdfmd-mathjax-font"), items = items})
+  local ok, out = pcall(pandoc.pipe, variable("pdfmd-mathjax-node"), {here .. "mathjax.cjs"}, request)
+  if not ok then return nil, tostring(out.output or out):gsub("%s+$", ""):sub(1, 300) end
+  local decoded, result = pcall(pandoc.json.decode, out, false)
+  if not decoded or type(result) ~= "table" or type(result.answers) ~= "table" or #result.answers ~= #items then
+    return nil, "no answer from mathjax.cjs"
+  end
+  return result
+end
+
+-- the size that gives MathJax's formulas the body font's x-height, when the font is not the one made for the body
+-- (`pdfmd-body-xheight` is set only then): the body's x-height over the math font's, kept within 0.85 and 1.4
+local function mathjax_size_style(xheight)
+  local body = tonumber(variable("pdfmd-body-xheight") or "")
+  if body == nil or xheight == nil or xheight <= 0 then return "" end
+  local scale = math.min(1.4, math.max(0.85, body / xheight))
+  return string.format('mjx-container[jax="CHTML"] mjx-math { font-size: %d%%; }\n', math.floor(scale * 100 + 0.5))
 end
 
 -- Pandoc writes the page's title (the PDF's Title) and its authors' names from the title and the authors as plain
@@ -106,6 +145,11 @@ local function keep_plain_names(meta)
   return meta
 end
 
+-- `tex`: why, for the first formula that failed, as a message shows it
+local function first_failure(el_text, why)
+  return string.format("`%s`: %s", el_text:gsub("%s+", " "):sub(1, 60), why)
+end
+
 local function typeset(doc)
   doc.meta = keep_plain_names(doc.meta)
   local items, index = {}, {}
@@ -117,43 +161,108 @@ local function typeset(doc)
     end
   end})
   if #items == 0 then return nil end
-  local answers, reason = katex(items)
-  local count, failed, first = 0, 0, nil
-  doc = doc:walk({Math = function(el)
-    count = count + 1
-    local answer = answers and answers[index[key(el)]]
-    if answer and answer.html then return pandoc.RawInline("html", answer.html) end
-    failed = failed + 1
-    if answer and first == nil then
-      -- KaTeX underlines the place of the error with combining low lines
-      local why = (answer.error or ""):gsub("\204\178", ""):gsub("^KaTeX parse error: ", "")
-      first = string.format("`%s`: %s", el.text:gsub("%s+", " "):sub(1, 60), why:gsub(" at position %d+:.*$", ""))
+  local have_mathjax = variable("pdfmd-mathjax") ~= nil and variable("pdfmd-mathjax-node") ~= nil
+  local have_katex = variable("pdfmd-katex") ~= nil and variable("pdfmd-katex-node") ~= nil
+  local html, texts = {}, {}                 -- by formula: its HTML; its TeX and the error of the first to fail
+  local engines, first = {}, {}
+  local jax_css, jax_xheight, jax_reason, jax_failed = nil, nil, nil, 0
+  -- MathJax first
+  if have_mathjax then
+    local result, reason = mathjax(items)
+    if result then
+      jax_css, jax_xheight = result.css, tonumber(result.xheight)
+      for number, answer in ipairs(result.answers) do
+        if answer.html then
+          html[number], engines[number] = answer.html, "mathjax"
+        else
+          jax_failed = jax_failed + 1
+          if first.mathjax == nil then first.mathjax = first_failure(items[number].tex, (answer.error or ""):gsub("%s+$", "")) end
+        end
+      end
+    else
+      jax_reason, jax_failed = reason, #items
     end
+  end
+  -- KaTeX takes the rest
+  local katex_failed, katex_reason = 0, nil
+  if have_katex then
+    local rest, number_of = {}, {}
+    for number, item in ipairs(items) do
+      if html[number] == nil then rest[#rest + 1] = item; number_of[#rest] = number end
+    end
+    if #rest > 0 then
+      local answers, reason = katex(rest)
+      if answers then
+        for position, answer in ipairs(answers) do
+          if answer.html then
+            html[number_of[position]], engines[number_of[position]] = answer.html, "katex"
+          else
+            katex_failed = katex_failed + 1
+            if first.katex == nil then
+              -- KaTeX underlines the place of the error with combining low lines
+              local why = (answer.error or ""):gsub("\204\178", ""):gsub("^KaTeX parse error: ", "")
+              first.katex = first_failure(rest[position].tex, why:gsub(" at position %d+:.*$", ""))
+            end
+          end
+        end
+      else
+        katex_reason, katex_failed = reason, #rest
+      end
+    end
+  end
+  -- the formulas on the page (a formula that comes twice counts twice): all, those MathJax did not typeset, those nobody did
+  local total, jax_miss, left, used_mathjax, used_katex = 0, 0, 0, false, false
+  doc = doc:walk({Math = function(el)
+    total = total + 1
+    local number = index[key(el)]
+    if engines[number] ~= "mathjax" then jax_miss = jax_miss + 1 end
+    if html[number] then
+      if engines[number] == "mathjax" then used_mathjax = true else used_katex = true end
+      return pandoc.RawInline("html", html[number])
+    end
+    left = left + 1
     return plain(el)
   end})
-  if not answers then
-    io.stderr:write(string.format("WARN  weasyprint: KaTeX could not run (%s); %d formula%s %s printed as text\n",
-      reason, count, count == 1 and "" or "s", count == 1 and "is" or "are"))
-  elseif failed > 0 then
-    io.stderr:write(string.format("WARN  weasyprint: KaTeX could not typeset %d of %d formulas, printed as text; the "
-      .. "first: %s\n", failed, count, first or "?"))
+  local function formulas(n) return n == 1 and "formula" or "formulas" end
+  -- what is said: once, and only what happened
+  if have_mathjax and jax_reason then
+    io.stderr:write(string.format("WARN  weasyprint: MathJax could not run (%s)%s\n", jax_reason,
+      have_katex and "; KaTeX typesets the formulas" or "; the formulas are printed as text"))
+  elseif have_mathjax and have_katex and jax_miss > left then
+    io.stderr:write(string.format("NOTE  weasyprint: MathJax could not typeset %d of %d formulas, KaTeX did%s; the first: %s\n",
+      jax_miss, total, left > 0 and string.format(" (not %d)", left) or "", first.mathjax or "?"))
   end
-  if failed < count then
+  if left > 0 then
+    if have_katex and katex_reason then
+      io.stderr:write(string.format("WARN  weasyprint: KaTeX could not run (%s); %d %s %s printed as text\n",
+        katex_reason, left, formulas(left), left == 1 and "is" or "are"))
+    elseif have_katex then
+      io.stderr:write(string.format("WARN  weasyprint: %s could not typeset %d of %d formulas, printed as text; the first: %s\n",
+        have_mathjax and "MathJax and KaTeX" or "KaTeX", left, total, first.katex or first.mathjax or "?"))
+    elseif have_mathjax and not jax_reason then
+      io.stderr:write(string.format("WARN  weasyprint: MathJax could not typeset %d of %d formulas, printed as text; the first: %s\n",
+        left, total, first.mathjax or "?"))
+    end
+  end
+  local style = ""
+  if used_mathjax then style = style .. "<style>\n" .. (jax_css or "") .. "\n" .. MATHJAX_FIXES .. mathjax_size_style(jax_xheight) .. "</style>" end
+  if used_katex then
     local url = variable("pdfmd-katex-url")
-    doc.blocks:insert(1, pandoc.RawBlock("html", '<link rel="stylesheet" href="' .. url .. '/katex.min.css">\n'
-      .. "<style>\n" .. KATEX_FIXES .. "</style>"))
+    style = style .. '<link rel="stylesheet" href="' .. url .. '/katex.min.css">\n<style>\n' .. KATEX_FIXES .. "</style>"
   end
+  if style ~= "" then doc.blocks:insert(1, pandoc.RawBlock("html", style)) end
   return doc
 end
 
 local function Pandoc(doc)
-  if variable("pdfmd-katex") and variable("pdfmd-katex-node") then return typeset(doc) end
+  if (variable("pdfmd-mathjax") and variable("pdfmd-mathjax-node"))
+      or (variable("pdfmd-katex") and variable("pdfmd-katex-node")) then return typeset(doc) end
   local count = 0
   doc:walk({Math = function() count = count + 1 end})
   if count > 0 then
     io.stderr:write(string.format("WARN  weasyprint: WeasyPrint does not typeset math; %d formula%s %s printed as text "
       .. "(simple ones in Unicode, the others as TeX). Typst or a LaTeX engine typesets %s: -e typst; or "
-      .. "`pdfmd --install math:katex` for WeasyPrint itself\n", count,
+      .. "`pdfmd --install math:mathjax` (or `pdfmd --install math:katex`) for WeasyPrint itself\n", count,
       count == 1 and "" or "s", count == 1 and "is" or "are", count == 1 and "it" or "them"))
   end
   return nil

@@ -267,7 +267,7 @@ class KatexInstall(unittest.TestCase):
         self.assertEqual(pdfmd.install_kind("math:katex"), "math:katex")
         self.assertEqual(pdfmd.install_kind("math"), "math")
         with self.assertRaises(Exception):
-            pdfmd.install_kind("math:mathjax")
+            pdfmd.install_kind("math:mathjaxx")                         # math:mathjax is MathJax (tests/test_mathjax.py)
 
     def test_weasyprints_css_complaints_are_dropped(self):
         said = ("WARNING: Ignored `text-rendering: optimizeLegibility` at 22:7, unknown property.\n"
@@ -333,8 +333,9 @@ class WeasyPrintKatex(unittest.TestCase):
 
     def build(self, text: str, *extra: str) -> subprocess.CompletedProcess:
         (self.directory / "doc.md").write_text(text, encoding="utf-8")
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "weasyprint", *extra],
-                              capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
+        # --no-auto mathjax: with MathJax installed too it would typeset first (tests/test_mathjax.py); these are KaTeX's
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "weasyprint", "--no-auto", "mathjax",
+                               *extra], capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
 
     def fonts(self) -> str:

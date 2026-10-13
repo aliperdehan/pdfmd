@@ -133,7 +133,7 @@ Page breaks (v3.27.13, off unless asked since v3.27.15):
     TeX spellings itself (PAGE_BREAK_RE, PAGE_BREAK_COMMENT_RE); tests/test_pagebreak.py holds the one list both are
     checked against.
 
-Math in WeasyPrint (v3.27.12, v3.28.11):
+Math in WeasyPrint (v3.27.12, v3.28.11, v3.28.46):
     WeasyPrint does not draw MathML, Pandoc's default HTML math: each formula printed twice as flat text. For
     `-e weasyprint` pdfmd gives Pandoc --math-method=plain (unless the command line chooses the math) and
     pdfmd_lua/weasyprint.lua says once that the math is text. A direct .html page with MathML goes to a browser first.
@@ -141,6 +141,10 @@ Math in WeasyPrint (v3.27.12, v3.28.11):
     no node) the filter typesets the math instead: one node call (pdfmd_lua/katex.cjs) gives each formula as KaTeX's
     HTML, the page links KaTeX's stylesheet and fonts, and WeasyPrint prints it as a browser does; a formula KaTeX
     cannot read stays text, with one WARN. `--math-method=...` on the command line keeps Pandoc's math.
+    With MathJax 4 too (`pdfmd --install math:mathjax[:FONT,...]`: the npm packages, pinned and checked, and the math font
+    that goes with the body font) MathJax is asked first (pdfmd_lua/mathjax.cjs: CHTML and its stylesheet, with a few
+    rules that undo WeasyPrint's misplacing of stacked glyph boxes), KaTeX takes the formulas it cannot read, and the
+    rest stays text. `--no-auto mathjax` leaves the math to KaTeX.
 
 Tables in an HTML engine's PDF (v3.28.3):
     Pandoc's own page style is for a screen: a table is a full-width block that scrolls sideways, and a word may
@@ -1358,7 +1362,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.45"
+PDFMD_VERSION = "3.28.46"
 import argparse
 import csv
 import filecmp
@@ -1620,7 +1624,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures", "remotecsl", "mathfont", "css",
+    "draftpictures", "remotecsl", "mathfont", "css", "mathjax",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -2948,6 +2952,10 @@ def dependency_report() -> bool:
     print(f"{'OK  ' if quarto else 'MISS'}  quarto (only needed for .qmd files)"
          + (f"  ({quarto})" if quarto else ""))
     if which("weasyprint"):
+        jax = mathjax_runtime()
+        print(f"{'OK  ' if jax else 'MISS'}  MathJax (math in WeasyPrint's PDFs"
+              + (f": {jax[1].name}, fonts {', '.join(mathjax_fonts(jax[1]))}, node {jax[0]})" if jax
+                 else "; pdfmd --install math:mathjax)"))
         runtime = katex_runtime()
         print(f"{'OK  ' if runtime else 'MISS'}  KaTeX (math in WeasyPrint's PDFs"
               + (f": {runtime[1].name}, node {runtime[0]})" if runtime else "; pdfmd --install math:katex)"))
@@ -4633,10 +4641,22 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
     line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre needs it)"))
     if which("weasyprint"):
-        runtime = katex_runtime()
-        line(bool(runtime), "math in WeasyPrint's PDFs: " + (f"typeset by KaTeX {runtime[1].name} (node {runtime[0]})"
-                                                             if runtime else "printed as text, no KaTeX"),
-             "pdfmd --install math:katex", "KaTeX, for math in WeasyPrint's PDFs (WeasyPrint itself prints it as text)")
+        jax, runtime = mathjax_runtime(), katex_runtime()
+        if jax and runtime:
+            said = (f"typeset by MathJax {jax[1].name} (fonts {', '.join(mathjax_fonts(jax[1]))}), KaTeX {runtime[1].name} "
+                    f"for what MathJax cannot read (node {jax[0]})")
+        elif jax:
+            said = (f"typeset by MathJax {jax[1].name} (fonts {', '.join(mathjax_fonts(jax[1]))}; node {jax[0]}), "
+                    "a formula it cannot read is printed as text")
+        elif runtime:
+            said = (f"typeset by KaTeX {runtime[1].name} (node {runtime[0]}); MathJax typesets more of it "
+                    "(pdfmd --install math:mathjax)")
+        else:
+            said = "printed as text, no MathJax or KaTeX"
+        line(bool(jax or runtime), "math in WeasyPrint's PDFs: " + said,
+             "pdfmd --install math:mathjax" if not jax else "pdfmd --install math:katex",
+             "MathJax, for math in WeasyPrint's PDFs (WeasyPrint itself prints it as text)" if not jax
+             else "KaTeX, behind MathJax, for what it cannot read")
     try:
         import pdfmd_direct as direct
         browsers = [name for name in direct.BROWSER_NAMES if direct.find_browser(name, which)]
@@ -6385,6 +6405,209 @@ def install_katex() -> bool:
     return True
 
 
+# -- MathJax for WeasyPrint (v3.28.46) ---------------------------------------------------------------------------------
+# MathJax 4 typesets the math of a WeasyPrint PDF first, KaTeX takes the formulas it cannot read, and what neither reads
+# stays text. `pdfmd --install math:mathjax` puts this release's files in data_root()/mathjax/<version>/node_modules/@mathjax
+# (the npm packages below, each checked against its SHA-256 pinned here: the bundle's TeX input and CHTML output, and the
+# STIX Two math font, which goes with pdfmd's default body font; `math:mathjax:newcm,termes,pagella,dejavu` adds the math
+# fonts of the other bodies in MATH_COMPANIONS), and node as for KaTeX. pdfmd_lua/mathjax.cjs renders; Apache-2.0.
+MATHJAX_VERSION = "4.1.3"
+MATHJAX_REGISTRY = "https://registry.npmjs.org/@mathjax"
+MATHJAX_SOURCE_SHA256 = "4611bed26b338dfc4b5757b8ed2d7ba82a85bcbd05d2729fb3465fba17b8896c"
+MATHJAX_FONT_SHA256 = {
+    "stix2": "664c8c40d739a231016cd6108cb6401166151772913e82b802bdd4b64812acf5",
+    "newcm": "87d7b869c6a2a6169d9a53acc4eab6c846a9cbe11752738226461bb5070c8b88",
+    "termes": "7b0e2c13d89703cbd5d0074525ba5f88a280183c3539251546940dcfb5a44f6f",
+    "pagella": "c28d88afe4e8fac9e930d6c297114e5ff5a3f72d043cd24cd623d8bcc8468a34",
+    "dejavu": "70dc992d68d6976d8b058841e8ee2fbe7ae161578d239216bf22c02ca7e1c42f",
+}
+MATHJAX_FONT_SIZES = {"stix2": "4.8 MB", "newcm": "13.9 MB", "termes": "3.1 MB", "pagella": "3.7 MB", "dejavu": "2.1 MB"}
+MATHJAX_DEFAULT_FONT = "stix2"
+# the text font -> the MathJax math font that goes with it (the table of MATH_COMPANIONS; Libertinus has none)
+MATHJAX_FONT_FOR = {"stix two text": "stix2", "dejavu serif": "dejavu", "new computer modern": "newcm",
+                    "tex gyre termes": "termes", "tex gyre pagella": "pagella"}
+MATHJAX_BUNDLE_KEPT = ("node-main.cjs", "node-main.js", "node-main.mjs", "node-main-setup.cjs", "package.json", "core.js",
+                       "loader.js", "startup.js", "require.mjs", "output/chtml.js")
+MATHJAX_BUNDLE_FOLDERS = ("input/tex", "adaptors")
+MATHJAX_BUNDLE_INPUT = ("input/tex.js", "input/tex-base.js")
+
+
+def mathjax_package_url(package: str) -> str:
+    return f"{MATHJAX_REGISTRY}/{package}/-/{package}-{MATHJAX_VERSION}.tgz"
+
+
+def mathjax_font_package(font: str) -> str:
+    return f"mathjax-{font}-font"
+
+
+def mathjax_folder() -> Path | None:
+    """The MathJax files pdfmd installed: this release's, else the newest other one there (an older pdfmd's)."""
+    root = data_root() / "mathjax"
+
+    def complete(folder: Path) -> bool:
+        return (folder / "node_modules" / "@mathjax" / "src" / "bundle" / "node-main.cjs").is_file() and bool(
+            mathjax_fonts(folder))
+
+    if complete(root / MATHJAX_VERSION):
+        return root / MATHJAX_VERSION
+    try:
+        found = [folder for folder in root.iterdir() if complete(folder)]
+    except OSError:
+        return None
+    return max(found, key=lambda folder: tuple(int(part) for part in re.findall(r"\d+", folder.name)), default=None)
+
+
+def mathjax_fonts(folder: Path) -> list[str]:
+    """The math fonts installed in a MathJax folder, in the order MATHJAX_FONT_SHA256 lists them."""
+    modules = folder / "node_modules" / "@mathjax"
+    return [font for font in MATHJAX_FONT_SHA256 if (modules / mathjax_font_package(font) / "chtml.js").is_file()]
+
+
+def mathjax_runtime() -> tuple[str, Path] | None:
+    """(node, the MathJax folder) when math in a WeasyPrint PDF can be typeset by MathJax, else None."""
+    folder = mathjax_folder()
+    node = which("node") if folder is not None else None
+    return (node, folder) if node else None
+
+
+def mathjax_font_for(body_font: str | None, installed: list[str]) -> tuple[str, bool] | None:
+    """(the MathJax font to use, whether it is the one that goes with the body font): the table's font for the body when
+    it is installed, else STIX Two's (the widest fit for a serif body), else the first one there; None with none."""
+    wanted = MATHJAX_FONT_FOR.get((body_font or "").casefold())
+    if wanted in installed:
+        return wanted, True
+    if MATHJAX_DEFAULT_FONT in installed:
+        return MATHJAX_DEFAULT_FONT, False
+    return (installed[0], False) if installed else None
+
+
+def unpack_npm(archive: Path, target: Path, keep) -> int:
+    """The files of an npm package (``package/...`` in the archive) that ``keep(parts)`` accepts, into ``target``; how many."""
+    count = 0
+    with tarfile.open(archive, "r:gz") as bundle:
+        for member in bundle.getmembers():
+            parts = PurePosixPath(member.name).parts
+            if not member.isfile() or ".." in parts or len(parts) < 2 or parts[0] != "package" or not keep(parts[1:]):
+                continue
+            handle = bundle.extractfile(member)
+            if handle is None:
+                continue
+            destination = target.joinpath(*parts[1:])
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(handle.read())
+            count += 1
+    return count
+
+
+def mathjax_keeps_source(parts: tuple[str, ...]) -> bool:
+    """MathJax's own package: the TeX input, the CHTML output and what loads them (the bundle), not the sources, the
+    other outputs, the accessibility and speech code (5 MB), nor the other input languages."""
+    relative = "/".join(parts)
+    if relative in ("package.json", "LICENSE"):
+        return True
+    if parts[0] != "bundle":
+        return False
+    inside = "/".join(parts[1:])
+    return (inside in MATHJAX_BUNDLE_KEPT or inside in MATHJAX_BUNDLE_INPUT
+            or any(inside.startswith(folder + "/") for folder in MATHJAX_BUNDLE_FOLDERS))
+
+
+def mathjax_keeps_font(parts: tuple[str, ...]) -> bool:
+    """A math font package: its CHTML script and fonts (woff2 and the ranges loaded on demand), its licence."""
+    return parts[0] in ("package.json", "chtml.js") or parts[0].startswith("LICENSE") or (parts[0] == "chtml" and len(parts) > 1)
+
+
+def install_mathjax_files(target: Path, fonts: tuple[str, ...], fetch=None) -> None:
+    """MathJax's package and each font's into ``target``/node_modules/@mathjax, each archive checked against its pinned
+    SHA-256 (``fetch(url, path, sha256)`` is download_file unless a test gives another)."""
+    fetch = fetch or download_file
+    modules = target / "node_modules" / "@mathjax"
+    staging = target.with_name(target.name + ".part")
+    shutil.rmtree(staging, ignore_errors=True)
+    wanted = [("src", mathjax_package_url("src"), MATHJAX_SOURCE_SHA256, mathjax_keeps_source)]
+    wanted += [(mathjax_font_package(font), mathjax_package_url(mathjax_font_package(font)), MATHJAX_FONT_SHA256[font],
+                mathjax_keeps_font) for font in fonts]
+    for name, url, sha256, keep in wanted:
+        if name != "src" and (modules / name / "chtml.js").is_file():
+            continue                                  # a font an earlier install put here
+        with NamedTemporaryFile(suffix=".tgz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            fetch(url, archive, sha256)
+            if unpack_npm(archive, staging / "node_modules" / "@mathjax" / name, keep) == 0:
+                raise OSError(f"{name} has none of the files pdfmd needs")
+        finally:
+            archive.unlink(missing_ok=True)
+    # an earlier install's other fonts stay: move the new ones in
+    for folder in (staging / "node_modules" / "@mathjax").iterdir():
+        destination = modules / folder.name
+        if destination.exists():
+            shutil.rmtree(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        folder.replace(destination)
+    shutil.rmtree(staging, ignore_errors=True)
+
+
+def mathjax_works(node: str, folder: Path, font: str) -> str | None:
+    """None when node typesets a formula with the MathJax in ``folder`` through pdfmd_lua/mathjax.cjs, else why not."""
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return "pdfmd_lua, the folder of pdfmd's filters, is not installed beside pdfmd.py"
+    request = json.dumps({"dir": str(folder), "font": font, "items": [{"tex": "\\hat{x}^2", "display": False}]})
+    try:
+        ran = subprocess.run([node, str(pdfmd_lua.FILTERS / "mathjax.cjs")], input=request, capture_output=True, text=True,
+                             encoding="utf-8", timeout=120)
+        answer = json.loads(ran.stdout)["answers"][0] if ran.returncode == 0 else {"error": ran.stderr.strip()[-300:]}
+    except (OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired) as error:
+        return str(error)
+    return None if "mjx-container" in str(answer.get("html", "")) else str(answer.get("error") or answer)
+
+
+def ensure_node(what: str) -> str | None:
+    """node's path: the one on PATH, else pdfmd fetches node's own release (as for Typst); None when neither works."""
+    node = which("node")
+    if node is None:
+        print(f"NOTE  {what} runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+              f"would do too: {node_install_hint()})")
+        if not install_node():
+            return None
+        node = which("node")
+    return node
+
+
+def install_mathjax(font_names: str = "") -> bool:
+    """`pdfmd --install math:mathjax[:FONT[,FONT]]`: MathJax's files and the STIX Two math font (and the named ones), and
+    node when there is none, so that WeasyPrint's PDFs have their math typeset by MathJax."""
+    fonts = (MATHJAX_DEFAULT_FONT, *(name for name in dict.fromkeys(part.strip() for part in font_names.split(","))
+                                     if name and name != MATHJAX_DEFAULT_FONT))
+    unknown = [name for name in fonts if name not in MATHJAX_FONT_SHA256]
+    if unknown:
+        print(f"No MathJax math font named {', '.join(unknown)}: choose from {', '.join(MATHJAX_FONT_SHA256)}",
+              file=sys.stderr)
+        return False
+    target = data_root() / "mathjax" / MATHJAX_VERSION
+    size = ", ".join(f"{name} {MATHJAX_FONT_SIZES[name]}" for name in fonts)
+    print(f"INSTALL  MathJax {MATHJAX_VERSION} and the math fonts {', '.join(fonts)} (downloads: 7.5 MB and {size}; "
+          f"about 1 MB on disk for MathJax and 1 MB per font): {MATHJAX_REGISTRY}")
+    try:
+        install_mathjax_files(target, fonts)
+    except (OSError, tarfile.TarError) as error:
+        print(f"Could not install MathJax ({error}).", file=sys.stderr)
+        return False
+    print("SHA-256 verified (pinned in pdfmd for MathJax " + MATHJAX_VERSION + ")")
+    node = ensure_node("MathJax")
+    if node is None:
+        return False
+    problem = mathjax_works(node, target, fonts[0])
+    if problem:
+        print(f"MathJax was installed in {target} but node ({node}) could not typeset with it: {problem}", file=sys.stderr)
+        return False
+    print(f"Installed MathJax {MATHJAX_VERSION} in {target} (delete the folder to remove it): a PDF made by WeasyPrint "
+          f"now has its math typeset by MathJax (KaTeX, when installed, takes what MathJax cannot read), with node {node}.")
+    return True
+
+
 # -- Diagram tools: D2 and Graphviz (v3.28.32) --------------------------------------------------------------------------
 # A ```d2 or ```dot block is drawn by the tool that reads it (pdfmd_lua/diagram.lua). `pdfmd --install diagram:d2` puts
 # D2's own release binary in pdfmd's tools folder, as for Typst (GitHub lists a SHA-256 for every asset). Graphviz has no
@@ -6593,11 +6816,14 @@ def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
     kind = value.partition(":")[0]
     if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram"))
-            or (kind == "math" and ":" in value and value != "math:katex")
+            or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax")
+                and not value.startswith("math:mathjax:"))
+            or (value.startswith("math:mathjax:") and not all(name in MATHJAX_FONT_SHA256
+                                                              for name in value.split(":", 2)[2].split(",")))
             or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
-                                         "math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
+                                         "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
                                          "diagram:dot draw ```d2 and ```dot blocks)")
     return value
 
@@ -6724,6 +6950,8 @@ def install_extra(kind: str) -> bool:
         return install_typst()
     if kind == "math:katex":
         return install_katex()
+    if kind == "math:mathjax" or kind.startswith("math:mathjax:"):
+        return install_mathjax(kind.partition(":")[2].partition(":")[2])
     if kind == "diagram" or kind.startswith("diagram:"):
         return install_diagram(kind.partition(":")[2])
     if kind == "ocr" or kind.startswith("ocr:"):
@@ -12586,11 +12814,9 @@ def sfnt_x_height(path: Path, index: int = 0) -> float | None:
     return height / units if height > 0 and units > 0 else None
 
 
-@lru_cache(maxsize=None)
-def katex_scale(family: str | None) -> float | None:
-    """The `font-size` (in em of the body) that gives KaTeX's formulas the body font's x-height: x-height / 0.442 (STIX Two
-    Text 1.07, Noto Serif 1.21, Times 1.01, Georgia 1.09, Libertinus 0.97), kept within 0.85 and 1.4; None when the font is
-    not known or has no x-height recorded (KaTeX keeps its own 1.21em)."""
+def body_x_height(family: str | None) -> float | None:
+    """The x-height (a fraction of the em) of an installed body font, found with fontconfig; None when the font is not
+    installed or its file records none."""
     fc_match = which("fc-match")
     if not family or not fc_match:
         return None
@@ -12602,18 +12828,29 @@ def katex_scale(family: str | None) -> float | None:
     lines = done.stdout.splitlines()
     if done.returncode != 0 or len(lines) < 3 or family.casefold() not in lines[0].casefold():
         return None                                  # fontconfig answered with another font: the family is not installed
-    height = sfnt_x_height(Path(lines[1]), int(lines[2]) if lines[2].isdigit() else 0)
+    return sfnt_x_height(Path(lines[1]), int(lines[2]) if lines[2].isdigit() else 0)
+
+
+@lru_cache(maxsize=None)
+def katex_scale(family: str | None) -> float | None:
+    """The `font-size` (in em of the body) that gives KaTeX's formulas the body font's x-height: x-height / 0.442 (STIX Two
+    Text 1.07, Noto Serif 1.21, Times 1.01, Georgia 1.09, Libertinus 0.97), kept within 0.85 and 1.4; None when the font is
+    not known or has no x-height recorded (KaTeX keeps its own 1.21em)."""
+    height = body_x_height(family)
     if height is None:
         return None
     return round(min(1.4, max(0.85, height / KATEX_X_HEIGHT)), 2)
 
 
-def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str | None = None) -> list[str]:
+def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str | None = None,
+                         no_auto: list[str] | None = None) -> list[str]:
     """For WeasyPrint (v3.27.12), which does not draw MathML (Pandoc's default HTML math printed each formula twice as
     flat text): Pandoc's plain math, simple formulas in Unicode and the others as TeX, unless the command line chooses
     the math; and pdfmd_lua/weasyprint.lua, which says once that the math is text and (v3.28.3) keeps a table's
-    caption whole. With KaTeX and node (v3.28.11, `pdfmd --install math:katex`) the filter typesets the math instead:
-    the variables name KaTeX's folder and node. Last of the filters, after the LaTeX filter's \\ce in math."""
+    caption whole. With node and MathJax (v3.28.46, `pdfmd --install math:mathjax`) the filter typesets the math with
+    it, in the font that goes with the body font; with KaTeX (v3.28.11, `pdfmd --install math:katex`) it typesets what
+    MathJax cannot read, or all of it when MathJax is not there (or `--no-auto mathjax`): the variables name their
+    folders and node. Last of the filters, after the LaTeX filter's \\ce in math."""
     if engine != "weasyprint":
         return []
     chosen = any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options)
@@ -12633,6 +12870,17 @@ def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str 
         scale = katex_scale(body_font)
         if scale is not None:
             out += ["-V", f"pdfmd-katex-scale={scale}"]
+    jax = (None if chosen or auto_disabled(no_auto, "mathjax") or not (pdfmd_lua.FILTERS / "mathjax.cjs").is_file()
+           else mathjax_runtime())
+    if jax is not None:
+        node, folder = jax
+        font = mathjax_font_for(body_font, mathjax_fonts(folder))
+        if font is not None:
+            out += ["-V", f"pdfmd-mathjax={folder}", "-V", f"pdfmd-mathjax-font={font[0]}",
+                    "-V", f"pdfmd-mathjax-node={node}"]
+            height = None if font[1] else body_x_height(body_font)
+            if height is not None:
+                out += ["-V", f"pdfmd-body-xheight={round(height, 4)}"]          # the size match, for a body the font is not made for
     return out + ["--lua-filter", str(shipped)]
 
 
@@ -18182,7 +18430,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
                     last_filters = typst_filter_args(engine) + weasyprint_math_args(
                         engine, pandoc_options,
-                        selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables))
+                        selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
+                        no_auto)
                     page_options = lambda: calibre_page_options(md_path, metadata_files, variables)
                     if engine == "calibre" or (engine in ("typst", "weasyprint") and office_fallback_wanted(
                             md_path, metadata_files, failed_families, "typst" if engine == "typst" else "html",
@@ -21584,8 +21833,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
                              "GitHub, into pdfmd's own tools folder), 'full' (both: a complete Markdown-to-PDF "
                              "setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
-                             "Python 3.11+), 'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
-                             "about 30 MB: WeasyPrint's PDFs then typeset math), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
+                             "Python 3.11+), 'math:mathjax' (MathJax 4 and its STIX Two math font, about 12 MB to download, and node "
+                             "when there is none, about 30 MB: WeasyPrint's PDFs then have their math typeset by MathJax; "
+                             "math:mathjax:newcm,termes,pagella,dejavu adds the fonts of other body fonts), "
+                             "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
+                             "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
                              "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "
                              "alone), 'emoji' (the colour emoji font, about 11 MB, into pdfmd's own "
                              "fonts folder: every engine that can draw colour emoji uses it, and the built-in "
@@ -21851,7 +22103,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), mathjax (MathJax typesets the math of WeasyPrint PDFs; off, KaTeX or text does), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
@@ -22969,7 +23221,8 @@ def main() -> None:
                         # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
                         report_last = typst_filter_args(engine) + weasyprint_math_args(
                             engine, pandoc_options,
-                            args.font or document_font_setting("mainfont", list(files), metadata_files, variables))
+                            args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
+                            report_no_auto)
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)
