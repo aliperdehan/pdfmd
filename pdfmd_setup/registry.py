@@ -38,7 +38,7 @@ UNSET = {
     "colorlinks": "off", "toc": "off",
     "options.unicode": "off (only for text the font lacks)", "translit": "Cyrillic only",
     "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
-    "options.attach-bibliography": "only the cited entries",
+    "options.attach-bibliography": "only the cited entries", "options.attach-csl": "off",
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
     "options.html.self-contained": "off", "options.html.math": "MathML",
     "options.line-numbers": "off", "options.line-number-step": "1",
@@ -294,6 +294,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         # -- the source inside the PDF
         choice("options.attach-source", "Attach the source to the PDF", on_off, "",
                "Anyone can read it back from the PDF (pdfmd --restore).", "Source inside the PDF"),
+        choice("options.attach-csl", "The citation style attached with the source", on_off, "",
+               "Off by default: a style is 10-90 KB (apa.csl is 86 KB) and the global metadata sets one for every document. "
+               "Without it a machine that builds the source again needs the style by its name.", "Source inside the PDF"),
         choice("options.bundle", "Files attached with the source",
                (("sources", "the files the text reads, not images"), ("true", "and the images"), ("all", "everything"),
                 ("false", "none: the source alone")),

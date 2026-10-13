@@ -159,6 +159,37 @@ class AttachAndRestore(unittest.TestCase):
         self.assertEqual(status, 0)
         return target
 
+    def test_a_style_travels_only_when_asked_and_the_document_cites(self):
+        # v3.28.36: the global metadata sets `csl:` for every document, and 86 KB of apa.csl went into each source
+        (self.root / "style.csl").write_text('<?xml version="1.0"?>\n<style xmlns="http://purl.org/net/xbiblio/csl"/>\n',
+                                             encoding="utf-8")
+        (self.root / "refs.bib").write_text("@book{smith, title={T}, author={Smith, A}, year=2020}\n", encoding="utf-8")
+        plain = self.root / "plain.md"
+        plain.write_text("---\ntitle: T\ncsl: style.csl\n---\n\nNo citations here.\n", encoding="utf-8")
+        citing = self.root / "citing.md"
+        citing.write_text("---\ntitle: T\ncsl: style.csl\nbibliography: refs.bib\n---\n\nSee [@smith].\n",
+                          encoding="utf-8")
+
+        def source(document: Path) -> tuple[str, dict]:
+            attachments = pdfmd.read_pdf_attachments(self.attach(document))
+            return (attachments[pdfmd.ATTACH_SOURCE].decode("utf-8"),
+                    json.loads(attachments[pdfmd.ATTACH_MANIFEST].decode("utf-8")))
+        text, manifest = source(citing)
+        self.assertNotIn("type: csl", text)                       # off by default
+        self.assertIn("csl: style.csl", text)                     # the key stays: the document's own choice
+        self.assertEqual(manifest["csl_left"], ["style.csl"])     # and the manifest says what a build needs
+        try:
+            pdfmd.CSL_ATTACH_CLI = True
+            self.assertIn("type: csl", source(citing)[0])
+            self.assertNotIn("type: csl", source(plain)[0])       # nothing cites: nothing to carry
+        finally:
+            pdfmd.CSL_ATTACH_CLI = None
+        self.attach(citing)                                       # as it is by default again
+        shown = io.StringIO()
+        with contextlib.redirect_stdout(shown):
+            pdfmd.restore_from_pdf(self.root / "citing.pdf", self.root / "back")
+        self.assertIn("NOTE  the citation style style.csl is not in the source", shown.getvalue())
+
     def test_single_file_round_trip_with_metadata_and_preamble(self):
         (self.root / "metadata").mkdir()
         (self.root / "metadata" / "metadata.yaml").write_text("author: A. Author\n", encoding="utf-8")

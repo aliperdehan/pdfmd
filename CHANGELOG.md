@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.36 — 2026-10-13
+
+Pre-edit state: commit `b4ab613` (v3.28.35).
+
+### Changed
+
+- **The citation style is no longer embedded in a source unless asked** (the author: "why is csl embedded at all? make it
+  adjustable and off by default"). Looking at a restored PDF, the merged source was 2065 lines, 2000 of them `apa.csl`
+  (86 KB), which the author's global metadata sets for every document, cited or not; the "does the document cite anything"
+  test only silenced the warning for a missing style, not the embedding. `csl` is now an embed kind of its own and an
+  optional one, as `files` is: `--attach-csl` / `--no-attach-csl`, `pdfmd-options: {attach-csl: true}` and a `--setup` row
+  ("The citation style attached with the source", off) for an attached source, `--embed-metadata csl` or
+  `embed: {csl: true}` for an assembled file, `all` includes it. Even when asked for, a style no one cites with stays out.
+  What is left out is recorded (`csl_left` in the manifest) and `--restore` says so: "the citation style X is not in the
+  source: a build needs a style of that name". A house style that exists only on one machine (nu-labreport.csl) should be
+  carried: `attach-csl: true` in its metadata. Sizes measured: apa 86 KB, apa6 59 KB, nu-labreport 72 KB, ieee 18 KB, acs 11 KB.
+  The merged text of a document with a bibliography but no style asked for is 2000 lines shorter.
+
 ## v3.28.35 — 2026-10-13
 
 Pre-edit state: commit `4b99efb` (v3.28.34).

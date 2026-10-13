@@ -833,11 +833,12 @@ pdfmd-options:
   bundle-packages: true          # also your own LaTeX packages (see below)
   strip-comments: true           # the default for the attached copy; see "Comments"
   attach-bibliography: used      # or `all`
+  attach-csl: false              # the default: the citation style is named, not attached (see below)
 ```
 
 Put these in the shared metadata file and every document that finds it carries
 its source. The attachment is the assembled Markdown with the metadata,
-preamble, Lua filters, bibliography and CSL style folded in (the file
+preamble, Lua filters and bibliography folded in, and the CSL style too when `attach-csl: true` (the file
 `--assemble-only --embed-metadata` writes), plus a manifest of the original
 layout, so `--restore` gives back `report.md`, `metadata/`, `parts/` and the rest
 where they were, each as a standalone file (a symlinked metadata file or
@@ -883,6 +884,11 @@ style, a compound library, a shared bibliography and parts.
 - **Only the bibliography entries you cite** are attached (and what they
   cross-reference), not a shared file of hundreds; `attach-bibliography: all`
   keeps it whole, and `nocite: '@*'` keeps every entry.
+- **The citation style is not attached unless you ask** (`--attach-csl`, `attach-csl: true`, `--embed-metadata csl` for an
+  assembled file). A style is 10-90 KB (apa.csl 86 KB, nu-labreport.csl 72 KB, ieee.csl 18 KB) and the global metadata sets
+  one for every document, cited or not. A style is only ever attached when the document cites something. Without it the
+  manifest records the name and `--restore` says that a build needs a style of that name (Pandoc's own `csl/` folder, or
+  beside the document); a house style that exists nowhere else should travel, so set `attach-csl: true` for it.
 - **It is opt-in, and it is everything you wrote.** An attached source includes
   what the author would not send in an email; check `--list` before sharing.
 - `--restore` never overwrites a file and never writes outside its folder. A

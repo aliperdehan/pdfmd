@@ -23,8 +23,8 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--split", "--split-depth", "--list-parts")),
     "source": ("a PDF that carries its source, an assembled single file, comments", (
         "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
-        "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-source",
-        "--no-attach-source", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
+        "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-csl", "--attach-source",
+        "--no-attach-source", "--no-attach-csl", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
         "--slim", "--trust-embedded", "--hybrid", "--check-source")),
     "tables": ("tables as CSV files, and back", (
         "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv-rows", "--csv-cols", "--table-numbers", "--table-names",

@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.35"
+PDFMD_VERSION = "3.28.36"
 import argparse
 import csv
 import filecmp
@@ -13823,9 +13823,11 @@ def write_assembled_markdown(sources: list[Path], output: Path,
 # The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
 # the discovery that would find them a second time stays off.
 EMBED_KINDS = ("metadata", "preamble", "lua", "bibliography", "hst")
+# `csl` (v3.28.36) is not in the default either: a citation style is 10-90 KB (apa.csl is 86 KB, 2000 lines) and the global
+# metadata sets one for every document; `--embed-metadata csl`, `--attach-csl` or `pdfmd-options: {embed: {csl: true}}` carry it.
 # `files` (v3.25.10) is not in the default: it can be big. `--embed-metadata files` or `all` asks for it: the images, CSV
 # data and included files the text and the preamble point at, as `type: file` blocks (text as it is, anything else as base64).
-EMBED_OPTIONAL = ("files",)
+EMBED_OPTIONAL = ("files", "csl")
 EMBED_ALL = EMBED_KINDS + EMBED_OPTIONAL
 # A LaTeX comment line closing the embedded preamble inside `header-includes`:
 # document_header_file puts the front-matter macro definitions there, after
@@ -13920,8 +13922,9 @@ def parse_embed_option(value) -> tuple[frozenset[str], str | None] | None:
     if isinstance(value, dict):
         kinds = {kind for kind in ("metadata", "preamble", "bibliography", "hst")
                  if value.get(kind, True) not in (False, "false", "no", "off")}
-        if value.get("files") not in (None, False, "false", "no", "off"):
-            kinds.add("files")
+        for optional in EMBED_OPTIONAL:
+            if value.get(optional) not in (None, False, "false", "no", "off"):
+                kinds.add(optional)
         lua = value.get("lua", True)
         mode = None
         if lua is False or str(lua).casefold() in {"false", "no", "off"}:
@@ -13979,6 +13982,7 @@ class EmbedPlan:
         self.strip_kinds: frozenset[str] = frozenset()    # comment kinds cut from what is embedded
         self.bib_prune = False                            # keep only the bibliography entries the text cites
         self.bib_report: list[str] = []                   # "name (kept of total)" for the summary
+        self.csl_left: list[str] = []                     # styles the metadata names that were not embedded (the `csl` kind is off)
 
 
 def sha256_text(text: str) -> str:
@@ -14736,7 +14740,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     bib_embedded: list[str] = []
     bib_problems: list[str] = []
     renamed: dict[str, str] = {}
-    if "bibliography" in kinds and references:
+    if references and ("bibliography" in kinds or "csl" in kinds):
         cited: set[str] | None = None
         if plan.bib_prune:
             cited = used_citation_keys([body, json.dumps(merged, default=str, ensure_ascii=False),
@@ -14756,6 +14760,10 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             keys = used_citation_keys([body, json.dumps(merged, default=str, ensure_ascii=False)])
             return keys is None or bool(keys)
         for key, name in references:
+            if key not in kinds:
+                if key == "csl":
+                    plan.csl_left.append(name)            # the manifest says so, and --restore tells what the build needs
+                continue
             reference = Path(name)
             # A CSL style is also looked up in Pandoc's own user data folder (csl/).
             where = search + ([data_dir / "csl", data_dir] if key == "csl" and data_dir else [])
@@ -14765,8 +14773,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             if found is None and not reference.is_absolute():
                 found = next(((directory / candidate) for candidate in names for directory in where
                               if (directory / candidate).is_file()), None)
-            if found is None and key == "csl" and not cites_anything():
-                continue            # a style nothing cites with is not worth a warning (the global metadata sets one)
+            if key == "csl" and not cites_anything():
+                continue            # a style nothing cites with is not worth a warning, nor 2000 lines of the source (the
+                                    # global metadata sets one for every document)
             if found is None:
                 bib_problems.append(f"{name} (not found in the document's folders"
                                     + (" or Pandoc's csl/ folder" if key == "csl" else "") + ")")
@@ -17773,6 +17782,7 @@ BUNDLE_MAX_MB = 100
 VERBOSE_OUTPUT = False
 # --attach-bibliography used|all (None: the document's pdfmd-options decide).
 BIB_ATTACH_CLI: str | None = None
+CSL_ATTACH_CLI: bool | None = None    # --attach-csl / --no-attach-csl
 # --bundle-packages / --no-bundle-packages (None: the document decides).
 BUNDLE_PACKAGES_CLI: bool | None = None
 EXTRA_PREFIX = "files/"
@@ -18172,6 +18182,7 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
             "name": relative_posix(base, md_path), "source": ATTACH_SOURCE, "sha256": sha256_text(merged),
             "comments_stripped": sorted(stripped), "no_auto": frontmatter_no_auto(md_path), "chunks": chunks,
             "bibliography": list(plan.bib_report) if plan else [],
+            **({"csl_left": list(plan.csl_left)} if plan is not None and plan.csl_left else {}),
             "layout": layout, "data_files": [block["path"] or block["name"] for block in parse_embedded_blocks(merged)
                                              if block["type"] in ("bibliography", "csl")],
             "images": images, **({"metadata_texts": metadata_texts} if metadata_texts else {}),
@@ -18181,11 +18192,11 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
 def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
                     preamble_files: list[Path] | None, no_auto: list[str] | None,
                     strip: frozenset[str], prune_bibliography: bool = True,
-                    report: bool = False, base: Path | None = None) -> tuple[str, dict]:
+                    report: bool = False, base: Path | None = None, with_csl: bool = False) -> tuple[str, dict]:
     """The text to attach (the assembled file with everything embedded) and its manifest.
     ``report``: the files are the chapters of a -r/--report build, each keeping its own front matter."""
     plan = make_embed_plan(md_path, metadata_files, preamble_files, no_auto,
-                           EmbedRequest(frozenset(EMBED_KINDS), None, False))
+                           EmbedRequest(frozenset(EMBED_KINDS + (("csl",) if with_csl else ())), None, False))
     plan.bib_prune = prune_bibliography
     base = base or md_path.parent
     chunks: list[dict] = []
@@ -18222,6 +18233,14 @@ def resolve_bibliography_pruning(md_path: Path, metadata_files: list[Path]) -> b
     (--attach-bibliography used|all), else `pdfmd-options.attach-bibliography`, else yes."""
     value = BIB_ATTACH_CLI or first_pdfmd_option(md_path, metadata_files, "attach-bibliography", "attach-bib")
     return str(value).strip().casefold() not in {"all", "false", "no", "off", "whole", "full"}
+
+
+def resolve_csl_attach(md_path: Path, metadata_files: list[Path]) -> bool:
+    """Whether the attached source carries the citation style the metadata names: the command line (--attach-csl), else
+    `pdfmd-options.attach-csl`, else no (v3.28.36: a style is 10-90 KB, and the global metadata sets one for every document)."""
+    if CSL_ATTACH_CLI is not None:
+        return CSL_ATTACH_CLI
+    return bool(option_flag(first_pdfmd_option(md_path, metadata_files, "attach-csl")))
 
 
 def add_deflated_attachment(writer: "pypdf.PdfWriter", name: str, data: bytes):
@@ -18399,7 +18418,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
                                            resolve_strip_comments(md_path, metadata_files, default=True),
                                            resolve_bibliography_pruning(md_path, metadata_files),
-                                           report=report, base=base)
+                                           report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files))
     extras: dict[str, bytes] = {}
     origins: dict[str, str] = {}
     mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
@@ -19304,6 +19323,9 @@ def restore_attachments(pdf_path: Path, attachments: dict[str, bytes], out_dir: 
           f"{comments_note(manifest)})")
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
+    if manifest.get("csl_left"):
+        print(f"NOTE  the citation style {', '.join(manifest['csl_left'])} is not in the source (--attach-csl carries it): "
+              "a build needs a style of that name (Pandoc's own csl/ folder, or beside the document)")
     # The files are counted by folder unless --verbose or --list asks for each (v3.28.15)
     compact = not VERBOSE_OUTPUT and not list_only
     for line in requirement_lines(manifest):
@@ -20660,10 +20682,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "metadata (the YAML files, merged with the front matter), preamble (the "
                              "LaTeX preamble, into header-includes), lua (the Lua filters, see "
                              "--lua-mode) or bibliography (the bibliography and CSL files the metadata "
-                             "names), hst (the NAME.hst history file) or files (the images, CSV data and "
+                             "names; the style itself only with `csl`), hst (the NAME.hst history file), csl (the "
+                             "citation style, 10-90 KB, not in the default) or files (the images, CSV data and "
                              "included files the text and preamble point at; text as it is, the rest base64: "
-                             "not in the default as it can be big); none given means all but files, `all` "
-                             "means every kind")
+                             "not in the default as it can be big); none given means all but files and csl, "
+                             "`all` means every kind")
     parser.add_argument("--no-embed-metadata", action="store_true",
                         help="turn off embedding for this run, even where a document's "
                              "pdfmd-options.embed asks for it")
@@ -20695,6 +20718,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "text cites (and what they cross-reference; all of them if it has "
                              "`nocite: '@*'`), 'all' the file as it is. A document sets it with "
                              "pdfmd-options.attach-bibliography")
+    parser.add_argument("--attach-csl", dest="attach_csl", action="store_true", default=None,
+                        help="also attach the citation style (.csl) the metadata names, with the source: it is not "
+                             "attached by default (a style is 10-90 KB, apa.csl 86 KB, and the global metadata sets one "
+                             "for every document), so a machine that builds the source again needs the style by its name. "
+                             "A document sets it with pdfmd-options.attach-csl; --embed-metadata csl does the same for "
+                             "an assembled file")
+    parser.add_argument("--no-attach-csl", dest="attach_csl", action="store_false",
+                        help="attach no style, even where a document's pdfmd-options.attach-csl asks for it")
     parser.add_argument("--attach-source", "--embed-source", dest="attach_source", action="store_true",
                         default=None,
                         help="attach the document's whole source (the assembled Markdown, comments "
@@ -21453,12 +21484,13 @@ def main() -> None:
         ASCII_CLI["on"] = ascii_asked
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
-    global BIB_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
+    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
     STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
     KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
     BIB_ATTACH_CLI = args.attach_bibliography
+    CSL_ATTACH_CLI = args.attach_csl
     ATTACH_CLI = args.attach_source
     KEEP_SOURCE_CLI = args.keep_source
     HYBRID_CLI = args.hybrid
