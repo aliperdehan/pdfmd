@@ -152,12 +152,11 @@ class Install(unittest.TestCase):
         made = subprocess.run(["hdiutil", "create", "-srcfolder", str(source), "-format", "UDZO", "-ov", str(image)],
                               capture_output=True, text=True)
         self.assertEqual(made.returncode, 0, made.stderr)
-        before = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout.count("pdfmd-calibre-dmg")
         done, out, err = self.run_install(fetch=self.fetch_with(image), release=release("calibre-9.99.0.dmg"))
         self.assertTrue(done, out + err)
         self.assertTrue((self.apps / "calibre.app" / "Contents" / "MacOS" / "ebook-convert").is_file())
-        after = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout.count("pdfmd-calibre-dmg")
-        self.assertEqual(before, after)                                              # the image is detached again
+        listing = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout
+        self.assertNotIn(str(image.resolve()), listing)             # this test's image is detached again (other runs' images do not count)
 
     def test_no_digest_no_download(self):
         pattern_name = "calibre-9.99.0.dmg" if sys.platform == "darwin" else "calibre-9.99.0-x86_64.txz"

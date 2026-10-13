@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.15 — 2026-10-14
+
+Pre-edit state: commit `e2594ab` (v3.29.14).
+
+### Fixed
+
+- `tests/test_install_calibre.py` counted every mounted `pdfmd-calibre-dmg` image to prove the test's own had been detached; two test
+  runs at once (the two Pandoc suites and the Pandoc-off run share the machine) counted each other's. It now looks for its own
+  image's path in `hdiutil info`. (Found by the 3.29.11 verification run: one failure in 1375.)
+
 ## v3.29.14 — 2026-10-14
 
 Pre-edit state: commit `0e51139` (v3.29.13).
