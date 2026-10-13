@@ -18,6 +18,9 @@
 -- landscape  ::: landscape, a div with style="page: landscape", a raw \begin{landscape}...\end{landscape}: the blocks on landscape pages.
 --            LaTeX the landscape environment (pdfmd's header file loads pdflscape), Typst #page(flipped: true)[...], HTML a
 --            named page; Word and OpenDocument keep the text with a note once.
+-- appendix   a raw \appendix, <!-- appendix -->, or a heading with the class .appendix (it starts the appendix): the sections after it
+--            are lettered (A, B ... A.1). LaTeX \appendix, Typst a heading numbering of letters; only for a document that numbers
+--            its sections (--number-sections). Other writers keep the headings and say once that the lettering is not made.
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
 --            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
 local enabled = nil
@@ -435,6 +438,61 @@ local function tex_environments(blocks)
 end
 
 
+
+-- ---- appendix --------------------------------------------------------------------------------------------------------
+local appendix_told = false
+
+local function appendix_marker(block)
+  if block.t == "RawBlock" then
+    local format = block.format:lower()
+    local text = block.text:gsub("^%s+", ""):gsub("%s+$", "")
+    if (format == "tex" or format == "latex") and text == "\\appendix" then return true end
+    if format == "html" or format == "html5" then
+      return text:lower():match("^<!%-%-%s*(%a+)%s*%-%->$") == "appendix"
+    end
+  end
+  return false
+end
+
+local function numbered()
+  local options = PANDOC_WRITER_OPTIONS
+  return options ~= nil and options.number_sections == true
+end
+
+local function appendix_blocks()
+  local format = FORMAT or ""
+  if format:match("^latex") then
+    return pandoc.Blocks({pandoc.RawBlock("latex", "\\appendix")})
+  elseif format:match("^typst") then
+    if not numbered() then return pandoc.Blocks({}) end
+    return pandoc.Blocks({pandoc.RawBlock("typst", '#set heading(numbering: "A.1")\n#counter(heading).update(0)')})
+  end
+  if not appendix_told and numbered() then
+    appendix_told = true
+    io.stderr:write("NOTE  markup: the appendix is lettered in LaTeX and Typst only; " .. format .. " keeps its numbering\n")
+  end
+  return pandoc.Blocks({})
+end
+
+-- the blocks of one document with the appendix start made the writer's own (a heading with .appendix starts it too)
+local function appendix_pass(blocks)
+  local out, changed, started = pandoc.Blocks({}), false, false
+  for _, block in ipairs(blocks) do
+    if appendix_marker(block) then
+      if not started then out:extend(appendix_blocks()) end
+      started, changed = true, true
+    elseif block.t == "Header" and block.classes:includes("appendix") and not started then
+      out:extend(appendix_blocks())
+      started, changed = true, true
+      out[#out + 1] = block
+    else
+      out[#out + 1] = block
+    end
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   no_named_pages = doc.meta["pdfmd-no-named-pages"] ~= nil
   local enabled_list = doc.meta["pdfmd-markup"]
@@ -485,6 +543,9 @@ function Pandoc(doc)
       return make_callout(kind, title, body)
     end,
   })
+  if on("appendix") then
+    walked.blocks = appendix_pass(walked.blocks) or walked.blocks
+  end
   if on("toc") then
     local headers = {}
     walked:walk({Header = function(header)

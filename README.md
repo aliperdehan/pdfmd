@@ -1607,6 +1607,12 @@ get the document's paper turned; WeasyPrint's is its own A4 unless your own `@pa
 name page types, and Word and OpenDocument have no sections made from here: they keep the text and say once that no landscape page
 was made. `--markup landscape` for one run.
 
+**Where the appendix starts** (v3.29, `markup: appendix`). A raw `\appendix`, `<!-- appendix -->` or a heading with the class
+`{.appendix}` marks the start: the sections after it are lettered (A, B, A.1) in LaTeX (`\appendix`) and Typst (a heading
+numbering of letters and a counter reset). It matters for a document that numbers its sections (`--number-sections`); without
+numbers Typst gets nothing and LaTeX's `\appendix` changes nothing visible. Other writers keep their own numbering and say once
+that the lettering is not made.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

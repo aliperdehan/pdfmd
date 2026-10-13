@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.20 — 2026-10-14
+
+Pre-edit state: commit `4aa8c25` (v3.29.19).
+
+### Added
+
+- **Universal markup, the eighth kind: `appendix`**. A raw `\appendix`, `<!-- appendix -->` or a heading with the class `.appendix`
+  (the start itself) makes the sections after it lettered: LaTeX `\appendix` once, Typst `#set heading(numbering: "A.1")` and a counter
+  reset (only when the build numbers its sections: `PANDOC_WRITER_OPTIONS.number_sections`); other writers keep their numbering with a
+  note once when numbered. Opt-in with the rest of `markup`. `tests/test_markup_appendix.py` (Pandoc 3.12 and 3.1.3). That is
+  eight of the nine kinds of the plan's list (toc, callouts, appendix, centring, highlight, keep-together, landscape; and
+  vertical space): not done, vertical space (`\vspace`, `\bigskip`, `<br>`), and the native renderers' own reading of any kind.
+
 ## v3.29.19 — 2026-10-14
 
 Pre-edit state: commit `bcf99ef` (v3.29.18).
