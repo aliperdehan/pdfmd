@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.1"
+PDFMD_VERSION = "3.29.2"
 import argparse
 import atexit
 import csv
@@ -20381,6 +20381,12 @@ def route_ebook_input(args) -> None:
             raise SystemExit(f"{book.name}: {done.stderr}")
     markdown = scratch / (book.stem + ".md")
     command = ["pandoc", str(epub), "-s", "-t", "markdown", "--wrap=none", "--extract-media=media", "-o", str(markdown)]
+    try:
+        import pdfmd_lua
+        if (pdfmd_lua.FILTERS / "ebook_input.lua").is_file():
+            command += ["--lua-filter", str(pdfmd_lua.FILTERS / "ebook_input.lua")]       # Calibre's anchors and classes go
+    except ImportError:
+        pass
     log_cmd(command, scratch, args.verbose)
     made = subprocess.run(command, capture_output=True, text=True, cwd=scratch)
     if made.returncode != 0 or not markdown.is_file():
@@ -20391,6 +20397,14 @@ def route_ebook_input(args) -> None:
         target = (args.to.casefold() if args.to else "pdf")
         args.out = named.with_suffix(FORMAT_EXTENSION.get(target, f".{target}"))
     DISPLAY_ALIAS[markdown] = DISPLAY_ALIAS[markdown.resolve()] = named
+    if args.out.suffix.lower() in (".md", ".markdown") and (scratch / "media").is_dir():
+        # the Markdown is kept, so its pictures are too: media/ beside it (never over a file that is there)
+        for picture in sorted((scratch / "media").rglob("*")):
+            if picture.is_file():
+                target = args.out.parent / "media" / picture.relative_to(scratch / "media")
+                if not target.exists():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(picture, target)
     args.path = [markdown]
 
 

@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.2 — 2026-10-14
+
+Pre-edit state: commit `934899f` (v3.29.1).
+
+### Fixed
+
+- **An ebook read as Markdown loses Calibre's scaffolding and keeps its pictures** (the advisor's check of 3.29.1). Calibre's
+  EPUB carries an empty anchor for every file it split the book into (`[]{#index_split_001.html}`), page-break divs and a class
+  on every span (`.calibre1`); `pdfmd_lua/ebook_input.lua` drops what is empty and not the target of a link, and the converter's
+  classes (`calibre*`, `mbp_*`, `pagebreak*`); words, headings, lists, tables, pictures and links are not touched. And
+  `pdfmd book.mobi -o book.md` wrote `![](media/images/00001.jpg)` with the pictures deleted along with the scratch folder: the
+  `media/` folder is now copied beside a kept Markdown (`.md`, `.markdown`), never over a file already there. (Before 3.29.1 an
+  ebook given to pdfmd stopped with a UnicodeDecodeError: nothing regressed.) `tests/test_ebook_input.py` (a book with a
+  picture, an anchor nothing links to and one a link points at).
+
 ## v3.29.1 — 2026-10-14
 
 Pre-edit state: commit `8f5d4a1` (v3.29.0).
@@ -66,8 +81,8 @@ Pre-edit state: commit `8f5d4a1` (v3.29.0).
   none (the tests of the no-Pandoc tier set it, so a Calibre on the machine does not leak in). `tests/test_calibre_markdown.py`.
 - **An ebook as input**: `pdfmd book.epub`, `book.mobi`, `.azw`, `.azw3`, `.azw4`, `.kepub`, `.lit`, `.lrf`, `.pdb`, `.prc`,
   `.chm`, `.snb`, `.tcr`, `.rb`, `.pmlz`, `.htmlz`, `.txtz` (`EBOOK_INPUT_EXTENSIONS`). An EPUB goes straight to Pandoc; the
-  others through Calibre's `ebook-convert` to an EPUB first (`--no-default-epub-cover --no-svg-cover`: no cover page of
-  Calibre's own making). Pandoc turns the EPUB into Markdown with its pictures (`--extract-media=media`) in a scratch folder
+  others through Calibre's `ebook-convert` to an EPUB first (`--no-default-epub-cover --no-svg-cover`: a book with no cover
+  is not given a generated one; a book's own cover stays, it is content). Pandoc turns the EPUB into Markdown with its pictures (`--extract-media=media`) in a scratch folder
   (`route_ebook_input`, after `route_text_input` in `main`), and that Markdown is built as any file is: the output is named after the
   book beside it (`book.pdf`; `-o` and `--to` as usual), the closing line names the book (`OK    book.mobi > book.pdf  (lualatex)`:
   `DISPLAY_ALIAS` in `display_path`), and `pdfmd book.mobi -o book.md` keeps the Markdown for editing. One book at a time (not

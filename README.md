@@ -248,7 +248,9 @@ Markdown (with its pictures in `media/`) for you to edit, `pdfmd book.azw3 --to 
 `mobi`, `azw`, `azw3`, `azw4`, `kepub`, `lit`, `lrf`, `pdb`, `prc`, `chm`, `snb`, `tcr`, `rb`, `pmlz`, `htmlz` and `txtz` first go
 through Calibre's `ebook-convert` into an EPUB (Calibre is needed for those, not for an EPUB). The closing line names the
 book. One book at a time, not with other files, `-b` or `-r`; a book with DRM, and an ebook of nothing but pictures (a comic),
-cannot be read. A formula a MOBI holds as a picture stays a picture.
+cannot be read. A formula a MOBI holds as a picture stays a picture. Calibre's own scaffolding in the converted book (an
+anchor for every file it split the book into, its page-break divs and classes) is dropped from the Markdown; with
+`-o book.md` the pictures are copied to a `media/` folder beside it.
 
 LibreOffice writes what Pandoc cannot too (v3.29): `pdfmd letter.md -o letter.doc` (Word 97) has Pandoc write the Word file (the
 same one `-o letter.docx` writes: your reference document, native equations and tables, pictures for what LaTeX alone can draw)

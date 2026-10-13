@@ -21,6 +21,8 @@ import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cfc0f01f0005000201a5f645400000000049454e44ae426082")
+
 STUB = """#!{python}
 import json, shutil, sys
 with open({log!r}, "a", encoding="utf-8") as handle:
@@ -53,9 +55,11 @@ class Build(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-ebook-input-"))
         self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
         source = self.directory / "src.md"
-        source.write_text("---\ntitle: Tiny Book\nauthor: A. Writer\n---\n\n# Chapter One\n\nA sentence with *emphasis* in it.\n\n"
-                          "- first\n- second\n", encoding="utf-8")
-        subprocess.run([PANDOC, str(source), "-o", str(self.directory / "book.epub")], check=True, capture_output=True)
+        (self.directory / "dot.png").write_bytes(PNG)
+        source.write_text("---\ntitle: Tiny Book\nauthor: A. Writer\n---\n\n[]{#index_split_000.html}\n\n# Chapter One\n\n"
+                          "A sentence with *emphasis* in it, [kept](#target) and [[bold]{.bold}]{.calibre1}.\n\n"
+                          "![a dot](dot.png)\n\n[]{#target}\n\n::: mbp_pagebreak\n:::\n\n- first\n- second\n", encoding="utf-8")
+        subprocess.run([PANDOC, "src.md", "-o", "book.epub"], check=True, capture_output=True, cwd=self.directory)
         self.log = self.directory / "calls.log"
         folder = self.directory / "bin"
         folder.mkdir()
@@ -83,6 +87,26 @@ class Build(unittest.TestCase):
         self.assertIn("emphasis", text)
         self.assertIn("second", text)
         self.assertEqual(self.calls(), [])
+
+    def test_the_pictures_stay_beside_a_kept_markdown(self):
+        done = self.run_pdfmd("book.epub", "-o", "out.md", calibre=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "out.md").read_text(encoding="utf-8")
+        link = next(part for part in text.split("(") if part.startswith("media/"))
+        picture = self.directory / link.split(")")[0]
+        self.assertTrue(picture.is_file(), (link, text))
+        self.assertEqual(picture.read_bytes(), PNG)
+
+    def test_calibre_scaffolding_goes_and_links_stay(self):
+        done = self.run_pdfmd("book.epub", "-o", "out.md", calibre=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "out.md").read_text(encoding="utf-8")
+        self.assertNotIn("index_split_000", text)                                    # an empty anchor nothing links to
+        self.assertNotIn("calibre1", text)
+        self.assertNotIn("mbp_pagebreak", text)
+        self.assertIn("_target}", text)                                              # a link points at this one
+        self.assertRegex(text, r"\[kept\]\(#[^)]*_target\)")
+        self.assertIn("**bold**", text.replace("[bold]{.bold}", "**bold**"))
 
     def test_a_mobi_goes_through_ebook_convert_to_an_epub(self):
         done = self.run_pdfmd("book.mobi", "-o", "out.md")
