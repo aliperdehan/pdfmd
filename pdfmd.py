@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.29"
+PDFMD_VERSION = "3.28.30"
 import argparse
 import csv
 import filecmp
@@ -14792,12 +14792,12 @@ def default_output_path(path: Path, target_format: str) -> Path:
 # any whole number N from 1: fN the first N, lN the last N, flN the first half and the last half (the first gets the odd
 # one: fl15 = 8 + 7), eN every Nth (the Nth, the 2Nth ...), all (or no spec). The files chosen by any selector open, once
 # each, in the order the batch lists them.
-BOPEN_RE = re.compile(r"^(?:(?P<all>all|a)|(?P<kind>fl|f|l|e)(?P<n>[0-9]+))$", re.IGNORECASE)
-BOPEN_HELP = "all, fN (first N), lN (last N), flN (first half and last half), eN (every Nth); joined by commas: f2,l3"
+BOPEN_RE = re.compile(r"^(?:(?P<all>all|a)|(?P<kind>fl|f|l|e|s)(?P<n>[0-9]+))$", re.IGNORECASE)
+BOPEN_HELP = "all, fN (first N), lN (last N), flN (first half and last half), eN (the Nth, 2Nth ...), sN (the 1st, then every Nth: 1st, N+1th ...); joined by commas: f2,l3"
 
 
 def parse_bopen(spec: str) -> list[tuple[str, int]]:
-    """The selectors of a --bopen spec as (kind, N); kind is all, f, l, fl or e. Stops with the grammar when it is not one."""
+    """The selectors of a --bopen spec as (kind, N); kind is all, f, l, fl, e or s. Stops with the grammar when it is not one."""
     selectors: list[tuple[str, int]] = []
     for word in re.split(r"[,;]", re.sub(r"\s+", "", str(spec))):
         if not word:
@@ -14825,8 +14825,10 @@ def bopen_indices(spec: str, count: int) -> list[int]:
             first = (number + 1) // 2
             chosen.update(range(min(first, count)))
             chosen.update(range(max(0, count - (number - first)), count))
+        elif kind == "s":
+            chosen.update(range(0, count, number))                    # Python's [::N]: the first, then every Nth
         else:
-            chosen.update(range(number - 1, count, number))
+            chosen.update(range(number - 1, count, number))           # e: the Nth, the 2Nth ...
     return sorted(chosen)
 
 

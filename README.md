@@ -1031,7 +1031,7 @@ OK    notes/week2.md > week2.pdf
 
 `-b` converts every `.md` in the folder into its own PDF, in parallel
 (`-j N` sets the number of workers). `--bopen SPEC` opens some of the finished files when
-the batch is done: `f5` the first five, `l5` the last five, `fl10` the first five and the last five, `e3` every third,
+the batch is done: `f5` the first five, `l5` the last five, `fl10` the first five and the last five, `e3` the third, sixth, ninth ... file, `s3` the first, fourth, seventh ... (Python's `[::3]`),
 `f2,l3` a mix, or none for all (any number works; the files open in the order the batch lists them). Add `--recursive` to include
 subfolders, and `-o DIR` to collect the PDFs somewhere else.
 

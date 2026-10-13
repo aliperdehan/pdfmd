@@ -1,4 +1,4 @@
-"""v3.28.20: --bopen SPEC opens the chosen files of a batch when it is done (fN, lN, flN, eN, all; any N)."""
+"""v3.28.20: --bopen SPEC opens the chosen files of a batch when it is done (fN, lN, flN, eN, sN, all; any N)."""
 
 from __future__ import annotations
 
@@ -24,6 +24,10 @@ class Spec(unittest.TestCase):
         self.assertEqual(pick("fl10", 20), [0, 1, 2, 3, 4, 15, 16, 17, 18, 19])
         self.assertEqual(pick("fl15", 30), list(range(8)) + list(range(23, 30)))           # 8 first, 7 last
         self.assertEqual(pick("e3", 10), [2, 5, 8])
+        self.assertEqual(pick("s3", 10), [0, 3, 6, 9])                                      # Python's [::3]: first, then every 3rd
+        self.assertEqual(pick("s1", 3), [0, 1, 2])
+        self.assertEqual(pick("s1000", 10), [0])
+        self.assertEqual(pick("S2,e5", 10), [0, 2, 4, 6, 8, 9])
         self.assertEqual(pick("e1", 3), [0, 1, 2])
         self.assertEqual(pick("e1000", 10), [])
         self.assertEqual(pick("all", 3), [0, 1, 2])
@@ -36,7 +40,7 @@ class Spec(unittest.TestCase):
         self.assertEqual(pick("l5", 0), [])
 
     def test_a_bad_spec_stops_with_the_grammar(self):
-        for bad in ("", "x", "f", "f0", "fl", "e0", "2f", "f2;;x"):
+        for bad in ("", "x", "f", "f0", "fl", "e0", "s0", "2f", "f2;;x"):
             with self.subTest(bad), self.assertRaises(SystemExit) as caught:
                 pdfmd.bopen_indices(bad, 5)
             self.assertIn("fN", str(caught.exception))

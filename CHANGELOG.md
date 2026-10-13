@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.30 — 2026-10-13
+
+Pre-edit state: commit `9051a96` (v3.28.29).
+
+### Added
+
+- **`--bopen sN`** (the author asked for it beside `eN`): the first file, then every Nth, as Python's `files[::N]` does
+  (`s3` opens the 1st, 4th, 7th ...). `eN` stays the Nth, 2Nth ... (`e3`: the 3rd, 6th, 9th ...). Both mix with the
+  other selectors (`f2,s5`). No new flag, so no setup row.
+
 ## v3.28.29 — 2026-10-13
 
 Pre-edit state: commit `41badfc` (v3.28.28).
