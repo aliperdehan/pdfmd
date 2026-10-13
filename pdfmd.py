@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.9"
+PDFMD_VERSION = "3.29.10"
 import argparse
 import atexit
 import csv
@@ -7747,7 +7747,7 @@ class AutoLog:
     # The order a line lists its items in, whichever was found first: the files, then the parts; the global
     # metadata, then margin, fonts, packages
     RANK = {"YAML": 0, "TEX": 1, "LUA": 2, "PARTS": 3, "GLOBAL": 0, "MARGIN": 1, "MAINFONT": 2, "MATHFONT": 2.5, "MONOFONT": 3,
-            "TEXPACKAGES": 4, "TITLE": 5, "TABLEWIDTH": 6}
+            "TEXPACKAGES": 4, "TITLE": 5, "TABLEWIDTH": 6, "SETTINGS": 0.5}
 
     def __init__(self) -> None:
         self.items: dict[tuple[str, str], tuple[int, str]] = {}
@@ -10566,7 +10566,7 @@ def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | 
     for where, options in option_sources(md_path, metadata_files):
         if "stamp" in options:
             found = True
-            for key, value in stamp_fields(options["stamp"], implied_on=where != "config").items():
+            for key, value in stamp_fields(options["stamp"], implied_on=not is_setup_layer(where)).items():
                 merged.setdefault(key, value)
     return {**DEFAULT_STAMP_OPTIONS, **merged} if found else None
 
@@ -12084,7 +12084,7 @@ def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enable
     merged: dict = {}
     for where, own in option_sources(md_path, metadata_files):       # field by field since v3.27.1
         if "backup" in own:
-            for key, value in backup_fields(own["backup"], implied_on=where != "config").items():
+            for key, value in backup_fields(own["backup"], implied_on=not is_setup_layer(where)).items():
                 merged.setdefault(key, value)
     options = {**DEFAULT_BACKUP_OPTIONS, **merged}
     if cli_enabled is not None:
@@ -14932,6 +14932,64 @@ def option_flag(value) -> bool | None:
     return None
 
 
+# -- Folder settings (v3.29.10) -----------------------------------------------------------------------------------------
+# `.pdfmd/config.yaml` in the document's folder or any folder above it: the same `options:` as the global config, for what is
+# under that folder. Nearest first; a layer that says `inherit: false` ends the walk upward; they sit between the document's
+# metadata files and the global config (the author's layer order). Only `options:` is read from a folder: `translit`, `setup-ui`
+# and `disabled` are this machine's and are ignored there, with a WARN. Nothing a folder says runs code that a discovered
+# file would not (a Lua filter or a preamble named there goes the same trust path as one found beside the document).
+FOLDER_SETTINGS = ".pdfmd/config.yaml"
+FOLDER_WARNED: set[str] = set()
+
+
+@lru_cache(maxsize=None)
+def folder_layer_files(folder: str) -> tuple[tuple[str, dict], ...]:
+    """((path, options) ...) of the folder layers from `folder` up, nearest first (see FOLDER_SETTINGS)."""
+    if yaml is None:
+        return ()
+    found: list[tuple[str, dict]] = []
+    here = Path(folder)
+    for candidate in (here, *here.parents):
+        path = candidate / FOLDER_SETTINGS
+        try:
+            if not path.is_file():
+                continue
+            data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+            print(f"WARN  {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+            continue
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            print(f"WARN  {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
+            continue
+        machine = sorted(str(key) for key in data if key in ("translit", "setup-ui", "disabled"))
+        if machine and str(path) not in FOLDER_WARNED:
+            FOLDER_WARNED.add(str(path))
+            print(f"WARN  {path}: {', '.join(machine)} {'is' if len(machine) == 1 else 'are'} for this machine and "
+                  "cannot be set by a folder; ignored", file=sys.stderr)
+        options = data.get("options")
+        found.append((str(path), options if isinstance(options, dict) else {}))
+        if str(data.get("inherit", True)).strip().casefold() in ("false", "no", "off", "0"):
+            break
+    return tuple(found)
+
+
+def is_setup_layer(where: str) -> bool:
+    """Whether an option source is a setup (the global config or a folder's) and not a document or its metadata: a mapping
+    there without `enabled` stays off."""
+    return where == "config" or where.startswith("folder ")
+
+
+def folder_layers(md_path: Path) -> list[tuple[str, dict]]:
+    """The folder layers of a document as (where, options) for option_sources, nearest first."""
+    try:
+        start = str(md_path.resolve().parent)
+    except OSError:
+        return []
+    return [(f"folder {display_path(Path(path))}", options) for path, options in folder_layer_files(start)]
+
+
 def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool = True) -> list[tuple[str, dict]]:
     """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files
     (the later first, as Pandoc takes them: metadata_files_by_priority, v3.27.22), then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
@@ -14941,6 +14999,7 @@ def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool 
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
     if with_config:
+        sources.extend(folder_layers(md_path))
         sources.append(("config", config_options()))
     return sources
 
@@ -18594,6 +18653,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
     # the style sheets of the document (v3.28.41): linked for an HTML-family build, read for settings with css-scope: all
     css_meta = [metadata_file] if isinstance(metadata_file, Path) else list(metadata_file or [])
+    for layer_path, _ in folder_layer_files(str(md_path.resolve().parent)):        # the folder settings in force (v3.29.10)
+        AUTO_LOG.record_file("SETTINGS", Path(layer_path), verbose)
     html_family = (target_format in HTML_TARGETS or target_format.startswith("epub")
                    or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" or item in BROWSER_ENGINES for item in engines)))
     css_options, css_variables = css_additions(md_path, css_meta, variables, no_auto, html_family, note)

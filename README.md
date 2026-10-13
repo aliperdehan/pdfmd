@@ -1805,6 +1805,14 @@ document or its metadata files say (the command line beats all of them);
 `translit:` is the romanization packs of the name lookup. `PDFMD_CONFIG=other.yaml`
 uses another file, `PDFMD_CONFIG=` (empty) none.
 
+**Settings for a folder** (v3.29): a `.pdfmd/config.yaml` in a document's folder, or in any folder above it, has the same
+`options:` for everything under it. The order, strongest first: the command line, the document's `pdfmd-options`, its metadata
+files, the folder settings (the nearest folder first, then the ones above it), your global `config.yaml`, pdfmd's own defaults.
+`inherit: false` in a folder's file stops the walk upward there. A folder cannot set what belongs to this computer (`translit`,
+`setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
+until it says `enabled: true`, as in the global file. A build lists the folder files it used on its `FOUND` line
+(`--verbose`: `AUTO SETTINGS`). Writing the file from `pdfmd --setup DIR`, and carrying it in an attached source, are not done yet.
+
 ```yaml
 translit: [greek, hangul]
 options:

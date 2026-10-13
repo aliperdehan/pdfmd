@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.10 — 2026-10-14
+
+Pre-edit state: commit `34808ef` (v3.29.9).
+
+### Added
+
+- **Folder settings** (queue item 4, the first part): `.pdfmd/config.yaml` in the document's folder or any folder above it holds
+  the same `options:` as the global config, for everything under it (`folder_layer_files`, `option_sources`). The layer order, the
+  author's of 2026-10-10: command line, document `pdfmd-options`, metadata files, **folder settings (nearest first)**, global config,
+  built-in. `inherit: false` ends the walk upward; `translit`, `setup-ui` and `disabled` are the machine's and a folder that sets
+  them gets a WARN (once per file) and is ignored for them; a `stamp:` or `backup:` mapping without `enabled` stays off, as in the
+  global file (`is_setup_layer`). A build reports the files on its `FOUND` line (`AUTO SETTINGS`). Not done yet: `pdfmd --setup DIR`
+  writing the file, the source of each value shown in `--setup` / `--show-config`, carrying the layers in an attached source,
+  a bundle or `--embed-metadata` (a PDF rebuilt from its attached source does not see the folder file), and the per-install
+  layer. `tests/test_folder_settings.py`.
+
 ## v3.29.9 — 2026-10-14
 
 Pre-edit state: commit `f04a106` (v3.29.8).
