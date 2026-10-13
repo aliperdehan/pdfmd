@@ -85,6 +85,31 @@ class EditPdf(unittest.TestCase):
         self.assertEqual(pdf.read_bytes(), before)
         self.assertFalse((self.root / ".backups").exists())
 
+    def test_a_report_is_edited_and_rebuilt_as_a_report_not_as_its_first_chapter(self):
+        # v3.28.31: the first chunk was built alone, and a one-chapter PDF replaced the whole book
+        for name, text in (("one.md", "---\ntitle: Book\n---\n\n# One\n\nFirst chapter text.\n"),
+                           ("two.md", "---\nchapter: 2\n---\n\n# Two\n\nSecond chapter text.\n"),
+                           ("three.md", "# Three\n\nThird chapter text.\n")):
+            (self.root / name).write_text(text, encoding="utf-8")
+        (self.root / "last.py").write_text(           # appends to the LAST file it is given
+            "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).open('a', encoding='utf-8').write('\\nADDED PARAGRAPH here.\\n')\n",
+            encoding="utf-8")
+        done = self.run_pdfmd("-r", "one.md", "two.md", "three.md", "--attach-source", "-o", "book.pdf")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        pdf = self.root / "book.pdf"
+        order = [word for word in ("First", "Second", "Third") if word in self.text(pdf)]
+        edit = self.run_pdfmd("--edit", "book.pdf", "--editor", f"{sys.executable} {self.root / 'last.py'}")
+        self.assertEqual(edit.returncode, 0, edit.stdout + edit.stderr)
+        self.assertIn("REPLACED  book.pdf", edit.stdout)
+        text = self.text(pdf)
+        self.assertEqual([word for word in ("First", "Second", "Third") if word in text], order)
+        self.assertEqual(len(order), 3)
+        self.assertIn("ADDED PARAGRAPH", text)
+        self.assertLess(text.index("Third"), text.index("ADDED PARAGRAPH"))
+        manifest = pdfmd.json.loads(pdfmd.read_pdf_attachments(pdf)[pdfmd.ATTACH_MANIFEST].decode("utf-8"))
+        self.assertEqual(manifest["mode"], "report")                   # still a report that carries its chapters
+        self.assertEqual(len(manifest["chunks"]), 3)
+
     def test_a_pdf_without_a_source_is_refused(self):
         writer = pypdf.PdfWriter()
         writer.add_blank_page(100, 100)

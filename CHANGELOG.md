@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.31 — 2026-10-13
+
+Pre-edit state: commit `1268739` (v3.28.30).
+
+### Fixed
+
+- **`pdfmd --edit BOOK.pdf` on a report in parts (`-r`) replaced the whole book with one chapter.** The edit restored the
+  chapters but opened and rebuilt only the first chunk, as a document of its own; the old book went to `.backups/`, so
+  nothing was lost, but the new PDF was one chapter long (found by trying it on a three-chapter report: the PDF kept only
+  chapter 2). A report is now edited as a report: `--editor CMD` is given every chapter file, and each save rebuilds
+  `pdfmd -r CHAPTERS --attach-source` in the order the book was built, so the PDF stays a book that carries its chapters.
+  The built-in editor, which opens one file, opens the first chapter and names the others. The new test edits the last
+  chapter of a three-chapter report and checks the three chapters, the edit, the order and the manifest.
+
 ## v3.28.30 — 2026-10-13
 
 Pre-edit state: commit `9051a96` (v3.28.29).

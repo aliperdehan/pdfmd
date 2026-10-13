@@ -1357,7 +1357,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.30"
+PDFMD_VERSION = "3.28.31"
 import argparse
 import csv
 import filecmp
@@ -10362,34 +10362,55 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         if restore_from_pdf(pdf, folder) != 0:
             return 1
         manifest = json.loads(attachments[ATTACH_MANIFEST].decode("utf-8"))
-        document = folder / str(manifest.get("name") or "")
-        if not document.is_file():
-            found = sorted(folder.rglob("*.md"))
-            if not found:
-                print("ERROR  the restored folder has no Markdown file to edit.", file=sys.stderr)
+        chapters: list[Path] = []
+        if manifest.get("mode") == "report":
+            # a -r report is its chapters, in the order it was built: edit and rebuild them all as a report
+            # (v3.28.31; before, the first chunk was built alone and replaced the whole book)
+            for chunk in manifest.get("chunks") or []:
+                where = restore_target_name(str(chunk.get("path") or ""))
+                if where is not None and (folder / where).is_file():
+                    chapters.append(folder / where)
+            if not chapters:
+                print("ERROR  the restored folder has none of the report's chapters.", file=sys.stderr)
                 return 1
-            document = found[0]
-        made = document.with_suffix(".pdf")
+            document = chapters[0]
+            made = work / pdf.name
+        else:
+            document = folder / str(manifest.get("name") or "")
+            if not document.is_file():
+                found = sorted(folder.rglob("*.md"))
+                if not found:
+                    print("ERROR  the restored folder has no Markdown file to edit.", file=sys.stderr)
+                    return 1
+                document = found[0]
+            made = document.with_suffix(".pdf")
+        edited = chapters or [document]
         state = {"built": None, "ok": False}
 
         def digest() -> str:
-            return hashlib.sha256(document.read_bytes()).hexdigest()
+            return hashlib.sha256(b"\0".join(item.read_bytes() for item in edited)).hexdigest()
 
         original = digest()
 
         def build(path: Path):
-            done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", str(path)],
-                                  capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=path.parent)
+            command = ([sys.executable, str(Path(__file__).resolve()), *passed, "-r", *map(str, chapters),
+                        "--attach-source", "-o", str(made)] if chapters else
+                       [sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", str(path)])
+            done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  cwd=path.parent)
             state["built"], state["ok"] = digest(), done.returncode == 0 and made.exists()
             return state["ok"], (done.stdout + done.stderr).strip(), made if state["ok"] else None
 
         if external is None:
             import pdfmd_edit
+            if len(chapters) > 1:
+                print(f"NOTE  a report of {len(chapters)} chapters: the built-in editor opens the first, "
+                      f"{chapters[0].name}; --editor CMD opens them all ({', '.join(item.name for item in chapters[1:])})")
             pdfmd_edit.run(document, build=build, opener=open_file)
         else:
-            print(f"EDIT      {shlex.join(external)} {document.name}   (the folder is watched: every save rebuilds; "
-                  "Ctrl+C, or quitting the editor, finishes)")
-            process = subprocess.Popen([*external, str(document)])
+            print(f"EDIT      {shlex.join(external)} {' '.join(item.name for item in edited)}   (the folder is watched: "
+                  "every save rebuilds; Ctrl+C, or quitting the editor, finishes)")
+            process = subprocess.Popen([*external, *map(str, edited)])
             started = time.monotonic()
             seen = tree_stamp(folder, {made})
             try:

@@ -435,7 +435,9 @@ You edit the restored source; Ctrl-B (or each save with `--editor`) builds it th
 replaced by the rebuilt one, which carries the source again, and the old one is kept in `.backups/` beside it. Nothing
 changes when you leave without editing, or when the last version does not build. The options of the first build are the
 ones the document and its metadata record; the command-line ones are the ones you give now, and the global metadata of
-`pdfmd --setup` is this machine's (a rebuild on another one can differ). `--editor CMD` also works on a Markdown file
+`pdfmd --setup` is this machine's (a rebuild on another one can differ). A book built with `-r` is edited as a book: your editor gets every
+chapter file and each save rebuilds all of them in the order the book was built (the built-in editor opens the first chapter and names the
+others). `--editor CMD` also works on a Markdown file
 (a watch that rebuilds on every save, until the editor closes), and `pdfmd --setup` keeps a default editor.
 
 ### In VS Code
