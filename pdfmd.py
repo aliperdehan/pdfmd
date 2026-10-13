@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.16"
+PDFMD_VERSION = "3.29.17"
 import argparse
 import atexit
 import csv
@@ -2378,7 +2378,7 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
 # carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
 # or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_KINDS = ("callouts", "toc", "center")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight")
 MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 
@@ -2443,17 +2443,39 @@ MARKUP_CALLOUT_HEADER = r"""% pdfmd: the box of a callout (pdfmd-options: markup
 """
 
 
+MARKUP_HIGHLIGHT_HEADER = r"""% pdfmd: highlighted text (pdfmd-options: markup: highlight)
+\makeatletter
+\@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
+\makeatother
+\IfFileExists{soul.sty}{\def\pdfmdhassoul{1}}{}
+\ifdefined\pdfmdhassoul
+  \usepackage{soul}
+  \definecolor{pdfmd-mark}{HTML}{FFF3A3}
+  \sethlcolor{pdfmd-mark}
+  \newcommand{\pdfmdhl}[1]{\hl{#1}}
+\else
+  \newcommand{\pdfmdhl}[1]{#1}
+\fi
+"""
+
+# the LaTeX definitions each kind of markup needs (the kinds not here need none)
+MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER}
+
+
 def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
-    """`--include-in-header` for a LaTeX build's callouts: the pdfmdcallout environment, in a header file of pdfmd's own (a
-    filter's `header-includes` is dropped by every other header file of pdfmd's), or []."""
+    """`--include-in-header` for a LaTeX build's universal markup: the pdfmdcallout environment, \\pdfmdhl ... in ONE header file
+    of pdfmd's own (a filter's `header-includes` is dropped by every other header file of pdfmd's), or []."""
     files = sources if isinstance(sources, list) else [sources]
-    if not files or "callouts" not in markup_kinds(files[0], metadata_files):
+    kinds = markup_kinds(files[0], metadata_files) if files else []
+    pieces = [MARKUP_HEADERS[kind] for kind in kinds if kind in MARKUP_HEADERS]
+    if not pieces:
         return []
-    header = cache_root() / "tex" / f"packages-markup-{hashlib.sha1(MARKUP_CALLOUT_HEADER.encode('utf-8')).hexdigest()[:16]}.tex"
+    text = "\n".join(pieces)
+    header = cache_root() / "tex" / f"packages-markup-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
     try:
         if not header.is_file():
             header.parent.mkdir(parents=True, exist_ok=True)
-            header.write_text(MARKUP_CALLOUT_HEADER, encoding="utf-8")
+            header.write_text(text, encoding="utf-8")
     except OSError:
         return []
     return ["--include-in-header", str(header)]
@@ -23050,7 +23072,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
-                             "text; bare: all kinds. Off by default; also "
+                             "text; highlight (==text==) marks it; bare: all kinds. Off by default; also "
                              "pdfmd-options.markup (true or a list) and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")

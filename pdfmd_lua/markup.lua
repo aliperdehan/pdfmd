@@ -12,6 +12,8 @@
 -- center     <center>...</center>, <div align="center">, <div style="text-align: center">, ::: center, and a raw \begin{center}...
 --            \end{center} (for the writers that are not LaTeX): LaTeX the center environment, Typst #align(center)[...], HTML and
 --            EPUB a text-align div. Word and OpenDocument keep the text as it is and say so once (they have no centring to give a block).
+-- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
+--            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -260,6 +262,82 @@ local function center_pairs(blocks)
   return nil
 end
 
+
+-- ---- highlight -------------------------------------------------------------------------------------------------------
+local highlight_told = false
+
+local function marked(inlines)
+  local format = FORMAT or ""
+  local out = pandoc.Inlines({})
+  if format:match("^latex") then
+    out[#out + 1] = pandoc.RawInline("latex", "\\pdfmdhl{")
+    out:extend(inlines)
+    out[#out + 1] = pandoc.RawInline("latex", "}")
+  elseif format:match("^typst") then
+    out[#out + 1] = pandoc.RawInline("typst", "#highlight[")
+    out:extend(inlines)
+    out[#out + 1] = pandoc.RawInline("typst", "]")
+  elseif format:match("^html") or format:match("^epub") or format:match("markdown") or format:match("^gfm")
+      or format:match("^commonmark") then
+    out[#out + 1] = pandoc.RawInline("html", "<mark>")
+    out:extend(inlines)
+    out[#out + 1] = pandoc.RawInline("html", "</mark>")
+  else
+    if not highlight_told and (format == "docx" or format == "odt" or format == "pptx") then
+      highlight_told = true
+      io.stderr:write("NOTE  markup: highlighting is not applied to " .. format .. "; the text is kept as it is\n")
+    end
+    out:extend(inlines)
+  end
+  return out
+end
+
+-- ==text== across the Str and Space elements of one list of inlines (Pandoc splits "==a b==" into "==a", Space, "b==")
+local function highlight_runs(inlines)
+  local out, changed, index = pandoc.Inlines({}), false, 1
+  while index <= #inlines do
+    local item = inlines[index]
+    local done = false
+    if item.t == "Str" and item.text:match("^==[^=]") then
+      local last
+      for position = index, #inlines do
+        local other = inlines[position]
+        if other.t == "Str" and other.text:match("[^=]==%p*$") and (position > index or item.text:match("^==.+[^=]==%p*$")) then
+          last = position
+          break
+        end
+        if other.t ~= "Str" and other.t ~= "Space" and other.t ~= "Emph" and other.t ~= "Strong" and other.t ~= "Code"
+            and other.t ~= "Link" and other.t ~= "SoftBreak" and other.t ~= "Quoted" and other.t ~= "Span" then
+          break
+        end
+      end
+      if last then
+        local inner = pandoc.Inlines({})
+        for position = index, last do inner[#inner + 1] = inlines[position] end
+        local tail = ""
+        inner[1] = pandoc.Str(inner[1].text:gsub("^==", ""))
+        local final = inner[#inner]
+        local body, punct = final.text:match("^(.-)==(%p*)$")
+        inner[#inner] = pandoc.Str(body)
+        tail = punct or ""
+        local cleaned = pandoc.Inlines({})
+        for _, part in ipairs(inner) do
+          if not (part.t == "Str" and part.text == "") then cleaned[#cleaned + 1] = part end
+        end
+        out:extend(marked(cleaned))
+        if tail ~= "" then out[#out + 1] = pandoc.Str(tail) end
+        index, changed, done = last + 1, true, true
+      end
+    end
+    if not done then
+      out[#out + 1] = item
+      index = index + 1
+    end
+  end
+  if changed then return out end
+  return nil
+end
+
 function Pandoc(doc)
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
@@ -274,6 +352,16 @@ function Pandoc(doc)
       if not kind then return nil end
       used.callouts = true
       return make_callout(kind, title, body)
+    end,
+    Inlines = function(inlines)
+      if not on("highlight") or (FORMAT or ""):match("^markdown") then return nil end
+      return highlight_runs(inlines)
+    end,
+    Span = function(span)
+      -- Pandoc 3.12 with +mark (or a Span written by hand) keeps the class: <mark> in HTML-like writers, the writer's own elsewhere
+      if on("highlight") and #span.classes == 1 and span.classes[1] == "mark" and #span.attributes == 0 and span.identifier == "" then
+        return marked(span.content)
+      end
     end,
     Blocks = function(blocks)
       if not on("center") then return nil end

@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.17 — 2026-10-14
+
+Pre-edit state: commit `5f4f3e4` (v3.29.16).
+
+### Added
+
+- **Universal markup, the fifth kind: `highlight`**. `==text==` (Pandoc splits `==a b==` into `==a`, a space, `b==`: the run is put
+  together across words, emphasis, links and soft breaks; a closing `==` may be followed by punctuation; a lone `==` and code are
+  untouched) and, with Pandoc 3.12's `+mark`, a `Span.mark` become LaTeX `\pdfmdhl{...}` (soul's `\hl` with a pale yellow, in the one
+  header file of pdfmd's own that now holds every kind's LaTeX definitions: `MARKUP_HEADERS`), Typst `#highlight[...]`, `<mark>` for
+  HTML, EPUB, gfm and commonmark; Pandoc's Markdown keeps `==...==`; Word and OpenDocument keep the text and say once that it is not
+  highlighted. Opt-in with the rest of `markup`. Not done: a Word highlight (a run property: needs the office route), a colour.
+  `tests/test_markup_highlight.py` (Pandoc 3.12 and 3.1.3).
+
 ## v3.29.16 — 2026-10-14
 
 Pre-edit state: commit `6569136` (v3.29.15).

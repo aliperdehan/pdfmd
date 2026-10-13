@@ -1587,6 +1587,12 @@ sentence is text.
 `text-align` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text as it is and say so once (no
 centring for a block there yet). `markup: [callouts, toc, center]` or `true` for all; `--markup center` for one run.
 
+**Highlighted text** (v3.29, `markup: highlight`). `==marked text==` (across several words, with emphasis inside, over a line
+break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (plain text when `soul` is not installed), Typst with
+`#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`; Pandoc's own Markdown output keeps `==...==`, and Word and OpenDocument
+keep the text and say once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
+punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or `true` for all; `--markup highlight` for one run.
+
 **PDF images in HTML.** A browser does not show a PDF in `<img>`, an SVG it does. For an HTML build (a web page, an
 EPUB, a PDF through WeasyPrint) every image that is a PDF, `![fig](plot.pdf)` or `<img src="plot.pdf">`, is converted to
 an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stays vector; the first page is used and the

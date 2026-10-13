@@ -93,6 +93,7 @@ MARKUP_CHOICES = (
     ("callouts", "> [!NOTE], > [!warning] Title, ::: note: a box (LaTeX, Typst), a styled div (HTML), a quote (the rest)"),
     ("toc", "[TOC], [[_TOC_]], <!-- toc -->: the table of contents where it stands"),
     ("center", "<center>, <div align=center>, ::: center, \\begin{center}: centred text in LaTeX, Typst and HTML"),
+    ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst and HTML"),
 )
 
 
@@ -357,7 +358,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 "--no-pagebreak.", "Universal markup"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
-                "contents go; center: `<center>` and `::: center`. Per run: --markup / "
+                "contents go; center: `<center>` and `::: center`; highlight: `==text==`. Per run: --markup / "
                 "--no-markup.", "Universal markup"),
         # -- what a build prints
         choice("options.found-style", "How the FOUND line lists the files it picked up",
