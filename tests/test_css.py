@@ -39,7 +39,7 @@ class Reader(unittest.TestCase):
         self.assertEqual([rule.media for rule in rules if rule.selector == "body"], ["screen", "print"])
         self.assertNotIn("@font-face", [rule.selector for rule in rules])
 
-    def test_print_counts_and_screen_and_conditions_do_not(self):
+    def test_print_counts_and_screen_and_conditions_do_not(self):                  # (v3.29.8: see test_css_v2 for the rest)
         for media, expected in (("", True), ("print", True), ("all", True), ("print and all", True), ("screen", False),
                                 ("(min-width: 600px)", False), ("screen and (min-width: 1px)", False)):
             self.assertEqual(pdfmd_css.applies(media), expected, media)
@@ -69,8 +69,9 @@ class Translation(unittest.TestCase):
 
     def test_what_it_does_not_use_is_named(self):
         ignored = " ".join(self.result.ignored)
-        for word in ("h1 color", "h1 font-size", "table border-collapse", "(@media screen)"):
+        for word in ("table border-collapse", "(@media screen)"):
             self.assertIn(word, ignored)
+        self.assertEqual(self.result.headings, {1: {"color": "red", "font-size": "20pt"}})     # v3.29.8: kept for LaTeX
 
     def test_a_size_latex_has_no_class_for_is_not_used_and_a_px_body_is_converted_only_when_it_fits(self):
         out = pdfmd_css.translate("body { font-size: 14pt }")

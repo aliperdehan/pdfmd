@@ -4,8 +4,11 @@ something to LaTeX, Typst, Word and the rest, as the Pandoc variables those take
 `translate(text)` returns what a style sheet asks of the page and the body (the paper, its margins, the body's font, size and
 line spacing, the paragraph indent, the colour of links, the font of code) as Pandoc variables, and names the properties it
 did not use. It is a v1 on purpose: a CSS cascade has no counterpart in LaTeX, so only the rules that say it plainly
-(`@page`, `html`/`body`/`:root`, `a`, `code`/`pre`) count, the last one wins, and `@media print` counts as if it stood alone
-while `@media screen` and a media query of any other kind do not. Heading, table and everything else are named as not used.
+(`@page`, `html`/`body`/`:root`, `a`, `code`/`pre`) count, the last one wins. A media query is read as a browser prints it
+(v3.29.8): `print` and `all` apply, `screen` does not, a comma is "or", `only` and `not` count, `(orientation: ...)` is read
+against the sheet's own `@page` size, any other condition (a width, a resolution, a colour scheme) is not for the page and is
+named. Headings (`h1`-`h6`: colour, size, family, weight, style) are kept for LaTeX, which uses them only when the document does
+not format its headings itself; table and everything else are named as not used.
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ GENERIC_FAMILIES = {"serif", "sans-serif", "monospace", "cursive", "fantasy", "s
                     "ui-monospace", "inherit", "initial", "unset", "emoji", "math", "fangsong"}
 LENGTH_RE = re.compile(r"^(-?\d*\.?\d+)(cm|mm|in|pt|px|pc|em|rem|%)?$")
 BODY_SELECTORS = {"html", "body", ":root", "html, body", "body, html"}
+HEADING_RE = re.compile(r"h([1-6])")
+HEADING_PROPERTIES = ("color", "font-size", "font-family", "font-weight", "font-style")
 LINK_SELECTORS = {"a", "a:link", "a:visited", "a:any-link", "a:hover"}
 CODE_SELECTORS = {"code", "pre", "pre code", "tt", "kbd", "samp", "code, pre", "pre, code"}
 
@@ -35,6 +40,7 @@ class Translation:
     variables: list[str] = field(default_factory=list)       # "key=value", in the form -V takes
     used: list[tuple[str, list[str]]] = field(default_factory=list)   # ("body font-size 11pt", ["fontsize=11pt"])
     ignored: list[str] = field(default_factory=list)         # "h1 color", "table border-collapse"
+    headings: dict[int, dict[str, str]] = field(default_factory=dict)    # 1..6 -> {"color": "#036", "font-size": "1.6em", ...}
 
 
 def strip_comments(text: str) -> str:
@@ -83,12 +89,38 @@ def declarations(block: str) -> dict[str, str]:
     return found
 
 
-def applies(media: str) -> bool:
-    """Whether a rule in this media query is for the page: none, `print` and `all` are; `screen` and conditions are not."""
+def applies(media: str, landscape: bool = False, unknown: list[str] | None = None) -> bool:
+    """Whether a rule in this media query is for the page. `print` and `all` are; `screen` and the other media types are
+    not; a comma is "or"; `only X` is X, `not X` is its opposite; `(orientation: landscape|portrait)` is read against the
+    sheet's own @page size; a feature of the screen or of a size (`(min-width: 600px)`) is not for the page, and is added to
+    `unknown` when that list is given."""
     if not media.strip():
         return True
-    parts = [part.strip().lower() for part in media.split(" and ")]
-    return all(part in ("print", "all") for part in parts)
+
+    def one(query: str) -> bool:
+        words = query.strip().lower()
+        negate = False
+        if words.startswith("not "):
+            negate, words = True, words[4:]
+        elif words.startswith("only "):
+            words = words[5:]
+        result = True
+        for part in (item.strip() for item in re.split(r"\s+and\s+", words)):
+            if part in ("print", "all", "(color)", "(monochrome)"):
+                continue
+            found = re.fullmatch(r"\(\s*orientation\s*:\s*(landscape|portrait)\s*\)", part)
+            if found:
+                result = result and ((found.group(1) == "landscape") == landscape)
+                continue
+            if not part.startswith("(") and part in ("screen", "speech", "tty", "tv", "projection", "handheld", "braille", "embossed"):
+                result = False
+                continue
+            if unknown is not None and part.startswith("("):
+                unknown.append(part)
+            result = False
+        return result != negate if negate else result
+
+    return any(one(query) for query in media.split(","))
 
 
 def length_points(value: str) -> float | None:
@@ -131,11 +163,26 @@ def translate(text: str) -> Translation:
     def choose(key: str, value: str, said: str) -> None:
         chosen[key] = (value, said)
 
-    for rule in parse(text):
-        if not applies(rule.media):
-            ignored[f"{rule.selector} (@media {rule.media})"] = None
+    rules = parse(text)
+    sheet_landscape = any(rule.selector == "@page" and "landscape" in rule.declarations.get("size", "").lower().split()
+                          and applies(rule.media) for rule in rules)
+    headings = out.headings
+    for rule in rules:
+        conditions: list[str] = []
+        if not applies(rule.media, sheet_landscape, conditions):
+            ignored[f"{rule.selector} (@media {rule.media})" + (f": {', '.join(conditions)} is not for a printed page"
+                                                                if conditions else "")] = None
             continue
         selector, found = rule.selector, rule.declarations
+        levels = [HEADING_RE.fullmatch(item.strip()) for item in selector.split(",")]
+        if levels and all(levels):
+            for level in (int(item.group(1)) for item in levels):
+                for name, value in found.items():
+                    if name in HEADING_PROPERTIES:
+                        headings.setdefault(level, {})[name] = value
+                    else:
+                        ignored[f"h{level} {name}"] = None
+            continue
         if selector == "@page":
             for name, value in found.items():
                 if name == "size":

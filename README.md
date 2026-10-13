@@ -1385,10 +1385,19 @@ code, pre { font-family: "JetBrains Mono" }
 With `css-scope: all` (`pdfmd-options`, or `--css-scope all`; the default is `html`) the sheet is read for the other writers
 too: those four rules become the paper, margins, font, size, line spacing, indent, link colour and code font that LaTeX,
 Typst and Word take, **below** what the document, its metadata and the command line set (`--verbose` says
-"body font-size 11pt -> fontsize=11pt" for each one it used, and names what it did not: headings, tables, anything else).
-Only rules that say it plainly count: `@page`, `html`/`body`/`:root`, `a`, `code`/`pre`; the last one wins; `@media print`
-counts as if it stood alone, `@media screen` and any other condition do not; a body size LaTeX has no class for (anything but 10,
-11 and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
+"body font-size 11pt -> fontsize=11pt" for each one it used, and names what it did not: tables, anything else).
+Only rules that say it plainly count: `@page`, `html`/`body`/`:root`, `a`, `code`/`pre`, `h1`-`h5`; the last one wins. A media
+query is read as a browser prints (v3.29): `print` and `all` apply, `screen` and the other media types do not, a comma is "or",
+`only` and `not` count, `(orientation: landscape)` is read against the sheet's own `@page` size, and a feature of the screen or of
+a width (`(min-width: 600px)`) is not for a printed page and is named. A body size LaTeX has no class for (anything but 10, 11
+and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
+
+Headings (v3.29): `h1`-`h5` with a `color`, `font-size` (`em`, `%`, `pt`, `px`: of the body's size), `font-family`,
+`font-weight` or `font-style` are set for LaTeX too, as titlesec's starred formats (the numbering and the spacing stay the
+class's; `h1` is `\section`, `h2` `\subsection` ... `h5` `\subparagraph`; `h6` has no LaTeX level). It is done only for the plain
+article class, and never over a document that formats its headings itself: a `titlesec`, `sectsty`, KOMA or memoir command, or a
+`\section` of its own, in the preamble, the `header-includes` or a metadata file, is named in a `CSS` note and nothing is added
+(and when `titlesec` is not installed, one LaTeX warning says so). A family needs XeLaTeX or LuaLaTeX.
 
 ### Code: wrapping and line numbers
 

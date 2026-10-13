@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.7"
+PDFMD_VERSION = "3.29.8"
 import argparse
 import atexit
 import csv
@@ -14160,6 +14160,144 @@ def css_additions(md_path: Path, metadata_files: list[Path], variables: list[str
     return options, added
 
 
+# Headings from a style sheet for LaTeX (v3.29.8, `css-scope: all`). `h1`-`h5` (`h6` has no LaTeX counterpart) with a colour, a
+# size, a family, a weight or a style become titlesec's \\titleformat*{\\section} ... {\\subparagraph} (the starred form: the numbering and
+# the spacing stay the class's) in a header file of their own. They are
+# for the plain article class only, and never over a document that formats its headings itself: a titlesec / sectsty /
+# KOMA / memoir command or an own \\section in its preamble, header-includes or metadata is reported, and nothing is added.
+CSS_HEADING_COMMANDS = {1: "section", 2: "subsection", 3: "subsubsection", 4: "paragraph", 5: "subparagraph"}
+CSS_HEADING_OWN_RE = re.compile(
+    r"titlesec|sectsty|titletoc|titleps|\\titleformat|\\titlespacing|\\(?:all)?(?:sub)*(?:section|paragraph)font|\\setkomafont|"
+    r"\\addtokomafont|\\RedeclareSectionCommand|\\@startsection|\\chapterstyle|\\setsecheadstyle|"
+    r"\\(?:re)?newcommand\*?\s*\{?\\(?:sub)*section\b|\\def\\(?:sub)*section\b")
+CSS_HEADING_DEFAULTS = {1: "\\Large", 2: "\\large", 3: "\\normalsize", 4: "\\normalsize", 5: "\\normalsize"}    # article's own
+CSS_COLOURS = {    # CSS's named colours (not xcolor's: its `green` is #00FF00)
+    "black": "000000", "white": "FFFFFF", "red": "FF0000", "green": "008000", "blue": "0000FF", "yellow": "FFFF00",
+    "gray": "808080", "grey": "808080", "silver": "C0C0C0", "maroon": "800000", "purple": "800080", "fuchsia": "FF00FF",
+    "magenta": "FF00FF", "lime": "00FF00", "olive": "808000", "navy": "000080", "teal": "008080", "aqua": "00FFFF",
+    "cyan": "00FFFF", "orange": "FFA500", "brown": "A52A2A", "pink": "FFC0CB", "gold": "FFD700", "crimson": "DC143C",
+    "indigo": "4B0082", "darkgreen": "006400", "darkblue": "00008B", "darkred": "8B0000", "darkgray": "A9A9A9",
+    "darkgrey": "A9A9A9", "lightgray": "D3D3D3", "lightgrey": "D3D3D3", "steelblue": "4682B4", "royalblue": "4169E1",
+    "firebrick": "B22222", "slategray": "708090", "dimgray": "696969", "tomato": "FF6347", "coral": "FF7F50"}
+
+
+def css_heading_latex(headings: dict[int, dict[str, str]], base_pt: float, say) -> list[str]:
+    """The LaTeX lines (titlesec) for the headings of a style sheet; `say(text)` is told what was left out."""
+    import pdfmd_css
+    fonts: list[str] = []
+    commands: list[str] = []
+    for level in sorted(headings):
+        if level not in CSS_HEADING_COMMANDS:
+            say(f"h{level} (LaTeX has no sixth heading level)")
+            continue
+        found = headings[level]
+        size_part, colour_part, family_part = CSS_HEADING_DEFAULTS[level], "", ""
+        weight_part, style_part = "\\bfseries", ""
+        changed = False
+        size = found.get("font-size", "").strip().lower()
+        if size:
+            value = pdfmd_css.length_points(size)
+            if value is None and re.fullmatch(r"\d*\.?\d+(em|rem|%)", size):
+                number = float(re.match(r"[\d.]+", size).group(0))
+                value = number / 100 * base_pt if size.endswith("%") else number * base_pt
+            if value is not None and 5 <= value <= 60:
+                size_part, changed = f"\\fontsize{{{value:g}}}{{{value * 1.2:.1f}}}\\selectfont", True
+            else:
+                say(f"h{level} font-size {size}")
+        colour = found.get("color", "").strip()
+        if colour:
+            hexed = re.fullmatch(r"#([0-9a-fA-F]{6})", colour) or re.fullmatch(r"#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])", colour)
+            if hexed:
+                digits = "".join(hexed.groups()) if len(hexed.groups()) == 1 else "".join(2 * item for item in hexed.groups())
+                colour_part, changed = f"\\color[HTML]{{{digits.upper()}}}", True
+            elif colour.lower() in CSS_COLOURS:
+                colour_part, changed = f"\\color[HTML]{{{CSS_COLOURS[colour.lower()]}}}", True
+            else:
+                say(f"h{level} color {colour}")
+        weight = found.get("font-weight", "").strip().lower()
+        if weight:
+            if weight in ("bold", "bolder") or (weight.isdigit() and int(weight) >= 600):
+                weight_part, changed = "\\bfseries", True
+            elif weight in ("normal", "lighter") or (weight.isdigit() and int(weight) < 600):
+                weight_part, changed = "\\mdseries", True
+            else:
+                say(f"h{level} font-weight {weight}")
+        style = found.get("font-style", "").strip().lower()
+        if style in ("italic", "oblique"):
+            style_part, changed = "\\itshape", True
+        elif style and style != "normal":
+            say(f"h{level} font-style {style}")
+        family = pdfmd_css.first_family(found.get("font-family", "")) if found.get("font-family") else None
+        if family:
+            name = f"\\pdfmdhead{'abcde'[level - 1]}"
+            fonts.append(f"\\@ifpackageloaded{{fontspec}}{{\\newfontfamily{name}{{{family}}}}}{{\\let{name}\\relax}}")
+            family_part, changed = name, True
+        if changed:
+            commands.append(f"\\titleformat*{{\\{CSS_HEADING_COMMANDS[level]}}}"
+                            f"{{\\normalfont{family_part}{size_part}{weight_part}{style_part}{colour_part}}}")
+    if not commands:
+        return []
+    return ["\\makeatletter", "\\@ifpackageloaded{xcolor}{}{\\usepackage{xcolor}}", *fonts, "\\makeatother",
+            "\\IfFileExists{titlesec.sty}{\\usepackage{titlesec}", *commands, "}{\\PackageWarningNoLine{pdfmd}{titlesec.sty is not "
+            "installed: the headings of the style sheet are not applied}}"]
+
+
+def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
+                     note) -> list[str]:
+    """`--include-in-header` for the headings of the style sheets of a LaTeX build (`css-scope: all`), or []."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or css_scope(files[0], metadata_files) != "all":
+        return []
+    sheets = list(dict.fromkeys(item for group in css_sources(files[0], metadata_files, no_auto) for item in group))
+    if not sheets:
+        return []
+    try:
+        import pdfmd_css
+    except ImportError:
+        return []
+    translation = pdfmd_css.translate("\n".join(path.read_text(encoding="utf-8", errors="replace") for path in sheets))
+    if not translation.headings:
+        return []
+    names = ", ".join(sorted(f"h{level}" for level in translation.headings))
+    metadata = effective_metadata(files[0], metadata_files, list(variables))
+    klass = str(metadata.get("documentclass") or "article").strip()
+    if klass != "article":
+        note("CSS", f"{names} not applied to the headings: the document class is {klass} (they are set for article only)")
+        return []
+    own: list[tuple[str, str]] = []
+    kept = pandoc_header_includes(files, metadata_files)
+    if kept:
+        own.append(("header-includes", kept[0]))
+    if not auto_disabled(no_auto, "preamble"):
+        for path in [*find_preambles(files[0].parent, files[0].stem, []), *frontmatter_extra_preambles(files[0])]:
+            own.append((path.name, read_text_best_effort(path)))
+    for where, text in own:
+        found = CSS_HEADING_OWN_RE.search(text)
+        if found:
+            note("CSS", f"{names} not applied to the headings: {where} formats them itself ({found.group(0).strip()})")
+            return []
+    size = next((item.split("=", 1)[1] for item in [*variables, *translation.variables] if item.startswith("fontsize=")),
+                str(metadata.get("fontsize") or ""))
+    found_size = re.match(r"(\d+(?:\.\d+)?)", size)
+    base = float(found_size.group(1)) if found_size else 10.0
+    left_out: list[str] = []
+    lines = css_heading_latex(translation.headings, base, left_out.append)
+    if left_out:
+        note("CSS", "headings not used: " + ", ".join(left_out))
+    if not lines:
+        return []
+    text = "% pdfmd: the headings of the style sheet (css-scope: all)\n" + "\n".join(lines) + "\n"
+    path = cache_root() / "tex" / f"packages-css-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    note("CSS", f"{names}: the headings take the style sheet's colour, size and font (titlesec)")
+    return ["--include-in-header", str(path)]
+
+
 def strip_embedded_preamble(text: str) -> str:
     """``text`` without the LaTeX preamble an assembled file embeds at the
     head of its `header-includes` (everything up to PREAMBLE_END_MARK): for a
@@ -18830,6 +18968,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += pandoc_options
                 if is_tex_target:
                     cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
+                    cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -19067,6 +19206,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += pandoc_options
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
+                        cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to
@@ -23975,6 +24115,7 @@ def main() -> None:
                         cmd += pandoc_options
                         if engine in LATEX_ENGINES:
                             cmd += tex_package_args(files, report_no_auto, report_note)
+                            cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
                         if report_fonts_filter is not None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:

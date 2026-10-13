@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.8 — 2026-10-14
+
+Pre-edit state: commit `9503d07` (v3.29.7).
+
+### Added
+
+- **CSS, the second round** (queue: "headings in LaTeX, guarded" and "`@media print` with css too", the author, 2026-10-13).
+  *Media queries* (`pdfmd_css.applies`): read as a browser prints: `print` and `all` apply, `screen` and the other media types do not,
+  a comma is "or", `only X` is X, `not X` its opposite, `(orientation: landscape|portrait)` is read against the sheet's own `@page`
+  size, `(color)` is true, and a feature of the screen or of a width (`(min-width: 600px)`, `prefers-color-scheme`) is not for a
+  printed page: the rule is dropped and the `CSS` note says which condition. *Headings*: `h1`-`h5` (and comma lists of them)
+  with `color` (a hex or one of 40 CSS names, as an HTML colour: CSS's `green` is not xcolor's), `font-size` (`em`/`%` of the body's
+  size, or a length), `font-family` (fontspec engines), `font-weight`, `font-style` are set for LaTeX with `css-scope: all`
+  as titlesec's starred formats (`\titleformat*{\section}{...}`: numbering and spacing stay the class's), in a header file
+  that comes last (`css_heading_args`, beside `tex_package_args` at the three build sites). Guarded: only the plain article class
+  (`documentclass:` anything else is a `CSS` note), and never over a document that formats its headings itself (titlesec, sectsty,
+  KOMA, memoir, `\titleformat`, `\section` redefined ... in a preamble, `header-includes` or metadata file: named, nothing added);
+  without titlesec installed one LaTeX warning says so. `h6` and the other properties are named as not used. Word and Typst
+  headings are still not translated. `tests/test_css_v2.py` (and `test_css.py`: headings are collected, no longer "ignored").
+
 ## v3.29.7 — 2026-10-14
 
 Pre-edit state: commit `3a1d68f` (v3.29.6).
