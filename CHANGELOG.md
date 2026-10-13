@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.39 — 2026-10-13
+
+Pre-edit state: commit `7e1b094` (v3.28.38).
+
+### Changed
+
+- **The attached source holds its text files, editable** (the author: "csvs and tex inputs: they should be editable there as
+  well, close to the end ... first all embedded texs, after them csvs, and after that those things already at the end"). The
+  `.tex` files a document reads (`\input`) and its CSV and other data (`.csv .tsv .dat .txt`, up to 1 MB each, UTF-8) are no
+  longer separate attachments: each is a `type: file` block of the source's own text, after the text and before the
+  filters, history, bibliography and style that were always at the end: `.tex` first, then the data, each group by name.
+  Files with one content are one block (`also:` lists the other paths: LR6's `chemicals.tex` is linked from two folders and
+  was stored twice, 76 KB each). Pictures, the package (`.sty`, logos, its helper) and files in sibling folders stay
+  separate files. A restore writes the blocks back at their paths, byte for byte; a build of the source itself finds them
+  (they are written to a scratch folder the engines search). LR6's attachments went from 34 to 11 files, its source from 3,900
+  to 22,000 lines (the data).
+- **Line markers.** Each embedded file is announced in two places by `<!-- pdfmd-at: ... -->` comments: an index after the
+  front matter (front matter, preamble, each file, bibliography, style, with its line) and one line before each block of the
+  text that names a file (`file="tables/x.csv"`, `\input{tex/fig}`: "tex/fig.tex @ line 241"). They are written whenever
+  the source is written, so the numbers are right in every attached source, and taken out wherever one is read: a restore
+  gives the original text byte for byte, a rebuild or re-attach of an edited source writes fresh ones. (An editor that has
+  the file open sees the numbers of the moment it was written until the next write.)
+- LR1-2, LR3, LR4-5, LR6 and Pre-lab 7 restored into an empty home folder rebuild to the same pages, and the second
+  generation differs from the first only by the line numbers and the build-history line.
+
 ## v3.28.38 — 2026-10-13
 
 Pre-edit state: commit `5dc15d5` (v3.28.37 and its test fixes).

@@ -38,6 +38,13 @@ import pdfmd  # noqa: E402
 strip = pdfmd.strip_markdown_comments
 
 
+def stored_files(attached) -> set[str]:
+    """The `files/...` a source keeps: attachments, and (v3.28.39) the text files it holds as blocks of its own text."""
+    names = {name for name in attached if name.startswith("files/")}
+    manifest = json.loads(attached["pdfmd-manifest.json"].decode("utf-8")) if "pdfmd-manifest.json" in attached else {}
+    return names | {"files/" + item["path"] for item in manifest.get("extras") or [] if item.get("inline")}
+
+
 class StripComments(unittest.TestCase):
     def test_inline_and_standalone(self):
         text = "A <!-- one --> b.\n\n<!-- alone -->\n\nC.\n"
@@ -287,8 +294,10 @@ class AttachAndRestore(unittest.TestCase):
             "<!-- ir/unrelated.bin is only in a comment: unrelated.bin -->\n", encoding="utf-8")
         pdf = self.bundle(document, "referenced")
         attachments = pdfmd.read_pdf_attachments(pdf)
-        self.assertEqual(sorted(name for name in attachments if name.startswith(pdfmd.EXTRA_PREFIX)),
+        self.assertEqual(sorted(stored_files(attachments)),
                          ["files/data/t.csv", "files/images/f.png", "files/ir/x.csv"])
+        self.assertIn("files/images/f.png", attachments)                      # a picture stays a file; the text files are in the text
+        self.assertNotIn("files/data/t.csv", attachments)
         out = self.restore(pdf)
         self.assertEqual((out / "images" / "f.png").read_bytes(), b"\x89PNG fake")
         self.assertEqual((out / "data" / "t.csv").read_bytes(), b"a,b\n1,2\n")
@@ -698,8 +707,7 @@ class BundleReach(unittest.TestCase):
         document.write_text("---\ntitle: T\n---\n\n```{=latex}\n\\input{tex/fig}\n```\n", encoding="utf-8")
         pdfmd.BUNDLE_CLI = "referenced"
         attached = self.attach(document)
-        self.assertEqual({name for name in attached if name.startswith("files/")},
-                         {"files/tex/fig.tex", "files/tex/raw.tex", "files/data/x.csv"})
+        self.assertEqual(stored_files(attached), {"files/tex/fig.tex", "files/tex/raw.tex", "files/data/x.csv"})
 
     def scheme_report(self) -> Path:
         """A report whose LaTeX input draws a picture and whose macro reads a CSV."""
@@ -715,8 +723,7 @@ class BundleReach(unittest.TestCase):
 
     def test_an_attached_pdf_stores_the_inputs_and_data_but_never_images(self):
         attached = self.attach(self.scheme_report())
-        self.assertEqual({name for name in attached if name.startswith("files/")},
-                         {"files/schemes/ester.tex", "files/ir/a.csv"})
+        self.assertEqual(stored_files(attached), {"files/schemes/ester.tex", "files/ir/a.csv"})
         manifest = json.loads(attached["pdfmd-manifest.json"])
         self.assertEqual(manifest["bundle"], "sources")
         # the picture only the stored .tex draws is recorded like the text's own, so a restore can take it out of the PDF
@@ -815,7 +822,7 @@ class BundleReach(unittest.TestCase):
             self.assertEqual(needs["mystyle.sty"]["version"], "2026/01/01 v1.2 My style")
             self.assertFalse(needs["mystyle.sty"]["stored"])
             self.assertTrue(needs["mylib.tex"]["stored"])             # an \input is data: stored with a bundle
-            self.assertIn("files/mylib.tex", plain)
+            self.assertIn("files/mylib.tex", stored_files(plain))
             self.assertNotIn("files/mystyle.sty", plain)
             saved = pdfmd.BUNDLE_PACKAGES_CLI
             pdfmd.BUNDLE_PACKAGES_CLI = True

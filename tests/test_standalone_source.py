@@ -125,10 +125,11 @@ class Sources(unittest.TestCase):
         attachments, manifest = self.attach(self.md)
         names = {name for name in attachments if name.startswith("files/")}
         self.assertIn("files/keypkg.sty", names)
+        self.assertNotIn("files/keydata.tex", names)                         # a text file: in the source's own text now
+        self.assertIn("keydata.tex", {item["path"] for item in manifest["extras"] if item.get("inline")})
         self.assertIn("files/keypkg-pdfmd.yaml", names)
         self.assertIn("files/key-logo.pdf", names)
         self.assertNotIn("files/key-other.pdf", names)                       # a graphic the package does not draw
-        self.assertIn("files/keydata.tex", names)
         self.assertIn("files/__up__/schemes/fig.tex", names)                 # no `..` in an attachment's name
         self.assertEqual(manifest["chain"], ["sub"])
         self.assertIn("../schemes/fig.tex", {item["path"] for item in manifest["extras"]})
@@ -168,6 +169,95 @@ class Sources(unittest.TestCase):
             self.assertEqual(str(pdfmd.restore_target_name("../schemes/x.tex")), "schemes/x.tex")
             self.assertIsNone(pdfmd.restore_target_name("../../x.tex"))
         self.assertIsNone(pdfmd.restore_target_name("../x.tex"))
+
+
+class Inline(unittest.TestCase):
+    """v3.28.39: the text files a source needs are blocks of its own text, after the text, with line markers."""
+
+    FRONT = "---\ntitle: T\nheader-includes: |\n  \\usepackage{x}\n---\n\n"
+    BODY = ("Intro.\n\n::: {.csv file=\"tables/a.csv\"}\n:::\n\n```{=latex}\n\\input{tex/fig}\n```\n\nEnd.\n")
+
+    def text(self) -> str:
+        files = {"tables/a.csv": b"a,b\n1,2\n", "tex/fig.tex": b"\\fbox{1}\n", "chemicals.tex": b"x\n",
+                 "metadata/chemicals.tex": b"x\n"}
+        return self.FRONT + self.BODY + pdfmd.inline_blocks(files), files
+
+    def test_the_tex_files_come_first_then_the_data_and_equal_files_are_one_block(self):
+        text, _ = self.text()
+        order = [(block["path"], block["also"]) for block in pdfmd.parse_embedded_blocks(text)]
+        self.assertEqual(order, [("chemicals.tex", ["metadata/chemicals.tex"]), ("tex/fig.tex", []),
+                                 ("tables/a.csv", [])])
+
+    def test_the_markers_give_the_lines_where_the_files_are_and_come_out_again(self):
+        text, _ = self.text()
+        marked = pdfmd.with_location_markers(text)
+        lines = marked.splitlines()
+        for name, line in pdfmd.embedded_lines(marked).items():
+            if name in ("front matter", "preamble"):
+                continue
+            self.assertIn(f"{name}  ", "\n".join(l for l in lines if l.startswith(name)) + "  ")
+            self.assertTrue(lines[line - 1].startswith("```{=pdfmd}"), name)
+            self.assertIn(f"line {line}", next(l for l in lines if l.startswith(name + " ")), name)
+        self.assertIn("<!-- pdfmd-at: tables/a.csv @ line ", marked)       # before the block that names it
+        self.assertIn("<!-- pdfmd-at: tex/fig.tex @ line ", marked)
+        self.assertEqual(pdfmd.strip_location_markers(marked), text)
+        self.assertEqual(pdfmd.with_location_markers(marked), marked)       # regenerated, not stacked
+
+    def test_an_edit_that_moves_a_line_is_followed_by_the_next_write(self):
+        text, _ = self.text()
+        marked = pdfmd.with_location_markers(text)
+        longer = marked.replace("Intro.\n", "Intro.\n\nOne more paragraph.\n\nAnd another.\n", 1)
+        again = pdfmd.with_location_markers(longer)
+        lines = again.splitlines()
+        for name, line in pdfmd.embedded_lines(again).items():
+            if name not in ("front matter", "preamble"):
+                self.assertIn(f"line {line}", next(l for l in lines if l.startswith(name + " ")), name)
+
+    def test_a_text_without_embedded_files_is_left_alone(self):
+        plain = self.FRONT.replace("header-includes: |\n  \\usepackage{x}\n", "") + "Just text.\n"
+        self.assertEqual(pdfmd.with_location_markers(plain), plain)
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_restore_gives_the_original_text_without_markers(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name).resolve() / "work" / "doc"
+        (root / "tables").mkdir(parents=True)
+        (root / "metadata").mkdir()
+        (root / "tables" / "a.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        (root / "chemicals.tex").write_text("x\n", encoding="utf-8")
+        (root / "metadata" / "chemicals.tex").write_text("x\n", encoding="utf-8")
+        original = "---\ntitle: T\n---\n\nIntro.\n\n::: {.csv file=\"tables/a.csv\"}\n:::\n\n```{=latex}\n\\input{chemicals}\n```\n"
+        md = root / "doc.md"
+        md.write_text(original, encoding="utf-8")
+        pdfmd.BUNDLE_CLI = "referenced"
+        self.addCleanup(setattr, pdfmd, "BUNDLE_CLI", None)
+        out = md.with_suffix(".pdf")
+        writer = pypdf.PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        with out.open("wb") as handle:
+            writer.write(handle)
+        with contextlib.redirect_stdout(io.StringIO()):
+            attachments, merged, manifest = pdfmd.source_attachments(md, out, [], [], [], None)
+        self.assertIn("<!-- pdfmd-at: index", merged)
+        self.assertFalse([name for name in attachments if name.startswith("files/")])      # every file is in the text
+        restored = root.parent / "restored"
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.restore_attachments(out, attachments, restored, False)
+        self.assertEqual((restored / "doc.md").read_text(encoding="utf-8"), original)
+        self.assertEqual((restored / "tables" / "a.csv").read_text(), "a,b\n1,2\n")
+        self.assertEqual((restored / "chemicals.tex").read_text(), "x\n")
+        self.assertFalse((restored / "doc.unpacked").exists())
+
+    def test_a_block_that_lists_two_paths_comes_back_at_both(self):
+        text, files = self.text()
+        from pathlib import PurePosixPath
+        text = text.replace("title: T\n", "pdfmd-assembled: true\ntitle: T\n", 1)
+        placed = pdfmd.layout_from_source(text, {"layout": [], "chunks": [], "sha256": ""}, PurePosixPath("doc.md"))
+        for name in files:
+            self.assertEqual(placed[name], files[name].decode("utf-8") if isinstance(placed[name], str) else files[name], name)
+        self.assertIn("metadata/chemicals.tex", placed)
+        self.assertFalse([name for name in placed if ".unpacked" in name])
 
 
 if __name__ == "__main__":

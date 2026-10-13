@@ -876,6 +876,12 @@ style, a compound library, a shared bibliography and parts.
   in the document's own folder, as it does in a restored source, is kept when the source is attached again. Together
   with `attach-csl` a report that sets both in its shared metadata rebuilds on a machine with nothing of yours
   installed (checked in an empty home folder). The TeX distribution's own packages, fonts and Pandoc are not carried.
+- **The text files are in the source's text.** The `.tex` files a document reads and its CSV data are blocks of the
+  attached `pdfmd-source.md`, after the text (`.tex` first, then the data) and before the bibliography and style at the
+  very end, so one file holds everything you edit; the pictures, your package and files in sibling folders stay separate
+  attachments. `<!-- pdfmd-at: ... -->` comments say on which line each block is (an index after the front matter and one
+  before each part of the text that names a file); pdfmd writes them whenever it writes the source and removes them
+  wherever it reads one, so they never reach a build and a restore gives back your text as it was.
 - **Files in sibling folders** (`\input{../schemes/x.tex}`, a CSV in `../ir/`) are stored too, up to two folders above
   the document's (never the home folder or above), and `--restore` puts the folder back in the same layout: the
   document in `<folder>/<its folder's name>/`, the siblings beside it. A bibliography the metadata names by the real

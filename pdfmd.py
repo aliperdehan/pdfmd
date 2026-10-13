@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.38"
+PDFMD_VERSION = "3.28.39"
 import argparse
 import csv
 import filecmp
@@ -13803,7 +13803,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
         plan.sources = list(sources)
     chunks = []
     for index, source in enumerate(sources):
-        text = source.read_text(encoding="utf-8-sig")
+        text = strip_location_markers(source.read_text(encoding="utf-8-sig"))
         if index and drop_later_front_matter:
             text = strip_part_front_matter(text)
         if "markdown" in kinds:
@@ -14070,6 +14070,159 @@ def render_embedded_file(name: str, path: str, data: bytes) -> str:
             f"{wrapped}\n```\n")
 
 
+# -- The attached source holds its text files, editable (v3.28.39) ------------------------------------------
+# After the text: the .tex files it reads (\input), then the CSV and other data, then what was always at the end (filters,
+# history, bibliography, citation style), each as a `type: file` block with its path from the document's folder. A block
+# can say `also:` (more paths with the same content: two symlinks to one chemicals.tex are one block). The text carries
+# `<!-- pdfmd-at: ... -->` comments that say on which line of this very file each one is: one index after the front matter
+# and one before each block that names a file (`file="x.csv"`, `\input{x}`). They are rewritten whenever the source is
+# written and taken out wherever it is read (strip_location_markers), so a line number never outlives an edit.
+INLINE_SUFFIXES = (".tex", ".csv", ".tsv", ".dat", ".txt")
+INLINE_LIMIT = 1024 * 1024
+INLINE_ORDER = (".tex",)                  # in this order, then the rest by name
+LOCATION_MARK = "pdfmd-at:"
+LOCATION_LINE_RE = re.compile(r"^<!-- pdfmd-at: [^\n]*-->[ \t]*\n(?:[ \t]*\n)?", re.MULTILINE)
+LOCATION_INDEX_RE = re.compile(r"^<!-- pdfmd-at: index\n.*?\n-->[ \t]*\n(?:[ \t]*\n)?", re.MULTILINE | re.DOTALL)
+BLOCK_TYPES = ("file", "lua-filter", "hst", "bibliography", "csl")
+
+
+def strip_location_markers(text: str) -> str:
+    """``text`` without the `<!-- pdfmd-at: ... -->` comments (and the one blank line each brought): the source as it was
+    before they were put in. Not inside a fenced block."""
+    return LOCATION_LINE_RE.sub("", LOCATION_INDEX_RE.sub("", text))
+
+
+def first_block_start(text: str) -> int:
+    """Where the trailing `{=pdfmd}` blocks (a file, a filter, the history, a bibliography, a style) begin in an assembled
+    text: the offset of the first one of those types, len(text) when there is none."""
+    for match in EMBED_BLOCK_RE.finditer(text):
+        head = match.group("body").partition("\n\n")[0]
+        if re.search(r"^type:[ \t]*(?:" + "|".join(BLOCK_TYPES) + r")[ \t]*$", head, re.MULTILINE):
+            return match.start()
+    return len(text)
+
+
+def inline_candidates(extras: dict[str, bytes]) -> dict[str, bytes]:
+    """The stored files that go into the text instead: text files within the document's folder (a name with no `..`),
+    not too big, readable as UTF-8 with Unix line ends and no ``` in them."""
+    found: dict[str, bytes] = {}
+    for name, data in extras.items():
+        if (name.lower().endswith(INLINE_SUFFIXES) and ".." not in name.split("/") and len(data) <= INLINE_LIMIT
+                and b"\r" not in data and b"\x00" not in data and b"```" not in data):
+            try:
+                data.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            if not data or data.endswith(b"\n"):
+                found[name] = data
+    return found
+
+
+def inline_blocks(files: dict[str, bytes]) -> str:
+    """The `type: file` blocks of ``files``: .tex first, then the others, each group by name; the files with one content
+    are one block that lists the other paths as `also:`."""
+    by_content: dict[bytes, list[str]] = {}
+    for name in sorted(files, key=lambda item: (next((index for index, suffix in enumerate(INLINE_ORDER)
+                                                      if item.lower().endswith(suffix)), len(INLINE_ORDER)), item)):
+        by_content.setdefault(files[name], []).append(name)
+    out = ""
+    for data, names in by_content.items():
+        block = render_embedded_file(PurePosixPath(names[0]).name, names[0], data)
+        if len(names) > 1:
+            block = block.replace("\nsha256:", "".join(f"\nalso: {item}" for item in names[1:]) + "\nsha256:", 1)
+        out += "\n" + block
+    return out
+
+
+def embedded_lines(text: str) -> dict[str, int]:
+    """{path or name: the line on which its `{=pdfmd}` block opens (1-based)} for the blocks of ``text``, and `front matter`
+    and `preamble` for the front matter's own parts."""
+    found: dict[str, int] = {}
+    front = re.match(r"^---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    if front:
+        found["front matter"] = 1
+        header = re.search(r"^header-includes:", front.group(1), re.MULTILINE)
+        if header:
+            found["preamble"] = text.count("\n", 0, front.start(1)) + front.group(1).count("\n", 0, header.start()) + 1
+    for match in EMBED_BLOCK_RE.finditer(text):
+        head = match.group("body").partition("\n\n")[0]
+        fields = {key.strip(): value.strip() for key, _, value in (line.partition(":") for line in head.splitlines())}
+        if fields.get("type") in BLOCK_TYPES:
+            found[fields.get("path") or fields.get("name") or fields["type"]] = text.count("\n", 0, match.start()) + 1
+    return found
+
+
+def reference_names(line: str, names: list[str]) -> list[str]:
+    """Which of ``names`` (paths of embedded files) a line of the text points at: `file="x.csv"`, `\\input{x}`."""
+    hits: list[str] = []
+    for found in re.findall(r"""\bfile\s*=\s*["']([^"']+)["']""", line) + re.findall(
+            r"\\(?:input|include|InputIfFileExists)\s*\{([^{}]+)\}", line):
+        for name in names:
+            if found == name or name in (found + ".tex", found + ".csv") or name.endswith("/" + found):
+                if name not in hits:
+                    hits.append(name)
+    return hits
+
+
+def with_location_markers(text: str) -> str:
+    """``text`` with the `pdfmd-at` comments: an index after the front matter, a line before each block of the text that
+    names an embedded file. Their line numbers are those of the text as returned (settled by repeating: the comments
+    themselves move what is below them, though never by a different amount)."""
+    clean = strip_location_markers(text)
+    split = first_block_start(clean)
+    body_part, blocks_part = clean[:split], clean[split:]
+    front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", body_part, re.DOTALL)
+    names = [name for name in embedded_lines(clean) if name not in ("front matter", "preamble")]
+    if not names and not (front and "header-includes:" in front.group(0)):
+        return clean
+    # which block of the body points at which file, and where that block starts (a fence, a div, a paragraph)
+    lines = body_part.splitlines(keepends=True)
+    starts: dict[int, list[str]] = {}
+    fence: tuple[str, int] | None = None
+    first = body_part[:front.end()].count("\n") if front else 0
+    paragraph = None
+    for index in range(first, len(lines)):
+        line = lines[index]
+        opener = re.match(r"^(`{3,}|~{3,})", line)
+        if fence is None and opener:
+            fence = (opener.group(1), index)
+        elif fence is not None and line.startswith(fence[0]) and line.strip() == fence[0]:
+            fence = None
+            continue
+        if not line.strip():
+            paragraph = None
+        elif paragraph is None:
+            paragraph = index
+        if line[:1] in " \t>" or not line.strip():
+            continue
+        hits = reference_names(line, names)
+        if hits:
+            start = fence[1] if fence is not None else paragraph if paragraph is not None else index
+            for name in hits:
+                if name not in starts.setdefault(start, []):
+                    starts[start].append(name)
+    listing = ["front matter", *(["preamble"] if "preamble" in embedded_lines(clean) else []), *names]
+    numbers: dict[str, int] = {}
+    result = clean
+    for _ in range(4):
+        out = []
+        for index, line in enumerate(lines):
+            for name in starts.get(index, []):
+                out.append(f"<!-- {LOCATION_MARK} {name} @ line {numbers.get(name, 0)} -->\n\n")
+            out.append(line)
+        marked = "".join(out)
+        entries = "".join(f"{name:<40} line {numbers.get(name, 0)}\n" for name in listing)
+        index_text = f"<!-- {LOCATION_MARK} index\n{entries}-->\n\n"
+        cut = front.end() if front else 0          # the markers are all after the front matter: it is still the first characters
+        result = marked[:cut] + index_text + marked[cut:] + blocks_part
+        found = embedded_lines(result)
+        fresh = {name: found[name] for name in listing if name in found}
+        if fresh == numbers:
+            break
+        numbers = fresh
+    return result
+
+
 def safe_relative_path(name: str) -> str:
     """A relative path for writing an embedded file back: as the metadata
     names it, unless that is absolute or climbs out (then just the file name)."""
@@ -14086,9 +14239,12 @@ def parse_embedded_blocks(text: str) -> list[dict]:
         if not separator:
             continue
         fields = {}
+        also: list[str] = []
         for line in head.splitlines():
             key, _, value = line.partition(":")
             fields[key.strip()] = value.strip()
+            if key.strip() == "also" and value.strip():
+                also.append(value.strip())
         source = rest + "\n"
         data = None
         digest = sha256_text(source)
@@ -14103,7 +14259,7 @@ def parse_embedded_blocks(text: str) -> list[dict]:
             data = source.rstrip("\n").encode("utf-8") + (b"\n" if rest.strip() else b"")
             digest = hashlib.sha256(data).hexdigest()
         blocks.append({"type": fields.get("type", ""), "name": fields.get("name") or "filter.lua",
-                       "path": fields.get("path"),
+                       "path": fields.get("path"), "also": also,
                        "declared": fields.get("sha256"), "source": source, "bytes": data,
                        "sha256": digest})
     return blocks
@@ -14231,14 +14387,15 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     history_blocks = [block for block in all_blocks if block["type"] == "hst"]
     file_blocks = [block for block in all_blocks if block["type"] == "file"]
     for block in file_blocks:
-        name = unique(safe_relative_path(block["path"] or block["name"]))
-        files[name] = block["bytes"] if block.get("bytes") is not None else block["source"]
         if block["declared"] == block["sha256"]:
             state = "hash matches what was written"
         else:
             mismatch = True
             state = "HASH MISMATCH: edited since it was written" if block["declared"] else "no hash recorded"
-        notes.append(f"FILE      {name}  ({state})")
+        for place in [block["path"] or block["name"], *block.get("also", [])]:
+            name = unique(safe_relative_path(place))
+            files[name] = block["bytes"] if block.get("bytes") is not None else block["source"]
+            notes.append(f"FILE      {name}  ({state})")
     for block in history_blocks:
         name = unique(Path(block["name"]).name or f"{path.stem}.hst")
         files[name] = block["source"]
@@ -14488,12 +14645,13 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
     if blocks:
         folder = Path(mkdtemp(prefix="pdfmd-resources-"))
         for block in blocks:
-            target = folder / safe_relative_path(block["path"] or block["name"])
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if block.get("bytes") is not None:
-                target.write_bytes(block["bytes"])
-            else:
-                write_text_lf(target, block["source"])
+            for name in [block["path"] or block["name"], *block.get("also", [])]:
+                target = folder / safe_relative_path(name)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if block.get("bytes") is not None:
+                    target.write_bytes(block["bytes"])
+                else:
+                    write_text_lf(target, block["source"])
         added.append(folder)
     unpacked = md_path.parent / f"{md_path.stem}{UNPACKED_SUFFIX}"
     if unpacked.is_dir():
@@ -18371,7 +18529,7 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
     base = base or md_path.parent
     chunks: list[dict] = []
     for index, source in enumerate([md_path, *parts]):
-        raw = source.read_text(encoding="utf-8-sig")
+        raw = strip_location_markers(source.read_text(encoding="utf-8-sig"))
         text = strip_part_front_matter(raw) if index and not report else raw
         head = raw[:len(raw) - len(text)] if index and raw.endswith(text) else ""
         if "markdown" in strip:
@@ -18641,17 +18799,23 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                     if not dep.get("local"):
                         origins[dep["name"]] = "tex-tree"
             manifest["bundle"] = mode
-            manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
-                                   **({"from": origins[name]} if name in origins else {})}
-                                  for name, data in extras.items()]
             manifest["outside"] = sorted({Path(name).name for name in outside})
     # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
     # small: it is stored even when the rest of the folder is not bundled.
     for name, data in csv_block_files(merged, base).items():
         if name not in extras:
             extras[name] = data
-    if extras and "extras" not in manifest:
-        manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+    # The text files go into the source itself, after the text, where they can be edited (v3.28.39); the rest stay attachments
+    inline = inline_candidates(extras)
+    if inline:
+        cut = first_block_start(merged)
+        merged = merged[:cut].rstrip("\n") + "\n" + inline_blocks(inline) + ("\n" if cut < len(merged) else "") + merged[cut:]
+    merged = with_location_markers(merged)
+    manifest["sha256"] = sha256_text(merged)
+    if extras:
+        manifest["extras"] = [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data),
+                               **({"from": origins[name]} if name in origins else {}),
+                               **({"inline": True} if name in inline else {})}
                               for name, data in extras.items()]
     if is_pdf:
         match_images_to_pdf(output, [image for image in manifest["images"] if image["path"] not in extras], base)
@@ -18659,7 +18823,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     attachments = {
         ATTACH_SOURCE: merged.encode("utf-8"),
         ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
-        **{extra_key(name): data for name, data in extras.items()}}
+        **{extra_key(name): data for name, data in extras.items() if name not in inline}}
     return attachments, merged, manifest
 
 
@@ -19577,8 +19741,11 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")
     target = (out_dir or pdf_path.with_name(f"{pdf_path.stem}{RESTORED_SUFFIX}")).resolve()
-    files: dict[str, str | bytes] = dict(layout_from_source(merged, manifest, name))
+    files: dict[str, str | bytes] = dict(layout_from_source(
+        strip_location_markers(merged), manifest, name, sha256_text(merged) == manifest.get("sha256")))
     for item in extras:
+        if item.get("inline"):
+            continue                                  # a block of the text: layout_from_source put it back
         where = restore_target_name(item["path"])
         data = attachments.get(extra_key(item["path"]))
         if where is None or data is None:
@@ -19764,7 +19931,8 @@ def assembled_origin(text: str) -> dict:
     return origin if isinstance(origin, dict) else {}
 
 
-def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) -> dict[str, str]:
+def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath,
+                       unedited: bool | None = None) -> dict[str, str | bytes]:
     """The files of the original layout, as {relative path: text}, from the
     attached assembled text: --unpack --slim does the splitting of the embedded
     metadata, preamble, filters and bibliography; the manifest says where each
@@ -19785,6 +19953,19 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
                     found[item.relative_to(unpacked).as_posix()] = item.read_text(encoding="utf-8")
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    # the text files the source holds as `type: file` blocks come back at their own paths (not under NAME.unpacked/)
+    placed: dict[str, str | bytes] = {}
+    block_names: set[str] = set()
+    for block in parse_embedded_blocks(merged):
+        if block["type"] != "file":
+            continue
+        data = block["bytes"] if block.get("bytes") is not None else block["source"].encode("utf-8")
+        for place in [block["path"] or block["name"], *block.get("also", [])]:
+            block_names.add(safe_relative_path(place))
+            where = restore_target_name(place)
+            if where is not None:
+                placed[str(where)] = data
+    found = {name: content for name, content in found.items() if name not in block_names}
     layout = [dict(entry) for entry in manifest.get("layout") or []]
     metadata_entries = [entry for entry in layout if entry["kind"] == "metadata"]
     if not metadata_entries:
@@ -19793,7 +19974,8 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
     # which is the layout's order too (v3.28.13: a label made unique as `folder-name.yaml` matches as well)
     labels = list(origin.get("files") or {})
     by_label = dict(zip(labels, metadata_entries)) if len(labels) == len(metadata_entries) else {}
-    unedited = sha256_text(merged) == manifest.get("sha256")
+    if unedited is None:
+        unedited = sha256_text(merged) == manifest.get("sha256")
     extras: dict[str, str] = {}
     strays: list[tuple[str, str, dict | None]] = []
     global_keys = (origin.get("files") or {}).get(origin.get("global")) or []
@@ -19881,6 +20063,7 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath) ->
     else:
         files[str(main_name)] = text
     files.update(extras)
+    files.update(placed)
     return files
 
 
