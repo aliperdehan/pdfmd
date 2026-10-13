@@ -1358,7 +1358,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.28.42"
+PDFMD_VERSION = "3.28.43"
 import argparse
 import csv
 import filecmp
@@ -13422,7 +13422,7 @@ def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | 
         keys += css_names(metadata_file_yaml(item).get("css"))
     try:
         keys += css_names(front_matter_dict(md_path.read_text(encoding="utf-8-sig")).get("css"))
-    except OSError:
+    except (OSError, UnicodeDecodeError):                    # not a text file (a .docx is converted too)
         pass
     named = css_names(first_pdfmd_option(md_path, metadata_files, "css")) + [str(Path(item)) for item in CSS_CLI]
     return beside, existing(keys, "css:"), existing(named, "pdfmd-options.css / --css")

@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.28.43 — 2026-10-13
+
+Pre-edit state: commit `118c0e7` (v3.28.42).
+
+### Fixed
+
+- A Word file (or any input that is not text) went through the new style-sheet search and stopped on `UnicodeDecodeError`
+  (v3.28.41 read the document's front matter for `css:`); it is read only when it is text. The zipapp build script lists the
+  `pdfmd_css` package too (the wheel and the zipapp ship the same packages: a test says so).
+
 ## v3.28.42 — 2026-10-13
 
 Pre-edit state: commit `af5ef7a` (v3.28.41).
