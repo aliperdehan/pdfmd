@@ -41,6 +41,19 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.6 — 2026-10-14
+
+Pre-edit state: commit `7927841` (v3.29.5).
+
+### Added
+
+- **`pan-tec` command** (the author's request, 2026-10-14): the first version of pdfmd, v0.1.0's shell function `pandoc "$@"
+  --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`, as a command name beside `mdpdf`, `inkmd` and `batchmd`.
+  `pan-tec test.md -o ex.pdf` runs pdfmd with `-e tectonic` and `--pdf-engine-opt=--chatter=minimal` added (`pan_tec_translate`,
+  `pan_tec_main`, a script in `pyproject.toml`); an engine or a chatter level on the command line is used instead; a Tectonic that is
+  not installed gets pdfmd's own "engine not found" message. Not done: the other half of the request, a Pandoc + Tectonic
+  core install (`pdfmd --install core:tex`), which is queued. `tests/test_pan_tec.py`.
+
 ## v3.29.5 — 2026-10-14
 
 Pre-edit state: commit `e2df84f` (v3.29.4).

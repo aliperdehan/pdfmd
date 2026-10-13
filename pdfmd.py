@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.5"
+PDFMD_VERSION = "3.29.6"
 import argparse
 import atexit
 import csv
@@ -21731,6 +21731,26 @@ def batchmd_translate(argv: list[str]) -> list[str]:
 def batchmd_main() -> None:
     """Entry point of the ``batchmd`` command: ``pdfmd -b``, with pdfmd's own options."""
     sys.argv[1:] = batchmd_translate(sys.argv[1:])
+    main()
+
+
+def pan_tec_translate(argv: list[str]) -> list[str]:
+    """The ``pan-tec`` command (v3.29.6): the first version of pdfmd was a shell function, `pandoc "$@"
+    --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`. The same, with pdfmd behind it: `-e tectonic` and
+    Tectonic's quiet output are added unless the command line names an engine / a chatter level of its own."""
+    out = list(argv)
+    if not any(token == "--engine" or token.startswith("--engine=") or token == "--pdf-engine"
+               or token.startswith("--pdf-engine=") or (token.startswith("-e") and not token.startswith("--"))
+               for token in out):
+        out = ["-e", "tectonic", *out]
+    if not any("chatter" in token for token in out):
+        out.append("--pdf-engine-opt=--chatter=minimal")
+    return out
+
+
+def pan_tec_main() -> None:
+    """Entry point of the ``pan-tec`` command: pdfmd with the Tectonic engine, quiet, as in its first version."""
+    sys.argv[1:] = pan_tec_translate(sys.argv[1:])
     main()
 
 

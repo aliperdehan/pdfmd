@@ -1084,9 +1084,9 @@ stamped or backed up unless you ask (`stamp=True`, `backup=True`). A failure rai
 `variables=` a dict of Pandoc variables, `extra_args=` anything else the command line takes, `cwd=` the folder it runs
 in and `timeout=` seconds.
 
-### Other command names: `mdpdf`, `inkmd` and `batchmd`
+### Other command names: `mdpdf`, `inkmd`, `batchmd` and `pan-tec`
 
-pdfmd also installs `mdpdf`, `inkmd` and `batchmd` commands that take those tools' own keys
+pdfmd also installs `mdpdf`, `inkmd`, `batchmd` and `pan-tec` commands that take those tools' own keys
 and do what they did, with pdfmd behind them:
 
 ```sh
@@ -1097,6 +1097,10 @@ inkmd notes.md -e lualatex                   # naming another engine uses it ins
 batchmd ~/notes                              # every .md in the folder, as pdfmd -b ~/notes
 batchmd -e inkmd                             # the current folder, with the built-in renderer
 ```
+
+`pan-tec` is the first version of pdfmd, a shell function around `pandoc "$@" --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`
+(v3.29): `pan-tec test.md -o ex.pdf` is `pdfmd -e tectonic test.md -o ex.pdf --pdf-engine-opt=--chatter=minimal`, with everything else
+pdfmd does. Name another engine (`-e typst`) or a chatter level of your own and that is used instead.
 
 `batchmd` is `pdfmd -b`: each Markdown file in the folder becomes its own PDF beside it.
 It takes the current folder when you name none (`pdfmd -b` alone refuses), and every

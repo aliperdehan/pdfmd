@@ -58,6 +58,8 @@ mdpdf = "pdfmd:mdpdf_main"
 inkmd = "pdfmd:inkmd_main"
 # `pdfmd -b` on one folder (the current one by default), the name of the first script; see batchmd_main.
 batchmd = "pdfmd:batchmd_main"
+# The first version of pdfmd was a shell function, `pandoc "$@" --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`.
+pan-tec = "pdfmd:pan_tec_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
