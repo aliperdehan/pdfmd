@@ -324,10 +324,29 @@ local function separator_settings(fields)
   return aligns, widths
 end
 
+-- a spreadsheet (v3.29.23): pdfmd has turned each sheet a .csv div names into a CSV file and says where in `pdfmd-sheet-map`
+local sheet_map = {}
+local function is_spreadsheet(path)
+  local lower = path:lower()
+  return lower:match("%.xlsx$") or lower:match("%.xlsm$") or lower:match("%.xls$") or lower:match("%.ods$")
+end
+
 local function csv_blocks(div)
   local path = div.attributes["file"]
   local text, label
-  if path and path ~= "" then
+  if path and path ~= "" and is_spreadsheet(path) then
+    local converted = sheet_map[path .. "|" .. (div.attributes["sheet"] or "")]
+    if not converted then
+      io.stderr:write("WARN  .csv: '" .. path .. "' is a spreadsheet pdfmd did not convert (see the note above); leaving it empty\n")
+      return {}
+    end
+    text = read_file(converted)
+    label = path
+    if not text then
+      io.stderr:write("WARN  .csv: could not open the converted sheet of '" .. path .. "'; leaving it empty\n")
+      return {}
+    end
+  elseif path and path ~= "" then
     text = read_file(path)
     label = path
     if not text then
@@ -548,6 +567,12 @@ local function read_defaults(meta)
     changed = true
     if type(value) == "boolean" then return tostring(value) end
     return pandoc.utils.stringify(value)
+  end
+  local map = meta["pdfmd-sheet-map"]
+  if map ~= nil then
+    for key, value in pairs(map) do sheet_map[key] = pandoc.utils.stringify(value) end
+    meta["pdfmd-sheet-map"] = nil
+    changed = true
   end
   local rows, cols, header, reader = take("rows"), take("cols"), take("header"), take("reader")
   local delimiter, cut = take("delimiter"), take("cut")

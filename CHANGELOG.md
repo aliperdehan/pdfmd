@@ -41,6 +41,21 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.23 — 2026-10-14
+
+Pre-edit state: commit `6719049` (v3.29.22).
+
+### Added
+
+- **Spreadsheets in the `.csv` block** (queue item 5c): `::: {.csv file="results.xlsx" sheet="Run 2"}` for `.xlsx`, `.xlsm`, `.xls`, `.ods`.
+  `pdfmd_tables/sheets.py` reads the sheet (a name, or a number from 1; the first by default) with the first of openpyxl (xlsx, xlsm;
+  stored values, not display formats; dates as ISO, whole floats as integers), pandas (also xls and ods) and LibreOffice (the sheet by
+  number), and says what to install when none can. pdfmd writes each sheet once as a CSV in the cache (named by the file's content and the
+  sheet) and gives the filter the map (`pdfmd-sheet-map`, a `--metadata-file`, as for converted images: `spreadsheet_args` inside
+  `csv_table_filter_args`); `csv_table.lua` reads the converted file; `pdfmd --expand-tables` reads a sheet through the same function.
+  Pandoc's own xlsx reader (3.12 has one, 3.1.3 not) is not used: it gives a table, not the CSV the block's options (delimiter, cut,
+  align) are about. All three were run here (LibreOffice through its app bundle: sheet 1 and sheet 2 of a two-sheet file). `tests/test_spreadsheets.py`.
+
 ## v3.29.22 — 2026-10-14
 
 Pre-edit state: commit `171af5d` (v3.29.21).

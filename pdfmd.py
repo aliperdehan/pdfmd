@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.22"
+PDFMD_VERSION = "3.29.23"
 import argparse
 import atexit
 import csv
@@ -2287,6 +2287,45 @@ def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
     return chosen
 
 
+def spreadsheet_args(files: list[Path]) -> list[str]:
+    """`--metadata-file` with the CSV each spreadsheet a `.csv` block names was turned into (v3.29.23: `::: {.csv file="a.xlsx"
+    sheet="Run 2"}`), or []. A sheet that cannot be read is a WARN naming what to install."""
+    try:
+        from pdfmd_tables import scan, sheets
+    except ImportError:
+        return []
+    mapping: dict[str, str] = {}
+    for source in files:
+        text = read_text_best_effort(Path(source))
+        if not any(suffix in text.lower() for suffix in sheets.SUFFIXES):
+            continue
+        for block in scan.find_csv_blocks(text):
+            name = block.attributes.get("file", "")
+            if not name or not sheets.is_spreadsheet(name):
+                continue
+            key = f"{name}|{block.attributes.get('sheet', '')}"
+            if key in mapping:
+                continue
+            path = (Path(source).parent / name).resolve()
+            try:
+                mapping[key] = str(sheets.cached_csv(path, block.attributes.get("sheet") or None, cache_root() / "sheets",
+                                                     resolve_soffice()))
+            except (OSError, sheets.SheetError) as error:
+                said = "no such file" if isinstance(error, FileNotFoundError) else error
+                print(f"WARN  {display_path(Path(source))}: {name}: {said}", file=sys.stderr)
+    if not mapping:
+        return []
+    digest = hashlib.sha1(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    target = cache_root() / "sheets" / "maps" / f"{digest}.yaml"
+    try:
+        if not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("pdfmd-sheet-map: " + json.dumps(mapping, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError:
+        return []
+    return ["--metadata-file", str(target)]
+
+
 def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
                           csv_filter_path: Path, metadata_files: list[Path] = ()) -> list[str]:
     """``--lua-filter`` for CSV_TABLE_LUA_FILTER, only when actually needed.
@@ -2303,6 +2342,7 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
     if not any(contains_csv_table(file) for file in files):
         return []
     args = ["--lua-filter", str(csv_filter_path)]
+    args += spreadsheet_args(files)
     chosen = csv_defaults(files[0], metadata_files)
     for key, value in chosen.items():            # only what differs: the filter's own defaults are the same
         if key == "delimiter":

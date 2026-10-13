@@ -1324,6 +1324,12 @@ Water,18.015,1.20
   `---`, `:--`, `:-:`, `--:` as in a pipe table; `align=` wins. If such a row is really data, say `separator="none"`.
   `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Without either, pdfmd picks
   widths that suit the contents.
+- **A spreadsheet** (v3.29) works as the file: `::: {.csv file="results.xlsx" sheet="Run 2"}` (`.xlsx`, `.xlsm`, `.xls`, `.ods`;
+  `sheet=` is a name or a number counted from 1, the first sheet when it is left out). The sheet is read by `openpyxl` (xlsx and
+  xlsm: the values the file stores, so a cell shown as `1.50` is `1.5`, a date is `2026-01-02`), else by `pandas`, else by
+  LibreOffice (the sheet by number); none of them is a `WARN` that says what to install (`pip install openpyxl`). The converted
+  CSV is kept in pdfmd's cache by the file's content, the attached source carries the spreadsheet itself, and
+  `--expand-tables` reads it too.
 - The first row is the header unless you add `header="false"`.
 - Large files are capped at 10 rows × 7 columns, so a huge CSV can't
   silently fill 40 pages. A cut table keeps both ends: the first 7 rows, a row

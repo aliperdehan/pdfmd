@@ -11,6 +11,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import sheets
 from .scan import (FENCE_RE, CsvBlock, FoundTable, caption_parts, find_csv_blocks, find_tables, split_row,
                    unescape_cell)
 
@@ -298,6 +299,11 @@ def _extract_inline_csv(result: Extracted, base_dir: Path, directory: str, used:
 def read_csv_data(block: CsvBlock, base_dir: Path) -> tuple[str, str]:
     """(the text, where it came from) of a `.csv` block's data."""
     name = block.attributes.get("file")
+    if name and sheets.is_spreadsheet(name):
+        try:
+            return sheets.to_csv(base_dir / name, block.attributes.get("sheet") or None), name
+        except (OSError, sheets.SheetError) as error:
+            raise TablesError(f"cannot read {name}: {error}")
     if name:
         try:
             return (base_dir / name).read_text(encoding="utf-8-sig"), name
