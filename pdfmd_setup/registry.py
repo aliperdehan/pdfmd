@@ -49,7 +49,7 @@ UNSET = {
     "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
-    "options.no-auto": "nothing switched off",
+    "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.reader": "gfm without front matter, markdown with it",
     "options.strict": "off", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
     "options.check-ignore": "none",
@@ -86,6 +86,7 @@ FOLDER_OPTIONS = frozenset({
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels",
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
+    "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
 # `.pdfmd`, not the document's (the author has not decided that yet)
@@ -98,6 +99,11 @@ def folder_split(settings: list["Setting"]) -> tuple[list["Setting"], list["Sett
             if setting.scope != "machine" and (
                 setting.key in FOLDER_OPTIONS or (setting.store == "metadata" and setting.key not in FOLDER_PATH_ROWS))]
     return kept, [setting for setting in settings if setting not in kept]
+
+# `auto:` (v3.29.30) says, for a kind, `on`, `off` or `explicit-only`; the two rows above write the last and the first, `no-auto` the list of off
+AUTO_EXPLICIT_CHOICES = ("lua", "preamble", "metadata")
+AUTO_ROWS = {"options.auto.explicit-only": "explicit", "options.auto.on": "on"}
+AUTO_WORDS = {"on": "on", "true": "on", "yes": "on", "explicit-only": "explicit", "explicit": "explicit", "named": "explicit"}
 
 TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian"), ("hebrew", "Hebrew"),
             ("arabic", "Arabic"), ("hangul", "Korean (needs the translit extra)"), ("kana", "Japanese kana"),
@@ -417,6 +423,14 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.no-auto", "Automatic behaviour to switch off", "multi",
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "What pdfmd does by itself, off for every document (`--no-auto`).", "Automatic behaviour"),
+        Setting("options.auto.explicit-only", "Look for nothing, use only what the document names", "multi",
+                tuple((kind, AUTO_HELP.get(kind, "")) for kind in AUTO_EXPLICIT_CHOICES), "",
+                "Not off (a file the document names is still used) but no longer looked for beside it: `auto: {lua: explicit-only}`.",
+                "Automatic behaviour"),
+        Setting("options.auto.on", "Switch back on", "multi",
+                tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
+                "For a folder: what the setup above it switched off (the nearest setup that names a kind decides it): `auto: {margin: on}`.",
+                "Automatic behaviour"),
         Setting("disabled", "Features switched off", "multi", feature_choices(), "",
                 "Hidden from --help, completion and this screen, refused on the command line; "
                 "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),
@@ -456,12 +470,31 @@ def put(config: dict, key: str, value) -> None:
         nodes[depth - 1].pop(parts[depth - 1], None)
 
 
+def auto_kinds(store: dict, state: str) -> list[str]:
+    mapping = get(store, "options.auto")
+    return [str(kind) for kind, value in mapping.items() if AUTO_WORDS.get(str(value).strip().casefold()) == state] \
+        if isinstance(mapping, dict) else []
+
+
 def read(stores: dict, setting: Setting):
-    return get(stores.setdefault(setting.store, {}), setting.key)
+    store = stores.setdefault(setting.store, {})
+    if setting.key in AUTO_ROWS:                       # the kinds of `auto:` that are in this state
+        return auto_kinds(store, AUTO_ROWS[setting.key]) or None
+    return get(store, setting.key)
 
 
 def write(stores: dict, setting: Setting, value) -> None:
-    put(stores.setdefault(setting.store, {}), setting.key, value)
+    store = stores.setdefault(setting.store, {})
+    if setting.key in AUTO_ROWS:
+        state = AUTO_ROWS[setting.key]
+        mapping = dict(get(store, "options.auto") or {})
+        for kind in auto_kinds(store, state):
+            mapping.pop(kind, None)
+        for kind in value or []:
+            mapping[kind] = "explicit-only" if state == "explicit" else "on"
+        put(store, "options.auto", mapping or None)
+        return
+    put(store, setting.key, value)
 
 
 def shown(setting: Setting, value) -> str:

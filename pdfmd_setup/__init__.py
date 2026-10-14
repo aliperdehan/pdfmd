@@ -49,6 +49,8 @@ def run(stores: dict, no_auto_kinds, path: str, ui: str | None = None, read_line
     choice = ui or ("plain" if folder else registry.get(stores.setdefault("config", {}), "setup-ui")) or "plain"
     settings = settings_for(no_auto_kinds, ("plain", "fancy") if fancy.available() else ("plain",))
     left_out = inventory.omitted_lines(flag_names)
+    if not folder:                                    # "switch back on" is for a folder: nothing above the global setup to switch back
+        settings = [setting for setting in settings if setting.key != "options.auto.on"]
     if folder:
         settings, not_here = folder_settings(settings)
         left_out = not_here + left_out

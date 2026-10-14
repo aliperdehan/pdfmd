@@ -1861,6 +1861,18 @@ pdfmd lecture --no-auto margin mainfont  # only these (kinds: reader title margi
                                            #  unicode lookup yaml tex lua ...; `pdfmd --help` lists them)
 ```
 
+**Three states, not two** (v3.29). Each kind is `on`, `off` or, for the three that have a file to name, `explicit-only`: pdfmd looks
+for no `lua` filter, `preamble` or `metadata` file beside the document, but uses the ones the document names (`pdfmd-options:
+{lua-filter: x.lua}`, `preamble:`, `yaml:`, `-y`). `off` is what `--no-auto` always was: it also ignores a file the document names.
+A setting says it with `no-auto: [lua]` (off; `true`: everything off) or `auto: {lua: explicit-only, margin: on}` (an `auto` entry wins
+over `no-auto` in the same layer), in the document's `pdfmd-options:`, in a folder's `.pdfmd/config.yaml`, or in the config. The layers,
+strongest first: the command line (`--no-auto`, which only switches off), the document, the folders (the nearest first), the config;
+**the first layer that names a kind decides it** (until 3.29.30 the layers were added up, so a kind switched off anywhere stayed off:
+a folder can now switch back on what the config switched off, `auto: {lua: on}`). `explicit-only` stops a folder you did not write
+from running its own filter while you can still name one: put `auto: {lua: explicit-only}` in the config. A metadata file's own `no-auto`
+is not read (it would have to be read to know whether metadata files are read). `pdfmd --setup` has the rows *Automatic behaviour to switch
+off* and *Look for nothing, use only what the document names*, and in a folder's setup *Switch back on*.
+
 ### Passing options to Pandoc
 
 Any option `pdfmd` doesn't recognise is passed straight to Pandoc:

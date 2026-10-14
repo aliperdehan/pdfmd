@@ -41,6 +41,32 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.30 — 2026-10-14
+
+Pre-edit state: commit `d99eeed` (v3.29.29).
+
+### Added
+
+- **The automatic kinds are three-state** (queue item 4): `on`, `off` and `explicit-only` (it looks for nothing, but uses what the document
+  names: a Lua filter, a preamble, a metadata file; for `lua`, `preamble`, `metadata` and their aliases `files`, `tex`, `yaml`). A layer
+  says it with `no-auto:` (a list: off; `true`: everything off, as ever) and/or the new `auto: {lua: explicit-only, margin: on}` of
+  `pdfmd-options` (an `auto` entry wins over `no-auto` in the same layer; `explicit-only` for any other kind is an error that says so). The
+  old spellings (`--no-auto`, `--no-auto KIND`, `no-auto:`) mean exactly what they did, and the command lines pdfmd builds with them are the same
+  byte for byte (checked on a folder with a discovered filter, preamble and metadata file, under every spelling, old code against new).
+- **What changes: the layers decide kind by kind instead of adding up.** The command line (`--no-auto`, which only switches off), the document,
+  the folders' `.pdfmd/config.yaml` (the nearest first), the global config: the first one that names a kind decides it, so a folder can
+  switch back on what the config switched off (`auto: {lua: on}`), where before a kind off anywhere stayed off. For files that only use the old
+  spellings nothing differs. `no-auto` in a metadata file is still not read: it would have to be read before pdfmd knows whether metadata files
+  are read at all (use the document, a folder's `config.yaml`, or the config).
+- **`pdfmd --setup`:** the rows *Look for nothing, use only what the document names* (`auto: {lua: explicit-only}`) and, in a folder's setup, *Switch
+  back on* (`auto: {margin: on}`) next to the old *Automatic behaviour to switch off*; the old row is in a folder's setup too now.
+- The internal form: a list of the kinds that are off, with `explicit:KIND` entries for the explicit-only ones (it travels through `--no-auto` of
+  the child runs and the `no-auto:` marker of an assembled file, whose pattern accepts them). `discovery_disabled()` is asked where pdfmd looks for
+  files, `auto_disabled()` where it uses a named one; `document_preambles()` is the one place that joins the two for preambles.
+
+Not done: `explicit-only` for the Word reference document and profile (`officeref`, `officeprofile`: the search and the named file are one step
+there), a `--auto` flag on the command line (it only switches off).
+
 ## v3.29.29 — 2026-10-14
 
 Pre-edit state: commit `1132c88` (v3.29.28).

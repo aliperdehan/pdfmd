@@ -162,6 +162,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "parts": Omitted("document", "a document in parts (the folder setup will hold it per project)"),
     "max-asset-mb": "options.max-asset-mb", "max-output-mb": "options.max-output-mb",
     "no-auto": "options.no-auto",
+    "auto": "options.auto.explicit-only", "auto.explicit-only": "options.auto.explicit-only", "auto.on": "options.auto.on",
     "office.latex": "options.office.latex", "office.labels": "options.office.labels",
     "office.reference-doc": "options.office.reference-doc",
     "office.profile": Omitted("document", "a house style's Word profile, named by the style's own metadata"),

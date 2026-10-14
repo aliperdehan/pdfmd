@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.29"
+PDFMD_VERSION = "3.29.30"
 import argparse
 import atexit
 import csv
@@ -1670,21 +1670,6 @@ def auto_disabled(no_auto: list[str] | None, kind: str) -> bool:
     return kind in no_auto or any(kind in NO_AUTO_ALIASES.get(item, ()) for item in no_auto)
 
 
-def merge_no_auto(cli: list[str] | None, doc: list[str] | None) -> list[str] | None:
-    """Union a CLI --no-auto with a document's own pdfmd-options.no-auto.
-
-    Additive, never a replacement: a kind named by either source is
-    disabled; ``[]`` (bare CLI --no-auto, or ``no-auto: true`` in the
-    document) from either side disables everything, regardless of what the
-    other side says.
-    """
-    if cli is None and doc is None:
-        return None
-    if cli == [] or doc == []:
-        return []
-    return sorted({*(cli or []), *(doc or [])})
-
-
 def accessory_directories(directory: Path, stem: str | None = None) -> list[Path]:
     """Return `directory`, plus its ACCESSORY_DIRNAME subdirectory if present,
     plus (given the document's ``stem``) the ``STEM.unpacked`` folder
@@ -1880,21 +1865,109 @@ def has_embedded_preamble(md_path: Path) -> bool:
     return isinstance(kinds, list) and "preamble" in kinds
 
 
+# -- The automatic kinds are three-state (v3.29.30) ---------------------------------------------------------------------
+# Each kind of NO_AUTO_KINDS is `on`, `off` (pdfmd does none of it, and ignores a file the document names for it: what `--no-auto`
+# always meant) or `explicit-only` (it looks for nothing, but uses what the document names: a Lua filter, a preamble, a metadata
+# file; only the kinds that have a file to name). A layer says it with `no-auto:` (a list: off; true: everything off) and/or
+# `auto: {lua: explicit-only, margin: on}` (an `auto` entry wins over `no-auto` in the same layer). The layers, strongest first:
+# the command line (`--no-auto`, which only switches off), the document's `pdfmd-options`, the folders' `.pdfmd/config.yaml` (the
+# nearest first), the global config; the first layer that names a kind decides it (before 3.29.30 the layers were added up and a
+# kind switched off anywhere stayed off). A metadata file's own `no-auto` is still not read: it would have to be read before
+# pdfmd knows whether metadata files are read at all. What the layers give is, as ever, a list of kinds that are off, with
+# `explicit:KIND` entries for the explicit-only ones (`[]`: everything off, `None`: nothing).
+EXPLICIT_PREFIX = "explicit:"
+EXPLICIT_KINDS = frozenset({"lua", "preamble", "tex", "metadata", "yaml", "files"})
+AUTO_STATES = {"on": "on", "true": "on", "yes": "on", "off": "off", "false": "off", "no": "off",
+               "explicit-only": "explicit", "explicit": "explicit", "named": "explicit"}
+
+
+def auto_expand(kind: str) -> set[str]:
+    return {kind} | set(NO_AUTO_ALIASES.get(kind, ()))
+
+
+def discovery_disabled(no_auto: list[str] | None, kind: str) -> bool:
+    """Whether pdfmd may not LOOK for files of this kind: off (auto_disabled), or explicit-only. What the document names is
+    asked of auto_disabled alone."""
+    if auto_disabled(no_auto, kind):
+        return True
+    for item in no_auto or ():
+        if item.startswith(EXPLICIT_PREFIX) and kind in auto_expand(item[len(EXPLICIT_PREFIX):]):
+            return True
+    return False
+
+
+def auto_layer(options: dict, where) -> tuple[bool, dict[str, str]]:
+    """(whether the layer switches everything off, {kind: "on" | "off" | "explicit"}) as one layer of options says it."""
+    everything, states = False, {}
+    listed = no_auto_from_value(options.get("no-auto"))
+    if listed == []:
+        everything = True
+    for item in listed or ():
+        if item.startswith(EXPLICIT_PREFIX):
+            name, state = item[len(EXPLICIT_PREFIX):], "explicit"
+        else:
+            name, state = item, "off"
+        if name not in NO_AUTO_KINDS:
+            raise SystemExit(f"{where}: unknown pdfmd-options.no-auto kind(s): {name}. Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
+        if state == "explicit" and name not in EXPLICIT_KINDS:
+            raise SystemExit(f"{where}: {item}: explicit-only is for {', '.join(sorted(EXPLICIT_KINDS))}")
+        for member in auto_expand(name):
+            states[member] = state
+    mapping = options.get("auto")
+    if mapping is not None:
+        if not isinstance(mapping, dict):
+            raise SystemExit(f"{where}: pdfmd-options.auto must be a mapping of kinds to on, explicit-only or off, not {mapping!r}")
+        for kind, value in mapping.items():
+            name, state = str(kind), AUTO_STATES.get(str(value).strip().casefold())
+            if name not in NO_AUTO_KINDS:
+                raise SystemExit(f"{where}: unknown pdfmd-options.auto kind {name}. Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
+            if state is None:
+                raise SystemExit(f"{where}: pdfmd-options.auto.{name} is {value!r}: on, explicit-only or off")
+            if state == "explicit" and name not in EXPLICIT_KINDS:
+                raise SystemExit(f"{where}: pdfmd-options.auto.{name}: explicit-only is for {', '.join(sorted(EXPLICIT_KINDS))}: "
+                                 f"{name} has no file a document could name")
+            for member in auto_expand(name):
+                states[member] = state
+    return everything, states
+
+
+def resolve_auto(layers: list[tuple[object, dict]]) -> list[str] | None:
+    """The kinds that are off (and `explicit:KIND` for the explicit-only ones) after the layers, strongest first; a kind is decided by
+    the first layer that names it, and a layer that switches everything off decides every kind no stronger layer named."""
+    decided: dict[str, str] = {}
+    blanket = False
+    for where, options in layers:
+        everything, states = auto_layer(options, where)
+        if not blanket:
+            for kind, state in states.items():
+                decided.setdefault(kind, state)
+            blanket = everything
+    if blanket:
+        for kind in NO_AUTO_KINDS:
+            decided.setdefault(kind, "off")
+        if all(state == "off" for state in decided.values()):
+            return []
+    off = sorted(kind for kind, state in decided.items() if state == "off")
+    explicit = sorted(EXPLICIT_PREFIX + kind for kind, state in decided.items() if state == "explicit")
+    return [*off, *explicit] or None
+
+
 def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str] | None:
-    """Merge a CLI --no-auto with md_path's own pdfmd-options.no-auto, and
-    validate the result. The one place this logic lives -- both convert_one
-    and main()'s pre-discovery gating (metadata/preamble auto-discovery
-    happens before convert_one is even called) need the same answer for
-    the same file.
-    """
-    merged = merge_no_auto(cli_no_auto, frontmatter_no_auto(md_path))
-    merged = merge_no_auto(merged, no_auto_from_value(config_options().get("no-auto")))   # the config file's (--setup)
-    if merged:
-        unknown = sorted(set(merged) - NO_AUTO_KINDS)
-        if unknown:
-            raise SystemExit(f"{md_path}: unknown pdfmd-options.no-auto kind(s): {', '.join(unknown)}. "
-                             f"Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
-    return merged
+    """What is switched off for a document, from the layers described above. The one place this logic lives -- both
+    convert_one and main()'s pre-discovery gating (metadata/preamble auto-discovery happens before convert_one is even
+    called) need the same answer for the same file."""
+    own = dict(frontmatter_pdfmd_options(md_path))
+    if "no-auto" not in own:
+        assembled = frontmatter_no_auto(md_path)             # an assembled file keeps its kinds in the comment form of its marker
+        if assembled is not None:
+            own["no-auto"] = assembled or True
+    layers: list[tuple[object, dict]] = []
+    if cli_no_auto is not None:
+        layers.append((md_path, {"no-auto": cli_no_auto or True}))
+    layers.append((md_path, own))
+    layers.extend((folder, options) for folder, options in folder_layers(md_path))
+    layers.append(("config", config_options()))
+    return resolve_auto(layers)
 
 
 # Auto-applied on every LaTeX-family render (see table_width_filter() below).
@@ -5376,7 +5449,7 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
     """(folder, package name) of each LaTeX package the document's preamble loads that is not part of the TeX
     distribution: a package may ship its Word support beside its .sty (`<name>-office.lua`,
     `<name>-office.yaml`, `<name>-reference.dotx`), found here."""
-    if auto_disabled(no_auto, "preamble"):
+    if discovery_disabled(no_auto, "preamble"):
         return []
     texts = []
     for item in find_preambles(md_path.parent, md_path.stem, []):
@@ -5441,7 +5514,7 @@ def pick_variant(pick: dict, chosen: list[str], md_path: Path, no_auto: list[str
     pattern = pick.get("from-preamble")
     if isinstance(pattern, str):
         texts = []
-        for item in (find_preambles(md_path.parent, md_path.stem, []) if not auto_disabled(no_auto, "preamble") else []):
+        for item in (find_preambles(md_path.parent, md_path.stem, []) if not discovery_disabled(no_auto, "preamble") else []):
             try:
                 texts.append(item.read_text(encoding="utf-8", errors="replace"))
             except OSError:
@@ -5616,7 +5689,7 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
             text += "\n" + part.read_text(encoding="utf-8-sig")
     except (SystemExit, OSError, UnicodeDecodeError):
         parts = []
-    preambles = find_preambles(md_path.parent, md_path.stem, []) if not auto_disabled(no_auto, "preamble") else []
+    preambles = find_preambles(md_path.parent, md_path.stem, []) if not discovery_disabled(no_auto, "preamble") else []
     texts = []
     for item in preambles:
         try:
@@ -5771,7 +5844,7 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
             places = [md_path.parent, *accessory_directories(md_path.parent, md_path.stem),
                       *(item.parent for item in metadata_files),
                       *(item.parent for item in (find_preambles(md_path.parent, md_path.stem, [])
-                                                  if not auto_disabled(no_auto, "preamble") else []))]
+                                                  if not discovery_disabled(no_auto, "preamble") else []))]
             arguments.filter_arguments += ["-M", "pdfmd-office-path=" + os.pathsep.join(
                 dict.fromkeys(str(Path(item).resolve()) for item in places))]
             if profile is not None:
@@ -5780,7 +5853,7 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
             # and the house packages it loads (v3.28.9: before, it was passed only with a profile)
             parts = []
             for item in (find_preambles(md_path.parent, md_path.stem, [])
-                         if not auto_disabled(no_auto, "preamble") else []):
+                         if not discovery_disabled(no_auto, "preamble") else []):
                 try:
                     parts.append(item.read_text(encoding="utf-8", errors="replace"))
                 except OSError:
@@ -8146,6 +8219,13 @@ def find_preambles(directory: Path, document_stem: str, options: list[str]) -> l
         return []
     return [path.resolve() for path in preamble_candidates(directory, document_stem)
             if is_latex_preamble(path)]
+
+
+def document_preambles(md_path: Path, pandoc_options: list[str], no_auto: list[str] | None) -> list[Path]:
+    """The preambles of a document: the ones found beside it (not for off or explicit-only) and the ones it names (not for off)."""
+    found = [] if discovery_disabled(no_auto, "preamble") else find_preambles(md_path.parent, md_path.stem, pandoc_options)
+    named = [] if auto_disabled(no_auto, "preamble") else frontmatter_extra_preambles(md_path)
+    return found + named
 
 
 class AutoLog:
@@ -14718,9 +14798,8 @@ def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], var
     kept = pandoc_header_includes(files, metadata_files)
     if kept:
         own.append(("header-includes", kept[0]))
-    if not auto_disabled(no_auto, "preamble"):
-        for path in [*find_preambles(files[0].parent, files[0].stem, []), *frontmatter_extra_preambles(files[0])]:
-            own.append((path.name, read_text_best_effort(path)))
+    for path in document_preambles(files[0], [], no_auto):
+        own.append((path.name, read_text_best_effort(path)))
     for where, text in own:
         found = CSS_HEADING_OWN_RE.search(text)
         if found:
@@ -14793,7 +14872,7 @@ ASSEMBLED_COMMENT = "<!-- pdfmd-assembled: true -->"
 # the marker can carry the no-auto kinds that the front-matter form keeps in
 # `pdfmd-options` (see embed_into_text).
 ASSEMBLED_COMMENT_RE = re.compile(
-    r"^<!-- pdfmd-assembled: true(?:; no-auto: (?P<kinds>[a-z,]+))? -->[ \t]*$", re.MULTILINE)
+    r"^<!-- pdfmd-assembled: true(?:; no-auto: (?P<kinds>[a-z:,]+))? -->[ \t]*$", re.MULTILINE)
 
 
 def is_assembled_text(text: str) -> bool:
@@ -19271,7 +19350,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     if reader_reason:
         note("READER", reader_reason)
         reader_notice(md_path, reader_reason)
-    lua_filters = [] if auto_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
+    lua_filters = [] if discovery_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
     if not auto_disabled(no_auto, "lua"):
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in lua_filters:
@@ -19547,7 +19626,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
                 cmd += chem_filter_args(list(all_inputs or [md_path]), metadata_files,
-                                        list(preamble_files or ([] if auto_disabled(no_auto, "preamble")
+                                        list(preamble_files or ([] if discovery_disabled(no_auto, "preamble")
                                                                 else find_preambles(md_path.parent, md_path.stem, []))),
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
                 cmd += typst_filter_args(target_format)
@@ -19902,7 +19981,7 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
     if resolved is None:
         return None
     kinds, lua_mode = resolved
-    discovered_lua = ([] if (auto_disabled(no_auto, "lua") or "lua" not in kinds)
+    discovered_lua = ([] if (discovery_disabled(no_auto, "lua") or "lua" not in kinds)
                       else find_lua_filters(md_path, metadata_files))
     if not auto_disabled(no_auto, "lua") and "lua" in kinds:
         for extra_filter in frontmatter_extra_lua_filters(md_path):
@@ -24397,7 +24476,8 @@ def main() -> None:
             metadata_request = ([] if args.metadata_file is None and auto_disabled(report_no_auto, "metadata")
                                 else args.metadata_file)
             if metadata_request is None:
-                metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or None
+                metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or (
+                    [] if discovery_disabled(report_no_auto, "metadata") else None)       # explicit-only: what the document names
             metadata = find_metadata(metadata_directory.resolve(), metadata_request, report=True,
                                      document_class=document_class, document_stem=files[0].stem, document=files[0])
         except (FileNotFoundError, ValueError) as error:
@@ -24435,9 +24515,7 @@ def main() -> None:
                 kinds, lua_mode = report_embed
                 report_plan = EmbedPlan(
                     kinds, lua_mode, list(metadata_files),
-                    ([] if "preamble" not in kinds or auto_disabled(report_no_auto, "preamble")
-                     else find_preambles(files[0].parent, files[0].stem, pandoc_options)
-                     + frontmatter_extra_preambles(files[0])),
+                    ([] if "preamble" not in kinds else document_preambles(files[0], pandoc_options, report_no_auto)),
                     [])  # a report build applies no discovered Lua filter
                 if "lua" in kinds:
                     print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
@@ -24467,9 +24545,7 @@ def main() -> None:
                 # report_no_auto/report_from/documentclass above), just
                 # without an engine ever actually running.
                 is_tex_target = target_format in TEX_STANDALONE_FORMATS
-                report_preambles = ([] if not is_tex_target or auto_disabled(report_no_auto, "preamble")
-                                    else find_preambles(files[0].parent, files[0].stem, pandoc_options)
-                                    + frontmatter_extra_preambles(files[0]))
+                report_preambles = ([] if not is_tex_target else document_preambles(files[0], pandoc_options, report_no_auto))
                 if report_preambles:
                     announce_preambles(report_preambles)
                 stamp_preambles = report_preambles
@@ -24605,7 +24681,7 @@ def main() -> None:
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     cmd += report_office_arguments.filter_arguments
                     cmd += chem_filter_args(list(files), metadata_files,
-                                            list(report_preambles or ([] if auto_disabled(report_no_auto, "preamble")
+                                            list(report_preambles or ([] if discovery_disabled(report_no_auto, "preamble")
                                                                       else find_preambles(files[0].parent, files[0].stem, []))),
                                             target_format, bool(report_office_arguments.filter_arguments),
                                             report_no_auto)
@@ -24617,9 +24693,7 @@ def main() -> None:
                         result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
                     office_finish(report_office_arguments, files[0], args.verbose)
             else:
-                preambles = ([] if auto_disabled(report_no_auto, "preamble")
-                            else find_preambles(files[0].parent, files[0].stem, pandoc_options)
-                            + frontmatter_extra_preambles(files[0]))
+                preambles = document_preambles(files[0], pandoc_options, report_no_auto)
                 announce_preambles(preambles)
                 stamp_preambles = preambles
                 report_pdf_meta_options = resolve_stamp_options(files[0], metadata_files, stamp_overrides)
@@ -24841,13 +24915,15 @@ def main() -> None:
             # metadata; only auto-discovery (args.metadata_file is None) is
             # what --no-auto metadata/yaml suppresses -- per file, since
             # each file's own pdfmd-options can differ even in one batch.
+            file_no_auto = effective_no_auto(file, args.no_auto)
             requested = ([] if args.metadata_file is None
-                        and auto_disabled(effective_no_auto(file, args.no_auto), "metadata")
+                        and auto_disabled(file_no_auto, "metadata")
                         else args.metadata_file)
             if requested is None:
                 # pdfmd-options.yaml / .metadata: the document names its own
                 # metadata files (like -y, but written in the document).
-                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or None
+                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or (
+                    [] if discovery_disabled(file_no_auto, "metadata") else None)          # explicit-only: what the document names
             metadata_by_dir[cache_key] = find_metadata(directory, requested,
                                                         document_class=document_class,
                                                         document_stem=file.stem, document=file)
@@ -24887,10 +24963,9 @@ def main() -> None:
             return chosen or batch_target
 
         def preamble_for(file):
-            if (not (file_target(file) in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file))
-                    or auto_disabled(effective_no_auto(file, args.no_auto), "preamble")):
+            if not (file_target(file) in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file)):
                 return []
-            preambles = find_preambles(file.parent, file.stem, pandoc_options) + frontmatter_extra_preambles(file)
+            preambles = document_preambles(file, pandoc_options, effective_no_auto(file, args.no_auto))
             announce_preambles(preambles)
             return preambles
         if args.open and args.bopen is None:
@@ -25020,9 +25095,8 @@ def main() -> None:
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             preambles = []
-            if ((target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(source))
-                    and not auto_disabled(effective_no_auto(source, args.no_auto), "preamble")):
-                preambles = find_preambles(source.parent, source.stem, pandoc_options) + frontmatter_extra_preambles(source)
+            if target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(source):
+                preambles = document_preambles(source, pandoc_options, effective_no_auto(source, args.no_auto))
                 announce_preambles(preambles)
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
