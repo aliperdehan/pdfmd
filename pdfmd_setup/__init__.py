@@ -66,5 +66,5 @@ def run(stores: dict, no_auto_kinds, path: str, ui: str | None = None, read_line
         if fancy.available():
             return fancy.run(stores, settings, path, left_out=left_out, hidden=hidden)
         say("NOTE  the full-screen setup needs prompt_toolkit: pdfmd --install tui (using the numbered list)")
-    nudge = "" if fancy.available() else "A full-screen version is optional: pdfmd --install tui, then set \"This setup screen\" to fancy."
+    nudge = "" if folder or fancy.available() else "A full-screen version is optional: pdfmd --install tui, then set \"This setup screen\" to fancy."
     return plain.run(stores, settings, path, read_line, say, nudge, left_out, hidden, inherited)

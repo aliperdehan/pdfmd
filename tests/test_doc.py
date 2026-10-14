@@ -129,9 +129,15 @@ class Render(unittest.TestCase):
 class Bundling(unittest.TestCase):
     def test_the_build_copies_the_documents_into_the_package(self):
         try:
-            import setuptools  # noqa: F401
+            import setuptools
         except ImportError:
             self.skipTest("needs setuptools")
+        try:
+            version = tuple(int(part) for part in setuptools.__version__.split(".")[:2])
+        except ValueError:
+            version = (0, 0)
+        if version < (77, 0):               # pyproject.toml's `license = "MIT AND Apache-2.0"` (PEP 639) is read by setuptools 77 and later
+            self.skipTest(f"the license of pyproject.toml needs setuptools 77 or newer (this is {setuptools.__version__})")
         with tempfile.TemporaryDirectory() as folder:
             done = subprocess.run([sys.executable, "setup.py", "-q", "build_py", "--build-lib", folder], cwd=ROOT,
                                   capture_output=True, text=True)

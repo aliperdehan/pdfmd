@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.33"
+PDFMD_VERSION = "3.29.34"
 import argparse
 import atexit
 import csv
@@ -7989,6 +7989,11 @@ def render_document(path: Path, title: str) -> Path | None:
 
 def doc_command(words: list[str], print_only: bool, path_only: bool) -> int:
     """`pdfmd --doc [NAME [SECTION]]`, `--doc search WORD ...`."""
+    if not sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")        # the documents are UTF-8; a Windows pipe is the ANSI code page otherwise
+        except (OSError, ValueError):
+            pass
     if not words:
         print(f"Documents of pdfmd {PDFMD_VERSION} (pdfmd --doc NAME; --print for the Markdown, --path for the file):")
         for name, (_, _, what) in DOCUMENTS.items():

@@ -41,6 +41,22 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.34 — 2026-10-14
+
+Pre-edit state: commit `7930027` (v3.29.33).
+
+### Fixed
+
+- The CI of v3.29.33 (the native jobs: no Pandoc, no `prompt_toolkit`, an older setuptools, Windows pipes) stopped three things that a machine with all of
+  them had not shown; nothing was published from it:
+  - **`pdfmd --doc` to a pipe on Windows** wrote the documents in the ANSI code page, so `--doc search` (whose lines of the README and the recipes
+    are not ASCII) could not be read back as UTF-8, and a character outside that code page would have stopped it. A `--doc` that is not on a terminal
+    writes UTF-8 now.
+  - **The folder screen of `pdfmd --setup FOLDER` told, without the full-screen interface installed, to set the row "This setup screen"** to fancy: a row
+    that screen does not have. No nudge in a folder's setup.
+  - **`tests/test_doc.py` ran `setup.py build_py` with the setuptools of the machine**, and one older than 77 does not read the license string of
+    `pyproject.toml` (PEP 639): the test is skipped there (the publish job builds with a current one, in an isolated environment).
+
 ## v3.29.33 — 2026-10-14
 
 Pre-edit state: commit `fe17777` (v3.29.32).
