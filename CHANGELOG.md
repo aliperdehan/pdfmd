@@ -41,6 +41,24 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.33 — 2026-10-14
+
+Pre-edit state: commit `fe17777` (v3.29.32).
+
+### Fixed
+
+- **A folder cannot loosen what finds code** (found in review before anything was published). With 3.29.30 a hidden `.pdfmd/config.yaml` with
+  `auto: {lua: on}` switched Lua discovery back on where the config said `no-auto: [lua]`, against the rule that a folder's options cannot name code,
+  and `explicit-only` in a folder would have let the document's named filter through. Now, for `lua` and `preamble` (and the aliases `files`,
+  `tex`) a folder's `on` is ignored with a `WARN`, and the state is the strictest of the layers that are not a folder's and of every folder's;
+  only the command line and the document's own `pdfmd-options` can loosen. Folders can still switch back on every other kind.
+- **A folder cannot name a Word profile:** `office: {profile: FILE}` (a Lua file the Word route runs) is dropped from a folder's options with a `WARN`;
+  `config_options(document)` brought it in with 3.29.29. (`pdf-engine` is checked against the engines pdfmd knows, so a folder's `./x.sh` is refused.)
+- **`explicit-only` for metadata no longer drops the user's own defaults.** It looked for nothing and, with nothing named, also dropped the folders'
+  `.pdfmd/metadata.yaml` and the global `metadata.yaml` of `--setup` (the author and paper size you set there vanished): only the search beside the
+  document is skipped now (`find_metadata(discover=False)`); `off` is what it always was.
+- `docs/agents.md` says a `.pdfmd/` folder above the document applies even with `PDFMD_CONFIG=` empty.
+
 ## v3.29.32 — 2026-10-14
 
 Pre-edit state: commit `b2f15dc` (v3.29.31).

@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.32"
+PDFMD_VERSION = "3.29.33"
 import argparse
 import atexit
 import csv
@@ -1896,6 +1896,28 @@ def discovery_disabled(no_auto: list[str] | None, kind: str) -> bool:
     return False
 
 
+CODE_KINDS = frozenset({"lua", "preamble"})
+
+
+def folder_auto_safe(options: dict, where: str) -> dict:
+    """A folder's `auto:` without the `on` of a kind that finds code (lua, preamble, and the aliases files and tex that cover them):
+    a folder you did not write must not run what you switched off in your config or your document. Off and explicit-only,
+    which only tighten, stay."""
+    mapping = options.get("auto")
+    if not isinstance(mapping, dict):
+        return options
+    kept = {}
+    for kind, value in mapping.items():
+        if (AUTO_STATES.get(str(value).strip().casefold()) == "on" and str(kind) in NO_AUTO_KINDS
+                and auto_expand(str(kind)) & CODE_KINDS):
+            if f"{where}:{kind}" not in FOLDER_WARNED:
+                FOLDER_WARNED.add(f"{where}:{kind}")
+                print(f"WARN  {where}: auto: {kind}: on cannot be set by a folder (it finds code); ignored", file=sys.stderr)
+            continue
+        kept[kind] = value
+    return {**options, "auto": kept}
+
+
 def auto_layer(options: dict, where) -> tuple[bool, dict[str, str]]:
     """(whether the layer switches everything off, {kind: "on" | "off" | "explicit"}) as one layer of options says it."""
     everything, states = False, {}
@@ -1931,9 +1953,12 @@ def auto_layer(options: dict, where) -> tuple[bool, dict[str, str]]:
     return everything, states
 
 
-def resolve_auto(layers: list[tuple[object, dict]]) -> list[str] | None:
-    """The kinds that are off (and `explicit:KIND` for the explicit-only ones) after the layers, strongest first; a kind is decided by
-    the first layer that names it, and a layer that switches everything off decides every kind no stronger layer named."""
+AUTO_STRICTNESS = {"on": 0, "explicit": 1, "off": 2}
+
+
+def auto_states(layers: list[tuple[object, dict]]) -> tuple[dict[str, str], bool]:
+    """({kind: state} the layers decide, strongest first, and whether a layer switched everything off): a kind is decided by the
+    first layer that names it, and a layer that switches everything off decides every kind no stronger layer named."""
     decided: dict[str, str] = {}
     blanket = False
     for where, options in layers:
@@ -1942,6 +1967,26 @@ def resolve_auto(layers: list[tuple[object, dict]]) -> list[str] | None:
             for kind, state in states.items():
                 decided.setdefault(kind, state)
             blanket = everything
+    return decided, blanket
+
+
+def resolve_auto(layers: list[tuple[object, dict]], folders: int = 0) -> list[str] | None:
+    """The kinds that are off (and `explicit:KIND` for the explicit-only ones) after the layers, strongest first. ``folders`` is
+    how many of the layers after the first two (command line, document) are folders': for what finds code (CODE_KINDS) a folder
+    only ever tightens: the state is the strictest of the layers that are not a folder's and of every folder's, unless the command
+    line or the document says it."""
+    decided, blanket = auto_states(layers)
+    if folders:
+        strong, strong_blanket = auto_states(layers[:2])
+        without, without_blanket = auto_states([*layers[:2], *layers[2 + folders:]])
+        for kind in CODE_KINDS:
+            if kind in strong or strong_blanket:
+                continue
+            states = [without.get(kind, "off" if without_blanket else "on")]
+            for layer in layers[2:2 + folders]:
+                named, everything = auto_states([layer])
+                states.append(named.get(kind, "off" if everything else "on"))
+            decided[kind] = max(states, key=AUTO_STRICTNESS.get)
     if blanket:
         for kind in NO_AUTO_KINDS:
             decided.setdefault(kind, "off")
@@ -1965,9 +2010,12 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
     if cli_no_auto is not None:
         layers.append((md_path, {"no-auto": cli_no_auto or True}))
     layers.append((md_path, own))
-    layers.extend((folder, options) for folder, options in folder_layers(md_path))
+    if cli_no_auto is None:
+        layers.insert(0, (md_path, {}))                  # the command line's place is always the first
+    above = [(folder, folder_auto_safe(options, folder)) for folder, options in folder_layers(md_path)]
+    layers.extend(above)
     layers.append(("config", config_options()))
-    return resolve_auto(layers)
+    return resolve_auto(layers, len(above))
 
 
 # Auto-applied on every LaTeX-family render (see table_width_filter() below).
@@ -4996,6 +5044,20 @@ def merge_options(base: dict, layer: dict) -> dict:
     return merged
 
 
+FOLDER_CODE_KEYS = (("office", "profile"),)         # a Lua file that runs in the Word route: a folder cannot name one
+
+
+def folder_options_safe(path: str, options: dict) -> dict:
+    """A folder layer's options without what names code (FOLDER_CODE_KEYS), said once."""
+    for outer, inner in FOLDER_CODE_KEYS:
+        if isinstance(options.get(outer), dict) and inner in options[outer]:
+            if f"{path}:{outer}.{inner}" not in FOLDER_WARNED:
+                FOLDER_WARNED.add(f"{path}:{outer}.{inner}")
+                print(f"WARN  {path}: {outer}.{inner} names code and cannot be set by a folder; ignored", file=sys.stderr)
+            options = {**options, outer: {key: value for key, value in options[outer].items() if key != inner}}
+    return options
+
+
 def config_options(md_path: Path | None = None) -> dict:
     """`options:` of the config file: defaults for every document's ``pdfmd-options``. With a document, the `options:` of the
     folder settings above it lie over them (v3.29.29; the nearest folder wins)."""
@@ -5007,8 +5069,8 @@ def config_options(md_path: Path | None = None) -> dict:
         layers = folder_layer_files(str(Path(md_path).resolve().parent))
     except OSError:
         return options
-    for _, folder_options in reversed(layers):
-        options = merge_options(options, folder_options)
+    for path, folder_options in reversed(layers):
+        options = merge_options(options, folder_options_safe(path, folder_options))
     return options
 
 
@@ -13170,11 +13232,12 @@ def metadata_files_by_priority(metadata_files) -> list[Path]:
 
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                   document_class: str | None = None,
-                  document_stem: str | None = None, document: Path | None = None) -> Path | list[Path] | object | None:
-    """Choose metadata files (see find_local_metadata), with the global metadata file last when the files were
-    found automatically (not named with -y). It is the lowest in priority: pandoc_metadata_order gives it to Pandoc
-    first."""
-    found = find_local_metadata(directory, requested, report, document_class, document_stem)
+                  document_stem: str | None = None, document: Path | None = None,
+                  discover: bool = True) -> Path | list[Path] | object | None:
+    """Choose metadata files (see find_local_metadata), with the folders' and the global metadata file last when the files were
+    found automatically (not named with -y). The global one is the lowest in priority: pandoc_metadata_order gives it to Pandoc
+    first. ``discover=False`` (explicit-only) looks for no file beside the document but keeps the folders' and the global ones."""
+    found = find_local_metadata(directory, requested, report, document_class, document_stem) if discover else None
     extra, folders = None, []
     if requested is None and found is not AUTO_METADATA_DISABLED:
         extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
@@ -24505,10 +24568,10 @@ def main() -> None:
             metadata_request = ([] if args.metadata_file is None and auto_disabled(report_no_auto, "metadata")
                                 else args.metadata_file)
             if metadata_request is None:
-                metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or (
-                    [] if discovery_disabled(report_no_auto, "metadata") else None)       # explicit-only: what the document names
+                metadata_request = option_names(frontmatter_pdfmd_options(files[0]), "yaml") or None
             metadata = find_metadata(metadata_directory.resolve(), metadata_request, report=True,
-                                     document_class=document_class, document_stem=files[0].stem, document=files[0])
+                                     document_class=document_class, document_stem=files[0].stem, document=files[0],
+                                     discover=not (metadata_request is None and discovery_disabled(report_no_auto, "metadata")))
         except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
@@ -24951,11 +25014,11 @@ def main() -> None:
             if requested is None:
                 # pdfmd-options.yaml / .metadata: the document names its own
                 # metadata files (like -y, but written in the document).
-                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or (
-                    [] if discovery_disabled(file_no_auto, "metadata") else None)          # explicit-only: what the document names
+                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or None
             metadata_by_dir[cache_key] = find_metadata(directory, requested,
                                                         document_class=document_class,
-                                                        document_stem=file.stem, document=file)
+                                                        document_stem=file.stem, document=file,
+                                                        discover=not (requested is None and discovery_disabled(file_no_auto, "metadata")))
             discovered = metadata_by_dir[cache_key]
             if args.metadata_file is None and discovered is not None and discovered is not AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]

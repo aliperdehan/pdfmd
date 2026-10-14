@@ -1868,8 +1868,12 @@ A setting says it with `no-auto: [lua]` (off; `true`: everything off) or `auto: 
 over `no-auto` in the same layer), in the document's `pdfmd-options:`, in a folder's `.pdfmd/config.yaml`, or in the config. The layers,
 strongest first: the command line (`--no-auto`, which only switches off), the document, the folders (the nearest first), the config;
 **the first layer that names a kind decides it** (until 3.29.30 the layers were added up, so a kind switched off anywhere stayed off:
-a folder can now switch back on what the config switched off, `auto: {lua: on}`). `explicit-only` stops a folder you did not write
-from running its own filter while you can still name one: put `auto: {lua: explicit-only}` in the config. A metadata file's own `no-auto`
+a folder can now switch back on what the config switched off, `auto: {margin: on}`). **What finds code is the exception:** for `lua` and
+`preamble` (and `files` and `tex`, which cover them) a folder only ever tightens. Its `on` is ignored with a `WARN`, and the strictest
+state of the config's and of every folder's stands; only the document's own `pdfmd-options` (or the command line) can loosen what your
+config switched off. So `auto: {lua: explicit-only}` in the config keeps a folder you did not write from running its own filter while
+you can still name one. `explicit-only` for `metadata` looks for no metadata file beside the document; the folders' `.pdfmd/metadata.yaml`
+and your global `metadata.yaml` still apply (`off` drops them all, as it always did). A metadata file's own `no-auto`
 is not read (it would have to be read to know whether metadata files are read). `pdfmd --setup` has the rows *Automatic behaviour to switch
 off* and *Look for nothing, use only what the document names*, and in a folder's setup *Switch back on*.
 
@@ -1930,7 +1934,7 @@ write `./plain`.
 `setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
 until it says `enabled: true`, as in the global file. A build lists the folder files it used on its `FOUND` line
 (`--verbose`: `AUTO SETTINGS`). A folder's options cannot name code (a Lua filter or a preamble is read from the document's own
-front matter only), a `.pdfmd/config.yaml` owned by another user (a shared `/tmp`) is not read, and a path in it (`css: house.css`)
+front matter only, and a folder's `office: {profile: ...}`, a Lua file, is ignored with a `WARN`), a `.pdfmd/config.yaml` owned by another user (a shared `/tmp`) is not read, and a path in it (`css: house.css`)
 is relative to the document, as everywhere, not to the folder file (Pandoc takes a path in the folder's `metadata.yaml` from the
 `.pdfmd` folder, so the setup does not offer those). Carrying a folder's files in an attached source or a bundle is not done yet:
 a restored PDF builds with the settings of the folder it is restored into.

@@ -4,6 +4,8 @@ they always did."""
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -82,20 +84,54 @@ class Layers(Tree):
     def test_a_nearer_layer_can_switch_back_on(self):
         self.set_config("options:\n  no-auto: [lua, margin]\n")
         self.assertEqual(self.off(), ["lua", "margin"])
-        self.layer("options:\n  auto: {lua: on}\n")
-        self.assertEqual(self.off(), ["margin"])
-        self.write_doc("pdfmd-options:\n  auto: {lua: off}\n")                         # the document is nearer than the folder
+        self.layer("options:\n  auto: {margin: on}\n")                                 # a folder: for what finds no code
+        self.assertEqual(self.off(), ["lua"])
+        self.write_doc("pdfmd-options:\n  auto: {lua: on}\n")                           # the document: for anything
+        self.assertIsNone(self.off())
+        self.write_doc("pdfmd-options:\n  auto: {margin: off}\n")                       # the document is nearer than the folder
         self.assertEqual(self.off(), ["lua", "margin"])
+
+    def test_a_folder_cannot_switch_back_on_what_finds_code(self):
+        self.set_config("options:\n  no-auto: [lua, preamble]\n")
+        for entry in ("lua: on", "preamble: on", "files: on", "tex: on", "lua: true"):
+            pdfmd.FOLDER_WARNED.clear()
+            self.layer("options:\n  auto: {%s}\n" % entry)
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                found = self.off()
+            self.assertEqual(found, ["lua", "preamble"], entry)
+            self.assertIn("cannot be set by a folder", errors.getvalue(), entry)
+
+    def test_a_folder_can_only_tighten_what_finds_code(self):
+        self.layer("options:\n  auto: {lua: explicit-only, margin: off}\n")
+        self.assertEqual(self.off(), ["margin", "explicit:lua"])
+        self.set_config("options:\n  no-auto: [lua]\n")                                  # off in the config: explicit-only would loosen it
+        self.assertEqual(self.off(), ["lua", "margin"])
+        self.set_config("options:\n  auto: {lua: explicit-only}\n")
+        self.layer("options:\n  auto: {lua: off}\n")                                    # explicit-only in the config: off tightens it
+        self.assertEqual(self.off(), ["lua"])
+        self.write_doc("pdfmd-options:\n  auto: {lua: explicit-only}\n")                # the document's own word is the user's
+        self.assertEqual(self.off(), ["explicit:lua"])
 
     def test_the_nearest_folder_decides(self):
         (self.root / "a" / "b").mkdir()
         self.doc = self.root / "a" / "b" / "d.md"
         self.write_doc("")
+        self.set_config("options:\n  no-auto: [margin]\n")
+        self.layer("options:\n  auto: {margin: off, title: off}\n", "a")
+        self.layer("options:\n  auto: {margin: on}\n", "a/b")
+        self.assertEqual(self.off(), ["title"])
+
+    def test_among_folders_what_finds_code_takes_the_strictest(self):
+        (self.root / "a" / "b").mkdir()
+        self.doc = self.root / "a" / "b" / "d.md"
+        self.write_doc("")
         self.layer("options:\n  auto: {lua: off}\n", "a")
-        self.layer("options:\n  auto: {lua: on}\n", "a/b")
-        self.assertIsNone(self.off())
-        self.layer("options:\n  auto: {lua: explicit-only}\n", "a/b")
-        self.assertEqual(self.off(), ["explicit:lua"])
+        self.layer("options:\n  auto: {lua: explicit-only}\n", "a/b")                 # a nearer folder cannot loosen a farther one
+        self.assertEqual(self.off(), ["lua"])
+        self.layer("options:\n  auto: {lua: explicit-only}\n", "a")
+        self.layer("options:\n  auto: {lua: off}\n", "a/b")
+        self.assertEqual(self.off(), ["lua"])
 
     def test_everything_off_in_a_layer_decides_what_a_nearer_one_left_alone(self):
         self.set_config("options:\n  no-auto: true\n")
@@ -206,11 +242,30 @@ class Builds(Tree):
         self.assertIn("extra.yaml", shown)
         self.assertNotIn("metadata.yaml", shown)
 
-    def test_a_folder_can_switch_what_the_config_switched_off_back_on(self):
+    def test_explicit_only_metadata_keeps_the_users_own_defaults(self):
+        (self.config.parent / "metadata.yaml").write_text("author: The Global Author\n", encoding="utf-8")
+        (self.root / "a" / "metadata.yaml").write_text("lang: en\n", encoding="utf-8")
+        self.layer("options: {}\n")
+        (self.root / "a" / ".pdfmd" / "metadata.yaml").write_text("papersize: a4\n", encoding="utf-8")
+        pdfmd.folder_walk.cache_clear()
+        shown = self.run_pdfmd()
+        self.assertIn("a/metadata.yaml".replace("/", os.sep), shown)
+        self.write_doc("pdfmd-options:\n  auto: {metadata: explicit-only}\n")
+        shown = self.run_pdfmd()
+        self.assertNotIn(os.path.join("a", "metadata.yaml"), shown.replace(os.path.join(".pdfmd", "metadata.yaml"), ""))
+        self.assertIn(os.path.join("a", ".pdfmd", "metadata.yaml"), shown)                  # the folder's own stays
+        self.assertIn(str(self.config.parent / "metadata.yaml").replace(str(Path.home()), "~"), shown.replace(str(Path.home()), "~"))   # so does the global one
+        self.write_doc("pdfmd-options:\n  auto: {metadata: off}\n")                          # off is what it was: none at all
+        shown = self.run_pdfmd()
+        self.assertNotIn("metadata.yaml", shown)
+
+    def test_a_folder_cannot_switch_a_filter_back_on_but_the_document_can(self):
         (self.root / "a" / "d.lua").write_text(FILTER, encoding="utf-8")
         self.set_config("options:\n  no-auto: [lua]\n")
         self.assertNotIn("d.lua", self.run_pdfmd())
         self.layer("options:\n  auto: {lua: on}\n")
+        self.assertNotIn("d.lua", self.run_pdfmd())
+        self.write_doc("pdfmd-options:\n  auto: {lua: on}\n")
         self.assertIn("d.lua", self.run_pdfmd())
 
 

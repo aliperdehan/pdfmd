@@ -125,6 +125,15 @@ class Reading(Tree):
             self.assertEqual(pdfmd.config_options(self.doc).get(top), data[top], key)
             self.assertEqual(pdfmd.first_pdfmd_option(self.doc, [], top), data[top], key)
 
+    def test_a_folder_cannot_name_code(self):
+        self.put("a", "config.yaml", "options:\n  office: {profile: mine.lua, latex: images}\n  fallback: char\n")
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            merged = pdfmd.config_options(self.doc)
+        self.assertEqual(merged["office"], {"latex": "images"})                      # a Lua profile runs: the document or the config names it
+        self.assertEqual(merged["fallback"], "char")
+        self.assertIn("office.profile names code", errors.getvalue())
+
     def test_a_folder_cannot_set_what_is_the_machines(self):
         self.put("a", "config.yaml", "setup-ui: fancy\noptions:\n  fallback: char\n")
         errors = io.StringIO()

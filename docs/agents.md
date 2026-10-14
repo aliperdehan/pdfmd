@@ -38,7 +38,8 @@ pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the
 
 - `PDFMD_NO_PROMPT=1` stops every question and every offer (an install, the setup hint).
 - `PDFMD_CONFIG=` (empty) ignores the user's config file, so a run does not depend on this machine's settings;
-  `PDFMD_CONFIG=file.yaml` names another.
+  `PDFMD_CONFIG=file.yaml` names another. A `.pdfmd/` folder in the document's folder or above it still applies (it is a
+  project's own setting; `--verbose` lists it as `AUTO SETTINGS`, the closing `FOUND` line as `.pdfmd`).
 - The output goes beside the document, or where `-o` says; pdfmd also keeps a cache (`~/.cache/pdfmd`) and a data folder
   for what `--install` fetches (`~/.local/share/pdfmd`). `pdfmd --clear-cache` empties the cache and is always safe.
   `--no-backup` forces backups of replaced files off for a run.
