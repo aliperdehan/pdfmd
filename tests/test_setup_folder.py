@@ -162,6 +162,22 @@ class Screen(Tree):
         self.assertIn("options.header", shown)
         self.assertIn("bibliography", shown)
 
+    def test_a_row_the_folder_has_no_value_for_shows_where_it_comes_from(self):
+        self.config.write_text("options:\n  csv: {rows: 9}\n", encoding="utf-8")
+        self.put("", "config.yaml", "options:\n  csv: {cols: 3}\n")
+        (self.root / "a").mkdir(exist_ok=True)
+        shown = self.run_setup(["q"]).stdout
+        rows = next(line for line in shown.splitlines() if "Rows a .csv table shows" in line)
+        cols = next(line for line in shown.splitlines() if "Columns a .csv table shows" in line)
+        cut = next(line for line in shown.splitlines() if "Where a long .csv table is cut" in line)
+        self.assertIn("9  (global)", rows)
+        self.assertRegex(cols, r"3  \(folder .*\)")
+        self.assertIn("ends (default)", cut)
+        self.put("a", "config.yaml", "inherit: false\noptions:\n  fallback: char\n")
+        shown = self.run_setup(["q"]).stdout
+        self.assertNotIn("(folder", next(line for line in shown.splitlines() if "Columns a .csv table shows" in line))
+        self.assertIn("9  (global)", next(line for line in shown.splitlines() if "Rows a .csv table shows" in line))   # the global setup is below every folder
+
     def test_an_emptied_folder_loses_its_files_and_its_folder(self):
         author = number("author")
         self.run_setup([str(author), "X", "s"])

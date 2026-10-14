@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.31 — 2026-10-14
+
+Pre-edit state: commit `386eab3` (v3.29.30).
+
+### Added
+
+- **`pdfmd --setup FOLDER` shows where a value comes from.** A row the folder has no value for reads `9  (global)` or `3  (folder ~/proj)`
+  (the nearest setup above that sets it, as a build layers them, and none for `inherit: false` on the folder's own row, which cuts the
+  folders above but not the global setup) instead of "(default)" when something above sets it. The numbered screen only; the full-screen one
+  shows the default as before. Not done: `--show-config FILE` printing the resolved values with their layer, and the same in the global screen
+  (there is nothing above it).
+
 ## v3.29.30 — 2026-10-14
 
 Pre-edit state: commit `d99eeed` (v3.29.29).

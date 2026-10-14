@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.30"
+PDFMD_VERSION = "3.29.31"
 import argparse
 import atexit
 import csv
@@ -7984,6 +7984,34 @@ def doc_command(words: list[str], print_only: bool, path_only: bool) -> int:
     return 0
 
 
+def setup_sources(module, folder: Path, stores: dict):
+    """For `pdfmd --setup FOLDER`: a function that says, for a row the folder has no value for, the value and the setup it comes
+    from: the folders above (the nearest first) and then the global config, as a build layers them."""
+    registry = module.registry
+
+    def layers() -> list[tuple[str, dict]]:
+        found: list[tuple[str, dict]] = []
+        config = stores.get("config") or {}
+        if str(config.get("inherit", True)).strip().casefold() not in ("false", "no", "off", "0"):
+            for directory, data, metadata in folder_walk(str(folder.resolve().parent)):
+                label = f"folder {display_path(directory.parent)}"
+                found.append((label, {"config": data or {}, "metadata": metadata_file_yaml(metadata) if metadata else {}}))
+        glob = {"config": load_config(), "metadata": {}}
+        metadata = global_metadata_file()
+        if metadata is not None:
+            glob["metadata"] = metadata_file_yaml(metadata)
+        found.append(("global", glob))
+        return found
+
+    def inherited(setting):
+        for label, above in layers():
+            value = registry.read(above, setting)
+            if value is not None:
+                return value, label
+        return None
+    return inherited
+
+
 def setup_command(screen: str = "") -> bool:
     """`--setup [plain|fancy|FOLDER]`: change the global defaults, or a folder's, without editing the config file by hand."""
     module = setup_module()
@@ -8037,7 +8065,8 @@ def setup_command(screen: str = "") -> bool:
     if folder is not None:
         shown_path = f"the settings of {display_path(folder.resolve())} and every folder under it  ({display_path(path)})"
     saved = module.run(stores, NO_AUTO_KINDS, shown_path, screen or None, flag_names=flag_names(),
-                       flag_topics=flag_topics(), folder=folder is not None)
+                       flag_topics=flag_topics(), folder=folder is not None,
+                       inherited=setup_sources(module, folder, stores) if folder is not None else None)
     if not saved:
         print("Nothing saved.")
         return True

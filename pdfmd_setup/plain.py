@@ -10,11 +10,14 @@ from .registry import shown as shown_value
 
 def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[str], str] = input,
         say: Callable[[str], None] = print, nudge: str = "", left_out: list[str] | None = None,
-        hidden: Callable[[Setting], bool] = lambda setting: False) -> bool:
+        hidden: Callable[[Setting], bool] = lambda setting: False,
+        inherited: Callable[[Setting], tuple | None] | None = None) -> bool:
     """Edit `stores` ({"config": {...}, "metadata": {...}}) in place; True when the user chose to save. `left_out` is
     what `o` prints: the flags and keys that are not settable here, and why (pdfmd_setup.inventory)."""
     changed = False
     say(f"pdfmd setup  --  {path}")
+    if inherited is not None:
+        say("A value not set here is shown with the setup it comes from, or as the default.")
     if nudge:
         say(nudge)
     switch = next((setting for setting in settings if setting.key == "disabled"), None)
@@ -26,7 +29,10 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
             if setting.section != section:
                 section = setting.section
                 say(section)
-            say(f"  {number:>2}. {setting.title:<44} {shown_value(setting, read(stores, setting))}")
+            value = read(stores, setting)
+            above = inherited(setting) if value is None and inherited is not None else None
+            say(f"  {number:>2}. {setting.title:<44} "
+                + (f"{shown_value(setting, above[0])}  ({above[1]})" if above else shown_value(setting, value)))
         if len(shown) < len(settings):
             say(f"  ({len(settings) - len(shown)} rows of switched-off features are hidden: d)")
         say("")

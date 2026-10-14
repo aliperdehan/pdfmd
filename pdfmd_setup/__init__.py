@@ -41,11 +41,12 @@ def folder_settings(settings: list[Setting]) -> tuple[list[Setting], list[str]]:
 
 def run(stores: dict, no_auto_kinds, path: str, ui: str | None = None, read_line=input, say=print,
         flag_names: dict[str, str] | None = None, flag_topics: dict[str, set[str]] | None = None,
-        folder: bool = False) -> bool:
+        folder: bool = False, inherited=None) -> bool:
     """Open the setup screen for `stores` ({"config": {...}, "metadata": {...}}, edited in place); True when the
     user saved. `ui` is `plain` or `fancy` (default: the config's `setup-ui`, else plain). `flag_names` maps a flag's
     argparse dest to how it is written, for the list of what is not settable here; `flag_topics` maps it to its
-    features (pdfmd_help topics), so the rows of a switched-off feature leave the screen."""
+    features (pdfmd_help topics), so the rows of a switched-off feature leave the screen. `inherited(setting)` gives, for a row a
+    folder has no value for, (the value, where it comes from) in the setups above it: the numbered screen shows it."""
     choice = ui or ("plain" if folder else registry.get(stores.setdefault("config", {}), "setup-ui")) or "plain"
     settings = settings_for(no_auto_kinds, ("plain", "fancy") if fancy.available() else ("plain",))
     left_out = inventory.omitted_lines(flag_names)
@@ -66,4 +67,4 @@ def run(stores: dict, no_auto_kinds, path: str, ui: str | None = None, read_line
             return fancy.run(stores, settings, path, left_out=left_out, hidden=hidden)
         say("NOTE  the full-screen setup needs prompt_toolkit: pdfmd --install tui (using the numbered list)")
     nudge = "" if fancy.available() else "A full-screen version is optional: pdfmd --install tui, then set \"This setup screen\" to fancy."
-    return plain.run(stores, settings, path, read_line, say, nudge, left_out, hidden)
+    return plain.run(stores, settings, path, read_line, say, nudge, left_out, hidden, inherited)

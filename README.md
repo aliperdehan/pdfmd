@@ -1923,7 +1923,8 @@ pdfmd's own defaults. **`pdfmd --setup FOLDER`** (`.` for this one) writes the t
 global setup: it offers the metadata rows and the options a build reads from a folder, leaves out what only the global setup
 reaches (the `o` key lists them: the page header and footer, the HTML, Markdown and text output tables, the editor ...) and
 the two path rows (`bibliography`, `csl`), adds a row *Also use the settings of the folders above* (`inherit`), and removes
-the files, and the folder, when everything is back to the default. A name that is `plain` or `fancy` is the screen, not a folder:
+the files, and the folder, when everything is back to the default. A row the folder has no value for shows where its value comes
+from, `9  (global)` or `3  (folder ~/proj)`, or `(default)`. A name that is `plain` or `fancy` is the screen, not a folder:
 write `./plain`.
 `inherit: false` in a folder's file stops the walk upward there. A folder cannot set what belongs to this computer (`translit`,
 `setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
