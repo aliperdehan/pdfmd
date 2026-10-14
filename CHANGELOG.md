@@ -41,6 +41,35 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.29 — 2026-10-14
+
+Pre-edit state: commit `1132c88` (v3.29.28).
+
+### Added
+
+- **`pdfmd --setup FOLDER`** (queue item 4, the folder part): the numbered screen for a folder, writing `FOLDER/.pdfmd/config.yaml` (the
+  `options:` and `inherit:`) and `FOLDER/.pdfmd/metadata.yaml` (author, language, paper, fonts ... the rows the global setup keeps in
+  its `metadata.yaml`), both for that folder and everything under it. **The folder's `metadata.yaml` is read now:** a build's metadata
+  files are the document's own, then the folders' (nearest first), then the global one (`find_metadata`, `pandoc_metadata_order`: a
+  later file wins, the global lowest, and `inherit: false` ends the walk for the metadata as for the options). The screen offers only
+  what a build reads from a folder (`registry.FOLDER_OPTIONS`, the keys read through `first_pdfmd_option` / `option_sources` or
+  `config_options(document)`) and the metadata rows, never a row of the machine (`setup-ui`, `translit`, `disabled`), and says what
+  it left out (`o`): the page header and footer, bookmarks, the HTML / Markdown / text output tables, the editor, `table-widths`,
+  `no-auto`, `metadata-precedence` ... are read from the global setup alone. A path row (`bibliography`, `csl`, `css`, `office.reference-doc`,
+  `backup.dir`) is left out too: relative to the document for `css`, and from the `.pdfmd` folder for a metadata file (Pandoc's own rule),
+  which is for the author to decide. A name that is no folder is refused; `--preset` is the global setup's.
+- **`config_options(document)`:** the `options:` of the global config with the folders' laid over it field by field, nearest first. The
+  readers that skipped the folder layers (`pdf-engine`, `citation-engine`, the cache and `seed-labels`, `parts`, the code filter's wrapping
+  and numbering, the Word route's `office:`) take it.
+
+### Fixed
+
+- `pdfmd --setup` wrote a `.bak` of the file and said "your comments are not kept" on every second save: the second line of its own header counted
+  as a hand-written comment (the global `config.yaml` and `metadata.yaml`, and now a folder's).
+
+Not done: carrying a folder's files in an attached source or a bundle (a restored PDF builds with the folder it is restored into); showing
+the layer a value comes from in `--setup`.
+
 ## v3.29.28 — 2026-10-14
 
 Pre-edit state: commit `7e4777b` (v3.29.27).

@@ -31,10 +31,10 @@ class Layers(unittest.TestCase):
         (self.root / "a" / "b").mkdir(parents=True)
         self.doc = self.root / "a" / "b" / "d.md"
         self.doc.write_text("---\ntitle: T\n---\n\ntext\n", encoding="utf-8")
-        pdfmd.folder_layer_files.cache_clear()
-        self.addCleanup(pdfmd.folder_layer_files.cache_clear)
+        pdfmd.folder_walk.cache_clear()
+        self.addCleanup(pdfmd.folder_walk.cache_clear)
         pdfmd.FOLDER_WARNED.clear()
-        patch = mock.patch.object(pdfmd, "config_options", lambda: {"fallback": "global", "missing": "global"})
+        patch = mock.patch.object(pdfmd, "config_options", lambda *a: {"fallback": "global", "missing": "global"})
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -94,7 +94,7 @@ class Layers(unittest.TestCase):
     @unittest.skipUnless(hasattr(os, "getuid"), "POSIX owners")
     def test_a_file_of_another_user_is_not_read(self):
         self.layer("a", "options:\n  fallback: char\n")
-        pdfmd.folder_layer_files.cache_clear()
+        pdfmd.folder_walk.cache_clear()
         err = io.StringIO()
         with mock.patch.object(pdfmd.os, "getuid", lambda: os.stat(self.root).st_uid + 12345), contextlib.redirect_stderr(err):
             self.assertEqual(self.value("fallback"), "global")

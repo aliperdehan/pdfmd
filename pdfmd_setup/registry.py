@@ -68,6 +68,37 @@ UNSET = {
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
 MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 
+# What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
+# layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
+# is read from the global config alone (the polish keys at the start of a run, the output formats' own tables, a path relative
+# to a place that is not the document's ...): the folder screen leaves it out and says so instead of offering a row that would
+# change nothing. tests/test_setup_folder.py walks this list against the folder layers.
+FOLDER_OPTIONS = frozenset({
+    "options.global-metadata", "options.preset", "options.fallback", "options.missing", "options.citation-engine",
+    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
+    "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter",
+    "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
+    "options.keep-source", "options.hybrid",
+    "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
+    "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note",
+    "options.backup.enabled", "options.backup.format", "options.backup.keep",
+    "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
+    "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.strict",
+    "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
+})
+# metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
+# `.pdfmd`, not the document's (the author has not decided that yet)
+FOLDER_PATH_ROWS = frozenset({"bibliography", "csl"})
+
+
+def folder_split(settings: list["Setting"]) -> tuple[list["Setting"], list["Setting"]]:
+    """(the rows a folder's setup offers, the rows it leaves out) of ``settings``."""
+    kept = [setting for setting in settings
+            if setting.scope != "machine" and (
+                setting.key in FOLDER_OPTIONS or (setting.store == "metadata" and setting.key not in FOLDER_PATH_ROWS))]
+    return kept, [setting for setting in settings if setting not in kept]
+
 TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian"), ("hebrew", "Hebrew"),
             ("arabic", "Arabic"), ("hangul", "Korean (needs the translit extra)"), ("kana", "Japanese kana"),
             ("han", "Chinese (needs the translit extra)"), ("other", "any other script"))
@@ -92,10 +123,10 @@ AUTO_HELP = {
 MARKUP_CHOICES = (
     ("callouts", "> [!NOTE], > [!warning] Title, ::: note: a box (LaTeX, Typst), a styled div (HTML), a quote (the rest)"),
     ("toc", "[TOC], [[_TOC_]], <!-- toc -->: the table of contents where it stands"),
-    ("center", "<center>, <div align=center>, ::: center, \\begin{center}: centred text in LaTeX, Typst and HTML"),
-    ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst and HTML"),
+    ("center", "<center>, <div align=center>, ::: center, \\begin{center}: centred text in LaTeX, Typst, HTML and Word"),
+    ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst, HTML and Word"),
     ("keep", "::: keep, break-inside: avoid, \\begin{samepage}: blocks held on one page in LaTeX, Typst and HTML"),
-    ("landscape", "::: landscape, \\begin{landscape}: the blocks on landscape pages in LaTeX, Typst and HTML"),
+    ("landscape", "::: landscape, \\begin{landscape}: the blocks on landscape pages in LaTeX, Typst, HTML and Word"),
     ("appendix", "\\appendix, <!-- appendix -->, {.appendix}: the sections after it lettered A, B (LaTeX, Typst; with --number-sections)"),
     ("space", "\\vspace{1cm}, \\bigskip, <br><br>, #v(1cm) alone on a line: vertical space in every format"),
 )

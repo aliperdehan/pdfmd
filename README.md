@@ -1904,15 +1904,23 @@ document or its metadata files say (the command line beats all of them);
 uses another file, `PDFMD_CONFIG=` (empty) none.
 
 **Settings for a folder** (v3.29): a `.pdfmd/config.yaml` in a document's folder, or in any folder above it, has the same
-`options:` for everything under it. The order, strongest first: the command line, the document's `pdfmd-options`, its metadata
-files, the folder settings (the nearest folder first, then the ones above it), your global `config.yaml`, pdfmd's own defaults.
+`options:` for everything under it, and a `.pdfmd/metadata.yaml` the metadata (author, language, paper, fonts ...: what the global
+`metadata.yaml` of `--setup` holds). The order, strongest first: the command line, the document's `pdfmd-options`, its metadata
+files, the folder settings (the nearest folder first, then the ones above it), your global `config.yaml` and `metadata.yaml`,
+pdfmd's own defaults. **`pdfmd --setup FOLDER`** (`.` for this one) writes the two files from the same numbered screen as the
+global setup: it offers the metadata rows and the options a build reads from a folder, leaves out what only the global setup
+reaches (the `o` key lists them: the page header and footer, the HTML, Markdown and text output tables, the editor ...) and
+the two path rows (`bibliography`, `csl`), adds a row *Also use the settings of the folders above* (`inherit`), and removes
+the files, and the folder, when everything is back to the default. A name that is `plain` or `fancy` is the screen, not a folder:
+write `./plain`.
 `inherit: false` in a folder's file stops the walk upward there. A folder cannot set what belongs to this computer (`translit`,
 `setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
 until it says `enabled: true`, as in the global file. A build lists the folder files it used on its `FOUND` line
 (`--verbose`: `AUTO SETTINGS`). A folder's options cannot name code (a Lua filter or a preamble is read from the document's own
 front matter only), a `.pdfmd/config.yaml` owned by another user (a shared `/tmp`) is not read, and a path in it (`css: house.css`)
-is relative to the document, as everywhere, not to the folder file. Writing the file from `pdfmd --setup DIR`, and carrying it in
-an attached source, are not done yet.
+is relative to the document, as everywhere, not to the folder file (Pandoc takes a path in the folder's `metadata.yaml` from the
+`.pdfmd` folder, so the setup does not offer those). Carrying a folder's files in an attached source or a bundle is not done yet:
+a restored PDF builds with the settings of the folder it is restored into.
 
 ```yaml
 translit: [greek, hangul]

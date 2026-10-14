@@ -98,7 +98,7 @@ class Settings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             md = Path(folder) / "d.md"
             md.write_text(f"---\n{front}---\n\nText.\n", encoding="utf-8")
-            with mock.patch.object(pdfmd, "config_options", lambda: config or {}):
+            with mock.patch.object(pdfmd, "config_options", lambda *a: config or {}):
                 return pdfmd.frontmatter_engine(md)
 
     def test_a_list_or_a_comma_string_in_pdfmd_options(self):

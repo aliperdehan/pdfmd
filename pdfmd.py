@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.28"
+PDFMD_VERSION = "3.29.29"
 import argparse
 import atexit
 import csv
@@ -2035,7 +2035,7 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         return []
     if shipped is None or not any(has_code_block(read_text_best_effort(source)) for source in sources):
         return []
-    configured = config_options()
+    configured = config_options(sources[0] if sources else None)
     own = frontmatter_pdfmd_options(sources[0]) if sources else {}
     settings = {}
     for key in ("code-wrap", "line-numbers", "line-number-step"):
@@ -4915,10 +4915,28 @@ def load_config() -> dict:
     return data
 
 
-def config_options() -> dict:
-    """`options:` of the config file: defaults for every document's ``pdfmd-options``."""
+def merge_options(base: dict, layer: dict) -> dict:
+    """``layer`` over ``base``: a mapping on both sides is merged field by field, anything else is the layer's."""
+    merged = dict(base)
+    for key, value in layer.items():
+        merged[key] = merge_options(merged[key], value) if isinstance(value, dict) and isinstance(merged.get(key), dict) else value
+    return merged
+
+
+def config_options(md_path: Path | None = None) -> dict:
+    """`options:` of the config file: defaults for every document's ``pdfmd-options``. With a document, the `options:` of the
+    folder settings above it lie over them (v3.29.29; the nearest folder wins)."""
     options = load_config().get("options")
-    return options if isinstance(options, dict) else {}
+    options = options if isinstance(options, dict) else {}
+    if md_path is None:
+        return options
+    try:
+        layers = folder_layer_files(str(Path(md_path).resolve().parent))
+    except OSError:
+        return options
+    for _, folder_options in reversed(layers):
+        options = merge_options(options, folder_options)
+    return options
 
 
 def folder_size(folder: Path) -> int:
@@ -5480,7 +5498,7 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
                                     for name, file in options["media"].items()}
     # the config file (pdfmd --setup) is below a house style's own defaults (v3.27.9): a global reference-doc must not
     # replace the department template nulabreport ships; the document and its metadata files are above both
-    configured = config_options().get("office")
+    configured = config_options(md_path).get("office")
     if isinstance(configured, dict):
         options = {**configured, **options}
     return options
@@ -7712,6 +7730,13 @@ SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by
                 "# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.\n")
 
 
+FOLDER_HEADER = ("# pdfmd's settings for this folder and every folder under it, written by `pdfmd --setup FOLDER` (edit it by hand, or\n"
+                 "# run that again). Precedence: command line > the document's `pdfmd-options:` > its metadata files > the folders'\n"
+                 "# files, the nearest first > the global setup. `inherit: false` stops the folders above from being read.\n")
+FOLDER_METADATA_HEADER = ("# pdfmd's metadata for this folder and every folder under it, written by `pdfmd --setup FOLDER`: below anything\n"
+                          "# a document's own front matter and its metadata files say, above the global metadata.\n")
+
+
 METADATA_HEADER = ("# pdfmd's global metadata, written by `pdfmd --setup`: every document gets these, below anything its own\n"
                    "# front matter and its folder's metadata files say.\n")
 
@@ -7887,20 +7912,29 @@ def doc_command(words: list[str], print_only: bool, path_only: bool) -> int:
 
 
 def setup_command(screen: str = "") -> bool:
-    """`--setup [plain|fancy]`: change the global defaults without editing the config file."""
+    """`--setup [plain|fancy|FOLDER]`: change the global defaults, or a folder's, without editing the config file by hand."""
     module = setup_module()
-    path = config_path()
     if module is None:
         print("pdfmd --setup is missing from this install (pdfmd_setup).", file=sys.stderr)
         return False
+    folder = None
+    if screen not in ("", "plain", "fancy"):
+        folder = Path(screen).expanduser()
+        if not folder.is_dir():
+            print(f"--setup takes plain, fancy or a folder (for that folder's own settings), not {screen!r}.", file=sys.stderr)
+            return False
+        if PRESET_CLI is not None:
+            print("--setup --preset is for the global setup: a folder's setup has no presets.", file=sys.stderr)
+            return False
+        screen = ""
+        path = folder.resolve() / FOLDER_DIR / "config.yaml"
+    else:
+        path = config_path()
     if path is None:
         print("The config file is switched off (PDFMD_CONFIG is empty).")
         return False
     if yaml is None:
         print("pdfmd --setup needs PyYAML (pip install pyyaml).", file=sys.stderr)
-        return False
-    if screen not in ("", "plain", "fancy"):
-        print(f"--setup takes plain or fancy, not {screen!r}.", file=sys.stderr)
         return False
     import copy
     metadata_path = path.with_name("metadata.yaml")
@@ -7927,8 +7961,10 @@ def setup_command(screen: str = "") -> bool:
             stores[name] = loaded if isinstance(loaded, dict) else {}
     original = copy.deepcopy(stores)
     shown_path = str(path) if metadata_path.name == "metadata.yaml" else f"{path}  (global metadata rows: {metadata_path.parent.name}/{metadata_path.name})"
+    if folder is not None:
+        shown_path = f"the settings of {display_path(folder.resolve())} and every folder under it  ({display_path(path)})"
     saved = module.run(stores, NO_AUTO_KINDS, shown_path, screen or None, flag_names=flag_names(),
-                       flag_topics=flag_topics())
+                       flag_topics=flag_topics(), folder=folder is not None)
     if not saved:
         print("Nothing saved.")
         return True
@@ -7940,9 +7976,10 @@ def setup_command(screen: str = "") -> bool:
             continue
         try:
             file.parent.mkdir(parents=True, exist_ok=True)
-            header = SETUP_HEADER if name == "config" else METADATA_HEADER
+            header = ((FOLDER_HEADER if name == "config" else FOLDER_METADATA_HEADER) if folder is not None
+                      else SETUP_HEADER if name == "config" else METADATA_HEADER)
             hand_written = [line for line in texts[name].splitlines() if line.lstrip().startswith("#")
-                            and not line.startswith(header.splitlines()[0])]
+                            and line not in header.splitlines()]       # (v3.29.29: the header's second line counted, a .bak every save)
             if hand_written:
                 backup = file.with_name(file.name + ".bak")
                 backup.write_text(texts[name], encoding="utf-8")
@@ -7952,11 +7989,17 @@ def setup_command(screen: str = "") -> bool:
                                                                default_flow_style=False), encoding="utf-8")
             elif file.exists():
                 file.unlink()
+                if folder is not None:
+                    try:
+                        file.parent.rmdir()              # the folder's own .pdfmd, when nothing else is in it
+                    except OSError:
+                        pass
         except OSError as error:
             print(f"Could not write {file}: {error}", file=sys.stderr)
             return False
-        print(f"Saved {file}")
+        print(f"{'Removed' if not stores[name] else 'Saved'} {file}")
     load_config.cache_clear()
+    folder_walk.cache_clear()
     return True
 
 
@@ -10656,7 +10699,8 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
             value = words(top) if top is not None else None
         if value is not None:
             return words(value)
-    value = config_options().get("pdf-engine") or config_options().get("engine")
+    configured = config_options(md_path)
+    value = configured.get("pdf-engine") or configured.get("engine")
     return words(value) if value is not None else None
 
 
@@ -10702,7 +10746,7 @@ def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) 
         value = options.get("citation-engine") if isinstance(options, dict) else None
         if value is not None:
             return str(value).casefold()
-    value = config_options().get("citation-engine")
+    value = config_options(md_path).get("citation-engine")
     return str(value).casefold() if value is not None else None
 
 
@@ -13000,10 +13044,11 @@ def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
     in Pandoc too (v3.27.22). The list itself keeps the global file last (Pandoc runs in the folder of its first
     entry); what pdfmd reads out of the files itself follows this order too (metadata_files_by_priority)."""
     extra = next((path for path in metadata_files if is_global_metadata(path)), None)
-    local = [path for path in metadata_files if path != extra]
+    folders = [path for path in metadata_files if path != extra and is_folder_metadata(path)]       # nearest first
+    local = [path for path in metadata_files if path != extra and not is_folder_metadata(path)]
     if len(local) > 1 and metadata_precedence() == "first":
         local.reverse()
-    return [extra, *local] if extra is not None else local
+    return [*([extra] if extra is not None else []), *reversed(folders), *local]
 
 
 def metadata_files_by_priority(metadata_files) -> list[Path]:
@@ -13021,14 +13066,15 @@ def find_metadata(directory: Path, requested: list[str] | None, report: bool = F
     found automatically (not named with -y). It is the lowest in priority: pandoc_metadata_order gives it to Pandoc
     first."""
     found = find_local_metadata(directory, requested, report, document_class, document_stem)
-    extra = None
+    extra, folders = None, []
     if requested is None and found is not AUTO_METADATA_DISABLED:
         extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
-    if extra is None or found is AUTO_METADATA_DISABLED:
+        folders = folder_metadata_files(str(directory.resolve()))          # the folders' own, between the files and the global
+    if (extra is None and not folders) or found is AUTO_METADATA_DISABLED:
         return found
-    if found is None:
-        return extra
-    return [*(found if isinstance(found, list) else [found]), extra]
+    listed = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders,
+              *([extra] if extra is not None else [])]
+    return listed[0] if len(listed) == 1 else listed
 
 
 def find_local_metadata(directory: Path, requested: list[str] | None, report: bool = False,
@@ -13206,7 +13252,7 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
     for metadata_file in metadata_files_by_priority(metadata_files):
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
-    sources.append(config_options())
+    sources.append(config_options(md_path))
     for options in sources:
         if "parts" not in options:
             continue
@@ -15319,42 +15365,80 @@ FOLDER_SETTINGS = ".pdfmd/config.yaml"
 FOLDER_WARNED: set[str] = set()
 
 
+FOLDER_DIR = ".pdfmd"
+FOLDER_METADATA = ".pdfmd/metadata.yaml"
+MACHINE_KEYS = ("translit", "setup-ui", "disabled")
+
+
+def folder_file_data(path: Path):
+    """The mapping a folder's settings file holds ({} when it is empty), None when there is no such file, or it cannot be
+    used: belongs to another user, cannot be read, is not a mapping (each said once, with a WARN)."""
+    try:
+        if not path.is_file():
+            return None
+        if hasattr(os, "getuid") and path.stat().st_uid not in (os.getuid(), 0):
+            if str(path) not in FOLDER_WARNED:
+                FOLDER_WARNED.add(str(path))
+                print(f"WARN  {path}: belongs to another user; not read", file=sys.stderr)
+            return None
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        print(f"WARN  {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+        return None
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        print(f"WARN  {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
+        return None
+    return data
+
+
 @lru_cache(maxsize=None)
-def folder_layer_files(folder: str) -> tuple[tuple[str, dict], ...]:
-    """((path, options) ...) of the folder layers from `folder` up, nearest first (see FOLDER_SETTINGS)."""
+def folder_walk(folder: str) -> tuple[tuple[Path, dict | None, Path | None], ...]:
+    """((the .pdfmd folder, the mapping of its config.yaml or None, its metadata.yaml or None) ...) from `folder` up, nearest
+    first, for each folder that has one of the two files; a config that says `inherit: false` ends the walk (v3.29.29: the
+    metadata.yaml of a folder is a layer too)."""
     if yaml is None:
         return ()
-    found: list[tuple[str, dict]] = []
+    found: list[tuple[Path, dict | None, Path | None]] = []
     here = Path(folder)
     for candidate in (here, *here.parents):
-        path = candidate / FOLDER_SETTINGS
-        try:
-            if not path.is_file():
-                continue
-            if hasattr(os, "getuid") and path.stat().st_uid not in (os.getuid(), 0):
-                if str(path) not in FOLDER_WARNED:
-                    FOLDER_WARNED.add(str(path))
-                    print(f"WARN  {path}: belongs to another user; not read", file=sys.stderr)
-                continue
-            data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
-            print(f"WARN  {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+        directory = candidate / FOLDER_DIR
+        data = folder_file_data(directory / "config.yaml")
+        metadata = directory / "metadata.yaml"
+        if folder_file_data(metadata) is None:
+            metadata = None
+        if data is None and metadata is None:
             continue
-        if data is None:
-            data = {}
-        if not isinstance(data, dict):
-            print(f"WARN  {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
-            continue
-        machine = sorted(str(key) for key in data if key in ("translit", "setup-ui", "disabled"))
-        if machine and str(path) not in FOLDER_WARNED:
-            FOLDER_WARNED.add(str(path))
-            print(f"WARN  {path}: {', '.join(machine)} {'is' if len(machine) == 1 else 'are'} for this machine and "
-                  "cannot be set by a folder; ignored", file=sys.stderr)
-        options = data.get("options")
-        found.append((str(path), options if isinstance(options, dict) else {}))
-        if str(data.get("inherit", True)).strip().casefold() in ("false", "no", "off", "0"):
+        if data is not None:
+            machine = sorted(str(key) for key in data if key in MACHINE_KEYS)
+            if machine and str(directory / "config.yaml") not in FOLDER_WARNED:
+                FOLDER_WARNED.add(str(directory / "config.yaml"))
+                print(f"WARN  {directory / 'config.yaml'}: {', '.join(machine)} {'is' if len(machine) == 1 else 'are'} for this "
+                      "machine and cannot be set by a folder; ignored", file=sys.stderr)
+        found.append((directory, data, metadata))
+        if data is not None and str(data.get("inherit", True)).strip().casefold() in ("false", "no", "off", "0"):
             break
     return tuple(found)
+
+
+def folder_layer_files(folder: str) -> tuple[tuple[str, dict], ...]:
+    """((path, options) ...) of the folder layers from `folder` up, nearest first (see FOLDER_SETTINGS)."""
+    result = []
+    for directory, data, _ in folder_walk(folder):
+        if data is not None:
+            options = data.get("options")
+            result.append((str(directory / "config.yaml"), options if isinstance(options, dict) else {}))
+    return tuple(result)
+
+
+def folder_metadata_files(folder: str) -> list[Path]:
+    """The `.pdfmd/metadata.yaml` files of the folder layers from `folder` up, nearest first."""
+    return [metadata for _, _, metadata in folder_walk(folder) if metadata is not None]
+
+
+def is_folder_metadata(path) -> bool:
+    return Path(path).name == "metadata.yaml" and Path(path).parent.name == FOLDER_DIR
 
 
 def is_setup_layer(where: str) -> bool:
@@ -15382,7 +15466,7 @@ def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool 
         sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
     if with_config:
         sources.extend(folder_layers(md_path))
-        sources.append(("config", config_options()))
+        sources.append(("config", config_options()))              # this one is the global config alone: the folders' are above it
     return sources
 
 
@@ -17193,7 +17277,7 @@ def cache_location(md_path: Path, metadata_files: list[Path]) -> str:
         for metadata_file in metadata_files_by_priority(metadata_files):
             found = metadata_file_yaml(metadata_file).get("pdfmd-options")
             sources.append(found if isinstance(found, dict) else {})
-        sources.append(config_options())
+        sources.append(config_options(md_path))
         for options in sources:
             nested = options.get("cache")
             value = (nested.get("location") if isinstance(nested, dict) else None) or options.get("cache-location")
@@ -17308,7 +17392,7 @@ def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) 
     for metadata_file in metadata_files_by_priority(metadata_files):
         options = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append(options if isinstance(options, dict) else {})
-    sources.append(config_options())
+    sources.append(config_options(md_path))
     for options in sources:
         if "cache" not in options:
             continue
@@ -17708,7 +17792,7 @@ def seed_labels_mode(md_path: Path, metadata_files: list[Path]) -> str:
         for metadata_file in metadata_files_by_priority(metadata_files):
             options = metadata_file_yaml(metadata_file).get("pdfmd-options")
             sources.append(options if isinstance(options, dict) else {})
-        sources.append(config_options())
+        sources.append(config_options(md_path))
         for options in sources:
             if "seed-labels" in options:
                 value = options["seed-labels"]
@@ -23250,7 +23334,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "notes.md beside the text; with -o x.md that is all it does. Off unless asked")
     parser.add_argument("--setup", "--config", nargs="?", const="", metavar="SCREEN",
                         help="change pdfmd's global defaults from a menu (a numbered list; `--setup fancy` is the optional "
-                             "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file. --config is the same")
+                             "full-screen one, installed by `pdfmd --install tui`) instead of editing the config file. "
+                             "`--setup FOLDER` (or `.`) does it for that folder and every folder under it, in FOLDER/.pdfmd/. "
+                             "--config is the same")
     parser.add_argument("--doc", nargs="*", default=None, metavar="NAME",
                         help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog); --doc NAME "
                              "shows one (the Markdown when the output is not a terminal or with --print, else a web page it opens); "
