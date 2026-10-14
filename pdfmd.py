@@ -1375,7 +1375,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.27"
+PDFMD_VERSION = "3.29.28"
 import argparse
 import atexit
 import csv
@@ -5928,6 +5928,10 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
                 module.centre_tables(path)
             except (OSError, zipfile.BadZipFile, KeyError) as error:
                 print(f"WARN  could not centre the tables of {path.name} ({error})", file=sys.stderr)
+            try:
+                module.finish_markup(path)
+            except (OSError, zipfile.BadZipFile, KeyError) as error:
+                print(f"WARN  could not finish the markup of {path.name} ({error})", file=sys.stderr)
     return result
 
 

@@ -41,6 +41,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.28 — 2026-10-14
+
+Pre-edit state: commit `7e4777b` (v3.29.27).
+
+### Added
+
+- **Universal markup in Word: centred text, highlighted text, landscape pages** (`markup: [center, highlight, landscape]`; before, a
+  `.docx` kept the text and said so). Pandoc gives a style it does not find in the reference document no formatting at all and writes a raw
+  section break as it was written, so the filter (`pdfmd_lua/markup.lua`) marks the text (a Div with the style `PdfmdCenter`, a Span with
+  `PdfmdHighlight`, two marker paragraphs around a landscape block) and `pdfmd_office.finish_markup` finishes the file (every Word build,
+  the soffice route's too): `jc center` into `PdfmdCenter` and a yellow character shading into `PdfmdHighlight` (a style of that name that
+  the user's own reference document already formats is left alone; a shading, not `w:highlight`, because LibreOffice takes only that in
+  a style), and the markers into section breaks that carry the document's own last section: its paper size and margins, headers and
+  footers, the block's turned. A block at the very start or the very end of the document, and two blocks in a row, make no empty page; the
+  title page's own first page stays the first page's. OpenDocument and PowerPoint still keep the text, with the note once. Tests
+  (`tests/test_markup_word.py`): the section arithmetic on synthetic XML, and a real build drawn by LibreOffice whose pages are
+  portrait, landscape, portrait, all A4, with Pandoc 3.12 and 3.1.3. Not done: `keep` in Word (no keep-together for a run of blocks
+  without a style per block), centring, highlight and landscape in OpenDocument.
+
 ## v3.29.27 — 2026-10-14
 
 Pre-edit state: commit `a2c1509` (v3.29.26).

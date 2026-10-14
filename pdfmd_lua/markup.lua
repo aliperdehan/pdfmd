@@ -11,13 +11,14 @@
 --            (Word asks to update it when the file is opened), every other writer a list of links to the headings (to level 3).
 -- center     <center>...</center>, <div align="center">, <div style="text-align: center">, ::: center, and a raw \begin{center}...
 --            \end{center} (for the writers that are not LaTeX): LaTeX the center environment, Typst #align(center)[...], HTML and
---            EPUB a text-align div. Word and OpenDocument keep the text as it is and say so once (they have no centring to give a block).
+--            EPUB a text-align div, Word the style PdfmdCenter (centred; pdfmd_office writes that into the file). OpenDocument and
+--            PowerPoint keep the text as it is and say so once.
 -- keep       ::: keep (also nobreak, keep-together), a div with style="break-inside: avoid", a raw \begin{samepage}...\end{samepage}:
 --            the blocks stay on one page. LaTeX the samepage environment, Typst #block(breakable: false)[...], HTML a break-inside
 --            div; Word and OpenDocument keep the text with a note once.
 -- landscape  ::: landscape, a div with style="page: landscape", a raw \begin{landscape}...\end{landscape}: the blocks on landscape pages.
 --            LaTeX the landscape environment (pdfmd's header file loads pdflscape), Typst #page(flipped: true)[...], HTML a
---            named page; Word and OpenDocument keep the text with a note once.
+--            named page, Word two section breaks (the page setup of the document, turned); OpenDocument keeps the text with a note once.
 -- space      vertical space on a line of its own: \vspace{1cm}, \vspace*{..}, \smallskip, \medskip, \bigskip, <br> (each one an em), a raw
 --            #v(1cm): LaTeX \vspace{..}, Typst #v(..), HTML an empty div of that height, Word and OpenDocument empty paragraphs (a
 --            line each, about), the Markdown family keeps what was written.
@@ -29,7 +30,8 @@
 --            an inline one; Markdown-family writers keep the comment as it is; OpenDocument and PowerPoint drop it, with a note once.
 --            pdfmd's own markers (<!-- pdfmd: ... -->, <!-- pagebreak -->, <!-- toc -->, <!-- appendix -->) stay invisible.
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
---            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>; Word and OpenDocument keep the text, with a note once.
+--            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>, Word the character style PdfmdHighlight (yellow);
+--            OpenDocument keeps the text, with a note once.
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -213,8 +215,11 @@ local function make_center(blocks)
     out[#out + 1] = pandoc.RawBlock("typst", "]")
   elseif format:match("^html") or format:match("^epub") then
     out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {}, {{"style", "text-align: center"}}))
+  elseif format:match("^docx") then
+    -- a Word style of that name; pdfmd_office gives it `jc center` when it finishes the file
+    out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {}, {{"custom-style", "PdfmdCenter"}}))
   else
-    if not center_told and (format == "docx" or format == "odt" or format == "pptx") then
+    if not center_told and (format == "odt" or format == "pptx") then
       center_told = true
       io.stderr:write("NOTE  markup: centring is not applied to " .. format .. "; the text is kept as it is\n")
     end
@@ -288,8 +293,10 @@ local function marked(inlines)
     out[#out + 1] = pandoc.RawInline("html", "<mark>")
     out:extend(inlines)
     out[#out + 1] = pandoc.RawInline("html", "</mark>")
+  elseif format:match("^docx") then
+    out[#out + 1] = pandoc.Span(inlines, pandoc.Attr("", {}, {{"custom-style", "PdfmdHighlight"}}))
   else
-    if not highlight_told and (format == "docx" or format == "odt" or format == "pptx") then
+    if not highlight_told and (format == "odt" or format == "pptx") then
       highlight_told = true
       io.stderr:write("NOTE  markup: highlighting is not applied to " .. format .. "; the text is kept as it is\n")
     end
@@ -408,7 +415,13 @@ local function make_landscape(blocks)
   elseif (format:match("^html") or format:match("^epub")) and not no_named_pages then
     landscape_used = true
     out[#out + 1] = pandoc.Div(blocks, pandoc.Attr("", {"pdfmd-landscape"}, {}))
-  elseif no_named_pages or format == "docx" or format == "odt" or format == "pptx" then
+  elseif format:match("^docx") then
+    -- two section breaks, written with the document's real page setup when pdfmd_office finishes the file: one ends the
+    -- portrait pages before the block, one ends the landscape pages of the block
+    out[#out + 1] = pandoc.RawBlock("openxml", '<w:p><w:pPr><w:sectPr w:rsidR="00D0F001"/></w:pPr></w:p>')
+    out:extend(blocks)
+    out[#out + 1] = pandoc.RawBlock("openxml", '<w:p><w:pPr><w:sectPr w:rsidR="00D0F002"/></w:pPr></w:p>')
+  elseif no_named_pages or format == "odt" or format == "pptx" then
     if not landscape_told then
       landscape_told = true
       io.stderr:write("NOTE  markup: landscape pages are not made in " .. (no_named_pages and "this PDF engine" or format)

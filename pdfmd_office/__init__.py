@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from .docx import default_reference, patch_docx
 from . import fragments
-from .docx_post import centre_tables, finish_docx
+from .docx_post import centre_tables, finish_docx, finish_markup
 from .fonts import office_font
 from .fragments import labels_only
 from .labels import cref_names, caption_separator, parse_aux
@@ -26,5 +26,5 @@ def patch_reference(kind: str, data: bytes, spec: OfficeSpec, house: bool = True
     raise ValueError(f"no reference-document patching for {kind}")
 
 
-__all__ = ["finish_docx", "finish_properties", "centre_tables", "fragments", "labels_only", "caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
+__all__ = ["finish_docx", "finish_markup", "finish_properties", "centre_tables", "fragments", "labels_only", "caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
            "spec_from_metadata"]

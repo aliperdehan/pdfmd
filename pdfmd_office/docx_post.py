@@ -139,3 +139,135 @@ def finish_docx(path: Path) -> int:
             target.writestr(infos[name] if name in infos else name, data)
     temporary.replace(path)
     return count
+
+
+# ---- universal markup (v3.29.28): what pdfmd_lua/markup.lua marks in a Word file ----------------------------------------
+# Pandoc makes a style it does not find in the reference document (a Div or Span with `custom-style`) without any formatting
+# and an openxml section break as it was written. Both are finished here, for the reference document of the user's too. The highlight
+# is a character shading, not `w:highlight`: Word takes both in a style, LibreOffice only the shading.
+MARKUP_STYLES = {"PdfmdCenter": ("pPr", "jc", '<w:jc w:val="center"/>'),
+                 "PdfmdHighlight": ("rPr", "shd", '<w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/>')}
+PORTRAIT_MARK, LANDSCAPE_MARK = "00D0F001", "00D0F002"
+BREAK = r'<w:p><w:pPr><w:sectPr w:rsidR="%s"\s*(?:/>|></w:sectPr>)</w:pPr></w:p>'
+SECTION = re.compile(r"<w:sectPr\b[^>]*?(?:/>|>(.*?)</w:sectPr>)", re.S)
+LETTER = (12240, 15840)
+
+
+def style_markup(styles: str) -> tuple[str, int]:
+    """The formatting of the markup styles, written into the ones that have none (a style the user's reference document
+    defines with its own centring or highlight is left as it is)."""
+    changed = 0
+    for style_id, (container, tag, element) in MARKUP_STYLES.items():
+        found = re.search(r'<w:style\b[^>]*w:styleId="%s"[^>]*>.*?</w:style>' % style_id, styles, re.S)
+        if found is None or f"<w:{tag}" in found.group(0):
+            continue
+        block = found.group(0)
+        have = re.search(rf"<w:{container}>(.*?)</w:{container}>", block, re.S)
+        if have:
+            block = block[:have.start(1)] + element + have.group(1) + block[have.end(1):]
+        else:
+            block = block[:-len("</w:style>")] + f"<w:{container}>{element}</w:{container}></w:style>"
+        styles = styles[:found.start()] + block + styles[found.end():]
+        changed += 1
+    return styles, changed
+
+
+def final_section(document: str) -> re.Match | None:
+    """The `<w:sectPr>` of the whole body: the last one, after every paragraph."""
+    found = None
+    for found in SECTION.finditer(document):
+        pass
+    if found is None or "</w:p>" in document[found.end():]:
+        return None
+    return found
+
+
+def landscape_of(inner: str) -> str:
+    size = re.search(r"<w:pgSz\b[^>]*/>", inner)
+    if size is None:
+        return inner + '<w:pgSz w:w="%d" w:h="%d" w:orient="landscape"/>' % (LETTER[1], LETTER[0])
+    width, height = (re.search(rf'w:{name}="(\d+)"', size.group(0)) for name in ("w", "h"))
+    if not width or not height:
+        return inner
+    wide, high = max(int(width.group(1)), int(height.group(1))), min(int(width.group(1)), int(height.group(1)))
+    return inner[:size.start()] + f'<w:pgSz w:w="{wide}" w:h="{high}" w:orient="landscape"/>' + inner[size.end():]
+
+
+def portrait_of(inner: str) -> str:
+    size = re.search(r"<w:pgSz\b[^>]*/>", inner)
+    if size is None:
+        return inner + '<w:pgSz w:w="%d" w:h="%d"/>' % LETTER
+    return inner
+
+
+def sections_markup(document: str) -> tuple[str, int]:
+    """Each landscape block of the filter is two marker paragraphs; they become section breaks that carry the document's own
+    page setup (size, margins, headers and footers of its last section), the block's turned. A block at the very start or end
+    makes no empty page: the first or the last section takes the setting itself."""
+    portrait_break, landscape_break = BREAK % PORTRAIT_MARK, BREAK % LANDSCAPE_MARK
+    if PORTRAIT_MARK not in document and LANDSCAPE_MARK not in document:
+        return document, 0
+    document = re.sub(landscape_break + r"\s*" + portrait_break, "", document)         # two blocks in a row: one section
+    final = final_section(document)
+    inner = (final.group(1) or "") if final else ""
+    first_page = "<w:titlePg/>" in inner
+    inner = inner.replace("<w:titlePg/>", "")
+    inner = re.sub(r"<w:type\b[^>]*/>", "", inner)
+    portrait_inner, landscape_inner = portrait_of(inner), landscape_of(portrait_of(inner))
+    count = 0
+    ends_landscape = False
+    start = re.search(r"<w:body>\s*(" + portrait_break + ")", document)
+    if start:
+        document = document[:start.start(1)] + document[start.end(1):]
+    end = re.search("(" + landscape_break + r")\s*<w:sectPr\b", document)
+    if end and final is not None:
+        document = document[:end.start(1)] + document[end.end(1):]
+        ends_landscape = True
+    first = True
+
+    def section(kind_inner: str, mark: str) -> str:
+        nonlocal first
+        body = kind_inner + ("<w:titlePg/>" if first and first_page else "")
+        first = False
+        return f'<w:p><w:pPr><w:sectPr w:rsidR="{mark}">{body}</w:sectPr></w:pPr></w:p>'
+
+    def replace(match: re.Match) -> str:
+        nonlocal count
+        count += 1
+        return section(portrait_inner if PORTRAIT_MARK in match.group(0) else landscape_inner,
+                       PORTRAIT_MARK if PORTRAIT_MARK in match.group(0) else LANDSCAPE_MARK)
+
+    document = re.sub(r'<w:p><w:pPr><w:sectPr w:rsidR="(?:%s|%s)"\s*(?:/>|></w:sectPr>)</w:pPr></w:p>' % (PORTRAIT_MARK, LANDSCAPE_MARK),
+                      replace, document)
+    final = final_section(document)
+    if final is not None:
+        body = landscape_inner if ends_landscape else portrait_inner
+        if first_page and first:                       # no break kept: this is the first section
+            body += "<w:titlePg/>"
+        attrs = re.match(r"<w:sectPr\b[^>]*?(?=/?>)", final.group(0)).group(0)
+        document = document[:final.start()] + attrs + ">" + body + "</w:sectPr>" + document[final.end():]
+    return document, count + int(ends_landscape) + (1 if start else 0)
+
+
+def finish_markup(path: Path) -> int:
+    """Write the formatting of pdfmd's markup (centred text, highlighted text, landscape pages) into a Word file Pandoc made;
+    returns how many things changed. A file with none of it is not touched."""
+    with zipfile.ZipFile(path) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+        infos = {item.filename: item for item in archive.infolist()}
+    document = entries["word/document.xml"].decode("utf-8")
+    styles = entries["word/styles.xml"].decode("utf-8") if "word/styles.xml" in entries else ""
+    used = any(f'w:val="{name}"' in document for name in MARKUP_STYLES)
+    styles, styled = style_markup(styles) if used else (styles, 0)
+    document, sections = sections_markup(document)
+    if not styled and not sections:
+        return 0
+    entries["word/document.xml"] = document.encode("utf-8")
+    if styled:
+        entries["word/styles.xml"] = styles.encode("utf-8")
+    temporary = path.with_suffix(path.suffix + ".part")
+    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as target:
+        for name, data in entries.items():
+            target.writestr(infos[name] if name in infos else name, data)
+    temporary.replace(path)
+    return styled + sections

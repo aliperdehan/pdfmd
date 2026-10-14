@@ -83,11 +83,11 @@ class Filter(unittest.TestCase):
             self.assertIn(word, out)
         self.assertEqual(err, "")
 
-    def test_word_keeps_the_text_and_says_so_once(self):
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "docx", "-o", "/dev/null" if sys.platform != "win32" else "NUL",
+    def test_opendocument_keeps_the_text_and_says_so_once(self):
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "odt", "-o", "/dev/null" if sys.platform != "win32" else "NUL",
                                "--lua-filter", str(FILTER), "-M", "pdfmd-markup=center"], input=SOURCE, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stderr.count("centring is not applied to docx"), 1)
+        self.assertEqual(done.stderr.count("centring is not applied to odt"), 1)
 
     def test_only_when_the_kind_is_on(self):
         out, _ = convert("html5", enabled="toc")
