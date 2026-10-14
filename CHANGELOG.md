@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.35 — 2026-10-14
+
+Pre-edit state: commit `0fce452` (v3.29.34).
+
+### Fixed
+
+- **The Calibre workflow looks harder at its one failing test.** The first diagnostic (v3.29.27) found that Calibre's own `ebook-convert` gives a
+  small document its PDF bookmarks on Linux and on macOS (`pages 1 outline ['Introduction', 'Second section']`), while `tests.test_calibre.Builds.test_a_document`
+  (the same headings plus a formula, a table and `papersize: a4`, built through pdfmd) finds none on both runners (it passes on the author's Mac). A new step
+  builds that document through pdfmd in five variants (plain, with the formula, with the table, with the paper, all) and prints the bookmarks of
+  each, with pdfmd's `--verbose` output of the first and the last. It never fails the run. Nothing in pdfmd changed.
+
 ## v3.29.34 — 2026-10-14
 
 Pre-edit state: commit `7930027` (v3.29.33).

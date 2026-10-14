@@ -72,6 +72,28 @@ jobs:
           print("pages", len(reader.pages), "outline", [getattr(i, "title", i) for i in reader.outline])
           print("root keys", sorted(reader.trailer["/Root"].keys()))
           EOF2
+      - name: Which part of a document costs Calibre its PDF bookmarks (a look, never a failure)
+        continue-on-error: true
+        run: |
+          python - <<'EOF3'
+          import os, subprocess, sys, pypdf
+          base = "---\ntitle: Trial\n{paper}---\n\n# Introduction\n\nWords{math}.\n\n{table}# Second section\n\nMore words.\n"
+          parts = {"math": " and $E = mc^2$", "table": "| a | b |\n|---|---|\n| 1 | 2 |\n\n", "paper": "papersize: a4\n"}
+          for name, keep in (("plain", ()), ("math", ("math",)), ("table", ("table",)), ("paper", ("paper",)), ("all", tuple(parts))):
+              text = base.format(**{key: (value if key in keep else "") for key, value in parts.items()})
+              os.makedirs("probe-" + name, exist_ok=True)
+              open(f"probe-{name}/doc.md", "w", encoding="utf-8").write(text)
+              done = subprocess.run(["pdfmd", "doc.md", "-e", "calibre", "-o", "doc.pdf", "--verbose"], cwd="probe-" + name,
+                                    capture_output=True, text=True)
+              outline = []
+              try:
+                  outline = [getattr(item, "title", item) for item in pypdf.PdfReader(f"probe-{name}/doc.pdf").outline]
+              except Exception as error:
+                  outline = [f"unreadable: {error}"]
+              print(f"{name:6} rc={done.returncode} outline={outline}")
+              if name in ("plain", "all"):
+                  print((done.stdout + done.stderr)[-1800:])
+          EOF3
       - name: Ebooks out and in, the Markdown reader and the PDF route, against the real thing
         run: python -m unittest tests.test_calibre tests.test_calibre_targets tests.test_ebook_input tests.test_calibre_markdown tests.test_install_calibre -v
       - name: A page and an ebook with the installed Calibre
