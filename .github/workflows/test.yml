@@ -17,6 +17,8 @@ jobs:
     defaults:
       run:
         shell: bash         # same commands on all three systems
+    env:
+      GITHUB_TOKEN: ${{ github.token }}       # --install lists a release of GitHub's: without a token the runners' shared addresses hit the rate limit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

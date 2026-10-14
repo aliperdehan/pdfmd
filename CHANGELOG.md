@@ -41,6 +41,16 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.36 — 2026-10-14
+
+Pre-edit state: commit `bf7c82c` (v3.29.35).
+
+### Fixed
+
+- **The examples job of the CI gets a token for `pdfmd --install`'s release listing.** Its Tectonic step (v3.29.7) listed GitHub's releases without one, and the
+  runners' shared addresses hit the unauthenticated rate limit ("GitHub lists no Tectonic download for this machine"): it failed the macOS job of v3.29.35 twice,
+  and with it the publish (which waits for every test job), after passing before. The other install job already passed one. pdfmd itself is unchanged.
+
 ## v3.29.35 — 2026-10-14
 
 Pre-edit state: commit `0fce452` (v3.29.34).
