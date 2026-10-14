@@ -57,6 +57,21 @@ jobs:
           assert found, "pdfmd cannot find the Calibre it installed"
           print(found)
           EOF2
+      - name: What this Calibre does with a document's headings (a look, never a failure)
+        continue-on-error: true
+        run: |
+          printf -- '---\ntitle: Probe\n---\n\n# Introduction\n\nWords.\n\n# Second section\n\nMore.\n' > probe.md
+          pandoc probe.md -s --mathml -o probe.html
+          python - <<'EOF2'
+          import subprocess, pdfmd, pypdf
+          exe = pdfmd.resolve_calibre()
+          run = subprocess.run([exe, "probe.html", "probe.pdf", *pdfmd.CALIBRE_OPTIONS, "-vv"], capture_output=True, text=True)
+          print("exit", run.returncode)
+          print((run.stdout + run.stderr)[-3000:])
+          reader = pypdf.PdfReader("probe.pdf")
+          print("pages", len(reader.pages), "outline", [getattr(i, "title", i) for i in reader.outline])
+          print("root keys", sorted(reader.trailer["/Root"].keys()))
+          EOF2
       - name: Ebooks out and in, the Markdown reader and the PDF route, against the real thing
         run: python -m unittest tests.test_calibre tests.test_calibre_targets tests.test_ebook_input tests.test_calibre_markdown tests.test_install_calibre -v
       - name: A page and an ebook with the installed Calibre

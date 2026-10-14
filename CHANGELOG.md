@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.27 — 2026-10-14
+
+Pre-edit state: commit `a2c1509` (v3.29.26).
+
+### Fixed
+
+- **The Calibre workflow, a look at its one failure.** The first run with valid YAML (the CI of v3.29.24) passed everything on macOS and
+  on Linux but one test: `test_a_document` finds no PDF bookmarks in what Calibre wrote on Linux (it finds both headings on macOS, with
+  Pandoc 3.12 and with 3.1.3, so it is not the Pandoc the Linux runner installs). Nothing in pdfmd changed: the workflow gets a step
+  that builds a small page with the installed Calibre and prints Calibre's own `-vv` output, the page count and the bookmarks, so
+  the next run says where they go. It never fails the run.
+
 ## v3.29.26 — 2026-10-14
 
 Pre-edit state: commit `ce218e3` (v3.29.25).
