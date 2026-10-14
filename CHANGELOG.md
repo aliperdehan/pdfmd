@@ -41,6 +41,15 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.29.32 — 2026-10-14
+
+Pre-edit state: commit `b2f15dc` (v3.29.31).
+
+### Fixed
+
+- A test of the folder settings ran a whole build to see a warning of `folder_layer_files`; without Pandoc (a CI job with none) the build stops before
+  it. It asks `folder_layer_files` in the process now. Nothing else changed.
+
 ## v3.29.31 — 2026-10-14
 
 Pre-edit state: commit `386eab3` (v3.29.30).

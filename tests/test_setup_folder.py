@@ -3,6 +3,8 @@ the places a build reads them: between the document's metadata files and the glo
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -125,9 +127,11 @@ class Reading(Tree):
 
     def test_a_folder_cannot_set_what_is_the_machines(self):
         self.put("a", "config.yaml", "setup-ui: fancy\noptions:\n  fallback: char\n")
-        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), str(self.doc), "-o", str(self.root / "o.md"), "--to", "gfm"],
-                              capture_output=True, text=True, env={**os.environ, "PDFMD_NO_PROMPT": "1"})
-        self.assertIn("setup-ui is for this machine", done.stderr)
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            layers = pdfmd.folder_layer_files(str(self.doc.parent))
+        self.assertIn("setup-ui is for this machine", errors.getvalue())
+        self.assertEqual([options for _, options in layers], [{"fallback": "char"}])
 
 
 @unittest.skipUnless(yaml, "needs PyYAML")
