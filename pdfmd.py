@@ -1382,7 +1382,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.0"
+PDFMD_VERSION = "3.30.1"
 import argparse
 import atexit
 import csv
@@ -23034,6 +23034,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                            f"{'last full build does not know' if seeded else 'references to parts left out need'} "
                            "(approximate: a macro the document defines itself is not counted)")
     try:
+        stage_build = (BUILD["output"], list(BUILD["sources"]))      # the PDF this build is for (v3.30.1)
         built = _convert_one(md_path, out_dir, False, font, engines, variables, slide_level,
                              pandoc_options, metadata_file, tex_path, headers, target_format="latex",
                              from_format=from_format, no_auto=no_auto, verbose=verbose, debug=debug,
@@ -23043,6 +23044,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                              part_markers=bool((persistent or (label_scan is not None and label_scan.markers))
                                                and parts_inputs),
                              trust_embedded=trust_embedded, source_override=source_override)
+        BUILD["output"], BUILD["sources"] = stage_build[0], stage_build[1]   # the .tex stage recorded its own file
         if not built[1]:
             return built
         pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent

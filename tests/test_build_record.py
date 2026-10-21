@@ -132,3 +132,33 @@ class CommandLine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("lualatex"), "needs Pandoc and LuaLaTeX")
+class ClosingLineOfTheCacheRoute(unittest.TestCase):
+    """A build that goes through the cache folder (a part alone) names the PDF, not the .tex it made on the way (v3.30.1)."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-closing-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "report.md").write_text("---\ntitle: T\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")
+        (self.directory / "parts").mkdir()
+        (self.directory / "parts" / "10-first.md").write_text("# First\n\nText.\n", encoding="utf-8")
+        (self.directory / "parts" / "20-second.md").write_text("# Second\n\nMore.\n", encoding="utf-8")
+
+    def run_pdfmd(self, *arguments: str) -> str:
+        env = {**os.environ, "XDG_CACHE_HOME": str(self.directory / "cache")}          # the cache route, in a folder of its own
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#second", "--no-backup", "--cache", "-e",
+                               "lualatex", *arguments], cwd=self.directory, env=env, capture_output=True, text=True, encoding="utf-8")
+        return done.stdout + done.stderr
+
+    def test_the_line_ends_in_the_pdf_and_never_names_the_cache_folder(self):
+        out = self.run_pdfmd()
+        ok = [line for line in out.splitlines() if line.startswith("OK")]
+        self.assertEqual(len(ok), 1, out)
+        self.assertRegex(ok[0], r"^OK\s+report\.md > report\.second\.pdf\s+\(lualatex\)$")
+        self.assertTrue((self.directory / "report.second.pdf").exists())
+
+    def test_to_latex_still_names_the_tex(self):
+        out = self.run_pdfmd("--to", "latex")
+        self.assertRegex(out, r"OK\s+report\.md > report\.second\.tex")

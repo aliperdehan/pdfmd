@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.1 — 2026-10-21
+
+Pre-edit state: commit `5617970` (v3.30.0).
+
+### Fixed
+
+- **The closing line names the PDF, not the `.tex` the cache made on the way.** A build through the cache folder (a part alone, `report#second`, with `cache:` on,
+  as the lab reports have it) printed `OK    report.md > ~/.cache/pdfmd/b888f4388b-report/report.tex  (lualatex)` although the PDF was written beside the source:
+  the nested Markdown-to-`.tex` stage of `convert_via_cache()` recorded its own file as the build's output, and nothing put the PDF back. It is restored after the
+  stage, so the line is `OK    report.md > report.second.pdf  (lualatex)`; `--to latex` still names the `.tex`, and `--verbose` still shows the cache folder (the
+  `CMD` and `TEXDIRECT` lines). Tested with the cache route on, which fails without the fix (`tests/test_build_record.py`).
+
+---
+
 ## v3.30.0 — 2026-10-21
 
 Pre-edit state: commit `a030424` (v3.29.36).
