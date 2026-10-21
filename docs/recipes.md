@@ -121,6 +121,29 @@ Yours go in a `templates/` folder of the config folder (a folder, or one `.md` f
 (`pdfmd --init ~/templates/lab-sheet sheet-3`). `{{name}}`, `{{title}}`, `{{author}}`, `{{date}}` and `{{year}}` are
 filled in; nothing that exists is overwritten ([README](../README.md#start-from-a-template)).
 
+### 1.9 Turn the paragraph indent off (or on) for a stretch of text
+
+A fenced div with `indent=` sets the first-line indent of the paragraphs inside it and puts the document's own back at
+the closing `:::` (v3.30.0), so there is no "turn it back on" line to forget:
+
+```markdown
+Ordinary paragraph, indented as the document is.
+
+::: {indent=false}
+Titration 1: V = 20.60 - 0.00 = 20.60 mL.\
+C = 0.4179 * 50.00 / (100.09 * 500.0 * 0.02060) = 0.02027 M
+:::
+
+Indented again.
+```
+
+`indent=false` (also `no`, `off`, `0`), `indent=true` (1.5em) or a length (`2em`, `12pt`, `5mm`; a bare number is em);
+`::: noindent` and `::: {.noindent}` are the short forms of `indent=false`, `.indent` of `indent=true`. Divs nest, and the
+div's `#id` stays. LaTeX and Beamer set `\parindent` in a group, Typst a `first-line-indent` rule, HTML (and EPUB) a
+`text-indent` style on the div. Pandoc Markdown and GFM keep the div as written. Word, OpenDocument and the other formats
+have no per-block indent: the text stays, the setting is dropped, with a NOTE. The document's own indent is Pandoc's
+`indent: true` in the front matter (none is the default).
+
 ---
 
 ## 2. A project with a house style

@@ -41,6 +41,25 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.0 — 2026-10-21
+
+Pre-edit state: commit `a030424` (v3.29.36).
+
+### Added
+
+- **A paragraph indent for a stretch of text: `::: {indent=false}`.** A fenced div with `indent=` (`false`, `no`, `off`, `0`; `true`, which is 1.5em; or a
+  length: `2em`, `12pt`, `5mm`, a bare number is em), or the classes `.noindent` / `.indent`, sets the first-line indent of the paragraphs inside it and puts the
+  document's own back at the closing `:::`, so there is no "turn it back on" line to forget. Divs nest (the inner one wins, the outer comes back after it), and
+  the div's `#id` and other classes stay. The new `pdfmd_lua/indent.lua` does it per writer: LaTeX and Beamer set `\parindent` in a `\begingroup` ...
+  `\endgroup`, Typst a `first-line-indent` rule in a content block (not in a `#block`, where it did not reach a paragraph that followed another), HTML and
+  EPUB a `text-indent` style on the div. Pandoc Markdown, GFM and CommonMark keep the div as written; Word, OpenDocument and the rest have no per-block indent,
+  so the text stays and a NOTE says the setting was left out. A value that is not an indent is a WARN and changes nothing. The filter is added only for a
+  document (or one of its parts) that has such a div (`indent_filter_args()`, `INDENT_DIV_RE`); there is no switch, since the div is the opt-in. Found with the
+  calculations of a lab report, where the lines of arithmetic should not be indented but the prose between them should. New `tests/test_indent.py`: the
+  detection, every writer, and real PDFs measured with `pdftotext -bbox` (a plain document and a report in parts). `docs/recipes.md` 1.9.
+
+---
+
 ## v3.29.36 — 2026-10-14
 
 Pre-edit state: commit `bf7c82c` (v3.29.35).

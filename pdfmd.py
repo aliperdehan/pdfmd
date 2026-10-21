@@ -119,6 +119,13 @@ Header files and header-includes (v3.27.18):
     the code-wrapping header), where a shared preamble goes; the document's own last but for the packages header. An
     --include-in-header or `-M header-includes` of your own replaces them, as in Pandoc.
 
+Paragraph indent for a stretch of text (v3.30.0):
+    a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`)
+    sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
+    (pdfmd_lua/indent.lua, added by `indent_filter_args()` only for a document, or a part, that has such a div): LaTeX
+    and Beamer in a `\\begingroup` ... `\\endgroup`, Typst a `first-line-indent` rule, HTML a `text-indent` style; the
+    Markdown writers keep the div, the others drop the setting with a NOTE. docs/recipes.md 1.9.
+
 Page breaks (v3.27.13, off unless asked since v3.27.15):
     `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
     pdfmd --setup), `--pagebreak [KIND ...]` and `--no-pagebreak` add pdfmd_lua/pagebreak.lua to every Pandoc route,
@@ -1375,7 +1382,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.29.36"
+PDFMD_VERSION = "3.30.0"
 import argparse
 import atexit
 import csv
@@ -2740,6 +2747,31 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+
+
+# A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
+# `::: noindent`, `::: {.noindent}`, `::: indent`. pdfmd_lua/indent.lua does it for the target format and puts the
+# document's own indent back at the closing `:::`; the filter goes in only for a document that has such a div.
+INDENT_DIV_RE = re.compile(r"""^[ \t]*:{3,}[ \t]*(?:\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*(?:\.(?:no)?indent\b|\bindent[ \t]*=)"""
+                           r"""|(?:no)?indent[ \t]*$)""", re.MULTILINE)
+
+
+def contains_indent_div(md_path: Path) -> bool:
+    text = EMBED_BLOCK_RE.sub("", read_text_best_effort(md_path))
+    return bool(INDENT_DIV_RE.search(text))
+
+
+def indent_filter_args(sources: Path | list[Path]) -> list[str]:
+    """``--lua-filter indent.lua`` when a source has an `indent=` / `.noindent` div (see INDENT_DIV_RE)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not any(contains_indent_div(file) for file in files):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("indent")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -18694,6 +18726,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["-V", variable]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += indent_filter_args(md_path)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
@@ -19206,6 +19239,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
+            cmd += indent_filter_args(md_path)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
@@ -19677,6 +19711,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
+                cmd += indent_filter_args(all_inputs or md_path)
                 cmd += markup_filter_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
                 cmd += cover_filter_args(md_path, metadata_files)
@@ -19929,6 +19964,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
+                    cmd += indent_filter_args(all_inputs or md_path)
                     cmd += markup_filter_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
                     cmd += cover_filter_args(md_path, metadata_files)
@@ -24753,6 +24789,7 @@ def main() -> None:
                                                 args.self_contained, report_note)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
+                    cmd += indent_filter_args(files)
                     cmd += markup_filter_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
                     cmd += cover_filter_args(files, metadata_files)
@@ -24878,6 +24915,7 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_header_file)]
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
+                        cmd += indent_filter_args(files)
                         cmd += markup_filter_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
                         cmd += cover_filter_args(files, metadata_files)
