@@ -1382,7 +1382,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.1"
+PDFMD_VERSION = "3.30.2"
 import argparse
 import atexit
 import csv
@@ -2413,6 +2413,41 @@ def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
             raise SystemExit(f"{where}: pdfmd-options.csv.cut must be ends or head, not {option['cut']!r}")
         chosen["cut"] = cut
     return chosen
+
+
+# `tablekeep` for a Lua filter (v3.30.2): nulabreport.lua keeps a Markdown table of up to that many body rows on one page.
+# --table-keep N (reaching -j workers as PDFMD_TABLE_KEEP), else `pdfmd-options: {table-keep: N}` (the document, its
+# metadata files, the config: first one wins), else nothing, and the metadata's own `tablekeep:` or the filter's default
+# stands. N reaches Pandoc as -M, which wins over a metadata file; 0 means "let every table break".
+TABLE_KEEP_ENV = "PDFMD_TABLE_KEEP"
+
+
+def table_keep_count(value) -> int | None:
+    """A table-keep row count: a whole number, 0 included; None when it is not one."""
+    text = str(value).strip()
+    return int(text) if text.isdigit() else None
+
+
+def table_keep_argument(value: str) -> int:
+    found = table_keep_count(value)
+    if found is None:
+        raise argparse.ArgumentTypeError(f"{value!r}: a whole number of rows (0 lets every table break)")
+    return found
+
+
+def table_keep_metadata(md_path: Path | None, metadata_files: list[Path] = ()) -> list[str]:
+    """``["-M", "tablekeep=N"]`` when the command line or `pdfmd-options.table-keep` names N, else []."""
+    value = os.environ.get(TABLE_KEEP_ENV)
+    if value is None and md_path is not None:
+        value = first_pdfmd_option(md_path, list(metadata_files), "table-keep")
+    if value is None or str(value).strip() == "":
+        return []
+    found = table_keep_count(value)
+    if found is None:
+        where = display_path(md_path) if md_path is not None else "table-keep"
+        raise SystemExit(f"{where}: pdfmd-options.table-keep must be a whole number of rows (0 lets every table break), "
+                         f"not {value!r}")
+    return ["-M", f"tablekeep={found}"]
 
 
 def spreadsheet_args(files: list[Path]) -> list[str]:
@@ -18721,6 +18756,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["--metadata-file", str(metadata)]
             if partial:
                 cmd += PARTIAL_METADATA
+            cmd += table_keep_metadata(md_path, metadata_files)
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
@@ -19648,6 +19684,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--metadata-file", str(metadata)]
                 if partial:
                     cmd += PARTIAL_METADATA
+                cmd += table_keep_metadata(md_path, metadata_files)
                 pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
                 cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
@@ -19906,6 +19943,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--metadata-file", str(metadata)]
                     if partial:
                         cmd += PARTIAL_METADATA
+                    cmd += table_keep_metadata(md_path, metadata_files)
                     pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
                     cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
@@ -23672,6 +23710,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--csv-cols", type=csv_count_argument, default=None, metavar="N|all",
                         help="how many columns a `::: {.csv}` table shows when its div does not say (default 7). "
                              "Also `pdfmd-options: {csv: {cols: N}}`, or --setup")
+    parser.add_argument("--table-keep", type=table_keep_argument, default=None, metavar="N",
+                        help="keep a Markdown table of up to N body rows on one page, for a Lua filter that reads "
+                             "`tablekeep` (nulabreport.lua; 0 lets every table break). Also `pdfmd-options: "
+                             "{table-keep: N}`, or --setup")
     parser.add_argument("--table-numbers", metavar="1,3-4",
                         help="with --extract-tables: only these tables, by their position in the document "
                              "(1 is the first; ranges allowed); the others stay as they are, and --table-names "
@@ -24229,6 +24271,8 @@ def main() -> None:
     for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"])):
         if value is not None:
             os.environ[variable] = str(value)
+    if args.table_keep is not None:
+        os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
         if value is not None:
             os.environ[variable] = str(value)

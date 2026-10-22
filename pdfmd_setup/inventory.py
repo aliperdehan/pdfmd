@@ -79,7 +79,7 @@ FLAGS: dict[str, str | Omitted] = {
     "gfm_scripts": "options.gfm.scripts", "gfm_math": "options.gfm.math", "ascii_missing": "options.ascii.missing",
     "ascii_stdio": Omitted("internal", "pdfmd's own ASCII filter calls it"),
     "init_vscode": CMD, "extract_tables": CMD, "extract_inline_csv": CMD, "expand_tables": CMD,
-    "csv_rows": "options.csv.rows", "csv_cols": "options.csv.cols",
+    "csv_rows": "options.csv.rows", "csv_cols": "options.csv.cols", "table_keep": "options.table-keep",
     "table_numbers": RUN, "table_names": RUN, "tables_dir": RUN, "tables_inline": RUN, "dry_run": RUN,
     "line_numbers": "options.line-numbers", "no_code_wrap": "options.code-wrap",
     "apply_defaults": "options.apply-defaults", "hybrid": "options.hybrid",
@@ -131,7 +131,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "csl-fallback": "options.csl-fallback",
     "code-wrap": "options.code-wrap", "line-numbers": "options.line-numbers",
     "line-number-step": "options.line-number-step",
-    "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols",
+    "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols", "table-keep": "options.table-keep",
     "csv.cut": "options.csv.cut", "csv.delimiter": "options.csv.delimiter",
     "csv.header": Omitted("document", "the shape of a project's data: per table (header=), or a folder's metadata.yaml"),
     "csv.reader": Omitted("document", "the shape of a project's data: per table (reader=), or a folder's metadata.yaml"),
@@ -197,7 +197,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
-    "options.csv.": "tables", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
+    "options.csv.": "tables", "options.table-keep": "tables", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",
 }
 

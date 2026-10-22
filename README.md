@@ -1353,6 +1353,14 @@ Water,18.015,1.20
   (in the front matter, a metadata file, or the config, where `pdfmd --setup`
   sets rows, columns, the cut and the delimiter); a div's own attributes still win.
 
+**Keeping a short table on one page.** A Lua filter can read the metadata key `tablekeep` (the one in
+nulabreport, a lab-report package, keeps a Markdown table of up to that many body rows
+whole: it moves to the next page instead of splitting). pdfmd sets it for a run without touching the metadata file:
+`--table-keep N` (0 lets every table break), or `pdfmd-options: {table-keep: N}` in the front matter, a metadata file or the
+config (also in `pdfmd --setup`). The command line wins over `pdfmd-options`, which wins over a `tablekeep:` in the
+metadata. Without any of them nothing is passed, and the filter uses its own default. A filter that does not read
+`tablekeep` ignores it.
+
 This works for every output format.
 
 #### Turning tables into CSV blocks, and back

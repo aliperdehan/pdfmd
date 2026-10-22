@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.2 — 2026-10-22
+
+Pre-edit state: commit `814acf5` (v3.30.1).
+
+### Added
+
+- **`--table-keep N` and `pdfmd-options: {table-keep: N}`.** pdfmd passes `-M tablekeep=N` to Pandoc, for a Lua filter that keeps a short Markdown
+  table on one page (nulabreport.lua, v1.28.16: a table of up to `N` body rows moves to the next page whole instead of splitting; its built-in 10 was
+  hard-coded before). `0` lets every table break. Order: the command line (it reaches `-j` workers as `PDFMD_TABLE_KEEP`), then `pdfmd-options.table-keep`
+  (document, metadata files, config), then nothing: pdfmd passes no `-M`, and the metadata's own `tablekeep:` or the filter's default stands. Pandoc's `-M`
+  wins over a metadata file, so the option also overrides a `tablekeep:` there. A value that is not a whole number stops the run with a message naming the
+  file. It is set at all three places the command is built (PDF and the other outputs, the Office route). A row in `pdfmd --setup` (Tables), in the
+  folder screen too. A filter that does not read `tablekeep` ignores it. Tested through the full pipeline: the flag, the option, the metadata key and
+  their order, and a bad value.
+
+---
+
 ## v3.30.1 — 2026-10-21
 
 Pre-edit state: commit `5617970` (v3.30.0).
