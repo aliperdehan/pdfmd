@@ -6907,7 +6907,6 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
         return run(cmd)
     scratch = arguments.scratch
     target = context["target"]
-    note = context["note"]
     first = list(cmd)
     if output.suffix.lower() == ".pdf":
         # the first run only lists fragments: write the engine's own source format instead of building a PDF
@@ -12344,7 +12343,6 @@ def notes_to_entries(text: str, whole: bool = False) -> tuple[str, list]:
         kept: list[str] = []
         heading_at: int | None = None
         for raw in body.split("\n"):
-            probe = raw[len(indent):] if raw.startswith(indent) else raw
             own = (stamp_line_pattern(indent).match(raw)
                    or re.match(rf"^{re.escape(indent)}  - (?:Compiled|Restored)\b", raw))
             entry = note_entry(raw) if own else None
@@ -15066,6 +15064,7 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
         raise SystemExit(f"--section '{request}' names no heading")
     tiers = LOOKUP_TIERS if FUZZY_LOOKUP else LOOKUP_TIERS[:3]
     pool = list(headings)
+    pool_owner = None                                      # the heading the pool is inside, from the second name on
     for position, name in enumerate(names):
         last = position == len(names) - 1
         candidates = [heading for heading in pool if not last or level is None or heading.level == level]
@@ -15083,7 +15082,7 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
                                 for heading in candidates[:12])
             raise NoHeadingMatches(f"--section '{request}' matches no heading"
                              + (f" at level {level}" if last and level else "")
-                             + (f" under '{pool_owner.text}'" if position else "")
+                             + (f" under '{pool_owner.text}'" if pool_owner else "")
                              + f". Headings: {choices or 'none'}" + (" ..." if len(candidates) > 12 else ""))
         heading = candidates[found[0]]
         announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading or element")
