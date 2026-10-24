@@ -3250,8 +3250,9 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
 
 
 # -- A styled terminal reader: --to ansi and --view (v3.30.3) ---------------------------------------------------------
-# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code, links, lists, quotes, box-drawn
-# tables, all wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
+# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code (coloured by language), links, lists,
+# quotes, box-drawn tables (a cell may span columns and rows), display math stacked where it has fractions, roots or sums, all
+# wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
 # files, filters, citations, \ce and the other steps of a build apply as they do for any output; with no Pandoc, the
 # built-in parser's tree stands in. `--view` is `-o -` plus a pager (see terminal_view). The width, the colour choice and
 # OSC 8 links reach the builds (which may be child processes) as the environment variables below.
@@ -3284,8 +3285,9 @@ def ansi_colour_on() -> bool:
 
 def ansi_math(tex: str, display: bool) -> "list[list[tuple[str, str]]] | None":
     """A formula for pdfmd_ansi.render: lines of (text, kind) pieces from the math-as-text converter (MathText), kind ""
-    (upright), "i" (a variable) or "b" (bold). Level (a) only: Unicode Greek, operators, sub- and superscripts, `(a+b)/(c+d)`;
-    None when the converter cannot read it, and the TeX is shown as it was written."""
+    (upright), "i" (a variable) or "b" (bold): Unicode Greek, operators, sub- and superscripts, `(a+b)/(c+d)`; None when the
+    converter cannot read it, and the TeX is shown as it was written. This is the linear form; for `$$..$$` on its own the renderer
+    stacks fractions, roots and sums on several rows (pdfmd_ansi/mathbox.py) and sets every other piece of the formula with this."""
     from pdfmd_ansi.render import script
     try:
         lines = math_lines(tex, False)
