@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.constants": "none", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -84,7 +84,7 @@ FOLDER_OPTIONS = frozenset({
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels",
-    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.constants", "options.strict",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
@@ -424,6 +424,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "A block of calculation lines reads better flush left, so a `::: calc` div has no paragraph indent even when the "
                "document has one. Off gives it the document's own. An `indent=` on the div wins. On unless set to off. "
                "Per run: --calc-noindent / --no-calc-noindent.", "Calculations"),
+        text("options.calc.space", "Room above and below a ::: calc div",
+             "A length (0.75em, 6pt, 2mm; units pt, mm, cm, in, em) or off. The default 0.75em keeps a block of calculation lines "
+             "apart from the paragraphs around it (LaTeX, Typst and HTML). Empty: 0.75em. Per run: --calc-space.", "Calculations"),
+        choice("options.calc.align", "Alignment of a ::: calc div",
+               (("left", "flush left (the default)"), ("center", "centred")), "left",
+               "Centres the lines of a `::: calc` div. Per run: --calc-align.", "Calculations"),
         text("options.calc.constants", "A file of named values for the calculator",
              "A CSV file, columns name,value[,digits[,note]] (a header row is fine, # lines are skipped), read before the document: "
              "`t18` then works in `t18`{=4sf} and {subs}. Looked for beside the document and its metadata files. Empty: none. "

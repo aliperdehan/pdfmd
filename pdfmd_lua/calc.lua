@@ -544,6 +544,7 @@ end
 
 local DEFAULT_FMT = nil
 local AUTO_SUBS = false
+local SPACE, CENTER = nil, false                         -- pdfmd-calc-space / pdfmd-calc-align (3.30.14), see framed
 local NOINDENT = false                                  -- set from pdfmd-calc-noindent (3.30.9), see indent_for_div
 local STATEMENTS = {}          -- every statement, in document order (id = position)
 local NAMED = {}               -- name -> its statements, in order
@@ -1145,6 +1146,37 @@ local function attributes_of(div, classes)
   return attributes
 end
 
+-- Room above and below a finished calc div and, with `calc: {align: center}`, centred lines (3.30.14). Written for the writers
+-- that have a vertical space and an alignment of their own; Markdown, Word and the plain writers get the content as it is.
+local FRAMES = {latex = "latex", beamer = "latex", typst = "typst", html = "html", html4 = "html", html5 = "html", epub = "html",
+  epub2 = "html", epub3 = "html", revealjs = "html", slidy = "html", slideous = "html", s5 = "html", dzslides = "html",
+  chunkedhtml = "html"}
+
+local function framed(blocks)
+  local kind = FRAMES[FORMAT:lower():gsub("[+-].*$", "")]
+  if not kind or (not SPACE and not CENTER) then return blocks end
+  local out = pandoc.Blocks({})
+  if kind == "html" then
+    local style = ""
+    if SPACE then style = "padding-top: " .. SPACE .. "; padding-bottom: " .. SPACE .. ";" end
+    if CENTER then style = style .. (style ~= "" and " " or "") .. "text-align: center;" end
+    out:insert(pandoc.Div(blocks, pandoc.Attr("", {}, {style = style})))
+  elseif kind == "latex" then
+    if SPACE then out:insert(pandoc.RawBlock("latex", "\\par\\addvspace{" .. SPACE .. "}")) end
+    if CENTER then out:insert(pandoc.RawBlock("latex", "\\begingroup\\centering")) end
+    out:extend(blocks)
+    if CENTER then out:insert(pandoc.RawBlock("latex", "\\par\\endgroup")) end
+    if SPACE then out:insert(pandoc.RawBlock("latex", "\\par\\addvspace{" .. SPACE .. "}")) end
+  else
+    if SPACE then out:insert(pandoc.RawBlock("typst", "#v(" .. SPACE .. ", weak: true)")) end
+    if CENTER then out:insert(pandoc.RawBlock("typst", "#align(center)[")) end
+    out:extend(blocks)
+    if CENTER then out:insert(pandoc.RawBlock("typst", "]")) end
+    if SPACE then out:insert(pandoc.RawBlock("typst", "#v(" .. SPACE .. ", weak: true)")) end
+  end
+  return out
+end
+
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
   if div.classes:includes("hide") or div.classes:includes("hidden") then      -- `::: {.calc .hide}`: statements, nothing printed
@@ -1160,8 +1192,8 @@ calc_div = function(div)
   local attributes = attributes_of(div, classes)
   local extra = false
   for _ in pairs(attributes) do extra = true end
-  if div.identifier == "" and #classes == 0 and not extra then return content, false end
-  return pandoc.Div(content, pandoc.Attr(div.identifier, classes, attributes)), false
+  if div.identifier == "" and #classes == 0 and not extra then return framed(content), false end
+  return framed(pandoc.Blocks({pandoc.Div(content, pandoc.Attr(div.identifier, classes, attributes))})), false
 end
 
 return {{Pandoc = function(doc)
@@ -1177,6 +1209,11 @@ return {{Pandoc = function(doc)
   AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
   local noindent = doc.meta["pdfmd-calc-noindent"]
   NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
+  local space = doc.meta["pdfmd-calc-space"]
+  space = space and pandoc.utils.stringify(space):lower() or nil
+  SPACE = space and space:match("^[%d.]+%a%a$") and space or nil           -- 0.75em, 6pt: nothing else is written into raw output
+  local align = doc.meta["pdfmd-calc-align"]
+  CENTER = align ~= nil and pandoc.utils.stringify(align):lower() == "center"
   local constants = doc.meta["pdfmd-calc-constants"]
   local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
   for _, which in ipairs({1, 2}) do

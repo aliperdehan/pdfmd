@@ -817,10 +817,12 @@ pdfmd-options:
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
     noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
+    space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
+    align: left       # or center: the lines of a ::: calc div centred
     constants:        # a CSV of named values (name,value[,digits[,note]]), see 6
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-constants FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a

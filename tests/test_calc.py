@@ -73,7 +73,7 @@ class Detection(unittest.TestCase):
             marked.write_text("It is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(plain, []), [])
             self.assertEqual(pdfmd.calc_filter_args([plain, marked], []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-noindent=true",
-                                                                                    "--lua-filter", str(CALC_LUA)])
+                                                                                    "-M", "pdfmd-calc-space=0.75em", "--lua-filter", str(CALC_LUA)])
 
     def test_calc_off_in_the_options_or_a_metadata_file_leaves_the_span_alone(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -90,7 +90,8 @@ class Detection(unittest.TestCase):
             digits = Path(directory) / "digits.md"
             digits.write_text("---\npdfmd-options:\n  calc:\n    digits: 4sf\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(digits, []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-digits=4sf",
-                                                                   "-M", "pdfmd-calc-noindent=true", "--lua-filter", str(CALC_LUA)])
+                                                                   "-M", "pdfmd-calc-noindent=true", "-M", "pdfmd-calc-space=0.75em",
+                                                                   "--lua-filter", str(CALC_LUA)])
             on = Path(directory) / "on.md"
             on.write_text("---\npdfmd-options:\n  calc: on\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertIn("--lua-filter", pdfmd.calc_filter_args(on, []))
@@ -467,6 +468,52 @@ class Switches(unittest.TestCase):
         self.assertEqual(latex("--calc-noindent", header=off).count("\\begingroup"), 3)
         self.assertEqual(latex(env={"PDFMD_CALC_NOINDENT": "false"}).count("\\begingroup"), 2)
         self.assertEqual(latex("--no-calc").count("\\begingroup"), 2)                                               # no calculator: the explicit divs only
+
+    def test_a_calc_div_has_room_around_it_and_can_be_centred(self):
+        source = "---\ntitle: T\n---\n\nBefore.\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n\nAfter.\n"
+
+        def convert(target, *arguments, env=None, header=""):
+            (self.directory / "doc.md").write_text(source.replace("---\ntitle: T\n", "---\ntitle: T\n" + header, 1), encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", target, "--no-backup", "-o", "out." + target,
+                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                                  env={**os.environ, **(env or {})})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            return (self.directory / ("out." + target)).read_text(encoding="utf-8")
+        latex = convert("latex")
+        self.assertEqual(latex.count("\\par\\addvspace{0.75em}"), 2)                      # the default: above and below
+        self.assertLess(latex.find("Before."), latex.find("\\addvspace"))
+        self.assertLess(latex.find("x = 2 * 3 = 6"), latex.rfind("\\addvspace"))
+        self.assertLess(latex.rfind("\\addvspace"), latex.find("After."))
+        self.assertNotIn("\\centering", latex)                                              # left unless asked
+        centred = convert("latex", "--calc-align", "center", "--calc-space", "6pt")
+        self.assertEqual(centred.count("\\par\\addvspace{6pt}"), 2)
+        self.assertLess(centred.find("\\begingroup\\centering"), centred.find("x = 2 * 3 = 6"))
+        self.assertLess(centred.find("x = 2 * 3 = 6"), centred.find("\\par\\endgroup"))
+        self.assertNotIn("addvspace", convert("latex", "--calc-space", "off"))
+        self.assertNotIn("addvspace", convert("latex", header="pdfmd-options:\n  calc:\n    space: 0\n"))
+        self.assertIn("addvspace{2mm}", convert("latex", header="pdfmd-options:\n  calc:\n    space: 2mm\n    align: center\n"))
+        self.assertIn("\\centering", convert("latex", env={"PDFMD_CALC_ALIGN": "center"}))
+        typst = convert("typst", "--calc-align", "center")
+        self.assertEqual(typst.count("#v(0.75em, weak: true)"), 2)
+        self.assertLess(typst.find("#align(center)["), typst.find("x = 2"))
+        html = convert("html", "--calc-align", "center")
+        self.assertIn('style="padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;"', html)
+        self.assertNotIn("padding", convert("html", "--calc-space", "off"))
+
+    def test_a_bad_space_or_align_is_an_error_and_the_other_writers_get_nothing(self):
+        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n", encoding="utf-8")
+        for arguments in (("--calc-space", "big"), ("--calc-space", "3"), ("--calc-space", "2furlongs")):
+            with self.subTest(arguments=arguments):
+                done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", *arguments],
+                                      cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn("calc.space must be a length", done.stdout + done.stderr)
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "gfm", "--no-backup", "-o", "out.md"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "out.md").read_text(encoding="utf-8")
+        self.assertNotIn("addvspace", text)
+        self.assertNotIn("padding", text)
 
     def test_the_other_writers_get_no_indent_attribute_and_no_note(self):
         (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n", encoding="utf-8")

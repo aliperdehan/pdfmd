@@ -194,6 +194,9 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   `` `x`{=} ``. `qt(0.975, 18)`, `qnorm`, `pt`, `pnorm` are built in.
 - A `::: calc` div has no first-line indent, even in a document that indents (`calc: {noindent: false}` or `--no-calc-noindent` gives it
   the document's own; `indent=2em` on the div wins). Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
+- A `::: calc` div has `0.75em` of room above and below it (LaTeX, Typst and HTML; `calc: {space: 6pt}`, `--calc-space off` for none) and
+  its lines flush left (`calc: {align: center}` or `--calc-align center` centres them). The room joins the paragraph spacing around it
+  instead of adding to it, so two calc divs in a row are not twice as far apart.
 - `--no-calc` turns it off for a run, `pdfmd-options: {calc: off}` for a document or a folder, `pdfmd --setup` for everything.
   A span it cannot calculate keeps its text and prints one `WARN  calc:` with the reason.
 

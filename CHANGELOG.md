@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.14 — 2026-10-24
+
+Pre-edit state: commit `2c0b9a3` (v3.30.13).
+
+### Added
+
+- **Room around a `::: calc` div, and optional centring.** The block ran straight into the paragraphs above and below it. It has `0.75em`
+  of room on each side now (`calc: {space: 0.75em}`, `--calc-space LENGTH|off`, `PDFMD_CALC_SPACE`; pt, mm, cm, in or em; a `--setup` row):
+  `\par\addvspace{..}` for LaTeX and Beamer (it merges with the paragraph skip next to it instead of adding to it), `#v(.., weak: true)`
+  for Typst, vertical padding on a wrapping `<div>` for HTML and the other HTML writers. `calc: {align: center}` / `--calc-align center`
+  (left is the default; a `--setup` row) centres the lines: a `\begingroup\centering` group, `#align(center)[..]`, `text-align: center`.
+  Markdown, Word and the plain writers get the block as before. A hidden `::: {.calc .hide}` div has no room, as it prints nothing.
+- **Ctrl-C is one line.** An interrupted run printed a page of traceback. It prints `Interrupted (Ctrl-C).` and exits with status 130 now
+  (`main()` wraps `run_main()`); Pandoc and the engines get the signal from the terminal, and the temporary folders are removed.
+
+### Tests
+
+- `tests.test_calc.Switches.test_a_calc_div_has_room_around_it_and_can_be_centred`, `test_a_bad_space_or_align_is_an_error_and_the_other_writers_get_nothing`;
+  the exact argument lists now carry `pdfmd-calc-space=0.75em`; `tests.test_interrupt`.
+- Measured in a LuaLaTeX PDF: the gap between the paragraphs around a calc line grew by the room set (2 cm: +113 pt), and `align: center`
+  moved the block's left edge from the margin to the middle of the line.
+
 ## v3.30.13 — 2026-10-24
 
 Pre-edit state: commit `67e53d2` (v3.30.12).

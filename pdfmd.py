@@ -135,8 +135,8 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     unless they carry an {ans}; `code`{=calc} is `code`{=}. A `::: calc` div has no first-line
     indent (`calc: {noindent: true}`, the default; false gives it the document's own; an `indent=` on the div wins). Added by
     `calc_filter_args()` only for a document that has such a span or div. The settings are
-    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, noindent}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-noindent / --no-calc-noindent or --setup; round() sends an exact half to the
+    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, noindent, space, align}}` (`calc: off` is the short form), --calc /
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
     even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
@@ -1403,7 +1403,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.13"
+PDFMD_VERSION = "3.30.14"
 import argparse
 import atexit
 import csv
@@ -2840,10 +2840,10 @@ def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = 
 # An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
 # evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
 # text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
-# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent, constants}}` (the
+# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent, space, align, constants}}` (the
 # document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
-# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-noindent, --calc-constants (reaching -j workers as PDFMD_CALC,
-# PDFMD_CALC_DIGITS, PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_NOINDENT, PDFMD_CALC_CONSTANTS). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
+# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-noindent, --calc-space, --calc-align, --calc-constants (reaching -j workers as PDFMD_CALC,
+# PDFMD_CALC_DIGITS, PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_NOINDENT, PDFMD_CALC_SPACE, PDFMD_CALC_ALIGN, PDFMD_CALC_CONSTANTS). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
 # prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
 CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2}|calc)?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)"
@@ -2853,6 +2853,11 @@ CALC_DIGITS_ENV = "PDFMD_CALC_DIGITS"
 CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
 CALC_SUBS_ENV = "PDFMD_CALC_SUBS"
 CALC_NOINDENT_ENV = "PDFMD_CALC_NOINDENT"
+CALC_SPACE_ENV = "PDFMD_CALC_SPACE"
+CALC_ALIGN_ENV = "PDFMD_CALC_ALIGN"
+CALC_SPACE_DEFAULT = "0.75em"
+CALC_SPACE_RE = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:pt|mm|cm|in|em)$")
+CALC_ALIGNS = ("left", "center")
 CALC_CONSTANTS_ENV = "PDFMD_CALC_CONSTANTS"
 CALC_ROUNDS = ("even", "away")
 CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
@@ -2912,6 +2917,35 @@ def calc_noindent_on(md_path: Path, metadata_files: list[Path]) -> bool:
     if flag is None:
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.noindent must be true or false, not {value!r}")
     return flag
+
+
+def calc_space(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """`calc: {space: 0.75em}`: the room above and below a `::: calc` div (pt, mm, cm, in or em), 0.75em unless set; off, false or 0 gives none."""
+    value = os.environ.get(CALC_SPACE_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "space")
+    if value is None or value is True:
+        return CALC_SPACE_DEFAULT
+    text = str(value).strip().lower().replace(" ", "")
+    if value is False or text in ("", "off", "none", "false", "no", "0", "0.0"):
+        return None
+    if text in ("on", "true", "yes"):
+        return CALC_SPACE_DEFAULT
+    if not CALC_SPACE_RE.match(text):
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.space must be a length such as 0.75em or 6pt "
+                         f"(pt, mm, cm, in, em), or off, not {value!r}")
+    return text
+
+
+def calc_align(md_path: Path, metadata_files: list[Path]) -> str:
+    """`calc: {align: center}` centres the lines of a `::: calc` div; left (the default) leaves them flush left."""
+    value = os.environ.get(CALC_ALIGN_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "align")
+    text = str(value).strip().lower() if value is not None else "left"
+    if text not in CALC_ALIGNS:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.align must be left or center, not {value!r}")
+    return text
 
 
 def calc_constants_file(md_path: Path, metadata_files: list[Path]) -> Path | None:
@@ -3017,6 +3051,11 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
         arguments += ["-M", "pdfmd-calc-subs=true"]
     if calc_noindent_on(files[0], metadata_files):
         arguments += ["-M", "pdfmd-calc-noindent=true"]
+    space = calc_space(files[0], metadata_files)
+    if space:
+        arguments += ["-M", "pdfmd-calc-space=" + space]
+    if calc_align(files[0], metadata_files) == "center":
+        arguments += ["-M", "pdfmd-calc-align=center"]
     constants = calc_constants_file(files[0], metadata_files)
     if constants is not None:
         arguments += ["-M", "pdfmd-calc-constants=" + "\n".join(calc_constants_statements(constants))]
@@ -24285,6 +24324,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a `::: calc` div has no first-line indent, whatever the document does (the default; --no-calc-noindent "
                              "gives it the document's own). An `indent=` on the div wins. Also "
                              "`pdfmd-options: {calc: {noindent: false}}`, or --setup")
+    parser.add_argument("--calc-space", metavar="LENGTH", default=None,
+                        help="the room above and below a `::: calc` div: a length (0.75em, 6pt, 2mm; pt mm cm in em) or off. "
+                             "Default 0.75em. Also `pdfmd-options: {calc: {space: 0.75em}}`, or --setup")
+    parser.add_argument("--calc-align", choices=CALC_ALIGNS, default=None,
+                        help="the lines of a `::: calc` div flush left (the default) or centred. Also "
+                             "`pdfmd-options: {calc: {align: center}}`, or --setup")
     parser.add_argument("--calc-constants", metavar="FILE", default=None,
                         help="a CSV file of named values the calculator knows before the document starts (columns "
                              "name,value[,digits[,note]]), looked for beside the document and its metadata files. Also "
@@ -24744,6 +24789,20 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 
 
 def main() -> None:
+    """The command: Ctrl-C ends it with one line and the usual exit status 130, not a traceback (v3.30.14). Pandoc and the
+    engines are in the same terminal group and get the signal too; the temporary folders are removed on the way out."""
+    try:
+        run_main()
+    except KeyboardInterrupt:
+        try:
+            sys.stderr.write("\nInterrupted (Ctrl-C).\n")
+            sys.stderr.flush()
+        except OSError:
+            pass
+        raise SystemExit(130) from None
+
+
+def run_main() -> None:
     parser, hidden = command_line_parser()
     args, pandoc_options = parser.parse_known_args()
     refuse_disabled(args, hidden, parser)
@@ -24873,6 +24932,10 @@ def main() -> None:
         os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
     if args.calc_noindent is not None:
         os.environ[CALC_NOINDENT_ENV] = "true" if args.calc_noindent else "false"
+    if args.calc_space is not None:
+        os.environ[CALC_SPACE_ENV] = args.calc_space
+    if args.calc_align is not None:
+        os.environ[CALC_ALIGN_ENV] = args.calc_align
     if args.calc_constants is not None:
         os.environ[CALC_CONSTANTS_ENV] = args.calc_constants
     if args.table_keep is not None:
