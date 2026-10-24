@@ -373,11 +373,13 @@ Mass,0.18
 :::
 ````
 
-The data comes from `file=` or from inside the block (with both, the file is used); the delimiter is guessed
+The data comes from `file=` or from inside the block (with both, the file is used); data without any attribute may use the
+bare `::: csv` (`file=` and `align=` need the braces; `::: csvfile` and `::: csv-x` are other classes); the delimiter is guessed
 (`delimiter=";"` or `semicolon`, `tab` ...); `align="lcr"` and `widths` are optional; the first row is the header unless
 `header="false"`. A large file is capped at 10 rows by 7 columns, and the PDF says so: `rows=all` or `cols=20` raise the
 cap, `--csv-rows all` or `pdfmd-options: {csv: {rows: all, cols: 12}}` (also in `pdfmd --setup`) for every table. Cells are Pandoc Markdown (`H~2~O`, `$x^2$`, `\ce{...}`, `[@key]`). A caption is `caption="..."` in the braces or the
-line `: Caption {#tbl:id}` after the block. This works for every output format. A table whose lines run long gets its
+line `: Caption {#tbl:id}` after the block. `pdfmd-options: {csv: off}` (or `--no-csv` for a run) leaves every `.csv` div as written, a
+plain div with its text, for a document that shows CSV lines as text; `csv: {rows: 30}` as a mapping keeps the tables. This works for every output format. A table whose lines run long gets its
 columns sized by content automatically (`--no-auto tablewidth` to stop).
 
 ### 4.2 Turn the tables you already have into CSV files
