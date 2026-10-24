@@ -109,7 +109,6 @@ class Trailer(unittest.TestCase):
             keep.find(text.replace("pdfmd-source 1", "pdfmd-source 99"))
 
 
-@needs_pandoc(3, 1, 3)
 class LineEnds(unittest.TestCase):
     """A file whose line ends were converted still carries its source: Pandoc writes CRLF on Windows, and git (autocrlf) or an editor
     converts a checked-out file."""
@@ -139,6 +138,7 @@ class LineEnds(unittest.TestCase):
         self.assertEqual(keep.digest("a\r\nb\r\n"), keep.digest("a\nb\n"))
 
 
+@needs_pandoc(3, 1, 3)
 class CommandLine(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-keep-"))
