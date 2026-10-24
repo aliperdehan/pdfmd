@@ -200,7 +200,9 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
 - `ppm = C * V = {subs} = {ans:2dp}` prints the expression with the numbers put in (`0.002039 * 34.41`), each in the digits its name
   was defined with; the computation keeps the full values. `calc: {subs: true}` does it before every `{ans}`, `{nosubs}` stops it on a line.
 - A dozen definitions at once: a ```` ```{=calc} ```` block (or ```` ```{=} ````, or `::: {.calc .hide}`), one `name = value` per line, nothing
-  printed for them; or `calc: {constants: tables/constants.csv}` with the columns `name,value[,digits[,note]]`. `` `x`{=calc} `` is
+  printed for them; or `calc: {constants: tables/constants.csv}` with the columns `name,value[,digits[,note]]`
+  (`calc: {export: tables/results.csv}` or `--calc-export FILE` writes the names after a build in that same format: the value of each
+  name's last definition, sorted, a file `constants` can read back). `` `x`{=calc} `` is
   `` `x`{=} ``. `qt(0.975, 18)`, `qnorm`, `pt`, `pnorm` are built in, and so are `mean(a, b, c)`, `sd`, `rsd` (percent), `ci(0.95, ...)`,
   `gstat` and `gcrit(n, 0.05)` (3.30.20): `They are ~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower`.
 - The values of a few names as a table, for the results or an appendix: `::: calc-table`, a line `t# tinf`, and `:::` (`*` any run of

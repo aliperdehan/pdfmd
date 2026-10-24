@@ -831,6 +831,21 @@ source, even when only a metadata file names it, and `pdfmd --restore` puts it b
 defines the same name again gets the usual WARN. Statistics: `qt(0.975, 18)` is also built in (see the functions below), so a
 constant that a function gives needs no file.
 
+The mirror of that file is the export: `calc: {export: tables/results.csv}` (or `--calc-export FILE`, `PDFMD_CALC_EXPORT` for `-j` workers)
+writes the names of the calculator after a build that evaluated some, one row per name with the value of its **last** definition at
+full precision (`%.17g`) and its digits (`4sf`, `2dp`, or empty), sorted by name:
+
+```csv
+name,value,digits
+V,11.82,2dp
+n,0.86749999999999972,3sf
+```
+
+It is read back by `constants` as it is (that is the format), so the results of one report can be the inputs of the next. It is an
+output, written beside the document unless the path is absolute, replaced whole (never half-written), and it does not travel with
+`--attach-source`; a value that is not a finite number is left out. A part built alone writes it only with the names from the parts
+above it in (`seed-calc`, see below); otherwise a NOTE says it was not written.
+
 **Digits.** `{ans:4sf}` four significant figures (trailing zeros kept: 20.60, 0.02027; the digits before the point are never
 dropped, 1049 at 3sf is 1049), `{ans:2dp}` two decimal places (digits after the point: burette volumes). After a span a format
 works as well: `` `1/3`{=3sf} `` is 0.333. Without any format a value prints as R does: up to 7 figures, `20` and not `20.0`.
@@ -868,9 +883,10 @@ pdfmd-options:
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
     align: left       # or center: the lines of a ::: calc div centred
     constants:        # a CSV of named values (name,value[,digits[,note]]), see 6
+    export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a

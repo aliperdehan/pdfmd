@@ -2949,10 +2949,10 @@ def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = 
 # An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
 # evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
 # text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
-# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent, space, align, constants}}` (the
+# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent, space, align, constants, export}}` (the
 # document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
-# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-noindent, --calc-space, --calc-align, --calc-constants (reaching -j workers as PDFMD_CALC,
-# PDFMD_CALC_DIGITS, PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_NOINDENT, PDFMD_CALC_SPACE, PDFMD_CALC_ALIGN, PDFMD_CALC_CONSTANTS). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
+# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-noindent, --calc-space, --calc-align, --calc-constants, --calc-export (reaching -j workers as PDFMD_CALC,
+# PDFMD_CALC_DIGITS, PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_NOINDENT, PDFMD_CALC_SPACE, PDFMD_CALC_ALIGN, PDFMD_CALC_CONSTANTS, PDFMD_CALC_EXPORT). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
 # prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
 CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2}|calc)?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)"
@@ -2968,6 +2968,8 @@ CALC_SPACE_DEFAULT = "0.75em"
 CALC_SPACE_RE = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:pt|mm|cm|in|em)$")
 CALC_ALIGNS = ("left", "center")
 CALC_CONSTANTS_ENV = "PDFMD_CALC_CONSTANTS"
+CALC_EXPORT_ENV = "PDFMD_CALC_EXPORT"
+CALC_DUMP: Path | None = None               # where this build's calc.lua writes its names, when the document exports them (set around one build)
 CALC_SEED: Path | None = None              # the names of the parts before a part built alone (build_calc_seed; set around one build)
 CALC_ROUNDS = ("even", "away")
 CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
@@ -3074,6 +3076,36 @@ def calc_constants_file(md_path: Path, metadata_files: list[Path]) -> Path | Non
                      f"and its metadata files)")
 
 
+def calc_export_file(md_path: Path, metadata_files: list[Path]) -> Path | None:
+    """`calc: {export: FILE}` / --calc-export: the CSV the build writes with the calculator's names (the mirror of
+    `constants`), a relative name beside the document. None when nothing asks for one."""
+    value = os.environ.get(CALC_EXPORT_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "export")
+    if value is None or str(value).strip().casefold() in ("", "none", "off", "false"):
+        return None
+    name = Path(os.path.expanduser(str(value).strip()))
+    return name if name.is_absolute() else md_path.parent / name
+
+
+def write_calc_export(dump: str, target: Path) -> int:
+    """`name,value,digits` from the text of calc.lua's dump (name TAB value TAB digits, value at %.17g), sorted by name, written
+    atomically: the format `calc_constants_statements()` reads back, so the file is a constants file as it is. A value that is not a
+    finite number has no form a constants file could hold and is left out. The number of names written (0: no file)."""
+    rows = []
+    for line in dump.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 2 or not fields[0] or fields[1] in ("nan", "inf", "-inf"):
+            continue
+        rows.append((fields[0], fields[1], fields[2] if len(fields) > 2 else ""))
+    if not rows:
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(target, "name,value,digits\n" + "".join(f"{name},{value},{digits}\n" for name, value, digits in sorted(rows)),
+                      newline="\n")
+    return len(rows)
+
+
 def calc_constants_statements(path: Path) -> list[str]:
     """The lines `name = value` (or `name = value = {ans:4sf}` with a digits column) of a constants file: columns
     name,value[,digits[,note]], comma, semicolon or tab separated, an optional header row, # lines and blank lines skipped."""
@@ -3172,6 +3204,8 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
         arguments += ["-M", "pdfmd-calc-constants=" + "\n".join(calc_constants_statements(constants))]
     if CALC_SEED is not None and not BUILD.get("scanning"):
         arguments += ["-M", "pdfmd-calc-seed=" + str(CALC_SEED)]
+    if CALC_DUMP is not None and not BUILD.get("scanning"):
+        arguments += ["-M", "pdfmd-calc-dump=" + str(CALC_DUMP)]
     return arguments + ["--lua-filter", str(shipped)]
 
 
@@ -17538,6 +17572,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         found, outside_files = bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
                                             plan.output or (base / "_assembled.md"), [], base)
         add_calc_constants(first, plan.metadata_files, base, represented, found, outside_files)
+        drop_calc_export(first, list(plan.sources), plan.metadata_files, found, outside_files)
         limit = float(option_flag_number(first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
                       or BUNDLE_MAX_MB) * 1024 * 1024
         if sum(item.stat().st_size for item in found) > limit:
@@ -21508,6 +21543,27 @@ def bundle_reach(base: Path) -> Path | None:
     return reach
 
 
+def drop_calc_export(md_path: Path, sources: list[Path], metadata_files: list[Path], found: list[Path], outside: list) -> None:
+    """The file `calc: {export: FILE}` writes is an output: it does not go with the source (v3.30.22), though its name stands in the
+    front matter and the file is there. It stays when it is also read: it is the constants file, or the body of the document
+    names it (a `.csv` div reading last time's results)."""
+    target = calc_export_file(md_path, metadata_files)
+    if target is None:
+        return
+    target = Path(os.path.abspath(target))
+    try:
+        constants = calc_constants_file(md_path, metadata_files)
+    except SystemExit:
+        constants = None
+    if constants is not None and Path(os.path.abspath(constants)) == target:
+        return
+    for source in sources:
+        if target.name in LEADING_FRONT_MATTER_RE.sub("", read_text_best_effort(source), count=1):
+            return
+    found[:] = [item for item in found if Path(os.path.abspath(item)) != target]
+    outside[:] = [item for item in outside if Path(os.path.abspath(str(item))) != target]
+
+
 def add_calc_constants(md_path: Path, metadata_files: list[Path], base: Path, represented: set[Path],
                        found: list[Path], outside: list[str]) -> None:
     """The calculator's constants file (`calc: {constants: FILE}`) goes with the source like the history file (v3.30.12): a name
@@ -21916,6 +21972,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
                                       manifest["data_files"], base, pictures, bundle_reach(base))
         add_calc_constants(md_path, metadata_files, base, represented, found, outside)
+        drop_calc_export(md_path, [md_path, *parts], metadata_files, found, outside)
         up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
                                                     for item in found if not item.is_relative_to(base))), 0) \
             if any(not item.is_relative_to(base) for item in found) else 0
@@ -23811,7 +23868,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
     gets it, including any added later.
     """
-    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED, CALC_SEED
+    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED, CALC_SEED, CALC_DUMP
     LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED = 0, False, False, 0
     metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     scratch = None
@@ -23867,6 +23924,16 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             seed_file, calc_names = build_calc_seed(md_path, metadata_list, [md_path, *(extra_inputs or [])], sources,
                                                     Path(calc_scratch.name), from_format, verbose)
             CALC_SEED = seed_file
+    export_target = calc_export_file(md_path, metadata_list) if target_format != ASSEMBLED_FORMAT else None
+    export_scratch = None
+    if export_target is not None:
+        if (partial or source_override is not None) and selection is None and CALC_SEED is None:
+            print(f"NOTE  calc: {display_path(export_target)} is not written for a part built alone with no names from the parts "
+                  "above it (seed-calc is off, or nothing stands above it)", file=sys.stderr)
+            export_target = None
+        else:
+            export_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-calc-export-")
+            CALC_DUMP = Path(export_scratch.name) / "names.tsv"
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
@@ -23879,10 +23946,24 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                               label_scan=label_scan, selection=selection)
     finally:
         CALC_SEED = None
+        dump_text = ""
+        if CALC_DUMP is not None and CALC_DUMP.is_file():
+            dump_text = CALC_DUMP.read_text(encoding="utf-8", errors="replace")
+        CALC_DUMP = None
+        if export_scratch is not None:
+            export_scratch.cleanup()
         if scratch is not None:
             scratch.cleanup()
         if calc_scratch is not None:
             calc_scratch.cleanup()
+    if result[1] and export_target is not None and dump_text:
+        try:
+            written = write_calc_export(dump_text, export_target)
+        except OSError as error:
+            print(f"WARN  calc: could not write {display_path(export_target)} ({error})", file=sys.stderr)
+        else:
+            if written:
+                print(f"CALC  {written} name{'s' if written != 1 else ''} written to {display_path(export_target)}")
     if result[1] and calc_names:
         print(f"NOTE  calc: {calc_names} names taken from {calc_from} (evaluated, not typeset)")
     if result[1] and target_format != ASSEMBLED_FORMAT:
@@ -24778,6 +24859,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a CSV file of named values the calculator knows before the document starts (columns "
                              "name,value[,digits[,note]]), looked for beside the document and its metadata files. Also "
                              "`pdfmd-options: {calc: {constants: tables/constants.csv}}`, or --setup")
+    parser.add_argument("--calc-export", metavar="FILE", default=None,
+                        help="after a build, write the calculator's names to this CSV (name,value,digits; the value of the last "
+                             "definition of each name, at full precision), beside the document unless the path is absolute: "
+                             "the mirror of --calc-constants, and a file it can read back. Also "
+                             "`pdfmd-options: {calc: {export: results.csv}}`, or --setup")
     parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
@@ -25390,6 +25476,8 @@ def run_main() -> None:
         os.environ[CALC_ALIGN_ENV] = args.calc_align
     if args.calc_constants is not None:
         os.environ[CALC_CONSTANTS_ENV] = args.calc_constants
+    if args.calc_export is not None:
+        os.environ[CALC_EXPORT_ENV] = args.calc_export
     if args.table_keep is not None:
         os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
