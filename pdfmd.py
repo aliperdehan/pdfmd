@@ -2237,6 +2237,7 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         import pdfmd_lua
         shipped, header = pdfmd_lua.path("code"), pdfmd_lua.FILTERS / "code_wrap.tex"
     except ImportError:
+        pdfmd_lua_missing()
         return []
     if shipped is None or not any(has_code_block(read_text_best_effort(source)) for source in sources):
         return []
@@ -2715,6 +2716,7 @@ def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("markup")
     return ["-M", "pdfmd-markup=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
@@ -2801,6 +2803,7 @@ def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("cover")
     if shipped is None:
@@ -2856,6 +2859,7 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
@@ -2888,6 +2892,7 @@ def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = 
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("indent")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -3015,6 +3020,7 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("calc")
     if shipped is None:
@@ -3051,6 +3057,7 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("title_meta")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -3112,6 +3119,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         import pdfmd_lua
         raw_filter, pdf_filter = pdfmd_lua.path("raw"), pdfmd_lua.path("pdf_images")
     except ImportError:
+        pdfmd_lua_missing()
         return []
     files = sources if isinstance(sources, list) else [sources]
     table = (resolve_raw(files[0], metadata_files, flat=flat_pictures is not None or flat_text)
@@ -9480,19 +9488,40 @@ def trust_lua(paths: list[Path]) -> bool:
     return complete
 
 
+PDFMD_LUA_WARNED: set[str] = set()
+
+
+def pdfmd_lua_missing(name: str = "") -> None:
+    """One WARN per run: pdfmd's own Lua filters (the package pdfmd_lua, or one file of it) are not there, so what they do is
+    skipped. A lone copy of pdfmd.py has no pdfmd_lua; so does a checkout with the folder deleted."""
+    key = name or "package"
+    if key in PDFMD_LUA_WARNED:
+        return
+    PDFMD_LUA_WARNED.add(key)
+    what = (f"pdfmd_lua/{name}.lua is missing from the pdfmd_lua package" if name
+            else "the pdfmd_lua package is not installed beside pdfmd.py")
+    print(f"WARN  lua: {what}, so pdfmd's own Lua filters do nothing in this run (tables sized by content, CSV tables, "
+          "calculations, indents, page breaks, markup ...). Install pdfmd-cli (`pipx install pdfmd-cli`) or keep the pdfmd_* "
+          "folders of the repository beside pdfmd.py", file=sys.stderr)
+
+
 @contextmanager
 def lua_filter_file(name: str, prefix: str) -> Iterator[Path]:
     """The path of pdfmd's own Lua filter `name` (pdfmd_lua/NAME.lua) for --lua-filter.
 
-    Without the pdfmd_lua package (a lone copy of this script) a filter that does nothing is
-    written to a temporary file instead, so the callers need no special case.
+    Without the pdfmd_lua package (a lone copy of this script), or without that file, a filter that does nothing is
+    written to a temporary file instead, so the callers need no special case -- and one WARN per run says that the filters
+    are missing (pdfmd_lua_missing).
     """
     shipped = None
     try:
         import pdfmd_lua
         shipped = pdfmd_lua.path(name)
     except ImportError:
-        pass
+        pdfmd_lua_missing()
+    else:
+        if shipped is None:
+            pdfmd_lua_missing(name)
     if shipped is not None:
         yield shipped
         return
@@ -14357,6 +14386,7 @@ def select_filter_args(selection) -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("select")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -14378,6 +14408,7 @@ def chem_filter_args(sources: list[Path], metadata_files: list[Path], preamble_f
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("chem")
     if shipped is None:
@@ -14397,6 +14428,7 @@ def typst_filter_args(writer: str) -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("typst")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -19527,6 +19559,7 @@ def ebook_filter_args() -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("ebook")
     if shipped is None:
