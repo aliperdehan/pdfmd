@@ -372,11 +372,11 @@ class PackageDefaults(unittest.TestCase):
                                   capture_output=True, text=True, env=environment)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("shipped with the mypkg package", done.stdout)
-            archive = zipfile.ZipFile(work / "d.docx")
-            styles = archive.read("word/styles.xml").decode()
-            heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
-            self.assertIn('w:val="FF0000"', heading)                       # Heading 1 looks like the package's MyH
-            self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy
+            with zipfile.ZipFile(work / "d.docx") as archive:             # (closed: Windows cannot remove a folder with an open file in it)
+                styles = archive.read("word/styles.xml").decode()
+                heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
+                self.assertIn('w:val="FF0000"', heading)                   # Heading 1 looks like the package's MyH
+                self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy
 
 
 @unittest.skipUnless(PANDOC and shutil.which("kpsewhich"), "needs Pandoc and kpsewhich")
