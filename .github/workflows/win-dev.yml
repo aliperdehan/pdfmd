@@ -66,11 +66,17 @@ jobs:
           echo "both:";             TEXMFHOME="$w" TEXINPUTS="$w//;" kpsewhich thing.sty; echo "exit=$?"
           echo "MIKTEX_USERROOTS:"; MIKTEX_USERROOTS="$w" kpsewhich thing.sty; echo "exit=$?"
           echo "-- pdftotext:"; which pdftotext pdftoppm
+      - name: "Experiment 4: the label draft pass on MiKTeX"
+        run: |
+          export PATH="/c/Program Files/MiKTeX/miktex/bin/x64:$PATH"
+          d="$(cygpath -w "$RUNNER_TEMP")\\dp"; mkdir -p "$RUNNER_TEMP/dp/out"; cd "$RUNNER_TEMP/dp"
+          printf '\\documentclass{article}\\begin{document}\\section{A}\\label{a}See \\ref{a}.\\end{document}\n' > t.tex
+          echo "--- -draftmode, -output-directory, windows paths"; lualatex -draftmode -interaction=nonstopmode -output-directory "$d\\out" "$d\\t.tex" 2>&1 | tail -5; ls out
+          echo "--- --draftmode"; lualatex --draftmode -interaction=nonstopmode -output-directory "$d\\out" "$d\\t.tex" 2>&1 | tail -5; ls out
+          echo "--- no draftmode"; lualatex -interaction=nonstopmode -output-directory "$d\\out" "$d\\t.tex" 2>&1 | tail -5; ls out
+          echo "--- cwd of the file, relative name"; lualatex -draftmode -interaction=nonstopmode -output-directory out t.tex 2>&1 | tail -5; ls out
       - name: The failing modules
         shell: bash
-        run: >
-          python -m unittest -v tests.test_command_words tests.test_ansi tests.test_ascii tests.test_attach tests.test_autolog
-          tests.test_code_blocks tests.test_edit_pdf tests.test_header_includes tests.test_indent tests.test_keep_source
-          tests.test_labels tests.test_markup_center tests.test_markup_highlight tests.test_markup_keep tests.test_markup_landscape
-          tests.test_show_comments tests.test_office tests.test_office_latex tests.test_package_helper tests.test_picture_cache_protocol
-          tests.test_readonly_home tests.test_sections tests.test_setup tests.test_tables tests.test_texpackages
+        run: |
+          export PATH="/c/ProgramData/chocolatey/bin:$PATH"
+          python -m unittest -v tests.test_command_words tests.test_ansi tests.test_ascii tests.test_attach tests.test_autolog tests.test_code_blocks tests.test_edit_pdf tests.test_header_includes tests.test_indent tests.test_keep_source tests.test_labels tests.test_markup_center tests.test_markup_highlight tests.test_markup_keep tests.test_markup_landscape tests.test_show_comments tests.test_office tests.test_office_latex tests.test_package_helper tests.test_picture_cache_protocol tests.test_readonly_home tests.test_sections tests.test_setup tests.test_tables tests.test_texpackages
