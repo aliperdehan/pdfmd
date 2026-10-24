@@ -108,6 +108,19 @@ class HungProgram(unittest.TestCase):
         self.assertEqual(pdfmd.engine_version_line(str(self.bin / "pandoc")), "")
 
 
+class FontList(unittest.TestCase):
+    def test_a_font_list_is_read_as_utf8_and_an_empty_answer_is_an_empty_set(self):
+        pdfmd.installed_font_families.cache_clear()
+        self.addCleanup(pdfmd.installed_font_families.cache_clear)
+        answer = mock.Mock(stdout="Caf\u00e9 Serif,Caf\u00e9\nDejaVu Sans\n".encode("utf-8"))
+        with mock.patch.object(pdfmd.shutil, "which", lambda name: "fc-list"), mock.patch.object(pdfmd.subprocess, "run", return_value=answer):
+            self.assertEqual(pdfmd.installed_font_families(), frozenset({"caf\u00e9 serif", "caf\u00e9", "dejavu sans"}))
+        pdfmd.installed_font_families.cache_clear()
+        with mock.patch.object(pdfmd.shutil, "which", lambda name: "fc-list"), \
+                mock.patch.object(pdfmd.subprocess, "run", return_value=mock.Mock(stdout=None)):
+            self.assertEqual(pdfmd.installed_font_families(), frozenset())
+
+
 class Source(unittest.TestCase):
     """Read from the code, so a probe added later without a timeout is found."""
 

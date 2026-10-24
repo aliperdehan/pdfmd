@@ -1570,9 +1570,11 @@ def installed_font_families() -> frozenset[str] | None:
     if not fc_list:
         return None
     try:
-        out = subprocess.run([fc_list, ":", "family"], capture_output=True, text=True, timeout=30).stdout
+        done = subprocess.run([fc_list, ":", "family"], capture_output=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
+    # decoded here: with text=True a Windows fc-list whose output the console code page cannot decode came back as None
+    out = (done.stdout or b"").decode("utf-8", "replace")
     return frozenset(name.strip().casefold() for line in out.splitlines() for name in line.split(","))
 
 
