@@ -56,7 +56,7 @@ UNSET = {
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
     "options.office.reference-doc": "one beside the document, else Pandoc's",
     "options.keep-source": "off",
-    "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on",
+    "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
@@ -81,7 +81,7 @@ FOLDER_OPTIONS = frozenset({
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
-    "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note",
+    "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note", "options.stamp.partial",
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
@@ -354,6 +354,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Two invisible fields in the PDF's Info dictionary.", "Build history"),
         choice("options.stamp.restored-note", "A \"Restored ...\" entry when a version is put back", (("true", "yes"), ("false", "no")),
                "true", "pdfmd --history-restore adds it to the history when the document keeps one.", "Build history"),
+        choice("options.stamp.partial", "Builds of some parts leave an entry in the history", on_off, "",
+               "Needs the history in a NAME.hst file (\"Where the compile history goes\"): a build of parts or sections only "
+               "is written there as a \"partial\" entry naming the parts and those that changed. Off unless set.", "Build history"),
         # -- backups
         choice("options.backup.enabled", "A backup of the source after each build", on_off, "",
                "Into .backups/ beside the document, when it changed. Off unless set.", "Backups"),

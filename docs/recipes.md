@@ -711,6 +711,7 @@ pdfmd report --stamp                         # a BUILD NOTES comment at the end 
 pdfmd report --stamp --stamp-mode history    # ... with the list of past compiles
 pdfmd report --stamp-packages nulabreport    # name a LaTeX package's version
 pdfmd report --stamp-store file              # the compile goes to .backups/report.hst; the document is not edited
+pdfmd report@60 --stamp-partial              # a draft build of one part is listed there too (parts built, parts changed)
 pdfmd --history-to-file report.md            # move the whole pdfmd BUILD NOTES block into the .hst file
 pdfmd --history-to-notes report.md           # and back
 pdfmd --merge-history a.hst b.hst -o all.hst # join two history files, every entry once
@@ -920,7 +921,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | tables | `--extract-tables`, `--expand-tables`, `--extract-inline-csv`, `--table-numbers`, `--table-names`, `--tables-dir`, `--tables-inline`, `--dry-run` |
 | code | `--line-numbers`, `--no-code-wrap` |
 | raw pieces | `--raw`, `--no-raw`, `--raw-for` |
-| history | `--history`, `--history-all`, `--history-diff`, `--history-restore`, `--no-restored-note`, `--init-backups`, `--backup-folder`, `--global`, `--stamp`, `--stamp-mode`, `--stamp-store`, `--history-to-file`, `--history-to-notes`, `--merge-history`, `--backup`, `--backup-format` |
+| history | `--history`, `--history-all`, `--history-diff`, `--history-restore`, `--no-restored-note`, `--init-backups`, `--backup-folder`, `--global`, `--stamp`, `--stamp-mode`, `--stamp-store`, `--stamp-partial`, `--no-stamp-partial`, `--history-to-file`, `--history-to-notes`, `--merge-history`, `--backup`, `--backup-format` |
 | fonts and scripts | `-f`, `--fallback`, `--missing`, `--check-fonts`, `--translit`, `--emoji-fallback` |
 | PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |

@@ -4,7 +4,7 @@
     2026-10-09 11:22:01 | compiled | with nulabreport v1.27.7, pdfmd v3.25.7 | sha=3fa91c0d
     2026-10-09 11:15:00 | restored | version 20261009110000 | from=report.md.bak.20261009110000
 
-WHEN is a local time, `YYYY-MM-DD HH:MM:SS`; KIND is `compiled`, `restored` or `note`; TEXT is free (a `|` is written
+WHEN is a local time, `YYYY-MM-DD HH:MM:SS`; KIND is `compiled`, `restored`, `partial` (a build of some parts or sections only) or `note`; TEXT is free (a `|` is written
 `\\|`, a line break `\\n`); the optional `key=value` words (no spaces) say more about the entry. Lines starting with `#`
 are comments, and a line that is not an entry is kept as a comment of its own, so nothing a person wrote is lost.
 """
@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HST_SUFFIX = ".hst"
-KINDS = ("compiled", "restored", "note")
+KINDS = ("compiled", "restored", "note", "partial")
 WHEN_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 SPLIT_RE = re.compile(r"(?<!\\)\|")
 
@@ -24,7 +24,7 @@ SPLIT_RE = re.compile(r"(?<!\\)\|")
 @dataclass(frozen=True)
 class Entry:
     when: str                                   # YYYY-MM-DD HH:MM:SS
-    kind: str                                   # compiled | restored | note
+    kind: str                                   # compiled | restored | partial | note
     text: str
     meta: tuple[tuple[str, str], ...] = field(default=(), compare=False)
 

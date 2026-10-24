@@ -2359,6 +2359,20 @@ keeps every entry once:
 2026-10-09 11:22:01 | compiled | with nulabreport v1.27.7, pdfmd v3.25.7 | sha=3fa91c0d4b21 out=report.pdf
 ```
 
+**Draft builds in the history (3.30.23).** A build of some parts or sections (`pdfmd @60`, `report#discussion`) is not the report, so it
+never writes the `BUILD NOTES` line. With `stamp: {partial: true}` (or `--stamp-partial`; `--no-stamp-partial` turns it off over a
+document that set it; `pdfmd --setup` has a row) and the history in a file, it leaves a `partial` entry instead, saying which parts
+it built and which of them changed:
+
+```
+2026-10-25 00:58:25 | partial | parts 50-calculations, 60-discussion; changed: 50-calculations; with nulabreport v1.28.20, pdfmd v3.30.23 | parts=50-calculations,60-discussion changed=50-calculations shas=50-calculations:8fec630b,60-discussion:78a4c87e out=report.calculations+discussion.pdf
+```
+
+"Changed" compares each part's text with the last entry that saw it (a full build in parts mode records every part's `shas`, a partial
+one the parts it built); a part no entry has seen is `first seen`, not changed. It is off unless set, because it adds lines to a
+history that held full builds only; a project that wants it (nulabreport does) sets it in its metadata file. With the history in
+`BUILD NOTES` (`store: notes`) nothing is written for a partial build.
+
 `pdfmd --history-to-file report.md` moves the whole `BUILD NOTES` block that pdfmd owns into that file (the compiles as
 entries, anything written by hand inside it as one `note` entry), and `--history-to-notes` builds the block again (both
 back the document up first, `--dry-run` shows). A document may carry several

@@ -40,6 +40,27 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.23 — 2026-10-25
+
+Pre-edit state: commit `4e38e85` (v3.30.22).
+
+### Added
+
+- **Draft builds in the history.** The `.hst` held full builds only: a build of some parts or sections (`pdfmd @60`, `doc#section`) writes no
+  BUILD NOTES line, and nothing took its place. With `pdfmd-options: {stamp: {partial: true}}` (or `--stamp-partial`; `--no-stamp-partial`
+  overrides a document that set it; a `--setup` row, `options.stamp.partial`) and the history in a file (`store: file` or `both`), such a build
+  leaves a new kind of entry, `partial`:
+  `... | partial | parts 50-calculations, 60-discussion; changed: 60-discussion; with nulabreport v1.28.20, pdfmd v3.30.23 | parts=... changed=... new=... shas=... out=...`.
+  `changed` compares each part's text with the last entry that saw it; a full build in parts mode now records every part's hash (`shas=`) for
+  that, and a part no entry has seen is `first seen` (`new=`). `--history` lists the entries as `partial`. Off by default (a history that
+  held full builds only gains lines); older pdfmd versions keep a `partial` line as a comment. A `partial` entry has no `sha`, so it is
+  never offered by `--history-restore`.
+
+### Tests
+
+- `tests.test_partial_history` (the entry round trip, the key, parts built and changed against a full build, first seen, off by default,
+  the flags, a section of a plain document).
+
 ## v3.30.22 — 2026-10-25
 
 Pre-edit state: commit `85a9283` (v3.30.21).

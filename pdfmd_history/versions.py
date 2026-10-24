@@ -12,7 +12,7 @@ from pathlib import Path
 @dataclass
 class Version:
     when: float                                  # seconds since the epoch
-    kind: str                                    # backup | git | compile | restore | note
+    kind: str                                    # backup | git | compile | partial | restore | note
     ref: str                                     # what `--history-diff REF` takes: a timestamp id, or a commit hash
     label: str                                   # the file name of a backup, the commit's subject
     summary: str = ""                            # what was compiled / who committed
@@ -42,7 +42,7 @@ def table(versions: list[Version], show_document: bool = False, width: int = 110
     rows = []
     for number, version in enumerate(versions, 1):
         what = {"backup": "backup", "git": "git", "compile": "compiled", "restore": "restored",
-                "note": "note"}[version.kind]
+                "note": "note", "partial": "partial"}[version.kind]
         name = version.label if version.kind != "git" else f"{version.ref[:7]}  {version.label}"
         extra = f"  {version.summary}" if version.summary else ""
         if show_document and version.document is not None:

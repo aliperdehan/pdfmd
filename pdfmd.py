@@ -1205,7 +1205,7 @@ The history file (v3.25.8; the package pdfmd_history):
     `--stamp-store file` (or `pdfmd-options: {stamp: {store: file}}`) writes each compile to NAME.hst, in the
     document's backup folder (see Backups), instead of into the document's BUILD NOTES: the document is not edited by
     a build. `both` does both. A .hst is one entry per line, newest first -- `WHEN | KIND | TEXT | key=value ...`,
-    KIND being compiled, restored or note, the key=value words holding the hash of the source at that moment (`sha`) and
+    KIND being compiled, restored, partial or note, the key=value words holding the hash of the source at that moment (`sha`) and
     the output (`out`) -- so two files join with `cat`, diff cleanly, and `--merge-history A.hst B.hst [-o OUT]` keeps
     every entry once. `--history-to-file FILE` moves the whole BUILD NOTES block(s) pdfmd owns (the "Compiled ..." line, the "Compile
     History:" list, and any text written by hand inside, as one `note` entry with `block=1`) into the .hst, and
@@ -1216,6 +1216,10 @@ The history file (v3.25.8; the package pdfmd_history):
     in any block is left as it is, and a block with a line `pdfmd: ignore` is never touched. The .hst is the
     `hst` embed kind: `--embed-metadata` folds it into the assembled file (`type: hst`), `--unpack` writes it out,
     `--attach-source` stores it in the PDF and `--restore` puts it back beside the backups.
+    A build of some parts or sections (`pdfmd @60`) writes no BUILD NOTES line; `--stamp-partial` (or `stamp: {partial: true}`,
+    off by default, `--no-stamp-partial` over a document that set it) makes it leave a `partial` entry in the .hst (store file
+    or both): the parts it built (`parts=`), those whose text differs from the last entry that saw them (`changed=`), and those
+    no entry has seen (`new=`); a full build in parts mode records every part's hash (`shas=`) to compare with.
 
 The hybrid PDF and single files that carry their data (v3.25.10):
     `--hybrid` (or `pdfmd-options: {hybrid: true}`, or --setup) makes the PDF a LibreOffice "hybrid PDF": it carries an
@@ -1409,7 +1413,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.22"
+PDFMD_VERSION = "3.30.23"
 import argparse
 import atexit
 import csv
@@ -11915,6 +11919,9 @@ DEFAULT_STAMP_OPTIONS = {
     "store": "notes",
     # `pdfmd --history-restore` leaves a "Restored ..." entry in the history; false for a document that must not.
     "restored_note": True,
+    # A build of some parts or sections only (`pdfmd @60`) is not the report, so it writes no BUILD NOTES line; with this on
+    # it leaves a "partial" entry in the NAME.hst (store: file or both) naming the parts it built and those that changed.
+    "partial": False,
     "packages": [],
     "scope": "always",
     "include_output": False,
@@ -11966,6 +11973,8 @@ def stamp_fields(value, implied_on: bool = True) -> dict:
         restored_note = value.get("restored_note", value.get("restored-note"))
         if restored_note is not None:
             options["restored_note"] = bool(restored_note)
+        if value.get("partial") is not None:
+            options["partial"] = bool(value["partial"])
         if "packages" in value:
             packages = value["packages"]
             options["packages"] = ([str(item) for item in packages] if isinstance(packages, list)
@@ -12308,8 +12317,10 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
     except (OSError, UnicodeDecodeError):
         digest = ""
     where = history.git.state(md_path)
+    parts = part_digests([Path(item) for item in BUILD["sources"][1:]], BUILD.get("root"))     # so a later partial entry can say what changed
     entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (
-        ("sha", digest), ("out", output.name), ("git", (where[0] + ("+" if where[1] else "")) if where else "")) if item[1]))
+        ("sha", digest), ("out", output.name), ("git", (where[0] + ("+" if where[1] else "")) if where else ""),
+        ("shas", ",".join(f"{name}:{part}" for name, part in parts if part))) if item[1]))
     path = history_file(md_path, metadata_files)
     try:
         history.add_entry(path, entry, md_path.name)
@@ -12479,7 +12490,7 @@ def document_versions(document: Path, metadata_files: list[Path], include_git: b
         if entry.kind == "compiled" and (entry.meta_dict().get("sha") in backup_digests
                                          or any(abs(stamp - when) <= 5 for when in backup_times)):
             continue                                       # a backup holds that compile and says so itself
-        result.append(versions.Version(stamp, {"restored": "restore", "note": "note"}.get(entry.kind, "compile"),
+        result.append(versions.Version(stamp, {"restored": "restore", "note": "note", "partial": "partial"}.get(entry.kind, "compile"),
                                        f"{entry.kind}-{entry.when}", entry.text, "", document=document))
     if include_git:
         for commit in history.git.log(document):
@@ -13229,9 +13240,87 @@ def stamp_scope_matches(options: dict, report_output: Path | None) -> bool:
 
 def stamp_unless_partial(partial: bool, *args, **kwargs) -> None:
     """stamp_after_success, except for a partial parts-mode build: that isn't
-    the report, so it shouldn't write a provenance note claiming it is."""
+    the report, so it shouldn't write a provenance note claiming it is. With
+    `stamp: {partial: true}` it leaves a "partial" entry in the NAME.hst instead."""
     if not partial:
         stamp_after_success(*args, **kwargs)
+    elif BUILD.get("partial") is not None and len(args) >= 6:
+        record_partial_history(*args[:6])
+
+
+def part_digests(parts: list[Path], root: Path | None) -> list[tuple[str, str]]:
+    """(name, digest) of each part of a document in parts: its path under the parts folder without `.md`, spaces as `_`
+    (a .hst word has none), and the first 8 characters of the hash of its text -- what the history compares."""
+    found: list[tuple[str, str]] = []
+    for part in parts:
+        try:
+            label = str(part.relative_to(root)) if root else part.name
+        except ValueError:
+            label = part.name
+        try:
+            digest = sha256_text(normalized_source(part.read_text(encoding="utf-8-sig")))[:8]
+        except (OSError, UnicodeDecodeError):
+            digest = ""
+        found.append((re.sub(r"\s+", "_", label.removesuffix(".md")), digest))
+    return found
+
+
+def partial_names(info: dict, md_path: Path, output: Path) -> list[tuple[str, str]]:
+    """(name, digest) of what a partial build is made of: each part (its path under the parts folder, no `.md`), or the one
+    cut of a plain document, named by what the output's name adds to the document's (`report.only-a-part.pdf`)."""
+    names = part_digests(info["parts"], info["root"])
+    if info["cut"] is not None:
+        stem = output.stem
+        label = stem[len(md_path.stem) + 1:] if stem.startswith(md_path.stem + ".") else stem
+        names.append((re.sub(r"\s+", "_", label), sha256_text(normalized_source(info["cut"]))[:8]))
+    return names
+
+
+def record_partial_history(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
+                           cli_overrides: dict, output: Path, verbose: bool) -> None:
+    """The "partial" entry of a build of some parts or sections (`stamp: {partial: true}`, the history in a NAME.hst)."""
+    options = resolve_stamp_options(md_path, metadata_files, cli_overrides)
+    if not (options["enabled"] and options["partial"] and options["store"] in ("file", "both")
+            and stamp_scope_matches(options, None)):
+        return
+    history = history_module()
+    info = BUILD.get("partial")
+    if history is None or info is None:
+        return
+    names = partial_names(info, md_path, output)
+    if not names:
+        return
+    path = history_file(md_path, metadata_files)
+    earlier, _ = history.read_file(path)
+    known: dict[str, str] = {}          # the digest each part had the last time an entry saw it
+    for entry in sorted(earlier, key=lambda item: item.when):
+        for word in entry.meta_dict().get("shas", "").split(","):
+            name, _, digest = word.rpartition(":")
+            if name and digest:
+                known[name] = digest
+    changed = [name for name, digest in names if name in known and known[name] != digest]
+    new = [name for name, _ in names if name not in known]      # no entry has seen it yet: there is nothing to compare with
+    texts = gather_stamp_texts(md_path, preamble_files)
+    tail = compile_entry(build_stamp_line(options, texts, output, None, verbose))
+    if tail is None:
+        return
+    shown = ", ".join(name for name, _ in names)
+    what = "parts" if len(names) != 1 or info["cut"] is None else "section"
+    news = f"; first seen: {', '.join(new)}" if new else ""
+    text = (f"{what} {shown}; " + (f"changed: {', '.join(changed)}" if changed else "nothing changed") + news
+            + f"; {tail.text}")
+    where = history.git.state(md_path)
+    meta = (("parts", ",".join(name for name, _ in names)), ("changed", ",".join(changed)), ("new", ",".join(new)),
+            ("shas", ",".join(f"{name}:{digest}" for name, digest in names if digest)), ("out", output.name),
+            ("git", (where[0] + ("+" if where[1] else "")) if where else ""))
+    entry = history.Entry(tail.when, "partial", text, tuple(item for item in meta if item[1]))
+    try:
+        history.add_entry(path, entry, md_path.name)
+    except OSError as error:
+        print(f"WARN  {display_path(md_path)}: cannot write {display_path(path)} ({error.strerror or error})", file=sys.stderr)
+        return
+    if verbose:
+        print(f"AUTO HISTORY  {display_path(path)}: {entry.when} partial ({shown})")
 
 
 def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
@@ -18717,7 +18806,7 @@ def safe_stem(name: str) -> str:
 # not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
 # about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": []}     # what built the file convert_one is working on
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -20291,6 +20380,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     # isn't the report itself and writes no BUILD NOTES stamp.
     stamp_overrides = stamp_overrides or {}
     parts_inputs = list(extra_inputs or [])
+    if partial:      # for the history (stamp_unless_partial): which parts this build is made of, or the text of the sections
+        chosen = ([item for item in parts_inputs if item in selection]
+                  if isinstance(selection, (set, frozenset)) and parts_inputs else parts_inputs)
+        BUILD["partial"] = {"parts": [Path(item) for item in chosen], "root": parts_root,
+                            "cut": source_override[0] if source_override is not None else None}
     noted: set[tuple[str, str]] = set()
 
     def note(kind: str, detail: str) -> None:
@@ -20323,6 +20417,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
     )
     BUILD["output"], BUILD["sources"] = output, [md_path, *parts_inputs]
+    if parts_inputs:
+        BUILD["root"] = parts_root
     if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
         check_asset_budget(BUILD["sources"], md_path, metadata_files)
     for source_file in (md_path, *parts_inputs):
@@ -21080,7 +21176,7 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
 
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
-    BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"] = None, [], None, []
+    BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"], BUILD["partial"], BUILD["root"] = None, [], None, [], None, None
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
@@ -25041,6 +25137,15 @@ def build_parser() -> argparse.ArgumentParser:
                                 "a document/metadata file that disabled it. No effect on a non-LaTeX "
                                 "PDF engine (weasyprint, typst, ...), which has no equivalent "
                                 "mechanism this reaches")
+    stamp_partial = parser.add_mutually_exclusive_group()
+    stamp_partial.add_argument("--stamp-partial", action="store_true", default=None,
+                               help="a build of some parts or sections (`pdfmd @60`) leaves a 'partial' entry in the "
+                                    "NAME.hst history (needs --stamp-store file or both): which parts it built and which of "
+                                    "them changed since the last entry that saw them. Off by default (also "
+                                    "`stamp: {partial: true}`)")
+    stamp_partial.add_argument("--no-stamp-partial", action="store_true", default=None,
+                               help="a partial build leaves nothing in the history (the default); overrides a document or "
+                                    "metadata file that set `stamp: {partial: true}`")
     backup_enable = parser.add_mutually_exclusive_group()
     backup_enable.add_argument("--backup", action="store_true", default=None,
                                help="after a successful compile, copy the source to "
@@ -25514,6 +25619,10 @@ def run_main() -> None:
         stamp_overrides["include_output"] = True
     if args.no_stamp_output:
         stamp_overrides["include_output"] = False
+    if args.stamp_partial:
+        stamp_overrides["partial"] = True
+    if args.no_stamp_partial:
+        stamp_overrides["partial"] = False
     if args.stamp_pdf_metadata:
         stamp_overrides["pdf_metadata"] = True
     if args.no_stamp_pdf_metadata:

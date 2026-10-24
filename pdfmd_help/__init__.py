@@ -31,7 +31,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--tables-dir", "--tables-inline", "--dry-run")),
     "history": ("build notes, backups, versions of a document", (
         "--stamp", "--no-stamp", "--stamp-mode", "--stamp-store", "--stamp-packages", "--stamp-scope",
-        "--stamp-output", "--no-stamp-output", "--stamp-pdf-metadata", "--no-stamp-pdf-metadata", "--backup",
+        "--stamp-partial", "--no-stamp-partial", "--stamp-output", "--no-stamp-output", "--stamp-pdf-metadata", "--no-stamp-pdf-metadata", "--backup",
         "--no-backup", "--backup-format", "--history-to-file", "--history-to-notes", "--history", "--history-all",
         "--history-diff", "--history-restore", "--no-restored-note", "--init-backups", "--backup-folder",
         "--global", "--merge-history", "--dry-run")),
