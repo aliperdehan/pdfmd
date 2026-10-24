@@ -18959,7 +18959,7 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         return None, 0
     dump = scratch / "calc-names.tsv"
     cmd = ["pandoc", *(str(file.resolve()) for file in before), *(["-f", from_format] if from_format else []),
-           "-t", "native", "-o", os.devnull, *arguments, "-M", "pdfmd-calc-dump=" + str(dump)]
+           "-t", "native", "-o", str(scratch / "calc-names.native"), *arguments, "-M", "pdfmd-calc-dump=" + str(dump)]
     cwd = pandoc_working_directory(md_path.parent)
     log_cmd(cmd, cwd, verbose)
     started = time.time()
