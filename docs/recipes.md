@@ -201,7 +201,12 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   was defined with; the computation keeps the full values. `calc: {subs: true}` does it before every `{ans}`, `{nosubs}` stops it on a line.
 - A dozen definitions at once: a ```` ```{=calc} ```` block (or ```` ```{=} ````, or `::: {.calc .hide}`), one `name = value` per line, nothing
   printed for them; or `calc: {constants: tables/constants.csv}` with the columns `name,value[,digits[,note]]`. `` `x`{=calc} `` is
-  `` `x`{=} ``. `qt(0.975, 18)`, `qnorm`, `pt`, `pnorm` are built in.
+  `` `x`{=} ``. `qt(0.975, 18)`, `qnorm`, `pt`, `pnorm` are built in, and so are `mean(a, b, c)`, `sd`, `rsd` (percent), `ci(0.95, ...)`,
+  `gstat` and `gcrit(n, 0.05)` (3.30.20): `They are ~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower`.
+- The values of a few names as a table, for the results or an appendix: `::: calc-table`, a line `t# tinf`, and `:::` (`*` any run of
+  characters, `?` one, `#` a run of digits are patterns). With a caption and a label to cite: `::: {#tbl:t .calc-table names="t# tinf"
+  caption="Student's *t*"}` and a closing `:::`; also `head="Symbol; Value"`, `labels="t1=$t_{1}$"`, `digits="3dp"`. The braces take only
+  `.class`, `#id` and `key=value`, so `{.calc-table t*}` does not work.
 - A `::: calc` div has no first-line indent, even in a document that indents (`calc: {noindent: false}` or `--no-calc-noindent` gives it
   the document's own; `indent=2em` on the div wins). Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
 - A `::: calc` div has `0.75em` of room above and below it (LaTeX, Typst and HTML; `calc: {space: 6pt}`, `--calc-space off` for none) and

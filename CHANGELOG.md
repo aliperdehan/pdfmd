@@ -40,6 +40,33 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.20 — 2026-10-25
+
+Pre-edit state: commit `4f34b63` (v3.30.19).
+
+### Added
+
+- **Statistics in the calculator:** `sum mean median`, `var sd stdev sem` (sample, n - 1), `rsd` (relative standard deviation in percent),
+  `ci(0.95, x1, x2, ...)` (half-width of the confidence interval, t * s / sqrt(n), through the existing `qt`), `gstat(x1, x2, ...)`
+  (Grubbs' G) and `gcrit(n, alpha)` (its two-sided critical value; agrees with SciPy to 10 figures). They take names as well as numbers:
+  `` ~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower `` works as written. These names stay free for a variable (`mean = 5` and `mean(1, 3)`
+  side by side, so no existing document breaks); the older function names are still reserved.
+- **`::: calc-table`, a line `t# tinf`, `:::`** (or `::: {.calc-table names="t# tinf"}`): a real table (Pandoc `Table`, so the document's table styling, widths and numbering apply)
+  of calculator names with their values, in the digits each was defined with (`digits="3dp"` for all). The names are the text of the div or `names=`: names and patterns
+  (`*` any characters, `?` one, `#` a run of digits, so `t#` leaves out `t_welch` and `tinf`), a pattern in natural order (t2 before t10); `labels="t1=$t_{1}$; V=Volume"` by name or one per row in order (Markdown and math
+  work); `head="Symbol; Value"` or `none`; `caption="..."` (Markdown); the identifier, other classes and attributes go to the table, so
+  `{#tbl:t}` can be cited. A name counts as defined at the place of the div, as for a span there; in a part built alone the names of the
+  parts above it are known (3.30.19). A name that is not defined, a pattern with no match, a value that cannot be computed: one `WARN
+  calc-table` naming it; a div without names prints its own code. `::: {.calc-table t*}` is not a div for Pandoc (braces take only
+  `.class`, `#id`, `key=value`) and gets one WARN with the right spelling instead of printing as text.
+
+### Tests
+
+- `tests.test_calc.Statistics` (13): the summary functions against Python's `statistics`, `ci` and `gcrit` against SciPy, the sentence of a
+  Discussion, bad calls (one WARN each, the code kept), the new names still free for a variable and the old ones reserved, the table
+  (natural order, labels by name, header, caption and identifier on a real `Table`, the place of the div, digits, everything that goes
+  wrong, the malformed spelling), and the detection for a document with only a table.
+
 ## v3.30.19 — 2026-10-24
 
 Pre-edit state: commit `65dc1da` (v3.30.18).

@@ -22,6 +22,10 @@
 --
 -- This filter is added only when a document has a `{=}` after inline code and `calc` is not off (pdfmd.py: calc_filter_args()).
 
+-- Pandoc before 3.2 has no pandoc.Caption: a caption is the table {long, short}. This stands in (as in csv_table.lua).
+if not pandoc.Caption then
+  pandoc.Caption = function(long, short) return {long = long or {}, short = short} end
+end
 local EPS = 1e-15          -- a trig result this close to 0 is 0 (sin(pi) is 1.2e-16 in floating point)
 
 local function fail(message) error({calc = message}, 0) end
@@ -236,6 +240,25 @@ function stats.qt(p, df)
 end
 
 
+function stats.mean(args, name)
+  if #args == 0 then fail(name .. " needs a number") end
+  local total = 0.0; for i = 1, #args do total = total + args[i] end
+  return total / #args
+end
+
+-- the sample variance (n - 1), from the deviations about the mean
+function stats.variance(args, name)
+  if #args < 2 then fail(name .. " needs at least two numbers") end
+  local m, total = stats.mean(args, name), 0.0
+  for i = 1, #args do total = total + (args[i] - m) ^ 2 end
+  return total / (#args - 1)
+end
+
+-- Functions a document may also use as a variable name (`mean = 2.5` and `mean(a, b)` side by side): the names a
+-- statistics function takes are ones a calculation is likely to have already (3.30.20); the older functions stay reserved.
+local SOFT = {sum = true, mean = true, median = true, var = true, stdev = true, sd = true, sem = true, rsd = true,
+  ci = true, gstat = true, gcrit = true}
+
 local FUNCTIONS = {
   sin = function(args) return snap(math.sin((argument(args, 1, "sin")))) end,
   cos = function(args) return snap(math.cos((argument(args, 1, "cos")))) end,
@@ -308,6 +331,50 @@ local FUNCTIONS = {
     local m = args[1]; for i = 2, #args do if args[i] > m then m = args[i] end end; return m
   end,
   hypot = function(args) local x, y = argument(args, 2, "hypot"); return math.sqrt(x * x + y * y) end,
+  sum = function(args)
+    if #args == 0 then fail("sum needs a number") end
+    local total = 0.0; for i = 1, #args do total = total + args[i] end; return total
+  end,
+  mean = function(args) return stats.mean(args, "mean") end,
+  median = function(args)
+    if #args == 0 then fail("median needs a number") end
+    local sorted = {}; for i = 1, #args do sorted[i] = args[i] end
+    table.sort(sorted)
+    local middle = (#sorted + 1) // 2
+    return #sorted % 2 == 1 and sorted[middle] or (sorted[middle] + sorted[middle + 1]) / 2
+  end,
+  var = function(args) return stats.variance(args, "var") end,
+  stdev = function(args) return math.sqrt(stats.variance(args, "stdev")) end,
+  sd = function(args) return math.sqrt(stats.variance(args, "sd")) end,
+  sem = function(args) return math.sqrt(stats.variance(args, "sem") / #args) end,
+  rsd = function(args)
+    local m = stats.mean(args, "rsd")
+    if m == 0 then fail("rsd is not defined there (the mean is 0)") end
+    return math.sqrt(stats.variance(args, "rsd")) / math.abs(m) * 100
+  end,
+  ci = function(args)                                    -- ci(0.95, x1, x2, ...): the half-width t * s / sqrt(n)
+    local confidence = args[1]
+    if confidence == nil or not (confidence > 0 and confidence < 1) then
+      fail("ci takes the confidence first, a fraction such as 0.95, then the numbers")
+    end
+    local data = {}; for i = 2, #args do data[#data + 1] = args[i] end
+    if #data < 2 then fail("ci needs at least two numbers after the confidence") end
+    return stats.qt(1 - (1 - confidence) / 2, #data - 1) * math.sqrt(stats.variance(data, "ci") / #data)
+  end,
+  gstat = function(args)                                 -- Grubbs' G of the data: the largest |x - mean| / s
+    if #args < 3 then fail("gstat needs at least three numbers") end
+    local m, s, far = stats.mean(args, "gstat"), math.sqrt(stats.variance(args, "gstat")), 0
+    if s == 0 then fail("gstat is not defined there (all the numbers are equal)") end
+    for i = 1, #args do far = math.max(far, math.abs(args[i] - m)) end
+    return far / s
+  end,
+  gcrit = function(args)                                 -- gcrit(n, alpha): the two-sided critical value of Grubbs' G
+    local n, alpha = argument(args, 2, "gcrit")
+    if n ~= math.floor(n) or n < 3 then fail("gcrit takes a whole number of observations, 3 or more") end
+    if not (alpha > 0 and alpha < 1) then fail("gcrit takes a significance level between 0 and 1, such as 0.05") end
+    local t = stats.qt(1 - alpha / (2 * n), n - 2)
+    return (n - 1) / math.sqrt(n) * math.sqrt(t * t / (n - 2 + t * t))
+  end,
   qnorm = function(args)
     local p = argument(args, 1, "qnorm")
     if not (p > 0 and p < 1) then fail("qnorm takes a probability between 0 and 1, not including them") end
@@ -645,7 +712,7 @@ local function read_statements(text, default)
     statement.expr = kind == "later" and tail_expression(parts[#parts]) or trim(parts[#parts])
     if statement.expr == "" then fail("there is nothing to calculate before the =") end
     for _, name in ipairs(statement.names) do
-      if FUNCTIONS[name] or CONSTANTS[name] then fail("'" .. name .. "' is built in; choose another name") end
+      if (FUNCTIONS[name] and not SOFT[name]) or CONSTANTS[name] then fail("'" .. name .. "' is built in; choose another name") end
     end
     statements[#statements + 1] = statement
     return statement
@@ -759,7 +826,7 @@ local function substitute(statement)
     if token.kind == "name" then
       local following = tokens[index + 1]
       local call = following and following.kind == "op" and following.value == "("
-      if not call and CONSTANTS[token.value] == nil and not FUNCTIONS[token.value] then
+      if not call and CONSTANTS[token.value] == nil and (SOFT[token.value] or not FUNCTIONS[token.value]) then
         local source = resolve(token.value, statement.id)
         local value = value_of(source)
         local shown = show(value, source.fmt or DEFAULT_FMT)
@@ -1177,6 +1244,175 @@ local function framed(blocks)
   return out
 end
 
+-- A table of the document's names (3.30.20): `::: {.calc-table names="t*, V" labels="..." head="Symbol; Value" caption="..."}`
+-- lists each name with its value in the digits it was defined with (`digits="3dp"` overrides). The names are the text of the
+-- div (`::: calc-table`, a line `t# tinf`, `:::`) or `names="..."`: names and patterns (`*` any run of characters, `?` one
+-- character, `#` a run of digits), separated by commas or spaces; a pattern lists its names in natural order
+-- (t2 before t10), a plain name where it is written. `labels` replaces the name in the first column, one label per row
+-- separated by `;`, or `name=label` for the rows named (Markdown, so `$t_{1}$` works). Every name counts as defined at the place of the div, the way a span there
+-- sees it. The div's identifier, other classes and attributes go to the table, so `{#tbl:t .calc-table ...}` can be cited.
+local TABLE_HORIZON = {}                                 -- pass 1: the n-th calc-table -> the statements defined above it
+local table_count = 0
+
+local function natural_less(a, b)
+  local i, j = 1, 1
+  while i <= #a and j <= #b do
+    local da, db = a:match("^%d+", i), b:match("^%d+", j)
+    if da and db then
+      local na, nb = tonumber(da), tonumber(db)
+      if na ~= nb then return na < nb end
+      i, j = i + #da, j + #db
+    else
+      local ca, cb = a:sub(i, i), b:sub(j, j)
+      if ca ~= cb then return ca < cb end
+      i, j = i + 1, j + 1
+    end
+  end
+  return (#a - i) < (#b - j)
+end
+
+local function table_warning(reason, kept)
+  io.stderr:write(string.format("WARN  calc-table: %s; %s\n", reason, kept))
+end
+
+local TABLE_OWN = {names = true, labels = true, head = true, caption = true, digits = true}
+
+-- the names a `names=` attribute stands for, in the order of the table
+local function table_names(spec)
+  local out, seen = {}, {}
+  for word in spec:gmatch("[^,%s]+") do
+    if word:find("[*?#]") then
+      if not word:match("^[%w_*?#]+$") then
+        table_warning("'" .. word .. "' is not a name pattern", "it is skipped")
+      else
+        local pattern = "^" .. word:gsub("[%^%$%(%)%%%.%[%]%+%-]", "%%%0"):gsub("%*", ".*"):gsub("%?", "."):gsub("#", "%%d+") .. "$"
+        local found = {}
+        for name in pairs(NAMED) do
+          if name:match(pattern) and not seen[name] then found[#found + 1] = name end
+        end
+        table.sort(found, natural_less)
+        if #found == 0 then table_warning("no name matches '" .. word .. "'", "nothing is listed for it") end
+        for _, name in ipairs(found) do seen[name] = true; out[#out + 1] = name end
+      end
+    elseif not is_identifier(word) then
+      table_warning("'" .. word .. "' is not a name", "it is skipped")
+    elseif not NAMED[word] then
+      table_warning("'" .. word .. "' is not defined", "it is skipped")
+    elseif not seen[word] then
+      seen[word] = true; out[#out + 1] = word
+    end
+  end
+  return out
+end
+
+local function table_cell(text) return (text:gsub("|", "\\|"):gsub("\n", " ")) end
+
+-- the text of a div's paragraphs as it was written (a `*` pattern may have been read as emphasis)
+local function source_of(inlines)
+  local out = {}
+  for _, item in ipairs(inlines) do
+    if item.t == "Str" then out[#out + 1] = item.text
+    elseif item.t == "Space" or item.t == "SoftBreak" or item.t == "LineBreak" then out[#out + 1] = " "
+    elseif item.t == "Emph" then out[#out + 1] = "*" .. source_of(item.content) .. "*"
+    elseif item.t == "Strong" then out[#out + 1] = "**" .. source_of(item.content) .. "**"
+    elseif item.t == "Code" then out[#out + 1] = item.text end
+  end
+  return table.concat(out)
+end
+
+local function table_of(div, horizon)
+  local spec = div.attributes.names
+  if not spec or trim(spec) == "" then                    -- `::: calc-table` and the names as the text of the div
+    local words = {}
+    for _, block in ipairs(div.content) do
+      if block.t == "Para" or block.t == "Plain" then words[#words + 1] = source_of(block.content) end
+    end
+    spec = table.concat(words, " ")
+  end
+  if trim(spec) == "" then
+    table_warning("the div has no names", "write the names in it (::: calc-table, then t# tinf, then :::); its place shows the code")
+    return pandoc.Para({pandoc.Code("calc-table: no names")})
+  end
+  local names = table_names(spec)
+  if #names == 0 then return pandoc.Para({pandoc.Code("calc-table names=\"" .. spec .. "\": no name found")}) end
+  local fmt = nil
+  if div.attributes.digits then
+    local ok, parsed = pcall(parse_fmt, div.attributes.digits)
+    if ok then fmt = parsed else table_warning("digits=\"" .. div.attributes.digits .. "\" is not a format", "the digits of each name are used") end
+  end
+  local labels, keyed = {}, {}                         -- `labels="t1=$t_1$; V=Volume"` by name, or one per row in order
+  if div.attributes.labels then
+    for label in (div.attributes.labels .. ";"):gmatch("([^;]*);") do
+      local name, text = label:match("^%s*([%a_][%w_]*)%s*=(.*)$")
+      if name and NAMED[name] then keyed[name] = trim(text) else labels[#labels + 1] = trim(label) end
+    end
+  end
+  local head = {"Name", "Value"}
+  local none = false
+  if div.attributes.head then
+    if div.attributes.head:lower() == "none" then none = true
+    else
+      local first, second = div.attributes.head:match("^([^;]*);(.*)$")
+      if first then head = {trim(first), trim(second)} else head = {trim(div.attributes.head), "Value"} end
+    end
+  end
+  local lines = {"| " .. (none and " " or table_cell(head[1])) .. " | " .. (none and " " or table_cell(head[2])) .. " |", "| :--- | ---: |"}
+  for index, name in ipairs(names) do
+    local source = resolve(name, horizon)
+    local ok, value = pcall(value_of, source)
+    local shown
+    if ok then
+      shown = show(value, fmt or source.fmt or DEFAULT_FMT)
+    else
+      table_warning(reason_of(value), "the value of '" .. name .. "' is shown as ?")
+      shown = "?"
+    end
+    local label = keyed[name] or labels[index]
+    lines[#lines + 1] = "| " .. table_cell(label and label ~= "" and label or (name:gsub("([_*])", "\\%1"))) .. " | " .. shown .. " |"
+  end
+  local parsed = pandoc.read(table.concat(lines, "\n") .. "\n\n", "markdown")
+  for _, block in ipairs(parsed.blocks) do
+    if block.t == "Table" then
+      local classes, attributes = {}, {}
+      for _, class in ipairs(div.classes) do if class ~= "calc-table" then classes[#classes + 1] = class end end
+      for key, value in pairs(div.attributes) do if not TABLE_OWN[key] then attributes[#attributes + 1] = {key, value} end end
+      if div.identifier ~= "" or #classes > 0 or #attributes > 0 then
+        block.attr = pandoc.Attr(div.identifier, classes, attributes)
+      end
+      local caption = div.attributes.caption
+      if caption and trim(caption) ~= "" then
+        local inlines = pandoc.read(caption, "markdown").blocks[1]
+        if inlines and inlines.content then block.caption = pandoc.Caption({pandoc.Plain(inlines.content)}) end
+      end
+      return block
+    end
+  end
+  return nil
+end
+
+local function calc_table_div(div)
+  if not div.classes:includes("calc-table") then return nil end
+  table_count = table_count + 1
+  if pass == 1 then
+    TABLE_HORIZON[table_count] = #STATEMENTS + 1
+    return nil
+  end
+  local block = table_of(div, TABLE_HORIZON[table_count] or (#STATEMENTS + 1))
+  if block then return block, false end
+  return nil
+end
+
+-- `::: {.calc-table t*}` is not a div for Pandoc (braces take .class, #id and key=value only): say so instead of printing it
+local function misspelt_table(block)
+  if pass ~= 2 then return nil end
+  local text = pandoc.utils.stringify(block)
+  if text:match("^:::%s*{%s*%.calc%-table[^=}]*}") then
+    table_warning("'" .. text:match("^(:::[^\n]*)") .. "' is not a div (Pandoc takes only .class, #id and key=value in braces)",
+      "write ::: {.calc-table names=\"t*\"}; the text is kept")
+  end
+  return nil
+end
+
 -- A part built alone (3.30.19). pdfmd evaluates the parts before it first, with this filter and `-M pdfmd-calc-dump=FILE`: the
 -- file lists every name with the value of its last definition (full precision, so later arithmetic is exact) and its digits;
 -- the real pass reads it back with `-M pdfmd-calc-seed=FILE` as definitions that stand above everything in the document.
@@ -1277,10 +1513,11 @@ return {{Pandoc = function(doc)
   local seed = doc.meta["pdfmd-calc-seed"]
   seed = seed and pandoc.utils.stringify(seed) or nil
   for _, which in ipairs({1, 2}) do
-    pass, occurrence, fence_cursor = which, 0, 1
+    pass, occurrence, fence_cursor, table_count = which, 0, 1, 0
     statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
     if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
-    doc = doc:walk({traverse = "topdown", Div = calc_div, Para = fence_handler, RawBlock = raw_block,
+    doc = doc:walk({traverse = "topdown", Div = function(div) return calc_div(div) or calc_table_div(div) end,
+      Para = function(block) misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block,
       Inlines = process_inlines})
   end
   local dump = doc.meta["pdfmd-calc-dump"]

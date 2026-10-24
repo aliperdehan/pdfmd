@@ -841,7 +841,12 @@ division, `7 // 2` is 3), parentheses, `|a - b|` (absolute value), and a `%` wit
 `log10 log2 sqrt cbrt abs sign floor ceil trunc`, `round(x, digits)`, `min max` (any number), `hypot factorial`. **Statistics** (3.30.10, lower tail, as in R): `qnorm(p)` and `pnorm(z)` for the normal
 distribution, `qt(p, df)` and `pt(t, df)` for Student's t. `df` may be a fraction (a Welch value such as 13.947) or `Inf`, so
 `t = qt(0.975, 18) = {ans:4sf}` prints 2.101 and `qt(0.975, df_w)` takes a name; `qt` is good to about 1e-12 and agrees with
-R's to the 12 figures it prints. Angles are in radians
+R's to the 12 figures it prints. **Summaries of a few numbers** (3.30.20; the numbers are written out or names, `mean(R_A, R_B2)`):
+`sum mean median`, `var sd stdev sem` (the sample ones, n - 1), `rsd` (the relative standard deviation **in percent**: `rsd(10, 12, 11)` is
+9.09), `ci(0.95, x1, x2, ...)` (the half-width of the confidence interval, t * s / sqrt(n)), `gstat(x1, x2, ...)` (Grubbs' G, the largest
+|x - mean| / s) and `gcrit(n, 0.05)` (its two-sided critical value, as SciPy and the usual tables give it). `They are
+~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower` works as written. These names may still be used for variables (`mean = 5`
+and `mean(1, 3)` side by side); the older function names stay reserved. Angles are in radians
 unless the name ends in `d`: `sin(30*deg)` and `sind(30)` are both 0.5. A trig result closer to 0 than 1e-15 is 0 (`sin(pi)`).
 
 **`round` goes to the even digit on an exact half, as R and Python do** (`round(2.5)` is 2, `round(3.5)` is 4, `round(0.125, 2)` is
@@ -867,8 +872,8 @@ line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
 wrong format) the text is kept as written and pdfmd prints one `WARN  calc: ...` naming it and the reason; nothing is dropped
-silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
-confidence interval), a mode that checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
+silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` math, statistics on a column of a table, a mode that
+checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
 `.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
 **A part built alone keeps the names of the parts above it** (3.30.19). `pdfmd @60` of a split report builds the Discussion without the
@@ -880,6 +885,18 @@ so editing part 50 and building part 60 shows the new number at once. The build 
 (evaluated, not typeset)`. `pdfmd-options: {seed-calc: off}` or `--seed-calc off` gives it up (a name defined in a part left out is then
 undefined, with the WARN above); `auto` (the default) and `scan` are the same. A name a later part defines is not known to an earlier
 one, as in the full build, where it counts only when nothing above defines it.
+
+**A table of names** (3.30.20). The shortest form is a div that holds the names: `::: calc-table`, a line `t# tinf`, and `:::`. It makes a real
+table of the names (`*` any run of characters, `?` one character, `#` a run of digits, so `t#` is t1, t2, t10 and not `t_welch`; a pattern
+lists its names in natural order, t2 before t10; a plain name stands where it is written), each with its value in the digits it was defined with, or `digits="3dp"` for all.
+`labels="t1=$t_{1}$; V=Volume, mL"` replaces the name in the first column (Markdown and math work; without `name=` the labels go to the rows
+in order); `head="none"` leaves the header out; `caption` and `{#tbl:t}` give it a caption and something to cite. They need the braces:
+`::: {#tbl:t .calc-table names="t# tinf" head="Symbol; Value" caption="Student's *t*, 95%"}` (the names then go in `names=`, and the other
+classes and attributes of the div go to the table). A name counts as defined at the place of the div, as it does for a span there, so a table in an appendix shows the last value and one
+before the definitions shows the first. The braces take only `.class`, `#id` and `key=value`: `{.calc-table t*}` is not a div for Pandoc, and
+pdfmd says so with one WARN that gives the spelling. Anything that cannot be listed (a name that is not defined, a pattern
+that matches nothing, a value that cannot be computed) gives one WARN naming it and is shown as `?` or left out; a div without names prints
+its own code where it stands.
 
 ### Read it in the terminal: `--view` and `--to ansi`
 

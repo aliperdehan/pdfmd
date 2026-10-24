@@ -4,7 +4,9 @@ adds the filter, the `calc: off` switch, and a real PDF built through the whole 
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -853,6 +855,128 @@ class Blocks(unittest.TestCase):
         pdfmd.add_calc_constants(self.directory / "d.md", [self.directory / "metadata.yaml"], Path(os.path.abspath(self.directory)), set(), found, outside)
         self.assertEqual([item.name for item in found], ["k.csv"])
         self.assertEqual(outside, [])
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Statistics(unittest.TestCase):
+    """mean, sd, rsd, ci, Grubbs' G (3.30.20) and the `.calc-table` div, which lists names with their values."""
+
+    def convert(self, text: str, *meta: str) -> subprocess.CompletedProcess:
+        arguments = [PANDOC, "-f", "markdown", "-t", "plain", "--wrap=none", "--lua-filter", str(CALC_LUA)]
+        for item in meta:
+            arguments += ["-M", item]
+        return subprocess.run(arguments, input=text, capture_output=True, text=True, encoding="utf-8")
+
+    def values(self, expressions: list[str]) -> list[float]:
+        done = self.convert(" | ".join(f"`{expression}`{{=12sf}}" for expression in expressions))
+        self.assertEqual(done.stderr, "")
+        return [float(part) for part in done.stdout.split("|")]
+
+    def test_the_summary_functions_against_python(self):
+        data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+        listing = ", ".join(str(x) for x in data)
+        got = self.values([f"mean({listing})", f"median({listing})", f"sum({listing})", f"sd({listing})", f"stdev({listing})",
+                           f"var({listing})", f"sem({listing})", f"rsd({listing})", "median(5, 1, 3)", "mean(0.5, 0.7)"])
+        want = [statistics.mean(data), statistics.median(data), sum(data), statistics.stdev(data), statistics.stdev(data),
+                statistics.variance(data), statistics.stdev(data) / len(data) ** 0.5, statistics.stdev(data) / statistics.mean(data) * 100,
+                3.0, 0.6]
+        for value, expected in zip(got, want):
+            self.assertAlmostEqual(value / expected, 1.0, delta=1e-10)
+
+    def test_a_confidence_interval_and_grubbs(self):
+        a, b, c, d, e = self.values(["ci(0.95, 10, 12, 11, 13)", "gstat(10.1, 10.2, 10.15, 10.3, 11.5)", "gcrit(3, 0.05)",
+                                     "gcrit(10, 0.05)", "gcrit(25, 0.05)"])
+        data = [10.1, 10.2, 10.15, 10.3, 11.5]
+        self.assertAlmostEqual(a / (3.1824463052837078 * statistics.stdev([10, 12, 11, 13]) / 2), 1.0, delta=1e-10)
+        self.assertAlmostEqual(b / (max(abs(x - statistics.mean(data)) for x in data) / statistics.stdev(data)), 1.0, delta=1e-10)
+        for value, expected in ((c, 1.1543048513440386), (d, 2.289954084479603), (e, 2.8216812378051954)):   # SciPy
+            self.assertAlmostEqual(value / expected, 1.0, delta=1e-9)
+
+    def test_the_sentence_of_a_discussion(self):
+        done = self.convert("`R_A = 0.0102`{=} `R_B2 = 0.0117`{=} `R_E4 = 0.3`{=}\n\nThey are ~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower than the "
+                            "`R_E4`{=3sf}% of Experiment 4.\n")
+        self.assertEqual(done.stderr, "")
+        self.assertIn("They are ~27 times lower than the 0.300% of Experiment 4.", done.stdout)
+
+    def test_a_bad_call_keeps_the_code_with_one_warning(self):
+        for expression, reason in (("mean()", "mean needs a number"), ("sd(1)", "sd needs at least two numbers"),
+                                   ("ci(2, 1, 2)", "ci takes the confidence first"), ("gcrit(2, 0.05)", "3 or more"),
+                                   ("gcrit(10, 5)", "between 0 and 1"), ("gstat(1, 1, 1)", "all the numbers are equal"),
+                                   ("rsd(1, -1)", "the mean is 0")):
+            with self.subTest(expression=expression):
+                done = self.convert(f"`{expression}`{{=}}\n")
+                self.assertEqual(done.stderr.count("WARN"), 1, done.stderr)
+                self.assertIn(reason, done.stderr)
+                self.assertIn(expression, done.stdout)
+
+    def test_the_new_function_names_are_still_free_for_a_variable(self):
+        done = self.convert("`mean = 5`{=} `sd = 2`{=} so `mean * sd`{=} and `mean(1, 3)`{=} and `sum = mean + sd = {ans}`{=}\n")
+        self.assertEqual(done.stderr, "")
+        self.assertIn("10 and 2 and sum = mean + sd = 7", done.stdout)
+
+    def test_the_older_functions_stay_reserved(self):
+        done = self.convert("`sqrt = 3`{=}\n")
+        self.assertIn("'sqrt' is built in", done.stderr)
+
+    TABLE = ("::: {#tbl:t .calc-table names=\"t*, V\" labels=\"t1=$t_{1}$; V=Volume\" head=\"Symbol; Value\" caption=\"Student's *t*\"}\n:::\n\n"
+             "::: {.calc .hide}\nt1 = qt(0.975, 1)\nt2 = qt(0.975, 2)\nt10 = qt(0.975, 10)\nt3 = qt(0.975, 3)\nV = 3.47\nV = 11.82\n:::\n")
+
+    def test_a_table_of_the_names_matching_a_pattern(self):
+        done = self.convert(self.TABLE, "pdfmd-calc-digits=4sf")
+        self.assertEqual(done.stderr, "")
+        rows = [line.split() for line in done.stdout.splitlines() if line.strip() and not line.lstrip().startswith(("-", ":"))]
+        self.assertEqual(rows[0][:2], ["Symbol", "Value"])
+        self.assertEqual([row[0] for row in rows[1:-0 or None]][:5], ["t₁", "t2", "t3", "t10", "Volume"])     # natural order: t3 before t10
+        self.assertEqual([row[-1] for row in rows[1:6]], ["12.71", "4.303", "3.182", "2.228", "3.470"])
+        self.assertIn("Student", done.stdout)
+
+    def test_the_table_is_a_real_table_with_the_identifier_and_caption(self):
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "native", "--lua-filter", str(CALC_LUA)], input=self.TABLE, capture_output=True,
+                              text=True, encoding="utf-8")
+        self.assertIn('"tbl:t"', done.stdout)
+        self.assertIn("Emph", done.stdout)                                       # the caption is Markdown
+        self.assertIn("InlineMath", done.stdout)                                 # and so is a label
+
+    def test_a_name_counts_as_defined_where_the_table_stands(self):
+        done = self.convert("::: {.calc-table names=\"V\" head=none}\n:::\n\n`V = 1`{=}\n\n::: {.calc-table names=\"V\" head=none}\n:::\n\n`V = 2`{=}\n\n"
+                            "::: {.calc-table names=\"V\" head=none}\n:::\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual([line.split()[-1] for line in done.stdout.splitlines() if line.strip().startswith("V")], ["1", "1", "2"])
+
+    def test_digits_override_and_the_names_digits(self):
+        done = self.convert("`a = 2.71828 = {ans:3sf}`{=} `b = 2.71828`{=}\n\n::: {.calc-table names=\"a b\" digits=\"1dp\" head=none}\n:::\n\n"
+                            "::: {.calc-table names=\"a b\" head=none}\n:::\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual([line.split()[-1] for line in done.stdout.splitlines() if re.fullmatch(r"[ab]\s+\S+", line.strip())],
+                         ["2.7", "2.7", "2.72", "2.71828"])
+
+    def test_what_goes_wrong_is_visible_and_warned_once_each(self):
+        done = self.convert("`ok = 1`{=} `bad = 1/0`{=}\n\n::: {.calc-table names=\"zz* ok nothing bad\"}\n:::\n\n::: {.calc-table}\n:::\n\n"
+                            "::: {.calc-table names=\"qq*\"}\n:::\n")
+        lines = [line for line in done.stderr.splitlines() if line.startswith("WARN  calc-table")]
+        self.assertEqual(len(lines), 5, done.stderr)
+        for fragment in ("no name matches 'zz*'", "'nothing' is not defined", "division by zero", "has no names", "no name matches 'qq*'"):
+            self.assertTrue(any(fragment in line for line in lines), (fragment, lines))
+        self.assertIn("calc-table: no names", done.stdout)
+        self.assertIn('calc-table names="qq*": no name found', done.stdout)
+
+    def test_the_names_as_the_text_of_the_div_and_the_digit_pattern(self):
+        done = self.convert("::: calc-table\nt# tinf\n:::\n\n::: {.calc .hide}\nt1 = 1.5\nt10 = 2.5\nt2 = 3.5\nt = 9\nt_w = 8\ntinf = 1.96\n:::\n\n"
+                            "::: calc-table\nt* V\n:::\n", "pdfmd-calc-digits=3sf")
+        rows = [line.split() for line in done.stdout.splitlines() if re.match(r"\s*(t\w*|V)\s+[\d.]+$", line)]
+        self.assertEqual([row[0] for row in rows], ["t1", "t2", "t10", "tinf", "t", "t1", "t2", "t10", "t_w", "tinf"])
+        self.assertEqual(done.stderr.count("WARN  calc-table"), 1)                    # V is not defined
+        self.assertIn("'V' is not defined", done.stderr)
+
+    def test_a_bare_word_in_braces_is_not_a_div_and_says_so(self):
+        done = self.convert("::: {.calc-table t*}\n:::\n")
+        self.assertEqual(done.stderr.count("WARN  calc-table"), 1, done.stderr)
+        self.assertIn('write ::: {.calc-table names="t*"}', done.stderr)
+        self.assertIn("{.calc-table t*}", done.stdout)
+
+    def test_the_detection_adds_the_filter_for_a_document_with_only_a_table(self):
+        self.assertTrue(pdfmd.CALC_SPAN_RE.search('::: {.calc-table names="t*"}'))
+        self.assertTrue(pdfmd.CALC_SPAN_RE.search("::: calc-table"))
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
