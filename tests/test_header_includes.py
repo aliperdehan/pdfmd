@@ -199,7 +199,7 @@ class Building(Folder):
         self.write("two.md", "# Two\n\nMore.\n")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "-r", "one.md", "two.md", "-o", "r.pdf",
                                "-e", "lualatex"], capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
-                              env={**os.environ, "PDFMD_NO_PROMPT": "1", "TEXINPUTS": f"{self.directory / 'tex'}//:"})
+                              env={**os.environ, "PDFMD_NO_PROMPT": "1", "TEXINPUTS": f"{self.directory / 'tex'}//{os.pathsep}"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         text = subprocess.run(["pdftotext", str(self.directory / "r.pdf"), "-"], capture_output=True, text=True).stdout
         self.assertIn("Experiment 7 done", " ".join(text.split()))

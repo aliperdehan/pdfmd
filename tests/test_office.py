@@ -367,7 +367,7 @@ class PackageDefaults(unittest.TestCase):
             work.mkdir()
             (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
             (work / "d.md").write_text("---\ntitle: T\n---\n\n# Head\n\nText.\n", encoding="utf-8")
-            environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+            environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//{os.pathsep}"}
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=work,
                                   capture_output=True, text=True, env=environment)
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -400,7 +400,7 @@ class PackageHelper(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text("\\usepackage{mypkg}\n\\newcommand{\\MyKey}{none}\n", encoding="utf-8")
         (work / "d.md").write_text(f"---\n{front}---\n\nText.\n", encoding="utf-8")
-        environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+        environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//{os.pathsep}"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "latex", "-o", "d.tex", "--no-stamp",
                                "--no-backup"], cwd=work, capture_output=True, text=True, env=environment)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -435,7 +435,7 @@ class PackageHelper(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
         (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
-        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//{os.pathsep}"
         self.addCleanup(os.environ.pop, "TEXINPUTS", None)
         options = pdfmd.office_options(work / "d.md", [])
         self.assertEqual(options["fonts"], "Serif")                   # <package>-office.yaml, beside the helper
@@ -462,7 +462,7 @@ class PackagePick(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text(preamble, encoding="utf-8")
         (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
-        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//{os.pathsep}"
         self.addCleanup(os.environ.pop, "TEXINPUTS", None)
         return pdfmd.office_options(work / "d.md", [])
 

@@ -27,6 +27,7 @@ except ImportError:                                  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 # never read or write the real user's config and state while testing
 import os as _os, tempfile as _tempfile  # noqa: E402
@@ -34,6 +35,7 @@ _os.environ["PDFMD_CONFIG"] = ""
 _os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
 
 import pdfmd  # noqa: E402
+from pandoc_support import tex_tree_env  # noqa: E402
 
 strip = pdfmd.strip_markdown_comments
 
@@ -810,8 +812,8 @@ class BundleReach(unittest.TestCase):
         (work / "preamble.tex").write_text("\\usepackage{mystyle}\n\\input{mylib}\n", encoding="utf-8")
         document = work / "r.md"
         document.write_text("---\ntitle: T\n---\n\nHi.\n", encoding="utf-8")
-        old = pdfmd.os.environ.get("TEXMFHOME")
-        pdfmd.os.environ["TEXMFHOME"] = str(tree)
+        old = {name: pdfmd.os.environ.get(name) for name in ("TEXMFHOME", "TEXINPUTS")}
+        pdfmd.os.environ.update(tex_tree_env(tree))
         pdfmd.find_in_tex_tree.cache_clear()
         pdfmd.tex_distribution_roots.cache_clear()
         try:
@@ -832,10 +834,11 @@ class BundleReach(unittest.TestCase):
                 pdfmd.BUNDLE_PACKAGES_CLI = saved
             self.assertIn("files/mystyle.sty", full)
         finally:
-            if old is None:
-                pdfmd.os.environ.pop("TEXMFHOME", None)
-            else:
-                pdfmd.os.environ["TEXMFHOME"] = old
+            for name, value in old.items():
+                if value is None:
+                    pdfmd.os.environ.pop(name, None)
+                else:
+                    pdfmd.os.environ[name] = value
             pdfmd.find_in_tex_tree.cache_clear()
             pdfmd.tex_distribution_roots.cache_clear()
 
