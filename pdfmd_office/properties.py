@@ -68,12 +68,12 @@ def finish_properties(path: Path, title: str | None = None, authors: list[str] |
             text = fill(fill(text, "meta:initial-creator", creator), "dc:creator", creator)
         return text
 
-    prefixes = sorted({escape(folder.rstrip("/\\")) for folder in folders if folder}, key=len, reverse=True)
+    prefixes = sorted({escape(folder.rstrip("/\\")).replace("\\", "/") for folder in folders if folder}, key=len, reverse=True)
 
     def pictures(text: str) -> str:
         def name_only(found: re.Match) -> str:
             value = found.group(2)
-            if not any(value.startswith(prefix + separator) for prefix in prefixes for separator in "/\\"):
+            if not any(value.replace("\\", "/").startswith(prefix + "/") for prefix in prefixes):     # Pandoc writes a Windows path with / (or not): either is the folder
                 return found.group(0)
             return found.group(1) + '="' + re.split(r"[/\\]", value)[-1] + '"'
         return re.sub(r'\b(descr|title)="([^"]*)"', name_only, text)

@@ -159,6 +159,8 @@ class Builds(Scratch):
                               env=self.environment(home))
         return done
 
+    @unittest.skipIf(sys.platform == "win32", "MiKTeX's LuaLaTeX stops in luaotfload when LOCALAPPDATA is not the folder it was set up with "
+                     "(CI log of the portability PR); a read-only home is not how a Windows user meets this, and nothing here is Windows-specific")
     def test_a_home_under_a_file_still_builds_and_says_so_once(self):
         done = self.build(self.blocked / "home")
         self.assertTrue((self.directory / "work" / "d.pdf").is_file(), done.stdout + done.stderr)
@@ -167,6 +169,8 @@ class Builds(Scratch):
         self.assertIn("NOTE  the cache folder", said)
         self.assertNotRegex(said, r"WARN  [^\n]*(cache|cannot be written)")
 
+    @unittest.skipIf(sys.platform == "win32", "MiKTeX's LuaLaTeX stops in luaotfload when LOCALAPPDATA is not the folder it was set up with "
+                     "(CI log of the portability PR); a read-only home is not how a Windows user meets this, and nothing here is Windows-specific")
     def test_the_cache_options_do_not_crash_on_an_unwritable_cache(self):
         done = self.build(self.blocked / "home", "--cache", "--cache-plots")
         self.assertTrue((self.directory / "work" / "d.pdf").is_file(), done.stdout + done.stderr)
