@@ -1396,9 +1396,9 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 def write_text_lf(path: Path, text: str) -> None:
-    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of."""
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
+    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of; all or nothing
+    (atomic_write_text)."""
+    atomic_write_text(path, text, newline="\n")
 
 
 PDFMD_VERSION = "3.30.9"
@@ -1457,6 +1457,61 @@ import tempfile
 from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
 from textwrap import dedent
 from typing import Iterator
+
+
+# -- Writing a file in place: through a temporary file in the same folder and os.replace() -------------------------
+# A file pdfmd rewrites (the document's BUILD NOTES, the config, the metadata, a restored source, a PDF it finishes) is written
+# whole to `.NAME.<pid>.<random>.part` beside it and then renamed over it: a crash, a full disk or ^C half-way leaves the old
+# file as it was (and the temporary file is removed). A symlink is written through, as write_text() does (the link stays); the
+# mode of the file it replaces is kept; text is written as write_text() would (newline=None: the platform's, "\n" for
+# write_text_lf). Not used for scratch files in a temporary folder, nor for a cache that is only ever replaced whole.
+@contextmanager
+def atomic_file(path: Path) -> Iterator[Path]:
+    """The path of a temporary file beside ``path`` to write into; on leaving the block it is renamed over ``path``, or removed
+    when the block raised (``path`` is then untouched)."""
+    path = Path(path)
+    target = Path(os.path.realpath(path)) if path.is_symlink() else path
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.part")
+    try:
+        yield temporary
+        try:
+            shutil.copymode(target, temporary)
+        except OSError:
+            pass                                          # a new file: the umask's mode, as the open() gave it
+        os.replace(temporary, target)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_text(path: Path, text: str, encoding: str = "utf-8", newline: str | None = None) -> None:
+    """``Path.write_text(text, encoding=...)`` (``newline`` as open() takes it), all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "x", encoding=encoding, newline=newline) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """``Path.write_bytes(data)``, all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def atomic_write_pdf(writer, path: Path) -> None:
+    """A pypdf writer's document over ``path``, all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "xb") as handle:
+            writer.write(handle)
+            handle.flush()
+            os.fsync(handle.fileno())
 
 
 def own_python_folder() -> Path:
@@ -3231,7 +3286,7 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
         data = output.read_bytes()
         if not data.isascii():
             asciifier = asciify.Asciifier(missing)
-            output.write_bytes(asciifier.text(data.decode("utf-8")).encode("ascii"))
+            atomic_write_bytes(output, asciifier.text(data.decode("utf-8")).encode("ascii"))
             lost = asciify.merge(lost, asciifier.lost)
     if not lost:
         return None
@@ -5238,10 +5293,7 @@ def set_pdf_info(pdf_path: Path, metadata: dict, verbose: bool, creator: str = "
         writer = pypdf.PdfWriter()
         writer.append(reader)
         writer.add_metadata({**(dict(reader.metadata) if reader.metadata else {}), **info})
-        with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-            writer.write(temporary)
-            temporary_path = Path(temporary.name)
-        temporary_path.replace(pdf_path)
+        atomic_write_pdf(writer, pdf_path)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
         if verbose:
             print(f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr)
@@ -5295,7 +5347,7 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             data = ink.compile(source.text, **options)
-        output.write_bytes(data)
+        atomic_write_bytes(output, data)
         set_pdf_info(output, source.metadata, verbose, creator="inkmd")
         return [str(item.message) for item in caught]
     import md2pdf
@@ -7113,7 +7165,7 @@ def config_report(init: bool = False) -> bool:
         else:
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+                atomic_write_text(path, CONFIG_TEMPLATE)
             except OSError as error:
                 print(f"Could not write {path}: {error}", file=sys.stderr)
                 return False
@@ -8669,11 +8721,11 @@ def setup_command(screen: str = "") -> bool:
                             and line not in header.splitlines()]       # (v3.29.29: the header's second line counted, a .bak every save)
             if hand_written:
                 backup = file.with_name(file.name + ".bak")
-                backup.write_text(texts[name], encoding="utf-8")
+                atomic_write_text(backup, texts[name])
                 print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
             if stores[name]:
-                file.write_text(header + yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
-                                                               default_flow_style=False), encoding="utf-8")
+                atomic_write_text(file, header + yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
+                                                                default_flow_style=False))
             elif file.exists():
                 file.unlink()
                 if folder is not None:
@@ -11929,7 +11981,7 @@ def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | 
 def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
     text = md_path.read_text(encoding="utf-8-sig")
     updated, warning = update_build_notes(text, new_line, mode)
-    md_path.write_text(updated, encoding="utf-8")
+    atomic_write_text(md_path, updated)
     if warning:
         print(f"WARN  {md_path}: {warning}", file=sys.stderr)
     if verbose:
@@ -12235,7 +12287,7 @@ def restore_version(document: Path, version, metadata_files: list[Path], note: b
         print(f"ERROR  {display_path(document)}: not restored, since the file as it is could not be backed up.",
               file=sys.stderr)
         return 1
-    document.write_text(result, encoding="utf-8")
+    atomic_write_text(document, result)
     if to_file:
         history.add_entry(history_file(document, metadata_files), entry, document.name)
     print(f"  BACKUP    {display_path(saved)}  (the file as it was a moment ago)")
@@ -12325,7 +12377,7 @@ def init_vscode_command(args) -> int:
         print(f"NOTE  {display_path(target)} exists; nothing was written. The tasks to add:\n{VSCODE_TASKS}")
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(VSCODE_TASKS, encoding="utf-8")
+    atomic_write_text(target, VSCODE_TASKS)
     print(f"WROTE  {display_path(target)}: tasks pdfmd: build, build and open, watch, extract tables "
           "(Terminal > Run Build Task). For commands, history and more, install the extension from the repository's vscode/ folder.")
     return 0
@@ -12538,7 +12590,7 @@ def put_outside_blocks(document: Path, folder: Path, manifest: dict) -> list[str
                 target = folder / where
                 if not target.is_file() or target.read_bytes() != data:
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(data)
+                    atomic_write_bytes(target, data)
                     written.append(place)
     return written
 
@@ -12738,8 +12790,8 @@ def init_backups_command(args) -> int:
             options[key] = wanted[key]
         if added:
             config_path().parent.mkdir(parents=True, exist_ok=True)
-            config_path().write_text(f"# {note_text}\n" + SETUP_HEADER + yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-                                     encoding="utf-8")
+            atomic_write_text(config_path(), f"# {note_text}\n" + SETUP_HEADER
+                              + yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
         print(f"CONFIG  {config_path()}: " + (f"set {', '.join(added)}" if added else "backup and stamp were already set; left alone"))
         return 0
     status = 0
@@ -12791,8 +12843,8 @@ def init_backups_command(args) -> int:
                 status = 1
                 continue
             new_body = "\n".join(lines)
-            target.write_text(text[:front.start("yaml")] + new_body + text[front.end("yaml"):] if target == document else new_body,
-                              encoding="utf-8")
+            atomic_write_text(target, text[:front.start("yaml")] + new_body + text[front.end("yaml"):] if target == document
+                              else new_body)
         options_now = resolve_backup_options(document, linked_metadata(document, args.metadata_file), None)
         backup_dir = backup_directory(document, {**options_now, **({"dir": folder} if folder != DEFAULT_BACKUP_DIR else {})})
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -12868,7 +12920,7 @@ def history_command(args) -> int:
                 status = 1
                 continue
             history.write_file(path, merged, document.name, other)       # the file first: nothing is lost if this stops
-            document.write_text(stripped, encoding="utf-8")
+            atomic_write_text(document, stripped)
             backup_notice(path.parent, resolve_backup_options(document, linked, None))
         else:
             entries, other = history.read_file(path)
@@ -12886,7 +12938,7 @@ def history_command(args) -> int:
                 print(f"ERROR  {display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
                 status = 1
                 continue
-            document.write_text(entries_to_notes(text, compiled), encoding="utf-8")
+            atomic_write_text(document, entries_to_notes(text, compiled))
             left = [entry for entry in entries if entry not in compiled]
             if left or other:
                 history.write_file(path, left, document.name, other)
@@ -13411,8 +13463,8 @@ def tables_command(args) -> int:
         for name, data in result.files.items():
             target = base / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(data, encoding="utf-8")
-        document.write_text(result.text, encoding="utf-8")
+            atomic_write_text(target, data)
+        atomic_write_text(document, result.text)
         print(f"  BACKUP  {display_path(backup)}")
         print(f"  WROTE   {display_path(document)}" + (f" and {len(result.files)} CSV file"
               f"{'' if len(result.files) == 1 else 's'}" if result.files else ""))
@@ -13516,13 +13568,9 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                     f"/{PDF_INFO_VERSIONS_KEY}": summary,
                     f"/{PDF_INFO_BUILD_DATE_KEY}": timestamp,
                 })
-                with NamedTemporaryFile("wb", suffix=".pdf", delete=False,
-                                        dir=pdf_path.parent) as temporary:
-                    writer.write(temporary)
-                    temporary_path = Path(temporary.name)
+                atomic_write_pdf(writer, pdf_path)
         finally:
             pypdf_logger.setLevel(previous_level)
-        temporary_path.replace(pdf_path)
     except Exception as error:  # noqa: BLE001 -- best-effort, like package_version()
         print(f"WARN  --stamp: could not write the PDF Info-dictionary stamp "
               f"into {pdf_path} ({error}) -- the compile itself still succeeded",
@@ -15102,9 +15150,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     text, why = fetch_csl(url)
     if text is not None:
         folder.mkdir(parents=True, exist_ok=True)
-        partial = cached.with_name(cached.name + ".part")
-        partial.write_text(text, encoding="utf-8")
-        partial.replace(cached)
+        atomic_write_text(cached, text)
         print(f"AUTO CSL   {url} -> {display_path(cached)}")
         return cached
     if cached.is_file():
@@ -15131,7 +15177,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
         if done is None or done.returncode != 0 or "<style" not in done.stdout:
             return None
         folder.mkdir(parents=True, exist_ok=True)
-        default.write_text(done.stdout, encoding="utf-8")
+        atomic_write_text(default, done.stdout)
     print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
           "the citations use Pandoc's default style (Chicago author-date). pdfmd-options: {csl-fallback: error} stops "
           "instead", file=sys.stderr)
@@ -16848,7 +16894,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     for name in fresh:
         (target / name).parent.mkdir(parents=True, exist_ok=True)
         if isinstance(files[name], bytes):
-            (target / name).write_bytes(files[name])
+            atomic_write_bytes(target / name, files[name])
         else:
             write_text_lf((target / name), files[name])
     # Each file on its own line with --verbose; otherwise counted by kind, and only what needs a look
@@ -16982,7 +17028,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
                 target = folder / safe_relative_path(name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if block.get("bytes") is not None:
-                    target.write_bytes(block["bytes"])
+                    atomic_write_bytes(target, block["bytes"])
                 else:
                     write_text_lf(target, block["source"])
         if away:
@@ -21231,12 +21277,9 @@ def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
             writer = pypdf.PdfWriter(clone_from=pdf_path)      # the whole document: properties, bookmarks, files
             for name, data in files.items():
                 add_deflated_attachment(writer, name, data)
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
+            atomic_write_pdf(writer, pdf_path)
     finally:
         pypdf_logger.setLevel(previous_level)
-    temporary_path.replace(pdf_path)
 
 
 def read_pdf_attachments(pdf_path: Path) -> dict[str, bytes]:
@@ -21563,7 +21606,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
             import pdfmd_flat.asciify as asciify
             label = asciify.Asciifier().text(label)
         trailer = keep.pack(entries, body, mode, label, PDFMD_VERSION)
-        output.write_bytes(keep.append(body, trailer).encode("utf-8"))
+        atomic_write_bytes(output, keep.append(body, trailer).encode("utf-8"))
     except Exception as error:  # noqa: BLE001 -- the Markdown itself is fine; say so and carry on
         print(f"WARN  keep-source: could not keep the source in {display_path(output)} ({error}); "
               "the Markdown itself was written", file=sys.stderr)
@@ -22384,7 +22427,7 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
                 raise SystemExit(f"{display_path(destination)} already exists; nothing was written "
                                  "(remove it, or give another -o folder)")
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(attachments[odf_name])
+            atomic_write_bytes(destination, attachments[odf_name])
             print(f"RESTORED  {destination.name}  (the OpenDocument file the PDF carries)")
             return 0
         names = ", ".join(sorted(attachments)) or "no attachments at all"
@@ -22498,7 +22541,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         destination = target / item
         destination.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, bytes):
-            destination.write_bytes(content)
+            atomic_write_bytes(destination, content)
         else:
             write_text_lf(destination, content)
         if not compact:
@@ -23083,10 +23126,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
             if options.get("info"):
                 writer.add_metadata(dict(options["info"]))
                 done.append("properties")
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
-        temporary_path.replace(pdf_path)
+            atomic_write_pdf(writer, pdf_path)
         if done:
             print(f"PDF   {display_path(pdf_path)}: " + ", ".join(done))
     except ValueError as error:
@@ -23441,12 +23481,9 @@ def attach_hybrid(pdf_path: Path, data: bytes, extension: str) -> bool:
             filespec = attachment.pdf_object
             filespec[NameObject("/UF")] = TextStringObject(name)
             filespec[NameObject("/Desc")] = TextStringObject(HYBRID_DESCRIPTION)
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
+            atomic_write_pdf(writer, pdf_path)
     finally:
         pypdf_logger.setLevel(previous_level)
-    temporary_path.replace(pdf_path)
     return True
 
 
