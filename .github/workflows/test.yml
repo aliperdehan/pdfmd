@@ -218,7 +218,7 @@ jobs:
         with:
           python-version: "3.13"
       - uses: pandoc/actions/setup@v1
-      - name: A LaTeX engine (MiKTeX, from Chocolatey: the organisation does not allow third-party actions)
+      - name: A LaTeX engine (MiKTeX from Chocolatey, since the organisation blocks third-party actions)
         run: |
           choco install miktex -y --no-progress
           miktex="/c/Program Files/MiKTeX/miktex/bin/x64"
