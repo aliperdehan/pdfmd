@@ -75,6 +75,8 @@ jobs:
           echo "--- --draftmode"; lualatex --draftmode -interaction=nonstopmode -output-directory "$d\\out" "$d\\t.tex" 2>&1 | tail -5; ls out
           echo "--- no draftmode"; lualatex -interaction=nonstopmode -output-directory "$d\\out" "$d\\t.tex" 2>&1 | tail -5; ls out
           echo "--- cwd of the file, relative name"; lualatex -draftmode -interaction=nonstopmode -output-directory out t.tex 2>&1 | tail -5; ls out
+          s="$(cygpath -d "$RUNNER_TEMP/dp")"; echo "--- the 8.3 name: $s"; lualatex -draftmode -interaction=nonstopmode -output-directory "$s\\out" "$s\\t.tex" 2>&1 | tail -4
+          l="$(cygpath -w -l "$s")"; echo "--- its long name: $l"
       - name: The failing modules
         shell: bash
         run: |
