@@ -155,7 +155,7 @@ class CommandLine(unittest.TestCase):
     def read(self, name: str) -> str:
         data = (self.directory / name).read_bytes()
         self.assertTrue(data.isascii(), f"{name} is not ASCII")
-        return data.decode("ascii")
+        return data.decode("ascii").replace("\r\n", "\n")       # (Pandoc writes a text file with the platform's line ends: CRLF on Windows)
 
     def test_text_beside_the_source_under_its_own_name(self):
         self.write("doc.md", HOSTILE)
