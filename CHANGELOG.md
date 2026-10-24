@@ -2,42 +2,41 @@
 
 Newest first. Versions follow semver loosely: a **major** bump changes
 behavior in a way that could surprise an existing user (a default flips, a
-flag's meaning changes), a **minor** bump adds a capability, a **patch**
-bump fixes a bug without changing what any flag does.
+flag's meaning changes). One **minor** bump (`3.N.0`) opens a feature line,
+however large it is; every change after it in that line is a **patch**
+(`3.N.x`), whatever it adds, so the version count stays small.
 
-The version string lives in one place, `pdfmd.py`, right after the module
-docstring:
+The version string lives in one place, the `PDFMD_VERSION` line of `pdfmd.py`
+(a little below its module docstring; `pyproject.toml` and the publish workflow
+read it from there):
 
 ```python
 PDFMD_VERSION = "2.0.0"
 ```
 
 `pdfmd --version` prints it. Bump it there and add an entry here in the
-same edit.
+same commit as the change.
 
-<!--
-## Why this starts at 2.0.0, not 1.0.0
+**Why this starts at 2.0.0, not 1.0.0.** `pdfmd.py` began as a one-line
+`pandoc file.md -o file.pdf` wrapper and was revised many times since — across
+ChatGPT, ChatGPT Codex, Claude Chat, Cowork, and Claude Code sessions — with no
+version marker or changelog kept at any point. `backups/pdfmd.py.bak-*` has
+snapshots from a handful of points in that history, but not from the
+ChatGPT/Codex/Cowork era at all, so reconstructing an honest "v1.x" changelog
+from what's actually on disk isn't possible — only a partial,
+misleadingly-precise-looking one. Decided 2026-09-16 (the author): start real
+changelog tracking now, at 2.0.0, rather than fabricate the gap. If the full
+history ever matters, it would need pulling the actual chat transcripts from
+each of those tools, not guessing from diffs between inconsistent backup
+snapshots.
 
-`pdfmd.py` began as a one-line `pandoc file.md -o file.pdf` wrapper and was
-revised many times since — across ChatGPT, ChatGPT Codex, Claude Chat,
-Cowork, and Claude Code sessions — with no version marker or changelog kept
-at any point. `backups/pdfmd.py.bak-*` has snapshots from a handful of
-points in that history, but not from the ChatGPT/Codex/Cowork era at all,
-so reconstructing an honest "v1.x" changelog from what's actually on disk
-isn't possible — only a partial, misleadingly-precise-looking one. Decided
-2026-09-16 (the author): start real changelog tracking now, at 2.0.0, rather than
-fabricate the gap. If the full history ever matters, it would need pulling
-the actual chat transcripts from each of those tools, not guessing from
-diffs between inconsistent backup snapshots.
-
-**Update, 2026-10-05:** an approximate outline of the earlier history has
-since been reconstructed, at the very end of this file (see "Before 2.0.0 —
+**Update, 2026-10-05:** an approximate outline of the earlier history has since
+been reconstructed, at the very end of this file (see "Before 2.0.0 —
 reconstructed history"), from the saved Codex transcripts and the surviving
-backup snapshots. It is explicitly NOT reliable: its 1.x numbers are
-invented, snapshot-based entries cover windows of days rather than single
-changes, and anything done in unsaved sessions (other ChatGPT chats,
-claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
--->
+backup snapshots. It is explicitly NOT reliable: its 1.x numbers are invented,
+snapshot-based entries cover windows of days rather than single changes, and
+anything done in unsaved sessions (other ChatGPT chats, claude.ai, Cowork) is
+missing. Real tracking still begins at 2.0.0.
 
 ---
 

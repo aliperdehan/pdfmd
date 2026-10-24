@@ -8498,10 +8498,21 @@ def document_file(name: str) -> Path | None:
 
 
 def document_headings(text: str) -> list[tuple[int, int, str]]:
-    """(line index, level, title) of each Markdown heading outside fenced code, in order."""
+    """(line index, level, title) of each Markdown heading outside fenced code and HTML comments, in order."""
     found: list[tuple[int, int, str]] = []
     fence = ""
+    in_comment = False
     for index, line in enumerate(text.splitlines()):
+        if not fence:                                    # a comment hides its lines, headings included (a fence in one does not count)
+            if in_comment:
+                end = line.find("-->")
+                if end < 0:
+                    continue
+                in_comment, line = False, line[end + 3:]
+            line = re.sub(r"<!--.*?-->", "", line)
+            start = line.find("<!--")
+            if start >= 0:
+                in_comment, line = True, line[:start]
         marker = re.match(r"^\s*(`{3,}|~{3,})", line)
         if marker:
             fence = "" if fence and marker.group(1)[0] == fence[0] else (fence or marker.group(1))

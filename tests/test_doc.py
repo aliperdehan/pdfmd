@@ -43,7 +43,7 @@ class Command(unittest.TestCase):
 
     def test_a_section_by_number_and_by_word(self):
         by_number = run("--doc", "agents", "1").stdout
-        self.assertTrue(by_number.startswith("## The ten commands that matter"), by_number[:60])
+        self.assertTrue(by_number.startswith("## The commands that matter"), by_number[:60])
         self.assertNotIn("## Reading what pdfmd says", by_number)            # it ends at the next heading of its level
         by_word = run("--doc", "agents", "running", "without").stdout
         self.assertTrue(by_word.startswith("## Running without a person"))
@@ -76,6 +76,19 @@ class Reading(unittest.TestCase):
         text = "# One\n\n```sh\n# a comment, not a heading\n```\n\n## Two\n\n~~~\n## nor this\n~~~\n\n### Three ###\n"
         self.assertEqual([(level, title) for _, level, title in pdfmd.document_headings(text)],
                          [(1, "One"), (2, "Two"), (3, "Three")])
+
+    def test_headings_ignore_html_comments(self):
+        text = ("# One\n\n<!--\n## Hidden\ntext\n-->\n\n## Two\n\n<!-- ## nor this -->\n<!-- start\n## nor this\n-->\n## Three\n\n"
+                "```\n<!-- not a comment, a code line\n```\n\n## Four\n")
+        self.assertEqual([title for _, _, title in pdfmd.document_headings(text)], ["One", "Two", "Three", "Four"])
+        self.assertEqual(pdfmd.document_section(text, "1")[0], "Two")                     # `1` is the first visible ## heading
+
+    def test_the_first_section_of_the_changelog_is_its_newest_entry(self):
+        first = pdfmd.document_section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), "1")
+        self.assertEqual(first[0].split()[0], f"v{pdfmd.PDFMD_VERSION}")
+        self.assertEqual(run("--doc", "changelog", "1").stdout.splitlines()[0].split()[:2], ["##", f"v{pdfmd.PDFMD_VERSION}"])
+        header = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n---\n", 1)[0]
+        self.assertNotIn("<!--", header)                                                  # the "why 2.0.0" paragraph is visible
 
     def test_a_section_runs_to_the_next_heading_of_its_level_or_higher(self):
         text = "# A\n\n## B\nb text\n\n### C\nc text\n\n## D\nd text\n"
@@ -119,7 +132,7 @@ class Render(unittest.TestCase):
                 page = pdfmd.render_document(ROOT / "docs" / "agents.md", "pdfmd: agents")
                 self.assertTrue(page and page.is_file())
                 text = page.read_text(encoding="utf-8")
-                self.assertIn("The ten commands that matter", text)
+                self.assertIn("The commands that matter", text)
                 before = page.stat().st_mtime_ns
                 self.assertEqual(pdfmd.render_document(ROOT / "docs" / "agents.md", "pdfmd: agents"), page)
                 self.assertEqual(page.stat().st_mtime_ns, before)
