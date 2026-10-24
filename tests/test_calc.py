@@ -497,7 +497,7 @@ class Switches(unittest.TestCase):
         self.assertIn("\\centering", convert("latex", env={"PDFMD_CALC_ALIGN": "center"}))
         typst = convert("typst", "--calc-align", "center")
         self.assertEqual(typst.count("#v(0.75em, weak: true)"), 2)
-        self.assertLess(typst.find("#align(center)["), typst.find("x = 2"))
+        self.assertLess(typst.find("#align(center)["), re.search(r"x \\?= 2", typst).start())      # (Pandoc 3.1 writes Typst's = as \\=)
         html = convert("html", "--calc-align", "center")
         self.assertIn('style="padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;"', html)
         self.assertNotIn("padding", convert("html", "--calc-space", "off"))
