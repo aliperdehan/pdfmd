@@ -119,14 +119,18 @@ Header files and header-includes (v3.27.18):
     the code-wrapping header), where a shared preamble goes; the document's own last but for the packages header. An
     --include-in-header or `-M header-includes` of your own replaces them, as in Pandoc.
 
-Inline calculator (v3.30.4):
-    inline code followed at once by a bare `{=}` becomes its value: `2026 - 2006`{=} is 20. pdfmd_lua/calc.lua has its own
-    small parser (+ - * / ^ ** % // %/%, parentheses, |abs|, a trailing % as a label, pi, deg, sin cos tan cot sec csc and their inverses, hyperbolics,
-    sind cosd tand asind acosd atand, exp ln log log10 log2 sqrt cbrt abs sign floor ceil trunc round min max hypot factorial) and runs
-    nothing. What it cannot evaluate keeps its code, with one WARN. Added by `calc_filter_args()` only for a document
-    that has such a span; --no-calc, `pdfmd-options: {calc: off}` or --setup turns it off, and round() sends an exact
-    half to the even digit (R, Python) unless --calc-round away / `calc-round: away`. Needs Pandoc (the built-in renderer
-    shows the span as written). docs/recipes.md 1.11.
+Inline calculator (v3.30.4, names and `::: calc` v3.30.6):
+    inline code followed at once by a bare `{=}` becomes its value: `2026 - 2006`{=} is 20; `C = n / V = {ans:4sf}` inside
+    the span prints the text with the value put in and stores C (full precision, found anywhere in the document, parts
+    included); `A = 4 - 2` stores and prints nothing; `::: calc` calculates the lines that hold {ans} without backticks.
+    pdfmd_lua/calc.lua has its own small parser (+ - * / ^ ** % // %/%, parentheses, |abs|, a trailing % as a label, pi,
+    deg, sin cos tan cot sec csc and their inverses, hyperbolics, sind cosd tand asind acosd atand, exp ln log log10 log2
+    sqrt cbrt abs sign floor ceil trunc round min max hypot factorial) and runs nothing. What it cannot evaluate keeps its
+    text, with one WARN. Added by `calc_filter_args()` only for a document that has such a span or div. The settings are
+    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away}}` (`calc: off` is the short form), --calc /
+    --no-calc, --calc-digits, --calc-round or --setup; round() sends an exact half to the even digit (R, Python) unless
+    away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
+    docs/recipes.md 1.11.
 
 Paragraph indent for a stretch of text (v3.30.0):
     a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`)
@@ -1391,7 +1395,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.5"
+PDFMD_VERSION = "3.30.6"
 import argparse
 import atexit
 import csv
@@ -2818,32 +2822,74 @@ def indent_filter_args(sources: Path | list[Path]) -> list[str]:
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
-# An inline calculator (v3.30.4): inline code followed at once by a bare `{=}` is replaced by its value,
-# `2026 - 2006`{=} -> 20, evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). The filter goes in only for a
-# document that has such a span. --calc / --no-calc (reaching -j workers as PDFMD_CALC), else `pdfmd-options: {calc: off}`
-# (the document, its metadata files, the config) turns it on or off; `calc-round: even|away` (--calc-round, PDFMD_CALC_ROUND)
-# is how round() settles an exact half: to even (R and Python, the default) or away from zero.
-CALC_SPAN_RE = re.compile(r"`\{=\}")
+# An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
+# evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
+# text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
+# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round}}` (the
+# document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
+# --calc / --no-calc, --calc-digits 4sf, --calc-round away (reaching -j workers as PDFMD_CALC, PDFMD_CALC_DIGITS,
+# PDFMD_CALC_ROUND). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
+# prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
+CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2})?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_ENV = "PDFMD_CALC"
+CALC_DIGITS_ENV = "PDFMD_CALC_DIGITS"
 CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
 CALC_ROUNDS = ("even", "away")
+CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
+
+
+def calc_option(md_path: Path, metadata_files: list[Path], field: str):
+    """`pdfmd-options.calc.<field>`; `calc: off` alone means `enabled: off`."""
+    value = first_pdfmd_option(md_path, list(metadata_files), "calc")
+    if isinstance(value, dict):
+        return value.get(field)
+    return value if field == "enabled" else None
 
 
 def calc_is_off(md_path: Path, metadata_files: list[Path]) -> bool:
     value = os.environ.get(CALC_ENV)
     if value is None:
-        value = first_pdfmd_option(md_path, list(metadata_files), "calc")
-    return value is False or (isinstance(value, str) and value.strip().lower() in ("off", "false", "no", "0"))
+        value = calc_option(md_path, metadata_files, "enabled")
+    if value is None:
+        return False
+    flag = option_flag(value)
+    if flag is None:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.enabled must be true or false, not {value!r}")
+    return not flag
 
 
 def calc_round_mode(md_path: Path, metadata_files: list[Path]) -> str:
     value = os.environ.get(CALC_ROUND_ENV)
     if value is None:
-        value = first_pdfmd_option(md_path, list(metadata_files), "calc-round")
+        value = calc_option(md_path, metadata_files, "round")
     mode = str(value).strip().lower() if value is not None else "even"
     if mode not in CALC_ROUNDS:
-        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc-round must be even or away, not {value!r}")
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.round must be even or away, not {value!r}")
     return mode
+
+
+def calc_digits_value(value) -> str | None:
+    """``4sf`` / ``2dp`` from what was written (None when it is no format)."""
+    found = CALC_DIGITS_RE.fullmatch(str(value).strip())
+    if not found:
+        return None
+    count, kind = int(found.group(1)), found.group(2).lower()
+    if (kind == "sf" and not 1 <= count <= 15) or (kind == "dp" and count > 15):
+        return None
+    return f"{count}{kind}"
+
+
+def calc_digits_mode(md_path: Path, metadata_files: list[Path]) -> str | None:
+    value = os.environ.get(CALC_DIGITS_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "digits")
+    if value is None or str(value).strip().casefold() in ("", "none", "auto"):
+        return None
+    found = calc_digits_value(value)
+    if found is None:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.digits must be like 4sf (four significant figures) "
+                         f"or 2dp (two decimal places), not {value!r}")
+    return found
 
 
 def calc_round_argument(value: str) -> str:
@@ -2852,8 +2898,15 @@ def calc_round_argument(value: str) -> str:
     return value.strip().lower()
 
 
+def calc_digits_argument(value: str) -> str:
+    found = calc_digits_value(value)
+    if found is None:
+        raise argparse.ArgumentTypeError(f"{value!r}: like 4sf (four significant figures) or 2dp (two decimal places)")
+    return found
+
+
 def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
-    """``--lua-filter calc.lua`` when a source has inline code followed by `{=}` and `calc` is not off."""
+    """``--lua-filter calc.lua`` when a source has a `{=}` span or a `::: calc` div and `calc` is not off."""
     files = sources if isinstance(sources, list) else [sources]
     if not any(CALC_SPAN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
         return []
@@ -2866,7 +2919,11 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     shipped = pdfmd_lua.path("calc")
     if shipped is None:
         return []
-    return ["-M", "pdfmd-calc-round=" + calc_round_mode(files[0], metadata_files), "--lua-filter", str(shipped)]
+    arguments = ["-M", "pdfmd-calc-round=" + calc_round_mode(files[0], metadata_files)]
+    digits = calc_digits_mode(files[0], metadata_files)
+    if digits:
+        arguments += ["-M", "pdfmd-calc-digits=" + digits]
+    return arguments + ["--lua-filter", str(shipped)]
 
 
 def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -24087,11 +24144,16 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --view: use $PDFMD_PAGER / $PAGER / `less -FRX` when stdout is a terminal (the default); "
                              "--no-pager prints it all. Also `pdfmd-options: {pager: false}`, or --setup")
     parser.add_argument("--calc", action=argparse.BooleanOptionalAction, default=None,
-                        help="evaluate inline code followed by `{=}` (`2026 - 2006`{=} is 20) in the text; --no-calc leaves "
-                             "it as written. On by default; also `pdfmd-options: {calc: off}`, or --setup")
+                        help="evaluate inline code followed by `{=}` (`2026 - 2006`{=} is 20) and the lines of a `::: calc` div "
+                             "(`C = n / V = {ans:4sf}`); --no-calc leaves them as written. On by default; also "
+                             "`pdfmd-options: {calc: {enabled: false}}` (or `calc: off`), or --setup")
+    parser.add_argument("--calc-digits", type=calc_digits_argument, default=None, metavar="4sf|2dp",
+                        help="how many figures a calculated value shows: 4sf (four significant figures), 2dp (two decimal "
+                             "places). Unset: as R prints, up to 7 figures. `{ans:2dp}` in a span wins. Also "
+                             "`pdfmd-options: {calc: {digits: 4sf}}`, or --setup")
     parser.add_argument("--calc-round", type=calc_round_argument, default=None, metavar="even|away",
-                        help="how round() in `{=}` settles an exact half: even (the default; 2.5 is 2, as R and Python do) "
-                             "or away from zero (2.5 is 3). Also `pdfmd-options: {calc-round: away}`, or --setup")
+                        help="how round() in a calculation settles an exact half: even (the default; 2.5 is 2, as R and Python "
+                             "do) or away from zero (2.5 is 3). Also `pdfmd-options: {calc: {round: away}}`, or --setup")
     parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
@@ -24668,6 +24730,8 @@ def main() -> None:
             os.environ[variable] = str(value)
     if args.calc is not None:
         os.environ[CALC_ENV] = "on" if args.calc else "off"
+    if args.calc_digits is not None:
+        os.environ[CALC_DIGITS_ENV] = args.calc_digits
     if args.calc_round is not None:
         os.environ[CALC_ROUND_ENV] = args.calc_round
     if args.table_keep is not None:

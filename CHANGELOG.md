@@ -41,6 +41,45 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.6 — 2026-10-24
+
+Pre-edit state: commit `1725405` (v3.30.5).
+
+### Added
+
+- **`{ans}`: the calculator prints the text it was given.** Inside a `` `...`{=} `` span, `` `V = 20.60 - 0.00 = {ans:2dp} mL`{=} `` becomes
+  "V = 20.60 - 0.00 = 20.60 mL" (the text as typed, `{ans}` replaced); the expression is what stands between the last `=` before `{ans}` and that
+  `= {ans}`, and what stands before it is a label. `` `2-4={ans}`{=} `` works unspaced and prints as typed. Several `{ans}` may share a span.
+- **Names.** A plain identifier on the left (`C_EDTA = ... = {ans}`, or the word after a `:` `;` `,` of a label: `Run 1: V = ...`) is stored with the
+  FULL value, not the displayed one, so later calculations cannot drift from what the page shows. `` `A = 4 - 2`{=} `` only stores (prints nothing);
+  `` `A`{=} `` and `` `A * 2`{=} `` print values. A name is found anywhere in the document, parts included (Results may cite Calculations): the
+  nearest definition above its use, else the first below; a name may be defined again; a cycle, an unknown name or a name that is a function or
+  constant (`pi`, `sqrt`) is a WARN and the text is kept. A stored name remembers the digits it was given.
+- **Number formats.** `{ans:4sf}` four significant figures (trailing zeros kept: 20.60; the digits before the point are never dropped, 1049 at 3sf is
+  1049; scientific only below 1e-6 or from 1e15), `{ans:2dp}` two decimal places, and after a span `` `1/3`{=3sf} `` (Pandoc reads `{=3sf}` as a
+  raw attribute: the filter takes `NNsf` / `NNdp` raw inlines and leaves every other raw format alone).
+- **`::: calc`** (also `::: {.calc}`, `::: {#id .calc}`; the class alone, as in Pandoc) calculates every line that holds `{ans}`, in paragraphs, list
+  items and quotes, without backticks; other lines are plain text; a line with bold, a link or math is left as written with a WARN. The detection
+  adds the filter for the div as well. It is the opt-in form of calculating prose: nothing outside it is read.
+- `--calc-digits 4sf|2dp` (and `PDFMD_CALC_DIGITS` for `-j` workers) and `pdfmd-options: {calc: {digits: 4sf}}` set the default format of a document
+  (unset: as R prints, up to 7 figures); a span's own format wins. `--setup` rows. README "Calculations inside the text" (for anyone writing with it),
+  docs/recipes.md 1.11.
+
+### Changed
+
+- **The calculator's options live under `calc:`** (like `csv:` and `backup:`): `pdfmd-options: {calc: {enabled, digits, round}}`, `--setup` rows
+  `options.calc.enabled|digits|round`. `calc: off` / `calc: false` stays as the short form of `enabled: false`. The flat `calc-round` key of 3.30.4
+  is gone (3.30.4 was not released); `--calc`, `--no-calc`, `--calc-round` are unchanged. A wrong `digits` or `round` is an error naming the key.
+- `tests/test_calc.py`: 33 tests (the new ones: 16 statement forms, 20 formats, the div in its spellings, two placeholders in a line, the warnings,
+  the options, flags and variables, and a PDF in which Results cites a name that Calculations defines in a `::: calc` div).
+
+### Not done (queued)
+
+- Spacing the operators for you (`C=n/V={ans}` printed as `C = n / V = 0.0203`), calculating plain prose without `{=}` or a div, `$..$` math, statistics
+  (mean, stdev, rsd, a t quantile, Grubbs), a check mode for a number already typed, significant-figure tracking, `.qmd` spellings.
+
+---
+
 ## v3.30.5 — 2026-10-24
 
 Pre-edit state: commit `2d56ccf` (v3.30.4).

@@ -37,7 +37,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--global", "--merge-history", "--dry-run")),
     "code": ("code blocks", ("--line-numbers", "--no-code-wrap")),
     "raw": ("raw HTML, LaTeX, Typst and Word pieces inside Markdown, page breaks", (
-        "--raw", "--no-raw", "--raw-for", "--pagebreak", "--no-pagebreak", "--markup", "--no-markup", "--show-comments", "--no-show-comments", "--calc", "--no-calc", "--calc-round")),
+        "--raw", "--no-raw", "--raw-for", "--pagebreak", "--no-pagebreak", "--markup", "--no-markup", "--show-comments", "--no-show-comments", "--calc", "--no-calc", "--calc-digits", "--calc-round")),
     "markdown": ("plain Markdown, text and ASCII output (--to gfm, txt, ascii), and Markdown that carries its source", (
         "--gfm-scripts", "--gfm-math", "--ascii-missing", "--keep-source", "--no-keep-source", "--restore", "--list")),
     "view": ("reading a document in the terminal: styled text, tables, math as text (--view, --to ansi)", (

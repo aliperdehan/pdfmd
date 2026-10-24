@@ -677,12 +677,90 @@ means `unicode` here); math as Pandoc's plain writer sets it (`E = mc²`). A pic
 for it, and a Typst or LaTeX picture piece is left out with a `WARN`. `pdfmd-options: {txt: {scripts: unicode, title:
 true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc's own plain writer; that is `--to plain`.
 
-### A number computed inside a sentence: `` `2026 - 2006`{=} ``
+### Calculations inside the text: `{=}`, `{ans}` and `::: calc`
 
-Inline code followed at once by a bare `{=}` is replaced by its value (3.30.4): `` `2026 - 2006`{=} `` is 20, `` `sin(30*deg)`{=} `` is 0.5.
-`pdfmd_lua/calc.lua` has its own small parser (`+ - * / ^ % //`, parentheses, `pi`, `sin cos tan` and their inverses, `exp ln log sqrt`,
-`round` (an exact half goes to the even digit, as in R and Python: `round(2.5)` is 2; `--calc-round away` or `pdfmd --setup` gives 3), `min max` and more; [docs/recipes.md](docs/recipes.md) 1.11 lists them) and runs nothing, so it is safe on any file. What it cannot
-evaluate keeps its code, with one `WARN`. `--no-calc`, `pdfmd-options: {calc: off}` or `--setup` turns it off. Needs Pandoc.
+pdfmd can compute the numbers of a lab report (or any document) for you, so a result is never typed by hand and a changed input
+changes every place that uses it (3.30.4 to 3.30.6; needs Pandoc, the built-in renderer shows the source as written). It has its
+own small arithmetic parser and **runs nothing** (no R, no Python, no `load`), so it is safe on a file from anybody.
+
+**1. Inline code followed at once by `{=}` is replaced by its value**
+
+```markdown
+Since `2026 - 2006`{=} years have passed, the angle is `sin(30*deg)`{=} and `round(4/3 * pi * 2.5^3, 1)`{=} cm3.
+```
+
+gives "Since 20 years have passed, the angle is 0.5 and 65.4 cm3." Inline code without `{=}` and code blocks are never touched.
+
+**2. `{ans}` inside the span prints the whole text with the value put in** (the text is kept exactly as typed)
+
+| You write | The document says |
+|---|---|
+| `` `2 - 4 = {ans}`{=} `` | 2 - 4 = -2 |
+| `` `V = 20.60 - 0.00 = {ans:2dp} mL`{=} `` | V = 20.60 - 0.00 = 20.60 mL |
+| `` `C = n / V = {ans:4sf} M`{=} `` | C = (the text) = 0.02027 M, and C is stored |
+| `` `A = 4 - 2`{=} `` | nothing: A is only stored |
+| `` `A`{=} ``, `` `A * 2`{=} `` | the value of A, of A * 2 |
+
+The expression is what stands between the last `=` before `{ans}` and that `= {ans}`; everything before it is a label. A name is
+stored when it is a plain identifier (letters, digits, `_`: `C_EDTA`, `ppm1`) standing alone, or the word after a `:` `;` or `,`
+(`Run 1: V = ...` stores `V`). Text between the expression and the `=` breaks it (`so 2 + 2 = {ans}` is an error: `so` is not
+a number), and units go after `{ans}`, never inside an expression. Several `{ans}` may share a span.
+
+**3. Names (variables) keep the full value**, not the rounded one: `C_Ca = n_Ca / V = {ans:4sf}` shows 0.02039 but stores 0.020386...,
+so `` `C_Ca * 2`{=} `` uses the full number and the numbers on the page cannot drift from one another. A name is found
+anywhere in the document, parts included (Results in `45-results.md` may cite what `50-calculations.md` defines). It means the nearest
+definition above the place that uses it, else the first one below; defining a name again is allowed (`Run 2: V = ...`) and
+the later uses see the later value. A name remembers the digits it was defined with, so `` `C_Ca`{=} `` prints 4 significant figures too.
+A name that is a function or constant (`pi`, `sqrt`, `deg`) is refused.
+
+**4. A `::: calc` div does the same for its lines without any backticks**
+
+```markdown
+::: calc
+Run 1: V = 20.60 - 0.00 = {ans:2dp} mL.\
+C_EDTA = 0.4179 * 0.05000 / (100.09 * 0.5000 * V / 1000) = {ans:4sf} M
+
+Run 2: V = 41.11 - 20.60 = {ans:2dp} mL.
+:::
+```
+
+Only a line that holds `{ans}` is calculated; every other line, and the rest of the document, is plain text. `::: calc` and
+`::: {.calc}` are the same (as in Pandoc); `{#id .calc}` keeps its id. A line with bold, a link or math in it is left as written
+with a WARN. A `` `...`{=} `` span works inside the div too, and the div's names are the document's names.
+
+**Digits.** `{ans:4sf}` four significant figures (trailing zeros kept: 20.60, 0.02027; the digits before the point are never
+dropped, 1049 at 3sf is 1049), `{ans:2dp}` two decimal places (digits after the point: burette volumes). After a span a format
+works as well: `` `1/3`{=3sf} `` is 0.333. Without any format a value prints as R does: up to 7 figures, `20` and not `20.0`.
+The default for a whole document is `pdfmd-options: {calc: {digits: 4sf}}`.
+
+**Operators:** `+ - * /`, `^` and `**` (right to left, so `-2^2` is -4), `%` and `%%` (remainder, `-7 % 3` is 2), `//` and `%/%` (floor
+division, `7 // 2` is 3), parentheses, `|a - b|` (absolute value), and a `%` with no number after it is a percent sign, a label:
+`0.5 / 4 * 100%` is 12.5. `×`, `·`, `÷` and `−` work. **Numbers:** `12`, `.5`, `6.022e23`. **Constants:** `pi`, `deg` (= pi/180).
+**Functions:** `sin cos tan cot sec csc` and `asin acos atan acot` (radians; `atan(y, x)` for two arguments),
+`sinh cosh tanh asinh acosh atanh`, `sind cosd tand` (degrees in) and `asind acosd atand` (degrees out), `exp ln log` (`log(x, base)`),
+`log10 log2 sqrt cbrt abs sign floor ceil trunc`, `round(x, digits)`, `min max` (any number), `hypot factorial`. Angles are in radians
+unless the name ends in `d`: `sin(30*deg)` and `sind(30)` are both 0.5. A trig result closer to 0 than 1e-15 is 0 (`sin(pi)`).
+
+**`round` goes to the even digit on an exact half, as R and Python do** (`round(2.5)` is 2, `round(3.5)` is 4, `round(0.125, 2)` is
+0.12). For half away from zero (2.5 is 3) set `calc: {round: away}`.
+
+**Settings.** Under `pdfmd-options:` (a document, a folder's `metadata.yaml`, the config file; `pdfmd --setup` has the same rows):
+
+```yaml
+pdfmd-options:
+  calc:
+    enabled: true     # false (or `calc: off`) leaves every {=} and ::: calc as written
+    digits: 4sf       # the default format: 4sf, 2dp; empty = as R prints
+    round: even       # or away
+```
+
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away` (the command line wins over the document).
+
+**When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
+wrong format) the text is kept as written and pdfmd prints one `WARN  calc: ...` naming it and the reason; nothing is dropped
+silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
+confidence interval), a mode that checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
+`.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
 ### Read it in the terminal: `--view` and `--to ansi`
 

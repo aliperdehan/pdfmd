@@ -46,7 +46,7 @@ VALUES = (
 
 FAILS = (
     ("1/0", "division by zero"), ("5 // 0", "division by zero"), ("5 % 0", "division by zero"), ("foo(2)", "'foo' is not a function"),
-    ("x + 1", "'x' is not a number"), ("3 +", "ends too soon"), ("(1 + 2", "expected ')'"), ("1 2", "unexpected"), ("|1 - 2", "expected '|'"), ("2 $ 3", "is not arithmetic"),
+    ("x + 1", "'x' is not defined"), ("3 +", "ends too soon"), ("(1 + 2", "expected ')'"), ("1 2", "unexpected"), ("|1 - 2", "expected '|'"), ("2 $ 3", "is not arithmetic"),
     ("asin(2)", "not defined there"), ("asind(2)", "not defined there"), ("sqrt(-1)", "not defined there"), ("ln(0)", "not defined there"), ("acosh(0.5)", "not defined there"),
     ("(-8)^(1/3)", "not a number"), ("10^400", "infinite"), ("sin(1, 2)", "takes 1 argument"), ("min()", "needs a number"),
     ("round(2.5, 1.5)", "whole number"), ("factorial(2.5)", "whole number"), ("factorial(171)", "whole number"), ("cot(0)", "not defined"),
@@ -55,12 +55,13 @@ FAILS = (
 
 class Detection(unittest.TestCase):
     def test_what_adds_the_filter(self):
-        for text in ("so `1/2`{=} is half", "`1/2`{=}.", "``1/2``{=}", "a `2+2`{=}, b"):
+        for text in ("so `1/2`{=} is half", "`1/2`{=}.", "``1/2``{=}", "a `2+2`{=}, b", "`1/3`{=4sf}", "`1/3`{=2dp}", "::: calc", "::: {.calc}",
+                     "::::: {#c1 .calc}", "  ::: calc"):
             with self.subTest(text=text):
                 self.assertTrue(pdfmd.CALC_SPAN_RE.search(text))
 
     def test_what_does_not(self):
-        for text in ("`1/2` is half", "`1/2`{.calc}", "{=} alone", "`{r} 1+1`"):
+        for text in ("`1/2` is half", "`1/2`{.calc}", "{=} alone", "`{r} 1+1`", "{ans} in prose", "::: calculation", "::: {.csv}", "`x`{=html}"):
             with self.subTest(text=text):
                 self.assertFalse(pdfmd.CALC_SPAN_RE.search(text))
 
@@ -80,6 +81,15 @@ class Detection(unittest.TestCase):
                     off = Path(directory) / "off.md"
                     off.write_text(f"---\n{header}---\n\nIt is `2+2`{{=}}.\n", encoding="utf-8")
                     self.assertEqual(pdfmd.calc_filter_args(off, []), [])
+            for header in ("pdfmd-options:\n  calc:\n    enabled: false\n", "pdfmd-options:\n  calc:\n    enabled: off\n"):
+                with self.subTest(header=header):
+                    mapped = Path(directory) / "mapped.md"
+                    mapped.write_text(f"---\n{header}---\n\nIt is `2+2`{{=}}.\n", encoding="utf-8")
+                    self.assertEqual(pdfmd.calc_filter_args(mapped, []), [])
+            digits = Path(directory) / "digits.md"
+            digits.write_text("---\npdfmd-options:\n  calc:\n    digits: 4sf\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
+            self.assertEqual(pdfmd.calc_filter_args(digits, []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-digits=4sf",
+                                                                   "--lua-filter", str(CALC_LUA)])
             on = Path(directory) / "on.md"
             on.write_text("---\npdfmd-options:\n  calc: on\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertIn("--lua-filter", pdfmd.calc_filter_args(on, []))
@@ -144,6 +154,142 @@ class Filter(unittest.TestCase):
         self.assertIn("It is 20.", self.convert("It is `2026 - 2006`{=}.\n", "typst").stdout)
 
 
+
+# (document text, what a plain-text build says, words in the warnings): the {ans} placeholder, stored names, formats
+STATEMENTS = (
+    ("`2-4`{=}", "-2"),
+    ("`2 - 4 = {ans}`{=}", "2 - 4 = -2"),
+    ("`2-4={ans}`{=}", "2-4=-2"),
+    ("`V = 20.60 - 0.00 = {ans} mL`{=}", "V = 20.60 - 0.00 = 20.6 mL"),
+    ("`V = 20.60 - 0.00 = {ans:2dp} mL`{=}", "V = 20.60 - 0.00 = 20.60 mL"),
+    ("`A = 4 - 2`{=}Value `A`{=}.", "Value 2."),
+    ("`A = 4 - 2 = {ans}`{=}", "A = 4 - 2 = 2"),
+    ("`A = B = 4 - 2`{=}`A + B`{=}", "4"),
+    ("`RSD = R_C = 3 / 4 * 100% = {ans}%`{=} `R_C`{=}", "RSD = R_C = 3 / 4 * 100% = 75% 75"),
+    ("Use `B`{=}. `B = 6 / 4`{=}", "Use 1.5."),                                  # a name may be used before it is given
+    ("`A = 1`{=} `A`{=} `A = 2`{=} `A`{=}", "1 2"),                              # the nearest definition above
+    ("`A = 1/3 = {ans:4sf}`{=}, `A`{=} and `A + 1`{=}", "A = 1/3 = 0.3333, 0.3333 and 1.333333"),   # a name keeps its format
+    ("`A = 1/3`{=3sf}`A`{=} and `1/3`{=2dp}", "0.333 and 0.33"),
+    ("`a = 2 + 2 = {ans} and b = 3 + 3 = {ans:2dp}`{=}", "a = 2 + 2 = 4 and b = 3 + 3 = 6.00"),
+    ("`Run 1: V = 5 - 1 = {ans:2dp} mL`{=} then `V`{=}", "Run 1: V = 5 - 1 = 4.00 mL then 4.00"),
+    ("{ans} stays in `code` and prose", "{ans} stays in code and prose"),
+)
+
+FORMATS = (
+    ("0.0203862", "4sf", "0.02039"), ("20.6", "4sf", "20.60"), ("0.0000265", "3sf", "0.0000265"), ("1.6e-19", "4sf", "1.600e-19"),
+    ("6.022e23", "4sf", "6.022e+23"), ("9.9996", "4sf", "10.00"), ("-0.0004999", "2sf", "-0.00050"), ("0", "3sf", "0.00"),
+    ("1049", "3sf", "1049"), ("1049.6", "3sf", "1050"), ("12345.678", "3sf", "12346"), ("2.5", "1sf", "2"), ("3.5", "1sf", "4"),
+    ("0.125", "2dp", "0.12"), ("-0.001", "1dp", "0.0"), ("1234.5678", "0dp", "1235"), ("2", "3dp", "2.000"), ("20.6", "2dp", "20.60"),
+    ("231.0997", "4sf", "231.1"), ("0.1299657", "2sf", "0.13"),
+)
+
+DIV = """\
+::: calc
+Run 1: V = 20.60 - 0.00 = {ans:2dp} mL.\\
+ppm = 0.02039 * 11.66 / 25.00 * 24.305 * 1000 = {ans:4sf} ppm
+
+No placeholder, so V = 3 + 4 stays as it is.
+
+Run 2: V = 41.11 - 20.60 = {ans:2dp} mL, double = V * 2 = {ans:1dp}.
+:::
+
+Later: `V`{=} and `ppm`{=}.
+"""
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Variables(unittest.TestCase):
+    def convert(self, text: str, *meta: str, writer: str = "plain") -> subprocess.CompletedProcess:
+        arguments = [PANDOC, "-f", "markdown", "-t", writer, "--wrap=none"]
+        for item in meta:
+            arguments += ["-M", item]
+        return subprocess.run(arguments + ["--lua-filter", str(CALC_LUA)], input=text, capture_output=True, text=True, encoding="utf-8")
+
+    @staticmethod
+    def flat(text: str) -> str:
+        return " ".join(text.split())
+
+    def test_statements(self):
+        for source, expected in STATEMENTS:
+            with self.subTest(source=source):
+                done = self.convert(source + "\n")
+                self.assertEqual(self.flat(done.stdout), expected, done.stderr)
+                self.assertEqual(done.stderr, "")
+
+    def test_formats(self):
+        for value, fmt, expected in FORMATS:
+            with self.subTest(value=value, fmt=fmt):
+                done = self.convert(f"`{value}`{{={fmt}}}\n")
+                self.assertEqual(self.flat(done.stdout), expected, done.stderr)
+
+    def test_the_default_digits_from_the_option(self):
+        self.assertEqual(self.flat(self.convert("`2/3`{=} `1049`{=} `20.6 = {ans}`{=}\n", "pdfmd-calc-digits=4sf").stdout), "0.6667 1049 20.6 = 20.60")
+        self.assertEqual(self.flat(self.convert("`2/3`{=} `V = 5 = {ans}`{=}\n", "pdfmd-calc-digits=2dp").stdout), "0.67 V = 5 = 5.00")
+        self.assertEqual(self.flat(self.convert("`2/3 = {ans:3sf}`{=}\n", "pdfmd-calc-digits=2dp").stdout), "2/3 = 0.667")      # the span wins
+
+    def test_the_div_calculates_its_lines_without_backticks(self):
+        done = self.convert(DIV)
+        self.assertEqual(done.stderr, "")
+        out = done.stdout
+        self.assertIn("Run 1: V = 20.60 - 0.00 = 20.60 mL.", out)
+        self.assertIn("ppm = 0.02039 * 11.66 / 25.00 * 24.305 * 1000 = 231.1 ppm", out)
+        self.assertIn("No placeholder, so V = 3 + 4 stays as it is.", out)
+        self.assertIn("Run 2: V = 41.11 - 20.60 = 20.51 mL, double = V * 2 = 41.0.", out)
+        self.assertIn("Later: 20.51 and 231.1.", self.flat(out))                  # V is the nearest definition above, ppm keeps 4sf
+        self.assertNotIn(":::", out)
+
+    def test_the_div_spellings(self):
+        for fence in ("::: calc", "::: {.calc}", "::::: {.calc}", "::: {#c .calc}"):
+            with self.subTest(fence=fence):
+                closing = ":::::" if fence.startswith(":::::") else ":::"
+                out = self.convert(f"{fence}\nV = 7 - 2 = {{ans}} mL\n{closing}\n", writer="html").stdout
+                self.assertIn("V = 7 - 2 = 5 mL", out)
+                self.assertIn('id="c"' if "#c" in fence else "<p>", out)
+                self.assertNotIn("{ans}", out)
+        self.assertIn("{ans}", self.convert("::: note\nV = 7 - 2 = {ans}\n:::\n").stdout)      # only a calc div
+
+    def test_two_placeholders_in_a_line_and_other_blocks_of_the_div(self):
+        out = self.convert("::: calc\n- a = 1 + 1 = {ans}, b = a * 3 = {ans}\n\n> c = b / 4 = {ans:2dp}\n:::\n").stdout
+        self.assertIn("a = 1 + 1 = 2, b = a * 3 = 6", out)
+        self.assertIn("c = b / 4 = 1.50", out)
+
+    def test_what_goes_wrong_is_kept_and_warned_once_each(self):
+        for source, kept, reason in (
+            ("`x = y + 1 = {ans}`{=}", "x = y + 1 = {ans}", "'y' is not defined"),
+            ("`1/0 = {ans}`{=}", "1/0 = {ans}", "division by zero"),
+            ("`A = B`{=} `B = A`{=} `A`{=}", "A = B B = A A", "depends on itself"),
+            ("`pi = 3`{=}", "pi = 3", "built in"),
+            ("`Run 1 = 3`{=}", "Run 1 = 3", "is not a name"),
+            ("`2 + 2 = {ans:9xx}`{=}", "2 + 2 = {ans:9xx}", "not a number format"),
+            ("`2 + 2 {ans}`{=}", "2 + 2 {ans}", "right after an ="),
+            ("`= {ans}`{=}", "= {ans}", "nothing to calculate"),
+            ("`2 + 2 = {ans}`{=7zz}", "2 + 2 = {ans}", None),
+        ):
+            with self.subTest(source=source):
+                done = self.convert(source + "\n")
+                if reason is None:
+                    continue
+                self.assertEqual(self.flat(done.stdout), kept, done.stderr)
+                self.assertIn("WARN  calc:", done.stderr)
+                self.assertIn(reason, done.stderr)
+
+    def test_a_div_line_with_formatting_or_a_bad_expression_is_left_as_written(self):
+        out = self.convert("::: calc\nV = **2** + 2 = {ans}\n\nW = 1/0 = {ans}\n:::\n")
+        self.assertIn("V = 2 + 2 = {ans}", out.stdout)
+        self.assertIn("W = 1/0 = {ans}", out.stdout)
+        self.assertIn("holds formatting", out.stderr)
+        self.assertIn("division by zero", out.stderr)
+
+    def test_the_other_writers(self):
+        html = self.convert("`C = 1/3 = {ans:4sf} M`{=}\n", writer="html").stdout
+        self.assertIn("<p>C = 1/3 = 0.3333 M</p>", html)
+        latex = self.convert("`C = 1/3 = {ans:4sf} M`{=}\n", writer="latex").stdout
+        self.assertIn("C = 1/3 = 0.3333 M", latex)
+
+    def test_a_raw_span_of_another_format_is_left_alone(self):
+        out = self.convert("`<b>x</b>`{=html} and `\\textbf{y}`{=latex}\n", writer="html").stdout
+        self.assertIn("<b>x</b>", out)
+
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Switches(unittest.TestCase):
     """--calc / --no-calc, --calc-round, the options that say the same, and which wins."""
@@ -177,22 +323,47 @@ class Switches(unittest.TestCase):
         self.assertIn("5/2", self.html("", env={"PDFMD_CALC": "off"}))
 
     def test_calc_round_in_the_options_the_flag_and_the_variable(self):
-        away = "---\npdfmd-options:\n  calc-round: away\n---\n\n"
+        away = "---\npdfmd-options:\n  calc:\n    round: away\n---\n\n"
         self.assertIn("Half: 3, sum: 3.", self.html(away))
         self.assertIn("Half: 2, sum: 3.", self.html(away, "--calc-round", "even"))
         self.assertIn("Half: 3, sum: 3.", self.html("", "--calc-round", "away"))
         self.assertIn("Half: 3, sum: 3.", self.html("", env={"PDFMD_CALC_ROUND": "away"}))
+
+    def test_calc_digits_in_the_options_the_flag_and_the_variable(self):
+        def body(header, *arguments, env=None):
+            (self.directory / "doc.md").write_text(f"{header}Third: `1/3`{{=}}, volume: `V = 5 - 1 = {{ans}} mL`{{=}}.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "html", "--no-backup", *arguments],
+                                  cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, **(env or {})})
+            self.assertTrue((self.directory / "doc.html").exists(), done.stdout + done.stderr)
+            return (self.directory / "doc.html").read_text(encoding="utf-8")
+        self.assertIn("Third: 0.3333333, volume: V = 5 - 1 = 4 mL.", body(""))
+        four = "---\npdfmd-options:\n  calc:\n    digits: 4sf\n---\n\n"
+        self.assertIn("Third: 0.3333, volume: V = 5 - 1 = 4.000 mL.", body(four))
+        self.assertIn("Third: 0.33, volume: V = 5 - 1 = 4.00 mL.", body(four, "--calc-digits", "2dp"))
+        self.assertIn("Third: 0.3333333, volume: V = 5 - 1 = 4 mL.", body(four, env={"PDFMD_CALC_DIGITS": "none"}))
+        self.assertIn("Third: 0.333, volume: V = 5 - 1 = 4.00 mL.", body("", env={"PDFMD_CALC_DIGITS": "3sf"}))
+
+    def test_a_wrong_calc_digits_is_refused(self):
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--calc-digits", "four", "doc.md"], cwd=self.directory,
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("4sf", done.stderr)
+        (self.directory / "bad.md").write_text("---\npdfmd-options:\n  calc:\n    digits: lots\n---\n\n`1+1`{=}\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "bad.md", "--to", "html", "--no-backup"], cwd=self.directory,
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("calc.digits must be like 4sf", done.stdout + done.stderr)
 
     def test_a_wrong_calc_round_is_refused(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--calc-round", "up", "doc.md"], cwd=self.directory,
                               capture_output=True, text=True, encoding="utf-8")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("even", done.stderr)
-        (self.directory / "bad.md").write_text("---\npdfmd-options:\n  calc-round: up\n---\n\n`1+1`{=}\n", encoding="utf-8")
+        (self.directory / "bad.md").write_text("---\npdfmd-options:\n  calc:\n    round: up\n---\n\n`1+1`{=}\n", encoding="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "bad.md", "--to", "html", "--no-backup"], cwd=self.directory,
                               capture_output=True, text=True, encoding="utf-8")
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("calc-round must be even or away", done.stdout + done.stderr)
+        self.assertIn("calc.round must be even or away", done.stdout + done.stderr)
 
 
 def words(pdf: Path) -> str:
@@ -223,6 +394,20 @@ class RealOutput(unittest.TestCase):
         done = self.build("doc.md", "-e", "lualatex")
         self.assertTrue((self.directory / "doc.pdf").exists(), done.stdout + done.stderr)
         self.assertIn("2026 - 2006", words(self.directory / "doc.pdf"))
+
+    def test_a_name_defined_in_one_part_is_used_in_another_and_the_div_builds(self):
+        (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n  calc:\n    digits: 4sf\n---\n", encoding="utf-8")
+        (self.directory / "parts").mkdir()
+        (self.directory / "parts" / "45-results.md").write_text("The standardised molarity is `C_EDTA`{=} M.\n", encoding="utf-8")
+        (self.directory / "parts" / "50-calculations.md").write_text(
+            "::: calc\nRun 1: V = 20.60 - 0.00 = {ans:2dp} mL.\\\nC_EDTA = 0.4179 * 0.05000 / (100.09 * 0.5000 * V / 1000) = {ans} M\n:::\n",
+            encoding="utf-8")
+        done = self.build("report.md", "-e", "lualatex")
+        self.assertTrue((self.directory / "report.pdf").exists(), done.stdout + done.stderr)
+        text = words(self.directory / "report.pdf")
+        self.assertIn("The standardised molarity is 0.02027 M.", text)
+        self.assertIn("Run 1: V = 20.60 - 0.00 = 20.60 mL.", text)
+        self.assertNotIn("{ans", text)
 
     def test_a_span_in_a_part_reaches_the_build(self):
         (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")

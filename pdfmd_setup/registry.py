@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc": "on", "options.calc-round": "even", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -84,7 +84,7 @@ FOLDER_OPTIONS = frozenset({
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels",
-    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc", "options.calc-round", "options.strict",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
@@ -407,12 +407,15 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.show-comments", "Show the <!-- comments --> of the text in the output", on_off, "",
                "Each comment becomes a box labelled Comment (LaTeX, Typst, HTML), a real Word comment (docx). pdfmd's own "
                "markers stay invisible. Per run: --show-comments / --no-show-comments.", "Universal markup"),
-        choice("options.calc", "Evaluate `2 + 2`{=} (inline code followed by a bare {=}) to its value", on_off, "",
-               "Pure arithmetic only, nothing is run: + - * / ^ % //, parentheses, pi, sin cos tan, sqrt, log, round and the like. "
-               "On unless set to off. Needs Pandoc. Per run: --calc / --no-calc.", "Universal markup"),
-        choice("options.calc-round", "How round() in a calculation settles an exact half",
+        choice("options.calc.enabled", "Calculate `2 + 2`{=} and the lines of a ::: calc div", on_off, "",
+               "Inline code followed by a bare {=} becomes its value; `C = n / V = {ans:4sf}` prints the text with the value in and keeps C. "
+               "Pure arithmetic only, nothing is run. On unless set to off. Needs Pandoc. Per run: --calc / --no-calc.", "Calculations"),
+        text("options.calc.digits", "Figures a calculated value shows",
+             "4sf (four significant figures), 2dp (two decimal places). Empty: as R prints, up to 7 figures. A span's {ans:2dp} wins. "
+             "Per run: --calc-digits.", "Calculations"),
+        choice("options.calc.round", "How round() in a calculation settles an exact half",
                (("even", "to the even digit: 2.5 is 2, 3.5 is 4 (R, Python)"), ("away", "away from zero: 2.5 is 3")), "even",
-               "For `round(2.5)`{=}. Per run: --calc-round.", "Universal markup"),
+               "For `round(2.5)`{=}. Per run: --calc-round.", "Calculations"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "
