@@ -13599,7 +13599,7 @@ def backup_summary(md_path: Path, saved: list[Path], when: datetime | None = Non
         return f"BACKUP  {display_path(saved[0])}"
     folders: list[str] = []
     for target in saved:
-        folder = display_path(target.parent).rstrip("/\\") + "/"
+        folder = display_path(target.parent).rstrip("/\\") + os.sep
         if folder not in folders:
             folders.append(folder)
     own = bool(saved) and saved[0].name.startswith(md_path.name)
