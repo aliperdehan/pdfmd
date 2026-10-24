@@ -11,12 +11,13 @@
 --   so -2^2 is -4 and 2^3^2 is 512, as in R, Python and Lua.   7 % 3 is 1, -7 % 3 is 2, 7 %/% 2 is 3.
 -- |x| is the absolute value (|a - b| / c). A % that no operand follows is a percent sign, a label like a unit and not an
 -- operator: 0.5 / 4 * 100% is 12.5, as in a lab report's "... * 100% = 12.5%". × · ÷ − (Unicode) are * * / -.
--- Numbers: 12, 0.5, .5, 6.022e23, 1e-3.   Constants: pi, deg (= pi/180, so sin(30*deg) is 0.5).
+-- Numbers: 12, 0.5, .5, 6.022e23, 1e-3.   Constants: pi, deg (= pi/180, so sin(30*deg) is 0.5), Inf.
 -- Functions (angles in radians; the d forms take degrees):
 --   sin cos tan cot sec csc   asin acos atan acot (atan(y, x) is the two-argument arctangent)   sinh cosh tanh asinh acosh atanh
 --   sind cosd tand asind acosd atand (degrees in / out)   exp ln log (log(x) is natural, log(x, base))   log10 log2 sqrt cbrt abs sign
 --   floor ceil trunc round(x) round(x, digits) (half to even like R and Python: round(2.5) is 2; -M pdfmd-calc-round=away: 3)   min max (any number of arguments)
 --   hypot(x, y)   factorial(n)
+--   qnorm(p) pnorm(z)   qt(p, df) pt(t, df)  (lower tail, as in R; df may be a fraction or Inf; qt(0.975, 18) is 2.100922)
 -- The result prints like R: up to 7 significant digits, 20 and not 20.0, no trailing zeros.
 --
 -- This filter is added only when a document has a `{=}` after inline code and `calc` is not off (pdfmd.py: calc_filter_args()).
@@ -57,6 +58,183 @@ local function round(x, digits)
 end
 
 local function sign(x) return x > 0 and 1 or (x < 0 and -1 or 0) end
+
+-- Statistics (v3.30.10): the normal and Student's t distributions, no libraries. Tested against R and SciPy: qnorm, pnorm about
+-- 1e-15; qt about 1e-12 (3e-11 for p near 1e-12); pt about 1e-12 up to 1000 degrees of freedom, 1e-9 above.
+local stats = {}
+
+local LANCZOS = {0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+  12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7}
+
+-- ln Gamma(x) for x > 0 (Lanczos, g = 7; relative error about 1e-15)
+local function lgamma(x)
+  if x < 0.5 then return math.log(math.pi / math.sin(math.pi * x)) - lgamma(1 - x) end
+  x = x - 1
+  local sum = LANCZOS[1]
+  for i = 1, 8 do sum = sum + LANCZOS[i + 1] / (x + i) end
+  local t = x + 7.5
+  return 0.5 * math.log(2 * math.pi) + (x + 0.5) * math.log(t) - t + math.log(sum)
+end
+
+-- the continued fraction of the regularized incomplete beta function (modified Lentz)
+local function beta_fraction(a, b, x)
+  local tiny = 1e-300
+  local qab, qap, qam = a + b, a + 1, a - 1
+  local c, d = 1.0, 1 - qab * x / qap
+  if math.abs(d) < tiny then d = tiny end
+  d = 1 / d
+  local h = d
+  for m = 1, 1000 do
+    local m2 = 2 * m
+    local aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+    d = 1 + aa * d; if math.abs(d) < tiny then d = tiny end
+    c = 1 + aa / c; if math.abs(c) < tiny then c = tiny end
+    d = 1 / d; h = h * d * c
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+    d = 1 + aa * d; if math.abs(d) < tiny then d = tiny end
+    c = 1 + aa / c; if math.abs(c) < tiny then c = tiny end
+    d = 1 / d
+    local delta = d * c
+    h = h * delta
+    if math.abs(delta - 1) < 1e-16 then break end
+  end
+  return h
+end
+
+-- I_x(a, b), the regularized incomplete beta function
+local function ibeta(x, a, b)
+  if x <= 0 then return 0.0 end
+  if x >= 1 then return 1.0 end
+  local front = math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * math.log(x) + b * math.log(1 - x))
+  if x < (a + 1) / (a + b + 2) then return front * beta_fraction(a, b, x) / a end
+  return 1 - front * beta_fraction(b, a, 1 - x) / b
+end
+
+-- Q(1/2, x), the regularized upper incomplete gamma function, for the normal tail: P(|Z| > z) = Q(1/2, z^2/2)
+local function gamma_q_half(x)
+  if x <= 0 then return 1.0 end
+  local a = 0.5
+  local front = math.exp(-x + a * math.log(x) - lgamma(a))
+  if x < a + 1 then
+    local sum, term, n = 1 / a, 1 / a, a
+    for _ = 1, 1000 do
+      n = n + 1; term = term * x / n; sum = sum + term
+      if math.abs(term) < math.abs(sum) * 1e-17 then break end
+    end
+    return 1 - front * sum
+  end
+  local tiny = 1e-300
+  local b = x + 1 - a
+  local c, d = 1 / tiny, 1 / b
+  local h = d
+  for i = 1, 1000 do
+    local an = -i * (i - a)
+    b = b + 2
+    d = an * d + b; if math.abs(d) < tiny then d = tiny end
+    c = b + an / c; if math.abs(c) < tiny then c = tiny end
+    d = 1 / d
+    local delta = d * c
+    h = h * delta
+    if math.abs(delta - 1) < 1e-16 then break end
+  end
+  return front * h
+end
+
+-- the upper tail P(Z > z) for z >= 0
+local function normal_tail(z) return 0.5 * gamma_q_half(z * z / 2) end
+
+function stats.pnorm(z)
+  if z ~= z then return z end
+  if z == math.huge then return 1.0 elseif z == -math.huge then return 0.0 end
+  if z >= 0 then return 1 - normal_tail(z) end
+  return normal_tail(-z)
+end
+
+-- Wichura, AS 241 (PPND16): about 16 figures
+function stats.qnorm(p)
+  local q = p - 0.5
+  local value
+  if math.abs(q) <= 0.425 then
+    local r = 0.180625 - q * q
+    value = q * (((((((2.5090809287301226727e+3 * r + 3.3430575583588128105e+4) * r + 6.7265770927008700853e+4) * r
+      + 4.5921953931549871457e+4) * r + 1.3731693765509461125e+4) * r + 1.9715909503065514427e+3) * r
+      + 1.3314166789178437745e+2) * r + 3.3871328727963666080) /
+      (((((((5.2264952788528545610e+3 * r + 2.8729085735721942674e+4) * r + 3.9307895800092710610e+4) * r
+      + 2.1213794301586595867e+4) * r + 5.3941960214247511077e+3) * r + 6.8718700749205790830e+2) * r
+      + 4.2313330701600911252e+1) * r + 1.0)
+    return value
+  end
+  local r = q < 0 and p or 1 - p
+  r = math.sqrt(-math.log(r))
+  if r <= 5 then
+    r = r - 1.6
+    value = (((((((7.74545014278341407640e-4 * r + 2.27238449892691845833e-2) * r + 2.41780725177450611770e-1) * r
+      + 1.27045825245236838258) * r + 3.64784832476320460504) * r + 5.76949722146069140550) * r
+      + 4.63033784615654529590) * r + 1.42343711074968357734) /
+      (((((((1.05075007164441684324e-9 * r + 5.47593808499534494600e-4) * r + 1.51986665636164571966e-2) * r
+      + 1.48103976427480074590e-1) * r + 6.89767334985100004550e-1) * r + 1.67638483018380384940) * r
+      + 2.05319162663775882187) * r + 1.0)
+  else
+    r = r - 5
+    value = (((((((2.01033439929228813265e-7 * r + 2.71155556874348757815e-5) * r + 1.24266094738807843860e-3) * r
+      + 2.65321895265761230930e-2) * r + 2.96560571828504891230e-1) * r + 1.78482653991729133580) * r
+      + 5.46378491116411436990) * r + 6.65790464350110377720) /
+      (((((((2.04426310338993978564e-15 * r + 1.42151175831644588870e-7) * r + 1.84631831751005468180e-5) * r
+      + 7.86869131145613259100e-4) * r + 1.48753612908506148525e-2) * r + 1.36929880922735805310e-1) * r
+      + 5.99832206555887937690e-1) * r + 1.0)
+  end
+  return q < 0 and -value or value
+end
+
+local LARGE_DF = 1000
+
+-- P(T > t) for t >= 0
+local function t_tail(t, df)
+  if df == math.huge then return normal_tail(t) end
+  if df > 1e6 then return normal_tail(t - t * (t * t + 1) / (4 * df)) end     -- the incomplete beta loses figures here
+  return 0.5 * ibeta(df / (df + t * t), df / 2, 0.5)
+end
+
+function stats.pt(t, df)
+  if t ~= t then return t end
+  if t == math.huge then return 1.0 elseif t == -math.huge then return 0.0 end
+  if t >= 0 then return 1 - t_tail(t, df) end
+  return t_tail(-t, df)
+end
+
+-- Student's t quantile, lower tail
+function stats.qt(p, df)
+  if p == 0.5 then return 0.0 end
+  local upper = p > 0.5
+  local q = upper and 1 - p or p                      -- the tail that is solved for, 0 < q < 0.5
+  local value
+  if df == math.huge then
+    value = -stats.qnorm(q)
+  elseif df == 1 then
+    value = 1 / math.tan(math.pi * q)
+  elseif df == 2 then
+    value = (1 - 2 * q) / math.sqrt(2 * q * (1 - q))
+  elseif df > LARGE_DF then                           -- Cornish-Fisher (Abramowitz and Stegun 26.7.5)
+    local z = -stats.qnorm(q)
+    local z2 = z * z
+    local g1 = z * (z2 + 1) / 4
+    local g2 = z * (5 * z2 * z2 + 16 * z2 + 3) / 96
+    local g3 = z * (3 * z2 * z2 * z2 + 19 * z2 * z2 + 17 * z2 - 15) / 384
+    local g4 = z * (79 * z2 ^ 4 + 776 * z2 ^ 3 + 1482 * z2 ^ 2 - 1920 * z2 - 945) / 92160
+    value = z + g1 / df + g2 / df ^ 2 + g3 / df ^ 3 + g4 / df ^ 4
+  else
+    local lo, hi = 0.0, 1.0
+    while t_tail(hi, df) > q do lo = hi; hi = hi * 2; if hi > 1e300 then break end end
+    for _ = 1, 300 do
+      local mid = (lo + hi) / 2
+      if t_tail(mid, df) > q then lo = mid else hi = mid end
+      if hi - lo <= 1e-16 * hi then break end
+    end
+    value = (lo + hi) / 2
+  end
+  return upper and value or -value
+end
+
 
 local FUNCTIONS = {
   sin = function(args) return snap(math.sin((argument(args, 1, "sin")))) end,
@@ -130,6 +308,23 @@ local FUNCTIONS = {
     local m = args[1]; for i = 2, #args do if args[i] > m then m = args[i] end end; return m
   end,
   hypot = function(args) local x, y = argument(args, 2, "hypot"); return math.sqrt(x * x + y * y) end,
+  qnorm = function(args)
+    local p = argument(args, 1, "qnorm")
+    if not (p > 0 and p < 1) then fail("qnorm takes a probability between 0 and 1, not including them") end
+    return stats.qnorm(p)
+  end,
+  pnorm = function(args) return stats.pnorm((argument(args, 1, "pnorm"))) end,
+  qt = function(args)
+    local p, df = argument(args, 2, "qt")
+    if not (p > 0 and p < 1) then fail("qt takes a probability between 0 and 1, not including them") end
+    if not (df > 0) then fail("qt takes degrees of freedom above 0 (or Inf)") end
+    return stats.qt(p, df)
+  end,
+  pt = function(args)
+    local t, df = argument(args, 2, "pt")
+    if not (df > 0) then fail("pt takes degrees of freedom above 0 (or Inf)") end
+    return stats.pt(t, df)
+  end,
   factorial = function(args)
     local n = argument(args, 1, "factorial")
     if n ~= math.floor(n) or n < 0 or n > 170 then fail("factorial takes a whole number from 0 to 170") end
@@ -137,7 +332,7 @@ local FUNCTIONS = {
   end,
 }
 
-local CONSTANTS = {pi = math.pi, deg = math.pi / 180}
+local CONSTANTS = {pi = math.pi, deg = math.pi / 180, Inf = math.huge}
 
 -- tokens: {kind = "num"|"name"|"op"|"end", value = ..., from = first byte, to = last byte}
 local UNICODE_OPERATORS = {["\u{2212}"] = "-", ["\u{00D7}"] = "*", ["\u{00B7}"] = "*", ["\u{22C5}"] = "*", ["\u{00F7}"] = "/"}

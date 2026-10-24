@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.10 — 2026-10-24
+
+Pre-edit state: commit `735569e` (v3.30.9).
+
+The calculator gets the normal and Student's t distributions, for a lab report that needs a 95 % two-tailed t at 13, 16, 18, 93 or
+13.947 degrees of freedom, none of which a printed table lists.
+
+### Added
+
+- **`qt(p, df)`, `pt(t, df)`, `qnorm(p)`, `pnorm(z)`** in `pdfmd_lua/calc.lua`, lower tail as in R, no library. `qnorm` is Wichura's AS 241;
+  `qt` inverts the incomplete beta function (continued fraction, bisection on the tail so a small `p` keeps its figures), exact for 1 and 2
+  degrees of freedom, and a Cornish-Fisher series above 1000. `df` may be a fraction or `Inf` (`qt(0.975, Inf)` is `qnorm(0.975)`), a name
+  works (`qt(0.975, df_w)`). `p` outside (0, 1) or `df <= 0` keeps the text with one WARN. The constant `Inf` is new.
+- Accuracy against R 4.6.1 and SciPy: `qnorm` and `pnorm` about 1e-15; `qt` about 1e-12 (3e-11 for `p` near 1e-12); `pt` about 1e-12 up to
+  1000 degrees of freedom and 1e-9 above. `qt(0.975, df)` equals R's to the 12 figures it prints for df 1, 2, 3, 6, 8, 9, 10, 13, 16, 18, 93,
+  96, 13.947016149 and Inf.
+- **Changed:** `qt`, `pt`, `qnorm`, `pnorm` and `Inf` are now built-in names, so a variable called `pt` is refused like `sin` (it was free
+  before; the calculator is unreleased).
+
+Tests: `tests.test_calc.Distributions` (R's table, 105 SciPy values, `Inf`, the symmetry, a name as df, the domain errors). README, the
+docstring.
+
 ## v3.30.9 — 2026-10-24
 
 Pre-edit state: commit `cbcd7a5` (v3.30.8).

@@ -508,6 +508,175 @@ def words(pdf: Path) -> str:
     return " ".join(subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout.split())
 
 
+# Reference values: qt(0.975, df) from R 4.6.1 (the first block, as printed to 12 figures), the rest from SciPy.
+R_QT = (("1", "12.7062047362"), ("2", "4.30265272975"), ("3", "3.18244630528"), ("6", "2.44691185114"), ("8", "2.3060041352"),
+        ("9", "2.2621571628"), ("10", "2.22813885199"), ("13", "2.16036865646"), ("16", "2.11990529922"),
+        ("18", "2.10092204024"), ("93", "1.98580181435"), ("96", "1.98498431152"), ("13.947016149", "2.14555134732"),
+        ("Inf", "1.95996398454"))
+DISTRIBUTION_ROWS = (
+    ("qnorm", "0.001", "-3.09023230617"),
+    ("qnorm", "0.025", "-1.95996398454"),
+    ("qnorm", "0.05", "-1.64485362695"),
+    ("qnorm", "0.3", "-0.524400512708"),
+    ("qnorm", "0.5", "0"),
+    ("qnorm", "0.9", "1.28155156554"),
+    ("qnorm", "0.975", "1.95996398454"),
+    ("qnorm", "0.995", "2.57582930355"),
+    ("qnorm", "0.999999", "4.75342430882"),
+    ("pnorm", "-8", "6.22096057427e-16"),
+    ("pnorm", "-3", "0.00134989803163"),
+    ("pnorm", "-1.96", "0.0249978951482"),
+    ("pnorm", "-0.5", "0.308537538726"),
+    ("pnorm", "0", "0.5"),
+    ("pnorm", "0.5", "0.691462461274"),
+    ("pnorm", "1", "0.841344746069"),
+    ("pnorm", "1.96", "0.975002104852"),
+    ("pnorm", "3", "0.998650101968"),
+    ("pnorm", "6", "0.999999999013"),
+    ("qt", "0.025, 0.5", "-164.55767348"),
+    ("qt", "0.2, 0.5", "-2.51271795367"),
+    ("qt", "0.975, 0.5", "164.55767348"),
+    ("qt", "0.025, 1", "-12.7062047362"),
+    ("qt", "0.2, 1", "-1.37638192047"),
+    ("qt", "0.975, 1", "12.7062047362"),
+    ("qt", "0.025, 2", "-4.30265272975"),
+    ("qt", "0.2, 2", "-1.06066017178"),
+    ("qt", "0.975, 2", "4.30265272975"),
+    ("qt", "0.025, 2.5", "-3.574654842"),
+    ("qt", "0.2, 2.5", "-1.01016387472"),
+    ("qt", "0.975, 2.5", "3.574654842"),
+    ("qt", "0.025, 3", "-3.18244630528"),
+    ("qt", "0.2, 3", "-0.978472312363"),
+    ("qt", "0.975, 3", "3.18244630528"),
+    ("qt", "0.025, 4", "-2.7764451052"),
+    ("qt", "0.2, 4", "-0.940964577235"),
+    ("qt", "0.975, 4", "2.7764451052"),
+    ("qt", "0.025, 5", "-2.57058183564"),
+    ("qt", "0.2, 5", "-0.919543780241"),
+    ("qt", "0.975, 5", "2.57058183564"),
+    ("qt", "0.025, 7", "-2.36462425159"),
+    ("qt", "0.2, 7", "-0.896029644314"),
+    ("qt", "0.975, 7", "2.36462425159"),
+    ("qt", "0.025, 13", "-2.16036865646"),
+    ("qt", "0.2, 13", "-0.870151533968"),
+    ("qt", "0.975, 13", "2.16036865646"),
+    ("qt", "0.025, 30", "-2.0422724563"),
+    ("qt", "0.2, 30", "-0.853767261471"),
+    ("qt", "0.975, 30", "2.0422724563"),
+    ("qt", "0.025, 93", "-1.98580181435"),
+    ("qt", "0.2, 93", "-0.845503281805"),
+    ("qt", "0.975, 93", "1.98580181435"),
+    ("qt", "0.025, 500", "-1.96471983747"),
+    ("qt", "0.2, 500", "-0.842340706154"),
+    ("qt", "0.975, 500", "1.96471983747"),
+    ("qt", "0.025, 1000", "-1.96233908083"),
+    ("qt", "0.2, 1000", "-0.841980822162"),
+    ("qt", "0.975, 1000", "1.96233908083"),
+    ("qt", "0.025, 1001", "-1.96233670528"),
+    ("qt", "0.2, 1001", "-0.841980462786"),
+    ("qt", "0.975, 1001", "1.96233670528"),
+    ("qt", "0.025, 5000", "-1.96043855171"),
+    ("qt", "0.2, 5000", "-0.841693127664"),
+    ("qt", "0.975, 5000", "1.96043855171"),
+    ("qt", "0.025, 1e+06", "-1.95996635681"),
+    ("qt", "0.2, 1e+06", "-0.841621593014"),
+    ("qt", "0.975, 1e+06", "1.95996635681"),
+    ("qt", "0.025, 1e+08", "-1.95996400826"),
+    ("qt", "0.2, 1e+08", "-0.841621237167"),
+    ("qt", "0.975, 1e+08", "1.95996400826"),
+    ("pt", "-3, 1", "0.10241638235"),
+    ("pt", "-0.5, 1", "0.35241638235"),
+    ("pt", "0.7, 1", "0.694400112214"),
+    ("pt", "2.101, 1", "0.858595786365"),
+    ("pt", "6, 1", "0.947431543289"),
+    ("pt", "-3, 2.5", "0.0362880477745"),
+    ("pt", "-0.5, 2.5", "0.328848959935"),
+    ("pt", "0.7, 2.5", "0.728297528405"),
+    ("pt", "2.101, 2.5", "0.927809809471"),
+    ("pt", "6, 2.5", "0.992359135057"),
+    ("pt", "-3, 8", "0.00853584061689"),
+    ("pt", "-0.5, 8", "0.315268037778"),
+    ("pt", "0.7, 8", "0.748114473991"),
+    ("pt", "2.101, 8", "0.96558481435"),
+    ("pt", "6, 8", "0.999838303389"),
+    ("pt", "-3, 18", "0.00384270607016"),
+    ("pt", "-0.5, 18", "0.311566228648"),
+    ("pt", "0.7, 18", "0.753561964569"),
+    ("pt", "2.101, 18", "0.975003818561"),
+    ("pt", "6, 18", "0.999994365014"),
+    ("pt", "-3, 100", "0.00170395767166"),
+    ("pt", "-0.5, 100", "0.309086782915"),
+    ("pt", "0.7, 100", "0.757223696773"),
+    ("pt", "2.101, 100", "0.980922340486"),
+    ("pt", "6, 100", "0.999999984138"),
+    ("pt", "-3, 1000", "0.00138335452212"),
+    ("pt", "-0.5, 1000", "0.308592540417"),
+    ("pt", "0.7, 1000", "0.757954943004"),
+    ("pt", "2.101, 1000", "0.982054605912"),
+    ("pt", "6, 1000", "0.999999998622"),
+    ("pt", "-3, 100000", "0.00135023044203"),
+    ("pt", "-0.5, 100000", "0.308538088827"),
+    ("pt", "0.7, 100000", "0.758035533576"),
+    ("pt", "2.101, 100000", "0.982178268681"),
+    ("pt", "6, 100000", "0.99999999901"),
+)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Distributions(unittest.TestCase):
+    """qnorm, pnorm, qt and pt (3.30.10): no library, checked against R and SciPy."""
+
+    def values(self, expressions: list[str]) -> list[float]:
+        text = " | ".join(f"`{expression}`{{=12sf}}" for expression in expressions)
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "plain", "--wrap=none", "--lua-filter", str(CALC_LUA)], input=text,
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.stderr, "")
+        return [float(part) for part in done.stdout.split("|")]
+
+    def test_qt_against_r(self):
+        got = self.values([f"qt(0.975, {df})" for df, _ in R_QT])
+        for (df, want), value in zip(R_QT, got):
+            with self.subTest(df=df):
+                self.assertAlmostEqual(value / float(want), 1.0, delta=2e-11)
+
+    def test_the_reference_table(self):
+        got = self.values([f"{name}({arguments})" for name, arguments, _ in DISTRIBUTION_ROWS])
+        for (name, arguments, want), value in zip(DISTRIBUTION_ROWS, got):
+            with self.subTest(call=f"{name}({arguments})"):
+                reference = float(want)
+                loose = name == "pt" and float(arguments.split(",")[1]) > 1e4
+                self.assertLessEqual(abs(value - reference), (2e-9 if loose else 3e-11) * max(abs(reference), 1e-12))
+
+    def test_inf_and_the_symmetry(self):
+        a, b, c, d = self.values(["qt(0.975, Inf)", "qnorm(0.975)", "qt(0.025, 18) + qt(0.975, 18)", "pt(0, 5)"])
+        self.assertEqual(a, b)
+        self.assertLess(abs(c), 1e-12)
+        self.assertEqual(d, 0.5)
+
+    def test_a_degree_of_freedom_from_a_name_and_a_table_value(self):
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "plain", "--wrap=none", "--lua-filter", str(CALC_LUA)],
+                              input="`df_w = 13.947016149`{=} t = `qt(0.975, df_w) = {ans:4sf}`{=}, `qt(0.975, 18)`{=4sf}\n",
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.stderr, "")
+        self.assertIn("t = qt(0.975, df_w) = 2.146, 2.101", done.stdout)
+
+    def test_a_value_outside_the_domain_keeps_the_text_and_warns_once(self):
+        for expression, reason in (("qt(1.5, 3)", "probability between 0 and 1"), ("qt(0, 3)", "probability between 0 and 1"),
+                                   ("qt(0.9, 0)", "degrees of freedom above 0"), ("qnorm(1)", "probability between 0 and 1"),
+                                   ("pt(1, -2)", "degrees of freedom above 0"), ("qt(0.9)", "qt takes 2 arguments")):
+            with self.subTest(expression=expression):
+                done = subprocess.run([PANDOC, "-f", "markdown", "-t", "plain", "--lua-filter", str(CALC_LUA)],
+                                      input=f"`{expression}`{{=}}\n", capture_output=True, text=True, encoding="utf-8")
+                self.assertEqual(done.stderr.count("WARN"), 1, done.stderr)
+                self.assertIn(reason, done.stderr)
+                self.assertIn(expression, done.stdout)
+
+    def test_the_new_names_are_built_in(self):
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "plain", "--lua-filter", str(CALC_LUA)], input="`pt = 3`{=}\n",
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertIn("'pt' is built in", done.stderr)
+
+
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")
 class RealOutput(unittest.TestCase):
     def setUp(self):

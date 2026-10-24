@@ -125,7 +125,7 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     included); `A = 4 - 2` stores and prints nothing; `::: calc` calculates the lines that hold {ans} without backticks.
     pdfmd_lua/calc.lua has its own small parser (+ - * / ^ ** % // %/%, parentheses, |abs|, a trailing % as a label, pi,
     deg, sin cos tan cot sec csc and their inverses, hyperbolics, sind cosd tand asind acosd atand, exp ln log log10 log2
-    sqrt cbrt abs sign floor ceil trunc round min max hypot factorial) and runs nothing. What it cannot evaluate keeps its
+    sqrt cbrt abs sign floor ceil trunc round min max hypot factorial qnorm pnorm qt pt) and runs nothing. What it cannot evaluate keeps its
     text, with one WARN. `<-` assigns like `=`; a second {ans} on a line repeats the value in another format
     (`= {ans:1dp}, so {ans:0dp}`) or calculates a new expression (`so round(n) = {ans:0dp}`); whatever follows the last {ans}
     of a `::: calc` line is copied as it is (`ppm Ca^2+^`); `x = a * b = {subs} = {ans}` prints the expression with the
@@ -1401,7 +1401,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.9"
+PDFMD_VERSION = "3.30.10"
 import argparse
 import atexit
 import csv

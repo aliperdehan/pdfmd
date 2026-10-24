@@ -762,10 +762,13 @@ The default for a whole document is `pdfmd-options: {calc: {digits: 4sf}}`.
 
 **Operators:** `+ - * /`, `^` and `**` (right to left, so `-2^2` is -4), `%` and `%%` (remainder, `-7 % 3` is 2), `//` and `%/%` (floor
 division, `7 // 2` is 3), parentheses, `|a - b|` (absolute value), and a `%` with no number after it is a percent sign, a label:
-`0.5 / 4 * 100%` is 12.5. `×`, `·`, `÷` and `−` work. **Numbers:** `12`, `.5`, `6.022e23`. **Constants:** `pi`, `deg` (= pi/180).
+`0.5 / 4 * 100%` is 12.5. `×`, `·`, `÷` and `−` work. **Numbers:** `12`, `.5`, `6.022e23`. **Constants:** `pi`, `deg` (= pi/180), `Inf`.
 **Functions:** `sin cos tan cot sec csc` and `asin acos atan acot` (radians; `atan(y, x)` for two arguments),
 `sinh cosh tanh asinh acosh atanh`, `sind cosd tand` (degrees in) and `asind acosd atand` (degrees out), `exp ln log` (`log(x, base)`),
-`log10 log2 sqrt cbrt abs sign floor ceil trunc`, `round(x, digits)`, `min max` (any number), `hypot factorial`. Angles are in radians
+`log10 log2 sqrt cbrt abs sign floor ceil trunc`, `round(x, digits)`, `min max` (any number), `hypot factorial`. **Statistics** (3.30.10, lower tail, as in R): `qnorm(p)` and `pnorm(z)` for the normal
+distribution, `qt(p, df)` and `pt(t, df)` for Student's t. `df` may be a fraction (a Welch value such as 13.947) or `Inf`, so
+`t = qt(0.975, 18) = {ans:4sf}` prints 2.101 and `qt(0.975, df_w)` takes a name; `qt` is good to about 1e-12 and agrees with
+R's to the 12 figures it prints. Angles are in radians
 unless the name ends in `d`: `sin(30*deg)` and `sind(30)` are both 0.5. A trig result closer to 0 than 1e-15 is 0 (`sin(pi)`).
 
 **`round` goes to the even digit on an exact half, as R and Python do** (`round(2.5)` is 2, `round(3.5)` is 4, `round(0.125, 2)` is
@@ -788,7 +791,7 @@ line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
 wrong format) the text is kept as written and pdfmd prints one `WARN  calc: ...` naming it and the reason; nothing is dropped
-silently. Not done yet: `qt(p, df)` and `qnorm(p)` (queued), calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
+silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
 confidence interval), a mode that checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
 `.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
