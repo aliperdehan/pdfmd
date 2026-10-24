@@ -41,6 +41,34 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.11 — 2026-10-24
+
+Pre-edit state: commit `2e35666` (v3.30.10).
+
+Definitions in bulk for the calculator: a report that needs 14 constants (t values, a stock concentration, molar masses) kept them as a run of
+hidden `` `name = value`{=} `` spans on one line (issue file 2, B).
+
+### Added
+
+- **A block of statements.** ```` ```{=calc} ```` (Pandoc's native raw block, lines intact), one statement per line, each as the text of a
+  `{=}` span: `name = value` or `name <- value` stores and prints nothing, a line with `{ans}` prints (one paragraph per line), blank lines and
+  `#` lines are skipped, a failing line is kept as code with one WARN and the rest goes on.
+- **```` ```{=} ```` works as ```` ```{=calc} ````.** Pandoc does not read an empty raw format as a block: it is a paragraph with one code
+  span whose line breaks are gone. `calc.lua` finds those paragraphs and reads the lines again from the input files Pandoc was given
+  (`PANDOC_STATE.input_files`), matching them by their text in document order; a fence shown inside a longer fence is not touched. From
+  standard input there is no file: one WARN says to write `{=calc}`.
+- **`::: {.calc .hide}`** (also `.hidden`): the same statements, nothing printed. Its lines are read as Markdown.
+- **`` `code`{=calc} ``** is `` `code`{=} `` (Pandoc's own raw attribute). A ```` ```{.calc} ```` code block stays a code block, never calculated.
+- **`calc: {constants: FILE}`**, `--calc-constants FILE`, `PDFMD_CALC_CONSTANTS`, a `--setup` row: a CSV (comma, semicolon or tab; columns
+  `name,value[,digits[,note]]`; header row optional; `#` lines skipped) read before the document, found beside the document, beside its
+  metadata files, then in the current folder. The `digits` column is the format that name remembers for `{subs}` and a bare `` `t18`{=} ``.
+  pdfmd turns the file into statements and passes them as `-M pdfmd-calc-constants`; the document defining a name again gets the usual WARN.
+- The filter is also added for a document that has only such a block.
+
+Tests: `tests.test_calc.Blocks` (12: the block, the empty-format fence from a file and from standard input, a fence inside a longer one,
+fourteen constants, the hidden div, failing lines, detection, the constants file by option, flag and variable, a semicolon file, the errors).
+README "Calculations inside the text" 6, `docs/recipes.md` 1.11.
+
 ## v3.30.10 — 2026-10-24
 
 Pre-edit state: commit `735569e` (v3.30.9).

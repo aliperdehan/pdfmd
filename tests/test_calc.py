@@ -677,6 +677,118 @@ class Distributions(unittest.TestCase):
         self.assertIn("'pt' is built in", done.stderr)
 
 
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Blocks(unittest.TestCase):
+    """Statement blocks (3.30.11): ```{=calc}, ```{=} (read again from the source), `::: {.calc .hide}`, `code`{=calc}, the constants file."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-calc-blocks-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+
+    def convert(self, text: str, *meta: str, name: str | None = "doc.md") -> subprocess.CompletedProcess:
+        arguments = [PANDOC, "-f", "markdown", "-t", "plain", "--wrap=none", "--lua-filter", str(CALC_LUA)]
+        for item in meta:
+            arguments += ["-M", item]
+        if name is None:
+            return subprocess.run(arguments, input=text, capture_output=True, text=True, encoding="utf-8")
+        (self.directory / name).write_text(text, encoding="utf-8")
+        return subprocess.run(arguments + [name], cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+
+    def test_the_calc_raw_block_stores_silently_and_prints_the_lines_with_an_ans(self):
+        done = self.convert("```{=calc}\n# the constants\nt1 = 12.7\n\nt2 <- 4.3\nk = t1 * 2 = {ans:3sf}\n```\n\nSo `t1 + t2`{=}.\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.split(), "k = t1 * 2 = 25.4 So 17.".split())
+
+    def test_a_fence_with_an_empty_format_is_the_same_block(self):
+        done = self.convert("```{=}\nt1 = 12.7\nt2 = 4.3\nk = t1 * 2 = {ans:3sf}\n```\n\nSo `t1 + t2`{=}.\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.split(), "k = t1 * 2 = 25.4 So 17.".split())
+
+    def test_several_empty_format_fences_and_one_shown_in_a_longer_fence(self):
+        text = ("````\n```{=}\nnot = 1\n```\n````\n\n```{=}\na = 2\n```\n\ntext\n\n```{=}\nb = a * 3\n```\n\n`a`{=}, `b`{=}\n")
+        done = self.convert(text)
+        self.assertEqual(done.stderr, "")
+        self.assertIn("2, 6", done.stdout)
+        self.assertIn("not = 1", done.stdout)                                    # the documented fence stays as shown
+
+    def test_an_empty_format_fence_from_standard_input_warns_and_stays(self):
+        done = self.convert("```{=}\na = 2\n```\n", name=None)
+        self.assertIn("write ```{=calc}", done.stderr)
+        self.assertIn("a = 2", done.stdout)
+
+    def test_the_inline_raw_spelling(self):
+        done = self.convert("`a = 2`{=calc}`a * 3`{=calc} and `a * 4`{=calc}.\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.strip(), "6 and 8.")
+
+    def test_a_hidden_div_defines_and_prints_nothing(self):
+        text = ("Before.\n\n::: {.calc .hide}\nc1 = 10\nc2 <- c1 / 4\n\n# note\nc3 = c2 * 2 = {ans}\n:::\n\n"
+                "After: `c1`{=}, `c2`{=}, `c3`{=}.\n")
+        done = self.convert(text)
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.split(), "Before. After: 10, 2.5, 5.".split())
+        self.assertEqual(self.convert(text.replace(".calc .hide", ".calc .hidden")).stdout, done.stdout)
+
+    def test_a_failing_line_warns_and_the_rest_goes_on(self):
+        done = self.convert("```{=calc}\nbad = 1 / 0\ngood = 2 + 2\n```\n\n`good`{=}\n")
+        self.assertEqual(done.stderr.count("WARN"), 1)
+        self.assertIn("bad = 1 / 0", done.stdout)
+        self.assertIn("4", done.stdout)
+        hidden = self.convert("::: {.calc .hide}\nbad = 1 / 0\ngood = 2 + 2\n:::\n\n`good`{=}\n")
+        self.assertEqual(hidden.stderr.count("WARN"), 1)
+        self.assertEqual(hidden.stdout.strip(), "4")
+
+    def test_fourteen_constants_in_one_block(self):
+        lines = "\n".join(f"t{n} = {n}.5" for n in range(1, 15))
+        done = self.convert(f"```{{=calc}}\n{lines}\n```\n\n`t14`{{=4sf}} and `t1 + t2`{{=}}\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.strip(), "14.50 and 4")
+
+    def test_constants_from_a_metadata_string(self):
+        done = self.convert("`t18`{=4sf}, `x = t18 * 2 = {ans:3sf}`{=}\n", "pdfmd-calc-constants=t18 = 2.100922\nunused = 1")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.strip(), "2.101, x = t18 * 2 = 4.20")
+
+    def test_detection(self):
+        for text in ("```{=calc}\nx = 1\n```", "~~~{=}\nx = 1\n~~~", "  ````{=}\n", "`x = 1`{=calc}", "::: {.calc .hide}\n"):
+            with self.subTest(text=text):
+                self.assertTrue(pdfmd.CALC_SPAN_RE.search(text))
+        for text in ("```{=latex}\nx\n```", "```{.calc}\nx = 1\n```", "```{=html}\n"):
+            with self.subTest(text=text):
+                self.assertFalse(pdfmd.CALC_SPAN_RE.search(text))
+
+    def build(self, name: str, *arguments: str, env: dict | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), name, "--to", "gfm", "--no-backup", "-o", "out.md", *arguments],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, **(env or {})})
+
+    def test_the_constants_file_in_the_options_the_flag_and_the_variable(self):
+        (self.directory / "k.csv").write_text("name,value,digits,note\nt18,2.100922,4sf,\"R qt(0.975, 18)\"\n# a comment\nstock,0.1\n",
+                                              encoding="utf-8")
+        body = "`x = t18 * stock = {ans}`{=}, `t18`{=}, `t18`{=2dp}\n"
+        (self.directory / "a.md").write_text("---\npdfmd-options:\n  calc:\n    constants: k.csv\n---\n\n" + body, encoding="utf-8")
+        (self.directory / "b.md").write_text("---\ntitle: B\n---\n\n" + body, encoding="utf-8")
+        done = self.build("a.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("x = t18 \\* stock = 0.2100922, 2.101, 2.10", (self.directory / "out.md").read_text(encoding="utf-8"))
+        for arguments, env in ((("--calc-constants", "k.csv"), None), ((), {"PDFMD_CALC_CONSTANTS": "k.csv"})):
+            with self.subTest(arguments=arguments, env=env):
+                self.assertEqual(self.build("b.md", *arguments, env=env).returncode, 0)
+                self.assertIn("2.101, 2.10", (self.directory / "out.md").read_text(encoding="utf-8"))
+
+    def test_a_semicolon_file_and_the_errors(self):
+        (self.directory / "s.csv").write_text("name;value\nk;1,5\n", encoding="utf-8")
+        statements = pdfmd.calc_constants_statements(self.directory / "s.csv")
+        self.assertEqual(statements, ["k = 1,5"])
+        (self.directory / "bad.csv").write_text("name,value,digits\nk,2,lots\n", encoding="utf-8")
+        with self.assertRaises(SystemExit) as caught:
+            pdfmd.calc_constants_statements(self.directory / "bad.csv")
+        self.assertIn("4sf", str(caught.exception))
+        (self.directory / "x.md").write_text("---\ntitle: X\n---\n\n`1+1`{=}\n", encoding="utf-8")
+        done = self.build("x.md", "--calc-constants", "missing.csv")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("no file 'missing.csv'", done.stdout + done.stderr)
+
+
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")
 class RealOutput(unittest.TestCase):
     def setUp(self):

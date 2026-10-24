@@ -847,6 +847,7 @@ local function span_at(inlines, i)
   if item.t == "Code" and following and following.t == "Str" and following.text:sub(1, 3) == "{=}" then
     return item.text, nil, 2, following.text:sub(4)
   end
+  if item.t == "RawInline" and item.format == "calc" then return item.text, nil, 1, "" end      -- `code`{=calc}
   if item.t == "RawInline" then
     local fmt = raw_format(item)
     if fmt then return item.text, fmt, 1, "" end
@@ -982,7 +983,135 @@ local function process_paragraph(inlines)
   if changed then return out end
 end
 
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Blocks of statements (3.30.11). The lines of a ```{=calc} block, of a `::: {.calc .hide}` div and of the constants file
+-- are statements like the text of a `{=}` span: `t = 2.101` stores a name and prints nothing, `x = a * b = {ans}` prints.
+
+local function normal(text) return trim((text:gsub("%s+", " "))) end
+
+-- the statements of a block's text: one per line, blank lines and lines that start with # skipped
+local function block_lines(text)
+  local lines = {}
+  for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+    line = trim(line)
+    if line ~= "" and line:sub(1, 1) ~= "#" then lines[#lines + 1] = line end
+  end
+  return lines
+end
+
+-- pass 1: register each line (returns nothing); pass 2: the paragraphs to print, none for a hidden block
+local function statement_block(lines, hidden)
+  local out = pandoc.Blocks({})
+  for _, line in ipairs(lines) do
+    if pass == 1 then
+      register(line, nil)
+    else
+      local record, problem = fetch(line)
+      local ok, result
+      if record then ok, result = pcall(render, record, DEFAULT_FMT) else ok, result = false, problem end
+      if ok then
+        if result ~= "" and not hidden then out:insert(pandoc.Para({pandoc.Str(result)})) end
+      else
+        warn("`" .. line .. "`", reason_of(result), hidden and "the line is ignored" or "the line is kept")
+        if not hidden then out:insert(pandoc.Para({pandoc.Code(line)})) end
+      end
+    end
+  end
+  if pass == 2 then return out end
+end
+
+local function raw_block(block)
+  if block.format ~= "calc" then return nil end
+  local out = statement_block(block_lines(block.text), false)
+  return out
+end
+
+-- ```{=} is no block for Pandoc (an empty raw format): the fence becomes a paragraph holding one code span whose line
+-- breaks are gone. The lines are read again from the source file(s) Pandoc was given, matched by their text, so
+-- ```{=} works as ```{=calc} does. (A document read from standard input has no file to read: write ```{=calc}.)
+local FENCES
+local fence_cursor = 1
+
+local function source_fences()
+  if FENCES then return FENCES end
+  FENCES = {}
+  local files = PANDOC_STATE and PANDOC_STATE.input_files or {}
+  for _, name in ipairs(files) do
+    local handle = name ~= "-" and io.open(name, "r") or nil
+    if handle then
+      local text = handle:read("a")
+      handle:close()
+      local opener, info, body
+      for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+        if not opener then
+          local marks, rest = line:match("^%s*(`+)(.*)$")
+          if not marks then marks, rest = line:match("^%s*(~+)(.*)$") end
+          if marks and #marks >= 3 and not (marks:sub(1, 1) == "`" and rest:find("`", 1, true)) then
+            opener, info, body = marks, trim(rest), {}
+          end
+        else
+          local closing = line:match("^%s*([`~]+)%s*$")
+          if closing and closing:sub(1, 1) == opener:sub(1, 1) and #closing >= #opener then
+            if info == "{=}" then FENCES[#FENCES + 1] = {key = normal(table.concat(body, " ")), lines = body} end
+            opener = nil
+          else
+            body[#body + 1] = line
+          end
+        end
+      end
+    end
+  end
+  return FENCES
+end
+
+-- a paragraph that is a misread ```{=} fence: (true, blocks) (blocks only in pass 2), or false for any other paragraph
+local function fence_block(block)
+  if #block.content ~= 1 or block.content[1].t ~= "Code" then return false end
+  local code = block.content[1].text
+  if code:sub(1, 3) ~= "{=}" then return false end
+  local wanted, fences, found = normal(code:sub(4)), source_fences(), nil
+  for index = fence_cursor, #fences do
+    if fences[index].key == wanted then found = fences[index]; fence_cursor = index + 1; break end
+  end
+  if not found then
+    if pass == 2 then
+      warn("a ```{=} block", "its lines could not be found in the source", "write ```{=calc}; the block is kept as text")
+    end
+    return false
+  end
+  local lines = block_lines(table.concat(found.lines, "\n"))
+  return true, statement_block(lines, false)
+end
+
+local function fence_handler(block)
+  local handled, out = fence_block(block)
+  if handled and pass == 2 then return out end
+end
+
+-- the statements of a hidden div's paragraph: one per line of plain text
+local function hidden_paragraph(block)
+  local handled = fence_block(block)
+  if handled then return pass == 2 and pandoc.Blocks({}) or nil end
+  local lines, current, plain = {}, {}, true
+  for _, item in ipairs(block.content) do
+    if item.t == "SoftBreak" or item.t == "LineBreak" then
+      lines[#lines + 1] = table.concat(current); current = {}
+    elseif item.t == "Str" or item.t == "Code" then current[#current + 1] = item.text
+    elseif item.t == "Space" then current[#current + 1] = " "
+    else plain = false; current[#current + 1] = "" end
+  end
+  lines[#lines + 1] = table.concat(current)
+  if not plain then
+    if pass == 2 then warn("a hidden calc block", "a line holds formatting, a link or math", "that paragraph is ignored") end
+  else
+    statement_block(block_lines(table.concat(lines, "\n")), true)
+  end
+  if pass == 2 then return pandoc.Blocks({}) end
+end
+
 local function paragraph(block)
+  local handled, replacement = fence_block(block)
+  if handled then return (pass == 2 and replacement or block), false end
   local out = process_paragraph(block.content)
   if out then block.content = out end
   return block, false                                  -- its inlines are done: the document-wide walk must not read them again
@@ -1017,8 +1146,13 @@ end
 
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
+  if div.classes:includes("hide") or div.classes:includes("hidden") then      -- `::: {.calc .hide}`: statements, nothing printed
+    div.content:walk({traverse = "topdown", Para = hidden_paragraph, Plain = hidden_paragraph, RawBlock = raw_block})
+    if pass == 1 then return div, false end
+    return pandoc.Blocks({}), false
+  end
   local content = div.content:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
-    Div = inner_div})
+    Div = inner_div, RawBlock = raw_block})
   if pass == 1 then return div, false end
   local classes = pandoc.List({})
   for _, class in ipairs(div.classes) do if class ~= "calc" then classes:insert(class) end end
@@ -1042,9 +1176,13 @@ return {{Pandoc = function(doc)
   AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
   local noindent = doc.meta["pdfmd-calc-noindent"]
   NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
+  local constants = doc.meta["pdfmd-calc-constants"]
+  local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
   for _, which in ipairs({1, 2}) do
-    pass, occurrence = which, 0
-    doc = doc:walk({traverse = "topdown", Div = calc_div, Inlines = process_inlines})
+    pass, occurrence, fence_cursor = which, 0, 1
+    statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
+    doc = doc:walk({traverse = "topdown", Div = calc_div, Para = fence_handler, RawBlock = raw_block,
+      Inlines = process_inlines})
   end
   return doc
 end}}

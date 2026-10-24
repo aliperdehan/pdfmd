@@ -755,6 +755,38 @@ To have it everywhere, set `calc: {subs: true}`: every `{ans}` that follows an e
 in front of it, without typing `{subs}`. An expression with no names (nothing to put in), a lone name, and a second `{ans}` that
 only repeats a value get no copy. For one line, `{subs}` forces it and `{nosubs}` (or `{subs:off}`) stops it.
 
+**6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
+a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
+prints, blank lines and lines that start with `#` are skipped):
+
+````markdown
+```{=calc}
+t13 = 2.160369       # qt(0.975, 13)
+t18 = 2.100922
+C_dil = C_EDTA * 50.00 / 500.0 = {ans:4sf} M
+```
+````
+
+Only the last line is printed. ```` ```{=} ```` (an empty format) means the same: Pandoc does not read it as a block, so pdfmd reads
+the lines again from your file (a document read from standard input has no file: write `{=calc}` there). The span spelling
+`` `x = 2`{=calc} `` is the same as `` `x = 2`{=} ``. A `::: {.calc .hide}` div (or `.hidden`) holds statements in the same way and
+prints nothing; its lines are read as Markdown, so the raw block is safer when an expression has `*` or `_` in it. Not the same
+thing: ```` ```{.calc} ```` is a code block with a class, shown as code and never calculated, which is how to show calc source.
+
+To keep the values in one citable file, `calc: {constants: tables/constants.csv}` (or `--calc-constants FILE`) loads a CSV before the
+document is read, with the columns `name,value[,digits[,note]]` (a header row is fine; comma, semicolon or tab; `#` lines are skipped):
+
+```csv
+name,value,digits,note
+t18,2.100922,4sf,"R qt(0.975, 18)"
+stock,0.1000,,stock concentration
+```
+
+The text then writes `` `t18`{=} `` or `` `x = t18 * stock = {ans}`{=} ``. `digits` is the format `{subs}` and a bare `` `t18`{=} `` show
+for that name. The file is looked for beside the document, then beside its metadata files, then in the current folder. A document that
+defines the same name again gets the usual WARN. Statistics: `qt(0.975, 18)` is also built in (see the functions below), so a
+constant that a function gives needs no file.
+
 **Digits.** `{ans:4sf}` four significant figures (trailing zeros kept: 20.60, 0.02027; the digits before the point are never
 dropped, 1049 at 3sf is 1049), `{ans:2dp}` two decimal places (digits after the point: burette volumes). After a span a format
 works as well: `` `1/3`{=3sf} `` is 0.333. Without any format a value prints as R does: up to 7 figures, `20` and not `20.0`.
@@ -784,9 +816,10 @@ pdfmd-options:
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
     noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
+    constants:        # a CSV of named values (name,value[,digits[,note]]), see 6
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-constants FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
