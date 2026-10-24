@@ -41,6 +41,31 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.15 — 2026-10-24
+
+Pre-edit state: commit `c43923e` (v3.30.14).
+
+### Added
+
+- **An indent div takes its value in the class word.** `::: .indent=3in`, `::: indent=3in`, `::: indent-3in`, `::: {.indent-3in}` and
+  `::: {.indent=3in}` (and `::: .indent`, `::: .noindent`) all mean `{indent=3in}`, through the same length parser (false, true, a number,
+  units). Pandoc reads the unbraced forms as a single class word, so only the braced `{indent=...}` carried a value before.
+- **A near miss warns.** A class that looks like an indent div but is none of the accepted spellings (`.indent3in`, `.noindent=2em`) gets one
+  `WARN  indent: '<class>' is not an indent div; write ::: {indent=3in} (or ::: noindent)` per run and is left as written. A project's own
+  `.indented`, `.indentation` and `.indent-block` are not looked at.
+- **A bare `::: csv` builds a table** like `::: {.csv}`, in the Pandoc route and in the built-in renderer, when it holds inline data.
+  `file=` and `align=` still need the braces; `::: csvfile` and `::: csv-x` do not match.
+- **`csv: off`** (`pdfmd-options: {csv: off}`, short for `csv: {enabled: false}`), `--csv` / `--no-csv` and `PDFMD_CSV` (for `-j` workers)
+  switch the csv-in-a-div feature off: the filter is not added and the div stays a plain div with its text, with no WARN, also in the
+  no-Pandoc renderer. A mapping such as `csv: {rows: 30}` still works and leaves tables on. The command line wins over the options.
+  `--setup` row `options.csv.enabled`.
+
+### Tests
+
+- New `tests.test_csv_switch` (17 tests); `tests.test_indent` extended (every accepted spelling, a measured x position in a real PDF, near
+  misses that warn, `.indented` that does not). One assertion fixed: it now accepts Pandoc 3.1's `\hypertarget` as well as `\label`.
+- From the cloud session (branch `cloud/small-patches`, PR 4).
+
 ## v3.30.14 — 2026-10-24
 
 Pre-edit state: commit `2c0b9a3` (v3.30.13).

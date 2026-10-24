@@ -59,7 +59,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
+    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.editor": "the built-in editor", "options.preset": "metadata.yaml", "options.global-metadata": "on",
@@ -76,7 +76,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep", "options.pager",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep", "options.pager",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -260,6 +260,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("mathml", "MathML (no network)"), ("mathjax", "MathJax"), ("katex", "KaTeX"), ("webtex", "WebTeX images"),
                 ("plain", "plain text")), "", "", "HTML"),
         # -- tables
+        choice("options.csv.enabled", "Build a table from a ::: {.csv} div", on_off, "",
+               "On unless set to off. Off leaves the div as written, a plain div with its text, and no WARN: for a document that "
+               "shows CSV lines as text. Per run: --csv / --no-csv.", "Tables"),
         text("options.csv.rows", "Rows a .csv table shows", "A whole number, or all. A div's rows= wins. Per run: --csv-rows.",
              "Tables", "config", "count"),
         text("options.csv.cols", "Columns a .csv table shows", "A whole number, or all. A div's cols= wins. Per run: --csv-cols.",

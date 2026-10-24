@@ -45,12 +45,15 @@ After.{LONG}
 class Detection(unittest.TestCase):
     def test_the_spellings_that_add_the_filter(self):
         for text in ("::: {indent=false}", "::: noindent", "::: {.noindent}", "::: {#a .indent}", "::::: {indent=2em}",
-                     '::: {style="x" indent="1em"}', "::: indent", "  ::: {indent=true}"):
+                     '::: {style="x" indent="1em"}', "::: indent", "  ::: {indent=true}",
+                     "::: .indent=3in", "::: indent=3in", "::: indent-3in", "::: {.indent-3in}", "::: {.indent=3in}",
+                     "::: .indent", "::: .indent3in", "::: .noindent=2em"):          # the last two: near misses, the filter warns
             with self.subTest(text=text):
                 self.assertTrue(pdfmd.INDENT_DIV_RE.search(text))
 
     def test_what_does_not(self):
-        for text in ("::: {.csv}", "::: indented", "indent = false", "indent: true", "`::: noindent` is the div", "::: {.indentation}"):
+        for text in ("::: {.csv}", "::: indented", "indent = false", "indent: true", "`::: noindent` is the div", "::: {.indentation}",
+                     "::: .indented", "::: .indentation", "::: indentation-x"):
             with self.subTest(text=text):
                 self.assertFalse(pdfmd.INDENT_DIV_RE.search(text))
 
@@ -81,7 +84,7 @@ class Filter(unittest.TestCase):
         self.assertLess(out.rfind("\\endgroup"), out.find("After."))
         self.assertLess(out.find("Nested."), out.find("\\endgroup"))
         self.assertLess(out.find("\\endgroup"), out.find("Back."))               # the inner group closes first
-        self.assertIn("\\label{inner}", out)                                     # the id stays
+        self.assertTrue("\\label{inner}" in out or "\\hypertarget{inner}" in out, out)   # the id stays (Pandoc 3.1 writes a hypertarget)
 
     def test_the_values(self):
         for value, length in (("false", "0pt"), ("no", "0pt"), ("off", "0pt"), ("0", "0pt"), ("true", "1.5em"),
@@ -101,6 +104,61 @@ class Filter(unittest.TestCase):
         self.assertIn("{1.5em}", self.convert("::: {.indent}\nx\n:::\n", "latex").stdout)
         self.assertIn("{4em}", self.convert("::: {.noindent indent=4em}\nx\n:::\n", "latex").stdout)     # the value wins
         self.assertIn("\\begingroup", self.convert("::: {indent=false}\nx\n:::\n", "beamer").stdout)
+
+    def test_the_value_in_the_class_word(self):
+        # Pandoc reads `::: indent=3in` as one class word; only the braced form carries attributes
+        for text, length in (("::: .indent=3in", "3in"), ("::: indent=3in", "3in"), ("::: indent-3in", "3in"),
+                             ("::: {.indent-3in}", "3in"), ("::: {.indent=3in}", "3in"), ("::: indent=false", "0pt"),
+                             ("::: .indent-no", "0pt"), ("::: indent=true", "1.5em"), ("::: indent-2", "2em"),
+                             ("::: .indent=1.5em", "1.5em"), ("::: .noindent", "0pt"), ("::: .indent", "1.5em")):
+            with self.subTest(text=text):
+                done = self.convert(f"{text}\nx\n:::\n", "latex")
+                self.assertEqual(done.stdout.count("\\setlength{\\parindent}{" + length + "}"), 1, done.stdout)
+                self.assertEqual(done.stderr, "")
+                self.assertNotIn("indent=", done.stdout.replace("\\parindent", ""))
+
+    def test_the_value_in_the_class_word_goes_through_the_same_parser_in_every_writer(self):
+        self.assertIn('text-indent: 3in', self.convert("::: indent=3in\nx\n:::\n", "html").stdout)
+        self.assertIn("first-line-indent: (amount: 3in, all: true)", self.convert("::: .indent=3in\nx\n:::\n", "typst").stdout)
+        kept = self.convert("::: indent=3in\nx\n:::\n", "markdown").stdout
+        self.assertIn("indent=3in", kept)                                           # the Markdown writer keeps it as written
+
+    def test_a_bad_value_in_the_class_word_warns_like_the_attribute(self):
+        done = self.convert("::: indent=banana\nx\n:::\n", "latex")
+        self.assertIn("WARN  indent: 'banana' is not an indent", done.stderr)
+        self.assertNotIn("parindent", done.stdout)
+
+    def test_the_other_classes_and_the_id_stay(self):
+        out = self.convert("::: {#box .indent-3in .shaded}\nx\n:::\n", "html").stdout
+        self.assertIn('id="box"', out)
+        self.assertIn('class="shaded"', out)
+        self.assertIn("text-indent: 3in", out)
+        self.assertNotIn("indent-3in", out)
+
+    def test_a_near_miss_warns_once_and_changes_nothing(self):
+        for text, shown in ((".indent3in", ".indent3in"), (".noindent=2em", ".noindent=2em"), ("indent3in", "indent3in"),
+                            ("{.noindent-2em}", "noindent-2em"), (".indentem", ".indentem"), ("indent=", "indent=")):
+            with self.subTest(text=text):
+                done = self.convert(f"::: {text}\nx\n:::\n", "latex")
+                self.assertEqual(done.stderr.strip(), f"WARN  indent: '{shown}' is not an indent div; write ::: {{indent=3in}} (or ::: noindent)")
+                self.assertNotIn("parindent", done.stdout)
+                self.assertNotIn("begingroup", done.stdout)
+                html = self.convert(f"::: {text}\nx\n:::\n", "html").stdout
+                self.assertNotIn("text-indent", html)
+                self.assertIn(f'class="{shown}"', html)                              # the div is as it was written
+
+    def test_a_near_miss_beside_a_real_indent_div_does_not_disturb_it(self):
+        done = self.convert("::: .indent3in\na\n:::\n\n::: indent=2em\nb\n:::\n", "latex")
+        self.assertEqual(done.stdout.count("\\setlength"), 1)
+        self.assertIn("{2em}", done.stdout)
+        self.assertEqual(done.stderr.count("WARN"), 1)
+
+    def test_classes_a_project_may_own_are_left_alone_without_a_warning(self):
+        for text in (".indented", ".indentation", "indent-block", ".indent-block", "{.indentation}", ".noindented", "{.indent-list .x}"):
+            with self.subTest(text=text):
+                done = self.convert(f"::: {text}\nx\n:::\n", "latex")
+                self.assertEqual(done.stderr, "")
+                self.assertNotIn("parindent", done.stdout)
 
     def test_an_invalid_value_warns_and_changes_nothing(self):
         done = self.convert("::: {indent=banana}\nx\n:::\n", "latex")
@@ -134,6 +192,9 @@ class Filter(unittest.TestCase):
         self.assertIn("NOTE  indent: 2 indent settings left out: plain has no per-block paragraph indent", done.stderr)
 
 
+NAMES = ("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot")
+
+
 def first_words(pdf: Path) -> dict[str, float]:
     """The left edge of every word that ends in a full stop and starts a line (`Inside.`), from pdftotext -bbox."""
     xml = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"], capture_output=True, text=True).stdout
@@ -164,6 +225,28 @@ class RealOutput(unittest.TestCase):
         done = self.build("doc.md", "-e", "lualatex")
         self.assertTrue((self.directory / "doc.pdf").exists(), done.stdout + done.stderr)
         self.check(first_words(self.directory / "doc.pdf"))
+
+    def test_every_spelling_of_the_value_indents_by_that_much(self):
+        # three centimetres: the first word of the paragraph sits that far right of the unindented one
+        lines = ["---\nlang: en\n---\n", "Plain.%s" % LONG, ""]
+        for number, spelling in enumerate(("::: .indent=3cm", "::: indent=3cm", "::: indent-3cm", "::: {.indent-3cm}",
+                                           "::: {.indent=3cm}", "::: {indent=3cm}"), start=1):
+            lines += [spelling, "%s.%s" % (NAMES[number - 1], LONG), ":::", ""]
+        (self.directory / "doc.md").write_text("\n".join(lines), encoding="utf-8")
+        done = self.build("doc.md", "-e", "lualatex")
+        self.assertTrue((self.directory / "doc.pdf").exists(), done.stdout + done.stderr)
+        edges = first_words(self.directory / "doc.pdf")
+        for name in NAMES:
+            with self.subTest(name=name):
+                self.assertAlmostEqual(edges[name] - edges["Plain"], 3 / 2.54 * 72, delta=1.0)
+
+    def test_a_near_miss_warns_through_the_build_and_does_not_indent(self):
+        (self.directory / "doc.md").write_text("---\nlang: en\n---\n\nPlain.%s\n\n::: .indent3in\nNear.%s\n:::\n" % (LONG, LONG), encoding="utf-8")
+        done = self.build("doc.md", "-e", "lualatex")
+        self.assertTrue((self.directory / "doc.pdf").exists(), done.stdout + done.stderr)
+        self.assertIn("WARN  indent: '.indent3in' is not an indent div", done.stdout + done.stderr)
+        edges = first_words(self.directory / "doc.pdf")
+        self.assertAlmostEqual(edges["Near"], edges["Plain"], places=1)
 
     def test_a_div_in_a_part_reaches_the_build(self):
         (self.directory / "report.md").write_text("---\nindent: true\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")

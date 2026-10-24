@@ -141,8 +141,9 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     docs/recipes.md 1.11.
 
 Paragraph indent for a stretch of text (v3.30.0):
-    a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`)
-    sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
+    a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`;
+    the value may sit in the class word: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`, `::: {.indent-3in}`, and a
+    near miss such as `.indent3in` gets a WARN) sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
     (pdfmd_lua/indent.lua, added by `indent_filter_args()` only for a document, or a part, that has such a div): LaTeX
     and Beamer in a `\\begingroup` ... `\\endgroup`, Typst a `first-line-indent` rule, HTML a `text-indent` style; the
     Markdown writers keep the div, the others drop the setting with a NOTE. docs/recipes.md 1.9.
@@ -819,7 +820,11 @@ CSV/TSV table inclusion:
     directly under the table itself, in the rendered output, not just on
     the compiling terminal. A `.csv` div with neither `file=` nor data, or one
     naming a file that can't be opened, gets a `WARN` and is left empty
-    rather than failing the whole compile.
+    rather than failing the whole compile. Inline data may sit in the bare
+    `::: csv` (no braces; `file=` and `align=` need them); `pdfmd-options: {csv: off}` (the short
+    form of `csv: {enabled: false}`), --no-csv or --setup leaves every `.csv` div as written, a
+    plain div with its text, and no WARN (--csv, PDFMD_CSV for -j workers; a mapping such as
+    `csv: {rows: 30}` keeps the tables on).
 
     v3.25.1: the data may be written inside the div, in a fenced code block
     (read verbatim: nothing in it is Markdown) or as plain lines; `file=` wins
@@ -1403,7 +1408,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.14"
+PDFMD_VERSION = "3.30.15"
 import argparse
 import atexit
 import csv
@@ -2366,7 +2371,9 @@ def csv_table_filter() -> Iterator[Path]:
         yield path
 
 
-CSV_DIV_RE = re.compile(r"""\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*\.csv\b""")
+# `::: {.csv ...}`, or the bare `::: csv` for inline data (`file=` and `align=` need the braces; `::: csvfile` and
+# `::: csv-x` are other classes)
+CSV_DIV_RE = re.compile(r"""\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*\.csv\b|^[ \t]*:{3,}[ \t]*csv[ \t]*$""", re.MULTILINE)
 
 
 def contains_csv_table(md_path: Path) -> bool:
@@ -2399,13 +2406,43 @@ def csv_count_argument(value: str) -> int | str:
     return found
 
 
+# `csv: off` switches the `.csv` div off for a document, the way `calc: off` does the calculator: the Lua filter is not
+# added and the div stays as written (a plain div with its text), with no WARN. `pdfmd-options: {csv: off}` is the short form of
+# `{csv: {enabled: false}}`, and a mapping (`csv: {rows: 30}`) leaves the tables on. --csv / --no-csv for a run (reaching -j
+# workers as PDFMD_CSV); the command line wins over the options.
+CSV_ENABLED_ENV = "PDFMD_CSV"
+
+
+def csv_enabled_option(md_path: Path | None, metadata_files: list[Path] = ()):
+    """`pdfmd-options.csv.enabled`; `csv: off` alone means `enabled: off`. None when nothing says."""
+    value = first_pdfmd_option(md_path, list(metadata_files), "csv") if md_path is not None else None
+    if isinstance(value, dict):
+        return value.get("enabled")
+    return value
+
+
+def csv_is_off(md_path: Path | None, metadata_files: list[Path] = ()) -> bool:
+    value = os.environ.get(CSV_ENABLED_ENV)
+    if value is None:
+        value = csv_enabled_option(md_path, metadata_files)
+    if value is None:
+        return False
+    flag = option_flag(value)
+    if flag is None:
+        where = display_path(md_path) if md_path is not None else "csv"
+        raise SystemExit(f"{where}: pdfmd-options.csv.enabled must be true or false, not {value!r}")
+    return not flag
+
+
 def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
     """The cap, the header rule and the cell reader of every `.csv` div of ``md_path`` (see CSV_DEFAULTS)."""
     chosen = dict(CSV_DEFAULTS)
     option = first_pdfmd_option(md_path, list(metadata_files), "csv") if md_path is not None else None
     where = display_path(md_path) if md_path is not None else "csv"
     if option is not None and not isinstance(option, dict):
-        raise SystemExit(f"{where}: pdfmd-options.csv must be a mapping (rows, cols, header, reader), not {option!r}")
+        if option_flag(option) is None:
+            raise SystemExit(f"{where}: pdfmd-options.csv must be a mapping (rows, cols, header, reader) or on/off, not {option!r}")
+        option = {"enabled": option}                   # `csv: off`: no caps to read (csv_is_off acts on it)
     option = option or {}
     for key in ("rows", "cols"):
         value = os.environ.get(CSV_ENV[key])
@@ -2524,6 +2561,8 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
         return []
     files = sources if isinstance(sources, list) else [sources]
     if not any(contains_csv_table(file) for file in files):
+        return []
+    if csv_is_off(files[0], metadata_files):               # `csv: off`: the div stays as written
         return []
     args = ["--lua-filter", str(csv_filter_path)]
     args += spreadsheet_args(files)
@@ -2806,10 +2845,14 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
 
 
 # A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
-# `::: noindent`, `::: {.noindent}`, `::: indent`. pdfmd_lua/indent.lua does it for the target format and puts the
-# document's own indent back at the closing `:::`; the filter goes in only for a document that has such a div.
-INDENT_DIV_RE = re.compile(r"""^[ \t]*:{3,}[ \t]*(?:\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*(?:\.(?:no)?indent\b|\bindent[ \t]*=)"""
-                           r"""|(?:no)?indent[ \t]*$)""", re.MULTILINE)
+# `::: noindent`, `::: {.noindent}`, `::: indent`, and the class-word spellings of a value, `::: indent=3in`, `::: .indent=3in`,
+# `::: indent-3in`, `::: {.indent-3in}`, `::: {.indent=3in}`. pdfmd_lua/indent.lua does it for the target format and puts the
+# document's own indent back at the closing `:::`; the filter goes in only for a document that has such a div. The expression
+# also lets a near miss through (`.indent3in`, `.noindent=2em`) so that the filter can say it is none of them; a class that only
+# starts with the word (`.indented`, `.indentation`) does not.
+_INDENT_WORD = r"(?:no)?indent(?:\b|(?=\d)|(?=(?:rem|em|ex|pt|cm|mm|in|bp|pc|px)\b))"
+INDENT_DIV_RE = re.compile(r"""^[ \t]*:{3,}[ \t]*(?:\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*(?:\.""" + _INDENT_WORD + r"""|\bindent[ \t]*=)"""
+                           r"""|\.?""" + _INDENT_WORD + r"""[^\s{}]*[ \t]*$)""", re.MULTILINE)
 
 
 def contains_indent_div(md_path: Path) -> bool:
@@ -4700,7 +4743,7 @@ def split_front_matter(text: str) -> tuple[dict, str]:
     return (data if isinstance(data, dict) else {}), body
 
 
-CSV_DIV_LINE_RE = re.compile(r"""^\s*:{3,}\s*\{((?:[^}"]|"(?:[^"\\]|\\.)*")*\.csv\b(?:[^}"]|"(?:[^"\\]|\\.)*")*)\}\s*$""")
+CSV_DIV_LINE_RE = re.compile(r"""^\s*:{3,}\s*(?:\{((?:[^}"]|"(?:[^"\\]|\\.)*")*\.csv\b(?:[^}"]|"(?:[^"\\]|\\.)*")*)\}|csv)\s*$""")
 DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
 DIV_ATTRIBUTE_RE = re.compile(r"""([\w-]+)=(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""")
 
@@ -5050,6 +5093,7 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     in_comment = False
     in_display = False
     skip_csv_div = False
+    csv_off = bool(CSV_DIV_RE.search(body)) and csv_is_off(source_path, list(metadata_files))   # `csv: off`: a plain div, its text
     body_lines = iter(body.splitlines())
     for line in body_lines:
         match = FENCE_RE.match(line)
@@ -5128,10 +5172,11 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
         if skip_csv_div:
             skip_csv_div = not DIV_CLOSE_RE.match(line)
             continue
-        csv_div = CSV_DIV_LINE_RE.match(line)
+        csv_div = None if csv_off else CSV_DIV_LINE_RE.match(line)
         if csv_div:
+            csv_attributes = csv_div.group(1) or ".csv"          # the bare `::: csv` has none
             inline = None
-            if not re.search(r"\bfile=", csv_div.group(1)):
+            if not re.search(r"\bfile=", csv_attributes):
                 data = []
                 for data_line in body_lines:      # the data written inside the div, up to its closing :::
                     if DIV_CLOSE_RE.match(data_line):
@@ -5140,10 +5185,10 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
                 if data and FENCE_RE.match(data[0]):
                     data = data[1:-1] if len(data) > 1 and FENCE_RE.match(data[-1]) else data[1:]
                 inline = "\n".join(data) if any(part.strip() for part in data) else None
-            table = csv_div_table(csv_div.group(1), base_dir or Path.cwd(), source_path, inline,
+            table = csv_div_table(csv_attributes, base_dir or Path.cwd(), source_path, inline,
                                   csv_defaults(source_path, metadata_files) if source_path is not None else None)
             items.extend([("", False), *[(row, False) for row in table], ("", False)])
-            skip_csv_div = inline is None and bool(re.search(r"\bfile=", csv_div.group(1)))
+            skip_csv_div = inline is None and bool(re.search(r"\bfile=", csv_attributes))
             count("csv")
             continue
         if DIV_FENCE_RE.match(line):
@@ -24287,6 +24332,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expand-tables", action="store_true",
                         help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
                              "(all its rows), its caption= the line under it. The CSV files are left where they are")
+    parser.add_argument("--csv", action=argparse.BooleanOptionalAction, default=None,
+                        help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
+                             "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "
+                             "or --setup")
     parser.add_argument("--csv-rows", type=csv_count_argument, default=None, metavar="N|all",
                         help="how many data rows a `::: {.csv}` table shows when its div does not say (default 10). "
                              "Also `pdfmd-options: {csv: {rows: N}}`, or --setup")
@@ -24922,6 +24971,8 @@ def run_main() -> None:
     for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"])):
         if value is not None:
             os.environ[variable] = str(value)
+    if args.csv is not None:
+        os.environ[CSV_ENABLED_ENV] = "on" if args.csv else "off"
     if args.calc is not None:
         os.environ[CALC_ENV] = "on" if args.calc else "off"
     if args.calc_digits is not None:
