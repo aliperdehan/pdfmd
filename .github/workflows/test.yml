@@ -135,3 +135,93 @@ jobs:
           cd examples
           pdfmd lecture -e typst
 
+
+  # The whole test suite on Linux with Pandoc and a LaTeX engine installed, so that the tests that need them run instead of
+  # skipping: Pandoc 3.1.3 (the oldest pdfmd supports) and the latest. The `native` job above has neither, on purpose.
+  # Gating: a failure here stops a release (publish.yml calls this file).
+  linux-pandoc:
+    name: linux-pandoc (Pandoc ${{ matrix.pandoc }})
+    strategy:
+      fail-fast: false
+      matrix:
+        pandoc: ["3.1.3", "latest"]
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PDFMD_NO_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pandoc/actions/setup@v1         # the latest
+        if: matrix.pandoc == 'latest'
+      - uses: pandoc/actions/setup@v1         # a version by number
+        if: matrix.pandoc != 'latest'
+        with:
+          version: ${{ matrix.pandoc }}
+      - name: LuaLaTeX and XeLaTeX, poppler (the tests read PDFs with pdftotext and pdftoppm), fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-luatex texlive-xetex texlive-latex-recommended \
+            texlive-latex-extra texlive-fonts-recommended texlive-science lmodern poppler-utils fonts-dejavu fonts-jetbrains-mono
+      - run: pip install .
+      - run: pandoc --version | head -1
+      - run: pdfmd --check-dependencies
+      - name: The whole test suite
+        run: python -m unittest discover -s tests -v
+
+  # Gating: pdfmd_inkmd/ is the published inkmd, byte for byte, and the PDF the vendored inkmd makes is the one the golden
+  # digest holds (CLAUDE.md: after re-vendoring, `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests` and read what changed).
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - name: pdfmd_inkmd/ matches the inkmd it was generated from
+        run: python scripts/vendor_inkmd.py --check
+      - name: The golden digest of inkmd's output (the golden modules only)
+        env:
+          PDFMD_GOLDEN: "1"
+        run: python -m unittest tests.test_native -v
+
+  # Not gating (continue-on-error): pyflakes' rules on pdfmd's own code. It names an undefined or unused name -- the kind of mistake
+  # that was an UnboundLocalError in 3.28.25. Read its output in the log; fix what it finds when you pass by.
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check --select F --exclude pdfmd_inkmd pdfmd.py pdfmd_*/ scripts/
+
+  # Not gating (continue-on-error): Windows with a LaTeX engine (TeX Live), which the jobs above do not have there. A failure is
+  # something to look at, not something that stops a release.
+  windows-latex:
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PDFMD_NO_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pandoc/actions/setup@v1
+      - uses: teatimeguest/setup-texlive-action@v3   # TeX Live, with LuaLaTeX
+        with:
+          packages: scheme-basic collection-latex collection-latexrecommended collection-luatex collection-fontsrecommended collection-xetex lm
+      - run: pip install .
+      - run: pdfmd --check-dependencies
+      - name: The whole test suite
+        run: python -m unittest discover -s tests -v
