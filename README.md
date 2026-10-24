@@ -221,6 +221,10 @@ prints it, before the rough built-in renderers, with the document's paper and ma
 none of Pandoc's syntax, and says so (`NOTE`, `WARN`). `-e calibre` or `-e native` without Pandoc picks it; with Pandoc,
 `-e calibre` is the HTML route above.
 
+The built-in renderers set the paper from `papersize:` (or `--paper`): `a0`-`a6`, `b4`-`b6`, `c4`, `c5`, `letter`, `legal`,
+`tabloid`, `executive`, `folio`, with `landscape` from `papersize: a4,landscape`, `classoption: [landscape]` or `geometry:`.
+A name they do not know is a `NOTE` and A4 (md2pdf has no `executive`, `folio` or `tabloid` either, and says so).
+
 `pdfmd --install calibre` (v3.29) gets Calibre when it is missing (190 to 360 MB). In a terminal on a Mac or Windows it offers
 `brew install --cask calibre` or `winget install --id calibre.calibre -e` first. Otherwise (or on answering `d`) pdfmd downloads the
 release file for your machine and checks it against the SHA-256 GitHub lists for it, and refuses a download whose checksum is not

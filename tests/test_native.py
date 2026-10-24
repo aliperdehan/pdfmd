@@ -217,6 +217,27 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(pdfmd.native_paper({"papersize": "Letter"}), "letter")
         self.assertEqual(pdfmd.native_paper({"papersize": "a4paper"}), "a4")
         self.assertEqual(pdfmd.native_paper({}), "a4")
+        for name in ("a6", "b4", "b5", "b6", "executive", "folio", "a2", "c5"):
+            self.assertEqual(pdfmd.native_paper({"papersize": name}), name)            # not A4 in silence any more
+        self.assertEqual(pdfmd.native_paper({"papersize": "us-letter"}), "letter")
+        self.assertEqual(pdfmd.native_page({"papersize": "wide"}), ("a4", False, "wide"))     # the caller says so (a NOTE)
+
+    def test_the_sizes_are_real_ones(self):
+        mm = lambda points: round(points * 25.4 / 72)
+        for name, (width, height) in (("a6", (105, 148)), ("b4", (250, 353)), ("b5", (176, 250)), ("b6", (125, 176)),
+                                      ("a4", (210, 297)), ("a3", (297, 420)), ("c5", (162, 229))):
+            with self.subTest(name=name):
+                self.assertEqual((mm(pdfmd.NATIVE_PAPER_POINTS[name][0]), mm(pdfmd.NATIVE_PAPER_POINTS[name][1])), (width, height))
+        self.assertEqual(pdfmd.NATIVE_PAPER_POINTS["executive"], (522.0, 756.0))                # 7.25 x 10.5 in
+        for name in pdfmd.PAPER_SIZES:
+            self.assertIn(name, pdfmd.NATIVE_PAPER_POINTS)
+
+    def test_landscape_is_read_from_the_papersize_classoption_and_geometry(self):
+        self.assertEqual(pdfmd.native_page({"papersize": "a4,landscape"}), ("a4", True, ""))
+        self.assertEqual(pdfmd.native_page({"papersize": "a5", "classoption": ["landscape", "12pt"]}), ("a5", True, ""))
+        self.assertEqual(pdfmd.native_page({"geometry": "a4paper, landscape, margin=1in"}), ("a4", True, ""))
+        self.assertEqual(pdfmd.native_page({"papersize": "b5", "classoption": "twocolumn"}), ("b5", False, ""))
+        self.assertTrue(pdfmd.native_landscape({"geometry": ["landscape"]}))
         self.assertEqual(pdfmd.native_font_size({"fontsize": "11pt"}), 11.0)
         self.assertIsNone(pdfmd.native_font_size({"fontsize": "huge"}))
 
@@ -388,6 +409,31 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
                 self.assertEqual(info.title, "Pandoc-flavoured")
                 self.assertEqual(info.author, "Ada Example, Bob Example")
                 self.assertEqual(info.creator, "inkmd via pdfmd-cli")
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_the_paper_and_its_orientation_reach_the_pdf(self):
+        sizes = (("a4", False, (595, 842)), ("b5", False, (499, 709)), ("a6", False, (298, 420)), ("executive", False, (522, 756)),
+                 ("a4", True, (842, 595)), ("b5", True, (709, 499)))
+        for name, landscape, expected in sizes:
+            with self.subTest(name=name, landscape=landscape), tempfile.TemporaryDirectory() as directory:
+                (Path(directory) / "doc.md").write_text(
+                    f"---\npapersize: {name}{',landscape' if landscape else ''}\n---\n\n# Hi\n\nText\n", encoding="utf-8")
+                result = self.run_pdfmd("doc.md", "-e", "inkmd", cwd=directory)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn("NOTE  native", result.stderr)
+                box = pypdf.PdfReader(Path(directory) / "doc.pdf").pages[0].mediabox
+                self.assertEqual((round(float(box.width)), round(float(box.height))), expected)
+
+    def test_a_paper_nobody_knows_is_a_note_and_a4(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "doc.md").write_text("---\npapersize: wide\n---\n\n# Hi\n", encoding="utf-8")
+            result = self.run_pdfmd("doc.md", "-e", "inkmd", cwd=directory)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("NOTE  native (inkmd): doc.md: paper 'wide' is not a size the built-in renderers know", result.stderr)
+            self.assertEqual(result.stderr.count("paper 'wide'"), 1)
+            if pypdf is not None:
+                box = pypdf.PdfReader(Path(directory) / "doc.pdf").pages[0].mediabox
+                self.assertEqual((round(float(box.width)), round(float(box.height))), (595, 842))
 
     def test_automatic_fallback_announces_itself(self):
         with tempfile.TemporaryDirectory() as directory:

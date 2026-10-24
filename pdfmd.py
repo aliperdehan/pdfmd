@@ -4516,13 +4516,30 @@ def chunks_width(chunks: list[Chunk], size: float) -> float:
     return total
 
 
-PAGE_WIDTHS = {"a3": 841.89, "a4": 595.28, "a5": 419.53, "letter": 612.0, "legal": 612.0, "tabloid": 792.0}
+def _millimetres(width: float, height: float) -> tuple[float, float]:
+    return (round(width * 72 / 25.4, 2), round(height * 72 / 25.4, 2))
+
+
+# Every paper the built-in renderers can set, portrait, in points (ISO sizes from their millimetres). inkmd knows the names in
+# PAPER_SIZES; the rest reach it as a (width, height) pair. md2pdf takes the names ReportLab has (a0-a10, b0-b10, c0-c10, letter,
+# legal, elevenseventeen), so the ones it lacks (executive, folio, tabloid) get a NOTE there and its own default.
+NATIVE_PAPER_POINTS = {
+    "a0": _millimetres(841, 1189), "a1": _millimetres(594, 841), "a2": _millimetres(420, 594), "a3": (841.89, 1190.55),
+    "a4": (595.28, 841.89), "a5": (419.53, 595.28), "a6": _millimetres(105, 148),
+    "b4": _millimetres(250, 353), "b5": _millimetres(176, 250), "b6": _millimetres(125, 176),
+    "c4": _millimetres(229, 324), "c5": _millimetres(162, 229),
+    "letter": (612.0, 792.0), "legal": (612.0, 1008.0), "tabloid": (792.0, 1224.0),
+    "executive": (522.0, 756.0), "folio": (612.0, 936.0),
+}
+PAPER_NAME_ALIASES = {"us-letter": "letter", "usletter": "letter", "us-legal": "legal", "uslegal": "legal"}
+PAGE_WIDTHS = {name: points[0] for name, points in NATIVE_PAPER_POINTS.items()}
 NO_BREAK_SPACE = "\u00a0"
 
 
-def centred_math(expression: str, page: str, size: float, margin: float = 72.0) -> str:
+def centred_math(expression: str, page: str, size: float, margin: float = 72.0, landscape: bool = False) -> str:
     """A display formula as Markdown for one centred block (one or more lines)."""
-    available = PAGE_WIDTHS.get(page, PAGE_WIDTHS["a4"]) - 2 * margin
+    width = NATIVE_PAPER_POINTS.get(page, NATIVE_PAPER_POINTS["a4"])[1 if landscape else 0]
+    available = width - 2 * margin
     rows = []
     for chunks in math_lines(expression):
         padding = max(0.0, (available - chunks_width(chunks, size)) / 2)
@@ -4823,7 +4840,7 @@ def strip_html_comments(line: str, in_comment: bool) -> tuple[str, bool]:
 
 
 def convert_math_items(items: list[tuple[str, bool]], engine: str, page: str,
-                       size: float) -> tuple[list[tuple[str, bool]], int]:
+                       size: float, landscape: bool = False) -> tuple[list[tuple[str, bool]], int]:
     """Set formulas md2pdf cannot typeset (and, for inkmd, every formula) as text.
 
     inkmd: every formula becomes text, display math a centred block. md2pdf with
@@ -4892,7 +4909,7 @@ def convert_math_items(items: list[tuple[str, bool]], engine: str, page: str,
             out.extend([("", False), ("$$", False), (form, False), ("$$", False), ("", False)])
         else:
             converted += 1
-            block = stacked_math(expression, html=False) if typeset else centred_math(expression, page, size)
+            block = stacked_math(expression, html=False) if typeset else centred_math(expression, page, size, landscape=landscape)
             out.extend([("", False), (block, False), ("", False)])
         index = end + 1
     return out, converted
@@ -5126,7 +5143,7 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     formulas_as_text = 0
     if math:
         items, formulas_as_text = convert_math_items(items, engine, native_paper(metadata),
-                                                     native_font_size(metadata) or 12.0)
+                                                     native_font_size(metadata) or 12.0, native_landscape(metadata))
         lines = [line for line, _ in items]
         if formulas_as_text:
             count("math_text", formulas_as_text)
@@ -5181,9 +5198,56 @@ def ignored_front_matter_keys(metadata: dict) -> list[str]:
     return sorted(str(key) for key in metadata if str(key) not in NATIVE_META_KEYS and str(key) not in own)
 
 
+def native_page(metadata: dict) -> tuple[str, bool, str]:
+    """(the paper, landscape, the name that is no paper we know or "") the built-in renderers set: --paper, else `papersize:` /
+    `pagesize:`, as `a4`, `a4paper`, `us-letter`, `a4,landscape`; `landscape` also from `classoption:` and `geometry:` (as for
+    LaTeX and Word). A paper we do not know gives A4 and its name, for the caller's NOTE."""
+    asked = PAPER_CLI or scalar_text(metadata.get("papersize")) or scalar_text(metadata.get("pagesize"))
+    words = [word.casefold() for word in re.split(r"[,\s]+", asked) if word]
+    options = metadata.get("classoption")
+    extra = [str(item) for item in options] if isinstance(options, list) else ([str(options)] if options else [])
+    geometry = metadata.get("geometry")
+    extra += [str(item) for item in geometry] if isinstance(geometry, list) else re.split(r"[,\s]+", scalar_text(geometry))
+    extra = [word.casefold() for word in extra if word]
+    landscape = "landscape" in words or "landscape" in extra or any(word == "landscape=true" for word in extra)
+
+    def known(word: str) -> str:
+        word = PAPER_NAME_ALIASES.get(word, word)
+        word = word[:-5] if word.endswith("paper") and word[:-5] in NATIVE_PAPER_POINTS else word
+        return word if word in NATIVE_PAPER_POINTS else ""
+
+    unknown = ""
+    for word in words:
+        if word == "landscape" or word == "portrait":
+            continue
+        if known(word):
+            return known(word), landscape, ""
+        unknown = unknown or word
+    for word in extra:                                   # `classoption: a5paper`, `geometry: a5paper`
+        if known(word):
+            return known(word), landscape, unknown
+    return "a4", landscape, unknown
+
+
 def native_paper(metadata: dict) -> str:
-    value = (PAPER_CLI or scalar_text(metadata.get("papersize"))).casefold().replace("paper", "")
-    return value if value in PAPER_SIZES else "a4"
+    return native_page(metadata)[0]
+
+
+def native_landscape(metadata: dict) -> bool:
+    return native_page(metadata)[1]
+
+
+def native_paper_note(metadata: dict, source: Path | None, engine: str) -> None:
+    """A NOTE for a `papersize:` the built-in renderers do not have (they set A4), once per file and name."""
+    unknown = native_page(metadata)[2]
+    if unknown and (str(source), unknown) not in NATIVE_PAPER_NOTED:
+        NATIVE_PAPER_NOTED.add((str(source), unknown))
+        where = f"{display_path(source)}: " if source is not None else ""
+        print(f"NOTE  native ({engine}): {where}paper '{unknown}' is not a size the built-in renderers know "
+              f"({', '.join(sorted(NATIVE_PAPER_POINTS))}); A4 is used", file=sys.stderr)
+
+
+NATIVE_PAPER_NOTED: set[tuple[str, str]] = set()
 
 
 def native_font_size(metadata: dict) -> float | None:
@@ -5287,7 +5351,12 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         return render_calibre_markdown(md_path, source, output, verbose)
     if engine == "inkmd":
         ink = load_inkmd()
-        options: dict = {"page_size": native_paper(source.metadata), "base_dir": md_path.resolve().parent}
+        paper, landscape, _ = native_page(source.metadata)
+        native_paper_note(source.metadata, md_path, engine)
+        options: dict = {"page_size": paper if paper in PAPER_SIZES else NATIVE_PAPER_POINTS[paper],
+                         "base_dir": md_path.resolve().parent}
+        if landscape:
+            options.update(orientation="landscape")          # inkmd's keyword, not a pdfmd-options key
         size = native_font_size(source.metadata)
         if size:
             options["font_size"] = size
@@ -5299,11 +5368,16 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         set_pdf_info(output, source.metadata, verbose, creator="inkmd")
         return [str(item.message) for item in caught]
     import md2pdf
+    paper, landscape, _ = native_page(source.metadata)
+    native_paper_note(source.metadata, md_path, engine)
     try:
+        config = md2pdf.Config(input_file=str(md_path), output_file=str(output), page_size=paper.upper(),
+                               orientation="landscape" if landscape else "portrait")
+    except Exception:  # a paper ReportLab has no name for (executive, folio): md2pdf's own default
+        print(f"NOTE  native (md2pdf): {display_path(md_path)}: md2pdf has no paper '{paper}'; its own default is used",
+              file=sys.stderr)
         config = md2pdf.Config(input_file=str(md_path), output_file=str(output),
-                               page_size=native_paper(source.metadata).upper())
-    except Exception:  # an unknown paper name falls back to the default
-        config = md2pdf.Config(input_file=str(md_path), output_file=str(output))
+                               orientation="landscape" if landscape else "portrait")
     with captured_logs("md2pdf") as messages:
         md2pdf.Pipeline(config).run(source.text)
     set_pdf_info(output, {}, verbose, creator="md2pdf (ReportLab)")
