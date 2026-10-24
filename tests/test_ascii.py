@@ -232,7 +232,7 @@ class CommandLine(unittest.TestCase):
         (self.directory / "d" / "b.md").write_text("# B\n\nCafé\n", encoding="utf-8")
         result = self.run_pdfmd("-b", "d", "-o", "out", "--to", "ascii", "--ascii-missing", "fail")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("FAIL  d/a.md", result.stdout + result.stderr)
+        self.assertIn("FAIL  " + str(Path("d", "a.md")), result.stdout + result.stderr)      # the OS's separator
         self.assertFalse((self.directory / "out" / "a.ascii.txt").exists())
         self.assertIn("Cafe", self.read("out/b.ascii.txt"))
 
