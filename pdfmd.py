@@ -8540,12 +8540,18 @@ def search_documents(words: list[str], limit: int = 40) -> list[str]:
         headings = document_headings(text)
         trail: dict[int, str] = {}
         position = 0
+        in_contents = False                              # the README's list of its own sections is not a place to find anything
         for index, line in enumerate(text.splitlines()):
             while position < len(headings) and headings[position][0] <= index:
                 _, level, title = headings[position]
                 trail = {key: value for key, value in trail.items() if key < level}
                 trail[level] = title
                 position += 1
+            if line.strip() == "<!-- contents -->":
+                in_contents = True
+            if in_contents:
+                in_contents = line.strip() != "<!-- /contents -->"
+                continue
             if all(word in line.casefold() for word in wanted) and line.strip():
                 where = " > ".join(trail[key] for key in sorted(trail)) or "(top)"
                 hits.append(f"{name}: {where} (line {index + 1}): {line.strip()[:110]}")

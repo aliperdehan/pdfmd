@@ -52,6 +52,43 @@ class Version(unittest.TestCase):
         self.assertIn("(`3.N.x`)", header)
 
 
+def github_anchor(title: str) -> str:
+    return re.sub(r"[^\w\s-]", "", title.lower().replace("`", "")).replace(" ", "-")
+
+
+class Readme(unittest.TestCase):
+    def setUp(self):
+        self.text = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_the_contents_list_every_section_with_its_anchor(self):
+        block = re.search(r"<!-- contents -->\n(.*?)<!-- /contents -->", self.text, re.S)
+        self.assertIsNotNone(block, "the list of sections at the top of the README")
+        listed = re.findall(r"\[([^\]]+)\]\(#([^)]+)\)", block.group(1))
+        expected, seen = [], {}
+        for _, level, title in pdfmd.document_headings(self.text):
+            if level in (2, 3):
+                base = github_anchor(title)
+                count = seen.get(base, 0)
+                seen[base] = count + 1
+                expected.append((title, base if count == 0 else f"{base}-{count}"))
+        shown = [(title, anchor) for title, anchor in listed]
+        self.assertEqual(shown[len(shown) - len(expected):], expected)          # the one-line list first, then every section
+
+    def test_every_doc_example_of_the_documents_finds_its_section(self):
+        for name in ("README.md", "docs/recipes.md", "docs/agents.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            for document, selector in re.findall(r"`pdfmd --doc (readme|recipes|agents|changelog) ([\w][\w ]*?)`", text) + \
+                    re.findall(r"`--doc (readme|recipes|agents|changelog) ([\w][\w ]*?)`", text):
+                with self.subTest(name=name, document=document, selector=selector):
+                    found = pdfmd.document_section(pdfmd.document_file(document).read_text(encoding="utf-8"), selector)
+                    self.assertIsNotNone(found, f"{name}: --doc {document} {selector} finds no section")
+
+    def test_the_search_example_is_one_the_command_answers(self):
+        words = re.search(r"`pdfmd --doc search (\S+)`", self.text).group(1)
+        hits = pdfmd.search_documents([words])
+        self.assertTrue(any(hit.startswith("agents:") and words in hit for hit in hits), hits)
+
+
 class AgentGuide(unittest.TestCase):
     def setUp(self):
         self.text = (ROOT / "docs" / "agents.md").read_text(encoding="utf-8")
