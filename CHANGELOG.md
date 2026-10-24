@@ -40,6 +40,30 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.21 — 2026-10-25
+
+Pre-edit state: commit `b20d62b` (v3.30.20).
+
+### Fixed
+
+- **A build printed `{ans}` lines and bare names instead of numbers (a regression of 3.30.20).** The new `.calc-table` handler was chained
+  to the `::: calc` handler with `calc_div(div) or calc_table_div(div)`, and `or` keeps only the first of the two values the first handler
+  returns, so the walk went into the div it had just written and the second pass counted its places twice: every span and `{ans}` line after
+  the first calc div failed with "the passes disagree about this place" (LR5: 71 lines in the Calculations, the numbers of the Discussion as
+  code). The two results are passed on now.
+
+### Added
+
+- When three or more places of a document could not be evaluated, the calculator ends with one line,
+  `WARN  calc: 21 places were not evaluated (each is above); the output shows their code or text where the numbers belong`, so a build
+  that failed on a whole section is not mistaken for one that printed a single odd span (`--strict` already fails on any WARN).
+- A `.calc-table` caption can be written inside the div: a line `Table: Student's *t*, 95%` (or `: ...` after a blank line); `caption="..."` still works.
+
+### Tests
+
+- `tests.test_calc.Statistics`: a silent span glued to an `{ans}` line (the four-line example of the report), the summary line, the three
+  caption spellings.
+
 ## v3.30.20 — 2026-10-25
 
 Pre-edit state: commit `4f34b63` (v3.30.19).

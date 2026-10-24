@@ -968,6 +968,31 @@ class Statistics(unittest.TestCase):
         self.assertEqual(done.stderr.count("WARN  calc-table"), 1)                    # V is not defined
         self.assertIn("'V' is not defined", done.stderr)
 
+    def test_a_silent_span_glued_to_an_ans_line_keeps_the_later_places(self):
+        done = self.convert("::: calc\na = 2 + 3 = {ans:2dp}`b = a * 2`{=}\n\nc = b + 1 = {ans:2dp}\n:::\n\nSpan: `b`{=2dp}, `c`{=2dp}.\n")
+        self.assertEqual(done.stderr, "")
+        self.assertIn("Span: 10.00, 11.00.", done.stdout)
+        self.assertIn("c = b + 1 = 11.00", done.stdout)
+
+    def test_many_places_that_fail_end_with_one_summary_line(self):
+        done = self.convert("`a1`{=} `a2`{=} `a3`{=}\n")
+        self.assertEqual(done.stderr.count("WARN  calc: `"), 3, done.stderr)
+        self.assertIn("WARN  calc: 3 places were not evaluated", done.stderr)
+        self.assertNotIn("places were not evaluated", self.convert("`a1`{=} `a2`{=}\n").stderr)
+
+    def test_a_caption_written_in_the_div(self):
+        for form in ("t# tinf\n\n: Student *t*, 95%", "t# tinf\n\nTable: Student *t*, 95%", "t# tinf\n: Student *t*, 95%"):
+            with self.subTest(form=form):
+                done = subprocess.run([PANDOC, "-f", "markdown", "-t", "native", "--lua-filter", str(CALC_LUA)],
+                                      input=f"`t1 = 12.7`{{=}} `t10 = 2.2`{{=}} `tinf = 1.96`{{=}}\n\n::: {{#tbl:t .calc-table}}\n{form}\n:::\n",
+                                      capture_output=True, text=True, encoding="utf-8")
+                self.assertEqual(done.stderr, "")
+                self.assertIn('"tbl:t"', done.stdout)
+                self.assertIn("Emph", done.stdout)
+                self.assertIn('Str "95%"', done.stdout)
+                self.assertNotIn("Table:", done.stdout)
+                self.assertIn('Str "tinf"', done.stdout)
+
     def test_a_bare_word_in_braces_is_not_a_div_and_says_so(self):
         done = self.convert("::: {.calc-table t*}\n:::\n")
         self.assertEqual(done.stderr.count("WARN  calc-table"), 1, done.stderr)

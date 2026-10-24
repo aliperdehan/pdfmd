@@ -893,7 +893,10 @@ local function render(record, default)
   return show(value, fmt or default)
 end
 
+local WARNED = 0                                       -- how many places pass 2 could not evaluate (summed up at the end)
+
 local function warn(shown, reason, kept)
+  if pass == 2 then WARNED = WARNED + 1 end
   io.stderr:write(string.format("WARN  calc: %s is not evaluated (%s); %s\n", shown, reason, kept))
 end
 
@@ -1246,7 +1249,8 @@ end
 
 -- A table of the document's names (3.30.20): `::: {.calc-table names="t*, V" labels="..." head="Symbol; Value" caption="..."}`
 -- lists each name with its value in the digits it was defined with (`digits="3dp"` overrides). The names are the text of the
--- div (`::: calc-table`, a line `t# tinf`, `:::`) or `names="..."`: names and patterns (`*` any run of characters, `?` one
+-- div (`::: calc-table`, a line `t# tinf`, `:::`; a caption is a line `Table: Student's t` or, after a blank line, `: Student's t`)
+-- or `names="..."`: names and patterns (`*` any run of characters, `?` one
 -- character, `#` a run of digits), separated by commas or spaces; a pattern lists its names in natural order
 -- (t2 before t10), a plain name where it is written. `labels` replaces the name in the first column, one label per row
 -- separated by `;`, or `name=label` for the rows named (Markdown, so `$t_{1}$` works). Every name counts as defined at the place of the div, the way a span there
@@ -1322,13 +1326,24 @@ end
 
 local function table_of(div, horizon)
   local spec = div.attributes.names
-  if not spec or trim(spec) == "" then                    -- `::: calc-table` and the names as the text of the div
-    local words = {}
-    for _, block in ipairs(div.content) do
-      if block.t == "Para" or block.t == "Plain" then words[#words + 1] = source_of(block.content) end
+  local written, caption_inlines = {}, nil               -- the text of the div: the names, and a caption (`Table: ...` or `: ...`)
+  for _, block in ipairs(div.content) do
+    if block.t == "Para" or block.t == "Plain" then
+      local first, rest = block.content[1], nil
+      if first and first.t == "Str" and first.text == "Table:" then
+        rest = pandoc.List(block.content); rest:remove(1)
+        if rest[1] and rest[1].t == "Space" then rest:remove(1) end
+        caption_inlines = rest
+      else
+        written[#written + 1] = source_of(block.content)
+      end
+    elseif block.t == "DefinitionList" and block.content[1] then     -- a line of names, a blank line, `: caption`
+      written[#written + 1] = source_of(block.content[1][1])
+      local definition = block.content[1][2][1]
+      if definition and definition[1] and definition[1].content then caption_inlines = definition[1].content end
     end
-    spec = table.concat(words, " ")
   end
+  if not spec or trim(spec) == "" then spec = table.concat(written, " ") end
   if trim(spec) == "" then
     table_warning("the div has no names", "write the names in it (::: calc-table, then t# tinf, then :::); its place shows the code")
     return pandoc.Para({pandoc.Code("calc-table: no names")})
@@ -1382,8 +1397,9 @@ local function table_of(div, horizon)
       local caption = div.attributes.caption
       if caption and trim(caption) ~= "" then
         local inlines = pandoc.read(caption, "markdown").blocks[1]
-        if inlines and inlines.content then block.caption = pandoc.Caption({pandoc.Plain(inlines.content)}) end
+        if inlines and inlines.content then caption_inlines = inlines.content end
       end
+      if caption_inlines and #caption_inlines > 0 then block.caption = pandoc.Caption({pandoc.Plain(caption_inlines)}) end
       return block
     end
   end
@@ -1516,9 +1532,16 @@ return {{Pandoc = function(doc)
     pass, occurrence, fence_cursor, table_count = which, 0, 1, 0
     statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
     if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
-    doc = doc:walk({traverse = "topdown", Div = function(div) return calc_div(div) or calc_table_div(div) end,
+    doc = doc:walk({traverse = "topdown", Div = function(div)
+        local out, descend = calc_div(div)               -- two results: `x or y` would drop the second (do not walk into the output)
+        if out ~= nil then return out, descend end
+        return calc_table_div(div)
+      end,
       Para = function(block) misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block,
       Inlines = process_inlines})
+  end
+  if WARNED >= 3 then                                  -- a report with names where numbers belong must not pass unnoticed
+    io.stderr:write(string.format("WARN  calc: %d places were not evaluated (each is above); the output shows their code or text where the numbers belong\n", WARNED))
   end
   local dump = doc.meta["pdfmd-calc-dump"]
   if dump then dump_names(pandoc.utils.stringify(dump)) end

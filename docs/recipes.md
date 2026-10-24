@@ -204,8 +204,8 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   `` `x`{=} ``. `qt(0.975, 18)`, `qnorm`, `pt`, `pnorm` are built in, and so are `mean(a, b, c)`, `sd`, `rsd` (percent), `ci(0.95, ...)`,
   `gstat` and `gcrit(n, 0.05)` (3.30.20): `They are ~`R_E4 / mean(R_A, R_B2)`{=0dp} times lower`.
 - The values of a few names as a table, for the results or an appendix: `::: calc-table`, a line `t# tinf`, and `:::` (`*` any run of
-  characters, `?` one, `#` a run of digits are patterns). With a caption and a label to cite: `::: {#tbl:t .calc-table names="t# tinf"
-  caption="Student's *t*"}` and a closing `:::`; also `head="Symbol; Value"`, `labels="t1=$t_{1}$"`, `digits="3dp"`. The braces take only
+  characters, `?` one, `#` a run of digits are patterns). With a caption: a line `Table: Student's *t*` in the div; with a label to cite too:
+  `::: {#tbl:t .calc-table}`; also `head="Symbol; Value"`, `labels="t1=$t_{1}$"`, `digits="3dp"` as attributes. The braces take only
   `.class`, `#id` and `key=value`, so `{.calc-table t*}` does not work.
 - A `::: calc` div has no first-line indent, even in a document that indents (`calc: {noindent: false}` or `--no-calc-noindent` gives it
   the document's own; `indent=2em` on the div wins). Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.

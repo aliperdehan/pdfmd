@@ -890,9 +890,9 @@ one, as in the full build, where it counts only when nothing above defines it.
 table of the names (`*` any run of characters, `?` one character, `#` a run of digits, so `t#` is t1, t2, t10 and not `t_welch`; a pattern
 lists its names in natural order, t2 before t10; a plain name stands where it is written), each with its value in the digits it was defined with, or `digits="3dp"` for all.
 `labels="t1=$t_{1}$; V=Volume, mL"` replaces the name in the first column (Markdown and math work; without `name=` the labels go to the rows
-in order); `head="none"` leaves the header out; `caption` and `{#tbl:t}` give it a caption and something to cite. They need the braces:
-`::: {#tbl:t .calc-table names="t# tinf" head="Symbol; Value" caption="Student's *t*, 95%"}` (the names then go in `names=`, and the other
-classes and attributes of the div go to the table). A name counts as defined at the place of the div, as it does for a span there, so a table in an appendix shows the last value and one
+in order); `head="none"` leaves the header out; a caption is a line inside the div, `Table: Student's *t*, 95%` (or `: Student's *t*, 95%` after a blank line, or `caption="..."`); something to
+cite needs the braces, `::: {#tbl:t .calc-table}`, with the names and the caption in the div as before (`names="t# tinf"` also works, and then the
+other classes and attributes of the div go to the table). `head="Symbol; Value"` and `labels` are attributes too. A name counts as defined at the place of the div, as it does for a span there, so a table in an appendix shows the last value and one
 before the definitions shows the first. The braces take only `.class`, `#id` and `key=value`: `{.calc-table t*}` is not a div for Pandoc, and
 pdfmd says so with one WARN that gives the spelling. Anything that cannot be listed (a name that is not defined, a pattern
 that matches nothing, a value that cannot be computed) gives one WARN naming it and is shown as `?` or left out; a div without names prints
