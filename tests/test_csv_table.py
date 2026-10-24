@@ -122,10 +122,6 @@ class InlineData(CsvTables):
         self.assertNotIn('Str "9"', out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Limits(unittest.TestCase):
     """The cap for every table (v3.27.2): --csv-rows/--csv-cols, `pdfmd-options: {csv: ...}`, the config; a div's own
     rows=/cols= still win."""
@@ -249,3 +245,7 @@ class Limits(unittest.TestCase):
         self.assertEqual(lines[0].count("|"), 10)                                          # 9 columns
         lines = pdfmd.csv_div_table('.csv file="d.csv" rows="1"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3})
         self.assertEqual(len([line for line in lines if line.startswith("| ")]), 3)
+
+
+if __name__ == "__main__":
+    unittest.main()
