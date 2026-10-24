@@ -1525,8 +1525,11 @@ def own_python_folder() -> Path:
 
 
 # behind the Python's own packages, before the optional ones below are imported
-if own_python_folder().is_dir() and str(own_python_folder()) not in sys.path:
-    sys.path.append(str(own_python_folder()))
+try:
+    if own_python_folder().is_dir() and str(own_python_folder()) not in sys.path:
+        sys.path.append(str(own_python_folder()))
+except (OSError, RuntimeError):          # a home that cannot be read, or none at all (a sandbox): nothing installed there
+    pass
 
 try:
     import yaml
@@ -18003,6 +18006,88 @@ def cache_root() -> Path:
     return base / "pdfmd"
 
 
+# -- A home that cannot be written (a sandbox, a read-only container) ------------------------------------------------------------
+# pdfmd keeps a cache (cache_root()), LuaTeX keeps its font names in the TeX user tree (TEXMFVAR, under the home), Pandoc and the
+# tools it starts may write in their working folder. When one of those places cannot be written the build goes on with a
+# temporary folder in its place, removed when the run ends, and says so once (a NOTE): the first run in such a place is slower
+# (the cache starts empty, LuaTeX indexes the fonts again), nothing else differs.
+TEMPORARY_PLACES: dict[str, Path] = {}
+NOTED_PLACES: set[str] = set()
+
+
+def folder_is_writable(path: Path) -> bool:
+    """Whether a file can be created in ``path`` -- or, when it is not there yet, in the nearest folder above it that is."""
+    folder = Path(path)
+    try:
+        while not folder.exists():
+            if folder.parent == folder:
+                return False
+            folder = folder.parent
+        return folder.is_dir() and os.access(folder, os.W_OK | os.X_OK)
+    except OSError:
+        return False
+
+
+def temporary_place(kind: str) -> Path:
+    """A folder for ``kind`` of this run only, made once and removed when the run ends."""
+    if kind not in TEMPORARY_PLACES:
+        folder = Path(mkdtemp(prefix=f"pdfmd-{kind}-"))
+        TEMPORARY_PLACES[kind] = folder
+        atexit.register(shutil.rmtree, folder, True)
+    return TEMPORARY_PLACES[kind]
+
+
+def note_place_once(key: str, message: str) -> None:
+    if key not in NOTED_PLACES:
+        NOTED_PLACES.add(key)
+        print(f"NOTE  {message}", file=sys.stderr)
+
+
+def tex_user_tree_writable() -> bool:
+    """Whether LuaTeX and friends can keep their caches: TEXMFVAR if it is set, else a TeX user tree in the home
+    (~/.texlive2023, ~/Library/texlive/2023) that exists and can be written, else the home itself."""
+    if os.environ.get("TEXMFVAR"):
+        return folder_is_writable(Path(os.environ["TEXMFVAR"].split(os.pathsep)[0]))
+    try:
+        home = Path.home()
+    except RuntimeError:
+        return False
+    for pattern in (".texlive*/texmf-var", "Library/texlive/*/texmf-var"):
+        if any(folder_is_writable(found) for found in home.glob(pattern)):
+            return True
+    return folder_is_writable(home)
+
+
+def provide_writable_places() -> None:
+    """Redirect what cannot be written to a temporary folder (see above); called once, at the start of main()."""
+    cache = cache_root()
+    redirected: list[str] = []
+    if not folder_is_writable(cache):
+        folder = temporary_place("cache")
+        variable = "LOCALAPPDATA" if sys.platform == "win32" else "XDG_CACHE_HOME"
+        os.environ[variable] = str(folder)               # cache_root() and the tools pdfmd starts (fontconfig, Typst ...) follow
+        redirected.append(f"the cache folder {display_path(cache)}")
+    if (not tex_user_tree_writable()
+            and any(which(name) for name in ("lualatex", "xelatex", "pdflatex", "latexmk", "tectonic"))):
+        folder = temporary_place("texmf")
+        os.environ["TEXMFVAR"] = str(folder / "texmf-var")
+        os.environ["TEXMFCONFIG"] = str(folder / "texmf-config")
+        redirected.append("the TeX user tree (font names, formats)")
+    if redirected:
+        note_place_once("places", f"{' and '.join(redirected)} cannot be written (a read-only home?): this run uses a temporary "
+                                  "folder instead, removed when it ends; the first build is slower and nothing else differs")
+
+
+def pandoc_working_directory(folder: Path) -> Path:
+    """The folder Pandoc runs in: ``folder`` (the document's, so its relative paths resolve), or when that cannot be written
+    a temporary one with the document's folder on --resource-path and TEXINPUTS (resource_path_option, tex_search_env)."""
+    if folder_is_writable(folder):
+        return folder
+    note_place_once(f"cwd:{folder}", f"{display_path(folder)} cannot be written: Pandoc runs in a temporary folder, with "
+                                     "the document's folder searched for what it names")
+    return temporary_place("pandoc")
+
+
 CACHE_LOCATIONS = ("global", "document")
 CACHE_LOCATION_NAMES = {"root": "global", "user": "global", "home": "global", "central": "global",
                         "local": "document", "folder": "document", "here": "document", "doc": "document",
@@ -18646,7 +18731,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     exact = False
     if draft_engine is not None:
         metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-        pandoc_cwd = metadata_list[0].parent if metadata_list else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_list[0].parent if metadata_list else md_path.parent)
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
                    str(scratch), str(tex_path)]
@@ -19247,7 +19332,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
     try:
         odt = scratch / f"{md_path.stem}.docx"
-        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
 
         def note(kind: str, detail: str) -> None:
             if verbose:
@@ -19744,7 +19829,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["-f", effective_from]
             for metadata in prepared_metadata:
                 cmd += ["--metadata-file", str(metadata)]
-            pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+            pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
@@ -20200,7 +20285,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if partial:
                     cmd += PARTIAL_METADATA
                 cmd += table_keep_metadata(md_path, metadata_files)
-                pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
                 cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
@@ -20464,7 +20549,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if partial:
                         cmd += PARTIAL_METADATA
                     cmd += table_keep_metadata(md_path, metadata_files)
-                    pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                    pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
                     cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
                         cmd += ["-t", "beamer"]
@@ -23597,7 +23682,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         BUILD["output"], BUILD["sources"] = stage_build[0], stage_build[1]   # the .tex stage recorded its own file
         if not built[1]:
             return built
-        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
         tex_env = tex_search_env(md_path.parent, pandoc_cwd)
         plot_dir = None
         aliases: dict[str, list[str]] = {}
@@ -24737,6 +24822,7 @@ def main() -> None:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     use_managed_tools()
+    provide_writable_places()
     if args.merge:
         # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all
         if args.no_embed_metadata:
@@ -25280,7 +25366,7 @@ def main() -> None:
             if args.open:
                 open_file(output)
             return
-        pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else files[0].parent)
         report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
         with table_width_filter() as width_filter, csv_table_filter() as csv_filter:
