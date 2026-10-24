@@ -148,7 +148,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ github.token }}
-      PDFMD_NO_PROMPT: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -167,6 +166,8 @@ jobs:
             texlive-latex-extra texlive-fonts-recommended texlive-science lmodern poppler-utils fonts-dejavu fonts-jetbrains-mono
       - run: pip install .
       - run: pandoc --version | head -1
+      - name: STIX Two Text, pdfmd's default main font, which the tests that name it need
+        run: pdfmd --install fonts:stix-two
       - run: pdfmd --check-dependencies
       - name: The whole test suite
         run: python -m unittest discover -s tests -v

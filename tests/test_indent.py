@@ -81,7 +81,7 @@ class Filter(unittest.TestCase):
         self.assertLess(out.rfind("\\endgroup"), out.find("After."))
         self.assertLess(out.find("Nested."), out.find("\\endgroup"))
         self.assertLess(out.find("\\endgroup"), out.find("Back."))               # the inner group closes first
-        self.assertIn("\\label{inner}", out)                                     # the id stays
+        self.assertTrue("\\label{inner}" in out or "\\hypertarget{inner}" in out, out)   # the id stays (Pandoc 3.1 writes a hypertarget)
 
     def test_the_values(self):
         for value, length in (("false", "0pt"), ("no", "0pt"), ("off", "0pt"), ("0", "0pt"), ("true", "1.5em"),

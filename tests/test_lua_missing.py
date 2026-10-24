@@ -84,8 +84,10 @@ class LoneCopy(unittest.TestCase):
         self.addCleanup(shutil.rmtree, directory, True)
         shutil.copy(ROOT / "pdfmd.py", directory / "pdfmd.py")
         (directory / "d.md").write_text("---\ntitle: T\n---\n\nHello.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
-        done = subprocess.run([sys.executable, "pdfmd.py", "d.md", "-e", ENGINES[0], "--no-backup", "--no-stamp"], cwd=directory,
-                              capture_output=True, text=True, encoding="utf-8",
+        # (an installed pdfmd -- `pip install .` in CI -- has pdfmd_lua on the path too, so it is hidden: None in sys.modules)
+        program = ("import runpy, sys; sys.modules['pdfmd_lua'] = None; sys.argv = ['pdfmd.py', 'd.md', '-e', %r, '--no-backup', "
+                   "'--no-stamp']; runpy.run_path('pdfmd.py', run_name='__main__')" % ENGINES[0])
+        done = subprocess.run([sys.executable, "-c", program], cwd=directory, capture_output=True, text=True, encoding="utf-8",
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
         self.assertTrue((directory / "d.pdf").is_file(), done.stdout + done.stderr)
         said = done.stdout + done.stderr

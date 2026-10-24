@@ -252,7 +252,7 @@ class Builds(Tree):
         self.assertIn("a/metadata.yaml".replace("/", os.sep), shown)
         self.write_doc("pdfmd-options:\n  auto: {metadata: explicit-only}\n")
         shown = self.run_pdfmd()
-        self.assertNotIn(os.path.join("a", "metadata.yaml"), shown.replace(os.path.join(".pdfmd", "metadata.yaml"), ""))
+        self.assertNotIn(os.sep + os.path.join("a", "metadata.yaml"), shown.replace(os.path.join(".pdfmd", "metadata.yaml"), ""))   # (the scratch folder's random name may end in "a")
         self.assertIn(os.path.join("a", ".pdfmd", "metadata.yaml"), shown)                  # the folder's own stays
         self.assertIn(str(self.config.parent / "metadata.yaml").replace(str(Path.home()), "~"), shown.replace(str(Path.home()), "~"))   # so does the global one
         self.write_doc("pdfmd-options:\n  auto: {metadata: off}\n")                          # off is what it was: none at all
