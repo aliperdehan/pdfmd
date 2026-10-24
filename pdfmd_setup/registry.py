@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -84,7 +84,7 @@ FOLDER_OPTIONS = frozenset({
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels",
-    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.strict",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
@@ -420,6 +420,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Before the result of `C = n / V = {ans}` print `n / V` with n and V replaced by their values, in the digits each was "
                "defined with (the computation keeps the full values). {subs} forces it on one line, {nosubs} stops it. "
                "Per run: --calc-subs / --no-calc-subs.", "Calculations"),
+        choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div", on_off, "",
+               "A block of calculation lines reads better flush left, so a `::: calc` div has no paragraph indent even when the "
+               "document has one. Off gives it the document's own. An `indent=` on the div wins. On unless set to off. "
+               "Per run: --calc-noindent / --no-calc-noindent.", "Calculations"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "

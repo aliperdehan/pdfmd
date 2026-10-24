@@ -780,9 +780,10 @@ pdfmd-options:
     digits: 4sf       # the default format: 4sf, 2dp; empty = as R prints
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
+    noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a

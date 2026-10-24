@@ -72,7 +72,8 @@ class Detection(unittest.TestCase):
             marked = Path(directory) / "marked.md"
             marked.write_text("It is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(plain, []), [])
-            self.assertEqual(pdfmd.calc_filter_args([plain, marked], []), ["-M", "pdfmd-calc-round=even", "--lua-filter", str(CALC_LUA)])
+            self.assertEqual(pdfmd.calc_filter_args([plain, marked], []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-noindent=true",
+                                                                                    "--lua-filter", str(CALC_LUA)])
 
     def test_calc_off_in_the_options_or_a_metadata_file_leaves_the_span_alone(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -89,7 +90,7 @@ class Detection(unittest.TestCase):
             digits = Path(directory) / "digits.md"
             digits.write_text("---\npdfmd-options:\n  calc:\n    digits: 4sf\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(digits, []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-digits=4sf",
-                                                                   "--lua-filter", str(CALC_LUA)])
+                                                                   "-M", "pdfmd-calc-noindent=true", "--lua-filter", str(CALC_LUA)])
             on = Path(directory) / "on.md"
             on.write_text("---\npdfmd-options:\n  calc: on\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertIn("--lua-filter", pdfmd.calc_filter_args(on, []))
@@ -445,6 +446,40 @@ class Switches(unittest.TestCase):
         self.assertIn("x = C * V = 10", body(on, "--no-calc-subs"))
         self.assertIn("x = C * V = 0.5 * 20 = 10", body("", "--calc-subs"))
         self.assertIn("x = C * V = 0.5 * 20 = 10", body("", env={"PDFMD_CALC_SUBS": "true"}))
+
+    def test_a_calc_div_has_no_indent_unless_asked_otherwise(self):
+        source = "::: calc\nx = 2 * 3 = {ans}\n:::\n\n::: {.calc indent=2em}\ny = 2 * 4 = {ans}\n:::\n\n::: {.calc .indent}\nz = 2 * 5 = {ans}\n:::\n"
+
+        def latex(*arguments, header="---\nindent: true\n---\n\n", env=None):
+            (self.directory / "doc.md").write_text(header + source, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", *arguments],
+                                  cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, **(env or {})})
+            self.assertTrue((self.directory / "doc.tex").exists(), done.stdout + done.stderr)
+            return (self.directory / "doc.tex").read_text(encoding="utf-8")
+        on = latex()
+        self.assertIn("\\begingroup\\setlength{\\parindent}{0pt}\n\nx = 2 * 3 = 6", on)       # the default
+        self.assertIn("\\setlength{\\parindent}{2em}\n\ny = 2 * 4 = 8", on)                    # an indent= on the div wins
+        self.assertIn("\\setlength{\\parindent}{1.5em}\n\nz = 2 * 5 = 10", on)                 # so does .indent
+        self.assertEqual(on.count("\\endgroup"), 3)
+        off = "---\npdfmd-options:\n  calc:\n    noindent: false\n---\n\n"
+        self.assertEqual(latex(header=off).count("\\begingroup"), 2)                                # only the two explicit ones
+        self.assertEqual(latex("--no-calc-noindent").count("\\begingroup"), 2)
+        self.assertEqual(latex("--calc-noindent", header=off).count("\\begingroup"), 3)
+        self.assertEqual(latex(env={"PDFMD_CALC_NOINDENT": "false"}).count("\\begingroup"), 2)
+        self.assertEqual(latex("--no-calc").count("\\begingroup"), 2)                                               # no calculator: the explicit divs only
+
+    def test_the_other_writers_get_no_indent_attribute_and_no_note(self):
+        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n", encoding="utf-8")
+        for target, suffix in (("gfm", "md"), ("docx", "docx"), ("html", "html")):
+            with self.subTest(target=target):
+                done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", target, "--no-backup", "-o", f"out.{suffix}"],
+                                      cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+                self.assertTrue((self.directory / f"out.{suffix}").exists(), done.stdout + done.stderr)
+                self.assertNotIn("indent", done.stdout + done.stderr)
+                if suffix == "md":
+                    self.assertEqual((self.directory / "out.md").read_text(encoding="utf-8").split("\n\n", 1)[1].strip(), "x = 2 \\* 3 = 6")
+                if suffix == "html":
+                    self.assertIn("text-indent: 0pt", (self.directory / "out.html").read_text(encoding="utf-8"))
 
     def test_a_wrong_calc_digits_is_refused(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--calc-digits", "four", "doc.md"], cwd=self.directory,

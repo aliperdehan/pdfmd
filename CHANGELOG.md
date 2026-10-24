@@ -41,6 +41,28 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.9 — 2026-10-24
+
+Pre-edit state: commit `cbcd7a5` (v3.30.8).
+
+A `::: calc` div has no first-line indent. The author wrote `::: noindent` around every calc block of a report whose document indents
+its paragraphs; the div now does it itself.
+
+### Added
+
+- **`calc: {noindent: true}`, on by default.** `pdfmd-options: {calc: {noindent: false}}` gives the div the document's own indent again;
+  `--calc-noindent` / `--no-calc-noindent` (the command line wins), `PDFMD_CALC_NOINDENT` for `-j` workers, a `pdfmd --setup` row.
+  `calc.lua` puts `indent="false"` on the finished div and `indent.lua` (now also added whenever a calc div is in the text and the
+  calculator and this option are on) does the rest per writer: LaTeX and Beamer `\begingroup\setlength{\parindent}{0pt}` ... `\endgroup`,
+  Typst a `#set par(first-line-indent: 0pt)` block, HTML a `text-indent` style. Markdown, Word and the plain-text writers get no attribute
+  and no NOTE (Word follows with the indent item queued for docx/odt). An `indent=` or `.indent` / `.noindent` on the same div wins, and
+  an outer `::: noindent` works as before. The default is on because the `::: calc` div was never published (3.30.6 onward).
+- A div that carries both classes is written `::: {.calc .noindent}`; `::: calc noindent` is not a Pandoc div (one bare word only) and is
+  left as text.
+
+Tests: `tests/test_calc.py` (the default, an `indent=` and `.indent` that win, the option, the flags, the variable, other writers) and a
+real LuaLaTeX PDF: body text starts at 86.9 pt, the calc lines at 72.0 pt. README "Calculations inside the text", `docs/recipes.md` 1.11.
+
 ## v3.30.8 — 2026-10-24
 
 Pre-edit state: commit `56fe65a` (v3.30.7).

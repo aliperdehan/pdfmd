@@ -189,6 +189,8 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   (`ppm \ce{Ca^2+}`), and a span inside the div sees the definition above it.
 - `ppm = C * V = {subs} = {ans:2dp}` prints the expression with the numbers put in (`0.002039 * 34.41`), each in the digits its name
   was defined with; the computation keeps the full values. `calc: {subs: true}` does it before every `{ans}`, `{nosubs}` stops it on a line.
+- A `::: calc` div has no first-line indent, even in a document that indents (`calc: {noindent: false}` or `--no-calc-noindent` gives it
+  the document's own; `indent=2em` on the div wins). Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
 - `--no-calc` turns it off for a run, `pdfmd-options: {calc: off}` for a document or a folder, `pdfmd --setup` for everything.
   A span it cannot calculate keeps its text and prints one `WARN  calc:` with the reason.
 

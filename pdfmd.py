@@ -130,10 +130,11 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     (`= {ans:1dp}, so {ans:0dp}`) or calculates a new expression (`so round(n) = {ans:0dp}`); whatever follows the last {ans}
     of a `::: calc` line is copied as it is (`ppm Ca^2+^`); `x = a * b = {subs} = {ans}` prints the expression with the
     names replaced by their values (the digits each was defined with; the computation keeps the full value), and
-    `calc: {subs: true}` does that before every {ans} ({nosubs} on a line turns it off). Added by `calc_filter_args()` only
-    for a document that has such a span or div. The settings are
-    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs or --setup; round() sends an exact half to the
+    `calc: {subs: true}` does that before every {ans} ({nosubs} on a line turns it off). A `::: calc` div has no first-line
+    indent (`calc: {noindent: true}`, the default; false gives it the document's own; an `indent=` on the div wins). Added by
+    `calc_filter_args()` only for a document that has such a span or div. The settings are
+    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, noindent}}` (`calc: off` is the short form), --calc /
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-noindent / --no-calc-noindent or --setup; round() sends an exact half to the
     even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
@@ -1400,7 +1401,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.8"
+PDFMD_VERSION = "3.30.9"
 import argparse
 import atexit
 import csv
@@ -2814,10 +2815,17 @@ def contains_indent_div(md_path: Path) -> bool:
     return bool(INDENT_DIV_RE.search(text))
 
 
-def indent_filter_args(sources: Path | list[Path]) -> list[str]:
-    """``--lua-filter indent.lua`` when a source has an `indent=` / `.noindent` div (see INDENT_DIV_RE)."""
+def calc_div_wants_indent_filter(files: list[Path], metadata_files: list[Path]) -> bool:
+    if not files or not any(CALC_DIV_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return False
+    return not calc_is_off(files[0], metadata_files) and calc_noindent_on(files[0], metadata_files)
+
+
+def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = ()) -> list[str]:
+    """``--lua-filter indent.lua`` when a source has an `indent=` / `.noindent` div (see INDENT_DIV_RE), or a `::: calc` div
+    while calc gives its divs no indent (the default; calc.lua sets `indent=false` on them, this filter acts on it)."""
     files = sources if isinstance(sources, list) else [sources]
-    if not any(contains_indent_div(file) for file in files):
+    if not any(contains_indent_div(file) for file in files) and not calc_div_wants_indent_filter(files, metadata_files):
         return []
     try:
         import pdfmd_lua
@@ -2830,16 +2838,18 @@ def indent_filter_args(sources: Path | list[Path]) -> list[str]:
 # An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
 # evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
 # text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
-# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs}}` (the
+# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent}}` (the
 # document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
-# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs (reaching -j workers as PDFMD_CALC, PDFMD_CALC_DIGITS,
-# PDFMD_CALC_ROUND, PDFMD_CALC_SUBS). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
+# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-noindent (reaching -j workers as PDFMD_CALC, PDFMD_CALC_DIGITS,
+# PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_NOINDENT). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
 # prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
+CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2})?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_ENV = "PDFMD_CALC"
 CALC_DIGITS_ENV = "PDFMD_CALC_DIGITS"
 CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
 CALC_SUBS_ENV = "PDFMD_CALC_SUBS"
+CALC_NOINDENT_ENV = "PDFMD_CALC_NOINDENT"
 CALC_ROUNDS = ("even", "away")
 CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
 
@@ -2884,6 +2894,19 @@ def calc_subs_on(md_path: Path, metadata_files: list[Path]) -> bool:
     flag = option_flag(value)
     if flag is None:
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.subs must be true or false, not {value!r}")
+    return flag
+
+
+def calc_noindent_on(md_path: Path, metadata_files: list[Path]) -> bool:
+    """`calc: {noindent: false}` gives a `::: calc` div the document's paragraph indent; on (the default) the div has none."""
+    value = os.environ.get(CALC_NOINDENT_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "noindent")
+    if value is None:
+        return True
+    flag = option_flag(value)
+    if flag is None:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.noindent must be true or false, not {value!r}")
     return flag
 
 
@@ -2944,6 +2967,8 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
         arguments += ["-M", "pdfmd-calc-digits=" + digits]
     if calc_subs_on(files[0], metadata_files):
         arguments += ["-M", "pdfmd-calc-subs=true"]
+    if calc_noindent_on(files[0], metadata_files):
+        arguments += ["-M", "pdfmd-calc-noindent=true"]
     return arguments + ["--lua-filter", str(shipped)]
 
 
@@ -19197,7 +19222,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
-            cmd += indent_filter_args(md_path)
+            cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
@@ -19711,7 +19736,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
-            cmd += indent_filter_args(md_path)
+            cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
@@ -20193,7 +20218,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
-                cmd += indent_filter_args(all_inputs or md_path)
+                cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                 cmd += markup_filter_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
                 cmd += cover_filter_args(md_path, metadata_files)
@@ -20452,7 +20477,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
-                    cmd += indent_filter_args(all_inputs or md_path)
+                    cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                     cmd += markup_filter_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
                     cmd += cover_filter_args(md_path, metadata_files)
@@ -24187,6 +24212,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a calculation shows its expression with the names replaced by their values in front of the result "
                              "(`ppm = C * V = 0.002 * 34.41 = 28.12`); the computation keeps the full values. {subs} on a line "
                              "forces it, {nosubs} stops it. Also `pdfmd-options: {calc: {subs: true}}`, or --setup")
+    parser.add_argument("--calc-noindent", action=argparse.BooleanOptionalAction, default=None,
+                        help="a `::: calc` div has no first-line indent, whatever the document does (the default; --no-calc-noindent "
+                             "gives it the document's own). An `indent=` on the div wins. Also "
+                             "`pdfmd-options: {calc: {noindent: false}}`, or --setup")
     parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
@@ -24769,6 +24798,8 @@ def main() -> None:
         os.environ[CALC_ROUND_ENV] = args.calc_round
     if args.calc_subs is not None:
         os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
+    if args.calc_noindent is not None:
+        os.environ[CALC_NOINDENT_ENV] = "true" if args.calc_noindent else "false"
     if args.table_keep is not None:
         os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
@@ -25336,7 +25367,7 @@ def main() -> None:
                     cmd += calc_filter_args(files, metadata_files)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
-                    cmd += indent_filter_args(files)
+                    cmd += indent_filter_args(files, metadata_files)
                     cmd += markup_filter_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
                     cmd += cover_filter_args(files, metadata_files)
@@ -25463,7 +25494,7 @@ def main() -> None:
                         cmd += calc_filter_args(files, metadata_files)
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
-                        cmd += indent_filter_args(files)
+                        cmd += indent_filter_args(files, metadata_files)
                         cmd += markup_filter_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
                         cmd += cover_filter_args(files, metadata_files)

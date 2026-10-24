@@ -349,6 +349,7 @@ end
 
 local DEFAULT_FMT = nil
 local AUTO_SUBS = false
+local NOINDENT = false                                  -- set from pdfmd-calc-noindent (3.30.9), see indent_for_div
 local STATEMENTS = {}          -- every statement, in document order (id = position)
 local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
@@ -798,6 +799,27 @@ local function inner_div(div)
   if div.classes:includes("calc") then return calc_div(div), false end
 end
 
+-- Writers pdfmd_lua/indent.lua can set a paragraph indent for (it runs after this filter). Elsewhere the attribute would
+-- only show up in the output (Markdown) or print a NOTE (Word), so it is not added.
+local INDENTS = {latex = true, beamer = true, typst = true, html = true, html4 = true, html5 = true, epub = true,
+  epub2 = true, epub3 = true, revealjs = true, slidy = true, slideous = true, s5 = true, dzslides = true,
+  chunkedhtml = true}
+
+-- The attributes of the finished div. A calc div carries no first-line indent (3.30.9, `calc: {noindent: true}`, the
+-- default): it becomes `indent=false` for indent.lua, unless the div says something about the indent itself.
+local function attributes_of(div, classes)
+  local attributes = {}
+  for key, value in pairs(div.attributes) do attributes[key] = value end
+  if NOINDENT and INDENTS[FORMAT:lower():gsub("[+-].*$", "")] and attributes.indent == nil then
+    local own = false
+    for _, class in ipairs(classes) do
+      if class == "indent" or class == "noindent" then own = true end
+    end
+    if not own then attributes.indent = "false" end
+  end
+  return attributes
+end
+
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
   local content = div.content:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
@@ -805,10 +827,11 @@ calc_div = function(div)
   if pass == 1 then return div, false end
   local classes = pandoc.List({})
   for _, class in ipairs(div.classes) do if class ~= "calc" then classes:insert(class) end end
+  local attributes = attributes_of(div, classes)
   local extra = false
-  for _ in pairs(div.attributes) do extra = true end
+  for _ in pairs(attributes) do extra = true end
   if div.identifier == "" and #classes == 0 and not extra then return content, false end
-  return pandoc.Div(content, pandoc.Attr(div.identifier, classes, div.attributes)), false
+  return pandoc.Div(content, pandoc.Attr(div.identifier, classes, attributes)), false
 end
 
 return {{Pandoc = function(doc)
@@ -822,6 +845,8 @@ return {{Pandoc = function(doc)
   end
   local subs = doc.meta["pdfmd-calc-subs"]
   AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
+  local noindent = doc.meta["pdfmd-calc-noindent"]
+  NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
   for _, which in ipairs({1, 2}) do
     pass, occurrence = which, 0
     doc = doc:walk({traverse = "topdown", Div = calc_div, Inlines = process_inlines})
