@@ -4018,10 +4018,6 @@ PANDOC_MISSING = ("Pandoc was not found on PATH. Install it with `pdfmd --instal
 NATIVE_LOST: dict[str, int] = {}
 
 
-def pandoc_missing_message() -> str:
-    return PANDOC_MISSING
-
-
 def inkmd_vendored() -> bool:
     """Whether the vendored inkmd (pdfmd_inkmd/) ships next to this file."""
     return importlib.util.find_spec("pdfmd_inkmd") is not None
@@ -6292,19 +6288,6 @@ def find_reference_doc(md_path: Path, metadata_files: list[Path], target: str, o
 
 OFFICE_LABEL_COMMANDS = re.compile(r"\\(?:ref|cref|Cref|eqref|autoref|pageref|labelcref|label)\s*\{"
                                    r"|\\begin\{(?:equation|align|gather|multline|eqnarray|reaction|figure|table)")
-
-
-def kpsewhich_path_text(name: str) -> tuple[Path, str] | None:
-    kpsewhich = which("kpsewhich")
-    if not kpsewhich:
-        return None
-    found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
-    if not found:
-        return None
-    try:
-        return Path(found[0]), Path(found[0]).read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
 
 
 def office_pdfmd_command(md_path: Path, metadata_files: list[Path], variables: list[str],
@@ -11700,11 +11683,6 @@ DEFAULT_STAMP_OPTIONS = {
 }
 
 
-def normalize_stamp_value(value) -> dict:
-    """A pdfmd-options.stamp value as a complete options dict: DEFAULT_STAMP_OPTIONS under stamp_fields(value)."""
-    return {**DEFAULT_STAMP_OPTIONS, **stamp_fields(value)}
-
-
 def stamp_fields(value, implied_on: bool = True) -> dict:
     """The fields a pdfmd-options.stamp value sets (no defaults filled in).
 
@@ -13245,11 +13223,6 @@ def backup_snapshots(backup_dir: Path, md_path: Path, template: str) -> tuple[li
     every.sort(key=backup_sort_key)
     prunable.sort(key=backup_sort_key)
     return every, prunable
-
-
-def normalize_backup_value(value) -> dict:
-    """A pdfmd-options.backup value as a complete options dict: DEFAULT_BACKUP_OPTIONS under backup_fields(value)."""
-    return {**DEFAULT_BACKUP_OPTIONS, **backup_fields(value)}
 
 
 def backup_fields(value, implied_on: bool = True) -> dict:
