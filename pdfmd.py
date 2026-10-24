@@ -1408,7 +1408,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.16"
+PDFMD_VERSION = "3.30.17"
 import argparse
 import atexit
 import csv
@@ -3383,8 +3383,9 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
 
 
 # -- A styled terminal reader: --to ansi and --view (v3.30.3) ---------------------------------------------------------
-# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code, links, lists, quotes, box-drawn
-# tables, all wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
+# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code (coloured by language), links, lists,
+# quotes, box-drawn tables (a cell may span columns and rows), display math stacked where it has fractions, roots or sums, all
+# wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
 # files, filters, citations, \ce and the other steps of a build apply as they do for any output; with no Pandoc, the
 # built-in parser's tree stands in. `--view` is `-o -` plus a pager (see terminal_view). The width, the colour choice and
 # OSC 8 links reach the builds (which may be child processes) as the environment variables below.
@@ -3417,8 +3418,9 @@ def ansi_colour_on() -> bool:
 
 def ansi_math(tex: str, display: bool) -> "list[list[tuple[str, str]]] | None":
     """A formula for pdfmd_ansi.render: lines of (text, kind) pieces from the math-as-text converter (MathText), kind ""
-    (upright), "i" (a variable) or "b" (bold). Level (a) only: Unicode Greek, operators, sub- and superscripts, `(a+b)/(c+d)`;
-    None when the converter cannot read it, and the TeX is shown as it was written."""
+    (upright), "i" (a variable) or "b" (bold): Unicode Greek, operators, sub- and superscripts, `(a+b)/(c+d)`; None when the
+    converter cannot read it, and the TeX is shown as it was written. This is the linear form; for `$$..$$` on its own the renderer
+    stacks fractions, roots and sums on several rows (pdfmd_ansi/mathbox.py) and sets every other piece of the formula with this."""
     from pdfmd_ansi.render import script
     try:
         lines = math_lines(tex, False)
@@ -3573,10 +3575,28 @@ def view_wants_pager(args, first: Path) -> bool:
     return str(value).strip().casefold() not in ("false", "no", "off", "0") if value is not None else True
 
 
-def run_pager(text: str) -> None:
-    """The text through `$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (-F: no pager at all when it fits the screen; -R: keep
-    the colours); printed directly when there is none."""
-    command = shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or VIEW_PAGER)
+def view_pager_setting(first: Path) -> str:
+    """`pdfmd-options: {pager_command: "bat --paging=always"}` (also `pager-command`; a word list works too): the document's,
+    its folder's or the config's pager, "" when none says."""
+    try:
+        value = first_pdfmd_option(first, [], "pager_command", "pager-command")
+    except Exception:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return " ".join(shlex.quote(str(word)) for word in value)
+    return "" if value in (None, False, True) else str(value).strip()
+
+
+def pager_command(setting: str = "") -> list[str]:
+    """The pager as words: `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting, else `less -FRX`. The environment
+    wins over the setting, so one shell can override a project's choice."""
+    return shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
+
+
+def run_pager(text: str, setting: str = "") -> None:
+    """The text through `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting (``setting``), else `less -FRX` (-F: no
+    pager at all when it fits the screen; -R: keep the colours); printed directly when there is none."""
+    command = pager_command(setting)
     if not command or not which(command[0]):
         sys.stdout.write(text)
         return
@@ -3659,7 +3679,7 @@ def terminal_view(args) -> int:
             pieces.append(header + data.decode("utf-8", "replace"))
         text = "\n".join(pieces)
         if pager:
-            run_pager(text)
+            run_pager(text, view_pager_setting(files[0]))
         else:
             sys.stdout.write(text)
             sys.stdout.flush()
@@ -24416,8 +24436,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "+ a pager. Takes files, `-` or a pipe, else the Markdown files here, else what you type "
                              "(Ctrl-D ends it)")
     parser.add_argument("--pager", action=argparse.BooleanOptionalAction, default=None,
-                        help="with --view: use $PDFMD_PAGER / $PAGER / `less -FRX` when stdout is a terminal (the default); "
-                             "--no-pager prints it all. Also `pdfmd-options: {pager: false}`, or --setup")
+                        help="with --view: use $PDFMD_PAGER / $PAGER / the `pager_command` setting / `less -FRX` when stdout is a terminal "
+                             "(the default); --no-pager prints it all. Also `pdfmd-options: {pager: false}` (and "
+                             "`{pager_command: \"bat --paging=always\"}` for the command), or --setup")
     parser.add_argument("--calc", action=argparse.BooleanOptionalAction, default=None,
                         help="evaluate inline code followed by `{=}` (`2026 - 2006`{=} is 20) and the lines of a `::: calc` div "
                              "(`C = n / V = {ans:4sf}`); --no-calc leaves them as written. On by default; also "

@@ -10,8 +10,9 @@ of pdfmd is imported: `qwen` and a later full-screen reader can use this package
 from __future__ import annotations
 
 import re
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
+from . import highlight, mathbox
 from .text import INF, Line, Run, clean, emit, line_width, pad, text_width, with_style, wrap
 
 MathFunction = Callable[[str, bool], Optional[List[List[Tuple[str, str]]]]]
@@ -105,14 +106,35 @@ def meta_inlines(value: Optional[dict]) -> List[dict]:
     return []
 
 
+# the box-drawing character at a crossing, by which arms (up, down, left, right) reach it
+JOINTS = {(False, False, False, False): " ", (True, False, False, False): "│", (False, True, False, False): "│",
+          (True, True, False, False): "│", (False, False, True, False): "─", (False, False, False, True): "─",
+          (False, False, True, True): "─", (False, True, False, True): "┌", (False, True, True, False): "┐",
+          (True, False, False, True): "└", (True, False, True, False): "┘", (True, True, False, True): "├",
+          (True, True, True, False): "┤", (False, True, True, True): "┬", (True, False, True, True): "┴",
+          (True, True, True, True): "┼"}
+
+
+class Cell(NamedTuple):
+    """A table cell placed on the grid: its top-left corner, how far it reaches, and what it holds."""
+    row: int
+    col: int
+    rowspan: int
+    colspan: int
+    align: str
+    blocks: list
+    header: bool
+
+
 class Renderer:
     def __init__(self, width: int = 100, color: bool = True, hyperlinks: bool = False,
-                 math: Optional[MathFunction] = None, title: bool = True):
+                 math: Optional[MathFunction] = None, title: bool = True, stacked: bool = True):
         self.width = max(20, width)
         self.color = color
         self.hyperlinks = hyperlinks and color
         self.math = math
         self.title = title
+        self.stacked = stacked                # display math on several rows (fractions, roots, limits), when `math` can set the rest
         self.notes: List[List[dict]] = []
         self.depth = 0
         self.skipped = 0                      # raw pieces no terminal can show (LaTeX, Word XML), counted, not hidden
@@ -208,12 +230,15 @@ class Renderer:
         kind, content = item["t"], item.get("c")
         if kind in ("Para", "Plain"):
             if len(content) == 1 and content[0]["t"] == "Math" and content[0]["c"][0]["t"] == "DisplayMath":
+                rows = self.stacked_math(content[0]["c"][1], width)
+                if rows is not None:
+                    return rows
                 return centred(wrap(self.inlines(content), width), width)       # a formula on its own is centred
             return wrap(self.inlines(content), width)
         if kind == "Header":
             return wrap(self.inlines(content[2], HEADINGS.get(content[0], ("b", "i"))), width)
         if kind == "CodeBlock":
-            return self.code_block(content[1], width)
+            return self.code_block(content[1], width, content[0][1])
         if kind == "BlockQuote":
             inner = self.blocks(content, width - 2)
             return [[Run("│ ", ("dim",)), *line] if line else [Run("│", ("dim",))] for line in inner]
@@ -242,9 +267,30 @@ class Renderer:
             self.skipped += 1
         return []
 
-    def code_block(self, text: str, width: int) -> List[Line]:
-        lines = clean(text.expandtabs(4)).rstrip("\n").split("\n")
-        return [[Run("  " + line, ("code",))] if line else [] for line in lines]
+    def code_block(self, text: str, width: int, classes: Sequence[str] = ()) -> List[Line]:
+        code = clean(text.expandtabs(4)).rstrip("\n")
+        marked = highlight.tokens(highlight.language_of(list(classes)), code) if self.color else None
+        if marked is None:                                       # colour off, or a language we do not colour: as it always was
+            return [[Run("  " + line, ("code",))] if line else [] for line in code.split("\n")]
+        out: List[Line] = []
+        for pieces in marked:
+            out.append([Run("  ", ("code",)), *[Run(text, (highlight.PALETTE[kind],) if kind else ("code",))
+                                                  for text, kind in pieces]] if pieces else [])
+        return out
+
+    def stacked_math(self, tex: str, width: int) -> Optional[List[Line]]:
+        """A display formula on several rows, centred as one block; None when it has nothing to stack, holds something that
+        cannot be (see pdfmd_ansi.mathbox), or is wider than the line -- the linear form is shown then."""
+        if not (self.stacked and self.math):
+            return None
+        rows = mathbox.stacked(tex, self.math)
+        if not rows:
+            return None
+        widest = max(sum(text_width(text) for text, _ in row) for row in rows)
+        if widest > width:
+            return None
+        margin = Run(" " * ((width - widest) // 2))
+        return [[margin, *[Run(clean(text), (kind,) if kind else ()) for text, kind in row]] if row else [] for row in rows]
 
     def item(self, blocks: Sequence[dict], width: int, marker: str, size: int) -> List[Line]:
         self.depth += 1
@@ -311,26 +357,38 @@ class Renderer:
         name = cell_align["t"] if cell_align["t"] != "AlignDefault" else column_align["t"]
         return {"AlignRight": "r", "AlignCenter": "c"}.get(name, "l")
 
-    def grid(self, rows: list, columns: list) -> List[list]:
-        """The rows as lists of ncols entries `(align, blocks)` or None (covered by a span): spans are placed, not merged."""
-        occupied = set()
-        grid = []
+    def place(self, rows: list, columns: list, header_rows: int) -> Tuple[List[list], List[Cell]]:
+        """The cells on the grid: `cover[row][col]` is the index in `cells` of the cell that fills that square (a cell with a
+        rowspan or a colspan fills several), and a square no cell names holds an empty one."""
+        count, total = len(columns), len(rows)
+        cover: List[list] = [[None] * count for _ in rows]
+        cells: List[Cell] = []
+
+        def put(r: int, c: int, rowspan: int, colspan: int, align: str, blocks: list) -> None:
+            rowspan = max(1, min(rowspan, total - r))
+            colspan = max(1, min(colspan, count - c))
+            while colspan > 1 and any(cover[r][c + dc] is not None for dc in range(colspan)):
+                colspan -= 1                                   # (a malformed table: a span may not run over another cell)
+            while rowspan > 1 and any(cover[r + dr][c + dc] is not None for dr in range(rowspan) for dc in range(colspan)):
+                rowspan -= 1
+            for dr in range(rowspan):
+                for dc in range(colspan):
+                    cover[r + dr][c + dc] = len(cells)
+            cells.append(Cell(r, c, rowspan, colspan, align, blocks, r < header_rows))
+
         for r, row in enumerate(rows):
-            cells: list = [None] * len(columns)
             c = 0
-            for cell in row[1]:
-                while c < len(columns) and (r, c) in occupied:
+            for _, align, rowspan, colspan, blocks in row[1]:
+                while c < count and cover[r][c] is not None:
                     c += 1
-                if c >= len(columns):
+                if c >= count:
                     break
-                _, align, rowspan, colspan, blocks = cell
-                cells[c] = (self.cell_align(align, columns[c][0]), blocks)
-                for dr in range(rowspan):
-                    for dc in range(colspan):
-                        occupied.add((r + dr, c + dc))
-                c += colspan
-            grid.append(cells)
-        return grid
+                put(r, c, rowspan, colspan, self.cell_align(align, columns[c][0]), blocks)
+                c += cells[-1].colspan
+            for c in range(count):
+                if cover[r][c] is None:
+                    put(r, c, 1, 1, "l", [])
+        return cover, cells
 
     @staticmethod
     def words_width(lines: List[Line]) -> int:
@@ -340,23 +398,30 @@ class Renderer:
                 longest = max(longest, text_width(word))
         return longest
 
-    def table(self, content: list, width: int) -> List[Line]:
-        _, caption, columns, head, bodies, foot = content
-        head_rows = head[1]
-        rows = head_rows + [row for body in bodies for row in body[2] + body[3]] + foot[1]
-        count = len(columns)
-        if not rows or not count:
-            return []
-        grid = self.grid(rows, columns)
-        header_rows = len(head_rows)
+    def column_widths(self, cells: List[Cell], count: int, width: int) -> List[int]:
+        """The width of each column's text: its natural width, or less when the table is wider than the line (the longest
+        words first kept whole). A cell that spans columns widens the ones it spans when it needs more than they have, and
+        counts for nothing else; the borders it leaves out give back three cells each."""
         natural = [1] * count
         floor = [1] * count
-        for cells in grid:
-            for c, cell in enumerate(cells):
-                if cell:
-                    lines = self.blocks(cell[1], INF)
-                    natural[c] = max(natural[c], *(line_width(line) for line in lines), 1)
-                    floor[c] = max(floor[c], self.words_width(lines))
+        measured = []
+        for cell in cells:
+            lines = self.blocks(cell.blocks, INF)
+            need = max([line_width(line) for line in lines] + [1])
+            word = self.words_width(lines)
+            measured.append((need, word))
+            if cell.colspan == 1:
+                natural[cell.col] = max(natural[cell.col], need)
+                floor[cell.col] = max(floor[cell.col], word)
+        spanning = sorted((index for index, cell in enumerate(cells) if cell.colspan > 1), key=lambda i: cells[i].colspan)
+        for index in spanning:
+            cell, (need, word) = cells[index], measured[index]
+            reach = range(cell.col, cell.col + cell.colspan)
+            for sizes, wanted in ((natural, need), (floor, word)):
+                missing = wanted - (sum(sizes[c] for c in reach) + 3 * (cell.colspan - 1))
+                while missing > 0:
+                    sizes[min(reach, key=lambda c: sizes[c])] += 1
+                    missing -= 1
         available = width - 3 * count - 1
         widths = list(natural)
         for minimum in (lambda c: min(floor[c], natural[c]), lambda c: min(3, natural[c])):
@@ -365,30 +430,95 @@ class Renderer:
                 if not shrinkable:
                     break
                 widths[max(shrinkable, key=lambda c: widths[c])] -= 1
+        return widths
+
+    def table(self, content: list, width: int) -> List[Line]:
+        _, caption, columns, head, bodies, foot = content
+        head_rows = head[1]
+        rows = head_rows + [row for body in bodies for row in body[2] + body[3]] + foot[1]
+        count = len(columns)
+        if not rows or not count:
+            return []
+        total = len(rows)
+        cover, cells = self.place(rows, columns, len(head_rows))
+        widths = self.column_widths(cells, count, width)
         edge = ("dim",)
 
-        def rule(left: str, middle: str, right: str) -> Line:
-            return [Run(left + middle.join("─" * (w + 2) for w in widths) + right, edge)]
+        def span_width(cell: Cell) -> int:
+            return sum(widths[cell.col:cell.col + cell.colspan]) + 3 * (cell.colspan - 1)
+
+        text: List[List[Line]] = []
+        for cell in cells:
+            lines = self.blocks(cell.blocks, span_width(cell))
+            text.append([with_style(line, "b") for line in lines] if cell.header else lines)
+        heights = [1] * total
+        for index, cell in enumerate(cells):
+            if cell.rowspan == 1:
+                heights[cell.row] = max(heights[cell.row], len(text[index]))
+        for index in sorted((i for i, cell in enumerate(cells) if cell.rowspan > 1), key=lambda i: cells[i].rowspan):
+            cell = cells[index]
+            room = sum(heights[cell.row:cell.row + cell.rowspan]) + cell.rowspan - 1     # the rules it leaves out are lines too
+            if len(text[index]) > room:
+                heights[cell.row + cell.rowspan - 1] += len(text[index]) - room
+
+        def line_of(index: int, nth: int) -> Line:
+            """The nth line of a cell's block, padded to the width of the columns it spans."""
+            cell = cells[index]
+            lines = text[index]
+            return pad(lines[nth] if nth < len(lines) else [], span_width(cell), cell.align)
+
+        def rule_drawn(boundary: int, c: int) -> bool:
+            """Whether a horizontal rule runs over column c between row boundary-1 and row boundary."""
+            return boundary in (0, total) or cover[boundary - 1][c] != cover[boundary][c]
+
+        def bar_drawn(r: int, j: int) -> bool:
+            """Whether a vertical line stands at column boundary j in row r."""
+            return j in (0, count) or cover[r][j - 1] != cover[r][j]
+
+        def junction(boundary: int, j: int) -> str:
+            up = boundary > 0 and bar_drawn(boundary - 1, j)
+            down = boundary < total and bar_drawn(boundary, j)
+            left = j > 0 and rule_drawn(boundary, j - 1)
+            right = j < count and rule_drawn(boundary, j)
+            return JOINTS[(up, down, left, right)]
+
+        def rule(boundary: int) -> Line:
+            line: Line = []
+            c = 0
+            pieces = ""
+            while c < count:
+                pieces += junction(boundary, c)
+                if rule_drawn(boundary, c):
+                    pieces += "─" * (widths[c] + 2)
+                    c += 1
+                    continue
+                cell = cells[cover[boundary][c]]                 # inside a rowspan: the cell goes on, across this line
+                line.append(Run(pieces, edge))
+                nth = sum(heights[cell.row:boundary]) + (boundary - cell.row) - 1
+                line += [Run(" "), *line_of(cover[boundary][c], nth), Run(" ")]
+                pieces = ""
+                c += cell.colspan
+            line.append(Run(pieces + junction(boundary, count), edge))
+            return line
 
         out: List[Line] = []
         if caption[1]:
             out += [with_style(line, "i") for line in self.blocks(caption[1], width)]
-        out.append(rule("┌", "┬", "┐"))
-        for r, cells in enumerate(grid):
+        out.append(rule(0))
+        for r in range(total):
             if r:
-                out.append(rule("├", "┼", "┤"))
-            rendered = []
-            for c, cell in enumerate(cells):
-                lines = self.blocks(cell[1], widths[c]) if cell else []
-                if r < header_rows:
-                    lines = [with_style(line, "b") for line in lines]
-                rendered.append((cell[0] if cell else "l", lines))
-            for y in range(max([len(lines) for _, lines in rendered] + [1])):
+                out.append(rule(r))
+            for y in range(heights[r]):
                 physical: Line = [Run("│", edge)]
-                for c, (align, lines) in enumerate(rendered):
-                    physical += [Run(" "), *pad(lines[y] if y < len(lines) else [], widths[c], align), Run(" "), Run("│", edge)]
+                c = 0
+                while c < count:
+                    index = cover[r][c]
+                    cell = cells[index]
+                    nth = sum(heights[cell.row:r]) + (r - cell.row) + y
+                    physical += [Run(" "), *line_of(index, nth), Run(" "), Run("│", edge)]
+                    c += cell.colspan
                 out.append(physical)
-        out.append(rule("└", "┴", "┘"))
+        out.append(rule(total))
         return out
 
     # --- the document -----------------------------------------------------------------------------------------------
@@ -443,6 +573,6 @@ def centred(lines: List[Line], width: int) -> List[Line]:
 
 
 def render(doc: dict, width: int = 100, color: bool = True, hyperlinks: bool = False,
-           math: Optional[MathFunction] = None, title: bool = True) -> str:
+           math: Optional[MathFunction] = None, title: bool = True, stacked: bool = True) -> str:
     """Pandoc's JSON AST as text for a terminal (see the module docstring)."""
-    return Renderer(width, color, hyperlinks, math, title).render(doc)
+    return Renderer(width, color, hyperlinks, math, title, stacked).render(doc)

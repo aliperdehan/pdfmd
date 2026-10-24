@@ -164,7 +164,10 @@ pdfmd --view --no-pager --width 80 report
 `--view` builds the document as usual (metadata, filters, citations, math as text) and shows it instead of making a
 file: bold, italic and code in colour, box-drawn tables wrapped to the window, lists, quotes, footnotes. The output stays
 styled when piped into `less -R`; `NO_COLOR` or `--color never` takes the styling away. `--to ansi` writes the same text to a
-file (`report.ansi`), and `-o -` sends any format to standard output. README: "Read it in the terminal".
+file (`report.ansi`), and `-o -` sends any format to standard output. Cells that span columns or rows are drawn across them,
+fenced code in a known language is coloured (python, bash, json, yaml, c, cpp, java, javascript, rust, go), and a `$$..$$` formula
+with a fraction, root, sum, product, integral or limit is stacked on several rows. The pager is `$PDFMD_PAGER`, else `$PAGER`, else
+`pdfmd-options: {pager_command: "bat --paging=always"}`, else `less -FRX`. README: "Read it in the terminal".
 
 ### 1.11 Compute the numbers of a calculation
 

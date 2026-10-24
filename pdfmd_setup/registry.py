@@ -60,6 +60,7 @@ UNSET = {
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
+    "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.editor": "the built-in editor", "options.preset": "metadata.yaml", "options.global-metadata": "on",
@@ -76,7 +77,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep", "options.pager",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -320,8 +321,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "pdfmd --restore FILE.md writes the folder back. Per run: --keep-source.", "Plain Markdown and text"),
         # -- reading in the terminal
         choice("options.pager", "Page --view output in the terminal", on_off, "",
-               "Through $PDFMD_PAGER, $PAGER or less when stdout is a terminal. Per run: --pager / --no-pager.",
+               "Through $PDFMD_PAGER, $PAGER, the command below or less when stdout is a terminal. Per run: --pager / --no-pager.",
                "Reading in the terminal"),
+        text("options.pager_command", "The pager command for --view",
+             "A command with its flags, e.g. `bat --paging=always` or `less -R`. $PDFMD_PAGER and $PAGER win over it, so one "
+             "shell can override a project's choice. Empty: `less -FRX` (it quits at once when the text fits the screen).",
+             "Reading in the terminal"),
         # -- PDF extras
         text("options.header", "Page header", "A template: {title}, {page}, {pages}, {date}, {header}.", "PDF finishing"),
         text("options.footer", "Page footer", "The same, e.g. {page} / {pages}.", "PDF finishing"),

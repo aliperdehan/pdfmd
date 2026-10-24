@@ -885,23 +885,33 @@ pdfmd report --to ansi -o - | less -R   # -o - is standard output, for any forma
 What the window shows: headings, **bold**, *italic*, `code`, ~~strike~~, links, lists with their numbers, block quotes, code
 blocks, rules, footnotes at the end, and every table as a box grid (a rule between rows, a bold header, columns as wide as
 their widest cell, right- and centre-aligned as the table says, cells wrapped to the window when it is narrower, wide
-characters counted as two). The text is wrapped to the window's width (`--width N` for another; 120 when there is no window).
+characters counted as two; a cell that spans columns or rows is drawn across them, its text wrapped to the merged width, the
+borders inside it left out, and the crossings drawn as the neighbours ask: `┬ ┴ ┼ ├ ┤`). The text is wrapped to the window's
+width (`--width N` for another; 120 when there is no window). Fenced code with a language (`python`, `bash`/`sh`, `json`,
+`yaml`, `c`, `cpp`, `java`, `javascript`, `rust`, `go`) has its keywords, strings, comments and numbers in colour; any other
+language, and every block when colour is off, stays as it was.
 Math is text: `$\Delta G = -RT\ln K$` becomes `ΔG = − RT ln K` with the variables in italic, `Mg^{2+}` becomes `Mg²⁺`, a
-fraction `(a+b)/(c+d)`; a formula on its own line is centred. A picture is `[image: alt] (path)`.
+fraction `(a+b)/(c+d)`. A formula on its own line (`$$..$$`) is centred and **stacked** where it can be: `\frac{a}{b}` on three
+rows with a bar as wide as the wider part, `\sqrt{x}` with an overbar (`\sqrt[3]{x}` with its index), `\sum`, `\prod`, `\int`
+and `\lim` with their limits above and below; everything else in the formula is set as the linear form sets it, and a formula
+with something that cannot be stacked (an `aligned` block, a script on a fraction) stays linear whole. Inline math stays linear.
+A picture is `[image: alt] (path)`.
 
 It is a build like any other, so discovery, metadata files, filters, citations and `\ce{...}` apply first (pdfmd reads
 Pandoc's AST; `--to ansi` writes the result to a file, `--view` to the screen). `--view` is `--to ansi -o -` plus a pager:
-`$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (it quits at once when the text fits the screen); `--no-pager`,
-`pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns the pager off. The styling is kept when the output is piped
+`$PDFMD_PAGER`, else `$PAGER`, else the pager command you set (`pdfmd-options: {pager_command: "bat --paging=always"}`, in the
+document, a metadata file or the config, or a row in `pdfmd --setup`; the environment variables win over it), else `less -FRX`
+(it quits at once when the text fits the screen); `--no-pager`, `pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns
+the pager off. The styling is kept when the output is piped
 (`pdfmd --view x.md | less -R`) and removed by `--color never` or the `NO_COLOR` variable; `-o -` into a pipe is plain unless
 `--color always`. A link is `words (address)`, or a clickable link in a terminal that draws them (iTerm2, WezTerm, Ghostty,
 VS Code) when the text is not paged. The notes of the build (`OK`, `DEFAULTS`) stay off the screen unless it failed or you
 gave `--verbose`; everything else a build prints goes to standard error, so standard output is the document and nothing
 else. `--view -o x.ansi` saves the file and shows nothing; `--view` with another `--to` is refused.
 
-Limits: a cell that spans rows or columns is drawn in its first cell only; a formula is drawn linearly (no stacked
-fractions, roots or sums yet); raw LaTeX, HTML and Word pieces are left out (`--verbose` counts them); code is not
-highlighted. Without Pandoc the built-in parser reads the Markdown, so no filters, citations, footnotes or metadata files.
+Limits: a formula of anything but fractions, roots, sums, products, integrals and limits stays linear (no tall brackets, no
+matrices); raw LaTeX, HTML and Word pieces are left out (`--verbose` counts them); code is coloured by a small tokenizer, not a
+parser (keywords, strings, comments and numbers, nothing finer). Without Pandoc the built-in parser reads the Markdown, so no filters, citations, footnotes or metadata files.
 
 ### ASCII only: `--to ascii`
 

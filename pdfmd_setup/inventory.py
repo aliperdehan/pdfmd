@@ -136,7 +136,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "line-number-step": "options.line-number-step",
     "csv": "options.csv.enabled", "csv.enabled": "options.csv.enabled",
     "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols", "table-keep": "options.table-keep",
-    "pager": "options.pager",
+    "pager": "options.pager", "pager_command": "options.pager_command", "pager-command": "options.pager_command",
     "csv.cut": "options.csv.cut", "csv.delimiter": "options.csv.delimiter",
     "csv.header": Omitted("document", "the shape of a project's data: per table (header=), or a folder's metadata.yaml"),
     "csv.reader": Omitted("document", "the shape of a project's data: per table (reader=), or a folder's metadata.yaml"),

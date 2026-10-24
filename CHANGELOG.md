@@ -40,6 +40,32 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.17 — 2026-10-24
+
+Pre-edit state: commit `fbe5640` (v3.30.16).
+
+### Added
+
+- **`--to ansi` / `--view` draw spanning table cells.** A cell with a colspan or rowspan is drawn across the merged columns and rows, its text
+  wraps to the merged width, the borders inside it are left out and each crossing uses the box character its neighbours ask for. A table
+  without spans is drawn exactly as before.
+- **Coloured code.** Fenced code in python, bash/sh/shell/zsh, json, yaml, c, cpp, java, javascript/typescript, rust and go (and the usual
+  aliases) gets keywords, strings, comments and numbers in four 256-colour codes, with no dependency. With colour off (`NO_COLOR`,
+  `--color never`, a pipe) or an unknown language the block is exactly as before.
+- **Stacked display math.** A `$$..$$` that is the whole paragraph is drawn on several rows where it has `\frac`/`\dfrac`/`\tfrac`, `\sqrt`
+  (with an overbar, and `\sqrt[n]{x}`), big operators with limits (`\sum \prod \coprod \int \iint \iiint \oint`) and `\lim`/`\max`/`\min`/
+  `\sup`/`\inf` with the limit below. A formula with anything that cannot be stacked, or wider than the line, prints its linear form whole,
+  never half stacked. Inline math stays linear.
+- **`options.pager_command`** (`pdfmd-options: {pager_command: "bat --paging=always"}`, also spelled `pager-command`; a word list works too),
+  the pager of `--view`. Order: `$PDFMD_PAGER`, `$PAGER`, the setting, `less -FRX`. `--setup` row `options.pager_command`, also offered per folder.
+
+### Tests
+
+- `tests.test_ansi` extended with golden tests (a header spanning two columns, a rowspan of 2, both at once; the code colours; stacked math).
+  A fuzz run of about 9000 random span tables had no misaligned line.
+- From the cloud session (branch `cloud/ansi-limits`, PR 6). Not verified: a real terminal and pager (checked through a pipe). The no-Pandoc
+  tier (`pdfmd_ansi/native.py`) builds tables without spans.
+
 ## v3.30.16 — 2026-10-24
 
 Pre-edit state: commit `05c6e73` (v3.30.15).
