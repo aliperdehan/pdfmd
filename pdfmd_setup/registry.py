@@ -59,7 +59,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)",
+    "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.editor": "the built-in editor", "options.preset": "metadata.yaml", "options.global-metadata": "on",
@@ -76,7 +76,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep",
+    "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.delimiter", "options.table-keep", "options.pager",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -315,6 +315,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.keep-source", "Markdown output carries its source",
                (("packed", "compressed, in one comment at the end"), ("readable", "as text, escaped")), "",
                "pdfmd --restore FILE.md writes the folder back. Per run: --keep-source.", "Plain Markdown and text"),
+        # -- reading in the terminal
+        choice("options.pager", "Page --view output in the terminal", on_off, "",
+               "Through $PDFMD_PAGER, $PAGER or less when stdout is a terminal. Per run: --pager / --no-pager.",
+               "Reading in the terminal"),
         # -- PDF extras
         text("options.header", "Page header", "A template: {title}, {page}, {pages}, {date}, {header}.", "PDF finishing"),
         text("options.footer", "Page footer", "The same, e.g. {page} / {pages}.", "PDF finishing"),

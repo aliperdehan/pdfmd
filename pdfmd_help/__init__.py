@@ -40,6 +40,8 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--raw", "--no-raw", "--raw-for", "--pagebreak", "--no-pagebreak", "--markup", "--no-markup", "--show-comments", "--no-show-comments")),
     "markdown": ("plain Markdown, text and ASCII output (--to gfm, txt, ascii), and Markdown that carries its source", (
         "--gfm-scripts", "--gfm-math", "--ascii-missing", "--keep-source", "--no-keep-source", "--restore", "--list")),
+    "view": ("reading a document in the terminal: styled text, tables, math as text (--view, --to ansi)", (
+        "--view", "--pager", "--color", "--width")),
     "fonts": ("scripts, fonts, emoji, transliteration", (
         "--fallback", "--missing", "--check-fonts", "--translit", "--emoji-fallback", "-f")),
     "builtin": ("the built-in renderer used when there is no Pandoc or PDF engine", (
@@ -82,6 +84,7 @@ fonts and an engine that works by itself.
   pdfmd -r                 all of them joined into one PDF
   pdfmd report#results     just one section of a long document
   pdfmd -w report          rebuild whenever something changes
+  pdfmd --view report      read it in the terminal: styled, tables drawn, paged (also: cat x.md | pdfmd --view)
   pdfmd --restore a.pdf    write back the source a PDF carries (it needs --attach-source when built)
 
 {options}

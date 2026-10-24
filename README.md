@@ -676,6 +676,38 @@ means `unicode` here); math as Pandoc's plain writer sets it (`E = mc²`). A pic
 for it, and a Typst or LaTeX picture piece is left out with a `WARN`. `pdfmd-options: {txt: {scripts: unicode, title:
 true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc's own plain writer; that is `--to plain`.
 
+### Read it in the terminal: `--view` and `--to ansi`
+
+```sh
+pdfmd --view report                  # styled text in the window, through a pager when it is longer
+cat notes.md | pdfmd --view          # a pipe is read as Markdown (also: pdfmd --view -)
+pdfmd --view a.md b.md               # one stream, a dim rule with each file's name above it
+pdfmd --view                         # the Markdown files here; with none, type or paste and press Ctrl-D
+pdfmd report --to ansi               # report.ansi, the same text with its escape codes (also -o report.ansi)
+pdfmd report --to ansi -o - | less -R   # -o - is standard output, for any format
+```
+
+What the window shows: headings, **bold**, *italic*, `code`, ~~strike~~, links, lists with their numbers, block quotes, code
+blocks, rules, footnotes at the end, and every table as a box grid (a rule between rows, a bold header, columns as wide as
+their widest cell, right- and centre-aligned as the table says, cells wrapped to the window when it is narrower, wide
+characters counted as two). The text is wrapped to the window's width (`--width N` for another; 120 when there is no window).
+Math is text: `$\Delta G = -RT\ln K$` becomes `ΔG = − RT ln K` with the variables in italic, `Mg^{2+}` becomes `Mg²⁺`, a
+fraction `(a+b)/(c+d)`; a formula on its own line is centred. A picture is `[image: alt] (path)`.
+
+It is a build like any other, so discovery, metadata files, filters, citations and `\ce{...}` apply first (pdfmd reads
+Pandoc's AST; `--to ansi` writes the result to a file, `--view` to the screen). `--view` is `--to ansi -o -` plus a pager:
+`$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (it quits at once when the text fits the screen); `--no-pager`,
+`pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns the pager off. The styling is kept when the output is piped
+(`pdfmd --view x.md | less -R`) and removed by `--color never` or the `NO_COLOR` variable; `-o -` into a pipe is plain unless
+`--color always`. A link is `words (address)`, or a clickable link in a terminal that draws them (iTerm2, WezTerm, Ghostty,
+VS Code) when the text is not paged. The notes of the build (`OK`, `DEFAULTS`) stay off the screen unless it failed or you
+gave `--verbose`; everything else a build prints goes to standard error, so standard output is the document and nothing
+else. `--view -o x.ansi` saves the file and shows nothing; `--view` with another `--to` is refused.
+
+Limits: a cell that spans rows or columns is drawn in its first cell only; a formula is drawn linearly (no stacked
+fractions, roots or sums yet); raw LaTeX, HTML and Word pieces are left out (`--verbose` counts them); code is not
+highlighted. Without Pandoc the built-in parser reads the Markdown, so no filters, citations, footnotes or metadata files.
+
 ### ASCII only: `--to ascii`
 
 ```sh

@@ -1382,7 +1382,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.2"
+PDFMD_VERSION = "3.30.3"
 import argparse
 import atexit
 import csv
@@ -3086,6 +3086,294 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
     return None
 
 
+# -- A styled terminal reader: --to ansi and --view (v3.30.3) ---------------------------------------------------------
+# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code, links, lists, quotes, box-drawn
+# tables, all wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
+# files, filters, citations, \ce and the other steps of a build apply as they do for any output; with no Pandoc, the
+# built-in parser's tree stands in. `--view` is `-o -` plus a pager (see terminal_view). The width, the colour choice and
+# OSC 8 links reach the builds (which may be child processes) as the environment variables below.
+ANSI_WIDTH_ENV, ANSI_COLOR_ENV, ANSI_LINKS_ENV = "PDFMD_ANSI_WIDTH", "PDFMD_ANSI_COLOR", "PDFMD_ANSI_LINKS"
+ANSI_FALLBACK_WIDTH = 120                                  # no terminal and no --width
+ANSI_LINK_TERMINALS = frozenset({"iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper"})     # TERM_PROGRAM: they draw OSC 8 links
+
+
+def ansi_width_argument(value: str) -> int:
+    if not value.isdigit() or int(value) < 20:
+        raise argparse.ArgumentTypeError(f"{value!r}: a width in columns, 20 or more")
+    return int(value)
+
+
+def ansi_columns() -> int:
+    """The width to draw for: --width, else the terminal's, else 120."""
+    value = os.environ.get(ANSI_WIDTH_ENV, "")
+    if value.isdigit() and int(value) >= 20:
+        return int(value)
+    return max(20, shutil.get_terminal_size((ANSI_FALLBACK_WIDTH, 24)).columns)
+
+
+def ansi_colour_on() -> bool:
+    """--color always|never decides; `auto` (and a build into a file) is on unless NO_COLOR is set."""
+    mode = os.environ.get(ANSI_COLOR_ENV, "auto")
+    if mode in ("always", "never"):
+        return mode == "always"
+    return not os.environ.get("NO_COLOR")
+
+
+def ansi_math(tex: str, display: bool) -> "list[list[tuple[str, str]]] | None":
+    """A formula for pdfmd_ansi.render: lines of (text, kind) pieces from the math-as-text converter (MathText), kind ""
+    (upright), "i" (a variable) or "b" (bold). Level (a) only: Unicode Greek, operators, sub- and superscripts, `(a+b)/(c+d)`;
+    None when the converter cannot read it, and the TeX is shown as it was written."""
+    from pdfmd_ansi.render import script
+    try:
+        lines = math_lines(tex, False)
+    except Exception:                                   # a formula the converter chokes on is the TeX, not a crash
+        return None
+    shown: list[list[tuple[str, str]]] = []
+    for line in lines:
+        pieces: list[tuple[str, str]] = []
+        raised: bool | None = None
+        held = ""
+        for markup, text, _ in line:
+            if markup in ("<sup>", "<sub>"):                # a script the converter left as a tag (nested in a root, say)
+                raised, held = markup == "<sup>", ""
+            elif markup in ("</sup>", "</sub>"):
+                if raised is not None and held:
+                    pieces.append((script(held, raised), ""))
+                raised = None
+            elif raised is not None:
+                held += text
+            elif text:
+                kind = "b" if markup.startswith("**") else "i" if markup.startswith("*") else ""
+                if not kind and text[0].isascii() and text[0].isalpha() and pieces and pieces[-1][0][-1:].isalnum():
+                    text = " " + text                   # a function name after a variable: RT ln K, not RTln K
+                pieces.append((text, kind))
+        if pieces:
+            shown.append(pieces)
+    return shown or None
+
+
+def ansi_document_text(document: dict) -> "tuple[str, int]":
+    """Pandoc's JSON AST as styled text, and how many raw pieces (LaTeX, Word XML) no terminal could show."""
+    from pdfmd_ansi.render import Renderer
+    renderer = Renderer(ansi_columns(), ansi_colour_on(), os.environ.get(ANSI_LINKS_ENV) == "1", ansi_math)
+    return renderer.render(document), renderer.skipped
+
+
+def ansi_finish(json_file: Path, output: Path, md_path: Path, verbose: bool = False) -> str | None:
+    """After Pandoc wrote its JSON AST: the styled text into `output`. A reason when it cannot (the build failed)."""
+    try:
+        text, skipped = ansi_document_text(json.loads(json_file.read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
+        return f"{display_path(md_path)}: --to ansi could not draw what Pandoc made ({type(error).__name__}: {error})"
+    write_text_lf(output, text)
+    if skipped and verbose:
+        print(f"NOTE  ansi: {display_path(md_path)}: {skipped} raw piece{'s' if skipped != 1 else ''} (LaTeX, Word XML) "
+              "no terminal can show left out", file=sys.stderr)
+    return None
+
+
+def ansi_without_pandoc(md_path: Path, output: Path) -> "tuple[bool, str]":
+    """`--to ansi` with no Pandoc: the built-in parser reads the Markdown (no filters, citations or footnotes)."""
+    if md_path.suffix.lower() not in (".md", ".markdown", ".txt") or not inkmd_vendored():
+        return False, PANDOC_MISSING
+    try:
+        from pdfmd_ansi.native import from_markdown
+        text, _ = ansi_document_text(from_markdown(read_text_best_effort(md_path)))
+    except (OSError, ImportError, ValueError) as error:
+        return False, f"{display_path(md_path)}: --to ansi could not read it without Pandoc ({type(error).__name__}: {error})"
+    print(f"NOTE  ansi: no Pandoc: {display_path(md_path)} was read by the built-in parser (no filters, citations "
+          "or footnotes)", file=sys.stderr)
+    write_text_lf(output, text)
+    return True, ""
+
+
+# `--view` and `-o -` (v3.30.3): each document is built by a child pdfmd into a scratch folder (so every discovery, filter
+# and note of a normal build applies, and the notes go to stderr), then the result is written to stdout: one stream, in
+# the order given. `--view` is `--to ansi` + `-o -` + a pager when stdout is a terminal. The options the children must not
+# get twice are dropped from their command line; the input files are handed over one by one.
+VIEW_DROPPED = {"--view": 0, "--pager": 0, "--no-pager": 0, "--color": 1, "--width": 1, "-t": 1, "--to": 1,
+                "-o": 1, "--out": 1, "--output": 1, "-b": 0, "--batch": 0, "-r": 0, "--report": 0, "--book": 0,
+                "--recursive": 0, "--open": 0, "-w": 0, "--watch": 0}
+BINARY_TARGETS = frozenset({"pdf", "docx", "odt", "pptx", "epub", "epub2", "epub3", "rtf"})
+VIEW_PAGER = "less -FRX"
+
+
+def view_child_arguments(argv: list[str], paths: list[Path]) -> list[str]:
+    """The command line of the run, less what `terminal_view` sets itself and the input paths."""
+    wanted = list(paths)
+    kept: list[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        name, equals, _ = token.partition("=") if token.startswith("--") else (token, "", "")
+        if name in VIEW_DROPPED:
+            index += 1 if equals else 1 + VIEW_DROPPED[name]
+            continue
+        if (not token.startswith("-") or token == "-") and Path(token) in wanted:
+            wanted.remove(Path(token))
+        else:
+            kept.append(token)
+        index += 1
+    return kept
+
+
+def view_stdin_file(text: bytes, scratch: Path, made: list[Path]) -> Path:
+    """Standard input as a Markdown file: in the current folder (a relative picture or include resolves there), else in the
+    scratch folder. The caller removes it."""
+    for folder in (Path.cwd(), scratch):
+        target = folder / f".pdfmd-stdin-{os.getpid()}.md"
+        try:
+            target.write_bytes(text)
+        except OSError:
+            continue
+        made.append(target)
+        return target
+    raise SystemExit("could not keep standard input in a file to build it from")
+
+
+def view_sources(args, scratch: Path, made: list[Path]) -> list[Path]:
+    """The documents to show, in order. A path that exists is read as a file (a folder: its Markdown files); `-` or no path
+    with a pipe on standard input reads that; no path and no pipe: the Markdown files of the current folder; and with
+    none there, what is typed or pasted into the terminal, ended with Ctrl-D."""
+    files: list[Path] = []
+    for path in args.path or []:
+        if str(path) == "-":
+            files.append(view_stdin_file(sys.stdin.buffer.read(), scratch, made))
+        elif path.is_dir():
+            found = sorted(path.rglob("*.md") if args.recursive else path.glob("*.md"), key=lambda item: str(item).casefold())
+            if not found:
+                raise SystemExit(f"{path}: no Markdown files in this folder")
+            files += found
+        else:
+            try:
+                files.append(find_markdown(path))
+            except (FileNotFoundError, LookupAmbiguous) as error:
+                raise SystemExit(str(error))
+    if files:
+        return files
+    if not sys.stdin.isatty():
+        text = sys.stdin.buffer.read()
+        if text.strip():
+            return [view_stdin_file(text, scratch, made)]
+    found = sorted(Path.cwd().glob("*.md"), key=lambda item: item.name.casefold())
+    if found:
+        return found
+    if sys.stdin.isatty():
+        print("reading Markdown from the terminal, Ctrl-D to finish", file=sys.stderr)
+        text = sys.stdin.read().encode("utf-8")
+        if text.strip():
+            return [view_stdin_file(text, scratch, made)]
+    raise SystemExit("Nothing to show: no file named, nothing on standard input and no Markdown files in this folder.")
+
+
+def view_wants_pager(args, first: Path) -> bool:
+    """--pager/--no-pager, else `pdfmd-options: {pager: ...}` (the document, its folder, the config), else on."""
+    if args.pager is not None:
+        return args.pager
+    try:
+        value = first_pdfmd_option(first, [], "pager")
+    except Exception:
+        value = None
+    return str(value).strip().casefold() not in ("false", "no", "off", "0") if value is not None else True
+
+
+def run_pager(text: str) -> None:
+    """The text through `$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (-F: no pager at all when it fits the screen; -R: keep
+    the colours); printed directly when there is none."""
+    command = shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or VIEW_PAGER)
+    if not command or not which(command[0]):
+        sys.stdout.write(text)
+        return
+    if Path(command[0]).name == "less":
+        flags = [word for word in command[1:] if word.startswith("-")]
+        if not flags:
+            command += ["-FRX"]
+        elif not any("R" in word or "r" in word for word in flags) and "R" not in os.environ.get("LESS", ""):
+            command += ["-R"]
+    process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    try:
+        process.stdin.write(text.encode("utf-8"))
+        process.stdin.close()
+    except BrokenPipeError:                                  # the reader quit before the end
+        pass
+    try:
+        process.wait()
+    except KeyboardInterrupt:
+        process.wait()
+
+
+def terminal_view(args) -> int:
+    """`--view`, and `-o -` for any target: build into a scratch folder, write one stream to stdout (see the comment above)."""
+    target = args.to or "pdf"
+    tty = sys.stdout.isatty()
+    if not tty and hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")     # the text is UTF-8; a Windows pipe is the ANSI code page otherwise
+        except (OSError, ValueError):
+            pass
+    if args.color in ("always", "never"):
+        colour = args.color
+    elif os.environ.get("NO_COLOR"):
+        colour = "never"
+    else:
+        colour = "always" if (args.view or tty) else "never"
+    os.environ[ANSI_COLOR_ENV] = colour
+    if args.width:
+        os.environ[ANSI_WIDTH_ENV] = str(args.width)
+    elif tty:
+        os.environ[ANSI_WIDTH_ENV] = str(max(20, shutil.get_terminal_size((ANSI_FALLBACK_WIDTH, 24)).columns))
+    suffix = FORMAT_EXTENSION.get(target, "." + target)
+    failed = 0
+    results: list[tuple[Path, bytes]] = []
+    made: list[Path] = []
+    pager = False
+    with tempfile.TemporaryDirectory(prefix="pdfmd-view-") as scratch_name:
+        scratch = Path(scratch_name)
+        try:
+            files = view_sources(args, scratch, made)
+            pager = bool(args.view) and tty and view_wants_pager(args, files[0])
+            if len(files) > 1 and target in BINARY_TARGETS:
+                raise SystemExit(f"-o - is one stream: {len(files)} documents cannot be joined as {target}. Build them "
+                                 "into a folder instead (-b, -o DIR), or name one.")
+            os.environ[ANSI_LINKS_ENV] = ("1" if tty and not pager and os.environ.get("TERM_PROGRAM") in ANSI_LINK_TERMINALS
+                                          else "0")
+            environment = {**os.environ, "PDFMD_NO_PROMPT": "1"}
+            for number, source in enumerate(files):
+                built = scratch / f"{number:03d}{suffix}"
+                command = [sys.executable, str(Path(__file__).resolve()), *view_child_arguments(sys.argv[1:], args.path or []),
+                           "--to", target, "-o", str(built), "--no-stamp", "--no-backup", str(source)]
+                done = subprocess.run(command, capture_output=True, text=True, stdin=subprocess.DEVNULL, env=environment)
+                # the child's OK / DEFAULTS lines would sit above the document: shown for a failure or with --verbose
+                sys.stderr.write((done.stdout if done.returncode != 0 or args.verbose else "") + done.stderr)
+                if done.returncode != 0 or not built.is_file():
+                    failed += 1
+                    continue
+                results.append((source, built.read_bytes()))
+        finally:
+            for item in made:
+                item.unlink(missing_ok=True)
+    if args.view:
+        pieces = []
+        for source, data in results:
+            header = ""
+            if len(files) > 1:                          # a dim rule with the file's name above each one
+                title = f"── {'stdin' if source.name.startswith('.pdfmd-stdin-') else source.name} "
+                rule = title + "─" * max(0, min(ansi_columns(), 100) - len(title))
+                header = (f"\x1b[2m{rule}\x1b[0m" if colour == "always" else rule) + "\n\n"
+            pieces.append(header + data.decode("utf-8", "replace"))
+        text = "\n".join(pieces)
+        if pager:
+            run_pager(text)
+        else:
+            sys.stdout.write(text)
+            sys.stdout.flush()
+    else:
+        for _, data in results:
+            sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    return 1 if failed else 0
+
+
 # Engines are tried in this order only when the user did not request one.
 # An explicit --engine is never overridden.
 PDF_ENGINES = (
@@ -3656,7 +3944,7 @@ def native_possible(args: argparse.Namespace) -> bool:
         return False
     chosen = args.to.casefold() if args.to else (
         format_from_output(args.out) if args.out and not args.batch else None)
-    return chosen in (None, "pdf")
+    return chosen in (None, "pdf", "ansi")           # ansi: the built-in parser draws it (v3.30.3)
 
 
 def native_note(engine: str, message: str, source: Path | None = None) -> None:
@@ -17008,7 +17296,7 @@ FORMAT_EXTENSION = {
     "html": ".html", "html4": ".html", "html5": ".html", "chunkedhtml": ".html",
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
-    "plain": ".txt", "txt": ".txt",
+    "plain": ".txt", "txt": ".txt", "ansi": ".ansi",
     "markdown": ".md", "gfm": ".md", "gfm+raw": ".md", "commonmark": ".md", "commonmark_x": ".md",
     "docx": ".docx", "odt": ".odt", "pptx": ".pptx",
     "epub": ".epub", "epub2": ".epub", "epub3": ".epub",
@@ -17034,7 +17322,7 @@ EXTENSION_FORMAT = {
     ".html": "html", ".htm": "html",
     ".tex": "latex",
     ".typ": "typst",
-    ".txt": "txt",
+    ".txt": "txt", ".ansi": "ansi",
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
@@ -19506,6 +19794,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         flush_summary()
         return md_path, ok, reason[-3000:]
 
+    if target_format == "ansi" and not which("pandoc") and not parts_inputs:
+        ok, reason = ansi_without_pandoc(md_path, output)        # the built-in parser stands in (v3.30.3)
+        flush_summary()
+        return md_path, ok, reason[-3000:]
     if not which("pandoc"):
         raise SystemExit(PANDOC_MISSING)
     warn_old_pandoc()
@@ -19570,7 +19862,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     flat_markdown = target_format == "gfm"             # flat Markdown: pictures beside the output, relative links, one line a paragraph
     flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
     flat = flat_settings(md_path, metadata_files, target_format) if flat_target else None
-    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title") or flat_target,
+    with prepared_title_source(md_path, metadata_files, disabled=auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
                                override=source_override) \
             as (title_source, title_shifted), \
             embedded_lua_filters(md_path, not auto_disabled(cli_no_auto, "lua"), trust_embedded) \
@@ -19666,7 +19958,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                      no_auto, note) as office_arguments:
                 source, *prepared_metadata = prepared
                 writer = flat_writer(target_format, flat) if target_format in ("gfm", "gfm+raw", "txt") else target_format
-                cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "-t", writer]
+                ansi_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-ansi-") if target_format == "ansi" else None
+                ansi_json = Path(ansi_scratch.name) / "document.json" if ansi_scratch is not None else None
+                if ansi_json is not None:
+                    writer = "json"                              # pdfmd_ansi draws Pandoc's AST (v3.30.3)
+                cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(ansi_json or output), "-t", writer]
                 if flat_markdown and not any(option.startswith("--wrap") for option in pandoc_options):
                     cmd.append("--wrap=none")      # a paragraph is one line: a viewer wraps it, a diff shows what changed
                 if (flat_markdown and output.parent.resolve() != md_path.parent.resolve()
@@ -19817,9 +20113,13 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                 env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
                     ascii_problem = (ascii_finish(output, Path(ascii_scratch.name), ascii_missing_mode, md_path)
                                      if ascii_scratch is not None and result.returncode == 0 else None)
+                    if ansi_json is not None and result.returncode == 0:
+                        ascii_problem = ansi_finish(ansi_json, output, md_path, verbose)
                 finally:
                     if ascii_scratch is not None:
                         ascii_scratch.cleanup()
+                    if ansi_scratch is not None:
+                        ansi_scratch.cleanup()
                 office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0 and not ascii_problem:
                 stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
@@ -23714,6 +24014,19 @@ def build_parser() -> argparse.ArgumentParser:
                         help="keep a Markdown table of up to N body rows on one page, for a Lua filter that reads "
                              "`tablekeep` (nulabreport.lua; 0 lets every table break). Also `pdfmd-options: "
                              "{table-keep: N}`, or --setup")
+    parser.add_argument("--view", action="store_true",
+                        help="read the document in the terminal: styled text (bold, italic, code, box-drawn tables, lists, "
+                             "math as text) wrapped to the window, through a pager when it is longer. = `--to ansi -o -` "
+                             "+ a pager. Takes files, `-` or a pipe, else the Markdown files here, else what you type "
+                             "(Ctrl-D ends it)")
+    parser.add_argument("--pager", action=argparse.BooleanOptionalAction, default=None,
+                        help="with --view: use $PDFMD_PAGER / $PAGER / `less -FRX` when stdout is a terminal (the default); "
+                             "--no-pager prints it all. Also `pdfmd-options: {pager: false}`, or --setup")
+    parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
+                        help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
+                             "into a pipe: no; NO_COLOR turns auto off)")
+    parser.add_argument("--width", type=ansi_width_argument, default=None, metavar="N",
+                        help="--to ansi / --view: draw for N columns (default: the terminal's, else 120)")
     parser.add_argument("--table-numbers", metavar="1,3-4",
                         help="with --extract-tables: only these tables, by their position in the document "
                              "(1 is the first; ranges allowed); the others stay as they are, and --table-names "
@@ -24208,6 +24521,18 @@ def main() -> None:
         args.to, ascii_asked = split_ascii_target(args.to)
         ASCII_CLI["on"] = ascii_asked
         args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
+    if args.view:
+        if args.to and args.to != "ansi":
+            raise SystemExit(f"--view shows the styled terminal text (--to ansi); it cannot be combined with --to {args.to}")
+        args.to = "ansi"
+        if args.out is not None and str(args.out) != "-":
+            args.view = False                         # -o FILE saves it: no pager, nothing shown (one meaning per flag)
+    if args.color:
+        os.environ[ANSI_COLOR_ENV] = args.color
+    if args.width:
+        os.environ[ANSI_WIDTH_ENV] = str(args.width)
+    if args.view or (args.out is not None and str(args.out) == "-"):
+        raise SystemExit(terminal_view(args))
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
     global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages

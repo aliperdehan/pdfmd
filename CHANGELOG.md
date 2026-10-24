@@ -41,6 +41,52 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.3 — 2026-10-24
+
+Pre-edit state: commit `ab380d1` (v3.30.2).
+
+### Added
+
+- **`--to ansi`: a document as styled text for a terminal.** Bold, italic, inline code, strikethrough, links, headings, ordered and bullet lists, block
+  quotes, code blocks, rules, footnotes (listed at the end), a title block from the front matter, and every table as a box-drawn grid: a rule between
+  rows, a bold header, each column as wide as its widest cell, the alignment the table gives, cells wrapped when the window is narrower than the table,
+  wide (East Asian) characters counted as two cells. The text is wrapped to `--width N`, else the terminal's width, else 120. It is a build like the others:
+  Pandoc reads the document through the usual steps (metadata files, filters, `pdfmd-options`, citations, `\ce`, the CSV tables) and writes its JSON AST,
+  which the new package `pdfmd_ansi/` (a pure function, no other pdfmd module imported) draws; the file is `NAME.ansi`, and `-o x.ansi` selects the format.
+  Without Pandoc the built-in parser (`pdfmd_inkmd`) reads the Markdown instead, with a NOTE: no filters, citations, footnotes or metadata files.
+- **Math as text, level (a).** `MathText` (the converter the built-in renderer uses) gets an ANSI back-end: Greek letters, operators, Unicode sub- and
+  superscripts, `(a+b)/(c+d)`, `√(...)`, variables in italic, a function name after a variable set off by a space (`RT ln K`); a formula alone on its line is
+  centred; one the converter cannot read is shown as its TeX.
+- **`--view`: read a document in the terminal.** = `--to ansi -o -` + a pager. It takes files (a folder: its Markdown files), `-` or a pipe on standard
+  input (written to a hidden temporary `.md` beside the cwd so relative pictures resolve, and removed), else the Markdown files of the current folder, else
+  what is typed or pasted into the terminal (ended with Ctrl-D; a hint says so on standard error). Several files are one stream in the order given, with a
+  dim rule naming each. Each file is built on its own by a child pdfmd into a scratch folder, so all discovery and notes apply; the notes (`OK`, `DEFAULTS`)
+  stay off the screen unless a build fails or `--verbose` is given, every other message goes to standard error. The styling stays when the output is piped
+  (`pdfmd --view x.md | less -R`). `--view -o FILE` saves the file and shows nothing; `--view` with another `--to` is an error.
+- **The pager** (on by default, `--pager` / `--no-pager`, `pdfmd-options: {pager: false}`, a `--setup` row, also in the folder screen): only when
+  standard output is a terminal, through `$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (`-F` quits at once when the text fits one screen, `-R` keeps the
+  colours; a `less` given without `-R` gets it).
+- **`-o -` is standard output**, for `--view` and for any format built from a file or a pipe: the build goes to a scratch folder and its bytes are copied to
+  stdout; several documents are joined only for text formats (a binary format, `pdf` or `docx`, with several inputs is refused). `--color auto|always|never`:
+  a file and `--view` are styled, `-o -` into a pipe is plain, `NO_COLOR` turns `auto` off, `always` wins over it.
+- Links are `words (address)`, or OSC 8 hyperlinks in a terminal known to draw them (iTerm2, WezTerm, Ghostty, VS Code) when the text is not paged. Text
+  from a document is cleaned before it is shown: control characters (an ESC would start a terminal sequence) and bidi overrides are dropped.
+- `--help view` lists `--view --pager --color --width`; `--view` is on the short help page. The flags are in `pdfmd_setup/inventory.py` (`--pager` is the row
+  `options.pager`; `--view` a command; `--color` and `--width` per run); `pdfmd_ansi` is in `pyproject.toml` and `scripts/build_zipapp.py`.
+
+### Known limits
+
+- A cell that spans rows or columns is drawn in its first cell only. A formula is linear (stacked fractions, roots and sums with limits, and pictures of
+  display math in terminals that show them, are later patches). Raw LaTeX, HTML and Word pieces are left out (`--verbose` counts them). Code is not highlighted.
+- The vendored built-in parser reads a `>` quote that follows a list, after a blank line, as a paragraph plus a one-line quote; that is in `pdfmd_inkmd`
+  (to be fixed upstream in inkmd, the vendored copy is not edited by hand), so it shows only without Pandoc.
+
+Tests: `tests/test_ansi.py` — widths and wrapping, escape-code cleaning, inline styles with and without colour, links, grid widths at several window
+widths (wide characters, shrinking, wrapping), lists/quotes/code, math through the callback; and through the full pipeline: `--to ansi` to a file, `-o x.ansi`,
+`--view` into a pipe, `NO_COLOR` / `--color`, `-o -`, several files, a pipe and `-`, `--to docx` refused, `-o` replacing `--view`, no Pandoc.
+
+---
+
 ## v3.30.2 — 2026-10-22
 
 Pre-edit state: commit `814acf5` (v3.30.1).

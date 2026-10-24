@@ -3,7 +3,7 @@
 The README says what pdfmd is; this is how to get things done with it. Each recipe is a problem, the commands, what
 they do, and where the README explains more. Every command works from the folder that holds the file;
 `pdfmd --doctor` shows what is installed, `pdfmd --help` is one short page and `pdfmd --help all` the whole list of
-options (`pdfmd --help tables`, `source`, `history`, `output`, `modes`, `raw`, `fonts`, `setup`, `debug` one subject at a time).
+options (`pdfmd --help tables`, `source`, `history`, `output`, `modes`, `raw`, `view`, `fonts`, `setup`, `debug` one subject at a time).
 
 **Contents**
 
@@ -145,6 +145,19 @@ have no per-block indent: the text stays, the setting is dropped, with a NOTE. T
 `indent: true` in the front matter (none is the default).
 
 ---
+
+### 1.10 Read a document in the terminal
+
+```sh
+pdfmd --view report                 # styled, tables drawn as grids, through a pager
+cat notes.md | pdfmd --view         # or from a pipe
+pdfmd --view --no-pager --width 80 report
+```
+
+`--view` builds the document as usual (metadata, filters, citations, math as text) and shows it instead of making a
+file: bold, italic and code in colour, box-drawn tables wrapped to the window, lists, quotes, footnotes. The output stays
+styled when piped into `less -R`; `NO_COLOR` or `--color never` takes the styling away. `--to ansi` writes the same text to a
+file (`report.ansi`), and `-o -` sends any format to standard output. README: "Read it in the terminal".
 
 ## 2. A project with a house style
 

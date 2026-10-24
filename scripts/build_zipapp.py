@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGES = ("pdfmd_check", "pdfmd_chem", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history",
+PACKAGES = ("pdfmd_ansi", "pdfmd_check", "pdfmd_chem", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_raw",
             "pdfmd_setup", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode")      # = pyproject.toml's packages (test_packaging)
 DEPENDENCIES = ("yaml", "pypdf")
