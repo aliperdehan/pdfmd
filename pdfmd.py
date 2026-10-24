@@ -3413,7 +3413,7 @@ def ascii_filter_args(scratch: Path, missing: str, smart: bool = False) -> list[
     if filter_path is None:
         raise SystemExit("--to ascii needs pdfmd_lua/ascii.lua and pdfmd_flat (install pdfmd-cli; a lone copy of "
                          "pdfmd.py cannot make ASCII text)")
-    config = {"pdfmd-ascii": {"command": sys.executable, "script": str(Path(__file__).resolve()), "missing": missing,
+    config = {"pdfmd-ascii": {"command": Path(sys.executable).as_posix(), "script": str(Path(__file__).resolve()), "missing": missing,
                               "report": str(scratch / "report.json"), "smart": "keep" if smart else "all"}}
     map_file = scratch / "ascii.yaml"
     map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
