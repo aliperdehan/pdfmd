@@ -37,8 +37,9 @@ class KeepError(ValueError):
 
 
 def digest(body: str) -> str:
-    """The hash of a body: its text without trailing newlines (the comment is appended after one blank line)."""
-    return hashlib.sha256(body.rstrip("\n").encode("utf-8")).hexdigest()
+    """The hash of a body: its text without trailing newlines (the comment is appended after one blank line), whatever its line
+    ends (Pandoc writes CRLF on Windows, and git or an editor may convert a file's)."""
+    return hashlib.sha256(body.replace("\r\n", "\n").rstrip("\n").encode("utf-8")).hexdigest()
 
 
 def escape(text: str) -> str:
@@ -97,6 +98,12 @@ class Trailer:
 def find(text: str) -> Trailer | None:
     """The trailer at the end of `text`, or None. The LAST marker at the start of a line that is followed by a proper
     end of file: a body that talks about the marker (a code block, say) does not confuse it."""
+    if "\r\n" in text:                      # converted line ends (Pandoc on Windows, git autocrlf, an editor): read it as LF
+        inner = find(text.replace("\r\n", "\n"))
+        if inner is None:
+            return None
+        index = text.rfind("\n" + MARKER + " ")
+        return Trailer(index + 1 if index >= 0 else 0, inner.header, inner.payload)
     if not text.rstrip().endswith("-->"):
         return None
     index = text.rfind("\n" + MARKER + " ")
