@@ -1,0 +1,61 @@
+# TEMPORARY (cloud/portability): the failing Windows modules only, and what MiKTeX does. Removed before the PR is done.
+name: win-dev
+on:
+  pull_request:
+    paths: [".github/workflows/win-dev.yml"]
+jobs:
+  win-dev:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pandoc/actions/setup@v1
+      - name: MiKTeX
+        run: |
+          choco install miktex -y --no-progress
+          echo 'C:\Program Files\MiKTeX\miktex\bin\x64' >> "$GITHUB_PATH"
+      - name: Baseline and attempts at the administrator warnings
+        continue-on-error: true
+        run: |
+          export PATH="/c/Program Files/MiKTeX/miktex/bin/x64:$PATH"
+          mkdir -p /tmp/h && cd /tmp/h && printf '\\documentclass{article}\\begin{document}Hi\\end{document}\n' > hello.tex
+          hello() { lualatex -interaction=nonstopmode hello.tex 2>&1 | head -12; echo "exit=${PIPESTATUS[0]}"; }
+          echo "--- baseline"; hello
+          initexmf --admin --set-config-value='[MPM]AutoInstall=1' || true
+          echo "--- after AutoInstall"; hello
+          mpm --admin --update-db 2>&1 | tail -3 || true
+          echo "--- after mpm --admin --update-db"; hello
+          miktex --admin packages check-update 2>&1 | tail -3 || true
+          echo "--- after miktex --admin packages check-update"; hello
+          miktex --admin packages update-package-database 2>&1 | tail -3 || true
+          mpm --admin --find-updates 2>&1 | tail -3 || true
+          echo "--- after the find-updates variants"; hello
+      - name: Does MiKTeX's kpsewhich honour TEXMFHOME or MIKTEX_USERROOTS?
+        continue-on-error: true
+        run: |
+          export PATH="/c/Program Files/MiKTeX/miktex/bin/x64:$PATH"
+          d="$RUNNER_TEMP/texhome"; mkdir -p "$d/tex/latex/thing"; echo '\ProvidesPackage{thing}' > "$d/tex/latex/thing/thing.sty"
+          w="$(cygpath -w "$d")"
+          echo "TEXMFHOME:";           TEXMFHOME="$w" kpsewhich thing.sty; echo "exit=$?"
+          echo "MIKTEX_USERROOTS:";    MIKTEX_USERROOTS="$w" kpsewhich thing.sty; echo "exit=$?"
+          echo "both:";                TEXMFHOME="$w" MIKTEX_USERROOTS="$w" kpsewhich thing.sty; echo "exit=$?"
+          echo "TEXINPUTS:";           TEXINPUTS="$w//;" kpsewhich thing.sty; echo "exit=$?"
+      - run: pip install .
+      - name: STIX Two
+        continue-on-error: true
+        run: pdfmd --install fonts:stix-two; fc-list 2>/dev/null | grep -ci stix || true
+      - name: The failing modules
+        run: >
+          python -m unittest -v tests.test_command_words tests.test_ansi tests.test_ascii tests.test_attach tests.test_autolog
+          tests.test_code_blocks tests.test_edit_pdf tests.test_header_includes tests.test_indent tests.test_keep_source
+          tests.test_labels tests.test_markup_center tests.test_markup_highlight tests.test_markup_keep tests.test_markup_landscape
+          tests.test_office tests.test_office_latex tests.test_package_helper tests.test_picture_cache_protocol
+          tests.test_readonly_home tests.test_sections tests.test_setup tests.test_tables tests.test_texpackages
