@@ -1403,12 +1403,12 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 def write_text_lf(path: Path, text: str) -> None:
-    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of."""
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
+    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of; all or nothing
+    (atomic_write_text)."""
+    atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.17"
+PDFMD_VERSION = "3.30.18"
 import argparse
 import atexit
 import csv
@@ -1466,6 +1466,61 @@ from textwrap import dedent
 from typing import Iterator
 
 
+# -- Writing a file in place: through a temporary file in the same folder and os.replace() -------------------------
+# A file pdfmd rewrites (the document's BUILD NOTES, the config, the metadata, a restored source, a PDF it finishes) is written
+# whole to `.NAME.<pid>.<random>.part` beside it and then renamed over it: a crash, a full disk or ^C half-way leaves the old
+# file as it was (and the temporary file is removed). A symlink is written through, as write_text() does (the link stays); the
+# mode of the file it replaces is kept; text is written as write_text() would (newline=None: the platform's, "\n" for
+# write_text_lf). Not used for scratch files in a temporary folder, nor for a cache that is only ever replaced whole.
+@contextmanager
+def atomic_file(path: Path) -> Iterator[Path]:
+    """The path of a temporary file beside ``path`` to write into; on leaving the block it is renamed over ``path``, or removed
+    when the block raised (``path`` is then untouched)."""
+    path = Path(path)
+    target = Path(os.path.realpath(path)) if path.is_symlink() else path
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.part")
+    try:
+        yield temporary
+        try:
+            shutil.copymode(target, temporary)
+        except OSError:
+            pass                                          # a new file: the umask's mode, as the open() gave it
+        os.replace(temporary, target)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_text(path: Path, text: str, encoding: str = "utf-8", newline: str | None = None) -> None:
+    """``Path.write_text(text, encoding=...)`` (``newline`` as open() takes it), all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "x", encoding=encoding, newline=newline) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """``Path.write_bytes(data)``, all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def atomic_write_pdf(writer, path: Path) -> None:
+    """A pypdf writer's document over ``path``, all or nothing."""
+    with atomic_file(path) as temporary:
+        with open(temporary, "xb") as handle:
+            writer.write(handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
 def own_python_folder() -> Path:
     """Where `pdfmd --install` puts Python packages when the Python it runs from is managed by the system (PEP 668:
     Homebrew, Debian), one folder per Python version, beside pdfmd's other tools (data_root())."""
@@ -1477,8 +1532,11 @@ def own_python_folder() -> Path:
 
 
 # behind the Python's own packages, before the optional ones below are imported
-if own_python_folder().is_dir() and str(own_python_folder()) not in sys.path:
-    sys.path.append(str(own_python_folder()))
+try:
+    if own_python_folder().is_dir() and str(own_python_folder()) not in sys.path:
+        sys.path.append(str(own_python_folder()))
+except (OSError, RuntimeError):          # a home that cannot be read, or none at all (a sandbox): nothing installed there
+    pass
 
 try:
     import yaml
@@ -1519,9 +1577,11 @@ def installed_font_families() -> frozenset[str] | None:
     if not fc_list:
         return None
     try:
-        out = subprocess.run([fc_list, ":", "family"], capture_output=True, text=True, timeout=30).stdout
+        done = subprocess.run([fc_list, ":", "family"], capture_output=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
+    # decoded here: with text=True a Windows fc-list whose output the console code page cannot decode came back as None
+    out = (done.stdout or b"").decode("utf-8", "replace")
     return frozenset(name.strip().casefold() for line in out.splitlines() for name in line.split(","))
 
 
@@ -1551,10 +1611,10 @@ def system_font_missing(family: str) -> bool:
             return False
         return not any(not face.managed for face in index._by_name.get(family.casefold(), []))
     try:
-        result = subprocess.run([tool, f"--find={family}"], capture_output=True, text=True, timeout=60)
+        result = subprocess.run([tool, f"--find={family}"], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.SubprocessError):
         return False
-    return "Cannot find" in result.stdout + result.stderr
+    return "Cannot find" in (result.stdout or "") + (result.stderr or "")
 
 
 @lru_cache(maxsize=None)
@@ -2186,6 +2246,7 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         import pdfmd_lua
         shipped, header = pdfmd_lua.path("code"), pdfmd_lua.FILTERS / "code_wrap.tex"
     except ImportError:
+        pdfmd_lua_missing()
         return []
     if shipped is None or not any(has_code_block(read_text_best_effort(source)) for source in sources):
         return []
@@ -2698,6 +2759,7 @@ def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("markup")
     return ["-M", "pdfmd-markup=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
@@ -2784,6 +2846,7 @@ def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("cover")
     if shipped is None:
@@ -2839,6 +2902,7 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
@@ -2875,6 +2939,7 @@ def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = 
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("indent")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -3082,6 +3147,7 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("calc")
     if shipped is None:
@@ -3126,6 +3192,7 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("title_meta")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -3187,6 +3254,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         import pdfmd_lua
         raw_filter, pdf_filter = pdfmd_lua.path("raw"), pdfmd_lua.path("pdf_images")
     except ImportError:
+        pdfmd_lua_missing()
         return []
     files = sources if isinstance(sources, list) else [sources]
     table = (resolve_raw(files[0], metadata_files, flat=flat_pictures is not None or flat_text)
@@ -3245,10 +3313,8 @@ _PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
 def pandoc_extensions(name: str) -> frozenset[str]:
     """The extensions this Pandoc knows for format `name` (on or off), for building a writer string it will accept."""
     if name not in _PANDOC_EXTENSIONS:
-        try:
-            listing = subprocess.run(["pandoc", f"--list-extensions={name}"], capture_output=True, text=True).stdout
-        except OSError:
-            listing = ""
+        done = run_probe(["pandoc", f"--list-extensions={name}"])
+        listing = done.stdout if done else ""
         _PANDOC_EXTENSIONS[name] = frozenset(line.strip().lstrip("+-") for line in listing.splitlines() if line.strip())
     return _PANDOC_EXTENSIONS[name]
 
@@ -3364,7 +3430,7 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
         data = output.read_bytes()
         if not data.isascii():
             asciifier = asciify.Asciifier(missing)
-            output.write_bytes(asciifier.text(data.decode("utf-8")).encode("ascii"))
+            atomic_write_bytes(output, asciifier.text(data.decode("utf-8")).encode("ascii"))
             lost = asciify.merge(lost, asciifier.lost)
     if not lost:
         return None
@@ -5453,10 +5519,7 @@ def set_pdf_info(pdf_path: Path, metadata: dict, verbose: bool, creator: str = "
         writer = pypdf.PdfWriter()
         writer.append(reader)
         writer.add_metadata({**(dict(reader.metadata) if reader.metadata else {}), **info})
-        with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-            writer.write(temporary)
-            temporary_path = Path(temporary.name)
-        temporary_path.replace(pdf_path)
+        atomic_write_pdf(writer, pdf_path)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
         if verbose:
             print(f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr)
@@ -5515,7 +5578,7 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             data = ink.compile(source.text, **options)
-        output.write_bytes(data)
+        atomic_write_bytes(output, data)
         set_pdf_info(output, source.metadata, verbose, creator="inkmd")
         return [str(item.message) for item in caught]
     import md2pdf
@@ -6194,9 +6257,9 @@ def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
     kpsewhich = which("kpsewhich")
     if not kpsewhich or not names:
         return {}
-    done = subprocess.run([kpsewhich, *names], capture_output=True, text=True)
+    done = run_probe([kpsewhich, *names])
     found: dict[str, Path] = {}
-    for line in done.stdout.splitlines():
+    for line in (done.stdout if done else "").splitlines():
         if line.strip():
             found.setdefault(Path(line.strip()).name, Path(line.strip()))
     return found
@@ -7325,7 +7388,7 @@ def config_report(init: bool = False) -> bool:
         else:
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+                atomic_write_text(path, CONFIG_TEMPLATE)
             except OSError as error:
                 print(f"Could not write {path}: {error}", file=sys.stderr)
                 return False
@@ -7487,9 +7550,9 @@ def install_typst() -> bool:
               file=sys.stderr)
         return False
     use_managed_tools()
-    version = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if version.returncode != 0:
-        print(f"Typst was downloaded to {target} but does not run here: {version.stderr.strip()}",
+    version = run_probe([str(target), "--version"])
+    if version is None or version.returncode != 0:
+        print(f"Typst was downloaded to {target} but does not run here: {version.stderr.strip() if version else 'it does not answer'}",
               file=sys.stderr)
         return False
     print(f"Installed {version.stdout.strip()} in {tools_directory()} "
@@ -7594,9 +7657,9 @@ def install_node() -> bool:
         print(f"Could not install node ({error}). Install it yourself: {node_install_hint()}", file=sys.stderr)
         return False
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"node was downloaded to {target} but does not run here ({ran.stderr.strip() or ran.returncode}). "
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"node was downloaded to {target} but does not run here ({(ran.stderr.strip() or ran.returncode) if ran else 'it does not answer'}). "
               f"Install it yourself: {node_install_hint()}", file=sys.stderr)
         return False
     print(f"Installed node {ran.stdout.strip()} in {tools_directory()} (used when no other node is on PATH; delete "
@@ -7953,9 +8016,9 @@ def install_d2() -> bool:
         print(f"Could not install D2 ({error}). Install it yourself: https://d2lang.com/tour/install", file=sys.stderr)
         return False
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip() if ran else 'it does not answer'}", file=sys.stderr)
         return False
     print(f"Installed D2 {ran.stdout.strip()} in {tools_directory()} (used when no other d2 is on PATH; delete the file "
           "to remove it). A PDF or Word diagram is converted from D2's SVG by rsvg-convert or inkscape.")
@@ -8310,9 +8373,9 @@ def install_tectonic(fetch=None, release: dict | None = None) -> bool:
     finally:
         archive.unlink(missing_ok=True)
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"Tectonic was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"Tectonic was downloaded to {target} but does not run here: {ran.stderr.strip() if ran else 'it does not answer'}", file=sys.stderr)
         return False
     print(f"Installed {ran.stdout.strip()} in {tools_directory()} (used when no other Tectonic is on PATH; delete the file to "
           "remove it). It fetches the TeX files a document needs from the network the first time (about 100 MB over time), "
@@ -8898,11 +8961,11 @@ def setup_command(screen: str = "") -> bool:
                             and line not in header.splitlines()]       # (v3.29.29: the header's second line counted, a .bak every save)
             if hand_written:
                 backup = file.with_name(file.name + ".bak")
-                backup.write_text(texts[name], encoding="utf-8")
+                atomic_write_text(backup, texts[name])
                 print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
             if stores[name]:
-                file.write_text(header + yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
-                                                               default_flow_style=False), encoding="utf-8")
+                atomic_write_text(file, header + yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
+                                                                default_flow_style=False))
             elif file.exists():
                 file.unlink()
                 if folder is not None:
@@ -9656,19 +9719,40 @@ def trust_lua(paths: list[Path]) -> bool:
     return complete
 
 
+PDFMD_LUA_WARNED: set[str] = set()
+
+
+def pdfmd_lua_missing(name: str = "") -> None:
+    """One WARN per run: pdfmd's own Lua filters (the package pdfmd_lua, or one file of it) are not there, so what they do is
+    skipped. A lone copy of pdfmd.py has no pdfmd_lua; so does a checkout with the folder deleted."""
+    key = name or "package"
+    if key in PDFMD_LUA_WARNED:
+        return
+    PDFMD_LUA_WARNED.add(key)
+    what = (f"pdfmd_lua/{name}.lua is missing from the pdfmd_lua package" if name
+            else "the pdfmd_lua package is not installed beside pdfmd.py")
+    print(f"WARN  lua: {what}, so pdfmd's own Lua filters do nothing in this run (tables sized by content, CSV tables, "
+          "calculations, indents, page breaks, markup ...). Install pdfmd-cli (`pipx install pdfmd-cli`) or keep the pdfmd_* "
+          "folders of the repository beside pdfmd.py", file=sys.stderr)
+
+
 @contextmanager
 def lua_filter_file(name: str, prefix: str) -> Iterator[Path]:
     """The path of pdfmd's own Lua filter `name` (pdfmd_lua/NAME.lua) for --lua-filter.
 
-    Without the pdfmd_lua package (a lone copy of this script) a filter that does nothing is
-    written to a temporary file instead, so the callers need no special case.
+    Without the pdfmd_lua package (a lone copy of this script), or without that file, a filter that does nothing is
+    written to a temporary file instead, so the callers need no special case -- and one WARN per run says that the filters
+    are missing (pdfmd_lua_missing).
     """
     shipped = None
     try:
         import pdfmd_lua
         shipped = pdfmd_lua.path(name)
     except ImportError:
-        pass
+        pdfmd_lua_missing()
+    else:
+        if shipped is None:
+            pdfmd_lua_missing(name)
     if shipped is not None:
         yield shipped
         return
@@ -11947,7 +12031,9 @@ def package_version(name: str) -> str | None:
     kpsewhich = which("kpsewhich")
     if not kpsewhich:
         return None
-    result = subprocess.run([kpsewhich, f"{name}.sty"], capture_output=True, text=True)
+    result = run_probe([kpsewhich, f"{name}.sty"])
+    if result is None:
+        return None
     sty_path = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
     if result.returncode != 0 or not sty_path:
         return None
@@ -12153,7 +12239,7 @@ def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | 
 def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
     text = md_path.read_text(encoding="utf-8-sig")
     updated, warning = update_build_notes(text, new_line, mode)
-    md_path.write_text(updated, encoding="utf-8")
+    atomic_write_text(md_path, updated)
     if warning:
         print(f"WARN  {md_path}: {warning}", file=sys.stderr)
     if verbose:
@@ -12459,7 +12545,7 @@ def restore_version(document: Path, version, metadata_files: list[Path], note: b
         print(f"ERROR  {display_path(document)}: not restored, since the file as it is could not be backed up.",
               file=sys.stderr)
         return 1
-    document.write_text(result, encoding="utf-8")
+    atomic_write_text(document, result)
     if to_file:
         history.add_entry(history_file(document, metadata_files), entry, document.name)
     print(f"  BACKUP    {display_path(saved)}  (the file as it was a moment ago)")
@@ -12549,7 +12635,7 @@ def init_vscode_command(args) -> int:
         print(f"NOTE  {display_path(target)} exists; nothing was written. The tasks to add:\n{VSCODE_TASKS}")
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(VSCODE_TASKS, encoding="utf-8")
+    atomic_write_text(target, VSCODE_TASKS)
     print(f"WROTE  {display_path(target)}: tasks pdfmd: build, build and open, watch, extract tables "
           "(Terminal > Run Build Task). For commands, history and more, install the extension from the repository's vscode/ folder.")
     return 0
@@ -12762,7 +12848,7 @@ def put_outside_blocks(document: Path, folder: Path, manifest: dict) -> list[str
                 target = folder / where
                 if not target.is_file() or target.read_bytes() != data:
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(data)
+                    atomic_write_bytes(target, data)
                     written.append(place)
     return written
 
@@ -12962,8 +13048,8 @@ def init_backups_command(args) -> int:
             options[key] = wanted[key]
         if added:
             config_path().parent.mkdir(parents=True, exist_ok=True)
-            config_path().write_text(f"# {note_text}\n" + SETUP_HEADER + yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-                                     encoding="utf-8")
+            atomic_write_text(config_path(), f"# {note_text}\n" + SETUP_HEADER
+                              + yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
         print(f"CONFIG  {config_path()}: " + (f"set {', '.join(added)}" if added else "backup and stamp were already set; left alone"))
         return 0
     status = 0
@@ -13015,8 +13101,8 @@ def init_backups_command(args) -> int:
                 status = 1
                 continue
             new_body = "\n".join(lines)
-            target.write_text(text[:front.start("yaml")] + new_body + text[front.end("yaml"):] if target == document else new_body,
-                              encoding="utf-8")
+            atomic_write_text(target, text[:front.start("yaml")] + new_body + text[front.end("yaml"):] if target == document
+                              else new_body)
         options_now = resolve_backup_options(document, linked_metadata(document, args.metadata_file), None)
         backup_dir = backup_directory(document, {**options_now, **({"dir": folder} if folder != DEFAULT_BACKUP_DIR else {})})
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -13092,7 +13178,7 @@ def history_command(args) -> int:
                 status = 1
                 continue
             history.write_file(path, merged, document.name, other)       # the file first: nothing is lost if this stops
-            document.write_text(stripped, encoding="utf-8")
+            atomic_write_text(document, stripped)
             backup_notice(path.parent, resolve_backup_options(document, linked, None))
         else:
             entries, other = history.read_file(path)
@@ -13110,7 +13196,7 @@ def history_command(args) -> int:
                 print(f"ERROR  {display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
                 status = 1
                 continue
-            document.write_text(entries_to_notes(text, compiled), encoding="utf-8")
+            atomic_write_text(document, entries_to_notes(text, compiled))
             left = [entry for entry in entries if entry not in compiled]
             if left or other:
                 history.write_file(path, left, document.name, other)
@@ -13630,8 +13716,8 @@ def tables_command(args) -> int:
         for name, data in result.files.items():
             target = base / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(data, encoding="utf-8")
-        document.write_text(result.text, encoding="utf-8")
+            atomic_write_text(target, data)
+        atomic_write_text(document, result.text)
         print(f"  BACKUP  {display_path(backup)}")
         print(f"  WROTE   {display_path(document)}" + (f" and {len(result.files)} CSV file"
               f"{'' if len(result.files) == 1 else 's'}" if result.files else ""))
@@ -13735,13 +13821,9 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                     f"/{PDF_INFO_VERSIONS_KEY}": summary,
                     f"/{PDF_INFO_BUILD_DATE_KEY}": timestamp,
                 })
-                with NamedTemporaryFile("wb", suffix=".pdf", delete=False,
-                                        dir=pdf_path.parent) as temporary:
-                    writer.write(temporary)
-                    temporary_path = Path(temporary.name)
+                atomic_write_pdf(writer, pdf_path)
         finally:
             pypdf_logger.setLevel(previous_level)
-        temporary_path.replace(pdf_path)
     except Exception as error:  # noqa: BLE001 -- best-effort, like package_version()
         print(f"WARN  --stamp: could not write the PDF Info-dictionary stamp "
               f"into {pdf_path} ({error}) -- the compile itself still succeeded",
@@ -14525,6 +14607,7 @@ def select_filter_args(selection) -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("select")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -14546,6 +14629,7 @@ def chem_filter_args(sources: list[Path], metadata_files: list[Path], preamble_f
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("chem")
     if shipped is None:
@@ -14565,6 +14649,7 @@ def typst_filter_args(writer: str) -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("typst")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
@@ -14604,11 +14689,11 @@ def body_x_height(family: str | None) -> float | None:
     if not family or not fc_match:
         return None
     try:
-        done = subprocess.run([fc_match, "-f", "%{family}\n%{file}\n%{index}", family], capture_output=True, text=True,
-                              timeout=30)
+        done = subprocess.run([fc_match, "-f", "%{family}\n%{file}\n%{index}", family], capture_output=True,
+                              encoding="utf-8", errors="replace", timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
-    lines = done.stdout.splitlines()
+    lines = (done.stdout or "").splitlines()
     if done.returncode != 0 or len(lines) < 3 or family.casefold() not in lines[0].casefold():
         return None                                  # fontconfig answered with another font: the family is not installed
     return sfnt_x_height(Path(lines[1]), int(lines[2]) if lines[2].isdigit() else 0)
@@ -15181,10 +15266,8 @@ def pandoc_has_option(option: str) -> bool:
     option name (`--math-method` is not found inside `--html-math-method`)."""
     global _PANDOC_HELP
     if _PANDOC_HELP is None:
-        try:
-            _PANDOC_HELP = subprocess.run(["pandoc", "--help"], capture_output=True, text=True).stdout
-        except OSError:
-            _PANDOC_HELP = ""
+        done = run_probe(["pandoc", "--help"])
+        _PANDOC_HELP = done.stdout if done else ""
     return bool(re.search(r"(?<![\w-])" + re.escape(option) + r"(?![\w-])", _PANDOC_HELP))
 
 
@@ -15231,12 +15314,10 @@ def pandoc_user_data_dir() -> Path | None:
     global _PANDOC_DATA_DIR
     if _PANDOC_DATA_DIR is False:
         _PANDOC_DATA_DIR = None
-        try:
-            for line in subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines():
-                if line.lower().startswith("user data directory:"):
-                    _PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
-        except OSError:
-            pass
+        done = run_probe(["pandoc", "--version"])
+        for line in (done.stdout if done else "").splitlines():
+            if line.lower().startswith("user data directory:"):
+                _PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
     return _PANDOC_DATA_DIR or None
 
 
@@ -15321,9 +15402,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     text, why = fetch_csl(url)
     if text is not None:
         folder.mkdir(parents=True, exist_ok=True)
-        partial = cached.with_name(cached.name + ".part")
-        partial.write_text(text, encoding="utf-8")
-        partial.replace(cached)
+        atomic_write_text(cached, text)
         print(f"AUTO CSL   {url} -> {display_path(cached)}")
         return cached
     if cached.is_file():
@@ -15350,7 +15429,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
         if done is None or done.returncode != 0 or "<style" not in done.stdout:
             return None
         folder.mkdir(parents=True, exist_ok=True)
-        default.write_text(done.stdout, encoding="utf-8")
+        atomic_write_text(default, done.stdout)
     print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
           "the citations use Pandoc's default style (Chicago author-date). pdfmd-options: {csl-fallback: error} stops "
           "instead", file=sys.stderr)
@@ -15383,7 +15462,8 @@ def pandoc_version() -> tuple[int, ...]:
     global _PANDOC_VERSION
     if _PANDOC_VERSION is None:
         try:
-            first = subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
+            done = run_probe(["pandoc", "--version"])
+            first = done.stdout.splitlines()[0]                                  # (no answer: an AttributeError, below)
             _PANDOC_VERSION = tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", first).group(1).split("."))
         except (OSError, IndexError, AttributeError, ValueError):
             _PANDOC_VERSION = (0,)
@@ -17067,7 +17147,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
     for name in fresh:
         (target / name).parent.mkdir(parents=True, exist_ok=True)
         if isinstance(files[name], bytes):
-            (target / name).write_bytes(files[name])
+            atomic_write_bytes(target / name, files[name])
         else:
             write_text_lf((target / name), files[name])
     # Each file on its own line with --verbose; otherwise counted by kind, and only what needs a look
@@ -17201,7 +17281,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
                 target = folder / safe_relative_path(name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if block.get("bytes") is not None:
-                    target.write_bytes(block["bytes"])
+                    atomic_write_bytes(target, block["bytes"])
                 else:
                     write_text_lf(target, block["source"])
         if away:
@@ -18177,6 +18257,112 @@ def cache_root() -> Path:
     return base / "pdfmd"
 
 
+# -- Probes: a version or a capability asked of a program ----------------------------------------------------------------
+# `pandoc --version`, `kpsewhich`, `typst --version` ... answer at once; a hung one (a broken install, a network drive, a tool
+# waiting on a prompt) must not hang pdfmd. A probe gets PROBE_TIMEOUT seconds, and one that does not answer counts as "not
+# available" (a verbose line says so). Never used for a command that builds something (Pandoc, a LaTeX engine, a converter):
+# those take as long as the document needs.
+PROBE_TIMEOUT = 10
+
+
+def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
+    """``subprocess.run`` of a probe: output captured as text, PROBE_TIMEOUT s. None when the program cannot be started or does
+    not answer in time."""
+    options.setdefault("capture_output", True)
+    options.setdefault("text", True)
+    try:
+        return subprocess.run(command, timeout=PROBE_TIMEOUT, **options)
+    except subprocess.TimeoutExpired:
+        if VERBOSE_OUTPUT:
+            asked = " ".join(Path(str(command[0])).name if index == 0 else str(word) for index, word in enumerate(command[:3]))
+            print(f"AUTO PROBE  {asked}: no answer in {PROBE_TIMEOUT} s; counted as not available")
+        return None
+    except OSError:
+        return None
+
+
+# -- A home that cannot be written (a sandbox, a read-only container) ------------------------------------------------------------
+# pdfmd keeps a cache (cache_root()), LuaTeX keeps its font names in the TeX user tree (TEXMFVAR, under the home), Pandoc and the
+# tools it starts may write in their working folder. When one of those places cannot be written the build goes on with a
+# temporary folder in its place, removed when the run ends, and says so once (a NOTE): the first run in such a place is slower
+# (the cache starts empty, LuaTeX indexes the fonts again), nothing else differs.
+TEMPORARY_PLACES: dict[str, Path] = {}
+NOTED_PLACES: set[str] = set()
+
+
+def folder_is_writable(path: Path) -> bool:
+    """Whether a file can be created in ``path`` -- or, when it is not there yet, in the nearest folder above it that is."""
+    folder = Path(path)
+    try:
+        while not folder.exists():
+            if folder.parent == folder:
+                return False
+            folder = folder.parent
+        return folder.is_dir() and os.access(folder, os.W_OK | os.X_OK)
+    except OSError:
+        return False
+
+
+def temporary_place(kind: str) -> Path:
+    """A folder for ``kind`` of this run only, made once and removed when the run ends."""
+    if kind not in TEMPORARY_PLACES:
+        folder = Path(mkdtemp(prefix=f"pdfmd-{kind}-"))
+        TEMPORARY_PLACES[kind] = folder
+        atexit.register(shutil.rmtree, folder, True)
+    return TEMPORARY_PLACES[kind]
+
+
+def note_place_once(key: str, message: str) -> None:
+    if key not in NOTED_PLACES:
+        NOTED_PLACES.add(key)
+        print(f"NOTE  {message}", file=sys.stderr)
+
+
+def tex_user_tree_writable() -> bool:
+    """Whether LuaTeX and friends can keep their caches: TEXMFVAR if it is set, else a TeX user tree in the home
+    (~/.texlive2023, ~/Library/texlive/2023) that exists and can be written, else the home itself."""
+    if os.environ.get("TEXMFVAR"):
+        return folder_is_writable(Path(os.environ["TEXMFVAR"].split(os.pathsep)[0]))
+    try:
+        home = Path.home()
+    except RuntimeError:
+        return False
+    for pattern in (".texlive*/texmf-var", "Library/texlive/*/texmf-var"):
+        if any(folder_is_writable(found) for found in home.glob(pattern)):
+            return True
+    return folder_is_writable(home)
+
+
+def provide_writable_places() -> None:
+    """Redirect what cannot be written to a temporary folder (see above); called once, at the start of main()."""
+    cache = cache_root()
+    redirected: list[str] = []
+    if not folder_is_writable(cache):
+        folder = temporary_place("cache")
+        variable = "LOCALAPPDATA" if sys.platform == "win32" else "XDG_CACHE_HOME"
+        os.environ[variable] = str(folder)               # cache_root() and the tools pdfmd starts (fontconfig, Typst ...) follow
+        redirected.append(f"the cache folder {display_path(cache)}")
+    if (not tex_user_tree_writable()
+            and any(which(name) for name in ("lualatex", "xelatex", "pdflatex", "latexmk", "tectonic"))):
+        folder = temporary_place("texmf")
+        os.environ["TEXMFVAR"] = str(folder / "texmf-var")
+        os.environ["TEXMFCONFIG"] = str(folder / "texmf-config")
+        redirected.append("the TeX user tree (font names, formats)")
+    if redirected:
+        note_place_once("places", f"{' and '.join(redirected)} cannot be written (a read-only home?): this run uses a temporary "
+                                  "folder instead, removed when it ends; the first build is slower and nothing else differs")
+
+
+def pandoc_working_directory(folder: Path) -> Path:
+    """The folder Pandoc runs in: ``folder`` (the document's, so its relative paths resolve), or when that cannot be written
+    a temporary one with the document's folder on --resource-path and TEXINPUTS (resource_path_option, tex_search_env)."""
+    if folder_is_writable(folder):
+        return folder
+    note_place_once(f"cwd:{folder}", f"{display_path(folder)} cannot be written: Pandoc runs in a temporary folder, with "
+                                     "the document's folder searched for what it names")
+    return temporary_place("pandoc")
+
+
 CACHE_LOCATIONS = ("global", "document")
 CACHE_LOCATION_NAMES = {"root": "global", "user": "global", "home": "global", "central": "global",
                         "local": "document", "folder": "document", "here": "document", "doc": "document",
@@ -18820,7 +19006,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     exact = False
     if draft_engine is not None:
         metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-        pandoc_cwd = metadata_list[0].parent if metadata_list else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_list[0].parent if metadata_list else md_path.parent)
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
                    str(scratch), str(tex_path)]
@@ -18967,7 +19153,8 @@ def kpsewhich_path(name: str) -> Path | None:
     kpsewhich = which("kpsewhich")
     if not kpsewhich:
         return None
-    found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
+    done = run_probe([kpsewhich, name])
+    found = done.stdout.strip().splitlines() if done else []
     return Path(found[0]) if found else None
 
 
@@ -18980,10 +19167,8 @@ def read_text_or_none(path: Path | None) -> str | None:
 
 @lru_cache(maxsize=None)
 def engine_version_line(engine: str) -> str:
-    try:
-        out = subprocess.run([engine, "--version"], capture_output=True, text=True).stdout
-    except OSError:
-        return ""
+    done = run_probe([engine, "--version"])
+    out = done.stdout if done else ""
     return out.splitlines()[0] if out else ""
 
 
@@ -19009,7 +19194,8 @@ def tex_tree_stamp() -> str:
     if not kpsewhich:
         return ""
     try:
-        root = subprocess.run([kpsewhich, "-var-value", "TEXMFROOT"], capture_output=True, text=True).stdout.strip()
+        done = run_probe([kpsewhich, "-var-value", "TEXMFROOT"])
+        root = done.stdout.strip() if done else ""
         stat = (Path(root) / "tlpkg" / "texlive.tlpdb").stat() if root else None
     except OSError:
         return ""
@@ -19026,10 +19212,8 @@ def user_tex_trees() -> tuple[Path, ...]:
         return ()
     trees: list[Path] = []
     for variable in ("TEXMFHOME", "TEXMFLOCAL"):
-        try:
-            value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, text=True).stdout
-        except OSError:
-            continue
+        done = run_probe([kpsewhich, "-var-value", variable])
+        value = done.stdout if done else ""
         for item in re.split(r"[,;{}]", value.strip()):      # a {a,b} list, rarely
             item = item.strip().lstrip("!")
             if item and Path(item).expanduser().is_dir():
@@ -19421,7 +19605,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
     try:
         odt = scratch / f"{md_path.stem}.docx"
-        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
 
         def note(kind: str, detail: str) -> None:
             if verbose:
@@ -19597,6 +19781,7 @@ def ebook_filter_args() -> list[str]:
     try:
         import pdfmd_lua
     except ImportError:
+        pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("ebook")
     if shipped is None:
@@ -19918,7 +20103,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["-f", effective_from]
             for metadata in prepared_metadata:
                 cmd += ["--metadata-file", str(metadata)]
-            pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+            pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
@@ -20374,7 +20559,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if partial:
                     cmd += PARTIAL_METADATA
                 cmd += table_keep_metadata(md_path, metadata_files)
-                pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
                 cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
@@ -20638,7 +20823,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if partial:
                         cmd += PARTIAL_METADATA
                     cmd += table_keep_metadata(md_path, metadata_files)
-                    pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+                    pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
                     cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
                         cmd += ["-t", "beamer"]
@@ -21467,12 +21652,9 @@ def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
             writer = pypdf.PdfWriter(clone_from=pdf_path)      # the whole document: properties, bookmarks, files
             for name, data in files.items():
                 add_deflated_attachment(writer, name, data)
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
+            atomic_write_pdf(writer, pdf_path)
     finally:
         pypdf_logger.setLevel(previous_level)
-    temporary_path.replace(pdf_path)
 
 
 def read_pdf_attachments(pdf_path: Path) -> dict[str, bytes]:
@@ -21800,7 +21982,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
             import pdfmd_flat.asciify as asciify
             label = asciify.Asciifier().text(label)
         trailer = keep.pack(entries, body, mode, label, PDFMD_VERSION)
-        output.write_bytes(keep.append(body, trailer).encode("utf-8"))
+        atomic_write_bytes(output, keep.append(body, trailer).encode("utf-8"))
     except Exception as error:  # noqa: BLE001 -- the Markdown itself is fine; say so and carry on
         print(f"WARN  keep-source: could not keep the source in {display_path(output)} ({error}); "
               "the Markdown itself was written", file=sys.stderr)
@@ -22621,7 +22803,7 @@ def restore_from_pdf(pdf_path: Path, out_dir: Path | None, list_only: bool = Fal
                 raise SystemExit(f"{display_path(destination)} already exists; nothing was written "
                                  "(remove it, or give another -o folder)")
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(attachments[odf_name])
+            atomic_write_bytes(destination, attachments[odf_name])
             print(f"RESTORED  {destination.name}  (the OpenDocument file the PDF carries)")
             return 0
         names = ", ".join(sorted(attachments)) or "no attachments at all"
@@ -22735,7 +22917,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         destination = target / item
         destination.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, bytes):
-            destination.write_bytes(content)
+            atomic_write_bytes(destination, content)
         else:
             write_text_lf(destination, content)
         if not compact:
@@ -23320,10 +23502,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
             if options.get("info"):
                 writer.add_metadata(dict(options["info"]))
                 done.append("properties")
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
-        temporary_path.replace(pdf_path)
+            atomic_write_pdf(writer, pdf_path)
         if done:
             print(f"PDF   {display_path(pdf_path)}: " + ", ".join(done))
     except ValueError as error:
@@ -23678,12 +23857,9 @@ def attach_hybrid(pdf_path: Path, data: bytes, extension: str) -> bool:
             filespec = attachment.pdf_object
             filespec[NameObject("/UF")] = TextStringObject(name)
             filespec[NameObject("/Desc")] = TextStringObject(HYBRID_DESCRIPTION)
-            with NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=pdf_path.parent) as temporary:
-                writer.write(temporary)
-                temporary_path = Path(temporary.name)
+            atomic_write_pdf(writer, pdf_path)
     finally:
         pypdf_logger.setLevel(previous_level)
-    temporary_path.replace(pdf_path)
     return True
 
 
@@ -23797,7 +23973,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         BUILD["output"], BUILD["sources"] = stage_build[0], stage_build[1]   # the .tex stage recorded its own file
         if not built[1]:
             return built
-        pandoc_cwd = metadata_files[0].parent if metadata_files else md_path.parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
         tex_env = tex_search_env(md_path.parent, pandoc_cwd)
         plot_dir = None
         aliases: dict[str, list[str]] = {}
@@ -24966,6 +25142,7 @@ def run_main() -> None:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     use_managed_tools()
+    provide_writable_places()
     if args.merge:
         # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all
         if args.no_embed_metadata:
@@ -25517,7 +25694,7 @@ def run_main() -> None:
             if args.open:
                 open_file(output)
             return
-        pandoc_cwd = metadata_files[0].parent if metadata_files else files[0].parent
+        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else files[0].parent)
         report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
         with table_width_filter() as width_filter, csv_table_filter() as csv_filter:

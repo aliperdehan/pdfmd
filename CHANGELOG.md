@@ -40,6 +40,44 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.18 — 2026-10-24
+
+Pre-edit state: commit `ad8efcd` (v3.30.17).
+
+### Fixed
+
+- **Every file pdfmd rewrites is written atomically**: to a temporary file in the same folder, then renamed over the old one (`os.replace`),
+  so a crash, a full disk or ^C leaves the old file whole. The mode of the replaced file is kept and a symlink is written through. Covers the
+  BUILD NOTES stamp, outputs, `--history-restore`, the backup options, `--extract-tables`, restored attachments, the config and metadata
+  files of `--setup` and `--init-backups --global`, `--init-config`, the places that rewrite a finished PDF, and the built-in renderers. A
+  process killed between write and rename leaves a `.NAME....part` file.
+- **A read-only home, cache or document folder no longer stops a build.** LuaLaTeX failed with `luaotfload: no writeable cache path`, `--cache`
+  crashed on a `PermissionError`, and the import itself died when the home could not be looked into. What cannot be written goes to a
+  temporary folder of the run (the cache folder, `TEXMFVAR`, `TEXMFCONFIG`, also for child processes), with one `NOTE`; Pandoc runs in a
+  temporary folder when the document's folder is read-only, the document's folder staying on `--resource-path` and `TEXINPUTS`.
+- **Probes have a timeout.** A version or capability probe (`pandoc --version`/`--help`/`--list-extensions`, `kpsewhich`, `lualatex`/`typst
+  --version`, the checks after `--install typst|node|d2|tectonic`, the Pandoc reference-document probe) is cut after 10 seconds
+  (`PROBE_TIMEOUT`); one that does not answer counts as "not available" (an `AUTO PROBE` line under `--verbose`). Build commands never get a
+  timeout.
+- **A missing `pdfmd_lua` is loud.** A lone copy of `pdfmd.py` gave silence while the Lua filters did nothing; it is one `WARN lua:` per run
+  now. A document that needs no filter says nothing.
+- **Windows: a font list the console could not decode** came back as `None` and stopped the whole build. `installed_font_families()` and the
+  fontconfig and `luaotfload-tool` calls decode the child's output themselves, replacing what cannot be read.
+
+### Changed
+
+- **CI** (`test.yml`, which `publish.yml` calls; `publish.yml` itself is untouched): a `linux-pandoc` job (Pandoc 3.1.3 and latest, LuaLaTeX
+  and XeLaTeX, the whole suite) and a `golden` job (`scripts/vendor_inkmd.py --check` and the golden test) now gate a release. A `lint` job
+  (`ruff --select F`, 39 findings, none silenced) and a `windows-latex` job (MiKTeX, the whole suite) run but do not gate.
+
+### Tests
+
+- New `tests.test_atomic`, `test_readonly_home`, `test_probes`, `test_lua_missing`; `test_auto_states` no longer
+  flakes when a scratch folder name ends in `a`.
+- From the cloud session (branch `cloud/robustness-ci`, PR 7). The `windows-latex` job fails on 55 tests and 14 errors of 1652 (Windows paths
+  in test Lua files, a `\` in `--section`, MiKTeX refusing to run as an administrator, missing fonts); it was the first whole-suite run on
+  Windows and the job does not gate.
+
 ## v3.30.17 — 2026-10-24
 
 Pre-edit state: commit `fbe5640` (v3.30.16).
