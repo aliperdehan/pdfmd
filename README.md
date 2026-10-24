@@ -757,7 +757,7 @@ only repeats a value get no copy. For one line, `{subs}` forces it and `{nosubs}
 
 **6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
 a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
-prints, blank lines and lines that start with `#` are skipped):
+prints, blank lines are skipped, and a `#` starts a comment, a whole line or the end of one):
 
 ````markdown
 ```{=calc}

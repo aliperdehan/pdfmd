@@ -41,6 +41,20 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.13 — 2026-10-24
+
+Pre-edit state: commit `67e53d2` (v3.30.12).
+
+### Added
+
+- **A trailing comment in a statement block.** In a ```` ```{=calc} ```` block, a `::: {.calc .hide}` div and the constants file a `#` starts
+  a comment to the end of the line, so `M_Mg <- 24.305 # g/mol` defines `M_Mg`; a whole-line `#` was skipped already. Before, the `#` was read
+  as arithmetic: the WARN "'#' is not arithmetic" and an undefined name for every later use. `--` is not a comment (it can be a double minus).
+
+### Tests
+
+- `tests.test_calc.Blocks.test_a_hash_starts_a_comment_at_the_end_of_a_line_too`.
+
 ## v3.30.12 — 2026-10-24
 
 Pre-edit state: commit `52f3d0f` (v3.30.11).

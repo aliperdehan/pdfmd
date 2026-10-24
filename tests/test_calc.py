@@ -744,6 +744,11 @@ class Blocks(unittest.TestCase):
         self.assertEqual(done.stderr, "")
         self.assertEqual(done.stdout.strip(), "14.50 and 4")
 
+    def test_a_hash_starts_a_comment_at_the_end_of_a_line_too(self):
+        done = self.convert("```{=calc}\n# a whole line\nM_Mg <- 24.305 # g/mol\nn = 2   #   moles #  more\n   # indented\n```\n\n`M_Mg * n`{=4sf}\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.strip(), "48.61")
+
     def test_constants_from_a_metadata_string(self):
         done = self.convert("`t18`{=4sf}, `x = t18 * 2 = {ans:3sf}`{=}\n", "pdfmd-calc-constants=t18 = 2.100922\nunused = 1")
         self.assertEqual(done.stderr, "")

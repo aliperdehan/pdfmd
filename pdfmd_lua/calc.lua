@@ -989,12 +989,13 @@ end
 
 local function normal(text) return trim((text:gsub("%s+", " "))) end
 
--- the statements of a block's text: one per line, blank lines and lines that start with # skipped
+-- the statements of a block's text: one per line; a # starts a comment (a whole line, or the end of one: `M = 24.3 # g/mol`),
+-- and a line left empty is skipped
 local function block_lines(text)
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\r?\n") do
-    line = trim(line)
-    if line ~= "" and line:sub(1, 1) ~= "#" then lines[#lines + 1] = line end
+    line = trim((line:gsub("#.*$", "")))
+    if line ~= "" then lines[#lines + 1] = line end
   end
   return lines
 end
