@@ -788,6 +788,20 @@ class Blocks(unittest.TestCase):
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("no file 'missing.csv'", done.stdout + done.stderr)
 
+    def test_the_constants_file_named_in_a_metadata_file_travels_with_the_source(self):
+        (self.directory / "tables").mkdir()
+        (self.directory / "tables" / "k.csv").write_text("t18,2.100922,4sf\n", encoding="utf-8")
+        (self.directory / "metadata.yaml").write_text("pdfmd-options:\n  calc: {constants: tables/k.csv}\n", encoding="utf-8")
+        (self.directory / "d.md").write_text("---\ntitle: D\n---\n\n`t18`{=}\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--assemble-only", "--embed-metadata", "files",
+                               "--no-backup", "-o", "asm.md"], cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("tables/k.csv", (self.directory / "asm.md").read_text(encoding="utf-8"))
+        found, outside = [], []
+        pdfmd.add_calc_constants(self.directory / "d.md", [self.directory / "metadata.yaml"], Path(os.path.abspath(self.directory)), set(), found, outside)
+        self.assertEqual([item.name for item in found], ["k.csv"])
+        self.assertEqual(outside, [])
+
 
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")
 class RealOutput(unittest.TestCase):

@@ -783,7 +783,8 @@ stock,0.1000,,stock concentration
 ```
 
 The text then writes `` `t18`{=} `` or `` `x = t18 * stock = {ans}`{=} ``. `digits` is the format `{subs}` and a bare `` `t18`{=} `` show
-for that name. The file is looked for beside the document, then beside its metadata files, then in the current folder. A document that
+for that name. The file is looked for beside the document, then beside its metadata files, then in the current folder. With `--attach-source` (or `--keep-source`, or `--embed-metadata files`) the file travels with the
+source, even when only a metadata file names it, and `pdfmd --restore` puts it back. A document that
 defines the same name again gets the usual WARN. Statistics: `qt(0.975, 18)` is also built in (see the functions below), so a
 constant that a function gives needs no file.
 

@@ -1403,7 +1403,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.11"
+PDFMD_VERSION = "3.30.12"
 import argparse
 import atexit
 import csv
@@ -17239,6 +17239,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
                                                                    *plan.preamble_files, *plan.lua_filters]}
         found, outside_files = bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
                                             plan.output or (base / "_assembled.md"), [], base)
+        add_calc_constants(first, plan.metadata_files, base, represented, found, outside_files)
         limit = float(option_flag_number(first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
                       or BUNDLE_MAX_MB) * 1024 * 1024
         if sum(item.stat().st_size for item in found) > limit:
@@ -21053,6 +21054,22 @@ def bundle_reach(base: Path) -> Path | None:
     return reach
 
 
+def add_calc_constants(md_path: Path, metadata_files: list[Path], base: Path, represented: set[Path],
+                       found: list[Path], outside: list[str]) -> None:
+    """The calculator's constants file (`calc: {constants: FILE}`) goes with the source like the history file (v3.30.12): a name
+    in a metadata file is no path the text mentions, so the scan for referenced files would not find it."""
+    try:
+        constants = calc_constants_file(md_path, metadata_files)
+    except SystemExit:
+        return
+    if constants is None:
+        return
+    constants = Path(os.path.abspath(constants))
+    if constants in found or constants in represented:
+        return
+    (found if constants.is_relative_to(base) else outside).append(constants if constants.is_relative_to(base) else str(constants))
+
+
 def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
                  represented: set[Path], output: Path, data_names: list[str],
                  base: Path | None = None, pictures: list[Path] | None = None,
@@ -21447,6 +21464,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         pictures: list[Path] = []
         found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
                                       manifest["data_files"], base, pictures, bundle_reach(base))
+        add_calc_constants(md_path, metadata_files, base, represented, found, outside)
         up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
                                                     for item in found if not item.is_relative_to(base))), 0) \
             if any(not item.is_relative_to(base) for item in found) else 0

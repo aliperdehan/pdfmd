@@ -41,6 +41,23 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.12 — 2026-10-24
+
+Pre-edit state: commit `52f3d0f` (v3.30.11).
+
+The calculator's constants file is part of the source that `--attach-source`, `--keep-source` and `--embed-metadata files` carry.
+
+### Fixed
+
+- **A constants file named in `metadata.yaml` was left out.** `calc: {constants: tables/constants.csv}` was found only when the document's own
+  text mentioned the path (the scan for referenced files), so a file named in a metadata file, the usual place for a report, was not attached
+  and `pdfmd --restore` gave back a source that failed with "no file". It travels now like the `.hst` history file (`add_calc_constants`),
+  and comes back under the same relative path. A constants file outside the document's folder gets the usual "outside" warning.
+
+### Tests
+
+- `tests.test_calc.Blocks.test_the_constants_file_named_in_a_metadata_file_travels_with_the_source`.
+
 ## v3.30.11 — 2026-10-24
 
 Pre-edit state: commit `2e35666` (v3.30.10).
