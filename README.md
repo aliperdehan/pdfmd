@@ -614,7 +614,7 @@ and `{{year}}` are replaced (`__name__.md` becomes `my-paper.md`); any other `{{
 `doc.only-a-part.pdf` beside the document. Headings are named the way files
 are: case, spaces and spelling don't matter, a unique start works (with a
 warning), and so does a `{#label}`. `doc##yield` asks for a level-2 heading,
-`doc#results/yield` for one under another, `doc#a+b` for several, and
+`doc#results/yield` for one under another, `doc#a+b` for several (`doc@45-60` for every part numbered from 45 to 60), and
 `pdfmd '#yield'` uses the folder's only Markdown file. `@` does the same as `#` (`doc@yield`, `doc@@yield`, `pdfmd @yield`), for the shells that read
 `#` as a comment. `pdfmd doc --list-parts`
 shows what can be named. In a document split into parts the same names work

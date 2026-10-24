@@ -909,7 +909,7 @@ A long document in parts (parts mode):
     replace the document's).
 
     Build part of it with --section NAME (a part's file name, with or
-    without its numeric prefix, a folder, or its number; several joined with
+    without its numeric prefix, a folder, or its number, or a range of numbers `45-60`; several joined with
     `+` or `,`, or repeated), the `pdfmd report#NAME` shorthand
     (`report#discussion+appendix`), or by naming a part file:
     `pdfmd parts/20-methods.md`. Whatever the order typed, the parts build in
@@ -1409,7 +1409,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.21"
+PDFMD_VERSION = "3.30.22"
 import argparse
 import atexit
 import csv
@@ -14364,6 +14364,13 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
         if not wanted:
             continue
         hits = [part for part, (exact, slugs) in keyed.items() if wanted in exact or wanted in slugs]
+        # `45-60`: every top-level part numbered from 45 to 60 (a name that is literally `45-60` wins above).
+        span = re.fullmatch(r"(\d+)-(\d+)", wanted)
+        if not hits and span:
+            low, high = sorted((int(span.group(1)), int(span.group(2))))
+            hits = [part for part in parts
+                    if (lead := re.match(r"\d+", part.relative_to(directory).parts[0]))
+                    and low <= int(lead.group(0)) <= high]
         if not hits:
             hits = [part for part, (_, slugs) in keyed.items()
                     if any(slug.startswith(wanted) for slug in slugs)]
@@ -14371,7 +14378,7 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
         # both Calculations and Discussion): join them yourself with a+b, or
         # spell the folder out (`discussion/yield`).
         groups = {part.relative_to(directory).parts[0] for part in hits}
-        if len(groups) > 1:
+        if len(groups) > 1 and not span:
             raise SystemExit(f"--section '{request}' is ambiguous: it matches parts in "
                              + ", ".join(sorted(groups))
                              + ". Name the folder too (e.g. 'folder/name'), or join with +")

@@ -534,5 +534,35 @@ class SectionLabelSeeding(unittest.TestCase):
         self.assertIn("\\newlabel{sec:results}{{1}", text)     # numbered from its own start, as documented
 
 
+class PartRanges(unittest.TestCase):
+    """`45-60` names every top-level part numbered from 45 to 60 (3.30.22)."""
+
+    def setUp(self):
+        self.directory = Path("/doc/parts")
+        names = ["10-intro.md", "45-a.md", "50-calculations.md", "55-x/1.md", "55-x/2.md", "60-discussion.md", "70-end.md"]
+        self.parts = [self.directory / name for name in names]
+
+    def pick(self, request):
+        return [str(part.relative_to(self.directory)) for part in pdfmd.select_parts(self.parts, self.directory, [request])]
+
+    def test_a_range_takes_the_numbers_between_and_including_the_ends(self):
+        self.assertEqual(self.pick("45-60"), ["45-a.md", "50-calculations.md", "55-x/1.md", "55-x/2.md", "60-discussion.md"])
+
+    def test_the_ends_need_not_be_parts_and_a_reversed_range_is_the_same(self):
+        self.assertEqual(self.pick("46-59"), ["50-calculations.md", "55-x/1.md", "55-x/2.md"])
+        self.assertEqual(self.pick("60-46"), ["50-calculations.md", "55-x/1.md", "55-x/2.md", "60-discussion.md"])
+
+    def test_a_range_joins_other_names_with_a_comma(self):
+        raw = pdfmd.split_section_requests(["10,50-60"])
+        names = sorted(p.name for p in pdfmd.select_parts(self.parts, self.directory, raw))
+        self.assertEqual(names, ["1.md", "10-intro.md", "2.md", "50-calculations.md", "60-discussion.md"])
+
+    def test_a_range_with_no_part_is_an_error_and_a_part_named_like_one_wins(self):
+        with self.assertRaises(pdfmd.NoPartMatches):
+            self.pick("80-90")
+        self.parts.append(self.directory / "2024-25.md")
+        self.assertEqual(self.pick("2024-25"), ["2024-25.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

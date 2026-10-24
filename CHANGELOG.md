@@ -40,6 +40,21 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.22 — 2026-10-25
+
+Pre-edit state: commit `85a9283` (v3.30.21).
+
+### Added
+
+- **A range of parts:** `pdfmd @45-60` (or `--section 45-60`, `doc#45-60`) builds every top-level part numbered from 45 to 60, ends included,
+  whether or not a part has that exact number; a reversed range is the same, and it joins other names (`@10,45-60`). A part literally named
+  `45-60` still wins, and a range that covers no part is the usual "matches no part" error. Only digits on both sides count, so
+  `10-introduction` is a name as before.
+
+### Tests
+
+- `tests.test_sections.PartRanges`.
+
 ## v3.30.21 — 2026-10-25
 
 Pre-edit state: commit `b20d62b` (v3.30.20).
