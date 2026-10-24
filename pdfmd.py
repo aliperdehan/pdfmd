@@ -3657,10 +3657,19 @@ def view_pager_setting(first: Path) -> str:
     return "" if value in (None, False, True) else str(value).strip()
 
 
+def split_command(text: str) -> list[str]:
+    """A command line typed by a person (`$PAGER`, `--editor`) as words. POSIX rules eat the backslashes of a Windows path
+    (`C:\\Tools\\less.exe` -> `C:Toolsless.exe`), so on Windows the backslashes stay and only the quotes around a word go."""
+    if os.name != "nt":
+        return shlex.split(text)
+    return [word[1:-1] if len(word) > 1 and word[0] == word[-1] and word[0] in "\"'" else word
+            for word in shlex.split(text, posix=False)]
+
+
 def pager_command(setting: str = "") -> list[str]:
     """The pager as words: `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting, else `less -FRX`. The environment
     wins over the setting, so one shell can override a project's choice."""
-    return shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
+    return split_command(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
 
 
 def run_pager(text: str, setting: str = "") -> None:
@@ -12651,7 +12660,7 @@ def editor_command(args) -> list[str] | None:
     if value is None or not str(value).strip():
         return None
     try:
-        return shlex.split(str(value))
+        return split_command(str(value))
     except ValueError as error:
         raise SystemExit(f"--editor {value!r}: {error}")
 
@@ -22398,7 +22407,7 @@ def find_batchocr() -> list[str] | None:
     an alias that is not on PATH), `batchocr` on PATH, or the module in this Python."""
     override = os.environ.get("PDFMD_BATCHOCR")
     if override:
-        return shlex.split(override, posix=os.name != "nt")
+        return split_command(override)
     found = which("batchocr")
     if found:
         return [found]
