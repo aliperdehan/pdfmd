@@ -19090,11 +19090,14 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         whole = tex_path.read_text(encoding="utf-8", errors="replace")
         quick = not auto_disabled(no_auto, "draftpictures") and whole.count("\\begin{document}") == 1
 
+        last_run: dict = {}
+
         def draft_pass(text: str) -> None:
             tex_path.write_text(text, encoding="utf-8")
             try:
-                subprocess.run(command, cwd=pandoc_cwd, env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
-                               capture_output=True, text=True, timeout=1800)
+                last_run["done"] = subprocess.run(command, cwd=pandoc_cwd,
+                                                  env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
+                                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             except (OSError, subprocess.SubprocessError) as error:
                 if verbose:
                     print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
@@ -19123,6 +19126,10 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                       f"{found} labels in {time.time() - began:.1f} s")
         elif verbose:
             print("LABELS    the draft pass left no .aux; the scan alone is used")
+            done = last_run.get("done")
+            if done is not None:
+                tail = " | ".join(line.strip() for line in (done.stdout + done.stderr).splitlines()[-4:] if line.strip())
+                print(f"LABELS    {draft_engine} exited {done.returncode}: {tail[:300]}")
     if markers:
         headers.insert(0, defs)
     return LabelScan(headers, result.labels, result.steps, markers, exact, result.skipped)
