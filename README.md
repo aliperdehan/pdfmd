@@ -173,7 +173,7 @@ git clone https://github.com/aliperdehan/pdfmd.git ~/pdfmd
 echo 'alias pdfmd="python3 ~/pdfmd/pdfmd.py"' >> ~/.zshrc   # or ~/.bashrc
 ```
 
-macOS's built-in `/usr/bin/python3` is 3.9, which is too old; pdfmd says
+macOS's built-in `/usr/bin/python3` is 3.9 (3.9.6), which runs pdfmd; a Python older than 3.9 is refused: pdfmd says
 so and exits.
 </details>
 
@@ -312,7 +312,7 @@ terminal, or with `--print`, it prints the Markdown instead, which is what a scr
 shows the third `##` section of it, `--doc readme tectonic` the first whose title has that word, `--doc search stamp history`
 the headings and lines that have every word (`agents: Running without a person > ... (line 41): ...`), and `--path` says where
 the file is. They are the documents of this version, copied into the package when it is built; a checkout reads the originals,
-and a zipapp has none (it says where they are online).
+and a zipapp (`scripts/build_zipapp.py`) carries them too.
 
 ### Tab completion
 

@@ -25,6 +25,10 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = ("pdfmd_ansi", "pdfmd_check", "pdfmd_chem", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_raw",
             "pdfmd_setup", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode")      # = pyproject.toml's packages (test_packaging)
+# the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's pdfmd_docs/ holds no .md
+# file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
+DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
+             ("docs/agents.md", "agents.md"))
 DEPENDENCIES = ("yaml", "pypdf")
 SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}
 SKIP_SUFFIXES = (".so", ".pyd", ".dylib", ".pyc", ".pyo")
@@ -80,6 +84,10 @@ def main() -> int:
         files = 1
         for package in PACKAGES:
             files += add_tree(bundle, ROOT / package, ROOT)
+        for source, name in DOCUMENTS:
+            if (ROOT / source).is_file():
+                bundle.write(ROOT / source, f"pdfmd_docs/{name}")
+                files += 1
         for name in ([] if args.no_dependencies else DEPENDENCIES):
             spec = importlib.util.find_spec(name)
             if spec is None or not spec.submodule_search_locations:
