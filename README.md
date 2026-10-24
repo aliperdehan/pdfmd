@@ -10,6 +10,66 @@ every PDF engine you have installed. The same document also builds to a
 Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
 [Word and OpenDocument output](#word-and-opendocument-output)).
 
+<!-- contents -->
+**Contents:** [Why](#why) · [Install](#install) · [Usage](#usage) · [What it does automatically](#what-it-does-automatically) · [Project files](#project-files) · [Build stamps, history and snapshots](#build-stamps-history-and-snapshots) · [Reference](#reference) · [License](#license)
+
+<details>
+<summary>All the sections</summary>
+
+- [Why](#why)
+- [Install](#install)
+  - [The documents of your version: `pdfmd --doc`](#the-documents-of-your-version-pdfmd---doc)
+  - [Tab completion](#tab-completion)
+  - [An older Pandoc, and a machine with no network](#an-older-pandoc-and-a-machine-with-no-network)
+  - [No Pandoc? The built-in fallback](#no-pandoc-the-built-in-fallback)
+- [Usage](#usage)
+  - [One document](#one-document)
+  - [Check a document before you build it](#check-a-document-before-you-build-it)
+  - [A small editor](#a-small-editor)
+  - [In VS Code](#in-vs-code)
+  - [A size budget for images and output](#a-size-budget-for-images-and-output)
+  - [Start from a template](#start-from-a-template)
+  - [One section](#one-section)
+  - [Other output formats](#other-output-formats)
+  - [Plain Markdown: `--to gfm`](#plain-markdown---to-gfm)
+  - [Plain text: `--to txt`](#plain-text---to-txt)
+  - [Calculations inside the text: `{=}`, `{ans}` and `::: calc`](#calculations-inside-the-text--ans-and--calc)
+  - [Read it in the terminal: `--view` and `--to ansi`](#read-it-in-the-terminal---view-and---to-ansi)
+  - [ASCII only: `--to ascii`](#ascii-only---to-ascii)
+  - [Word and OpenDocument output](#word-and-opendocument-output)
+  - [Stopping part-way](#stopping-part-way)
+  - [The PDF carries its own source](#the-pdf-carries-its-own-source)
+  - [PDF to Markdown](#pdf-to-markdown)
+  - [Bookmarks, header and footer, linked files](#bookmarks-header-and-footer-linked-files)
+  - [Use it from Python](#use-it-from-python)
+  - [Other command names: `mdpdf`, `inkmd`, `batchmd` and `pan-tec`](#other-command-names-mdpdf-inkmd-batchmd-and-pan-tec)
+  - [Slides](#slides)
+  - [A whole folder](#a-whole-folder)
+  - [A book or report from several files](#a-book-or-report-from-several-files)
+  - [One long document in several files](#one-long-document-in-several-files)
+  - [Tables straight from a CSV file](#tables-straight-from-a-csv-file)
+  - [One style sheet for the page: `--css`, `pdfmd.css`, `css-scope`](#one-style-sheet-for-the-page---css-pdfmdcss-css-scope)
+  - [A cover: `cover`](#a-cover-cover)
+  - [Code: wrapping and line numbers](#code-wrapping-and-line-numbers)
+  - [Images: SVG and remote ones](#images-svg-and-remote-ones)
+  - [Diagrams written as code](#diagrams-written-as-code)
+  - [Editable in LibreOffice, and one file that carries its data](#editable-in-libreoffice-and-one-file-that-carries-its-data)
+  - [HTML, LaTeX, Typst and Word pieces inside Markdown](#html-latex-typst-and-word-pieces-inside-markdown)
+  - [Not just Markdown](#not-just-markdown)
+- [What it does automatically](#what-it-does-automatically)
+  - [Other scripts](#other-scripts)
+  - [Switching defaults off](#switching-defaults-off)
+  - [Passing options to Pandoc](#passing-options-to-pandoc)
+  - [Settings inside the document](#settings-inside-the-document)
+  - [Your own defaults: the config file](#your-own-defaults-the-config-file)
+- [Project files](#project-files)
+- [Build stamps, history and snapshots](#build-stamps-history-and-snapshots)
+- [Reference](#reference)
+- [License](#license)
+
+</details>
+<!-- /contents -->
+
 ```console
 $ pdfmd lecture
 FOUND     metadata: metadata.yaml + preamble.tex
@@ -44,52 +104,26 @@ line as an ordinary section heading instead of a title.
 
 ## Why
 
-Pandoc can do nearly anything, but its defaults assume you'll pass the right
-flags every time. In practice that means one of two things: a long command
-you copy from an old shell history, or a Makefile in every folder. `pdfmd`
-turns that knowledge into defaults:
+Pandoc can do nearly anything, but its defaults assume you pass the right flags every time: in practice a long command
+copied from an old shell history, or a Makefile in every folder. `pdfmd` turns that knowledge into defaults.
 
-- **It decides per document, not globally.** A file with no YAML front
-  matter is treated as ordinary GitHub-flavoured Markdown. A file that has
-  front matter is assumed to be written for Pandoc and is left alone.
-- **It finds your project files.** A `metadata.yaml`, `preamble.tex` or
-  `<name>.lua` beside the document (or in a `metadata/` folder next to it)
-  is picked up automatically, so every document in a folder shares one
-  house style without any flags.
-- **It doesn't give up on the first engine.** If `lualatex` fails or isn't
-  installed, it tries the next engine, then the next, and tells you why each
-  one failed.
-- **It writes real Word files.** `pdfmd report -o report.docx` reads the front matter the PDF reads (paper size,
-  margins, fonts, line spacing) and writes it into the file's page setup and styles, so the Word file is laid out the
-  way the PDF is. With LaTeX installed, what only LaTeX can say in the document comes along: `\ce{...}` chemistry,
-  `\SI{...}{...}` units and equations become native, editable Word text and equations; a house style's own macros can be
-  given a Word recipe; what is left (tikz, chemfig, math Pandoc cannot convert) is drawn by LaTeX in the document's
-  own preamble and embedded as vector pictures. `pdfmd-options: {office: {latex: auto|images|off}}`, `--no-auto
-  officelatex` and `pdfmd --setup` switch it (see [Word and OpenDocument output](#word-and-opendocument-output)).
-  The file's properties hold the document's title and authors, and nothing of the machine that built it.
-- **It handles every script and emoji.** Text the main font cannot draw (Arabic,
-  Hebrew, Chinese, Japanese, Korean, Greek, Cyrillic with Kazakh letters, Indic and
-  more) is set run by run in an installed font for its script, emoji become colour
-  pictures, and `pdfmd --install fonts` fetches missing fonts without admin rights
-  (see [Other scripts](#other-scripts)).
-- **It finds documents by name, in any script.** `pdfmd glyukoza` opens
-  `Глюкоза.md`; with `--translit` packs, `pdfmd tyche` finds `Τύχη.md` and
-  `pdfmd mingyun` finds `命運.md`.
-- **It reads PDFs too.** `pdfmd paper.pdf` restores a PDF's own embedded source or
-  OCRs the pages to Markdown (see [PDF to Markdown](#pdf-to-markdown)).
-- **Tables can be data.** A `::: {.csv}` block puts a table's data in a CSV file or right in the document (any
-  delimiter, alignment and widths as attributes), and `pdfmd --extract-tables` turns the tables you already have into
-  such blocks after checking that Pandoc reads the same tables back (see [Tables straight from a CSV
-  file](#tables-straight-from-a-csv-file)). A table that is too wide gets its columns sized by their content.
-- **Long code wraps, SVG and web images work.** Code lines wrap at the margin in a LaTeX build, an SVG is converted for
-  LaTeX with whatever is installed, and an image from the web is fetched once and kept.
-- **Finished files are not rewritten.** A `.typ` file goes to Typst and an `.html` file to WeasyPrint or a browser, so
-  the page setup, styles and scripts survive; `--hybrid` makes the PDF open in LibreOffice as an editable document.
-- **It keeps the history.** `pdfmd --history` lists the backups, commits and compiles of a file, `--history-restore`
-  puts a version back (backing up the one it replaces), and the build history can live in a `.hst` file instead of the
-  document (see [Build stamps, history and snapshots](#build-stamps-history-and-snapshots)).
-- **It shows what it did.** Every automatic decision prints an `AUTO` line,
-  `-v` shows the exact Pandoc command, and every default can be switched off.
+- **It decides per document.** A file with no YAML front matter is ordinary GitHub-flavoured Markdown; one with front
+  matter is written for Pandoc and is left alone.
+- **It finds your project files.** A `metadata.yaml`, `preamble.tex` or `<name>.lua` beside the document (or in a
+  `metadata/` folder next to it) is used without a flag, so every document in a folder shares one house style.
+- **It does not give up on the first engine.** If `lualatex` fails or is missing it tries the next one, and says why
+  each failed.
+- **It writes real Word files** that follow the page setup, fonts and LaTeX of the PDF (see [Word and OpenDocument
+  output](#word-and-opendocument-output)), and EPUB, HTML, Typst, e-book and plain-text files.
+- **It handles every script and emoji**, installs missing fonts without admin rights (see [Other scripts](#other-scripts)),
+  and finds `Глюкоза.md` when you type `pdfmd glyukoza`.
+- **It reads PDFs too**: a PDF's own embedded source, or OCR (see [PDF to Markdown](#pdf-to-markdown)).
+- **Tables can be data**: a `::: {.csv}` block takes a CSV file or lines in the document (see [Tables straight from a
+  CSV file](#tables-straight-from-a-csv-file)), and wide tables get their columns sized by content.
+- **It keeps the history**: `pdfmd --history` lists backups, commits and compiles, `--history-restore` puts a version
+  back (see [Build stamps, history and snapshots](#build-stamps-history-and-snapshots)).
+- **It shows what it did.** Every automatic decision prints an `AUTO` line, `--verbose` shows the exact Pandoc command,
+  and every default can be switched off.
 
 ## Install
 
@@ -173,7 +207,7 @@ git clone https://github.com/aliperdehan/pdfmd.git ~/pdfmd
 echo 'alias pdfmd="python3 ~/pdfmd/pdfmd.py"' >> ~/.zshrc   # or ~/.bashrc
 ```
 
-macOS's built-in `/usr/bin/python3` is 3.9, which is too old; pdfmd says
+macOS's built-in `/usr/bin/python3` is 3.9 (3.9.6), which runs pdfmd; a Python older than 3.9 is refused: pdfmd says
 so and exits.
 </details>
 
@@ -220,6 +254,10 @@ With no Pandoc at all, Calibre reads the Markdown itself (v3.29): its own Markdo
 prints it, before the rough built-in renderers, with the document's paper and margins. It has no math (formulas are text) and
 none of Pandoc's syntax, and says so (`NOTE`, `WARN`). `-e calibre` or `-e native` without Pandoc picks it; with Pandoc,
 `-e calibre` is the HTML route above.
+
+The built-in renderers set the paper from `papersize:` (or `--paper`): `a0`-`a6`, `b4`-`b6`, `c4`, `c5`, `letter`, `legal`,
+`tabloid`, `executive`, `folio`, with `landscape` from `papersize: a4,landscape`, `classoption: [landscape]` or `geometry:`.
+A name they do not know is a `NOTE` and A4 (md2pdf has no `executive`, `folio` or `tabloid` either, and says so).
 
 `pdfmd --install calibre` (v3.29) gets Calibre when it is missing (190 to 360 MB). In a terminal on a Mac or Windows it offers
 `brew install --cask calibre` or `winget install --id calibre.calibre -e` first. Otherwise (or on answering `d`) pdfmd downloads the
@@ -305,10 +343,12 @@ It takes a few seconds per engine (a minute or more if TeX has to fetch packages
 examples), `agents` (a short guide for a program or an AI assistant that runs pdfmd) and `changelog`. `pdfmd --doc readme`
 opens a web page of one in your browser (made once per version by Pandoc, kept in the cache); when the output is not a
 terminal, or with `--print`, it prints the Markdown instead, which is what a script or an assistant wants. `--doc readme 3`
-shows the third `##` section of it, `--doc readme tectonic` the first whose title has that word, `--doc search stamp history`
-the headings and lines that have every word (`agents: Running without a person > ... (line 41): ...`), and `--path` says where
-the file is. They are the documents of this version, copied into the package when it is built; a checkout reads the originals,
-and a zipapp has none (it says where they are online).
+shows the third `##` section of it, `--doc readme completion` the
+first section whose title has that word, and `--path` says where the file is. `--doc search WORDS` lists the headings and
+lines that have every word, one per line as `document: Heading > Subheading (line N): the line` (the first 40 of them);
+`pdfmd --doc search PDFMD_NO_PROMPT` lists every line that names that variable, the agent guide's line about it among them.
+The documents are those of this version, copied into the package when it is built; a checkout reads the originals, and a
+zipapp (`scripts/build_zipapp.py`) carries them too.
 
 ### Tab completion
 

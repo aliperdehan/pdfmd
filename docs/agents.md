@@ -3,7 +3,7 @@
 A short guide for a program or an AI assistant that runs `pdfmd`. The same text is in the README, the recipes and
 `pdfmd --help all`; this is the part you need first. `pdfmd --doc` lists the documents that came with your version.
 
-## The ten commands that matter
+## The commands that matter
 
 ```sh
 pdfmd report.md                     # Markdown to report.pdf beside it; the closing line names the engine
@@ -62,5 +62,5 @@ pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the
 | the best PDF of a Markdown file | `pdfmd file.md` (Pandoc and a LaTeX or Typst engine) |
 | a Word, OpenDocument or e-book file | `-o file.docx`, `.odt`, `.epub`, `.azw3` (Calibre writes the Kindle formats) |
 | the Markdown of a PDF, a Word file or an e-book | `pdfmd file.pdf`, `file.docx`, `book.epub` |
-| a self-contained, restorable PDF | the default: the source is attached; `--restore` writes it back |
+| a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`): the source goes into the PDF; `--restore` writes it back |
 | what is wrong with this machine | `pdfmd --doctor --deep` |

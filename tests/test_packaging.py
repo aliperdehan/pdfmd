@@ -112,6 +112,27 @@ class PyprojectTests(unittest.TestCase):
         folders = sorted(path.name for path in ROOT.glob("pdfmd_*") if (path / "__init__.py").is_file())
         self.assertEqual(sorted(self.setuptools["packages"]), folders)
 
+    def test_the_zipapp_copies_the_documents_the_wheel_does(self):
+        import ast
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_zipapp", ROOT / "scripts" / "build_zipapp.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        tree = ast.parse((ROOT / "setup.py").read_text(encoding="utf-8"))
+        wheel = next(ast.literal_eval(node.value) for node in tree.body
+                     if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "DOCUMENTS")
+        self.assertEqual(tuple(module.DOCUMENTS), tuple(wheel))
+        self.assertEqual({name for _, name in module.DOCUMENTS}, {packaged for packaged, _, _ in pdfmd.DOCUMENTS.values()})
+        for source, _ in module.DOCUMENTS:
+            self.assertTrue((ROOT / source).is_file(), source)
+
+    def test_the_build_requires_the_setuptools_that_reads_the_license_fields(self):
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        required = re.search(r'(?m)^requires = \["setuptools>=(\d+)', text)
+        self.assertIsNotNone(required)
+        self.assertGreaterEqual(int(required.group(1)), 77)                    # PEP 639: license = "MIT AND Apache-2.0", license-files
+        self.assertRegex(text, r'(?m)^license = "[^"]+"')
+
     def test_the_changelog_starts_with_the_current_version(self):
         headings = re.findall(r"^## v(\d+\.\d+\.\d+)\b", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
         self.assertEqual(headings[0], pdfmd.PDFMD_VERSION)
