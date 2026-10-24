@@ -1588,6 +1588,8 @@ Water,18.015,1.20
 
 - Data without attributes may use the bare `::: csv` (no braces): `::: csv` with the lines inside builds the same table as
   `::: {.csv}`. `file=`, `align=` and the other attributes need the braces. `::: csvfile` and `::: csv-x` are other classes.
+  `--extract-inline-csv` moves a bare block's data to a file (the block then has braces, for the `file=`), `--expand-tables`
+  turns it into a pipe table, and `--check` reads it as it reads the braced one.
 - To show CSV lines as text in a document that has `.csv` divs, switch the table off: `pdfmd-options: {csv: off}` (the
   short form of `csv: {enabled: false}`; a mapping such as `csv: {rows: 30}` leaves the tables on), `--no-csv` for a run
   (`--csv` turns them back on), or the row in `pdfmd --setup`. The filter is then not added and the div stays as written, a

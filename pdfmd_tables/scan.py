@@ -20,7 +20,8 @@ FULL_DASHES_RE = re.compile(r"^\s*-{3,}\s*$")
 CAPTION_START_RE = re.compile(r"^(?:Table)?:[ \t]+(.*)$")
 CAPTION_ATTRIBUTES_RE = re.compile(r"\s*\{([^{}]*)\}\s*$")
 ATTRIBUTE_TEXT = r'(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*'            # inside {...}: a quoted value may hold braces
-CSV_OPEN_RE = re.compile(r"^(\s*)(:{3,})\s*\{(" + ATTRIBUTE_TEXT + r"\.csv\b" + ATTRIBUTE_TEXT + r")\}\s*$")
+# `::: {.csv ...}`, or the bare `::: csv` (v3.30.15; no attributes, so its data is inside); group 3 is the braces' text, None for the bare form
+CSV_OPEN_RE = re.compile(r"^(\s*)(:{3,})\s*(?:\{(" + ATTRIBUTE_TEXT + r"\.csv\b" + ATTRIBUTE_TEXT + r")\}|csv)\s*$")
 DIV_CLOSE_RE = re.compile(r"^\s*:{3,}\s*$")
 IGNORE_RE = re.compile(r"^\s*<!--\s*pdfmd:\s*ignore\s*-->\s*$", re.IGNORECASE)
 ATTRIBUTE_RE = re.compile(r"""([\w:.-]+)=(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^\s"']+))""")
@@ -345,14 +346,15 @@ def _scan_csv_blocks(text: str) -> list[CsvBlock]:
                 break
         if end is None:
             continue
-        identifier, classes, pairs = parse_attributes(match.group(3))
+        attribute_text = match.group(3) if match.group(3) is not None else ".csv"
+        identifier, classes, pairs = parse_attributes(attribute_text)
         body = lines[index + 1:end]
         data = None
         if "file" not in pairs and any(item.strip() for item in body):
             if body and FENCE_RE.match(body[0].strip()):
                 body = body[1:-1] if len(body) > 1 and FENCE_RE.match(body[-1].strip()) else body[1:]
             data = "\n".join(body)
-        blocks.append(CsvBlock(index, end + 1, pairs, identifier, classes, data, match.group(1), match.group(3)))
+        blocks.append(CsvBlock(index, end + 1, pairs, identifier, classes, data, match.group(1), attribute_text))
         skip_until = end + 1
     return blocks
 

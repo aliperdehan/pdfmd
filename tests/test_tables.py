@@ -528,5 +528,67 @@ class BackupDirectory(unittest.TestCase):
             self.assertEqual(pdfmd.backup_directory(document, {"dir": str(elsewhere)}), elsewhere)
 
 
+class BareCsv(unittest.TestCase):
+    """The bare `::: csv` (v3.30.15) is a `.csv` block for --extract-tables, --expand-tables and --check too."""
+
+    BARE = "# H\n\n::: csv\nname,qty\nwater,3\nacid,4\n:::\n\n: Fruit {#tbl:fruit}\n\nSee @tbl:fruit.\n"
+
+    def test_the_scan_finds_it_and_only_it(self):
+        [block] = tables.find_csv_blocks(self.BARE)
+        self.assertEqual((block.classes, block.data, block.attribute_text), (["csv"], "name,qty\nwater,3\nacid,4", ".csv"))
+        for other in ("::: csvfile\nx\n:::\n", "::: csv-x\nx\n:::\n", "::: csv extra\nx\n:::\n", "::: {.csvx}\nx\n:::\n"):
+            self.assertEqual(tables.find_csv_blocks(other), [], other)
+        [indented] = tables.find_csv_blocks("- item\n\n  ::: csv\n  a,b\n  :::\n")
+        self.assertEqual(indented.indent, "  ")
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_extract_inline_moves_its_data_to_a_file_and_names_it_in_braces(self):
+        done = tables.extract(self.BARE, Path("."), pandoc=PANDOC, inline_csv=True)
+        self.assertEqual(done.changed, 1, done.report)
+        self.assertIn('::: {.csv file="tables/csv1.csv"}\n:::', done.text)
+        self.assertNotIn("::: csv\n", done.text)
+        self.assertEqual(done.files["tables/csv1.csv"], "name,qty\nwater,3\nacid,4\n")
+
+    def test_a_marked_bare_block_is_skipped(self):
+        text = "<!-- pdfmd: ignore -->\n::: csv\na,b\n:::\n"
+        done = tables.extract(text, Path("."), pandoc=PANDOC, inline_csv=True)
+        self.assertEqual((done.changed, done.text), (0, text))
+        self.assertTrue(any(line.startswith("SKIP") for line in done.report), done.report)
+
+    def test_expand_makes_a_pipe_table_of_it_and_keeps_its_caption(self):
+        done = tables.expand(self.BARE, Path("."))
+        self.assertEqual(done.changed, 1)
+        self.assertIn("| name | qty |\n|---|---|\n| water | 3 |\n| acid | 4 |\n", done.text)
+        self.assertIn(": Fruit {#tbl:fruit}", done.text)
+        self.assertNotIn("::: csv", done.text)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_the_command_lines_and_check(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-bare-csv-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        env = {**os.environ, "XDG_CONFIG_HOME": str(directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+
+        def run(*args):
+            return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=directory, capture_output=True, text=True, env=env)
+
+        (directory / "doc.md").write_text("---\ntitle: T\n---\n\n" + self.BARE, encoding="utf-8")
+        before = run("doc.md", "--check")
+        self.assertEqual((before.returncode, "no problems" in before.stdout), (0, True), before.stdout + before.stderr)
+        extracted = run("--extract-inline-csv", "doc.md")
+        self.assertEqual(extracted.returncode, 0, extracted.stdout + extracted.stderr)
+        self.assertIn('::: {.csv file="tables/csv1.csv"}', (directory / "doc.md").read_text(encoding="utf-8"))
+        self.assertTrue((directory / "tables" / "csv1.csv").is_file())
+        expanded = run("--expand-tables", "doc.md")
+        self.assertEqual(expanded.returncode, 0, expanded.stdout + expanded.stderr)
+        self.assertIn("| water | 3 |", (directory / "doc.md").read_text(encoding="utf-8"))
+        # --check reads the bare block as it reads the braced one: the same findings for the same data, and a missing file= is still named
+        for opener in ("::: {.csv}", "::: csv"):
+            (directory / "c.md").write_text(f"---\ntitle: T\n---\n\n# H\n\n{opener}\nname,ref\nwater,@fig:nope\n:::\n", encoding="utf-8")
+            checked = run("c.md", "--check")
+            self.assertIn("c.md:9: error: @fig:nope has no {#fig:nope} to point at", checked.stdout, opener)
+        (directory / "m.md").write_text('---\ntitle: T\n---\n\n::: {.csv file="gone.csv"}\n:::\n', encoding="utf-8")
+        self.assertIn("data file not found: gone.csv", run("m.md", "--check").stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
