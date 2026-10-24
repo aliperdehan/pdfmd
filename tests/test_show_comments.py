@@ -14,6 +14,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+from pandoc_support import discard_path  # noqa: E402
 
 import pdfmd  # noqa: E402
 
@@ -81,7 +84,7 @@ class Filter(unittest.TestCase):
         self.assertIn("<!-- a block comment", out)
 
     def test_open_document_drops_them_with_a_note_once(self):
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "odt", "-o", "/dev/null" if sys.platform != "win32" else "NUL",
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "odt", "-o", discard_path(".odt"),
                                "--lua-filter", str(FILTER), "-M", "pdfmd-markup=comments"], input=SOURCE, capture_output=True, text=True)
         self.assertEqual(done.stderr.count("comments are not shown in odt"), 1)
 
