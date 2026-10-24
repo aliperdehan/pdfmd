@@ -25669,6 +25669,8 @@ def run_main() -> None:
     if len(paths) == 1 and re.search(r"[#@]", str(paths[0])) and not paths[0].exists():
         # The whole string, not .name: a section path (`doc#results/yield`) has a slash.
         base, separator, suffix = re.split(r"([#@])", str(paths[0]), maxsplit=1)
+        if os.sep != "/":
+            suffix = suffix.replace(os.sep, "/")        # Path turned `doc#results/yield` into `doc#results\\yield` on Windows
         if base and not base.endswith(("/", os.sep)):
             paths = [Path(base)]
         else:
