@@ -133,7 +133,7 @@ class Reading(unittest.TestCase):
 
     def test_every_code_has_a_severity_and_text(self):
         for code, (severity, text) in pdfmd_check.CODES.items():
-            self.assertIn(severity, ("error", "warning"), code)
+            self.assertIn(severity, ("error", "warning", "note"), code)
             self.assertTrue(text, code)
 
     @needs_pandoc(3, 1, 3)
@@ -241,6 +241,144 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("CHECK  a.md: no problems", done.stdout)
         self.assertIn("CHECK  b.md: 1 error(s)", done.stdout)
+
+
+class CalcNames(unittest.TestCase):
+    """What the calculator's filter reports about names (pdfmd_lua/calc.lua in check mode) is put on the lines that hold them."""
+
+    REPORT = Source("report.md", None, "---\ntitle: R\n---\n\nIntro `V = 2 + 2`{=} and `W = V * y`{=} and `V = 5`{=}.\n")
+    PART_A = Source("parts/10-a.md", None, "# A\n\n::: calc\nRun 1: A = V * zz = {ans:2dp} mL.\n\nV = 7 = {ans}\n:::\n")
+    PART_B = Source("parts/60-b.md", None, "# B\n\n```{=calc}\nq = 3\n```\n\n```python\nW = V * y\n```\n\nSo `a + b = {ans}`{=} and `V = 5`{=}.\n")
+
+    def found(self, sources, uses, definitions, ignore=frozenset()):
+        return [(problem.file, problem.line, problem.severity, problem.code)
+                for problem in lint(sources, calc=(uses, definitions), ignore=ignore)]
+
+    def test_a_use_of_an_undefined_name_is_on_its_line_in_its_part(self):
+        uses = [("y", "W = V * y"), ("zz", "Run 1: A = V * zz = {ans:2dp}"), ("a", "a + b = {ans}"), ("b", "a + b = {ans}")]
+        problems = [problem for problem in lint([self.REPORT, self.PART_A, self.PART_B], calc=(uses, []))]
+        self.assertEqual([(problem.file, problem.line, problem.code) for problem in problems],
+                         [("report.md", 5, "calc-undefined"), ("parts/10-a.md", 4, "calc-undefined"),
+                          ("parts/60-b.md", 11, "calc-undefined"), ("parts/60-b.md", 11, "calc-undefined")])     # (not the line in the python fence)
+        self.assertIn("'y' is not defined for the calculator; give it a value with `y = 2 + 2`{=} somewhere (used in `W = V * y`)",
+                      problems[0].message)
+        self.assertEqual({problem.severity for problem in problems}, {"error"})
+        self.assertTrue(problems[2].message.startswith("'a' ") and problems[3].message.startswith("'b' "))   # one statement, two names
+
+    def test_the_same_text_in_two_places_is_two_places(self):
+        source = Source("r.md", None, "`x * 2`{=}\n\ntext\n\n`x * 2`{=}\n")
+        found = self.found([source], [("x", "x * 2"), ("x", "x * 2")], [])
+        self.assertEqual([line for _, line, _, _ in found], [1, 5])
+
+    def test_a_name_defined_several_times_is_a_note_that_says_where_and_which_one_a_use_sees(self):
+        definitions = [("V", "V = 2 + 2", "document"), ("V", "V = 5", "document"), ("V", "V = 7 = {ans}", "document"),
+                       ("V", "V = 5", "document")]
+        [problem] = lint([self.REPORT, self.PART_A, self.PART_B], calc=([], definitions))
+        self.assertEqual((problem.file, problem.line, problem.severity, problem.code), ("report.md", 5, "note", "calc-redefined"))
+        self.assertEqual(problem.message, "V is defined 4 times (report.md: line 5 (x2); parts/10-a.md: line 6; parts/60-b.md: line 11); "
+                                          "a use below them sees the last one (parts/60-b.md: line 11)")
+
+    def test_constants_count_and_a_name_only_there_is_not_reported(self):
+        [problem] = lint([self.REPORT], calc=([], [("V", "V = 1", "constants"), ("V", "V = 2 + 2", "document")]))
+        self.assertIn("V is defined 2 times (the constants file; report.md: line 5)", problem.message)
+        self.assertEqual(lint([self.REPORT], calc=([], [("V", "V = 1", "constants"), ("V", "V = 2", "constants")])), [])
+
+    def test_the_ignore_codes_and_the_directive_work_for_them_too(self):
+        uses = [("y", "W = V * y")]
+        self.assertEqual(self.found([self.REPORT], uses, [], frozenset({"calc-undefined"})), [])
+        silenced = Source("r.md", None, "<!-- pdfmd-check: ignore calc-undefined -->\n`W = V * y`{=}\n")
+        self.assertEqual(self.found([silenced], uses, []), [])
+        self.assertEqual(len(self.found([Source("r.md", None, "`W = V * y`{=}\n")], uses, [])), 1)
+
+    def test_a_place_that_cannot_be_found_is_still_reported(self):
+        [problem] = lint([self.REPORT], calc=([("q", "nowhere to be seen")], []))
+        self.assertEqual((problem.file, problem.line, problem.code), ("report.md", 0, "calc-undefined"))
+
+
+@needs_pandoc(3, 1, 3)
+class CalcCheck(unittest.TestCase):
+    """`pdfmd FILE --check` on a document with a calculator: Pandoc runs the filter once, only when a calculator is there."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-calc-check-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "parts").mkdir()
+        (self.directory / "report.md").write_text(
+            "---\ntitle: R\npdfmd-options:\n  parts: auto\n---\n\nIntro `V = 2 + 2`{=} and `W = V * y`{=}.\n", encoding="utf-8")
+        (self.directory / "parts" / "10-a.md").write_text(
+            "# A\n\n::: calc\nRun 1: A = V * zz = {ans:2dp} mL.\n\nV = 7 = {ans}\n:::\n", encoding="utf-8")
+        (self.directory / "parts" / "60-b.md").write_text("# B\n\nSo `a + b = {ans}`{=} and `V = 5`{=}.\n", encoding="utf-8")
+
+    def check(self, *arguments, folder=None):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=folder or self.directory,
+                              capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": ""})
+
+    def test_undefined_names_and_a_name_defined_often_are_reported_in_document_order(self):
+        done = self.check("report.md", "--check")
+        lines = done.stdout.splitlines()
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual([line.split(": ")[0] for line in lines[:-1]],
+                         ["report.md:7", "report.md:7", "parts/10-a.md:4", "parts/60-b.md:3", "parts/60-b.md:3"])
+        self.assertIn("report.md:7: error: 'y' is not defined for the calculator", lines[0])
+        self.assertIn("report.md:7: note: V is defined 3 times (report.md: line 7; parts/10-a.md: line 6; parts/60-b.md: line 3); "
+                      "a use below them sees the last one (parts/60-b.md: line 3)  [calc-redefined]", lines[1])
+        self.assertIn("parts/10-a.md:4: error: 'zz' is not defined", lines[2])
+        self.assertIn("'a' is not defined", lines[3])
+        self.assertIn("'b' is not defined", lines[4])
+        self.assertEqual(lines[-1], "CHECK  report.md and 2 part(s): 4 error(s), 1 note(s)")
+
+    def test_a_normal_build_says_nothing_about_a_name_that_is_defined_often(self):
+        (self.directory / "parts" / "10-a.md").write_text("# A\n\nRun `V = 7`{=}.\n", encoding="utf-8")
+        built = self.check("report.md", "--to", "latex", "-o", "out.tex", "--no-backup", "--no-stamp")
+        self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+        said = built.stdout + built.stderr
+        self.assertNotIn("times", said)                                   # (the WARNs about y, a and b are the build's own, as before)
+        self.assertNotIn("redefined", said)
+        self.assertNotIn("V is defined", said)
+
+    def test_a_note_alone_does_not_fail_even_with_strict(self):
+        (self.directory / "report.md").write_text(
+            "---\ntitle: R\npdfmd-options:\n  parts: auto\n---\n\n`V = 2`{=}\n", encoding="utf-8")
+        (self.directory / "parts" / "10-a.md").write_text("# A\n\n`V = 3`{=}\n", encoding="utf-8")
+        (self.directory / "parts" / "60-b.md").write_text("# B\n\nOK\n", encoding="utf-8")
+        done = self.check("report.md", "--check", "--strict")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("1 note(s)", done.stdout)
+        self.assertNotIn("error", done.stdout.split("CHECK")[-1])
+        ignored = self.check("report.md", "--check", "--check-ignore", "calc-redefined")
+        self.assertIn("no problems", ignored.stdout)
+
+    def test_a_document_without_a_calculator_never_starts_pandoc(self):
+        (self.directory / "plain.md").write_text("---\ntitle: P\n---\n\nA `code` span and {braces}.\n", encoding="utf-8")
+        bin_dir = self.directory / "bin"
+        bin_dir.mkdir()
+        marker = self.directory / "pandoc-ran"
+        wrapper = bin_dir / "pandoc"
+        wrapper.write_text(f"#!/bin/sh\ntouch '{marker}'\nexec '{shutil.which('pandoc')}' \"$@\"\n", encoding="utf-8")
+        wrapper.chmod(0o755)
+        if os.name == "nt":
+            self.skipTest("a shell wrapper stands in for Pandoc")
+        env = {**os.environ, "PDFMD_CONFIG": "", "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "plain.md", "--check"], cwd=self.directory,
+                              capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertIn("no problems", done.stdout)
+        self.assertFalse(marker.exists(), "Pandoc was started for a document with no calculator")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "--check"], cwd=self.directory,
+                              capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertTrue(marker.exists())                                      # with one it is started once for the whole document
+        self.assertEqual(wrapper.read_text().count("touch"), 1)
+
+    def test_calc_off_and_a_missing_pandoc_leave_names_alone(self):
+        off = self.check("report.md", "--check", "--no-calc")
+        self.assertIn("no problems", off.stdout, off.stdout + off.stderr)
+        empty = self.directory / "empty"
+        empty.mkdir()
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PATH": str(empty)}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "--check"], cwd=self.directory,
+                              capture_output=True, text=True, encoding="utf-8", env=environment)
+        self.assertIn("NOTE  --check: the names of the calculator are not checked without Pandoc", done.stderr)
+        self.assertIn("no problems", done.stdout)
+
 
 
 if __name__ == "__main__":

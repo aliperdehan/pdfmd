@@ -7102,6 +7102,45 @@ def check_bibliography(document: Path, metadata_files: list[Path], variables: li
     return check.Bibliography(declared, frozenset(keys), complete and not missing), missing
 
 
+def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[list, list] | None":
+    """What the calculator's filter finds in ``files`` for `--check` (pdfmd_lua/calc.lua, `-M pdfmd-calc-check=FILE`): ([(name, place)] of the
+    uses of a name nothing defines, [(name, place, origin)] of every definition of a name that has several). None when there is
+    no calculator in them, `calc` is off, Pandoc is not there or could not read them: the check then says nothing about names
+    (a NOTE when Pandoc is the reason). Pandoc is run only for a document with a calculator span or div."""
+    if calc_is_off(files[0], metadata_files):
+        return None
+    if not any(CALC_SPAN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return None
+    pandoc = which("pandoc")
+    if not pandoc:
+        print("NOTE  --check: the names of the calculator are not checked without Pandoc", file=sys.stderr)
+        return None
+    arguments = calc_filter_args(files, metadata_files)
+    if not arguments:
+        return None
+    with tempfile.TemporaryDirectory(prefix="pdfmd-calc-check-") as scratch:
+        report = Path(scratch) / "names.tsv"
+        command = [pandoc, *(str(file.resolve()) for file in files), "-t", "native", "-o", str(Path(scratch) / "out.native"),
+                   *arguments, "-M", "pdfmd-calc-check=" + str(report)]
+        try:
+            done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  cwd=pandoc_working_directory(files[0].parent))
+        except OSError:
+            return None
+        if done.returncode != 0 or not report.is_file():
+            print("NOTE  --check: the names of the calculator are not checked (Pandoc could not read the document)", file=sys.stderr)
+            return None
+        unescape = {"t": "\t", "n": "\n", "r": "\r", "\\": "\\"}
+        uses, definitions = [], []
+        for line in report.read_text(encoding="utf-8").split("\n"):
+            fields = [re.sub(r"\\(.)", lambda found: unescape.get(found.group(1), found.group(1)), field) for field in line.split("\t")]
+            if fields[0] == "U" and len(fields) == 3:
+                uses.append((fields[1], fields[2]))
+            elif fields[0] == "D" and len(fields) == 4:
+                definitions.append((fields[1], fields[2], fields[3]))
+    return (uses, definitions) if uses or definitions else None
+
+
 def check_documents(target: Path, args) -> tuple[list[Path], Path]:
     """(the files `--check` reads for ``target``, the document's main file): the scaffold and its parts when
     it is one."""
@@ -7150,7 +7189,8 @@ def check_command(args) -> int:
                 status = 1
         folders = [folder for folder in accessory_directories(document.parent, document.stem)[1:]]
         limit = resolve_budget(document, metadata_files)[0]
-        problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None)
+        problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
+                              calc=calc_check_records(files, metadata_files))
         for name in missing:
             if "bibliography-missing" in ignore:
                 continue
@@ -7162,7 +7202,8 @@ def check_command(args) -> int:
                     break
             problems.insert(0, check.Problem(label, line, "bibliography-missing", f"bibliography file not found: {name}"))
         errors = sum(problem.severity == "error" for problem in problems)
-        warnings = len(problems) - errors
+        notes = sum(problem.severity == "note" for problem in problems)
+        warnings = len(problems) - errors - notes
         for problem in problems:
             place = f"{problem.file}:{problem.line}" if problem.line else problem.file
             print(f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
@@ -7171,7 +7212,8 @@ def check_command(args) -> int:
             print(f"CHECK  {name}: no problems")
         else:
             counts = ", ".join(part for part in (f"{errors} error(s)" if errors else "",
-                                                 f"{warnings} warning(s)" if warnings else "") if part)
+                                                 f"{warnings} warning(s)" if warnings else "",
+                                                 f"{notes} note(s)" if notes else "") if part)
             print(f"CHECK  {name}: {counts}")
         strict = resolve_strict(document, metadata_files)
         if errors or (warnings and strict):

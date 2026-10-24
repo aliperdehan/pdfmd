@@ -502,9 +502,11 @@ pdfmd report --check --strict         # warnings fail too (exit 1), for CI
 pdfmd report --check --check-ignore heading-jump,link-missing
 ```
 
-`--check` reads the source, with no Pandoc and no LaTeX, and prints compiler-style lines
+`--check` reads the source, with no Pandoc and no LaTeX (the one exception: a document that uses the calculator is read once by
+Pandoc with the calculator's filter, which evaluates nothing, to see its names; without Pandoc a NOTE says they were not checked),
+and prints compiler-style lines
 (`report.md:12: error: image not found: figs/a.png  [image-missing]`) that an editor can jump to, then
-`CHECK  report.md: 1 error(s), 2 warning(s)`. It exits 1 on an error, and on a warning too with `--strict`. It finds:
+`CHECK  report.md: 1 error(s), 2 warning(s)`. It exits 1 on an error, and on a warning too with `--strict` (a `note` never fails it). It finds:
 
 | check | |
 |---|---|
@@ -516,6 +518,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
 | `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |
+| `calc-undefined`, `calc-redefined` | a calculator span, `::: calc` line or `{ans}` that uses a name no span, line or constants file defines (one line per statement, with its line and part, in document order); a name defined more than once: a note listing where, and which definition a use below them sees (a normal build says nothing: redefining a name on purpose is how a report reuses `V`) |
 
 Code, comments, math and URLs are not read, so `@decorator` in a code block or `me@x.org` is not a citation. A
 document in parts is checked as one: a link to `#methods` in the scaffold is found in a part. A file with no front
