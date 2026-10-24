@@ -49,7 +49,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--emoji-fallback", "--paper")),
     "office": ("Word / OpenDocument output and direct .typ / .html builds", (
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
-    "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--no-cache", "--seed-labels")),
+    "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--no-cache", "--seed-labels", "--seed-calc")),
     "setup": ("installing, configuring and checking pdfmd itself", (
         "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path")),

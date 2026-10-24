@@ -855,6 +855,123 @@ class Blocks(unittest.TestCase):
         self.assertEqual(outside, [])
 
 
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class PartBuiltAlone(unittest.TestCase):
+    """A part (or a section) built alone knows the names of what stands above it (3.30.19): pandoc evaluates the parts left out
+    with the calculator only, calc.lua writes each name's last value, and the build reads it back."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-calc-seed-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n  calc:\n    digits: 4sf\n---\n\nScaffold.\n",
+                                                 encoding="utf-8")
+        (self.directory / "parts").mkdir()
+        self.parts = self.directory / "parts"
+        (self.parts / "10-intro.md").write_text("# Intro\n\nNothing computed here.\n", encoding="utf-8")
+        (self.parts / "50-calculations.md").write_text(
+            "# Calculations\n\n::: calc\nV = 37.58 - 34.11 = {ans:2dp}\nV = 40.00 - 28.18 = {ans:2dp}\nn = V / 4 = {ans}\n:::\n\n"
+            "```{=calc}\nt = 2.101\n```\n", encoding="utf-8")
+        (self.parts / "60-discussion.md").write_text(
+            "# Discussion\n\nThe tap volume was `V`{=} mL, so `n * 2`{=2dp} and `t`{=}; `ghost`{=2dp} is nowhere.\n", encoding="utf-8")
+
+    def build(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments, "--no-backup", "--to", "latex", "-o", "out.tex"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+
+    def tex(self) -> str:
+        return (self.directory / "out.tex").read_text(encoding="utf-8")
+
+    def test_the_dump_and_the_seed_round_trip_through_the_filter(self):
+        before = self.directory / "before.md"
+        before.write_text((self.parts / "50-calculations.md").read_text(encoding="utf-8"), encoding="utf-8")
+        dump = self.directory / "names.tsv"
+        subprocess.run([PANDOC, str(before), "-t", "native", "-o", os.devnull, "--lua-filter", str(CALC_LUA), "-M", f"pdfmd-calc-dump={dump}"],
+                       capture_output=True, text=True, check=True)
+        lines = dump.read_text(encoding="utf-8").splitlines()
+        self.assertEqual([line.split("\t")[0] for line in lines], ["V", "n", "t"])
+        self.assertEqual(lines[0].split("\t")[1], "11.82")          # the LAST definition of V, at full precision
+        self.assertEqual(lines[0].split("\t")[2], "2dp")
+        self.assertEqual(lines[1].split("\t")[1:], ["2.9550000000000001", ""])
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "plain", "--wrap=none", "--lua-filter", str(CALC_LUA), "-M", f"pdfmd-calc-seed={dump}"],
+                              input="`V`{=} and `n * 2`{=2dp} and `t`{=}\n", capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout.strip(), "11.82 and 5.91 and 2.101")
+
+    def test_a_part_alone_prints_the_numbers_of_the_full_build_and_nothing_vanishes(self):
+        full = self.build()
+        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
+        whole = self.tex()
+        alone = self.build("@60")
+        self.assertEqual(alone.returncode, 0, alone.stdout + alone.stderr)
+        text = self.tex()
+        self.assertIn("The tap volume was 11.82 mL, so 5.91 and 2.101;", text)
+        self.assertIn("The tap volume was 11.82 mL, so 5.91 and 2.101;", whole)
+        self.assertIn("NOTE  calc: 3 names taken from parts 10-50 (evaluated, not typeset)", alone.stdout)
+
+    def test_a_name_that_is_nowhere_prints_as_code_with_one_warning_in_both_builds(self):
+        for arguments in ((), ("@60",)):
+            with self.subTest(arguments=arguments):
+                done = self.build(*arguments)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn("\\texttt{ghost}", self.tex())
+                lines = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc")]
+                self.assertEqual(len(lines), 1, lines)
+                self.assertIn("`ghost`{=2dp}", lines[0])
+
+    def test_the_filter_alone_keeps_a_formatted_span_it_cannot_evaluate_visible(self):
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "latex", "--lua-filter", str(CALC_LUA)], input="a `nope + 1`{=3sf} b\n",
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.stderr.count("WARN"), 1, done.stderr)
+        self.assertIn("\\texttt{nope\\ +\\ 1}", done.stdout)
+
+    def test_the_setting_turns_it_off(self):
+        done = self.build("@60", "--seed-calc", "off")
+        self.assertNotIn("names taken from", done.stdout)
+        self.assertIn("\\texttt{V}", self.tex())
+        self.assertGreaterEqual(done.stdout.count("WARN  calc"), 3)
+        (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n  seed-calc: off\n---\n", encoding="utf-8")
+        done = self.build("@60")
+        self.assertNotIn("names taken from", done.stdout)
+        self.assertEqual(pdfmd.seed_calc_mode(self.directory / "report.md", []), "off")
+
+    def test_a_part_that_defines_its_own_names_is_not_overridden_by_the_parts_above(self):
+        (self.parts / "60-discussion.md").write_text("# Discussion\n\n::: calc\nV = 1.5 + 1 = {ans}\n:::\n\nNow `V`{=}.\n", encoding="utf-8")
+        done = self.build("@60")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Now 2.500.", self.tex())
+
+    def test_a_part_with_no_calculator_and_a_document_without_one_are_built_as_before(self):
+        done = self.build("@10")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("calc", done.stdout)
+        (self.directory / "plain.md").write_text("# One\n\ntext\n\n# Two\n\nmore\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "plain#Two", "--no-backup", "--to", "latex", "-o", "plain.tex"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("names taken from", done.stdout)
+
+    def test_a_section_built_alone_knows_the_names_of_the_sections_above(self):
+        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n# Calculations\n\n::: calc\nC = 0.01 = {ans}\nV = 25.0 = {ans}\nm = C * V = {ans:3sf}\n:::\n\n"
+                                               "# Discussion\n\nHere `m * 2`{=2dp} and `C`{=}.\n\n# Notes\n\nLater `m`{=3sf}.\n",
+                                               encoding="utf-8")
+        for section, expected in (("Discussion", "Here 0.50 and 0.01."), ("Notes", "Later 0.250.")):
+            with self.subTest(section=section):
+                done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), f"doc#{section}", "--no-backup", "--to", "latex", "-o", "doc.tex"],
+                                      cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn(expected, (self.directory / "doc.tex").read_text(encoding="utf-8"))
+                self.assertIn("NOTE  calc: 3 names taken from the sections above it", done.stdout)
+                self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+
+    def test_the_mode_is_checked(self):
+        with self.assertRaises(SystemExit):
+            old, pdfmd.SEED_CALC_CLI = pdfmd.SEED_CALC_CLI, "sometimes"
+            try:
+                pdfmd.seed_calc_mode(self.directory / "report.md", [])
+            finally:
+                pdfmd.SEED_CALC_CLI = old
+
+
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")
 class RealOutput(unittest.TestCase):
     def setUp(self):

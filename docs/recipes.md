@@ -340,7 +340,9 @@ exact and wins when there is one ([12.1](#121-faster-rebuilds)). `--seed-labels 
 For HTML, EPUB, Word, OpenDocument, Typst and PDF through a non-LaTeX engine the whole document is numbered by
 pandoc-crossref and only the part you asked for is kept, so its numbers are the whole document's and `[@sec:x]` to the
 rest resolves (raw LaTeX `\ref` does not outside LaTeX). `pdfmd-options: {seed-labels: scan}` picks the source; `draft` runs LaTeX once over the whole document without output
-(exact, about half a compile's cost each time); `off` gives the `??` back.
+(exact, about half a compile's cost each time); `off` gives the `??` back. The calculator's names (`` `mean_A`{=2dp} `` defined in
+part 50, used in part 60) are taken the same way: pdfmd evaluates the parts above, nothing typeset, and says `NOTE  calc: 128 names taken
+from parts 10-50` (`--seed-calc off` gives it up, [1.11](#111-compute-the-numbers-of-a-calculation)).
 
 ### 3.3 Cut a single file into parts, or join parts back
 

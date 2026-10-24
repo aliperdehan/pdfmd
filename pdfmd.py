@@ -1408,7 +1408,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.18"
+PDFMD_VERSION = "3.30.19"
 import argparse
 import atexit
 import csv
@@ -2967,6 +2967,7 @@ CALC_SPACE_DEFAULT = "0.75em"
 CALC_SPACE_RE = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:pt|mm|cm|in|em)$")
 CALC_ALIGNS = ("left", "center")
 CALC_CONSTANTS_ENV = "PDFMD_CALC_CONSTANTS"
+CALC_SEED: Path | None = None              # the names of the parts before a part built alone (build_calc_seed; set around one build)
 CALC_ROUNDS = ("even", "away")
 CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
 
@@ -3168,6 +3169,8 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     constants = calc_constants_file(files[0], metadata_files)
     if constants is not None:
         arguments += ["-M", "pdfmd-calc-constants=" + "\n".join(calc_constants_statements(constants))]
+    if CALC_SEED is not None and not BUILD.get("scanning"):
+        arguments += ["-M", "pdfmd-calc-seed=" + str(CALC_SEED)]
     return arguments + ["--lua-filter", str(shipped)]
 
 
@@ -15105,6 +15108,7 @@ class SectionPlan:
         self.shifted = shifted      # the document's leading `# Title` became its title
         self.selected = selected
         self.full_text = text       # the whole document, the selection in part divs (set by plan_sections)
+        self.before_text = ""       # what stands above the last section chosen, the chosen ones left out (for the calculator)
 
     @property
     def output_stem(self) -> str:
@@ -15147,6 +15151,9 @@ def plan_sections(source: Path, requests: list[str], cli_no_auto: list[str] | No
     # the whole document with the selection marked, for the writers that number it whole (see wrap_part)
     kept = [(item.line, item.end) for item in selected] + ([(0, first_heading)] if lead else [])
     plan.full_text = head + wrap_runs("\n".join(lines), kept) + "\n"
+    above = [line for number, line in enumerate(lines[:max(item.line for item in selected)])
+             if not any(start <= number < stop for start, stop in kept)]
+    plan.before_text = head + "\n".join(above) + "\n" if any(line.strip() for line in above) else ""
     return plan
 
 
@@ -18909,6 +18916,57 @@ def seed_labels_mode(md_path: Path, metadata_files: list[Path]) -> str:
     if mode not in pdfmd_labels.MODES:
         raise SystemExit(f"{md_path}: unknown seed-labels value {value!r}. Valid: {', '.join(pdfmd_labels.MODES)}")
     return mode
+
+
+SEED_CALC_MODES = ("auto", "scan", "off")
+SEED_CALC_CLI: str | None = None           # --seed-calc (set in main)
+
+
+def seed_calc_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """auto (default, same as scan) | scan | off, from --seed-calc, else `pdfmd-options.seed-calc`."""
+    value = SEED_CALC_CLI
+    if value is None:
+        value = first_pdfmd_option(md_path, metadata_files, "seed-calc")
+    if value is None:
+        return "auto"
+    mode = {True: "auto", False: "off"}.get(value) if isinstance(value, bool) else str(value).strip().lower()
+    if mode not in SEED_CALC_MODES:
+        raise SystemExit(f"{display_path(md_path)}: unknown seed-calc value {value!r}. Valid: {', '.join(SEED_CALC_MODES)}")
+    return mode
+
+
+def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Path], before: list[Path],
+                    scratch: Path, from_format: str | None, verbose: bool) -> tuple[Path | None, int]:
+    """The names a part built alone needs from the parts before it (v3.30.19; `pdfmd-options: {seed-calc: auto|scan|off}`).
+    Pandoc reads ``before`` (the scaffold, then the parts left out that stand above the last one built) with only calc.lua,
+    to nowhere; calc.lua writes each name with its last value, at full precision and with its digits, and the build reads
+    that file back as definitions above the document. Nothing is stored between builds, so nothing can be stale.
+    (the file, how many names) or (None, 0) when there is nothing to take or it cannot be made: the build goes on without."""
+    arguments = calc_filter_args(selected, metadata_files)       # [] when calc is off or the part holds no span or div
+    if not arguments:
+        return None, 0
+    if not any(CALC_SPAN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in before):
+        return None, 0
+    dump = scratch / "calc-names.tsv"
+    cmd = ["pandoc", *(str(file.resolve()) for file in before), *(["-f", from_format] if from_format else []),
+           "-t", "native", "-o", os.devnull, *arguments, "-M", "pdfmd-calc-dump=" + str(dump)]
+    cwd = pandoc_working_directory(md_path.parent)
+    log_cmd(cmd, cwd, verbose)
+    started = time.time()
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
+    except OSError as error:
+        if verbose:
+            print(f"CALC      the names of the parts left out could not be evaluated ({error})")
+        return None, 0
+    if done.returncode != 0 or not dump.is_file():
+        if verbose:
+            print("CALC      the names of the parts left out could not be evaluated; the build goes on without them")
+        return None, 0
+    count = sum(1 for line in dump.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+    if verbose:
+        print(f"CALC      {count} names of the parts left out evaluated in {time.time() - started:.1f} s")
+    return (dump, count) if count else (None, 0)
 
 
 class LabelScan:
@@ -23703,13 +23761,14 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                 self_contained: bool | None = None,
                 source_override: tuple[str, bool] | None = None,
                 all_parts: list[Path] | None = None,
-                full_override: str | None = None) -> tuple[Path, bool, str]:
+                full_override: str | None = None,
+                before_override: str | None = None) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
     gets it, including any added later.
     """
-    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED
+    global LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED, CALC_SEED
     LAST_SCANNED, LAST_EXACT, LAST_WHOLE, LAST_SKIPPED = 0, False, False, 0
     metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     scratch = None
@@ -23738,6 +23797,33 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                 selection = True
                 source_override = (full_override, source_override[1])
                 LAST_WHOLE = True
+    calc_scratch = None
+    calc_names = 0
+    calc_from = ""
+    if (partial or source_override is not None) and selection is None and not presentation:
+        # The names the calculator needs from what stands above (a `mean_A`{=2dp} of part 60, defined in part 50).
+        before = []
+        if all_parts and extra_inputs:
+            built = [all_parts.index(part) for part in extra_inputs if part in all_parts]
+            before = [part for part in all_parts[:max(built)] if part not in extra_inputs] if built else []
+            if before:
+                numbers = [part.stem.split("-")[0] for part in (before[0], before[-1])]
+                calc_from = ("parts " + "-".join(numbers)) if all(number.isdigit() for number in numbers) \
+                    else f"parts {before[0].stem} to {before[-1].stem}"
+        calc_wanted = bool(before) or bool(before_override and before_override.strip())
+        if calc_wanted and seed_calc_mode(md_path, metadata_list) != "off":
+            calc_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-calc-")
+            sources = [md_path]
+            if before:
+                sources = [md_path, *before]
+            else:
+                text_before = Path(calc_scratch.name) / "before.md"
+                text_before.write_text(before_override, encoding="utf-8")
+                sources = [text_before]
+                calc_from = "the sections above it"
+            seed_file, calc_names = build_calc_seed(md_path, metadata_list, [md_path, *(extra_inputs or [])], sources,
+                                                    Path(calc_scratch.name), from_format, verbose)
+            CALC_SEED = seed_file
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
@@ -23749,8 +23835,13 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                               self_contained=self_contained, source_override=source_override,
                               label_scan=label_scan, selection=selection)
     finally:
+        CALC_SEED = None
         if scratch is not None:
             scratch.cleanup()
+        if calc_scratch is not None:
+            calc_scratch.cleanup()
+    if result[1] and calc_names:
+        print(f"NOTE  calc: {calc_names} names taken from {calc_from} (evaluated, not typeset)")
     if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
@@ -24744,6 +24835,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "full build's .aux when the cache has one, then a scan of the whole document's LaTeX), "
                              "aux, scan, draft (a LaTeX pass over the whole document without output) or off. "
                              "Also `pdfmd-options: {seed-labels: scan}`")
+    parser.add_argument("--seed-calc", metavar="MODE", choices=SEED_CALC_MODES,
+                        help="where a part (or a section) built alone takes the calculator's names from: the parts "
+                             "above it are evaluated with the calculator only, not typeset (auto, the default, or scan), "
+                             "or off (a `name`{=} of an earlier part is then undefined). "
+                             "Also `pdfmd-options: {seed-calc: off}`")
     parser.add_argument("--clear-cache", action="store_true",
                         help="delete pdfmd's cache folder for the given document (or all of it, with no "
                              "document), then exit; always safe")
@@ -25220,7 +25316,7 @@ def run_main() -> None:
     # which implies it just above) turns this on too, not just --full-paths
     # on its own.
     SHOW_FULL_PATHS = args.full_paths or args.verbose
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, METADATA_PRECEDENCE_CLI
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI
     global PRESET_CLI, GLOBAL_METADATA_CLI
     CITEPROC_DISABLED = args.no_citeproc
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
@@ -25271,6 +25367,7 @@ def run_main() -> None:
         print(f"WARN  --translit: {problem}", file=sys.stderr)
     CACHE_PLOTS_CLI = args.cache_plots or None
     SEED_LABELS_CLI = args.seed_labels
+    SEED_CALC_CLI = args.seed_calc
     METADATA_PRECEDENCE_CLI = args.metadata_precedence
     PRESET_CLI, GLOBAL_METADATA_CLI = args.preset, args.global_metadata
     global CACHE_LOCATION_CLI
@@ -26275,7 +26372,8 @@ def run_main() -> None:
                                             or section_plan is not None),
                                    source_override=((section_plan.text, section_plan.shifted)
                                                     if section_plan is not None else None),
-                                   full_override=(section_plan.full_text if section_plan is not None else None))]
+                                   full_override=(section_plan.full_text if section_plan is not None else None),
+                                   before_override=(section_plan.before_text if section_plan is not None else None))]
             if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
                 if LAST_WHOLE:
                     print("NOTE  section build: the whole document was numbered and this section kept, so its "

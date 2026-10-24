@@ -871,6 +871,16 @@ silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` m
 confidence interval), a mode that checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
 `.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
+**A part built alone keeps the names of the parts above it** (3.30.19). `pdfmd @60` of a split report builds the Discussion without the
+Calculations, so a `` `mean_A`{=2dp} `` there has nothing to find; pdfmd therefore has Pandoc read the parts above it (the scaffold, then
+every part left out that stands before the last one built) with the calculator only, nothing typeset (about a second), and the build starts
+from the names that came out: each at the value of its last definition above the part, at full precision, with the digits it was defined
+with. The same holds for a section of an ordinary document (`doc#discussion`) and the sections above it. Nothing is stored between builds,
+so editing part 50 and building part 60 shows the new number at once. The build says `NOTE  calc: 128 names taken from parts 10-50
+(evaluated, not typeset)`. `pdfmd-options: {seed-calc: off}` or `--seed-calc off` gives it up (a name defined in a part left out is then
+undefined, with the WARN above); `auto` (the default) and `scan` are the same. A name a later part defines is not known to an earlier
+one, as in the full build, where it counts only when nothing above defines it.
+
 ### Read it in the terminal: `--view` and `--to ansi`
 
 ```sh

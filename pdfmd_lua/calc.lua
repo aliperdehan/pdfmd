@@ -872,8 +872,8 @@ local function process_inlines(inlines)
         if ok then
           if result ~= "" then out:insert(pandoc.Str(result .. rest)) elseif rest ~= "" then out:insert(pandoc.Str(rest)) end
         else
-          warn("`" .. text .. "`{=}", reason_of(result), "the code is kept")
-          out:insert(inlines[i])
+          warn("`" .. text .. "`{=" .. (fmt and (fmt.n .. fmt.kind) or "") .. "}", reason_of(result), "the code is kept")
+          out:insert(inlines[i].t == "Code" and inlines[i] or pandoc.Code(text))     -- a RawInline of format 2dp would vanish
           if rest ~= "" then out:insert(pandoc.Str(rest)) end
         end
       end
@@ -1177,6 +1177,64 @@ local function framed(blocks)
   return out
 end
 
+-- A part built alone (3.30.19). pdfmd evaluates the parts before it first, with this filter and `-M pdfmd-calc-dump=FILE`: the
+-- file lists every name with the value of its last definition (full precision, so later arithmetic is exact) and its digits;
+-- the real pass reads it back with `-M pdfmd-calc-seed=FILE` as definitions that stand above everything in the document.
+local function number_text(x)
+  if x ~= x then return "nan" end
+  if x == math.huge then return "inf" end
+  if x == -math.huge then return "-inf" end
+  return string.format("%.17g", x)
+end
+
+local function number_from(text)
+  if text == "nan" then return 0 / 0 end
+  if text == "inf" then return math.huge end
+  if text == "-inf" then return -math.huge end
+  local x = tonumber(text)
+  return x and x + 0.0 or nil
+end
+
+local function load_seed(path)
+  local file = io.open(path, "r")
+  if not file then return end
+  for line in file:lines() do
+    local name, value, spec = line:match("^([%a_][%w_]*)\t(%S+)\t?(%S*)$")
+    local x = value and number_from(value)
+    if name and x then
+      local fmt = nil
+      if spec ~= "" then
+        local ok, parsed = pcall(parse_fmt, spec)
+        if ok then fmt = parsed end
+      end
+      local statement = {names = {name}, expr = name, value = x, fmt = fmt}
+      STATEMENTS[#STATEMENTS + 1] = statement
+      statement.id = #STATEMENTS
+      NAMED[name] = NAMED[name] or {}
+      table.insert(NAMED[name], statement)
+    end
+  end
+  file:close()
+end
+
+local function dump_names(path)
+  local names = {}
+  for name in pairs(NAMED) do names[#names + 1] = name end
+  table.sort(names)
+  local file = io.open(path, "w")
+  if not file then return end
+  for _, name in ipairs(names) do
+    local list = NAMED[name]
+    local statement = list[#list]
+    local ok, value = pcall(value_of, statement)
+    if ok and type(value) == "number" then
+      local fmt = statement.fmt
+      file:write(name, "\t", number_text(value), "\t", fmt and (fmt.n .. fmt.kind) or "", "\n")
+    end
+  end
+  file:close()
+end
+
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
   if div.classes:includes("hide") or div.classes:includes("hidden") then      -- `::: {.calc .hide}`: statements, nothing printed
@@ -1216,11 +1274,16 @@ return {{Pandoc = function(doc)
   CENTER = align ~= nil and pandoc.utils.stringify(align):lower() == "center"
   local constants = doc.meta["pdfmd-calc-constants"]
   local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
+  local seed = doc.meta["pdfmd-calc-seed"]
+  seed = seed and pandoc.utils.stringify(seed) or nil
   for _, which in ipairs({1, 2}) do
     pass, occurrence, fence_cursor = which, 0, 1
     statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
+    if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
     doc = doc:walk({traverse = "topdown", Div = calc_div, Para = fence_handler, RawBlock = raw_block,
       Inlines = process_inlines})
   end
+  local dump = doc.meta["pdfmd-calc-dump"]
+  if dump then dump_names(pandoc.utils.stringify(dump)) end
   return doc
 end}}

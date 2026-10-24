@@ -40,6 +40,38 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.19 — 2026-10-24
+
+Pre-edit state: commit `65dc1da` (v3.30.18).
+
+### Fixed
+
+- **A part (or a section) built alone knows the calculator's names from what stands above it.** `pdfmd @60` printed nothing where
+  `` `mean_A`{=2dp} `` had been (the name is defined in part 50), and the build was silent about it. Before the real pass pdfmd now has
+  Pandoc read the scaffold and the parts left out that stand above the last one built, with `calc.lua` only (`-t native -o /dev/null`,
+  about a second for 128 names); `calc.lua` writes every name with the value of its last definition (`%.17g`, full precision) and its
+  digits (`-M pdfmd-calc-dump=FILE`), and the build reads the file back (`-M pdfmd-calc-seed=FILE`) as definitions above everything in the
+  document, after the constants file. A section of an ordinary document (`doc#discussion`) does the same with the sections above it. The
+  build says `NOTE  calc: 128 names taken from parts 10-50 (evaluated, not typeset)`. Nothing is stored between builds, so nothing is
+  stale. HTML, Word, Typst and the other writers that number the whole document and keep the part already evaluated everything.
+- **A span the calculator cannot evaluate no longer vanishes.** `` `name`{=2dp} `` is a raw inline of the format `2dp` for Pandoc; the
+  filter put that item back, and the LaTeX and other writers drop a raw inline of a format they do not know, so the sentence had a hole and
+  the WARN's "the code is kept" was untrue. The code is kept now (printed as code), with the one WARN, which names the format as written
+  (`` `ghost`{=2dp} ``).
+
+### Added
+
+- `pdfmd-options: {seed-calc: auto|scan|off}` and `--seed-calc MODE` (a `--setup` row under Cache): `off` gives the seeding up. `auto` and
+  `scan` are the same.
+
+### Tests
+
+- `tests.test_calc.PartBuiltAlone`: the dump and seed through the filter alone (the last value of a redefined name at full precision, its
+  digits, a name with no digits); a split report's part 60 built alone against the full build (same text, the NOTE); an unknown name printed
+  as code with exactly one WARN in both builds; the setting in the document and on the command line; a part that redefines a name is not
+  overridden; a part with no calculator and a document without one are built as before; sections above a section (`doc#Discussion`,
+  `doc#Notes`).
+
 ## v3.30.18 — 2026-10-24
 
 Pre-edit state: commit `ad8efcd` (v3.30.17).
