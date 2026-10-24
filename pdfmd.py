@@ -3170,10 +3170,8 @@ _PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
 def pandoc_extensions(name: str) -> frozenset[str]:
     """The extensions this Pandoc knows for format `name` (on or off), for building a writer string it will accept."""
     if name not in _PANDOC_EXTENSIONS:
-        try:
-            listing = subprocess.run(["pandoc", f"--list-extensions={name}"], capture_output=True, text=True).stdout
-        except OSError:
-            listing = ""
+        done = run_probe(["pandoc", f"--list-extensions={name}"])
+        listing = done.stdout if done else ""
         _PANDOC_EXTENSIONS[name] = frozenset(line.strip().lstrip("+-") for line in listing.splitlines() if line.strip())
     return _PANDOC_EXTENSIONS[name]
 
@@ -6024,9 +6022,9 @@ def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
     kpsewhich = which("kpsewhich")
     if not kpsewhich or not names:
         return {}
-    done = subprocess.run([kpsewhich, *names], capture_output=True, text=True)
+    done = run_probe([kpsewhich, *names])
     found: dict[str, Path] = {}
-    for line in done.stdout.splitlines():
+    for line in (done.stdout if done else "").splitlines():
         if line.strip():
             found.setdefault(Path(line.strip()).name, Path(line.strip()))
     return found
@@ -7330,9 +7328,9 @@ def install_typst() -> bool:
               file=sys.stderr)
         return False
     use_managed_tools()
-    version = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if version.returncode != 0:
-        print(f"Typst was downloaded to {target} but does not run here: {version.stderr.strip()}",
+    version = run_probe([str(target), "--version"])
+    if version is None or version.returncode != 0:
+        print(f"Typst was downloaded to {target} but does not run here: {version.stderr.strip() if version else 'it does not answer'}",
               file=sys.stderr)
         return False
     print(f"Installed {version.stdout.strip()} in {tools_directory()} "
@@ -7437,9 +7435,9 @@ def install_node() -> bool:
         print(f"Could not install node ({error}). Install it yourself: {node_install_hint()}", file=sys.stderr)
         return False
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"node was downloaded to {target} but does not run here ({ran.stderr.strip() or ran.returncode}). "
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"node was downloaded to {target} but does not run here ({(ran.stderr.strip() or ran.returncode) if ran else 'it does not answer'}). "
               f"Install it yourself: {node_install_hint()}", file=sys.stderr)
         return False
     print(f"Installed node {ran.stdout.strip()} in {tools_directory()} (used when no other node is on PATH; delete "
@@ -7796,9 +7794,9 @@ def install_d2() -> bool:
         print(f"Could not install D2 ({error}). Install it yourself: https://d2lang.com/tour/install", file=sys.stderr)
         return False
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip() if ran else 'it does not answer'}", file=sys.stderr)
         return False
     print(f"Installed D2 {ran.stdout.strip()} in {tools_directory()} (used when no other d2 is on PATH; delete the file "
           "to remove it). A PDF or Word diagram is converted from D2's SVG by rsvg-convert or inkscape.")
@@ -8153,9 +8151,9 @@ def install_tectonic(fetch=None, release: dict | None = None) -> bool:
     finally:
         archive.unlink(missing_ok=True)
     use_managed_tools()
-    ran = subprocess.run([str(target), "--version"], capture_output=True, text=True)
-    if ran.returncode != 0:
-        print(f"Tectonic was downloaded to {target} but does not run here: {ran.stderr.strip()}", file=sys.stderr)
+    ran = run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"Tectonic was downloaded to {target} but does not run here: {ran.stderr.strip() if ran else 'it does not answer'}", file=sys.stderr)
         return False
     print(f"Installed {ran.stdout.strip()} in {tools_directory()} (used when no other Tectonic is on PATH; delete the file to "
           "remove it). It fetches the TeX files a document needs from the network the first time (about 100 MB over time), "
@@ -11778,7 +11776,9 @@ def package_version(name: str) -> str | None:
     kpsewhich = which("kpsewhich")
     if not kpsewhich:
         return None
-    result = subprocess.run([kpsewhich, f"{name}.sty"], capture_output=True, text=True)
+    result = run_probe([kpsewhich, f"{name}.sty"])
+    if result is None:
+        return None
     sty_path = result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
     if result.returncode != 0 or not sty_path:
         return None
@@ -15013,10 +15013,8 @@ def pandoc_has_option(option: str) -> bool:
     option name (`--math-method` is not found inside `--html-math-method`)."""
     global _PANDOC_HELP
     if _PANDOC_HELP is None:
-        try:
-            _PANDOC_HELP = subprocess.run(["pandoc", "--help"], capture_output=True, text=True).stdout
-        except OSError:
-            _PANDOC_HELP = ""
+        done = run_probe(["pandoc", "--help"])
+        _PANDOC_HELP = done.stdout if done else ""
     return bool(re.search(r"(?<![\w-])" + re.escape(option) + r"(?![\w-])", _PANDOC_HELP))
 
 
@@ -15063,12 +15061,10 @@ def pandoc_user_data_dir() -> Path | None:
     global _PANDOC_DATA_DIR
     if _PANDOC_DATA_DIR is False:
         _PANDOC_DATA_DIR = None
-        try:
-            for line in subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines():
-                if line.lower().startswith("user data directory:"):
-                    _PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
-        except OSError:
-            pass
+        done = run_probe(["pandoc", "--version"])
+        for line in (done.stdout if done else "").splitlines():
+            if line.lower().startswith("user data directory:"):
+                _PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
     return _PANDOC_DATA_DIR or None
 
 
@@ -15213,7 +15209,8 @@ def pandoc_version() -> tuple[int, ...]:
     global _PANDOC_VERSION
     if _PANDOC_VERSION is None:
         try:
-            first = subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
+            done = run_probe(["pandoc", "--version"])
+            first = done.stdout.splitlines()[0]                                  # (no answer: an AttributeError, below)
             _PANDOC_VERSION = tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", first).group(1).split("."))
         except (OSError, IndexError, AttributeError, ValueError):
             _PANDOC_VERSION = (0,)
@@ -18006,6 +18003,30 @@ def cache_root() -> Path:
     return base / "pdfmd"
 
 
+# -- Probes: a version or a capability asked of a program ----------------------------------------------------------------
+# `pandoc --version`, `kpsewhich`, `typst --version` ... answer at once; a hung one (a broken install, a network drive, a tool
+# waiting on a prompt) must not hang pdfmd. A probe gets PROBE_TIMEOUT seconds, and one that does not answer counts as "not
+# available" (a verbose line says so). Never used for a command that builds something (Pandoc, a LaTeX engine, a converter):
+# those take as long as the document needs.
+PROBE_TIMEOUT = 10
+
+
+def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
+    """``subprocess.run`` of a probe: output captured as text, PROBE_TIMEOUT s. None when the program cannot be started or does
+    not answer in time."""
+    options.setdefault("capture_output", True)
+    options.setdefault("text", True)
+    try:
+        return subprocess.run(command, timeout=PROBE_TIMEOUT, **options)
+    except subprocess.TimeoutExpired:
+        if VERBOSE_OUTPUT:
+            asked = " ".join(Path(str(command[0])).name if index == 0 else str(word) for index, word in enumerate(command[:3]))
+            print(f"AUTO PROBE  {asked}: no answer in {PROBE_TIMEOUT} s; counted as not available")
+        return None
+    except OSError:
+        return None
+
+
 # -- A home that cannot be written (a sandbox, a read-only container) ------------------------------------------------------------
 # pdfmd keeps a cache (cache_root()), LuaTeX keeps its font names in the TeX user tree (TEXMFVAR, under the home), Pandoc and the
 # tools it starts may write in their working folder. When one of those places cannot be written the build goes on with a
@@ -18878,7 +18899,8 @@ def kpsewhich_path(name: str) -> Path | None:
     kpsewhich = which("kpsewhich")
     if not kpsewhich:
         return None
-    found = subprocess.run([kpsewhich, name], capture_output=True, text=True).stdout.strip().splitlines()
+    done = run_probe([kpsewhich, name])
+    found = done.stdout.strip().splitlines() if done else []
     return Path(found[0]) if found else None
 
 
@@ -18891,10 +18913,8 @@ def read_text_or_none(path: Path | None) -> str | None:
 
 @lru_cache(maxsize=None)
 def engine_version_line(engine: str) -> str:
-    try:
-        out = subprocess.run([engine, "--version"], capture_output=True, text=True).stdout
-    except OSError:
-        return ""
+    done = run_probe([engine, "--version"])
+    out = done.stdout if done else ""
     return out.splitlines()[0] if out else ""
 
 
@@ -18920,7 +18940,8 @@ def tex_tree_stamp() -> str:
     if not kpsewhich:
         return ""
     try:
-        root = subprocess.run([kpsewhich, "-var-value", "TEXMFROOT"], capture_output=True, text=True).stdout.strip()
+        done = run_probe([kpsewhich, "-var-value", "TEXMFROOT"])
+        root = done.stdout.strip() if done else ""
         stat = (Path(root) / "tlpkg" / "texlive.tlpdb").stat() if root else None
     except OSError:
         return ""
@@ -18937,10 +18958,8 @@ def user_tex_trees() -> tuple[Path, ...]:
         return ()
     trees: list[Path] = []
     for variable in ("TEXMFHOME", "TEXMFLOCAL"):
-        try:
-            value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, text=True).stdout
-        except OSError:
-            continue
+        done = run_probe([kpsewhich, "-var-value", variable])
+        value = done.stdout if done else ""
         for item in re.split(r"[,;{}]", value.strip()):      # a {a,b} list, rarely
             item = item.strip().lstrip("!")
             if item and Path(item).expanduser().is_dir():

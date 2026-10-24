@@ -32,12 +32,18 @@ SECT_ORDER = ["headerReference", "footerReference", "footnotePr", "endnotePr", "
               "pgBorders", "lnNumType", "pgNumType", "cols", "formProt", "vAlign", "noEndnote", "titlePg",
               "textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"]
 
+PROBE_TIMEOUT = 10        # seconds (pdfmd.PROBE_TIMEOUT: a version or capability probe, never a build)
+
 _CHILD = re.compile(r"<w:(\w+)\b(?:[^>]*?/>|[^>]*>.*?</w:\1>)", re.S)
 
 
 def default_reference(kind: str = "docx") -> bytes:
     """Pandoc's own reference document (needs the `pandoc` on PATH)."""
-    done = subprocess.run(["pandoc", "--print-default-data-file", f"reference.{kind}"], capture_output=True)
+    try:
+        done = subprocess.run(["pandoc", "--print-default-data-file", f"reference.{kind}"], capture_output=True,
+                              timeout=PROBE_TIMEOUT)             # a probe: a Pandoc that does not answer is one that is not there
+    except subprocess.TimeoutExpired:
+        raise OSError(f"pandoc did not answer in {PROBE_TIMEOUT} s") from None
     if done.returncode != 0 or not done.stdout:
         raise OSError(done.stderr.decode("utf-8", "replace").strip() or "pandoc has no default reference document")
     return done.stdout
