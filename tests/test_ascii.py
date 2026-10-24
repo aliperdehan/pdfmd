@@ -261,5 +261,22 @@ class CommandLine(unittest.TestCase):
         self.assertIn("Café α.", (self.directory / "doc.ascii.gfm.restored" / "doc.md").read_text(encoding="utf-8"))
 
 
+@needs_pandoc(3, 1, 3)
+class HelperFailure(unittest.TestCase):
+    def test_a_helper_that_cannot_start_is_named_in_the_warning_and_the_text_is_still_mapped(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-ascii-helper-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        config = directory / "ascii.yaml"
+        config.write_text('pdfmd-ascii: {command: "' + str(directory / "no-such-python").replace("\\", "/") + '", script: "x.py", '
+                          'missing: question, report: "' + (directory / "r.json").as_posix() + '", smart: all}\n', encoding="utf-8")
+        done = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--metadata-file", str(config), "--lua-filter",
+                               str(ROOT / "pdfmd_lua" / "ascii.lua")], input="Caf\u00e9 \u65e5.\n", capture_output=True, text=True,
+                              encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertRegex(done.stderr, r"WARN  ascii: the transliteration helper did not answer \(.+\); the text is mapped on the written file")
+        self.assertIn("no-such-python", done.stderr)                       # the reason is the system's own words about the command
+
+
+
 if __name__ == "__main__":
     unittest.main()
