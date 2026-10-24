@@ -13227,16 +13227,19 @@ def stamp_scope_matches(options: dict, report_output: Path | None) -> bool:
     return options["scope"] in ("always", wanted_scope)
 
 
-def stamp_unless_partial(partial: bool, *args, **kwargs) -> None:
-    """stamp_after_success, except for a partial parts-mode build: that isn't
-    the report, so it shouldn't write a provenance note claiming it is."""
-    if not partial:
-        stamp_after_success(*args, **kwargs)
+def stamp_build(partial: bool, skip: bool, md_path: Path, *args, **kwargs) -> None:
+    """stamp_after_success for a finished build. A partial parts-mode build isn't the report, so it writes no BUILD NOTES
+    stamp into the source (it would claim the report was built) -- but its PDF still says what made it (Creator,
+    PdfmdVersions, PdfmdBuildDate, and PdfmdPartial naming the parts). `skip`: an intermediate stage (the cache route's
+    .tex), which the final stage stamps."""
+    if skip:
+        return
+    stamp_after_success(md_path, *args, **kwargs, pdf_only=partial)
 
 
 def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_files: list[Path],
                         cli_overrides: dict, output: Path, verbose: bool,
-                        report_output: Path | None = None) -> None:
+                        report_output: Path | None = None, pdf_only: bool = False) -> None:
     """Write/update md_path's BUILD NOTES stamp after a successful compile,
     if --stamp/pdfmd-options.stamp says to for this context.
 
@@ -13245,6 +13248,8 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     compile (convert_one) -- options['scope'] decides which context(s)
     actually write a stamp (see DEFAULT_STAMP_OPTIONS/resolve_stamp_options):
     "always" (default), "report"-only, or "standalone"-only.
+
+    pdf_only (a partial build): the PDF's own provenance is written, the source's BUILD NOTES are not.
     """
     options = resolve_stamp_options(md_path, metadata_files, cli_overrides)
     if not stamp_scope_matches(options, report_output):
@@ -13253,8 +13258,8 @@ def stamp_after_success(md_path: Path, metadata_files: list[Path], preamble_file
     # Independent of options["enabled"] below on purpose -- pdf_metadata is
     # its own always-on-by-default switch (DEFAULT_STAMP_OPTIONS), separate
     # from the .md-source BUILD NOTES stamp that "enabled" actually gates.
-    stamp_pdf_metadata_posthoc(output, options, texts, verbose)
-    if not options["enabled"]:
+    stamp_pdf_metadata_posthoc(output, options, texts, verbose, partial_parts=partial_parts_label(md_path, output) if pdf_only else "")
+    if pdf_only or not options["enabled"]:
         return
     line = build_stamp_line(options, texts, output, report_output, verbose)
     store = options["store"]
@@ -13736,6 +13741,14 @@ def tables_command(args) -> int:
 # out entirely here rather than fought with escaping.
 PDF_INFO_VERSIONS_KEY = "PdfmdVersions"
 PDF_INFO_BUILD_DATE_KEY = "PdfmdBuildDate"
+PDF_INFO_PARTIAL_KEY = "PdfmdPartial"
+
+
+def partial_parts_label(scaffold: Path, output: Path) -> str:
+    """The parts a partial build holds, as the output file names them (`report.introduction+procedure.pdf` ->
+    `introduction+procedure`); the output's own stem when it does not start with the scaffold's."""
+    prefix = scaffold.stem + "."
+    return output.stem[len(prefix):] if output.stem.startswith(prefix) and len(output.stem) > len(prefix) else output.stem
 
 
 def pdf_metadata_snippet(options: dict, texts: list[str], verbose: bool) -> str | None:
@@ -13771,7 +13784,7 @@ def pdf_metadata_snippet(options: dict, texts: list[str], verbose: bool) -> str 
     return None
 
 
-def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], verbose: bool) -> None:
+def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], verbose: bool, partial_parts: str = "") -> None:
     """Write PdfmdVersions/PdfmdBuildDate into pdf_path's own PDF Info
     dictionary after a successful compile -- see pdf_metadata_snippet's
     docstring for why this replaced an in-LaTeX \\hypersetup injection.
@@ -13779,7 +13792,8 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
     a real PDF (e.g. a --to other than pdf), or pypdf isn't installed (a
     soft dependency, same convention as this module's own `yaml` import --
     a WARN either way, since unlike PyYAML's front-matter sugar this is an
-    always-on-by-default feature quietly not doing its job).
+    always-on-by-default feature quietly not doing its job). ``partial_parts``: the parts a partial build holds, recorded as
+    PdfmdPartial so the PDF says it is not the whole report.
     """
     if not options.get("pdf_metadata"):
         return
@@ -13824,6 +13838,7 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                     **existing,
                     f"/{PDF_INFO_VERSIONS_KEY}": summary,
                     f"/{PDF_INFO_BUILD_DATE_KEY}": timestamp,
+                    **({f"/{PDF_INFO_PARTIAL_KEY}": partial_parts} if partial_parts else {}),
                 })
                 atomic_write_pdf(writer, pdf_path)
         finally:
@@ -20374,7 +20389,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             for temporary in temporaries:
                 temporary.unlink(missing_ok=True)
         if ok:
-            stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [],
+            stamp_build(partial, skip_stamp, md_path, metadata_files, preamble_files or [],
                                  stamp_overrides, output, verbose)
         flush_summary()
         return md_path, ok, reason[-3000:]
@@ -20760,7 +20775,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         ansi_scratch.cleanup()
                 office_finish(office_arguments, md_path, verbose)
             if result.returncode == 0 and not ascii_problem:
-                stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+                stamp_build(partial, skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
             flush_summary()
             return md_path, result.returncode == 0 and not ascii_problem, ascii_problem or result.stderr[-3000:]
 
@@ -20815,7 +20830,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # .md BUILD NOTES stamp nor a PDF-metadata one -- every other
                 # success path in this function does call it.
                 if ok:
-                    stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [],
+                    stamp_build(partial, skip_stamp, md_path, metadata_files, preamble_files or [],
                                         stamp_overrides, output, verbose)
                 flush_summary()
                 return md_path, ok, reason[-3000:]
@@ -21054,7 +21069,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             return md_path, False, ("no PDF engine could build this. Install a LaTeX or Typst engine "
                                     "(pdfmd --install typst) or use --to html")
         if result.returncode == 0:
-            stamp_unless_partial(partial or skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
+            stamp_build(partial, skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides, output, verbose)
         flush_summary()
         return md_path, result.returncode == 0, result.stderr[-3000:]
 
@@ -24115,7 +24130,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                           f"({time.time() - started:.0f} s)" + (f"; {failed} failed (typeset inline, "
                           "nothing lost)" if failed else ""))
         if ok:
-            stamp_unless_partial(partial, md_path, metadata_files, preamble_files or [], stamp_overrides,
+            stamp_build(partial, False, md_path, metadata_files, preamble_files or [], stamp_overrides,
                                  output, verbose)
         flush_summary()
         return md_path, ok, reason[-3000:]
