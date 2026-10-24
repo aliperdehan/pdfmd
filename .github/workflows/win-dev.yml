@@ -22,6 +22,7 @@ jobs:
         run: |
           choco install miktex poppler -y --no-progress
           echo 'C:\Program Files\MiKTeX\miktex\bin\x64' >> "$GITHUB_PATH"
+          echo 'C:\ProgramData\chocolatey\bin' >> "$GITHUB_PATH"      # in front of MiKTeX's own pdftotext
           "/c/Program Files/MiKTeX/miktex/bin/x64/initexmf" --admin --set-config-value='[MPM]AutoInstall=1'
       - run: pip install .
       - name: Fonts
@@ -29,6 +30,12 @@ jobs:
           pdfmd --install fonts:stix-two
           pdfmd --install fonts:jetbrains-mono
           pdfmd --install fonts:dejavu
+      - name: "Experiment 0: which poppler"
+        run: |
+          which -a pdftotext pdftocairo pdftoppm
+          pdftotext -v 2>&1 | head -2
+          pdftocairo -v 2>&1 | head -2
+          echo '<p>x</p>' > /tmp/x.html
       - name: "Experiment 1: the ASCII helper without Python's UTF-8 mode"
         run: |
           mkdir -p /tmp/e1 && cd /tmp/e1

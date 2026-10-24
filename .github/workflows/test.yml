@@ -227,7 +227,9 @@ jobs:
           "$miktex/initexmf" --admin --set-config-value='[MPM]AutoInstall=1'     # packages a document needs are fetched on demand
           "$miktex/lualatex" --version | head -1
       - name: poppler (the tests read PDFs with pdftotext and pdftoppm)
-        run: choco install poppler -y --no-progress
+        run: |
+          choco install poppler -y --no-progress
+          echo 'C:\ProgramData\chocolatey\bin' >> "$GITHUB_PATH"     # in front of MiKTeX's own pdftotext, which has no -bbox
       - run: pip install .
       - name: The fonts the tests name (pdfmd's own default main font, its code font, DejaVu for missing glyphs)
         run: |
