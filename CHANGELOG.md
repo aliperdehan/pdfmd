@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.4 — 2026-10-24
+
+Pre-edit state: commit `b55a83b` (v3.30.3).
+
+### Added
+
+- **An inline calculator: `` `2026 - 2006`{=} `` becomes `20`.** Inline code followed at once by a bare `{=}` is replaced by its value, in every
+  output format a Pandoc build writes. `pdfmd_lua/calc.lua` has its own small parser and runs nothing (no `load`, no R, no Python), so a document from
+  anybody is safe and nothing asks for trust. Operators: `+ - * /`, `^` and `**` (right to left; `-2^2` is -4), `%` and `%%` (remainder, floored:
+  `-7 % 3` is 2), `//` and `%/%` (floor division: `7 %/% 2` is 3), parentheses, unary minus. `|a - b|` is the absolute value. A `%` that no operand follows is a percent sign, a label and not an operator (`0.5 / 4 * 100%` is 12.5, as a lab report
+  writes it); `×`, `·`, `÷` and `−` are `*`, `*`, `/` and `-`. Numbers: `12`, `.5`, `6.022e23`. Constants `pi` and `deg`
+  (= pi/180, so `sin(30*deg)` is 0.5). Functions (angles in radians): `sin cos tan cot sec csc`, `asin acos atan acot` (`atan(y, x)` is the two-argument
+  arctangent), `sinh cosh tanh asinh acosh atanh`, `sind cosd tand` (degrees in) and `asind acosd atand` (degrees out; `asin(x) / deg` is the same), `exp ln log` (`log(x, base)`), `log10 log2 sqrt cbrt abs sign`,
+  `floor ceil trunc`, `round(x)` and `round(x, digits)` (an exact half goes to the even digit, as in R and Python: `round(2.5)` is 2, `round(3.5)` is 4; `calc-round: away` makes it 3), `min max` (any number of
+  arguments), `hypot factorial`. A trig result closer to 0 than 1e-15 is 0 (`sin(pi)`). The value prints as R does: up to 7 significant digits, `20`
+  and not `20.0`, `0.3` for `0.1 + 0.2`, `1.2044e+24` for a very large one.
+- What the parser cannot evaluate (a name it does not know, a division by zero, `asin(2)`, an unfinished expression, an infinite or undefined
+  result) is kept as the code it was, without the `{=}`, with one `WARN  calc: ...` naming the span and the reason. Inline code without `{=}`, code
+  blocks and a `{=}` anywhere else are never touched.
+- `--calc` / `--no-calc` (and `PDFMD_CALC=on|off`, which is how a `-j` worker gets it) and `pdfmd-options: {calc: off}` (the document, a metadata file or the
+  config file, in that order of precedence after the flag) turn the calculator on or off, with a `--setup` row;
+  `--calc-round even|away`, `pdfmd-options: {calc-round: away}` and a `--setup` row choose how `round()` settles an exact half (default even, like R and Python); the filter is
+  attached only to a document that has a `` `...`{=} `` span. Without Pandoc the built-in renderer shows the span as written. docs/recipes.md 1.11.
+- `tests/test_calc.py`: 88 expressions with their text, 23 failures with their warning, the neighbouring text, code that must stay, the HTML, LaTeX
+  and Typst writers, the detection, the switch (document and metadata file), and real PDFs (a part included) read back with `pdftotext`.
+
+### Not done (queued)
+
+- spellings for `.qmd` (`` `{r} 2 + 2` ``, `{python}`) and an `all` mode that evaluates every
+  arithmetic-only code span.
+
+---
+
 ## v3.30.3 — 2026-10-24
 
 Pre-edit state: commit `ab380d1` (v3.30.2).

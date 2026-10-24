@@ -676,6 +676,13 @@ means `unicode` here); math as Pandoc's plain writer sets it (`E = mc²`). A pic
 for it, and a Typst or LaTeX picture piece is left out with a `WARN`. `pdfmd-options: {txt: {scripts: unicode, title:
 true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc's own plain writer; that is `--to plain`.
 
+### A number computed inside a sentence: `` `2026 - 2006`{=} ``
+
+Inline code followed at once by a bare `{=}` is replaced by its value (3.30.4): `` `2026 - 2006`{=} `` is 20, `` `sin(30*deg)`{=} `` is 0.5.
+`pdfmd_lua/calc.lua` has its own small parser (`+ - * / ^ % //`, parentheses, `pi`, `sin cos tan` and their inverses, `exp ln log sqrt`,
+`round` (an exact half goes to the even digit, as in R and Python: `round(2.5)` is 2; `--calc-round away` or `pdfmd --setup` gives 3), `min max` and more; [docs/recipes.md](docs/recipes.md) 1.11 lists them) and runs nothing, so it is safe on any file. What it cannot
+evaluate keeps its code, with one `WARN`. `--no-calc`, `pdfmd-options: {calc: off}` or `--setup` turns it off. Needs Pandoc.
+
 ### Read it in the terminal: `--view` and `--to ansi`
 
 ```sh

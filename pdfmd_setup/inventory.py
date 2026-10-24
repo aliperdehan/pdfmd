@@ -75,6 +75,7 @@ FLAGS: dict[str, str | Omitted] = {
     "pagebreak": "options.pagebreak", "no_pagebreak": "options.pagebreak",
     "markup": "options.markup", "no_markup": "options.markup",
     "show_comments": "options.show-comments",
+    "calc": "options.calc", "calc_round": "options.calc-round",
     "raw_for": Omitted("document", "per output family: pdfmd-options.raw as a mapping"),
     "gfm_scripts": "options.gfm.scripts", "gfm_math": "options.gfm.math", "ascii_missing": "options.ascii.missing",
     "ascii_stdio": Omitted("internal", "pdfmd's own ASCII filter calls it"),
@@ -176,7 +177,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "office.CJKmainfont": WORD_ONLY, "office.linestretch": WORD_ONLY, "office.lang": WORD_ONLY,
     "office.indent": WORD_ONLY,
     "raw": "options.raw",
-    "pagebreak": "options.pagebreak", "markup": "options.markup", "show-comments": "options.show-comments",
+    "pagebreak": "options.pagebreak", "markup": "options.markup", "show-comments": "options.show-comments", "calc": "options.calc", "calc-round": "options.calc-round",
     "reader": "options.reader",
     "seed-labels": "options.seed-labels",
     "metadata-precedence": "options.metadata-precedence",
@@ -200,7 +201,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
-    "options.csv.": "tables", "options.table-keep": "tables", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
+    "options.csv.": "tables", "options.table-keep": "tables", "options.calc": "markdown", "options.calc-round": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",
 }
 

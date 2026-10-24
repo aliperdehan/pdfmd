@@ -159,6 +159,34 @@ file: bold, italic and code in colour, box-drawn tables wrapped to the window, l
 styled when piped into `less -R`; `NO_COLOR` or `--color never` takes the styling away. `--to ansi` writes the same text to a
 file (`report.ansi`), and `-o -` sends any format to standard output. README: "Read it in the terminal".
 
+### 1.11 Compute a number inside a sentence
+
+Inline code followed at once by `{=}` is replaced by its value (v3.30.4), so the sentence and the number cannot disagree:
+
+```markdown
+Since `2026 - 2006`{=} years have passed, the average has moved by `2 * 20 / 10`{=} points;
+the angle is `sin(30*deg)`{=} and the volume `round(4/3 * pi * 2.5^3, 1)`{=} cm3.
+```
+
+gives "Since 20 years have passed, the average has moved by 4 points; the angle is 0.5 and the volume 65.4 cm3."
+
+- Operators: `+ - * /`, `^` (also `**`; right to left, `-2^2` is -4), `%` (remainder: `7 % 3` is 1, `-7 % 3` is 2; R's `%%` also
+  works), `//` (floor division: `7 // 2` is 3; R's `%/%` also works), parentheses.
+- `|a - b|` is the absolute value. A `%` with no number or name after it is a percent sign, a label and not an operator, so the lab-report
+  line `0.0000265 / 0.02039 * 100%` is 0.1299657 and `7 % 3` is 1. `×`, `·`, `÷` and `−` work as `*`, `*`, `/` and `-`.
+- Numbers: `12`, `0.5`, `.5`, `6.022e23`. Constants: `pi`, and `deg` (= pi/180) for degrees: `sin(30*deg)`.
+- Functions: `sin cos tan cot sec csc`, `asin acos atan acot` (`atan(y, x)` for two arguments), `sinh cosh tanh asinh acosh atanh`,
+  `sind cosd tand` (degrees in), `asind acosd atand` (degrees out; `asin` and the others give radians: `asin(0.5) / deg` is 30), `exp ln log` (`log(x)` is natural, `log(x, 10)`), `log10 log2 sqrt cbrt abs sign`, `floor ceil trunc`,
+  `round(x, digits)`, `min max hypot factorial`. Angles are in radians unless the function ends in `d`.
+- `round` sends an exact half to the even digit, as R and Python do: `round(2.5)` is 2, `round(3.5)` is 4, `round(0.125, 2)` is 0.12. For
+  half away from zero (2.5 is 3) set `pdfmd-options: {calc-round: away}`, `--calc-round away`, or `pdfmd --setup`.
+- The result prints like R: up to 7 significant digits (`1/3` is 0.3333333), `20` and not `20.0`.
+- Only arithmetic runs; a name it does not know is not looked up anywhere. Such a span (and `1/0`, `asin(2)`) keeps its code, without the
+  `{=}`, and pdfmd prints one `WARN  calc:` naming it. Inline code without `{=}` and code blocks are never touched.
+- `--no-calc` turns it off for a run (`--calc` turns it on over a document that says off); `pdfmd-options: {calc: off}` for a document,
+  a folder's `metadata.yaml` or every document (`pdfmd --setup`). It needs
+  Pandoc; the built-in renderer shows `` `2+2`{=} `` as written.
+
 ## 2. A project with a house style
 
 pdfmd looks beside the document, and in a `metadata/` folder beside it, for **only** these names:

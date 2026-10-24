@@ -119,6 +119,15 @@ Header files and header-includes (v3.27.18):
     the code-wrapping header), where a shared preamble goes; the document's own last but for the packages header. An
     --include-in-header or `-M header-includes` of your own replaces them, as in Pandoc.
 
+Inline calculator (v3.30.4):
+    inline code followed at once by a bare `{=}` becomes its value: `2026 - 2006`{=} is 20. pdfmd_lua/calc.lua has its own
+    small parser (+ - * / ^ ** % // %/%, parentheses, |abs|, a trailing % as a label, pi, deg, sin cos tan cot sec csc and their inverses, hyperbolics,
+    sind cosd tand asind acosd atand, exp ln log log10 log2 sqrt cbrt abs sign floor ceil trunc round min max hypot factorial) and runs
+    nothing. What it cannot evaluate keeps its code, with one WARN. Added by `calc_filter_args()` only for a document
+    that has such a span; --no-calc, `pdfmd-options: {calc: off}` or --setup turns it off, and round() sends an exact
+    half to the even digit (R, Python) unless --calc-round away / `calc-round: away`. Needs Pandoc (the built-in renderer
+    shows the span as written). docs/recipes.md 1.11.
+
 Paragraph indent for a stretch of text (v3.30.0):
     a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`)
     sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
@@ -1382,7 +1391,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.3"
+PDFMD_VERSION = "3.30.4"
 import argparse
 import atexit
 import csv
@@ -2807,6 +2816,57 @@ def indent_filter_args(sources: Path | list[Path]) -> list[str]:
         return []
     shipped = pdfmd_lua.path("indent")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
+# An inline calculator (v3.30.4): inline code followed at once by a bare `{=}` is replaced by its value,
+# `2026 - 2006`{=} -> 20, evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). The filter goes in only for a
+# document that has such a span. --calc / --no-calc (reaching -j workers as PDFMD_CALC), else `pdfmd-options: {calc: off}`
+# (the document, its metadata files, the config) turns it on or off; `calc-round: even|away` (--calc-round, PDFMD_CALC_ROUND)
+# is how round() settles an exact half: to even (R and Python, the default) or away from zero.
+CALC_SPAN_RE = re.compile(r"`\{=\}")
+CALC_ENV = "PDFMD_CALC"
+CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
+CALC_ROUNDS = ("even", "away")
+
+
+def calc_is_off(md_path: Path, metadata_files: list[Path]) -> bool:
+    value = os.environ.get(CALC_ENV)
+    if value is None:
+        value = first_pdfmd_option(md_path, list(metadata_files), "calc")
+    return value is False or (isinstance(value, str) and value.strip().lower() in ("off", "false", "no", "0"))
+
+
+def calc_round_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    value = os.environ.get(CALC_ROUND_ENV)
+    if value is None:
+        value = first_pdfmd_option(md_path, list(metadata_files), "calc-round")
+    mode = str(value).strip().lower() if value is not None else "even"
+    if mode not in CALC_ROUNDS:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc-round must be even or away, not {value!r}")
+    return mode
+
+
+def calc_round_argument(value: str) -> str:
+    if value.strip().lower() not in CALC_ROUNDS:
+        raise argparse.ArgumentTypeError(f"{value!r}: even (2.5 rounds to 2, as R and Python do) or away (2.5 rounds to 3)")
+    return value.strip().lower()
+
+
+def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter calc.lua`` when a source has inline code followed by `{=}` and `calc` is not off."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not any(CALC_SPAN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return []
+    if calc_is_off(files[0], metadata_files):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        return []
+    shipped = pdfmd_lua.path("calc")
+    if shipped is None:
+        return []
+    return ["-M", "pdfmd-calc-round=" + calc_round_mode(files[0], metadata_files), "--lua-filter", str(shipped)]
 
 
 def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -19048,6 +19108,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
+            cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += indent_filter_args(md_path)
@@ -19561,6 +19622,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             # docstring for the 2026-09-20 fix this is part of).
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
+            cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += indent_filter_args(md_path)
@@ -20042,6 +20104,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # document_header_includes()'s own docstring.
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
+                cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
                 cmd += indent_filter_args(all_inputs or md_path)
@@ -20300,6 +20363,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
+                    cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
                     cmd += indent_filter_args(all_inputs or md_path)
@@ -24022,6 +24086,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pager", action=argparse.BooleanOptionalAction, default=None,
                         help="with --view: use $PDFMD_PAGER / $PAGER / `less -FRX` when stdout is a terminal (the default); "
                              "--no-pager prints it all. Also `pdfmd-options: {pager: false}`, or --setup")
+    parser.add_argument("--calc", action=argparse.BooleanOptionalAction, default=None,
+                        help="evaluate inline code followed by `{=}` (`2026 - 2006`{=} is 20) in the text; --no-calc leaves "
+                             "it as written. On by default; also `pdfmd-options: {calc: off}`, or --setup")
+    parser.add_argument("--calc-round", type=calc_round_argument, default=None, metavar="even|away",
+                        help="how round() in `{=}` settles an exact half: even (the default; 2.5 is 2, as R and Python do) "
+                             "or away from zero (2.5 is 3). Also `pdfmd-options: {calc-round: away}`, or --setup")
     parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
@@ -24596,6 +24666,10 @@ def main() -> None:
     for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"])):
         if value is not None:
             os.environ[variable] = str(value)
+    if args.calc is not None:
+        os.environ[CALC_ENV] = "on" if args.calc else "off"
+    if args.calc_round is not None:
+        os.environ[CALC_ROUND_ENV] = args.calc_round
     if args.table_keep is not None:
         os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
@@ -25158,6 +25232,7 @@ def main() -> None:
                     if target_format in HTML_TARGETS:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
+                    cmd += calc_filter_args(files, metadata_files)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
                     cmd += indent_filter_args(files)
@@ -25284,6 +25359,7 @@ def main() -> None:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         if report_header_file is not None:          # last, as in the branch above
                             cmd += ["--include-in-header", str(report_header_file)]
+                        cmd += calc_filter_args(files, metadata_files)
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)
                         cmd += indent_filter_args(files)
