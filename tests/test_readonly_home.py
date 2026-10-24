@@ -141,6 +141,11 @@ class Builds(Scratch):
         environment.update({"HOME": str(home), "USERPROFILE": str(home), "LOCALAPPDATA": str(home / "Local"),
                             "APPDATA": str(home / "Roaming"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
                             "PYTHONDONTWRITEBYTECODE": "1"})
+        if sys.platform == "win32":
+            # pdfmd moves the cache folder (LOCALAPPDATA) when it cannot be written; MiKTeX keeps its configuration in APPDATA and
+            # cannot run without a writable one, which has nothing to do with what is being tested
+            environment["APPDATA"] = str(self.directory / "appdata")
+            (self.directory / "appdata").mkdir(exist_ok=True)
         return environment
 
     def build(self, home: Path, *arguments: str, document: Path | None = None, cwd: Path | None = None):
