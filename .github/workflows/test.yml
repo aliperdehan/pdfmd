@@ -201,7 +201,7 @@ jobs:
       - run: pip install ruff
       - run: ruff check --select F --exclude pdfmd_inkmd pdfmd.py pdfmd_*/ scripts/
 
-  # Not gating (continue-on-error): Windows with a LaTeX engine (TeX Live), which the jobs above do not have there. A failure is
+  # Not gating (continue-on-error): Windows with a LaTeX engine (MiKTeX), which the jobs above do not have there. A failure is
   # something to look at, not something that stops a release.
   windows-latex:
     runs-on: windows-latest
@@ -218,9 +218,13 @@ jobs:
         with:
           python-version: "3.13"
       - uses: pandoc/actions/setup@v1
-      - uses: teatimeguest/setup-texlive-action@v3   # TeX Live, with LuaLaTeX
-        with:
-          packages: scheme-basic collection-latex collection-latexrecommended collection-luatex collection-fontsrecommended collection-xetex lm
+      - name: A LaTeX engine (MiKTeX, from Chocolatey: the organisation does not allow third-party actions)
+        run: |
+          choco install miktex -y --no-progress
+          miktex="/c/Program Files/MiKTeX/miktex/bin/x64"
+          echo 'C:\Program Files\MiKTeX\miktex\bin\x64' >> "$GITHUB_PATH"
+          "$miktex/initexmf" --admin --set-config-value='[MPM]AutoInstall=1'     # packages a document needs are fetched on demand
+          "$miktex/lualatex" --version | head -1
       - run: pip install .
       - run: pdfmd --check-dependencies
       - name: The whole test suite
