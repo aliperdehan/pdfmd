@@ -139,8 +139,9 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     docs/recipes.md 1.11.
 
 Paragraph indent for a stretch of text (v3.30.0):
-    a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`)
-    sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
+    a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`;
+    the value may sit in the class word: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`, `::: {.indent-3in}`, and a
+    near miss such as `.indent3in` gets a WARN) sets the first-line indent of the paragraphs inside it and puts the document's own back at the closing `:::`
     (pdfmd_lua/indent.lua, added by `indent_filter_args()` only for a document, or a part, that has such a div): LaTeX
     and Beamer in a `\\begingroup` ... `\\endgroup`, Typst a `first-line-indent` rule, HTML a `text-indent` style; the
     Markdown writers keep the div, the others drop the setting with a NOTE. docs/recipes.md 1.9.
@@ -2804,10 +2805,14 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
 
 
 # A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
-# `::: noindent`, `::: {.noindent}`, `::: indent`. pdfmd_lua/indent.lua does it for the target format and puts the
-# document's own indent back at the closing `:::`; the filter goes in only for a document that has such a div.
-INDENT_DIV_RE = re.compile(r"""^[ \t]*:{3,}[ \t]*(?:\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*(?:\.(?:no)?indent\b|\bindent[ \t]*=)"""
-                           r"""|(?:no)?indent[ \t]*$)""", re.MULTILINE)
+# `::: noindent`, `::: {.noindent}`, `::: indent`, and the class-word spellings of a value, `::: indent=3in`, `::: .indent=3in`,
+# `::: indent-3in`, `::: {.indent-3in}`, `::: {.indent=3in}`. pdfmd_lua/indent.lua does it for the target format and puts the
+# document's own indent back at the closing `:::`; the filter goes in only for a document that has such a div. The expression
+# also lets a near miss through (`.indent3in`, `.noindent=2em`) so that the filter can say it is none of them; a class that only
+# starts with the word (`.indented`, `.indentation`) does not.
+_INDENT_WORD = r"(?:no)?indent(?:\b|(?=\d)|(?=(?:rem|em|ex|pt|cm|mm|in|bp|pc|px)\b))"
+INDENT_DIV_RE = re.compile(r"""^[ \t]*:{3,}[ \t]*(?:\{(?:[^}"\n]|"(?:[^"\\\n]|\\.)*")*(?:\.""" + _INDENT_WORD + r"""|\bindent[ \t]*=)"""
+                           r"""|\.?""" + _INDENT_WORD + r"""[^\s{}]*[ \t]*$)""", re.MULTILINE)
 
 
 def contains_indent_div(md_path: Path) -> bool:

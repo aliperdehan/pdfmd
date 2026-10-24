@@ -144,6 +144,13 @@ div's `#id` stays. LaTeX and Beamer set `\parindent` in a group, Typst a `first-
 have no per-block indent: the text stays, the setting is dropped, with a NOTE. The document's own indent is Pandoc's
 `indent: true` in the front matter (none is the default).
 
+Pandoc reads `::: indent=3in` as a div whose one class is `indent=3in`; only the braced form carries attributes. So the
+value is also understood in the class word, with the same values: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`,
+`::: {.indent-3in}` and `::: {.indent=3in}` all mean `::: {indent=3in}`. A class that starts like these but is none of
+them (`.indent3in`, `.noindent=2em`) is not an indent div: pdfmd says `WARN  indent: '.indent3in' is not an indent div`
+and leaves it as it is. Classes of your own (`.indented`, `.indentation`, `.indent-block`) are not touched and not
+reported.
+
 ---
 
 ### 1.10 Read a document in the terminal

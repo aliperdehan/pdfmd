@@ -9,6 +9,11 @@
 --   indent=false | no | off | 0     no indent
 --   indent=true  | yes | on         1.5em (`.indent` alone means the same)
 --   indent=2em | 12pt | 5mm | 0.2in  that length (a bare number is em)
+-- The value also goes into the class word, for the one who forgets the braces (Pandoc reads `::: indent=3in` as a div with
+-- the single class `indent=3in`, and only the braced form carries attributes): `::: indent=3in`, `::: .indent=3in`,
+-- `::: indent-3in`, `::: {.indent-3in}`, `::: {.indent=3in}` all mean `{indent=3in}`. A class that starts like one of these
+-- but is none of them (`.indent3in`, `.noindent=2em`) is not an indent div: one WARN, and it is left as it is. Classes of
+-- a project's own (`.indented`, `.indentation`, `.indent-block`) are not looked at.
 -- Nested divs work (the inner one wins, the outer comes back after it). The div's id and other classes stay.
 --
 -- LaTeX and Beamer get `\begingroup\setlength{\parindent}{..}` ... `\endgroup`, Typst `#[#set par(first-line-indent: ..)`
@@ -33,6 +38,7 @@ local WORDS = {["false"] = "off", no = "off", off = "off", ["true"] = "on", yes 
 
 local unsupported = 0
 local invalid = {}
+local nearmiss, nearly = {}, {}
 
 -- "0pt" for off, a length for the rest, nil (and a WARN later) for something else
 local function length(value)
@@ -47,28 +53,70 @@ local function length(value)
   return number .. unit:lower()
 end
 
+-- What a class word means: nil (not this filter's business), {value = "1.5em"} (an indent class), {invalid = "banana"} (an
+-- `indent=` class with a value that is no length) or {near = true} (starts like an indent class, is none).
+-- Pandoc keeps `{.indent=3in}` whole as one class word, braces and dot included, and `::: .indent` as `.indent`.
+local function classify(class)
+  local word = class:match("^{(.*)}$") or class
+  word = word:gsub("^%.", "")
+  if word == "indent" then return {value = DEFAULT} end
+  if word == "noindent" then return {value = "0pt", bare = true} end
+  local given = word:match("^indent[=-](.+)$")
+  if given then
+    local value = length(given)
+    if value then return {value = value} end
+    if word:sub(7, 7) == "=" then return {invalid = given} end
+    return nil                                        -- `.indent-block`: a class of the project's own
+  end
+  local rest = word:match("^indent(.*)$") or word:match("^noindent(.*)$")
+  if not rest or rest == "" then return nil end
+  local first = rest:sub(1, 1)
+  if first == "=" or first:match("%d") or (first == "-" and length(rest:sub(2))) or UNITS[rest:lower()] then
+    return {near = true}
+  end
+  return nil                                          -- `.indented`, `.indentation`
+end
+
 local function wanted(div)
+  local accepted, bad, nears = nil, nil, {}
+  for _, class in ipairs(div.classes) do
+    local found = classify(class)
+    if found and found.near then
+      nears[#nears + 1] = class
+    elseif found and found.invalid then
+      bad = bad or found.invalid
+    elseif found and (accepted == nil or found.bare) then
+      accepted = found.value
+    end
+  end
   local value = div.attributes["indent"]
-  local classes = {}
-  for _, class in ipairs(div.classes) do classes[class] = true end
-  if value == nil and not classes.noindent and not classes.indent then return nil end
-  local result
-  if value ~= nil then
-    result = length(value)
+  if value ~= nil then                                -- the attribute wins over a class
+    local result = length(value)
     if not result then
       invalid[#invalid + 1] = value
       return nil, true
     end
-  else
-    result = classes.noindent and "0pt" or DEFAULT
+    return result, true
   end
-  return result, true
+  if accepted then return accepted, true end
+  if bad then
+    invalid[#invalid + 1] = bad
+    return nil, true
+  end
+  for _, class in ipairs(nears) do
+    if not nearly[class] then
+      nearly[class] = true
+      nearmiss[#nearmiss + 1] = class
+    end
+  end
+  return nil, false
 end
 
 local function stripped(div)
   local attributes = pandoc.Attr(div.identifier, {}, {})
   for _, class in ipairs(div.classes) do
-    if class ~= "noindent" and class ~= "indent" then attributes.classes:insert(class) end
+    local found = classify(class)
+    if not found or found.near then attributes.classes:insert(class) end
   end
   for key, value in pairs(div.attributes) do
     if key ~= "indent" then attributes.attributes[key] = value end
@@ -117,6 +165,9 @@ return {{Div = function(div)
   return pandoc.Div(div.content, attr)
 end,
 Pandoc = function(doc)
+  for _, class in ipairs(nearmiss) do
+    io.stderr:write(string.format("WARN  indent: '%s' is not an indent div; write ::: {indent=3in} (or ::: noindent)\n", class))
+  end
   for _, value in ipairs(invalid) do
     io.stderr:write(string.format("WARN  indent: '%s' is not an indent (false, true, or a length such as 2em, 12pt, 5mm); "
       .. "the div is left as it is\n", value))
