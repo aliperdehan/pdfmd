@@ -41,6 +41,18 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.7 — 2026-10-24
+
+Pre-edit state: commit `230ff0b` (v3.30.6).
+
+### Fixed
+
+- **A partial build lists its metadata again.** `pdfmd @10,40` (or `report#section`) printed `FOUND nulabreport.lua, 2 parts` and
+  `DEFAULTS packages mhchem`, without the metadata file, the preamble, the global metadata or the balanced tables a full build lists.
+  The files were used all along (the Pandoc command had them); only the summary was wrong. The hidden pass over the whole document, which
+  gives the left-out parts their numbers, printed its own summary to nowhere and emptied the items already recorded. The summary is now saved
+  before that pass and put back after it (`AutoLog.snapshot` / `restore`). Test: `tests/test_autolog.py` (`Builds`).
+
 ## v3.30.6 — 2026-10-24
 
 Pre-edit state: commit `1725405` (v3.30.5).

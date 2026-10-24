@@ -1395,7 +1395,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.6"
+PDFMD_VERSION = "3.30.7"
 import argparse
 import atexit
 import csv
@@ -8821,6 +8821,12 @@ class AutoLog:
         self.shown: dict[str, str] = {}
         self.dedupe = False
         self.quiet = False
+
+    def snapshot(self) -> tuple[dict, list, dict]:
+        return dict(self.items), list(self.other), dict(self.shown)
+
+    def restore(self, saved: tuple[dict, list, dict]) -> None:
+        self.items, self.other, self.shown = dict(saved[0]), list(saved[1]), dict(saved[2])
 
     def reset(self, dedupe: bool = False) -> None:
         self.items.clear()
@@ -18510,6 +18516,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     cheap = ["svg", "remoteimages", "pdfimages"]
     scan_no_auto = no_auto if (no_auto is not None and not no_auto) else [*(no_auto or []), *cheap]
     saved_build = dict(BUILD)
+    saved_log = AUTO_LOG.snapshot()
     BUILD["scanning"] = True
     try:
         with contextlib.redirect_stdout(io.StringIO()):
@@ -18528,6 +18535,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     finally:
         BUILD.clear()
         BUILD.update(saved_build)                  # what the scan recorded (its scratch .tex) is not the build's
+        AUTO_LOG.restore(saved_log)                # its summary went to nowhere and must not take the build's FOUND items
     if not built[1] or not tex_path.is_file():
         if verbose:
             print("LABELS    the whole-document scan failed; references to parts left out stay ??")

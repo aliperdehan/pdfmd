@@ -137,6 +137,21 @@ class Builds(unittest.TestCase):
         self.assertTrue(all(len(line) <= 110 for line in lines), lines)
         self.assertFalse(any(line.startswith("AUTO YAML") for line in lines))
 
+    def test_the_summary_survives_the_hidden_scan_of_a_partial_build(self):
+        """v3.30.7: the whole-document scan printed (to nowhere) and emptied the FOUND items, so a partial build
+        lost its metadata and preamble from the line."""
+        if not shutil.which("lualatex"):
+            self.skipTest("needs LuaLaTeX")
+        (self.doc / "parts").mkdir()
+        (self.doc / "parts" / "10-a.md").write_text("# A\n\nOne.\n", encoding="utf-8")
+        (self.doc / "parts" / "20-b.md").write_text("# B\n\nTwo, see @sec:a.\n", encoding="utf-8")
+        (self.doc / "r.md").write_text("---\ntitle: T\npdfmd-options:\n  parts: auto\n---\n", encoding="utf-8")
+        lines = self.run_pdfmd("-e", "lualatex", "-o", "r.pdf", "r.md@10")
+        found = [line for line in lines if line.startswith("FOUND")]
+        self.assertEqual(len(found), 1, lines)
+        self.assertIn("metadata: metadata.yaml + preamble.tex", found[0])
+        self.assertTrue(any(line.startswith("DEFAULTS  global metadata") for line in lines), lines)
+
     def test_verbose_keeps_the_words_the_manuals_quote(self):
         text = "\n".join(self.run_pdfmd("d.md", "--to", "latex", "--verbose"))
         self.assertIn("AUTO YAML  ", text)
