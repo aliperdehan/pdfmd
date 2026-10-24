@@ -82,7 +82,7 @@ fonts and an engine that works by itself.
   pdfmd report -t docx     another format: docx, odt, html, typst, epub ... (or -o report.docx)
   pdfmd -b                 every Markdown file in the folder, one PDF each
   pdfmd -r                 all of them joined into one PDF
-  pdfmd report#results     just one section of a long document
+  pdfmd report#results     just one section of a long document (report@results where # is a comment)
   pdfmd -w report          rebuild whenever something changes
   pdfmd --view report      read it in the terminal: styled, tables drawn, paged (also: cat x.md | pdfmd --view)
   pdfmd --restore a.pdf    write back the source a PDF carries (it needs --attach-source when built)

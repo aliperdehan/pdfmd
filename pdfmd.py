@@ -8,7 +8,7 @@ Examples:
     pdfmd Downloads -b -f "DejaVu Serif"
     pdfmd Downloads -b --recursive
     pdfmd book -r -o book.pdf
-    pdfmd report#methods            (parts mode: build one part)
+    pdfmd report#methods            (parts mode: build one part; `@` does the same: report@methods)
     pdfmd animp                     (a unique start of a name or title works, with a WARN)
     pdfmd doc#onlyapart             (just the section "Only a Part"; also in parts mode)
     pdfmd chapter.md -y metadata.yaml
@@ -1391,7 +1391,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.4"
+PDFMD_VERSION = "3.30.5"
 import argparse
 import atexit
 import csv
@@ -13891,7 +13891,7 @@ def collect_parts(directory: Path) -> list[Path]:
             if entry.name.casefold() not in PARTS_SKIP_DIRS:
                 found.extend(collect_parts(entry))
         elif entry.suffix.lower() == ".md":
-            found.append(entry.resolve())
+            found.append(Path(os.path.abspath(entry)))       # not resolve(): a symlinked file or folder stays under the parts folder
     return found
 
 
@@ -24976,15 +24976,17 @@ def main() -> None:
     # for a level-2 heading (see find_heading); `#name` alone, with no
     # document, means the folder's only Markdown file.
     section_requests = split_section_requests(args.section)
-    if len(paths) == 1 and "#" in str(paths[0]) and not paths[0].exists():
+    # `@` says the same as `#` (`pdfmd report@intro`, `doc@@yield`): an interactive bash and some other shells take a `#`
+    # for the start of a comment and never pass it on.
+    if len(paths) == 1 and re.search(r"[#@]", str(paths[0])) and not paths[0].exists():
         # The whole string, not .name: a section path (`doc#results/yield`) has a slash.
-        base, _, suffix = str(paths[0]).partition("#")
+        base, separator, suffix = re.split(r"([#@])", str(paths[0]), maxsplit=1)
         if base and not base.endswith(("/", os.sep)):
             paths = [Path(base)]
         else:
             paths = [only_markdown_in(Path(base) if base else Path.cwd())]
         # `doc#name` asks for `name`; `doc##name` for `##name`, a level-2 heading.
-        section_requests += split_section_requests(["#" + suffix if suffix.startswith("#") else suffix])
+        section_requests += split_section_requests(["#" + suffix.replace("@", "#", 1) if suffix.startswith(("#", "@")) else suffix])
     scaffold_plan = None
     section_plan = None
     plan_source = None

@@ -41,6 +41,26 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.5 — 2026-10-24
+
+Pre-edit state: commit `2d56ccf` (v3.30.4).
+
+### Fixed
+
+- **A symlink in `parts/` crashed the build** (`ValueError: '...' is not in the subpath of '.../parts'`). `collect_parts()` resolved every part to its real
+  path, so a `.md` file linked into the parts folder, or one inside a linked folder, no longer lay under it and `part_key()` / `select_parts()`
+  could not name it. A part now keeps the path it has in the parts folder (`os.path.abspath`, not `resolve()`), so a linked file or folder is built
+  as a part, in its place in the order and under its link's name. (A folder in `parts/` is always walked: to keep a reference folder beside the parts
+  without building it, name it with a leading `_` or `.`.)
+
+### Added
+
+- **`@` for `#` in the section shorthand**: `pdfmd report@methods`, `pdfmd doc@@yield` (a level-2 heading), `pdfmd @yield` (the folder's only Markdown
+  file), `doc@a+b`. An interactive bash (and some other shells) takes a `#` for the start of a comment and never passes it on, so `pdfmd #10` ran
+  without its argument. A real file whose name has an `@` still wins, as with `#`; `--section` is unchanged. `tests/test_symlinked_parts.py`.
+
+---
+
 ## v3.30.4 — 2026-10-24
 
 Pre-edit state: commit `b55a83b` (v3.30.3).
