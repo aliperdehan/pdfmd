@@ -13553,13 +13553,14 @@ def backup_unchanged(previous: Path, current: Path) -> bool:
 
 
 def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
-                         verbose: bool, cli_format: str | None = None) -> None:
+                         verbose: bool, cli_format: str | None = None, collect: "list[Path] | None" = None) -> None:
     """Snapshot md_path into its backup directory if --backup/
     pdfmd-options.backup says to -- skipped when the newest existing
     snapshot, in any recognized naming form (backup_snapshots), is already
     identical ignoring --stamp's own lines; then pruned to ``keep`` if set.
     Best-effort: an OSError warns rather than failing a compile that
-    already succeeded.
+    already succeeded. ``collect``: the snapshot is added to this list instead of announced (a parts build announces its
+    files in one line, see backup_summary()).
     """
     options = resolve_backup_options(md_path, metadata_files, cli_enabled, cli_format)
     if not options["enabled"]:
@@ -13577,7 +13578,10 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
             return
         target = backup_target(backup_dir, template, md_path)
         shutil.copy2(md_path, target)
-        print(f"BACKUP  {display_path(target)}")
+        if collect is None:
+            print(f"BACKUP  {display_path(target)}")
+        else:
+            collect.append(target)
         prunable.append(target)
         if options["keep"] and len(prunable) > options["keep"]:
             for old in prunable[:-options["keep"]]:
@@ -13586,6 +13590,22 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
                     print(f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
     except OSError as error:
         print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+
+
+def backup_summary(md_path: Path, saved: list[Path], when: datetime | None = None) -> str:
+    """One line for the snapshots of one build: `BACKUP  report.md + 6 parts -> .backups/, parts/.backups/ (20261024-173319)`.
+    A single snapshot is named as it always was. ``saved`` are the snapshot files; the first one is md_path's when it was saved."""
+    if len(saved) == 1:
+        return f"BACKUP  {display_path(saved[0])}"
+    folders: list[str] = []
+    for target in saved:
+        folder = display_path(target.parent).rstrip("/\\") + "/"
+        if folder not in folders:
+            folders.append(folder)
+    own = bool(saved) and saved[0].name.startswith(md_path.name)
+    parts = len(saved) - (1 if own else 0)
+    what = f"{md_path.name} + {parts} part{'s' if parts != 1 else ''}" if own else f"{parts} parts"
+    return f"BACKUP  {what} -> {', '.join(folders)} ({(when or datetime.now()).strftime('%Y%m%d-%H%M%S')})"
 
 
 def backup_before_edit(md_path: Path, metadata_files: list[Path] | None = None) -> Path | None:
@@ -23861,8 +23881,14 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     if result[1] and target_format != ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))
+        saved: list[Path] = []
         for backed_up in [md_path, *(extra_inputs or [])]:
-            backup_after_success(backed_up, metadata_files, backup, verbose, backup_format)
+            backup_after_success(backed_up, metadata_files, backup, verbose, backup_format, collect=saved)
+        if saved:
+            print(backup_summary(md_path, saved))
+            if verbose and len(saved) > 1:
+                for target in saved:
+                    print(f"  BACKUP  {display_path(target)}")
         if target_format == "pdf" and source_override is None and not partial:
             polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
                        [md_path, *(extra_inputs or [])], verbose)
