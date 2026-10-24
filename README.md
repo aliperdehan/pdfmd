@@ -1617,11 +1617,13 @@ Water,18.015,1.20
   of `…`, the last 3, and the first 5 columns, a `…` column, the last 2 (about
   any cap keeps its last ⌊√cap⌋: 16 + 4 of 20, 25 + 5 of 30; `cut="head"` or `csv: {cut: head}` keeps the first
   ones only). `rows=all` or `cols=20` raise the cap. When a table is cut, the
-  build warns and the PDF itself shows a note saying so. For every table of a
-  document: `--csv-rows N|all` / `--csv-cols N|all`, or
-  `pdfmd-options: {csv: {rows: all, cols: 12, cut: ends, delimiter: auto, header: false, reader: gfm}}`
+  build warns (once per table, with how to show more) and the document shows a short note under the table, only for what was
+  cut: *(showing the first 7 and the last 3 of 15 rows)*. `note=off` on the div (or `--csv-note off`, or `csv: {note: off}`)
+  leaves the note out, the `…` row still marks the cut, and `note=full` (`--csv-note full`) adds the advice to the note as
+  earlier versions did. For every table of a document: `--csv-rows N|all` / `--csv-cols N|all`, or
+  `pdfmd-options: {csv: {rows: all, cols: 12, cut: ends, note: short, delimiter: auto, header: false, reader: gfm}}`
   (in the front matter, a metadata file, or the config, where `pdfmd --setup`
-  sets rows, columns, the cut and the delimiter); a div's own attributes still win.
+  sets rows, columns, the cut, the note and the delimiter); a div's own attributes still win.
 
 **Keeping a short table on one page.** A Lua filter can read the metadata key `tablekeep` (the one in
 nulabreport, a lab-report package, keeps a Markdown table of up to that many body rows

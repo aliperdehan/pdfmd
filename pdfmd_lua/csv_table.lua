@@ -10,7 +10,7 @@ local DEFAULT_MAX_COLS = 7
 -- For every table of the document (v3.27.2): pdfmd passes --csv-rows/--csv-cols or `pdfmd-options: {csv: ...}` as
 -- `-M pdfmd-csv-rows=N|all`, `pdfmd-csv-cols`, `pdfmd-csv-header=false`, `pdfmd-csv-reader=gfm`, only when they differ
 -- from the defaults; a div's own attributes still win. read_defaults (run first) takes them out of the metadata.
-local defaults = {rows = nil, cols = nil, header = true, reader = "markdown", delimiter = "auto", cut = "ends"}
+local defaults = {rows = nil, cols = nil, header = true, reader = "markdown", delimiter = "auto", cut = "ends", note = "short"}
 
 -- The whole text at once (a quoted field may hold a line break, and inline data arrives as one string): rows of
 -- fields, RFC 4180 quoting (a doubled `""` is a quote); blank lines are skipped.
@@ -376,6 +376,14 @@ local function csv_blocks(div)
     delim = DELIMITER_NAMES[delim:lower()] or delim:sub(1, 1)
   end
   local cut = (div.attributes["cut"] or defaults.cut or "ends"):lower()
+  -- the note under a table that was cut: short (the fact), off, full (the fact and how to show more); see CSV_NOTES in pdfmd.py
+  local note_mode = (div.attributes["note"] or defaults.note or "short"):lower()
+  if note_mode == "false" or note_mode == "no" or note_mode == "none" then note_mode = "off" end
+  if note_mode == "true" or note_mode == "yes" or note_mode == "on" then note_mode = "short" end
+  if note_mode ~= "short" and note_mode ~= "off" and note_mode ~= "full" then
+    io.stderr:write("WARN  " .. label .. ": note=" .. note_mode .. " is not short, off or full; short is used\n")
+    note_mode = "short"
+  end
   local max_rows = limit_or_all(div.attributes["rows"], defaults.rows or DEFAULT_MAX_ROWS)
   local max_cols = limit_or_all(div.attributes["cols"], defaults.cols or DEFAULT_MAX_COLS)
   local has_header = defaults.header
@@ -494,13 +502,24 @@ local function csv_blocks(div)
       end
       return string.format("%d of %d %s%s", shown, total, noun, plural)
     end
-    local note = "*(showing " .. part(row_head, row_tail, shown_rows, total_data_rows, "row") .. ", " ..
-      part(col_head, col_tail, shown_cols, total_cols, "column") .. " -- use `rows=all`/`cols=all`, or " ..
-      "`rows=N`/`cols=N`, on this `.csv` div to include more, or `--csv-rows`/`--csv-cols` for every table)*"
-    for _, block in ipairs(pandoc.read(note .. "\n", "markdown").blocks) do blocks[#blocks + 1] = block end
-    io.stderr:write("WARN  " .. label .. ": showing " .. shown_rows .. " of " ..
-                     total_data_rows .. " row(s), " .. shown_cols .. " of " ..
-                     total_cols .. " column(s) -- see the note under the table\n")
+    local facts = {}
+    if rows_truncated then facts[#facts + 1] = part(row_head, row_tail, shown_rows, total_data_rows, "row") end
+    if cols_truncated then facts[#facts + 1] = part(col_head, col_tail, shown_cols, total_cols, "column") end
+    local shown_text = table.concat(facts, ", ")
+    local note
+    if note_mode == "full" then
+      note = "*(showing " .. shown_text .. " -- use `rows=all`/`cols=all`, or `rows=N`/`cols=N`, on this `.csv` div to include more, " ..
+        "or `--csv-rows`/`--csv-cols` for every table)*"
+    elseif note_mode == "short" then
+      note = "*(showing " .. shown_text .. ")*"
+    end
+    if note then
+      for _, block in ipairs(pandoc.read(note .. "\n", "markdown").blocks) do blocks[#blocks + 1] = block end
+    end
+    local advice = {}
+    if rows_truncated then advice[#advice + 1] = "rows=all or rows=N on the .csv div shows more rows, --csv-rows for every table" end
+    if cols_truncated then advice[#advice + 1] = "cols=all or cols=N on the .csv div shows more columns, --csv-cols for every table" end
+    io.stderr:write("WARN  " .. label .. ": showing " .. shown_text .. " -- " .. table.concat(advice, "; ") .. "\n")
   end
   return blocks, reader
 end
@@ -575,7 +594,8 @@ local function read_defaults(meta)
     changed = true
   end
   local rows, cols, header, reader = take("rows"), take("cols"), take("header"), take("reader")
-  local delimiter, cut = take("delimiter"), take("cut")
+  local delimiter, cut, note = take("delimiter"), take("cut"), take("note")
+  if note and note ~= "" then defaults.note = note:lower() end
   if delimiter and delimiter ~= "" then
     defaults.delimiter = delimiter:lower() == "auto" and "auto" or (DELIMITER_NAMES[delimiter:lower()] or delimiter:sub(1, 1))
   end
