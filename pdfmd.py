@@ -8222,6 +8222,17 @@ def safe_unpack_tar(archive: Path, target: Path) -> None:
         bundle.extractall(target)
 
 
+def detach_disk_image(mount: Path, attempts: int = 4, pause: float = 1.0) -> bool:
+    """`hdiutil detach` for a mounted image, tried `attempts` times with a pause between (macOS answers "resource busy" for a
+    moment after a copy, e.g. while Spotlight looks at the volume), then once with -force. True when it is detached."""
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(pause)
+        if subprocess.run(["hdiutil", "detach", str(mount)], capture_output=True).returncode == 0:
+            return True
+    return subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True).returncode == 0
+
+
 def install_calibre_dmg(image: Path, applications: Path) -> Path:
     """Mount Calibre's disk image read-only and copy calibre.app into `applications` (replacing a copy there);
     returns the app's ebook-convert."""
@@ -8245,8 +8256,7 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
             raise OSError("ditto could not copy calibre.app: " + (copied.stderr.strip().splitlines() or ["?"])[-1])
     finally:
         if attached:
-            if subprocess.run(["hdiutil", "detach", str(mount)], capture_output=True).returncode != 0:
-                subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True)
+            detach_disk_image(mount)
         shutil.rmtree(mount, ignore_errors=True)
     return destination / "Contents" / "MacOS" / "ebook-convert"
 

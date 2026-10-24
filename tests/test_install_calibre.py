@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -155,7 +156,11 @@ class Install(unittest.TestCase):
         done, out, err = self.run_install(fetch=self.fetch_with(image), release=release("calibre-9.99.0.dmg"))
         self.assertTrue(done, out + err)
         self.assertTrue((self.apps / "calibre.app" / "Contents" / "MacOS" / "ebook-convert").is_file())
-        listing = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout
+        for _ in range(10):                                         # macOS may take a moment to drop the image after the detach
+            listing = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout
+            if str(image.resolve()) not in listing:
+                break
+            time.sleep(1)
         self.assertNotIn(str(image.resolve()), listing)             # this test's image is detached again (other runs' images do not count)
 
     def test_no_digest_no_download(self):
@@ -184,6 +189,37 @@ class Install(unittest.TestCase):
         self.assertTrue(done)
         self.assertIn("already installed", out)
         self.assertEqual(self.fetched, [])
+
+
+class Detach(unittest.TestCase):
+    """A disk image that is busy for a moment is detached on a later try; only then is it forced (any OS: hdiutil is faked)."""
+
+    def calls(self, answers):
+        seen = []
+
+        def fake(command, **kwargs):
+            seen.append(command)
+            return subprocess.CompletedProcess(command, answers[len(seen) - 1] if len(seen) <= len(answers) else 0)
+        return seen, fake
+
+    def test_a_busy_image_is_retried_and_not_forced(self):
+        seen, fake = self.calls([16, 16, 0])
+        with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep") as pause:
+            self.assertTrue(pdfmd.detach_disk_image(Path("/Volumes/x")))
+        self.assertEqual([call[1:] for call in seen], [["detach", "/Volumes/x"]] * 3)
+        self.assertEqual(pause.call_count, 2)
+
+    def test_an_image_that_stays_busy_is_forced_at_the_end(self):
+        seen, fake = self.calls([16, 16, 16, 16, 0])
+        with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep"):
+            self.assertTrue(pdfmd.detach_disk_image(Path("/Volumes/x"), attempts=4))
+        self.assertEqual(seen[-1][1:], ["detach", "-force", "/Volumes/x"])
+        self.assertEqual(len(seen), 5)
+
+    def test_a_detach_that_cannot_be_forced_says_so(self):
+        seen, fake = self.calls([1] * 5)
+        with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep"):
+            self.assertFalse(pdfmd.detach_disk_image(Path("/Volumes/x"), attempts=2))
 
 
 class OwnFolder(unittest.TestCase):
