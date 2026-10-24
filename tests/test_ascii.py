@@ -18,7 +18,6 @@ os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
-import pdfmd  # noqa: E402
 from pdfmd_flat import asciify, keep  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
 

@@ -422,7 +422,6 @@ class PackageHelper(unittest.TestCase):
 
     def test_the_office_section_supplies_word_defaults(self):
         sys.path.insert(0, str(ROOT))
-        import pdfmd
         directory = tempfile.mkdtemp(prefix="pdfmd-helper-")
         self.addCleanup(shutil.rmtree, directory, True)
         root = Path(directory)
@@ -450,7 +449,6 @@ class PackagePick(unittest.TestCase):
 
     def options(self, preamble: str, yaml_text: str | None = None):
         sys.path.insert(0, str(ROOT))
-        import pdfmd
         directory = tempfile.mkdtemp(prefix="pdfmd-pick-")
         self.addCleanup(shutil.rmtree, directory, True)
         root = Path(directory)

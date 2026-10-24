@@ -781,7 +781,6 @@ class FallbackErrors(unittest.TestCase):
             make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
             doc = root / "d.md"
             doc.write_text("---\npdfmd-options:\n  fallback: error\n---\nhello \u547d\n", encoding="utf-8")
-            real = pdfmd.font_index
             pdfmd._FONT_INDEX = pu.FontIndex(root, use_system=False)
             try:
                 with self.assertRaises(SystemExit) as caught:

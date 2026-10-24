@@ -23,7 +23,7 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 
 import pdfmd  # noqa: E402
 import pdfmd_labels  # noqa: E402
-from pdfmd_labels.scan import Event, scan  # noqa: E402
+from pdfmd_labels.scan import scan  # noqa: E402
 from pandoc_support import needs_crossref  # noqa: E402
 
 WRAP = "\\documentclass{article}\n\\newcommand{\\gone}{\\section{in preamble}\\label{gone}}\n\\begin{document}\n%s\n\\end{document}\n"
