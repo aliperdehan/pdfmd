@@ -139,50 +139,60 @@ local FUNCTIONS = {
 
 local CONSTANTS = {pi = math.pi, deg = math.pi / 180}
 
--- tokens: {kind = "num"|"name"|"op"|"end", value = ...}
+-- tokens: {kind = "num"|"name"|"op"|"end", value = ..., from = first byte, to = last byte}
+local UNICODE_OPERATORS = {["\u{2212}"] = "-", ["\u{00D7}"] = "*", ["\u{00B7}"] = "*", ["\u{22C5}"] = "*", ["\u{00F7}"] = "/"}
+
 local function tokenize(text)
   local tokens, i, n = {}, 1, #text
+  local function add(kind, value, from, to) tokens[#tokens + 1] = {kind = kind, value = value, from = from, to = to} end
   while i <= n do
     local c = text:sub(i, i)
-    if c:match("%s") then
+    local unicode                                              -- first: the locale's %a may take the lead byte of × for a letter
+    if c:byte() >= 0x80 then
+      for symbol, operator in pairs(UNICODE_OPERATORS) do
+        if text:sub(i, i + #symbol - 1) == symbol then unicode = {symbol, operator}; break end
+      end
+    end
+    if unicode then
+      add("op", unicode[2], i, i + #unicode[1] - 1); i = i + #unicode[1]
+    elseif c:match("%s") then
       i = i + 1
     elseif c:match("%d") or (c == "." and text:sub(i + 1, i + 1):match("%d")) then
       local s, e = text:find("^%d*%.?%d*", i)
       local exp_s, exp_e = text:find("^[eE][+-]?%d+", e + 1)
       if exp_s then e = exp_e end
-      tokens[#tokens + 1] = {kind = "num", value = tonumber(text:sub(s, e)) + 0.0}
+      add("num", tonumber(text:sub(s, e)) + 0.0, s, e)
       i = e + 1
     elseif c:match("[%a_]") then
       local s, e = text:find("^[%a_][%w_]*", i)
-      tokens[#tokens + 1] = {kind = "name", value = text:sub(s, e)}
+      add("name", text:sub(s, e), s, e)
       i = e + 1
     else
       local three, two = text:sub(i, i + 2), text:sub(i, i + 1)
       if three == "%/%" then
-        tokens[#tokens + 1] = {kind = "op", value = "//"}; i = i + 3
+        add("op", "//", i, i + 2); i = i + 3
       elseif two == "%%" then
-        tokens[#tokens + 1] = {kind = "op", value = "%"}; i = i + 2
+        add("op", "%", i, i + 1); i = i + 2
       elseif two == "//" then
-        tokens[#tokens + 1] = {kind = "op", value = "//"}; i = i + 2
+        add("op", "//", i, i + 1); i = i + 2
       elseif two == "**" then
-        tokens[#tokens + 1] = {kind = "op", value = "^"}; i = i + 2
+        add("op", "^", i, i + 1); i = i + 2
       elseif c == "%" then
         local nextchar = text:match("^%s*(.)", i + 1)            -- an operand after it: the remainder; else a percent sign
-        if nextchar and nextchar:match("[%w_%.%(|]") then tokens[#tokens + 1] = {kind = "op", value = "%"} end
+        if nextchar and nextchar:match("[%w_%.%(|]") then add("op", "%", i, i) end
         i = i + 1
       elseif c:match("[%+%-%*/%^%(%),|]") then
-        tokens[#tokens + 1] = {kind = "op", value = c}; i = i + 1
+        add("op", c, i, i); i = i + 1
       else
         fail("'" .. c .. "' is not arithmetic")
       end
     end
   end
-  tokens[#tokens + 1] = {kind = "end"}
+  tokens[#tokens + 1] = {kind = "end", from = n + 1, to = n + 1}
   return tokens
 end
 
 local function evaluate(text, lookup)
-  text = text:gsub("\u{2212}", "-"):gsub("\u{00D7}", "*"):gsub("\u{00B7}", "*"):gsub("\u{22C5}", "*"):gsub("\u{00F7}", "/")
   local tokens = tokenize(text)
   local position = 1
   local expression
@@ -324,11 +334,21 @@ end
 -- Statements and variables
 --
 -- A text is read as statements. `[names =] EXPRESSION = {ans[:fmt]}` calculates and prints; `names = EXPRESSION` alone
--- (a span without {ans}) only stores; a lone `EXPRESSION` prints its value. Names are plain identifiers (C_EDTA, ppm1);
--- anything before them that is not one (`Run 1: V`) is a label and is left as written. A name refers to the nearest
--- definition above its use, else to the first below it, so Results may cite what Calculations defines.
+-- (a span without {ans}) only stores; a lone `EXPRESSION` prints its value. `<-` assigns like `=`. Names are plain
+-- identifiers (C_EDTA, ppm1); anything before them that is not one (`Run 1: V`) is a label and is left as written. A name
+-- refers to the nearest definition above its use, else to the first below it, so Results may cite what Calculations defines.
+--
+-- More than one {ans} in a text: after text that ends in = it is a new calculation, whose expression is the longest tail of
+-- that text that reads as one (`so round(n) = {ans:0dp}`: the words before `round(n)` are prose); after text that does not
+-- end in = it repeats the value just printed in its own format (`= {ans:1dp}, so {ans:0dp}`).
+--
+-- {subs} between two = signs prints the expression with each name replaced by its value, written to the digits the name
+-- was defined with (the computation always uses the full value): `ppm = C * V = {subs} = {ans:2dp}`. With
+-- calc: {subs: true} every {ans} that follows an expression holding names gets that substituted copy in front of it;
+-- {nosubs} (or {subs:off}) anywhere in the text turns it off for that text.
 
 local DEFAULT_FMT = nil
+local AUTO_SUBS = false
 local STATEMENTS = {}          -- every statement, in document order (id = position)
 local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
@@ -337,13 +357,19 @@ local occurrence = 0
 
 local function reason_of(err) return type(err) == "table" and err.calc or tostring(err) end
 
+-- the pieces of a text between = and <- signs
 local function split_equals(text)
-  local parts, start = {}, 1
+  local parts, start, from = {}, 1, 1
   while true do
-    local at = text:find("=", start, true)
+    local at = text:find("[=<]", from)
     if not at then parts[#parts + 1] = text:sub(start); break end
-    parts[#parts + 1] = text:sub(start, at - 1)
-    start = at + 1
+    if text:sub(at, at) == "=" then
+      parts[#parts + 1] = text:sub(start, at - 1); start = at + 1; from = start
+    elseif text:sub(at, at + 1) == "<-" then
+      parts[#parts + 1] = text:sub(start, at - 1); start = at + 2; from = start
+    else
+      from = at + 1
+    end
   end
   return parts
 end
@@ -352,47 +378,120 @@ local function trim(text) return (text:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local function is_identifier(text) return text:match("^[%a_][%w_]*$") ~= nil end
 
--- the statements of `text`; `default` is the format a {=4sf} after a span gave
+-- does `text` read as an expression? (a value a name might take does not matter; a division by zero is still an expression)
+local SYNTAX_ERRORS = {"^unexpected", "^expected", "ends too soon", "is not arithmetic", "is not a function pdfmd knows",
+  "is not a number or a name"}
+local function parses(text)
+  local ok, err = pcall(evaluate, text, function() return 1.2345678 end)
+  if ok then return true end
+  local reason = reason_of(err)
+  for _, pattern in ipairs(SYNTAX_ERRORS) do
+    if reason:find(pattern) then return false end
+  end
+  return true
+end
+
+-- the longest tail of `piece` that is an expression: ", so round(n)" -> "round(n)"
+local function tail_expression(piece)
+  piece = trim((piece:gsub("^[%s,;:]+", "")))
+  local starts = {1}
+  for at in piece:gmatch("%s()%S") do starts[#starts + 1] = at end
+  for _, at in ipairs(starts) do
+    local candidate = piece:sub(at)
+    if parses(candidate) then return candidate end
+  end
+  fail("'" .. piece .. "' holds no expression to calculate")
+end
+
+-- every {ans[:fmt]}, {subs}, {subs:off} and {nosubs} of a text, in order
+local function find_markers(text)
+  local list, position = {}, 1
+  while true do
+    local s, e, word, spec = text:find("{(%a+)([^}]*)}", position)
+    if not s then break end
+    if word == "ans" then
+      if spec ~= "" and spec:sub(1, 1) ~= ":" then fail("'{ans" .. spec .. "}': a format goes after a colon, {ans:4sf}") end
+      list[#list + 1] = {kind = "ans", s = s, e = e, spec = spec}
+    elseif word == "subs" and spec == "" then
+      list[#list + 1] = {kind = "subs", s = s, e = e}
+    elseif (word == "subs" and spec:lower() == ":off") or (word == "nosubs" and spec == "") then
+      list[#list + 1] = {kind = "nosubs", s = s, e = e}
+    end
+    position = e + 1
+  end
+  return list
+end
+
+-- the statements of `text`; `default` is the format a {=4sf} after a span gave. Returns the statements, whether the text has
+-- an {ans}, the edits that remove {nosubs}, and whether {nosubs} was there.
 local function read_statements(text, default)
-  local statements, position = {}, 1
-  local function add(segment, placeholder, fmt)
-    local parts = split_equals(segment)
-    local statement = {fmt = fmt or default, names = {}, placeholder = placeholder}
+  local statements, edits, nosubs = {}, {}, false
+  local function add(piece, kind, fmt)           -- kind: "plain" (no {ans}), "first" or "later" {ans} of the text
+    local parts = split_equals(piece)
+    local statement = {fmt = fmt or default, names = {}, placeholder = kind ~= "plain"}
     for index = 1, #parts - 1 do
-      local piece = trim(parts[index])
-      if placeholder then
-        local name = is_identifier(piece) and piece or piece:match("[:;,]%s*([%a_][%w_]*)$")     -- `Run 1: V` names V
-        if name then statement.names[#statement.names + 1] = name end
+      local part = trim(parts[index])
+      if kind == "plain" then
+        if not is_identifier(part) then fail("'" .. part .. "' is not a name; a name is letters, digits and _, such as C_EDTA") end
+        statement.names[#statement.names + 1] = part
       else
-        if not is_identifier(piece) then fail("'" .. piece .. "' is not a name; a name is letters, digits and _, such as C_EDTA") end
-        statement.names[#statement.names + 1] = piece
+        local name
+        if kind == "first" then
+          name = is_identifier(part) and part or part:match("[:;,]%s*([%a_][%w_]*)$")     -- `Run 1: V` names V
+        else
+          local word = part:match("(%S+)$")                                          -- `, so n2` names n2
+          name = word and is_identifier(word) and word or nil
+        end
+        if name then statement.names[#statement.names + 1] = name end
       end
     end
-    statement.expr = trim(parts[#parts])
+    statement.expr = kind == "later" and tail_expression(parts[#parts]) or trim(parts[#parts])
     if statement.expr == "" then fail("there is nothing to calculate before the =") end
     for _, name in ipairs(statement.names) do
       if FUNCTIONS[name] or CONSTANTS[name] then fail("'" .. name .. "' is built in; choose another name") end
     end
     statements[#statements + 1] = statement
+    return statement
   end
-  local found = false
-  while true do
-    local s, e, spec = text:find("{ans(:?[^}]*)}", position)
-    if not s then break end
-    found = true
-    local fmt = nil
-    if spec ~= "" then
-      if spec:sub(1, 1) ~= ":" then fail("'{ans" .. spec .. "}': a format goes after a colon, {ans:4sf}") end
-      fmt = parse_fmt(spec:sub(2))
+  local markers = find_markers(text)
+  local found, previous, pending = false, nil, nil
+  local position, segment = 1, ""
+  for _, marker in ipairs(markers) do
+    segment = segment .. text:sub(position, marker.s - 1)
+    position = marker.e + 1
+    if marker.kind == "nosubs" then
+      nosubs = true
+      edits[#edits + 1] = {s = marker.s, e = marker.e, text = "", swallow = true}
+    elseif marker.kind == "subs" then
+      segment = trim(segment)
+      if segment:sub(-1) ~= "=" then segment = segment .. " =" end
+      local _, stop = text:find("^%s*=", position)                  -- the = after {subs} is the one before {ans}: already there
+      if stop then position = stop + 1 end
+      pending = marker
+    else
+      found = true
+      local fmt = nil
+      if marker.spec ~= "" then fmt = parse_fmt(marker.spec:sub(2)) end
+      local piece = trim(segment)
+      segment = ""
+      local statement
+      if previous and piece:sub(-1) ~= "=" then                      -- the value just printed, in another format
+        local source = previous.repeat_of or previous
+        statement = {fmt = fmt or default, names = {}, expr = source.expr, repeat_of = source, placeholder = true}
+        statements[#statements + 1] = statement
+        if pending then fail("{subs} has to stand in front of an {ans} that follows its own expression") end
+      else
+        if piece:sub(-1) ~= "=" then fail("{ans} has to come right after an =, as in `2 + 2 = {ans}`") end
+        statement = add(piece:sub(1, -2), previous and "later" or "first", fmt)
+      end
+      statement.start, statement.stop = marker.s, marker.e
+      if pending then statement.subs_start, statement.subs_stop = pending.s, pending.e; pending = nil end
+      previous = statement
     end
-    local segment = trim(text:sub(position, s - 1))
-    if segment:sub(-1) ~= "=" then fail("{ans} has to come right after an =, as in `2 + 2 = {ans}`") end
-    add(segment:sub(1, -2), true, fmt)
-    statements[#statements].start, statements[#statements].stop = s, e
-    position = e + 1
   end
-  if not found then add(text, false, nil) end
-  return statements, found
+  if pending then fail("{subs} has to stand in front of an {ans}, as in `x = a * b = {subs} = {ans}`") end
+  if not found then add(text, "plain", nil) end
+  return statements, found, edits, nosubs
 end
 
 local function resolve(name, id)
@@ -406,6 +505,7 @@ local function resolve(name, id)
 end
 
 local function value_of(statement)
+  if statement.repeat_of then return value_of(statement.repeat_of) end
   if statement.value ~= nil then return statement.value end
   if statement.failure then fail(statement.failure) end
   if statement.busy then fail("'" .. (statement.names[1] or statement.expr) .. "' depends on itself") end
@@ -424,10 +524,10 @@ end
 -- pass 1: record the statements of a text; returns the occurrence
 local function register(text, default)
   occurrence = occurrence + 1
-  local ok, statements, found = pcall(read_statements, text, default)
+  local ok, statements, found, edits, nosubs = pcall(read_statements, text, default)
   local record = {text = text, found = found}
   if ok then
-    record.statements = statements
+    record.statements, record.edits, record.nosubs = statements, edits, nosubs
     for _, statement in ipairs(statements) do
       STATEMENTS[#STATEMENTS + 1] = statement
       statement.id = #STATEMENTS
@@ -452,19 +552,73 @@ local function fetch(text)
   return record
 end
 
+-- the expression of a statement with every name replaced by its value, in the digits that name was defined with; and
+-- whether any name was replaced. A negative value gets parentheses unless nothing before it could take it for a sign.
+local function substitute(statement)
+  local text = statement.expr
+  local tokens = tokenize(text)
+  local out, position, changed = {}, 1, false
+  for index, token in ipairs(tokens) do
+    if token.kind == "name" then
+      local following = tokens[index + 1]
+      local call = following and following.kind == "op" and following.value == "("
+      if not call and CONSTANTS[token.value] == nil and not FUNCTIONS[token.value] then
+        local source = resolve(token.value, statement.id)
+        local value = value_of(source)
+        local shown = show(value, source.fmt or DEFAULT_FMT)
+        if shown:sub(1, 1) == "-" then
+          local before = tokens[index - 1]
+          local open = not before or (before.kind == "op" and (before.value == "(" or before.value == ","))
+          local power = following and following.kind == "op" and following.value == "^"
+          if not open or power then shown = "(" .. shown .. ")" end
+        end
+        out[#out + 1] = text:sub(position, token.from - 1)
+        out[#out + 1] = shown
+        position = token.to + 1
+        changed = true
+      end
+    end
+  end
+  out[#out + 1] = text:sub(position)
+  return table.concat(out), changed
+end
+
+-- what each {ans}, {subs} and {nosubs} of a record is replaced by: a list of {s, e, text} over the record's text
+local function edits_of(record, default)
+  local edits = {}
+  for _, edit in ipairs(record.edits) do edits[#edits + 1] = edit end
+  for _, statement in ipairs(record.statements) do
+    local shown = show(value_of(statement), statement.fmt or default)
+    if statement.subs_start then
+      edits[#edits + 1] = {s = statement.subs_start, e = statement.subs_stop, text = (substitute(statement))}
+    elseif AUTO_SUBS and not record.nosubs and not statement.repeat_of then
+      local substituted, changed = substitute(statement)
+      local lone_name = #tokenize(statement.expr) == 2          -- `y = C = {ans}`: the copy would only repeat the value
+      if changed and not lone_name and substituted ~= shown then shown = substituted .. " = " .. shown end
+    end
+    edits[#edits + 1] = {s = statement.start, e = statement.stop, text = shown}
+  end
+  table.sort(edits, function(a, b) return a.s < b.s end)
+  return edits
+end
+
+-- the text with the edits put in
+local function splice(text, edits)
+  local out, position = {}, 1
+  for _, edit in ipairs(edits) do
+    local s = edit.s
+    if edit.swallow and s > position and text:sub(s - 1, s - 1):match("%s") then s = s - 1 end
+    out[#out + 1] = text:sub(position, s - 1)
+    out[#out + 1] = edit.text
+    position = edit.e + 1
+  end
+  out[#out + 1] = text:sub(position)
+  return table.concat(out)
+end
+
 -- the text of a record with each {ans} replaced by its value (or, with no {ans}: the value, or nothing for a stored one)
 local function render(record, default)
-  local out, position = {}, 1
-  if record.found then
-    for _, statement in ipairs(record.statements) do
-      local value = value_of(statement)
-      out[#out + 1] = record.text:sub(position, statement.start - 1)
-      out[#out + 1] = show(value, statement.fmt or default)
-      position = statement.stop + 1
-    end
-    out[#out + 1] = record.text:sub(position)
-    return trim(table.concat(out))
-  end
+  if record.found then return trim(splice(record.text, edits_of(record, default))) end
   local statement = record.statements[1]
   local value = value_of(statement)
   if #statement.names > 0 then return "" end
@@ -534,76 +688,127 @@ local function process_inlines(inlines)
   if pass == 2 and changed then return out end
 end
 
--- one line (items a..b) of a ::: calc paragraph: when it holds {ans}, calculate and put the values in place of the placeholders
+local function has_marker(item)
+  return item.t == "Str" and (item.text:find("{ans", 1, true) or item.text:find("{subs", 1, true)
+    or item.text:find("{nosubs", 1, true)) and true or false
+end
+
+-- one line (items a..b) of a ::: calc paragraph. The line's own {ans} come first (the text up to the last marker has to be
+-- plain; what follows may hold anything: a unit, \ce{Ca^2+}, math), then the `code`{=} spans of the line, so that
+-- everything is registered in the order it is read. Returns the new items of the line, or nil when nothing changed.
 local function process_line(items, a, b)
-  local holders, parts, plain = {}, {}, true
+  local last, holders = nil, false
   for index = a, b do
-    local item = items[index]
-    if item.t == "Str" then
-      parts[#parts + 1] = item.text
-      if item.text:find("{ans", 1, true) then holders[#holders + 1] = index end
-    elseif item.t == "Space" then parts[#parts + 1] = " "
-    elseif item.t == "Code" then parts[#parts + 1] = item.text
-    else plain = false end
+    if has_marker(items[index]) then
+      last = index
+      if items[index].text:find("{ans", 1, true) then holders = true end
+    end
   end
-  if #holders == 0 then return false end
-  local text = table.concat(parts)
-  if not plain then
-    if pass == 2 then warn("line `" .. trim(text) .. "`", "it holds formatting, a link or math", "the line is left as written") end
-    return false
+  local changed, line = false, nil
+  if holders then
+    local parts, offsets, plain, length = {}, {}, true, 0
+    for index = a, last do
+      local item = items[index]
+      local piece
+      if item.t == "Str" or item.t == "Code" then piece = item.text elseif item.t == "Space" then piece = " " else plain = false end
+      if piece then
+        offsets[index] = {length + 1, length + #piece}
+        parts[#parts + 1] = piece
+        length = length + #piece
+      end
+    end
+    local text = table.concat(parts)
+    if not plain then
+      if pass == 2 then warn("line `" .. trim(text) .. "`", "it holds formatting, a link or math before its last {ans}", "the line is left as written") end
+    elseif pass == 1 then
+      register(text, nil)
+    else
+      local record, problem = fetch(text)
+      local ok, edits = false, problem
+      if record then ok, edits = pcall(edits_of, record, DEFAULT_FMT) end
+      if not ok then
+        warn("line `" .. trim(text) .. "`", reason_of(edits), "the line is left as written")
+      else
+        local per_item = {}
+        for _, edit in ipairs(edits) do
+          local home
+          for index, offset in pairs(offsets) do
+            if items[index].t == "Str" and offset[1] <= edit.s and edit.e <= offset[2] then home = index end
+          end
+          if not home then
+            warn("line `" .. trim(text) .. "`", "a {...} marker is split by formatting", "the line is left as written")
+            per_item = nil
+            break
+          end
+          per_item[home] = per_item[home] or {}
+          table.insert(per_item[home], {s = edit.s - offsets[home][1] + 1, e = edit.e - offsets[home][1] + 1, text = edit.text})
+        end
+        if per_item then
+          line = pandoc.Inlines({})
+          for index = a, b do line:insert(items[index]) end
+          for index, list in pairs(per_item) do
+            line[index - a + 1] = pandoc.Str(splice(items[index].text, list))
+          end
+          changed = true
+        end
+      end
+    end
   end
-  if pass == 1 then
-    register(text, nil)
-    return false
+  if not line then
+    line = pandoc.Inlines({})
+    for index = a, b do line:insert(items[index]) end
   end
-  local record, problem = fetch(text)
-  local ok, values = false, problem
-  if record then
-    ok, values = pcall(function()
-      local shown = {}
-      for _, statement in ipairs(record.statements) do shown[#shown + 1] = show(value_of(statement), statement.fmt or DEFAULT_FMT) end
-      return shown
-    end)
-  end
-  if not ok then
-    warn("line `" .. trim(text) .. "`", reason_of(values), "the line is left as written")
-    return false
-  end
-  local n = 0
-  for _, index in ipairs(holders) do
-    items[index] = pandoc.Str((items[index].text:gsub("{ans[^}]*}", function() n = n + 1; return values[n] or "?" end)))
-  end
-  return true
+  local spans = process_inlines(line)
+  if spans then line, changed = spans, true end
+  if changed then return line end
 end
 
 local function process_paragraph(inlines)
   local items = pandoc.Inlines({})
   for _, item in ipairs(inlines) do items:insert(item) end
-  local changed, first = false, 1
+  local out, changed, first = pandoc.Inlines({}), false, 1
   for index = 1, #items + 1 do
-    if index == #items + 1 or items[index].t == "SoftBreak" or items[index].t == "LineBreak" then
-      if index > first and process_line(items, first, index - 1) then changed = true end
+    local item = items[index]
+    if index == #items + 1 or item.t == "SoftBreak" or item.t == "LineBreak" then
+      if index > first then
+        local line = process_line(items, first, index - 1)
+        if line then
+          changed = true
+          for _, piece in ipairs(line) do out:insert(piece) end
+        else
+          for position = first, index - 1 do out:insert(items[position]) end
+        end
+      end
+      if item then out:insert(item) end
       first = index + 1
     end
   end
-  if changed then return items end
+  if changed then return out end
 end
 
 local function paragraph(block)
   local out = process_paragraph(block.content)
-  if out then block.content = out; return block end
+  if out then block.content = out end
+  return block, false                                  -- its inlines are done: the document-wide walk must not read them again
 end
 
-local function calc_div(div)
+local calc_div
+
+local function inner_div(div)
+  if div.classes:includes("calc") then return calc_div(div), false end
+end
+
+calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
-  local content = div.content:walk({traverse = "topdown", Para = paragraph, Plain = paragraph})
-  if pass == 1 then return nil end
+  local content = div.content:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
+    Div = inner_div})
+  if pass == 1 then return div, false end
   local classes = pandoc.List({})
   for _, class in ipairs(div.classes) do if class ~= "calc" then classes:insert(class) end end
   local extra = false
   for _ in pairs(div.attributes) do extra = true end
-  if div.identifier == "" and #classes == 0 and not extra then return content end
-  return pandoc.Div(content, pandoc.Attr(div.identifier, classes, div.attributes))
+  if div.identifier == "" and #classes == 0 and not extra then return content, false end
+  return pandoc.Div(content, pandoc.Attr(div.identifier, classes, div.attributes)), false
 end
 
 return {{Pandoc = function(doc)
@@ -615,6 +820,8 @@ return {{Pandoc = function(doc)
     local ok, parsed = pcall(parse_fmt, pandoc.utils.stringify(digits))
     if ok then DEFAULT_FMT = parsed end
   end
+  local subs = doc.meta["pdfmd-calc-subs"]
+  AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
   for _, which in ipairs({1, 2}) do
     pass, occurrence = which, 0
     doc = doc:walk({traverse = "topdown", Div = calc_div, Inlines = process_inlines})

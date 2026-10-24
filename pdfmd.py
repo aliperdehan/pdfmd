@@ -119,17 +119,22 @@ Header files and header-includes (v3.27.18):
     the code-wrapping header), where a shared preamble goes; the document's own last but for the packages header. An
     --include-in-header or `-M header-includes` of your own replaces them, as in Pandoc.
 
-Inline calculator (v3.30.4, names and `::: calc` v3.30.6):
+Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     inline code followed at once by a bare `{=}` becomes its value: `2026 - 2006`{=} is 20; `C = n / V = {ans:4sf}` inside
     the span prints the text with the value put in and stores C (full precision, found anywhere in the document, parts
     included); `A = 4 - 2` stores and prints nothing; `::: calc` calculates the lines that hold {ans} without backticks.
     pdfmd_lua/calc.lua has its own small parser (+ - * / ^ ** % // %/%, parentheses, |abs|, a trailing % as a label, pi,
     deg, sin cos tan cot sec csc and their inverses, hyperbolics, sind cosd tand asind acosd atand, exp ln log log10 log2
     sqrt cbrt abs sign floor ceil trunc round min max hypot factorial) and runs nothing. What it cannot evaluate keeps its
-    text, with one WARN. Added by `calc_filter_args()` only for a document that has such a span or div. The settings are
-    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round or --setup; round() sends an exact half to the even digit (R, Python) unless
-    away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
+    text, with one WARN. `<-` assigns like `=`; a second {ans} on a line repeats the value in another format
+    (`= {ans:1dp}, so {ans:0dp}`) or calculates a new expression (`so round(n) = {ans:0dp}`); whatever follows the last {ans}
+    of a `::: calc` line is copied as it is (`ppm Ca^2+^`); `x = a * b = {subs} = {ans}` prints the expression with the
+    names replaced by their values (the digits each was defined with; the computation keeps the full value), and
+    `calc: {subs: true}` does that before every {ans} ({nosubs} on a line turns it off). Added by `calc_filter_args()` only
+    for a document that has such a span or div. The settings are
+    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs}}` (`calc: off` is the short form), --calc /
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs or --setup; round() sends an exact half to the
+    even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
 Paragraph indent for a stretch of text (v3.30.0):
@@ -1395,7 +1400,7 @@ def write_text_lf(path: Path, text: str) -> None:
         handle.write(text)
 
 
-PDFMD_VERSION = "3.30.7"
+PDFMD_VERSION = "3.30.8"
 import argparse
 import atexit
 import csv
@@ -2825,15 +2830,16 @@ def indent_filter_args(sources: Path | list[Path]) -> list[str]:
 # An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
 # evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
 # text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
-# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round}}` (the
+# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs}}` (the
 # document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
-# --calc / --no-calc, --calc-digits 4sf, --calc-round away (reaching -j workers as PDFMD_CALC, PDFMD_CALC_DIGITS,
-# PDFMD_CALC_ROUND). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
+# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs (reaching -j workers as PDFMD_CALC, PDFMD_CALC_DIGITS,
+# PDFMD_CALC_ROUND, PDFMD_CALC_SUBS). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
 # prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
 CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2})?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 CALC_ENV = "PDFMD_CALC"
 CALC_DIGITS_ENV = "PDFMD_CALC_DIGITS"
 CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
+CALC_SUBS_ENV = "PDFMD_CALC_SUBS"
 CALC_ROUNDS = ("even", "away")
 CALC_DIGITS_RE = re.compile(r"(\d+)\s*(sf|dp)", re.IGNORECASE)
 
@@ -2866,6 +2872,19 @@ def calc_round_mode(md_path: Path, metadata_files: list[Path]) -> str:
     if mode not in CALC_ROUNDS:
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.round must be even or away, not {value!r}")
     return mode
+
+
+def calc_subs_on(md_path: Path, metadata_files: list[Path]) -> bool:
+    """`calc: {subs: true}`: every {ans} is preceded by the expression with its names replaced by their values."""
+    value = os.environ.get(CALC_SUBS_ENV)
+    if value is None:
+        value = calc_option(md_path, metadata_files, "subs")
+    if value is None:
+        return False
+    flag = option_flag(value)
+    if flag is None:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.subs must be true or false, not {value!r}")
+    return flag
 
 
 def calc_digits_value(value) -> str | None:
@@ -2923,6 +2942,8 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     digits = calc_digits_mode(files[0], metadata_files)
     if digits:
         arguments += ["-M", "pdfmd-calc-digits=" + digits]
+    if calc_subs_on(files[0], metadata_files):
+        arguments += ["-M", "pdfmd-calc-subs=true"]
     return arguments + ["--lua-filter", str(shipped)]
 
 
@@ -24162,6 +24183,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calc-round", type=calc_round_argument, default=None, metavar="even|away",
                         help="how round() in a calculation settles an exact half: even (the default; 2.5 is 2, as R and Python "
                              "do) or away from zero (2.5 is 3). Also `pdfmd-options: {calc: {round: away}}`, or --setup")
+    parser.add_argument("--calc-subs", action=argparse.BooleanOptionalAction, default=None,
+                        help="a calculation shows its expression with the names replaced by their values in front of the result "
+                             "(`ppm = C * V = 0.002 * 34.41 = 28.12`); the computation keeps the full values. {subs} on a line "
+                             "forces it, {nosubs} stops it. Also `pdfmd-options: {calc: {subs: true}}`, or --setup")
     parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
@@ -24742,6 +24767,8 @@ def main() -> None:
         os.environ[CALC_DIGITS_ENV] = args.calc_digits
     if args.calc_round is not None:
         os.environ[CALC_ROUND_ENV] = args.calc_round
+    if args.calc_subs is not None:
+        os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
     if args.table_keep is not None:
         os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):

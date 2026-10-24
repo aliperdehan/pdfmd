@@ -41,6 +41,39 @@ claude.ai, Cowork) is missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.8 — 2026-10-24
+
+Pre-edit state: commit `56fe65a` (v3.30.7).
+
+Two fixes and three additions to the calculator, found converting a whole Calculations part of a real lab report (about 130 `{ans}` lines)
+to `{=}`, `{ans}` and `::: calc`.
+
+### Fixed
+
+- **A `` `...`{=} `` span inside a `::: calc` div sees the definition above it, not the last one.** The div's lines were registered before
+  the spans in them, so in `a = 1 + 1 = {ans:1dp}, so `a * 10`{=}` followed by the same line with `3 + 3`, both spans took the last `a`
+  (60 twice, no WARN). Lines and spans are now read together, line by line, in the order of the text, and the div no longer hands its
+  paragraphs to the document-wide pass a second time.
+- **A `::: calc` line may carry anything after its last `{ans}`.** `y = 2 + 2 = {ans:1dp} ppm \ce{Ca^2+}` (raw TeX), a superscript, bold,
+  a link or `$..$` after the value used to leave the whole line as written, `{ans}` and all. Only the text up to the last marker has to be
+  plain; the rest is copied as it is. Formatting before the last `{ans}` is still refused with the WARN.
+
+### Added
+
+- **More than one `{ans}` in a span or a line.** After text that does not end in `=` it repeats the value just shown in its own format
+  (`= {ans:1dp}, so {ans:0dp}`); after text that ends in `=` it is a new calculation whose expression is the longest tail of that text
+  that reads as one (`so round(n) = {ans:0dp}`; `so k = round(n) = {ans:0dp}` also stores `k`).
+- **`{subs}`: the expression with the names replaced by their values.** `ppm1 = C_dil * V / 100.0 * 40.078 * 1000 = {subs} = {ans:2dp} ppm`
+  prints `... = 0.002039 * 34.41 / 100.0 * 40.078 * 1000 = 28.12 ppm`. Each name shows the digits it was defined with (a hidden span's use
+  `calc: digits`); the computation always uses the full values. Literals, operators, functions, `pi` and `deg` stay as typed; a negative value
+  gets parentheses (`(-0.5)^2`) unless nothing before it could be read as a sign. `calc: {subs: true}` (also `--calc-subs` /
+  `--no-calc-subs`, `PDFMD_CALC_SUBS`, a `pdfmd --setup` row) puts the copy before every `{ans}` that follows an expression with names; a
+  lone name, an expression without names and a repeated `{ans}` get none. `{subs}` forces it on a line, `{nosubs}` or `{subs:off}` stops it.
+- **`<-` assigns like `=`**: `` `t18 <- 2.10092204`{=} ``, `ppm1 <- C_dil * V = {ans:2dp}`.
+
+The Unicode operators (`×`, `·`, `÷`, `−`) are now read by the tokenizer itself (the parser needs byte positions for `{subs}`). Queued, not
+done: `qt(p, df)` and `qnorm(p)`.
+
 ## v3.30.7 — 2026-10-24
 
 Pre-edit state: commit `230ff0b` (v3.30.6).

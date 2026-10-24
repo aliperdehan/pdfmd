@@ -286,6 +286,95 @@ class Variables(unittest.TestCase):
         latex = self.convert("`C = 1/3 = {ans:4sf} M`{=}\n", writer="latex").stdout
         self.assertIn("C = 1/3 = 0.3333 M", latex)
 
+    # v3.30.8: what real use of a long Calculations section turned up
+
+    def test_a_span_in_a_div_line_sees_the_definition_above_it_not_the_last_one(self):
+        source = "::: calc\na = 1 + 1 = {ans:1dp}, so `a * 10`{=0dp}\na = 3 + 3 = {ans:1dp}, so `a * 10`{=0dp}\n:::\n"
+        done = self.convert(source)
+        self.assertEqual(self.flat(done.stdout), "a = 1 + 1 = 2.0, so 20 a = 3 + 3 = 6.0, so 60", done.stderr)
+        self.assertEqual(done.stderr, "")
+        paragraphs = self.convert("::: calc\na = 1 + 1 = {ans:1dp}, so `a * 10`{=}\n\na = 3 + 3 = {ans:1dp}, so `a * 10`{=}\n:::\n")
+        self.assertEqual(self.flat(paragraphs.stdout), "a = 1 + 1 = 2.0, so 20 a = 3 + 3 = 6.0, so 60")
+        defined_only_in_the_div = self.convert("::: calc\nn1 = 2.4 + 0 = {ans:1dp}\nn2 = n1 * 2 = {ans:1dp}, `round(n2)`{=}\n:::\n")
+        self.assertEqual(self.flat(defined_only_in_the_div.stdout), "n1 = 2.4 + 0 = 2.4 n2 = n1 * 2 = 4.8, 5")
+        self.assertEqual(defined_only_in_the_div.stderr, "")
+
+    def test_what_follows_the_last_ans_of_a_div_line_is_copied_as_it_is(self):
+        for tail, latex in (("ppm \\ce{Ca^2+}", "ppm \\ce{Ca^2+}"), ("ppm Ca^2+^", "ppm Ca\\textsuperscript{2+}"),
+                            ("ppm **Ca**", "ppm \\textbf{Ca}"), ("ppm $x^2$", "ppm \\(x^2\\)"),
+                            ("ppm [link](http://x.y)", "ppm \\href{http://x.y}{link}")):
+            with self.subTest(tail=tail):
+                done = self.convert(f"::: calc\ny = 2 + 2 = {{ans:1dp}} {tail}\n:::\n", writer="latex")
+                self.assertIn("y = 2 + 2 = 4.0 " + latex, done.stdout, done.stderr)
+                self.assertEqual(done.stderr, "")
+        before = self.convert("::: calc\ny = **2** + 2 = {ans:1dp} ppm\n:::\n")
+        self.assertIn("{ans:1dp}", before.stdout)                                   # formatting BEFORE the {ans} is still refused
+        self.assertIn("holds formatting", before.stderr)
+
+    def test_several_ans_in_one_text(self):
+        for source, expected in (
+            ("n = 9.7 * 9.7 / 1.0 = {ans:1dp}, so {ans:0dp}", "n = 9.7 * 9.7 / 1.0 = 94.1, so 94"),
+            ("n = 9.7 * 9.7 = {ans:1dp}, so round(n) = {ans:0dp}, so n / 2 = {ans:3dp}", "n = 9.7 * 9.7 = 94.1, so round(n) = 94, so n / 2 = 47.045"),
+            ("m = 2.5 * 7 = {ans:2dp}, then m2 = m / 2 = {ans:1dp}", "m = 2.5 * 7 = 17.50, then m2 = m / 2 = 8.8"),
+            ("x = 3 * 3 = {ans}; {ans:2dp} {ans:0dp}", "x = 3 * 3 = 9; 9.00 9"),
+        ):
+            with self.subTest(source=source):
+                done = self.convert(f"::: calc\n{source}\n:::\n")
+                self.assertEqual(self.flat(done.stdout), expected, done.stderr)
+                self.assertEqual(done.stderr, "")
+        stored = self.convert("::: calc\nn = 9.7 * 9.7 = {ans:1dp}, so k = round(n) = {ans:0dp}\n\nk2 = k * 2 = {ans}\n:::\n")
+        self.assertIn("k2 = k * 2 = 188", stored.stdout)                              # the second expression's name is stored
+        self.assertIn("{ans} has to come right after an =", self.convert("`2 + 2 {ans}`{=}\n").stderr)
+
+    def test_the_left_arrow_assigns(self):
+        done = self.convert("`t18 <- 2.10092204`{=} `t18`{=4sf} ppm1 and\n\n::: calc\nppm1 <- t18 * 10 = {ans:2dp}\n\nk = ppm1 / 2 = {ans:1dp}\n:::\n")
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(self.flat(done.stdout), "2.101 ppm1 and ppm1 <- t18 * 10 = 21.01 k = ppm1 / 2 = 10.5")
+        self.assertEqual(self.flat(self.convert("`a <- b <- 4`{=} `a + b`{=}\n").stdout), "8")
+        self.assertEqual(self.flat(self.convert("`x<-2`{=}`x`{=}\n").stdout), "2")
+
+    def test_subs_puts_the_values_into_the_expression(self):
+        source = ("`C_dil <- 0.002039`{=} `V <- 34.41`{=2dp} `neg <- -0.5`{=}\n\n::: calc\n"
+                  "ppm1 = C_dil * V / 100.0 * 40.078 * 1000 = {subs} = {ans:2dp} ppm\n\n"
+                  "xbar = (ppm1 + V) / 3 = {subs} = {ans:2dp}\n\n"
+                  "sq = neg^2 + neg * 2 = {subs} = {ans}\n\n"
+                  "f = sqrt(V) + pi - neg = {subs} = {ans:3dp}\n:::\n")
+        done = self.convert(source, "pdfmd-calc-digits=4sf")
+        self.assertEqual(done.stderr, "")
+        out = done.stdout
+        self.assertIn("ppm1 = C_dil * V / 100.0 * 40.078 * 1000 = 0.002039 * 34.41 / 100.0 * 40.078 * 1000 = 28.12 ppm", out)
+        self.assertIn("xbar = (ppm1 + V) / 3 = (28.12 + 34.41) / 3 = 20.84", out)           # each name in the digits it was defined with
+        self.assertIn("sq = neg^2 + neg * 2 = (-0.5000)^2 + (-0.5000) * 2 = -0.7500", out)     # a negative value gets parentheses
+        self.assertIn("f = sqrt(V) + pi - neg = sqrt(34.41) + pi - (-0.5000) = 9.508", out)   # functions and constants stay
+
+    def test_subs_computes_with_the_full_value(self):
+        done = self.convert("`a <- 1/3`{=3sf}\n\n::: calc\nb = a * 3 = {subs} = {ans:3sf}\n:::\n")
+        self.assertIn("b = a * 3 = 0.333 * 3 = 1.00", done.stdout)                           # 0.333 * 3 is 0.999: the result is 1.00
+
+    def test_the_switch_puts_subs_before_every_ans_that_has_names(self):
+        source = ("`C <- 0.5`{=} `V <- 20`{=}\n\n::: calc\nx = C * V = {ans}\n\nx2 = 2 * 3 = {ans}\n\ny = C = {ans:3dp}\n\n"
+                  "z = C * V = {ans} {nosubs}\n\nw = C * V = {ans:2dp}, so {ans:0dp}\n:::\n\n"
+                  "Span: `q = C * V / 4 = {ans:2dp}`{=}.\n")
+        off = self.convert(source).stdout
+        self.assertIn("x = C * V = 10", off)
+        on = self.convert(source, "pdfmd-calc-subs=true")
+        self.assertEqual(on.stderr, "")
+        self.assertIn("x = C * V = 0.5 * 20 = 10", on.stdout)
+        self.assertIn("x2 = 2 * 3 = 6", on.stdout)                                           # nothing to put in: no second copy
+        self.assertIn("y = C = 0.500", on.stdout)                                            # a lone name: it would only repeat the value
+        self.assertIn("z = C * V = 10", on.stdout)                                           # {nosubs}
+        self.assertNotIn("nosubs", on.stdout)
+        self.assertIn("w = C * V = 0.5 * 20 = 10.00, so 10", on.stdout)                      # a repeat has no expression of its own
+        self.assertIn("Span: q = C * V / 4 = 0.5 * 20 / 4 = 2.50.", on.stdout)
+        forced = self.convert("`C <- 0.5`{=}\n\n::: calc\nx = 2 * 3 = {subs} = {ans}\n\ny = C * 2 = {subs} = {ans} {subs:off}\n:::\n")
+        self.assertIn("x = 2 * 3 = 2 * 3 = 6", forced.stdout)                                # {subs} forces the copy
+        self.assertIn("y = C * 2 = 0.5 * 2 = 1", forced.stdout)
+
+    def test_a_misplaced_subs_is_kept_with_one_warning(self):
+        done = self.convert("`x = 2 * 3 = {subs}`{=}\n")
+        self.assertIn("{subs} has to stand in front of an {ans}", done.stderr)
+        self.assertEqual(self.flat(done.stdout), "x = 2 * 3 = {subs}")
+
     def test_a_raw_span_of_another_format_is_left_alone(self):
         out = self.convert("`<b>x</b>`{=html} and `\\textbf{y}`{=latex}\n", writer="html").stdout
         self.assertIn("<b>x</b>", out)
@@ -342,6 +431,20 @@ class Switches(unittest.TestCase):
         self.assertIn("Third: 0.33, volume: V = 5 - 1 = 4.00 mL.", body(four, "--calc-digits", "2dp"))
         self.assertIn("Third: 0.3333333, volume: V = 5 - 1 = 4 mL.", body(four, env={"PDFMD_CALC_DIGITS": "none"}))
         self.assertIn("Third: 0.333, volume: V = 5 - 1 = 4.00 mL.", body("", env={"PDFMD_CALC_DIGITS": "3sf"}))
+
+    def test_calc_subs_in_the_options_the_flag_and_the_variable(self):
+        def body(header, *arguments, env=None):
+            (self.directory / "doc.md").write_text(header + "`C <- 0.5`{=} `V <- 20`{=}\n\n`x = C * V = {ans}`{=}\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "html", "--no-backup", *arguments],
+                                  cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, **(env or {})})
+            self.assertTrue((self.directory / "doc.html").exists(), done.stdout + done.stderr)
+            return (self.directory / "doc.html").read_text(encoding="utf-8")
+        self.assertIn("x = C * V = 10", body(""))
+        on = "---\npdfmd-options:\n  calc:\n    subs: true\n---\n\n"
+        self.assertIn("x = C * V = 0.5 * 20 = 10", body(on))
+        self.assertIn("x = C * V = 10", body(on, "--no-calc-subs"))
+        self.assertIn("x = C * V = 0.5 * 20 = 10", body("", "--calc-subs"))
+        self.assertIn("x = C * V = 0.5 * 20 = 10", body("", env={"PDFMD_CALC_SUBS": "true"}))
 
     def test_a_wrong_calc_digits_is_refused(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--calc-digits", "four", "doc.md"], cwd=self.directory,

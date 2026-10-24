@@ -184,6 +184,11 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
 - Operators `+ - * / ^ ** % // |abs|`, constants `pi` and `deg`, and functions `sin cos tan ... sqrt log round min max` (the list is in
   the README) run in a parser of their own: nothing is executed. `round` sends an exact half to the even digit as R and Python do
   (`calc: {round: away}` for 2.5 is 3). Angles are radians unless the name ends in `d` (`sind(30)`), `asin(x) / deg` is degrees.
+- `=` or `<-` assigns (`` `t18 <- 2.1009`{=} ``). A second `{ans}` repeats the value in another format (`= {ans:1dp}, so {ans:0dp}`) or
+  calculates a new expression (`so round(n) = {ans:0dp}`). In a `::: calc` line whatever follows the last `{ans}` is copied as it is
+  (`ppm \ce{Ca^2+}`), and a span inside the div sees the definition above it.
+- `ppm = C * V = {subs} = {ans:2dp}` prints the expression with the numbers put in (`0.002039 * 34.41`), each in the digits its name
+  was defined with; the computation keeps the full values. `calc: {subs: true}` does it before every `{ans}`, `{nosubs}` stops it on a line.
 - `--no-calc` turns it off for a run, `pdfmd-options: {calc: off}` for a document or a folder, `pdfmd --setup` for everything.
   A span it cannot calculate keeps its text and prints one `WARN  calc:` with the reason.
 

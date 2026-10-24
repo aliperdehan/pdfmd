@@ -680,7 +680,7 @@ true}}` holds the settings. Until 3.26.7 `--to txt` and `-o x.txt` meant Pandoc'
 ### Calculations inside the text: `{=}`, `{ans}` and `::: calc`
 
 pdfmd can compute the numbers of a lab report (or any document) for you, so a result is never typed by hand and a changed input
-changes every place that uses it (3.30.4 to 3.30.6; needs Pandoc, the built-in renderer shows the source as written). It has its
+changes every place that uses it (3.30.4 to 3.30.8; needs Pandoc, the built-in renderer shows the source as written). It has its
 own small arithmetic parser and **runs nothing** (no R, no Python, no `load`), so it is safe on a file from anybody.
 
 **1. Inline code followed at once by `{=}` is replaced by its value**
@@ -703,8 +703,14 @@ gives "Since 20 years have passed, the angle is 0.5 and 65.4 cm3." Inline code w
 
 The expression is what stands between the last `=` before `{ans}` and that `= {ans}`; everything before it is a label. A name is
 stored when it is a plain identifier (letters, digits, `_`: `C_EDTA`, `ppm1`) standing alone, or the word after a `:` `;` or `,`
-(`Run 1: V = ...` stores `V`). Text between the expression and the `=` breaks it (`so 2 + 2 = {ans}` is an error: `so` is not
-a number), and units go after `{ans}`, never inside an expression. Several `{ans}` may share a span.
+(`Run 1: V = ...` stores `V`), and it is followed by `=` or by `<-` (R's assignment: `` `t18 <- 2.10092204`{=} ``,
+`ppm1 <- C_dil * V = {ans:2dp}`; the `{ans}` still goes after the last `=`). Text between the expression and the `=` breaks it
+(`so 2 + 2 = {ans}` is an error: `so` is not a number), and units go after `{ans}`, never inside an expression.
+
+**More than one `{ans}` in a span or a line** (3.30.8). After text that does not end in `=`, a second `{ans}` prints the value just
+shown in its own format: `n = t^2 * R^2 / e^2 = {ans:1dp}, so {ans:0dp}` gives "... = 94.1, so 94". After text that ends in `=`
+it is a new calculation, and its expression is the longest tail of that text that reads as one, so the words before it are prose:
+`n = 9.7 * 9.7 = {ans:1dp}, so round(n) = {ans:0dp}` gives "... = 94.1, so round(n) = 94", and `so k = round(n) = {ans:0dp}` stores `k`.
 
 **3. Names (variables) keep the full value**, not the rounded one: `C_Ca = n_Ca / V = {ans:4sf}` shows 0.02039 but stores 0.020386...,
 so `` `C_Ca * 2`{=} `` uses the full number and the numbers on the page cannot drift from one another. A name is found
@@ -725,8 +731,29 @@ Run 2: V = 41.11 - 20.60 = {ans:2dp} mL.
 ```
 
 Only a line that holds `{ans}` is calculated; every other line, and the rest of the document, is plain text. `::: calc` and
-`::: {.calc}` are the same (as in Pandoc); `{#id .calc}` keeps its id. A line with bold, a link or math in it is left as written
-with a WARN. A `` `...`{=} `` span works inside the div too, and the div's names are the document's names.
+`::: {.calc}` are the same (as in Pandoc); `{#id .calc}` keeps its id. Up to the last `{ans}` a line has to be plain text; a
+line with bold, a link or math there is left as written with a WARN. **What follows the last `{ans}` is copied as it is**:
+`y = 2 + 2 = {ans:1dp} ppm \ce{Ca^2+}`, `... {ans} mol L^-1^`, `... {ans} **M**`, `$..$` all print as typed. A `` `...`{=} `` span
+works inside the div too (`a = 1 + 1 = {ans:1dp}, so `a * 10`{=0dp}`), read in the order of the text, so it sees the definition of
+`a` above it and not a later one; the div's names are the document's names.
+
+**5. The numbers put in: `{subs}`** (3.30.8). A lab report shows a calculation twice, with the names and with the numbers. Put
+`{subs}` between two `=` signs and pdfmd writes the expression with each name replaced by its value:
+
+```markdown
+ppm1 = C_dil * V / 100.0 * 40.078 * 1000 = {subs} = {ans:2dp} ppm
+```
+
+prints `ppm1 = C_dil * V / 100.0 * 40.078 * 1000 = 0.002039 * 34.41 / 100.0 * 40.078 * 1000 = 28.12 ppm`. Each number is written in
+the digits its name was defined with (`{ans:4sf}` gives 0.002039, `{ans:2dp}` gives 34.41; a name defined by a hidden span uses
+`calc: {digits}`), but **the computation always uses the full values**, so the printed numbers may add up to a result that differs
+in the last digit from the printed one (a report says so once: "values are kept unrounded in the computation and rounded only for
+display"). Literals, operators, functions, `pi` and `deg` stay as typed; a negative value gets parentheses unless nothing
+before it could be taken for a sign (`(-0.5)^2`). It works in a span and in a `::: calc` line.
+
+To have it everywhere, set `calc: {subs: true}`: every `{ans}` that follows an expression holding names gets the substituted copy
+in front of it, without typing `{subs}`. An expression with no names (nothing to put in), a lone name, and a second `{ans}` that
+only repeats a value get no copy. For one line, `{subs}` forces it and `{nosubs}` (or `{subs:off}`) stops it.
 
 **Digits.** `{ans:4sf}` four significant figures (trailing zeros kept: 20.60, 0.02027; the digits before the point are never
 dropped, 1049 at 3sf is 1049), `{ans:2dp}` two decimal places (digits after the point: burette volumes). After a span a format
@@ -752,13 +779,15 @@ pdfmd-options:
     enabled: true     # false (or `calc: off`) leaves every {=} and ::: calc as written
     digits: 4sf       # the default format: 4sf, 2dp; empty = as R prints
     round: even       # or away
+    subs: false       # true puts the numbers into every calculation, see 5
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away` (the command line wins over the document).
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs` (the command
+line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
 wrong format) the text is kept as written and pdfmd prints one `WARN  calc: ...` naming it and the reason; nothing is dropped
-silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
+silently. Not done yet: `qt(p, df)` and `qnorm(p)` (queued), calculating plain prose without `{=}` or a div, `$..$` math, statistics (mean, standard deviation,
 confidence interval), a mode that checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
 `.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
