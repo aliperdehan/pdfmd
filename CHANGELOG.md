@@ -40,6 +40,21 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.24 — 2026-10-25
+
+Pre-edit state: commit `de9c29a` (v3.30.23).
+
+### Added
+
+- `history:` is accepted in `pdfmd-options` (a document, a metadata file, the config) as another name for `stamp:`: the build history is that
+  one setting (`enabled`, `store`, `mode`, `scope`, `packages`, `partial`, ...), not a second one. `history: {store: file, partial: true}` is
+  `stamp: {store: file, partial: true}`; a field both set is taken from `stamp`. Older pdfmd versions do not know `history:`, so a shared
+  metadata file that must work with them keeps `stamp:`.
+
+### Tests
+
+- `tests.test_partial_history.HistoryAlias`.
+
 ## v3.30.23 — 2026-10-25
 
 Pre-edit state: commit `4e38e85` (v3.30.22).

@@ -36,6 +36,28 @@ class Entries(unittest.TestCase):
         self.assertNotIn("partial", pdfmd.stamp_fields({"mode": "history"}))
 
 
+class HistoryAlias(unittest.TestCase):
+    """`history:` in pdfmd-options is `stamp:` (3.30.24): one setting, two names."""
+
+    def options(self, text):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-alias-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        document = directory / "report.md"
+        document.write_text(text, encoding="utf-8")
+        return pdfmd.frontmatter_stamp(document, [])
+
+    def test_the_same_fields_under_either_name(self):
+        stamp = self.options("---\npdfmd-options:\n  stamp: {store: file, partial: true}\n---\n")
+        history_ = self.options("---\npdfmd-options:\n  history: {store: file, partial: true}\n---\n")
+        self.assertEqual(stamp, history_)
+        self.assertEqual((history_["store"], history_["partial"], history_["enabled"]), ("file", True, True))
+
+    def test_a_bare_history_switches_it_on_and_stamp_wins_a_field_both_set(self):
+        self.assertTrue(self.options("---\npdfmd-options:\n  history: true\n---\n")["enabled"])
+        both = self.options("---\npdfmd-options:\n  stamp: {store: both}\n  history: {store: file, partial: true}\n---\n")
+        self.assertEqual((both["store"], both["partial"]), ("both", True))
+
+
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Builds(unittest.TestCase):
     def setUp(self):

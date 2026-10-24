@@ -1201,7 +1201,8 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     three keys require PyYAML and a document that already has a `---`
     block; silently ignored (not an error) if PyYAML isn't installed.
 
-The history file (v3.25.8; the package pdfmd_history):
+The history file (v3.25.8; the package pdfmd_history). In `pdfmd-options` the setting is `stamp:`, and `history:` is an alias for it (v3.30.24; where
+    both give a field, `stamp` wins):
     `--stamp-store file` (or `pdfmd-options: {stamp: {store: file}}`) writes each compile to NAME.hst, in the
     document's backup folder (see Backups), instead of into the document's BUILD NOTES: the document is not edited by
     a build. `both` does both. A .hst is one entry per line, newest first -- `WHEN | KIND | TEXT | key=value ...`,
@@ -1413,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.23"
+PDFMD_VERSION = "3.30.24"
 import argparse
 import atexit
 import csv
@@ -12004,10 +12005,11 @@ def frontmatter_stamp(md_path: Path, metadata_files: list[Path] = ()) -> dict | 
     merged: dict = {}
     found = False
     for where, options in option_sources(md_path, metadata_files):
-        if "stamp" in options:
-            found = True
-            for key, value in stamp_fields(options["stamp"], implied_on=not is_setup_layer(where)).items():
-                merged.setdefault(key, value)
+        for name in ("stamp", "history"):       # `history` is the same setting under the name people look for (3.30.24)
+            if name in options:
+                found = True
+                for key, value in stamp_fields(options[name], implied_on=not is_setup_layer(where)).items():
+                    merged.setdefault(key, value)
     return {**DEFAULT_STAMP_OPTIONS, **merged} if found else None
 
 

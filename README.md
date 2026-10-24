@@ -2349,7 +2349,7 @@ pdfmd-options:
   backup: { dir: .backups, keep: 30 }
 ```
 
-**History in a file instead of in the document.** `--stamp-store file` (or `stamp: {store: file}`) writes each compile
+**History in a file instead of in the document.** `--stamp-store file` (or `stamp: {store: file}`; `history:` is the same setting under another name, 3.30.24, so `history: {store: file, partial: true}` works as well) writes each compile
 to `NAME.hst` in the backup folder, and the document itself is not edited by a build. The file is one line per entry,
 newest first, so it reads in any editor, two of them join with `cat`, and `pdfmd --merge-history a.hst b.hst -o all.hst`
 keeps every entry once:
