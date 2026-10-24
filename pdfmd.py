@@ -18371,8 +18371,9 @@ def provide_writable_places() -> None:
     if (not tex_user_tree_writable()
             and any(which(name) for name in ("lualatex", "xelatex", "pdflatex", "latexmk", "tectonic"))):
         folder = temporary_place("texmf")
-        os.environ["TEXMFVAR"] = str(folder / "texmf-var")
-        os.environ["TEXMFCONFIG"] = str(folder / "texmf-config")
+        for name, variable in (("texmf-var", "TEXMFVAR"), ("texmf-config", "TEXMFCONFIG")):
+            (folder / name).mkdir(parents=True, exist_ok=True)         # (an engine that does not make its own cache folder needs it there)
+            os.environ[variable] = str(folder / name)
         redirected.append("the TeX user tree (font names, formats)")
     if redirected:
         note_place_once("places", f"{' and '.join(redirected)} cannot be written (a read-only home?): this run uses a temporary "
