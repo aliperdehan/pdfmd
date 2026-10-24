@@ -3413,8 +3413,8 @@ def ascii_filter_args(scratch: Path, missing: str, smart: bool = False) -> list[
     if filter_path is None:
         raise SystemExit("--to ascii needs pdfmd_lua/ascii.lua and pdfmd_flat (install pdfmd-cli; a lone copy of "
                          "pdfmd.py cannot make ASCII text)")
-    config = {"pdfmd-ascii": {"command": Path(sys.executable).as_posix(), "script": str(Path(__file__).resolve()), "missing": missing,
-                              "report": str(scratch / "report.json"), "smart": "keep" if smart else "all"}}
+    config = {"pdfmd-ascii": {"command": Path(sys.executable).as_posix(), "script": Path(__file__).resolve().as_posix(),
+                              "missing": missing, "report": (scratch / "report.json").as_posix(), "smart": "keep" if smart else "all"}}
     map_file = scratch / "ascii.yaml"
     map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
     return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
@@ -18158,6 +18158,14 @@ def tex_bibliography_tool(text: str) -> str | None:
     return None
 
 
+def tex_argument(path) -> str:
+    """A path as it goes on a TeX engine's command line. The engine reads that line as TeX, where `~` is an active
+    character: on Windows, a temporary folder under its short name (`C:\\Users\\RUNNER~1\\AppData\\Local\\Temp`, what
+    the CI runner and any long user name give) made MiKTeX's LuaLaTeX look for no file at all (`texput.log`). The long
+    name has no `~`; elsewhere the path is unchanged."""
+    return str(Path(path).resolve()) if os.name == "nt" else str(path)
+
+
 def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[str] | None:
     """Build one direct-compile pass's command line for ``engine``.
 
@@ -18170,12 +18178,12 @@ def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[
     """
     if engine in {"lualatex", "xelatex", "pdflatex"}:
         return [engine, "-interaction=nonstopmode", "-halt-on-error", "-file-line-error",
-                f"-output-directory={output_dir}", str(tex_path)]
+                f"-output-directory={tex_argument(output_dir)}", tex_argument(tex_path)]
     if engine == "latexmk":
         return ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error",
-                f"-output-directory={output_dir}", str(tex_path)]
+                f"-output-directory={tex_argument(output_dir)}", tex_argument(tex_path)]
     if engine == "tectonic":
-        return ["tectonic", "-o", str(output_dir), str(tex_path)]
+        return ["tectonic", "-o", tex_argument(output_dir), tex_argument(tex_path)]
     return None
 
 
@@ -19087,7 +19095,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         pandoc_cwd = pandoc_working_directory(metadata_list[0].parent if metadata_list else md_path.parent)
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
-                   str(scratch), str(tex_path)]
+                   tex_argument(scratch), tex_argument(tex_path)]
         whole = tex_path.read_text(encoding="utf-8", errors="replace")
         quick = not auto_disabled(no_auto, "draftpictures") and whole.count("\\begin{document}") == 1
 
@@ -19487,7 +19495,7 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
             + (f"\\shipout\\vbox{{\\kern{margin}\\hbox{{\\kern{margin}\\box\\z@\\kern{margin}}}\\kern{margin}}}\n"
                if margin != "0pt" else "\\shipout\\hbox{\\box\\z@}\n") + "\\end{document}\n", encoding="utf-8")
         cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
-               f"-output-directory={plot_dir}", str(job)]
+               f"-output-directory={tex_argument(plot_dir)}", tex_argument(job)]
         log_cmd(cmd, cwd, verbose)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
         for _ in range(passes - 1):
