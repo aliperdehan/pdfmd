@@ -200,7 +200,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install ruff
-      - run: ruff check --select F --exclude pdfmd_inkmd pdfmd.py pdfmd_*/ scripts/
+      - run: ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py pdfmd_*/ scripts/ tests/      # --force-exclude: the glob names pdfmd_inkmd/ itself, which is generated
 
   # Not gating (continue-on-error): Windows with a LaTeX engine (MiKTeX), which the jobs above do not have there. A failure is
   # something to look at, not something that stops a release.
