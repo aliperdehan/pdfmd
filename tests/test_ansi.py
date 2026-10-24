@@ -473,6 +473,65 @@ GRID = """+---------+---------+
 """
 
 
+class PagerCommand(unittest.TestCase):
+    """`pager_command` beside the on/off `pager`: the environment wins, then the setting, then `less -FRX`."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-pager-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        saved = {key: os.environ.pop(key, None) for key in ("PDFMD_PAGER", "PAGER", "PDFMD_CONFIG")}
+        os.environ["PDFMD_CONFIG"] = ""
+        self.addCleanup(lambda: [os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+                                 for key, value in saved.items()])
+
+    def document(self, front: str) -> Path:
+        path = self.directory / "d.md"
+        path.write_text(f"---\ntitle: T\n{front}---\n\nText\n", encoding="utf-8")
+        return path
+
+    def test_the_order(self):
+        import pdfmd
+        self.assertEqual(pdfmd.pager_command(), ["less", "-FRX"])
+        self.assertEqual(pdfmd.pager_command("bat --paging=always"), ["bat", "--paging=always"])
+        os.environ["PAGER"] = "more"
+        self.assertEqual(pdfmd.pager_command("bat"), ["more"])                      # $PAGER wins over the setting
+        os.environ["PDFMD_PAGER"] = "most -s"
+        self.assertEqual(pdfmd.pager_command("bat"), ["most", "-s"])                # $PDFMD_PAGER over both
+
+    def test_the_setting_is_read_from_the_document_in_either_spelling_and_as_a_list(self):
+        import pdfmd
+        for front, expected in (("pdfmd-options:\n  pager_command: bat --paging=always\n", "bat --paging=always"),
+                                ("pdfmd-options:\n  pager-command: less -R\n", "less -R"),
+                                ("pdfmd-options:\n  pager_command: [bat, --style, plain file]\n", "bat --style 'plain file'"),
+                                ("pdfmd-options:\n  pager: false\n", ""), ("", "")):
+            with self.subTest(front=front):
+                self.assertEqual(pdfmd.view_pager_setting(self.document(front)), expected)
+
+    def test_the_text_goes_through_the_setting_and_the_environment_overrides_it(self):
+        import pdfmd
+        if sys.platform == "win32":
+            self.skipTest("needs sh")
+        one, two = self.directory / "one.txt", self.directory / "two.txt"
+        pdfmd.run_pager("hello\n", f"sh -c 'cat > {one}'")
+        self.assertEqual(one.read_text(encoding="utf-8"), "hello\n")
+        os.environ["PDFMD_PAGER"] = f"sh -c 'cat > {two}'"
+        pdfmd.run_pager("again\n", f"sh -c 'cat > {one}'")
+        self.assertEqual(two.read_text(encoding="utf-8"), "again\n")
+        self.assertEqual(one.read_text(encoding="utf-8"), "hello\n")                 # the setting was not used
+        os.environ["PDFMD_PAGER"] = "pdfmd-no-such-pager"
+        with mock.patch.object(sys.stdout, "write") as written:
+            pdfmd.run_pager("plain\n")                                              # no such program: printed directly
+        written.assert_called_with("plain\n")
+
+    def test_the_setting_has_a_row_in_the_setup_and_a_name_in_the_options(self):
+        from pdfmd_setup import inventory, registry
+        rows = {setting.key: setting for setting in registry.settings_for(("lua",))}
+        self.assertIn("options.pager_command", rows)
+        self.assertIn("less -FRX", rows["options.pager_command"].unset)
+        self.assertEqual(inventory.OPTIONS["pager_command"], "options.pager_command")
+        self.assertEqual(inventory.OPTIONS["pager-command"], "options.pager_command")
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class PipelineBlocks(unittest.TestCase):
     """Spanning cells, coloured code and stacked math through the whole of pdfmd (Pandoc's AST, ansi_math)."""

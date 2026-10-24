@@ -3442,10 +3442,28 @@ def view_wants_pager(args, first: Path) -> bool:
     return str(value).strip().casefold() not in ("false", "no", "off", "0") if value is not None else True
 
 
-def run_pager(text: str) -> None:
-    """The text through `$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (-F: no pager at all when it fits the screen; -R: keep
-    the colours); printed directly when there is none."""
-    command = shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or VIEW_PAGER)
+def view_pager_setting(first: Path) -> str:
+    """`pdfmd-options: {pager_command: "bat --paging=always"}` (also `pager-command`; a word list works too): the document's,
+    its folder's or the config's pager, "" when none says."""
+    try:
+        value = first_pdfmd_option(first, [], "pager_command", "pager-command")
+    except Exception:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return " ".join(shlex.quote(str(word)) for word in value)
+    return "" if value in (None, False, True) else str(value).strip()
+
+
+def pager_command(setting: str = "") -> list[str]:
+    """The pager as words: `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting, else `less -FRX`. The environment
+    wins over the setting, so one shell can override a project's choice."""
+    return shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
+
+
+def run_pager(text: str, setting: str = "") -> None:
+    """The text through `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting (``setting``), else `less -FRX` (-F: no
+    pager at all when it fits the screen; -R: keep the colours); printed directly when there is none."""
+    command = pager_command(setting)
     if not command or not which(command[0]):
         sys.stdout.write(text)
         return
@@ -3528,7 +3546,7 @@ def terminal_view(args) -> int:
             pieces.append(header + data.decode("utf-8", "replace"))
         text = "\n".join(pieces)
         if pager:
-            run_pager(text)
+            run_pager(text, view_pager_setting(files[0]))
         else:
             sys.stdout.write(text)
             sys.stdout.flush()
@@ -24197,8 +24215,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "+ a pager. Takes files, `-` or a pipe, else the Markdown files here, else what you type "
                              "(Ctrl-D ends it)")
     parser.add_argument("--pager", action=argparse.BooleanOptionalAction, default=None,
-                        help="with --view: use $PDFMD_PAGER / $PAGER / `less -FRX` when stdout is a terminal (the default); "
-                             "--no-pager prints it all. Also `pdfmd-options: {pager: false}`, or --setup")
+                        help="with --view: use $PDFMD_PAGER / $PAGER / the `pager_command` setting / `less -FRX` when stdout is a terminal "
+                             "(the default); --no-pager prints it all. Also `pdfmd-options: {pager: false}` (and "
+                             "`{pager_command: \"bat --paging=always\"}` for the command), or --setup")
     parser.add_argument("--calc", action=argparse.BooleanOptionalAction, default=None,
                         help="evaluate inline code followed by `{=}` (`2026 - 2006`{=} is 20) and the lines of a `::: calc` div "
                              "(`C = n / V = {ans:4sf}`); --no-calc leaves them as written. On by default; also "

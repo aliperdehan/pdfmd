@@ -820,8 +820,10 @@ A picture is `[image: alt] (path)`.
 
 It is a build like any other, so discovery, metadata files, filters, citations and `\ce{...}` apply first (pdfmd reads
 Pandoc's AST; `--to ansi` writes the result to a file, `--view` to the screen). `--view` is `--to ansi -o -` plus a pager:
-`$PDFMD_PAGER`, else `$PAGER`, else `less -FRX` (it quits at once when the text fits the screen); `--no-pager`,
-`pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns the pager off. The styling is kept when the output is piped
+`$PDFMD_PAGER`, else `$PAGER`, else the pager command you set (`pdfmd-options: {pager_command: "bat --paging=always"}`, in the
+document, a metadata file or the config, or a row in `pdfmd --setup`; the environment variables win over it), else `less -FRX`
+(it quits at once when the text fits the screen); `--no-pager`, `pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns
+the pager off. The styling is kept when the output is piped
 (`pdfmd --view x.md | less -R`) and removed by `--color never` or the `NO_COLOR` variable; `-o -` into a pipe is plain unless
 `--color always`. A link is `words (address)`, or a clickable link in a terminal that draws them (iTerm2, WezTerm, Ghostty,
 VS Code) when the text is not paged. The notes of the build (`OK`, `DEFAULTS`) stay off the screen unless it failed or you
