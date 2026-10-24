@@ -22,7 +22,7 @@ import pdfmd  # noqa: E402
 class WorkerState(unittest.TestCase):
     def test_every_global_main_sets_reaches_a_worker(self):
         names = set()
-        for line in re.findall(r"^\s+global (.+)$", inspect.getsource(pdfmd.main), re.MULTILINE):
+        for line in re.findall(r"^\s+global (.+)$", inspect.getsource(pdfmd.run_main), re.MULTILINE):
             names.update(name.strip() for name in line.split(","))
         self.assertTrue(names)
         for name in names:
