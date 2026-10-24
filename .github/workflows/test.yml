@@ -212,7 +212,7 @@ jobs:
         shell: bash
     env:
       GITHUB_TOKEN: ${{ github.token }}
-      PDFMD_NO_PROMPT: "1"
+      PYTHONUTF8: "1"          # Python's UTF-8 mode: the tests read what pdfmd and its children write as UTF-8 (the console's code page would not)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -226,7 +226,14 @@ jobs:
           echo 'C:\Program Files\MiKTeX\miktex\bin\x64' >> "$GITHUB_PATH"
           "$miktex/initexmf" --admin --set-config-value='[MPM]AutoInstall=1'     # packages a document needs are fetched on demand
           "$miktex/lualatex" --version | head -1
+      - name: poppler (the tests read PDFs with pdftotext and pdftoppm)
+        run: choco install poppler -y --no-progress
       - run: pip install .
+      - name: The fonts the tests name (pdfmd's own default main font, its code font, DejaVu for missing glyphs)
+        run: |
+          pdfmd --install fonts:stix-two
+          pdfmd --install fonts:jetbrains-mono
+          pdfmd --install fonts:dejavu
       - run: pdfmd --check-dependencies
       - name: The whole test suite
         run: python -m unittest discover -s tests -v
