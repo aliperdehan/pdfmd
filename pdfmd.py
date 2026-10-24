@@ -1604,10 +1604,10 @@ def system_font_missing(family: str) -> bool:
             return False
         return not any(not face.managed for face in index._by_name.get(family.casefold(), []))
     try:
-        result = subprocess.run([tool, f"--find={family}"], capture_output=True, text=True, timeout=60)
+        result = subprocess.run([tool, f"--find={family}"], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.SubprocessError):
         return False
-    return "Cannot find" in result.stdout + result.stderr
+    return "Cannot find" in (result.stdout or "") + (result.stderr or "")
 
 
 @lru_cache(maxsize=None)
@@ -14470,11 +14470,11 @@ def body_x_height(family: str | None) -> float | None:
     if not family or not fc_match:
         return None
     try:
-        done = subprocess.run([fc_match, "-f", "%{family}\n%{file}\n%{index}", family], capture_output=True, text=True,
-                              timeout=30)
+        done = subprocess.run([fc_match, "-f", "%{family}\n%{file}\n%{index}", family], capture_output=True,
+                              encoding="utf-8", errors="replace", timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
-    lines = done.stdout.splitlines()
+    lines = (done.stdout or "").splitlines()
     if done.returncode != 0 or len(lines) < 3 or family.casefold() not in lines[0].casefold():
         return None                                  # fontconfig answered with another font: the family is not installed
     return sfnt_x_height(Path(lines[1]), int(lines[2]) if lines[2].isdigit() else 0)

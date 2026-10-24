@@ -200,7 +200,7 @@ def _fontconfig_faces() -> list[Face] | None:
         return None
     try:
         out = subprocess.run([exe, "--format", "%{family}\t%{style}\t%{file}\t%{index}\t%{fontformat}\n"],
-                             capture_output=True, text=True, timeout=60).stdout
+                             capture_output=True, encoding="utf-8", errors="replace", timeout=60).stdout or ""
     except (OSError, subprocess.SubprocessError):
         return None
     faces = []
