@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.34 — 2026-10-26
+
+Pre-edit state: commit `210497a` (v3.30.33).
+
+### Added
+- **`pdfmd -` builds the Markdown on standard input.** `echo '# Hi' | pdfmd -` writes `stdin.pdf` (`stdin.html`, `stdin.docx` ... with `--to`) in the current folder, or the file `-o` names. Before, `-` was "Could not find Markdown file for '-'", and only `--view` and `-o -` read a pipe. The text is kept in a hidden file in the current folder for the length of the run (a relative picture or include resolves there; it is removed on success, failure and ^C), and the OK line names it `stdin.md`. Standard input that is empty is refused with a reason. A plain `pdfmd` with a pipe is unchanged (it builds the folder's Markdown): the `-` is what says that the pipe is the document, so no script that runs `pdfmd` with an inherited stdin changes meaning. `tests/test_stdin.py`.
+
 ## v3.30.33 — 2026-10-26
 
 Pre-edit state: commit `5fe0411` (v3.30.32b).

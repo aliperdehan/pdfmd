@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.33"
+PDFMD_VERSION = "3.30.34"
 import argparse
 import atexit
 import csv
@@ -3713,6 +3713,26 @@ def view_sources(args, scratch: Path, made: list[Path]) -> list[Path]:
         if text.strip():
             return [view_stdin_file(text, scratch, made)]
     raise SystemExit("Nothing to show: no file named, nothing on standard input and no Markdown files in this folder.")
+
+
+def stdin_build(args) -> None:
+    """`pdfmd -`: Markdown read from standard input is built like a file. It sits in the current folder for the length of the
+    run (a relative picture or include resolves there) and is shown as `stdin.md`; the result is `stdin.pdf` (or `stdin.<ext>`
+    for `--to`) unless `-o` names it. `-o -` and `--view` read standard input in terminal_view()."""
+    if sys.stdin.isatty():
+        print("reading Markdown from the terminal, Ctrl-D to finish", file=sys.stderr)
+    text = sys.stdin.buffer.read()
+    if not text.strip():
+        raise SystemExit("Nothing to build: standard input was empty.")
+    made: list[Path] = []
+    with tempfile.TemporaryDirectory(prefix="pdfmd-stdin-") as scratch:
+        source = view_stdin_file(text, Path(scratch), made)
+    atexit.register(lambda: [item.unlink(missing_ok=True) for item in made])
+    DISPLAY_ALIAS[source] = DISPLAY_ALIAS[source.resolve()] = source.with_name("stdin.md")
+    args.path = [source]
+    if args.out is None:
+        target = args.to or "pdf"
+        args.out = Path.cwd() / ("stdin" + FORMAT_EXTENSION.get(target, "." + target))
 
 
 def view_wants_pager(args, first: Path) -> bool:
@@ -25736,6 +25756,8 @@ def run_main() -> None:
         os.environ[ANSI_WIDTH_ENV] = str(args.width)
     if args.view or (args.out is not None and str(args.out) == "-"):
         raise SystemExit(terminal_view(args))
+    if args.path and [str(path) for path in args.path] == ["-"]:
+        stdin_build(args)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
     global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI
     BUNDLE_PACKAGES_CLI = args.bundle_packages

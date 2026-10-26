@@ -958,6 +958,16 @@ VS Code) when the text is not paged. The notes of the build (`OK`, `DEFAULTS`) s
 gave `--verbose`; everything else a build prints goes to standard error, so standard output is the document and nothing
 else. `--view -o x.ansi` saves the file and shows nothing; `--view` with another `--to` is refused.
 
+`pdfmd -` is the same idea for an ordinary build: the Markdown on standard input is built like a file, and the result is
+`stdin.pdf` (`stdin.html`, `stdin.docx` ... with `--to`) in the current folder, or the name `-o` gives it. The text sits in a
+hidden file in the folder while the build runs, so a relative picture or include resolves there, and the OK line calls it
+`stdin.md`. Plain `pdfmd` with a pipe still builds the Markdown files of the folder; name the `-` when the pipe is the document.
+
+```
+echo '# Hi' | pdfmd -                 # stdin.pdf
+cat notes.md | pdfmd - --to docx -o notes.docx
+```
+
 Limits: a formula of anything but fractions, roots, sums, products, integrals and limits stays linear (no tall brackets, no
 matrices); raw LaTeX, HTML and Word pieces are left out (`--verbose` counts them); code is coloured by a small tokenizer, not a
 parser (keywords, strings, comments and numbers, nothing finer). Without Pandoc the built-in parser reads the Markdown, so no filters, citations, footnotes or metadata files.

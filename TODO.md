@@ -11,7 +11,6 @@ wait for an answer before any code.
 ## Next: small and concrete
 
 - [ ] After a failed TeX run, name the causes that reach pdfmd only as "Fatal error occurred" (unwritable cache, corrupt luaotfload database) with a one-page probe [3dd]
-- [ ] `pdfmd -`: build Markdown read from standard input as an ordinary build [3cd]
 - [ ] Indent div (`::: {indent=false}`) in docx and odt: a paragraph style, not a note [3ca]
 
 ## Decide first
