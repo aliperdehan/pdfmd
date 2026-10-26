@@ -67,6 +67,15 @@ class Siunitx(unittest.TestCase):
         self.assertEqual(siunitx.runs_tex(siunitx.convert(r"\qtyrange{1}{5}{\mL}")),
                          r"1\,\mathrm{mL}\text{ to }5\,\mathrm{mL}")
 
+    def test_an_empty_unit_prints_the_number_alone(self):
+        # siunitx 2 style, as in study notes: \SI{1.8e-5}{} is \num{1.8e-5} (issue 12)
+        number = siunitx.runs_tex(siunitx.convert(r"\num{1.8e-5}"))
+        for command in (r"\SI{1.8e-5}{}", r"\qty{1.8e-5}{}", r"\SI{1.8e-5}{ }"):
+            with self.subTest(command=command):
+                self.assertEqual(siunitx.runs_tex(siunitx.convert(command)), number)
+        self.assertEqual(flat(siunitx.convert(r"\SIrange{1}{2}{}")), "1to2")
+        self.assertEqual(siunitx.convert(r"\si{}"), [])
+
     def test_what_it_refuses(self):
         for command in (r"\num{2 x 3}", r"\si{\unknownunit}", r"\qty{5}", r"\num{abc}"):
             with self.subTest(command=command), self.assertRaises(siunitx.SiunitxError):
@@ -223,6 +232,33 @@ class Routes(unittest.TestCase):
     def test_none_of_its_settings_in_the_output(self):
         # a standalone Markdown file writes the metadata: pdfmd-chem-python (the home folder) is taken out first
         self.assertNotIn("pdfmd-chem", self.out["markdown"])
+
+
+class WhatItCannotConvert(unittest.TestCase):
+    """issue 12: an empty unit in a formula took the whole formula down, and the loss was silent"""
+
+    def build(self, text):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "d.md").write_text(text, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--from", "markdown", "--to", "typst",
+                                   "-o", "d.typ"], cwd=root, capture_output=True, text=True,
+                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "c"),
+                                       "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            return (root / "d.typ").read_text(encoding="utf-8"), done.stdout + done.stderr
+
+    def test_an_empty_unit_in_a_formula_and_in_text(self):
+        typst, _ = self.build("B: $\\ce{K_a} = \\SI{1.8e-5}{}$\n\nD: \\SI{1.8e-5}{} here\n")
+        self.assertNotIn("\\SI", typst)
+        self.assertIn("upright(K)", typst)
+        self.assertIn("10#super[\u22125] here", typst)
+
+    def test_a_command_it_cannot_convert_is_named_in_a_warn(self):
+        typst, report = self.build("F: \\SI{3}{\\bogus} here and $x = \\SI{3}{\\bogus}$\n")
+        self.assertEqual(report.count("[pdfmd] WARN \\SI{3}{\\bogus} cannot be converted"), 1)
+        self.assertIn("x = \\SI{3}{\\bogus} cannot be converted", report)
+        self.assertIn("is not known", report)
 
 
 class Batch(unittest.TestCase):

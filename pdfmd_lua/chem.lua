@@ -38,6 +38,17 @@ end
 
 local function is_tex(element) return element.format == "latex" or element.format == "tex" end
 
+-- a command or formula the converter refused: one WARN naming it and the reason, once (v3.30.25; the output used to
+-- lose it without a word)
+local warned = {}
+local function lost(client, kind, source, outcome)
+  local answer = client.cache[client:key(kind, source)]
+  if type(answer) ~= "table" or not answer.error or warned[kind .. source] then return end
+  warned[kind .. source] = true
+  io.stderr:write("[pdfmd] WARN " .. source:gsub("%s+", " ") .. " cannot be converted (" .. tostring(answer.error)
+    .. "); " .. outcome .. "\n")
+end
+
 local function Pandoc(doc)
   local client = chem.new({dir = (folder:gsub("[/\\][^/\\]*$", "")) .. "/pdfmd_chem", python = python,
     preamble = preamble})
@@ -62,15 +73,19 @@ local function Pandoc(doc)
         if inlines then return inlines end
       end
       local answer = client:answer("math", el.text)
+      if not answer then lost(client, "math", el.text, "the formula stays TeX") end
       return answer and pandoc.Math(el.mathtype, answer.math) or nil
     end,
     RawInline = function(el)
       if not (is_tex(el) and chem.command(el.text)) then return nil end
-      return chem.inlines(client:answer("text", el.text))
+      local inlines = chem.inlines(client:answer("text", el.text))
+      if not inlines then lost(client, "text", el.text, "it is left out") end
+      return inlines
     end,
     RawBlock = function(el)
       if not (is_tex(el) and chem.command(el.text)) then return nil end
       local inlines = chem.inlines(client:answer("text", el.text))
+      if not inlines then lost(client, "text", el.text, "it is left out") end
       return inlines and pandoc.Para(inlines) or nil
     end,
   })

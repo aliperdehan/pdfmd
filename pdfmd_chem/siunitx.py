@@ -550,8 +550,15 @@ def _merge(runs: list[tuple[str, str]]) -> list[tuple[str, str]]:
 #
 # the commands
 #
+def _blank(text: str) -> bool:
+    """`\\SI{1.8e-5}{}`: siunitx v2 style, an empty unit prints the number alone, as `\\num` does"""
+    return not re.sub(r"[\s{}]", "", text)
+
+
 def _quantity(number_text: str, unit_text: str, settings: Settings) -> list[tuple[str, str]]:
     number = parse_number(number_text)
+    if _blank(unit_text):
+        return number_runs(number, settings)
     units = parse_unit(unit_text, settings)
     product = units[0].product if units[0].product is not None else settings.quantity_product
     return _merge(number_runs(number, settings) + [(product, "")] + unit_runs(units, settings))
@@ -615,7 +622,7 @@ def convert(command: str, settings: Settings | None = None) -> list[tuple[str, s
     if name == "num":
         return number_runs(parse_number(arguments[0]), local)
     if name in ("si", "unit"):
-        return unit_runs(parse_unit(arguments[0], local), local)
+        return [] if _blank(arguments[0]) else unit_runs(parse_unit(arguments[0], local), local)
     if name in ("SI", "qty"):
         return _quantity(arguments[0], arguments[1], local)
     if name == "ang":

@@ -40,6 +40,23 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.25 — 2026-10-26
+
+Pre-edit state: commit `abb652a` (v3.30.24). Issue 12.
+
+### Fixed
+
+- siunitx 2 style `\SI{1.8e-5}{}` and `\qty{1.8e-5}{}` (an empty unit) print the number alone, as `\num{1.8e-5}` does; `\si{}` and `\unit{}`
+  print nothing; the same for `\SIlist`, `\SIrange` and their `qty` names. The empty unit made the converter refuse the command, so in
+  a Typst, HTML or text output the command was left out of the text without a word, and a formula holding one (even beside a `\ce`) stayed raw
+  TeX, with a warning that only blamed the missing `pdftocairo`.
+- A command or a formula the converter refuses is named in one `WARN` with the reason (`[pdfmd] WARN \SI{3}{\bogus} cannot be converted
+  (siunitx unit \bogus is not known); it is left out`), once per command, for the outputs the LaTeX filter does not run for.
+
+### Tests
+
+- `tests.test_chem.Siunitx.test_an_empty_unit_prints_the_number_alone`, `tests.test_chem.WhatItCannotConvert`.
+
 ## v3.30.24 — 2026-10-25
 
 Pre-edit state: commit `de9c29a` (v3.30.23).
