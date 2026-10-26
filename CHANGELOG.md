@@ -40,6 +40,19 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.39 — 2026-10-26
+
+Pre-edit state: commit `e069268` (v3.30.38).
+
+### Added
+- **`mdpdf in.md out.pdf`: the output as a second positional.** The Go `mdpdf` and `md2static` name the PDF that way; the
+  `mdpdf` command now takes a last positional ending in `.pdf` that follows another positional as `-o`, whether or not options
+  come after it (`mdpdf notes.md notes.pdf -p A4`). It is left alone when `-o` is given, when it is the value of an option
+  (`--cover c.pdf`), when it is the only argument, and when the one before it is a PDF too. The original `mdpdf` never reads a PDF,
+  so nothing it accepted changes. `pdfmd` itself does not do this: for pdfmd a PDF argument is an input.
+- **`pdfmd x.pdf -o -`: the Markdown on standard output.** M1ck4's `pdfmd` (archived 2026-05-08) pipes that way; for PDF inputs it
+  now means batchocr's `--stdout` (it was the terminal view, which refuses a PDF). `pdfmd x.pdf --stdout` worked already.
+
 ## v3.30.38 — 2026-10-26
 
 Pre-edit state: commit `d4ae514` (v3.30.37).

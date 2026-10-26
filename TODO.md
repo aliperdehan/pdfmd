@@ -27,6 +27,20 @@ wait for an answer before any code.
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
 
+## Other tools' command lines
+
+Answer the keys of the other `pdfmd`, `mdpdf` and `md2pdf` tools under their own command names, check their behaviour, take
+what pdfmd lacks. Plain `pdfmd` keeps its own meanings (`-p` is slides, `-s`, `-h`...); a PDF read as Markdown is
+batchocr's, so what is listed for it lands in batchocr. Never delegate to a copy of another tool. The quick ones first; the rest
+is low priority. [3di]
+
+- [ ] `mdpdf` also answers the npm `mdpdf`: `--style`, `--border[-top|-left|-bottom|-right]`, `--format`, `--orientation`, `--h-height`, `--f-height`, `--no-emoji`, `--gh-style`, `--debug`, `MDPDF_STYLES`; `--header`/`--footer` told apart by value (an existing `.html`/`.hbs` file is npm's, a comma template is PyPI's)
+- [ ] `--doctor` names the program that answers `pdfmd`, `mdpdf`, `inkmd` and `md2pdf` on the PATH when it is not this one
+- [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
+- [ ] An `md2pdf` command (jmaupetit: `-i -o -c -e -C -W`; `md-to-pdf`: `--stylesheet --pdf-options --config-file`; kxxoling: `--theme`), dialect told apart by the keys; `pymd2pdf`, pdfmd's own optional dependency, installs that name too, so decide first who owns it
+- [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert)
+- [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
+
 ## Before 4.0
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]

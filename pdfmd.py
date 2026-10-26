@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.38"
+PDFMD_VERSION = "3.30.39"
 import argparse
 import atexit
 import csv
@@ -23129,6 +23129,9 @@ def route_ebook_input(args) -> None:
     args.path = [markdown]
 
 
+PDF_TO_STDOUT = False        # set by `-o -` on PDF inputs (v3.30.39)
+
+
 def route_pdf_input(args, extra: list[str]) -> int | None:
     """Handle a run whose inputs are PDFs; None when they are not."""
     paths = list(args.path or [])
@@ -23175,7 +23178,9 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
         raise SystemExit(batchocr_missing_message(version))
     suffix = ".md" if fmt == "md" else ".txt"
     call = [*command, *map(str, rest), "--to", fmt]
-    to_stdout = any(item in ("-s", "--stdout") for item in extra)
+    to_stdout = any(item in ("-s", "--stdout") for item in extra) or PDF_TO_STDOUT
+    if PDF_TO_STDOUT and not any(item in ("-s", "--stdout") for item in extra):
+        extra = [*extra, "--stdout"]
     produced: list[Path] = []
     if out is not None and not to_stdout:
         if len(rest) == 1 and (out_is_file or not out.is_dir() and not out.suffix):
@@ -24108,8 +24113,12 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
     """The ``mdpdf`` command's own keys (``-o -h -f -t -s -a -k -p`` and their long forms) as pdfmd options,
     plus what mdpdf always does: bookmarks and attached linked files. Anything else is a pdfmd option as
     usual. Wildcards in the inputs are expanded here, as mdpdf does, for shells that do not, and several
-    Markdown inputs are combined into one PDF (``--report``), as mdpdf does."""
+    Markdown inputs are combined into one PDF (``--report``), as mdpdf does. A last positional ending in
+    ``.pdf`` after another positional is the output (``mdpdf in.md out.pdf``, the form of the Go ``mdpdf`` and
+    ``md2static``); mdpdf itself never reads a PDF, and an option's value (``--cover x.pdf``) is not mistaken
+    for it because the token before it is the option."""
     out, rest, literal, documents = ["--bookmarks", "--attach-links"], list(argv), False, 0
+    previous, second = None, None                 # the last token read, when it was a positional; where the output is
     while rest:
         token = rest.pop(0)
         if literal or token == "-" or not token.startswith("-"):
@@ -24117,7 +24126,12 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
             out += matches or [token]
             documents += sum(1 for name in (matches or [token])
                              if Path(name).suffix.lower() in (".md", ".markdown") and Path(name).is_file())
+            if second is None and previous is not None and not matches and token.lower().endswith(".pdf") \
+                    and not previous.lower().endswith(".pdf") and (not rest or (rest[0].startswith("-") and not literal)):
+                second = len(out) - 1           # `mdpdf in.md out.pdf`: the output as a second positional (v3.30.39)
+            previous = token
             continue
+        previous = None
         if token == "--":
             literal = True
             continue
@@ -24134,6 +24148,8 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
                 continue
             value = rest.pop(0)
         out += [MDPDF_KEYS[key], value.casefold() if key in ("-p", "--paper") else value]
+    if second is not None and "--out" not in out:
+        out[second:second + 1] = ["--out", out[second]]
     if documents > 1 and "--report" not in out and "-r" not in out:
         out.append("--report")                      # several inputs make one PDF, as in mdpdf
     return out
@@ -25846,6 +25862,10 @@ def run_main() -> None:
         os.environ[ANSI_COLOR_ENV] = args.color
     if args.width:
         os.environ[ANSI_WIDTH_ENV] = str(args.width)
+    if (args.out is not None and str(args.out) == "-" and not args.view and args.path
+            and all(path.suffix.lower() == ".pdf" for path in args.path)):
+        global PDF_TO_STDOUT
+        args.out, PDF_TO_STDOUT = None, True     # `pdfmd x.pdf -o -`: the Markdown on standard output (M1ck4's pdfmd pipes so)
     if args.view or (args.out is not None and str(args.out) == "-"):
         raise SystemExit(terminal_view(args))
     if args.path and [str(path) for path in args.path] == ["-"]:

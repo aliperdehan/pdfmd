@@ -1338,7 +1338,7 @@ order, OCR for scanned pages, headings, lists, tables, running headers removed,
 pdfmd only routes: any flag it does not know goes to batchocr unchanged, so the
 options of [M1ck4's pdfmd](https://github.com/M1ck4/pdfmd) (`--ocr`, `--lang`,
 `--export-images`, `--page-breaks`, `--preview-only`, `--stats`, `-q`, `--output`)
-work as they did. Install the reader once:
+work as they did (`-o -` writes the Markdown to standard output). Install the reader once:
 
 ```sh
 pdfmd --install batchocr         # pip install batchocr[md] from its GitHub release,
@@ -1435,7 +1435,7 @@ It takes the current folder when you name none (`pdfmd -b` alone refuses), and e
 other option is pdfmd's.
 
 `mdpdf` turns bookmarks and attached links on and combines several inputs into one
-PDF. `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
+PDF; like the Go `mdpdf` it also takes the output as a second name (`mdpdf notes.md notes.pdf`). `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
 when you give `-o -`, or no `-o` while output is piped (at a terminal it writes
 `notes.pdf` beside the file instead). The default page is pdfmd's, not Letter: pass
 `-p letter` / `--page-size letter`. If the original `mdpdf` or `inkmd` package is

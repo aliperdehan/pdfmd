@@ -111,6 +111,28 @@ class MdpdfKeys(unittest.TestCase):
     def test_one_input_is_not_a_report(self):
         self.assertNotIn("--report", self.translate("doc.md"))
 
+    def test_a_second_positional_ending_in_pdf_is_the_output(self):
+        # v3.30.39: `mdpdf in.md out.pdf`, as the Go mdpdf and md2static take it
+        self.assertEqual(self.translate("doc.md", "made.pdf")[2:], ["doc.md", "--out", "made.pdf"])
+        self.assertEqual(self.translate("a.md", "b.md", "All.PDF")[2:], ["a.md", "b.md", "--out", "All.PDF"])
+        with tempfile.TemporaryDirectory() as folder:
+            names = [str(Path(folder) / "a.md"), str(Path(folder) / "b.md")]
+            for name in names:
+                Path(name).write_text("# T\n", encoding="utf-8")
+            result = self.translate(*names, "All.pdf")
+        self.assertEqual(result[2:], [*names, "All.pdf"][:2] + ["--out", "All.pdf", "--report"])
+
+    def test_it_is_left_alone_when_it_could_be_something_else(self):
+        self.assertEqual(self.translate("-o", "x.pdf", "doc.md", "y.pdf").count("--out"), 1)     # an output already named
+        self.assertNotIn("--out", self.translate("doc.md", "--cover", "cover.pdf"))              # an option's value
+        self.assertNotIn("--out", self.translate("only.pdf"))                                    # nothing before it
+        self.assertNotIn("--out", self.translate("a.pdf", "b.pdf"))                              # PDFs are not inputs to name
+
+    def test_options_may_follow_it(self):
+        self.assertEqual(self.translate("doc.md", "made.pdf", "-p", "A4", "-e", "inkmd")[2:],
+                         ["doc.md", "--out", "made.pdf", "--paper", "a4", "-e", "inkmd"])
+        self.assertEqual(self.translate("doc.md", "made.pdf", "-o", "x.pdf").count("--out"), 1)
+
     def test_the_entry_point_exists(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('mdpdf = "pdfmd:mdpdf_main"', text)

@@ -84,6 +84,14 @@ class PdfInput(unittest.TestCase):
         self.run_pdfmd("a.pdf", "-t", "gfm", batchocr=self.fake())
         self.assertEqual(self.call()[1:3], ["--to", "md"])
 
+    def test_o_dash_is_the_markdown_on_standard_output(self):
+        # v3.30.39: M1ck4's pdfmd pipes with `-o -`; for a PDF that is batchocr's --stdout, not the terminal view
+        done = self.run_pdfmd("a.pdf", "-o", "-", batchocr=self.fake())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.call(), ["a.pdf", "--to", "md", "--stdout"])
+        self.run_pdfmd("a.pdf", "-o", "-", "--stdout", batchocr=self.fake())
+        self.assertEqual(self.call().count("--stdout"), 1)
+
     def test_an_output_folder_gets_the_name_of_the_pdf(self):
         self.run_pdfmd("a.pdf", "-o", "notes", batchocr=self.fake())
         self.assertEqual(self.call()[3:], ["-o", str(Path("notes/a.md"))])
