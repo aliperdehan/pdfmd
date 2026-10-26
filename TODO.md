@@ -44,7 +44,7 @@ is low priority. [3di]
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
-- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo and bundled for `pdfmd --doc`; every feature page says the version it appeared in, the versions of its fixes and the latest version it was tested on, with a re-test pass against rot, an entry with its tests required of every new feature, a page per version, and the pages rendered by pdfmd itself; every confusion point found while writing gets a fix or an accepted spelling and a test, on every route and fallback (the paper bug of 3.30.42 was found only by trying other engines) [3dg]
+- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; feature pages carry the version added, fixed and last tested [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
 - [ ] 4.0
 
