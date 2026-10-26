@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.33 — 2026-10-26
+
+Pre-edit state: commit `5fe0411` (v3.30.32b).
+
+### Fixed
+- `--doctor --deep` builds a page with a struck-out word. A LaTeX installation without `soul.sty` (xelatex, pdflatex) or `lua-ul` (lualatex) passed the check and then failed on the first document with `~~text~~`.
+
 ## v3.30.32b — 2026-10-26
 
 Pre-edit state: commit `3b97509` (v3.30.32). A docs-only commit: `PDFMD_VERSION` stays 3.30.32.

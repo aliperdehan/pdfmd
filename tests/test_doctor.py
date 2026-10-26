@@ -50,6 +50,12 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("Smoke test", result.stdout)
             self.assertRegex(result.stdout, r"(?m)^OK    (inkmd|md2pdf): built a PDF in ")
 
+    def test_the_deep_page_has_a_struck_out_word(self):
+        # ~~x~~ needs soul.sty on xelatex/pdflatex (lua-ul on lualatex): without it a missing package would pass the check
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        self.assertIn("~~", pdfmd.DEEP_SAMPLE)
+
     def test_deep_alone_is_refused(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--deep"], capture_output=True, text=True)
         self.assertNotEqual(done.returncode, 0)

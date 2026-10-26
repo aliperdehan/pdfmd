@@ -11,12 +11,8 @@ wait for an answer before any code.
 ## Next: small and concrete
 
 - [ ] After a failed TeX run, name the causes that reach pdfmd only as "Fatal error occurred" (unwritable cache, corrupt luaotfload database) with a one-page probe [3dd]
-- [ ] `--doctor --deep`: add strikethrough to the smoke page, so a missing `soul.sty` is caught [3dd]
-- [ ] Parts builds: one `BACKUP` line instead of one per part; the list under `--verbose` [3ct]
-- [ ] The pager command as a setting (today only `$PDFMD_PAGER` / `$PAGER`) [3ci]
 - [ ] `pdfmd -`: build Markdown read from standard input as an ordinary build [3cd]
 - [ ] Indent div (`::: {indent=false}`) in docx and odt: a paragraph style, not a note [3ca]
-- [ ] Tests: retry `hdiutil detach` in `test_install_calibre`; the 39 `ruff --select F` findings [3cx]
 
 ## Decide first
 

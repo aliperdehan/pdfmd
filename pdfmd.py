@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.32"
+PDFMD_VERSION = "3.30.33"
 import argparse
 import atexit
 import csv
@@ -6006,7 +6006,7 @@ title: pdfmd smoke test
 
 # Heading
 
-Text with math $x^2 + \\alpha$, an accent (café), `code`, and a table:
+Text with math $x^2 + \\alpha$, an accent (café), `code`, ~~struck out~~, and a table:
 
 | a | b |
 |---|---|
