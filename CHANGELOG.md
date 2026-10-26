@@ -40,6 +40,21 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.31 — 2026-10-26
+
+Pre-edit state: commit `16fad47` (v3.30.30 + the CLAUDE.md rule).
+
+### Added
+
+- A failed TeX run names its cause when the log has a known signature: a second line under the `WARN ... failed` line, `cause: the LaTeX package soul.sty is missing; install it (tlmgr install soul; Debian/Ubuntu: apt install texlive-plain-generic)`. Known: a missing `.sty` (the package that has it for lmodern, soul, selnolig, lua-ul, luacolor; `tlmgr install NAME` for any other), a missing luaotfload, a corrupt luaotfload font database, an unwritable TeX cache. The signatures come from real logs of an outside reviewer's six cases (2026-10-14). Once per document, not once per engine tried.
+- Not done: the unwritable cache and the corrupt database reach pdfmd as Pandoc's bare `Fatal error occurred, no output PDF file produced!`, the cause is only in the engine's own console output, so those two are named only when the log text is at hand (not through Pandoc). Naming them needs a probe run (a one-page `lualatex` smoke document after such a failure, as `--doctor --deep` already has); queued.
+
+### Tests
+
+- `tests/test_tex_cause.py`.
+- `.gitignore` lists `pdfmd-reviews/` (an outside reviewer's raw logs, kept in the working folder for the classifier; not part of the package: `MANIFEST.in` names the files it ships).
+- Windows `native` CI (first run of the combined tree): `test_doc` reads `--help` output with `errors="replace"`, `test_install_calibre.Detach` and `test_sections.PartRanges` compare paths the way the platform spells them (`Path(...)`, `as_posix()`). Test code only.
+
 ## v3.30.30 — 2026-10-26
 
 Pre-edit state: commit `69dc4a6` (v3.30.29). Issue 13.

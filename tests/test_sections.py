@@ -543,7 +543,7 @@ class PartRanges(unittest.TestCase):
         self.parts = [self.directory / name for name in names]
 
     def pick(self, request):
-        return [str(part.relative_to(self.directory)) for part in pdfmd.select_parts(self.parts, self.directory, [request])]
+        return [part.relative_to(self.directory).as_posix() for part in pdfmd.select_parts(self.parts, self.directory, [request])]
 
     def test_a_range_takes_the_numbers_between_and_including_the_ends(self):
         self.assertEqual(self.pick("45-60"), ["45-a.md", "50-calculations.md", "55-x/1.md", "55-x/2.md", "60-discussion.md"])

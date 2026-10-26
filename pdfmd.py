@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.30"
+PDFMD_VERSION = "3.30.31"
 import argparse
 import atexit
 import csv
@@ -18242,6 +18242,37 @@ def engine_failure_reason(stderr: str) -> str | None:
     return lines[-1] if lines else None
 
 
+# What a failed TeX run's text says about WHY, for the causes whose log signature is known (signatures from
+# real logs: a missing luaotfload, a missing package, a corrupt font database, an unwritable cache). First match wins.
+TEX_CAUSES = (
+    (r"no writeable cache path", "the TeX cache folder is not writable",
+     "set TEXMFVAR and TEXMFCACHE to a folder you can write to"),
+    (r"luaotfload-database\.lua:\d+: \[string", "the LuaTeX font database is corrupt",
+     "run `luaotfload-tool --update --force`, or delete the luatex-cache folders"),
+    (r"module 'luaotfload-main' not found|not loadable: metric d", "the LuaTeX font loader (luaotfload) is missing",
+     "install it (tlmgr install luaotfload; Debian/Ubuntu: apt install texlive-luatex), or use -e xelatex"),
+    (r"File `([^']+\.sty)' not found", "the LaTeX package {0} is missing", None),
+)
+TEX_PACKAGES = {"lmodern.sty": ("lmodern", "lmodern"), "soul.sty": ("soul", "texlive-plain-generic"),
+                "selnolig.sty": ("selnolig", "texlive-luatex"), "lua-ul.sty": ("lua-ul", "texlive-luatex"),
+                "luacolor.sty": ("luacolor", "texlive-luatex")}
+
+
+def tex_failure_cause(text: str) -> tuple[str, str] | None:
+    """(cause, fix) for a failed TeX run whose text matches a known signature, else None."""
+    for pattern, cause, fix in TEX_CAUSES:
+        found = re.search(pattern, text)
+        if not found:
+            continue
+        if fix is None:                                                  # a missing .sty: name the package that has it
+            style = found.group(1)
+            tl, distro = TEX_PACKAGES.get(style, (style.removesuffix(".sty"), None))
+            fix = f"install it (tlmgr install {tl}" + (f"; Debian/Ubuntu: apt install {distro})" if distro else ")")
+            return cause.format(style), fix
+        return cause, fix
+    return None
+
+
 SHOWN_LOCATIONS: set[tuple[str, str]] = set()
 LATEX_CONTEXT_RE = re.compile(r"(?m)^l\.(\d+) (.+)$")
 
@@ -18317,6 +18348,10 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
         if where and (label, where) not in SHOWN_LOCATIONS:
             SHOWN_LOCATIONS.add((label, where))
             print(f"      {where}", file=sys.stderr)
+    known = tex_failure_cause(result.stderr)
+    if known and (label, known[0]) not in SHOWN_LOCATIONS:             # once per document, not once per engine
+        SHOWN_LOCATIONS.add((label, known[0]))
+        print(f"      cause: {known[0]}; {known[1]}", file=sys.stderr)
     if debug and result.stderr.strip():
         print(f"----- {label}: {engine} stderr (--debug) -----", file=sys.stderr)
         print(result.stderr.strip(), file=sys.stderr)

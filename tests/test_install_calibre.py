@@ -206,14 +206,14 @@ class Detach(unittest.TestCase):
         seen, fake = self.calls([16, 16, 0])
         with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep") as pause:
             self.assertTrue(pdfmd.detach_disk_image(Path("/Volumes/x")))
-        self.assertEqual([call[1:] for call in seen], [["detach", "/Volumes/x"]] * 3)
+        self.assertEqual([call[1:] for call in seen], [["detach", str(Path("/Volumes/x"))]] * 3)
         self.assertEqual(pause.call_count, 2)
 
     def test_an_image_that_stays_busy_is_forced_at_the_end(self):
         seen, fake = self.calls([16, 16, 16, 16, 0])
         with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep"):
             self.assertTrue(pdfmd.detach_disk_image(Path("/Volumes/x"), attempts=4))
-        self.assertEqual(seen[-1][1:], ["detach", "-force", "/Volumes/x"])
+        self.assertEqual(seen[-1][1:], ["detach", "-force", str(Path("/Volumes/x"))])
         self.assertEqual(len(seen), 5)
 
     def test_a_detach_that_cannot_be_forced_says_so(self):

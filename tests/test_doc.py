@@ -19,7 +19,7 @@ import pdfmd  # noqa: E402
 
 def run(*args: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": ""}
-    return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], capture_output=True, text=True, encoding="utf-8", env=env)
+    return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
 
 
 class Command(unittest.TestCase):
