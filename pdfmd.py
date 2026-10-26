@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.36"
+PDFMD_VERSION = "3.30.37"
 import argparse
 import atexit
 import csv
@@ -3837,7 +3837,7 @@ def terminal_view(args) -> int:
             for number, source in enumerate(files):
                 built = scratch / f"{number:03d}{suffix}"
                 command = [sys.executable, str(Path(__file__).resolve()), *view_child_arguments(sys.argv[1:], args.path or []),
-                           "--to", target, "-o", str(built), "--no-stamp", "--no-backup", str(source)]
+                           "--to", target, "-o", str(built), "--no-stamp", "--no-backup", "--rewrite", str(source)]
                 done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=environment)
                 # the child's OK / DEFAULTS lines would sit above the document: shown for a failure or with --verbose
                 sys.stderr.write((done.stdout if done.returncode != 0 or args.verbose else "") + done.stderr)
@@ -6644,7 +6644,7 @@ def office_pdfmd_command(md_path: Path, metadata_files: list[Path], variables: l
     """This pdfmd run again, as a subprocess, for the same document with other options (a PDF build for its
     labels, a `--to latex` run for its preamble)."""
     # --no-stamp/--no-backup: only the build the user asked for writes a note into the source and a snapshot
-    command = [sys.executable, str(Path(__file__).resolve()), str(md_path), *options, "--no-stamp", "--no-backup",
+    command = [sys.executable, str(Path(__file__).resolve()), str(md_path), *options, "--no-stamp", "--no-backup", "--rewrite",
                "--no-auto", *(no_auto or ["officeref"])]
     for variable in variables:
         command += ["-V", variable]
@@ -7142,7 +7142,7 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
             continue
         with tempfile.TemporaryDirectory(prefix="pdfmd-check-") as scratch:
             command = [sys.executable, str(Path(__file__).resolve()), str(document), "--to", "docx",
-                       "-o", str(Path(scratch) / f"{document.stem}.docx"), "--no-stamp", "--no-backup"]
+                       "-o", str(Path(scratch) / f"{document.stem}.docx"), "--no-stamp", "--no-backup", "--rewrite"]
             for variable in args.variable or []:
                 command += ["-V", variable]
             if args.metadata_file is not None:
@@ -13011,8 +13011,8 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
             if single:
                 put_outside_blocks(document, folder, manifest)
             command = ([sys.executable, str(Path(__file__).resolve()), *passed, "-r", *map(str, chapters),
-                        "--attach-source", "-o", str(made)] if chapters else
-                       [sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", str(path)])
+                        "--attach-source", "--rewrite", "-o", str(made)] if chapters else
+                       [sys.executable, str(Path(__file__).resolve()), *passed, "--attach-source", "--rewrite", str(path)])
             done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   cwd=path.parent)
             state["built"], state["ok"] = digest(), done.returncode == 0 and made.exists()
@@ -13160,7 +13160,7 @@ def edit_command(args) -> int:
             return 1
 
     def build(path: Path):
-        done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, str(path)],
+        done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *passed, "--rewrite", str(path)],
                               capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=path.parent)
         made = path.with_suffix(".pdf")
         return done.returncode == 0, (done.stdout + done.stderr).strip(), made if done.returncode == 0 and made.exists() else None
@@ -18213,6 +18213,50 @@ def output_extension_for(target_format: str, source: Path | None = None) -> str:
     if ASCII_CLI["on"] and target_format in ASCII_FORMATS:       # --to ascii: another name, so the Unicode file stays
         extension = ".ascii" + extension
     return extension
+
+
+REWRITE_CLI: bool | None = None
+REWRITE_NAME = "{stem} ({n}){ext}"
+
+
+def rewrite_wanted(md_path: Path, metadata_files: list[Path]) -> bool:
+    """--rewrite/--no-rewrite, else `pdfmd-options: {rewrite: ...}` (the document, its folder, the config), else on."""
+    if REWRITE_CLI is not None:
+        return REWRITE_CLI
+    try:
+        value = first_pdfmd_option(md_path, metadata_files, "rewrite")
+    except Exception:
+        return True
+    return True if value is None else str(value).strip().casefold() not in ("false", "no", "off", "0")
+
+
+def rewrite_template(md_path: Path, metadata_files: list[Path]) -> str:
+    """`rewrite-name`: the numbered copy's name; it must have {n} and no folder, else the default with a WARN."""
+    try:
+        value = first_pdfmd_option(md_path, metadata_files, "rewrite-name", "rewrite_name")
+    except Exception:
+        value = None
+    if value in (None, ""):
+        return REWRITE_NAME
+    template = str(value)
+    if "{n}" not in template or re.search(r"[\\/]", template):
+        print(f"WARN  rewrite-name '{template}' needs {{n}} and no folder; using {REWRITE_NAME}", file=sys.stderr)
+        return REWRITE_NAME
+    return template
+
+
+def numbered_output(output: Path, template: str = REWRITE_NAME) -> Path:
+    """``output`` when nothing is there, else the first free numbered name (`report (1).pdf`)."""
+    if not output.exists():
+        return output
+    today = datetime.now().strftime("%Y%m%d")
+    for number in range(1, 1000):
+        name = (template.replace("{stem}", output.stem).replace("{ext}", output.suffix)
+                .replace("{date}", today).replace("{n}", str(number)))
+        candidate = output.with_name(name)
+        if not candidate.exists():
+            return candidate
+    raise SystemExit(f"{display_path(output)} and the 999 numbered copies of it exist; remove some or name the output with -o")
 
 
 def default_output_path(path: Path, target_format: str) -> Path:
@@ -24315,6 +24359,10 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
         else:
             export_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-calc-export-")
             CALC_DUMP = Path(export_scratch.name) / "names.tsv"
+    if target_format != ASSEMBLED_FORMAT and not rewrite_wanted(md_path, metadata_list):
+        planned = output_file or ((out_dir / f"{md_path.stem}{output_extension_for(target_format, md_path)}") if out_dir
+                                  else md_path.with_suffix(output_extension_for(target_format, md_path)))
+        output_file = numbered_output(planned, rewrite_template(md_path, metadata_list))
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
@@ -25218,6 +25266,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "math as text) wrapped to the window, through a pager when it is longer. = `--to ansi -o -` "
                              "+ a pager. Takes files, `-` or a pipe, else the Markdown files here, else what you type "
                              "(Ctrl-D ends it)")
+    parser.add_argument("--rewrite", action=argparse.BooleanOptionalAction, default=None,
+                        help="replace an older output of the same name (the default); --no-rewrite writes `report (1).pdf` "
+                             "(the first free number) and leaves the old file alone. Also `pdfmd-options: {rewrite: false}`, "
+                             "`{rewrite-name: \"{stem}-{n}{ext}\"}` for the name, or --setup. A watch (-w) always rewrites")
     parser.add_argument("--pager", action=argparse.BooleanOptionalAction, default=None,
                         help="with --view: use $PDFMD_PAGER / $PAGER / the `pager_command` setting / `less -FRX` when stdout is a terminal "
                              "(the default); --no-pager prints it all. Also `pdfmd-options: {pager: false}` (and "
@@ -25799,7 +25851,8 @@ def run_main() -> None:
     if args.path and [str(path) for path in args.path] == ["-"]:
         stdin_build(args)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
-    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI
+    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI, REWRITE_CLI
+    REWRITE_CLI = True if args.watch else args.rewrite       # a watch rebuilds the same file on every save
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments
     STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
@@ -27025,7 +27078,7 @@ def pdfmd_version() -> str:
 
 def _api_command(source: Path, to: str | None, output: Path, extra_args, metadata, variables, stamp: bool,
                  backup: bool) -> list[str]:
-    command = [sys.executable, str(Path(__file__).resolve()), str(source), "-o", str(output)]
+    command = [sys.executable, str(Path(__file__).resolve()), str(source), "-o", str(output), "--rewrite"]
     if to and to.lower() not in ("pdf", output.suffix.lstrip(".").lower()):
         command += ["--to", to]
     if not stamp:

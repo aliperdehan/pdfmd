@@ -13,7 +13,6 @@ wait for an answer before any code.
 
 ## Decide first
 
-- [ ] **decide** `--no-rewrite`: numbered sibling instead of overwriting; name template, parts, `-o`, watch [3ce]
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 

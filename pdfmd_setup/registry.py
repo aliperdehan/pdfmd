@@ -63,6 +63,7 @@ UNSET = {
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
+    "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
     "options.editor": "the built-in editor", "options.preset": "metadata.yaml", "options.global-metadata": "on",
 }
 
@@ -75,7 +76,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled"})
 # to a place that is not the document's ...): the folder screen leaves it out and says so instead of offering a row that would
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
-    "options.global-metadata", "options.preset", "options.fallback", "options.missing", "options.citation-engine",
+    "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
@@ -461,6 +462,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "
                 "--no-markup.", "Universal markup"),
+        choice("options.rewrite", "Replace an older output of the same name", on_off, "",
+               "Off: a build that finds report.pdf already there writes report (1).pdf and leaves the old one. "
+               "Per run: --rewrite / --no-rewrite. A watch (-w) always rewrites.", "Output"),
+        text("options.rewrite-name", "The name of the numbered copy",
+             "A template with {n} (1, 2, ...), {stem}, {ext} (with its dot) and {date}: `{stem} ({n}){ext}`, `{stem}-{n}{ext}`, "
+             "`{stem}_{date}-{n}{ext}`. No folders.", "Output"),
         # -- what a build prints
         choice("options.found-style", "How the FOUND line lists the files it picked up",
                (("group", "files of one folder together: metadata: metadata.yaml + preamble.tex"),

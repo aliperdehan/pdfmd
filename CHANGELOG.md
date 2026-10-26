@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.37 — 2026-10-26
+
+Pre-edit state: commit `276f947` (v3.30.36).
+
+### Added
+- **`--no-rewrite`: keep the old output.** A build replaces an older `report.pdf`; with `--no-rewrite` it writes `report (1).pdf` (the first free number) and leaves the old file alone. `--rewrite` turns it back on for one run. Also `pdfmd-options: {rewrite: false}` (a document, a folder's `.pdfmd`, the config) and a `--setup` row ("Replace an older output of the same name", in the folder screen too). The name is a template, `rewrite-name` (`--setup`: "The name of the numbered copy"), default `{stem} ({n}){ext}`, with `{n}`, `{stem}`, `{ext}` and `{date}`; one without `{n}` or with a folder in it is refused with a warning. It applies to the final output of every build: the `-o` name, each file of a `-b` batch and of a parts build on its own, `pdfmd -` (`stdin (1).pdf`), `--to` formats; the cache stage's `.tex`, the `--view` scratch files and the builds pdfmd runs on itself (`--edit`'s rebuild, the labels pass, the Python API) are never numbered. A watch (`-w`) always rewrites. The first build of a name has no number. `tests/test_rewrite.py`.
+
 ## v3.30.36 — 2026-10-26
 
 Pre-edit state: commit `bdc81b1` (v3.30.35).

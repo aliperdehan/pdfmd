@@ -24,6 +24,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [No Pandoc? The built-in fallback](#no-pandoc-the-built-in-fallback)
 - [Usage](#usage)
   - [One document](#one-document)
+  - [Keep the old file: `--no-rewrite`](#keep-the-old-file---no-rewrite)
   - [Check a document before you build it](#check-a-document-before-you-build-it)
   - [A small editor](#a-small-editor)
   - [In VS Code](#in-vs-code)
@@ -494,6 +495,22 @@ they use [pypinyin](https://pypi.org/project/pypinyin/) (MIT) and
 letters, no tones, vowels left out where the script leaves them out. Names that
 romanize alike (homophones) are listed as ambiguous, never picked between. The
 same spelling rules find a section by its heading (`doc#tyche`).
+
+### Keep the old file: `--no-rewrite`
+
+A build replaces an older `lecture.pdf`. With `--no-rewrite` it writes `lecture (1).pdf` instead (the first free number) and
+leaves the old file as it was; the OK line names the copy. A first build has no number.
+
+```sh
+pdfmd lecture --no-rewrite           # lecture.pdf, then lecture (1).pdf, lecture (2).pdf ...
+pdfmd lecture --rewrite              # one run replaces it again, whatever the document or the setup says
+```
+
+Every output counts, the `-o` name and each file of a `-b` batch on its own (`pdfmd -` builds `stdin.pdf` the same way). It is
+also a document setting, `pdfmd-options: {rewrite: false}`, a folder's or your own default (`pdfmd --setup`, "Replace an older
+output of the same name"). The name is a template, `rewrite-name`, with `{n}`, `{stem}`, `{ext}` (with its dot) and `{date}`:
+`{stem}-{n}{ext}` gives `lecture-1.pdf`, `{stem}_{date}-{n}{ext}` gives `lecture_20261026-1.pdf`. The template needs `{n}` and no
+folder, otherwise the default is used with a warning. A watch (`-w`) always rewrites, or every save would make a copy.
 
 ### Check a document before you build it
 
