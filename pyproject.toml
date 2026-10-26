@@ -54,6 +54,8 @@ pdfmd = "pdfmd:main"
 pdfmd-cli = "pdfmd:main"
 # mdpdf's own command line (-o -h -f -t -s -a -k -p), answered by pdfmd; see mdpdf_translate.
 mdpdf = "pdfmd:mdpdf_main"
+# the keys of jmaupetit's md2pdf, md-to-pdf and kxxoling's md2pdf, answered by pdfmd; see md2pdf_translate.
+md2pdf = "pdfmd:md2pdf_main"
 # inkmd's own command line, answered by pdfmd with its built-in renderer; see inkmd_main.
 inkmd = "pdfmd:inkmd_main"
 # `pdfmd -b` on one folder (the current one by default), the name of the first script; see batchmd_main.

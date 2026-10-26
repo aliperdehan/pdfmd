@@ -4,6 +4,8 @@ own keys. The end-to-end tests build with the built-in renderer (nothing on PATH
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -136,6 +138,50 @@ class MdpdfKeys(unittest.TestCase):
     def test_the_entry_point_exists(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('mdpdf = "pdfmd:mdpdf_main"', text)
+
+
+class Md2pdfKeys(unittest.TestCase):
+    """v3.30.40: the `md2pdf` command answers jmaupetit's md2pdf, md-to-pdf and kxxoling's md2pdf."""
+
+    def translate(self, *arguments):
+        with contextlib.redirect_stderr(io.StringIO()) as noted:
+            result = pdfmd.md2pdf_translate(list(arguments))
+        self.noted = noted.getvalue()
+        return result
+
+    def test_a_file_alone_is_pdfmd(self):
+        self.assertEqual(self.translate("x.md"), ["x.md"])
+        self.assertEqual(self.noted, "")
+
+    def test_jmaupetits_keys(self):
+        self.assertEqual(self.translate("-i", "a.md", "-o", "b.pdf", "-c", "s.css", "-W", "2"),
+                         ["-e", "html", "a.md", "--out", "b.pdf", "--css", "s.css", "-j", "2"])
+        self.assertEqual(self.translate("--input=a.md", "--output=b.pdf")[:2], ["a.md", "--out"])
+
+    def test_extensions_are_dropped_with_a_note_but_an_engine_after_e_is_an_engine(self):
+        self.assertEqual(self.translate("-e", "pymdownx.emoji", "-C", "{}", "-i", "a.md"), ["a.md"])
+        self.assertIn("-e pymdownx.emoji", self.noted)
+        self.assertIn("-C {}", self.noted)
+        self.assertEqual(self.translate("-e", "typst", "x.md"), ["-e", "typst", "x.md"])
+        self.assertEqual(self.noted, "")
+
+    def test_md_to_pdfs_keys(self):
+        self.assertEqual(self.translate("x.md", "--stylesheet", "a.css", "--pdf-options", "{}", "--as-html", "-w"),
+                         ["x.md", "--css", "a.css", "--to", "html", "-w"])      # HTML output reads the sheet itself
+        self.assertIn("--pdf-options {}", self.noted)
+        self.assertEqual(self.translate("x.md", "--css", "body { color: red }"), ["x.md"])        # a string of styles, not a file
+        self.assertIn("--css body { color: red }", self.noted)
+
+    def test_a_theme_is_a_style_sheet_only_when_it_is_a_css_file(self):
+        self.assertEqual(self.translate("x.md", "--theme=mine.css"), ["-e", "html", "x.md", "--css", "mine.css"])
+        self.assertEqual(self.translate("x.md", "--theme", "github"), ["x.md"])
+        self.assertIn("--theme github", self.noted)
+
+    def test_a_named_engine_is_not_replaced_by_html(self):
+        self.assertEqual(self.translate("x.md", "-c", "s.css", "-e", "weasyprint"), ["x.md", "--css", "s.css", "-e", "weasyprint"])
+
+    def test_the_entry_point_exists(self):
+        self.assertIn('md2pdf = "pdfmd:md2pdf_main"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 class InkmdKeys(unittest.TestCase):

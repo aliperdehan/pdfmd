@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.39"
+PDFMD_VERSION = "3.30.40"
 import argparse
 import atexit
 import csv
@@ -24158,6 +24158,85 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
 def mdpdf_main() -> None:
     """Entry point of the ``mdpdf`` command: pdfmd, answering to mdpdf's keys."""
     sys.argv[1:] = mdpdf_translate(sys.argv[1:])
+    main()
+
+
+# The `md2pdf` command (v3.30.40). Several tools install that name: jmaupetit's `md2pdf` (-i -o -c -e -C -W), `md-to-pdf`
+# (--stylesheet --css --pdf-options --config-file ... and a file as the only argument) and kxxoling's (--theme). The keys do not
+# collide in meaning, so one table answers all three; what pdfmd has no use for is named on stderr and left out, never silently.
+MD2PDF_VALUE_KEYS = {"-i": "", "--input": "", "-o": "--out", "--output": "--out", "-c": "--css", "--css-file": "--css",
+                     "--stylesheet": "--css", "-W": "-j", "--workers": "-j", "--document-title": "--pdf-title"}
+MD2PDF_IGNORED_VALUE_KEYS = ("-e", "--extras", "-C", "--config", "--config-file", "--body-class", "--page-media-type",
+                             "--highlight-style", "--marked-options", "--pdf-options", "--launch-options",
+                             "--gray-matter-options", "--port", "--md-file-encoding", "--stylesheet-encoding",
+                             "--watch-options", "--basedir", "--theme")
+MD2PDF_ENGINE_WORDS = frozenset({"lualatex", "xelatex", "pdflatex", "tectonic", "typst", "weasyprint", "wkhtmltopdf", "context",
+                                 "pandoc", "tex", "html", "calibre", "inkmd", "native", "soffice", "edge", "chrome", "brave",
+                                 "chromium", "prince", "groff", "pdfroff", "pagedjs-cli"})
+
+
+def md2pdf_translate(argv: list[str]) -> list[str]:
+    """The `md2pdf` command's keys as pdfmd options: ``-i/--input`` are just inputs, ``-o`` the output, ``-c/--css/--stylesheet``
+    a style sheet (which only an HTML engine reads, so ``-e html`` is added unless an engine is named; md-to-pdf's ``--css`` is a
+    string of styles, not a file, and is dropped), ``-W`` the jobs,
+    ``--as-html`` HTML output, ``-w/--watch`` a watch. ``-e`` is an engine when its value is one (as in pdfmd) and jmaupetit's
+    Markdown extension otherwise; ``--theme`` is a style sheet when it names a .css file. Keys that pdfmd has no counterpart for
+    (extensions, Puppeteer and marked options, a config file) are said once on stderr and dropped, with their value."""
+    out, rest, ignored, css, engine = [], list(argv), [], False, False
+    while rest:
+        token = rest.pop(0)
+        key, equals, value = token.partition("=") if token.startswith("--") else (token[:2], "", token[2:])
+        if not token.startswith("-") or token == "-":
+            out.append(token)
+            continue
+        if key in ("-e", "--engine") and (equals or value or rest):
+            given = value if (equals or value) else rest.pop(0)
+            if key == "--engine" or given.casefold().split(",")[0].strip() in MD2PDF_ENGINE_WORDS:
+                out += ["-e", given]
+                engine = True
+            else:
+                ignored.append(f"{key} {given}")
+            continue
+        if key == "--css":                                   # a file in jmaupetit's, a string of styles in md-to-pdf's
+            given = value if (equals or value) else (rest.pop(0) if rest else "")
+            if "{" in given or not given:
+                ignored.append(f"--css {given}".strip())
+            else:
+                out += ["--css", given]
+                css = True
+            continue
+        if key in MD2PDF_VALUE_KEYS or key in MD2PDF_IGNORED_VALUE_KEYS:
+            if not (equals or value):
+                if not rest:
+                    out.append(MD2PDF_VALUE_KEYS.get(key) or token)       # missing value: let the parser complain
+                    continue
+                value = rest.pop(0)
+            if key == "--theme" and value.lower().endswith(".css"):
+                out += ["--css", value]
+                css = True
+            elif key in MD2PDF_VALUE_KEYS:
+                target = MD2PDF_VALUE_KEYS[key]
+                out += [target, value] if target else [value]
+                css = css or target == "--css"
+            else:
+                ignored.append(f"{key} {value}")
+            continue
+        if token == "--as-html":
+            out += ["--to", "html"]
+        elif token == "--devtools":
+            ignored.append(token)
+        else:
+            out.append(token)
+    if ignored:
+        print(f"NOTE  md2pdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
+    if css and not engine and "html" not in out:
+        out = ["-e", "html", *out]
+    return out
+
+
+def md2pdf_main() -> None:
+    """Entry point of the ``md2pdf`` command: pdfmd, answering to the keys of the tools that install that name."""
+    sys.argv[1:] = md2pdf_translate(sys.argv[1:])
     main()
 
 

@@ -40,6 +40,17 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.40 — 2026-10-26
+
+Pre-edit state: commit `e606b1b` (v3.30.39).
+
+### Added
+- **An `md2pdf` command.** Several tools install that name; pdfmd now answers the keys of all three: jmaupetit's `md2pdf`
+  (`-i -o -c -W`), `md-to-pdf` (`--stylesheet`, `--as-html`, `-w`, `--document-title`) and kxxoling's (`--theme file.css`). A style
+  sheet adds `-e html` unless an engine is named (only HTML engines read CSS). `-e` is an engine when its value is one and
+  jmaupetit's Markdown extension otherwise. What pdfmd has no counterpart for (extensions, `-C`, `--pdf-options`, `--config-file`,
+  `--launch-options`, a string given to `--css`, a built-in `--theme`) is named on standard error and left out.
+
 ## v3.30.39 — 2026-10-26
 
 Pre-edit state: commit `e069268` (v3.30.38).

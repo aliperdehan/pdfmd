@@ -43,7 +43,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [PDF to Markdown](#pdf-to-markdown)
   - [Bookmarks, header and footer, linked files](#bookmarks-header-and-footer-linked-files)
   - [Use it from Python](#use-it-from-python)
-  - [Other command names: `mdpdf`, `inkmd`, `batchmd` and `pan-tec`](#other-command-names-mdpdf-inkmd-batchmd-and-pan-tec)
+  - [Other command names: `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec`](#other-command-names-mdpdf-md2pdf-inkmd-batchmd-and-pan-tec)
   - [Slides](#slides)
   - [A whole folder](#a-whole-folder)
   - [A book or report from several files](#a-book-or-report-from-several-files)
@@ -1412,9 +1412,9 @@ stamped or backed up unless you ask (`stamp=True`, `backup=True`). A failure rai
 `variables=` a dict of Pandoc variables, `extra_args=` anything else the command line takes, `cwd=` the folder it runs
 in and `timeout=` seconds.
 
-### Other command names: `mdpdf`, `inkmd`, `batchmd` and `pan-tec`
+### Other command names: `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec`
 
-pdfmd also installs `mdpdf`, `inkmd`, `batchmd` and `pan-tec` commands that take those tools' own keys
+pdfmd also installs `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec` commands that take those tools' own keys
 and do what they did, with pdfmd behind them:
 
 ```sh
@@ -1425,6 +1425,13 @@ inkmd notes.md -e lualatex                   # naming another engine uses it ins
 batchmd ~/notes                              # every .md in the folder, as pdfmd -b ~/notes
 batchmd -e inkmd                             # the current folder, with the built-in renderer
 ```
+
+`md2pdf` answers the three tools that use that name: `md2pdf -i notes.md -o notes.pdf -c style.css` (jmaupetit's),
+`md2pdf notes.md --stylesheet style.css` (`md-to-pdf`'s) and `md2pdf notes.md --theme my.css` (kxxoling's). A file alone is
+`pdfmd notes.md`. A style sheet is read by the HTML engines only, so `-e html` is added when one is given and no engine is named.
+What pdfmd has no counterpart for (Markdown extensions `-e pymdownx...`, `-C`, `--pdf-options`, `--config-file`, a built-in
+`--theme github`) is named on standard error and left out. If another `md2pdf` is installed too, whichever was installed
+last owns the command name.
 
 `pan-tec` is the first version of pdfmd, a shell function around `pandoc "$@" --pdf-engine=tectonic --pdf-engine-opt=--chatter=minimal`
 (v3.29): `pan-tec test.md -o ex.pdf` is `pdfmd -e tectonic test.md -o ex.pdf --pdf-engine-opt=--chatter=minimal`, with everything else

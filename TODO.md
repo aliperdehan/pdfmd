@@ -37,13 +37,14 @@ is low priority. [3di]
 - [ ] `mdpdf` also answers the npm `mdpdf`: `--style`, `--border[-top|-left|-bottom|-right]`, `--format`, `--orientation`, `--h-height`, `--f-height`, `--no-emoji`, `--gh-style`, `--debug`, `MDPDF_STYLES`; `--header`/`--footer` told apart by value (an existing `.html`/`.hbs` file is npm's, a comma template is PyPI's)
 - [ ] `--doctor` names the program that answers `pdfmd`, `mdpdf`, `inkmd` and `md2pdf` on the PATH when it is not this one
 - [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
-- [ ] An `md2pdf` command (jmaupetit: `-i -o -c -e -C -W`; `md-to-pdf`: `--stylesheet --pdf-options --config-file`; kxxoling: `--theme`), dialect told apart by the keys; `pymd2pdf`, pdfmd's own optional dependency, installs that name too, so decide first who owns it
+- [ ] `md2pdf` leftovers: `pdfmd --install math` installs `pymd2pdf`, whose own `md2pdf` script then replaces pdfmd's in the same folder (restore it after the install)
 - [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert)
 - [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
 
 ## Before 4.0
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
+- [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo and bundled for `pdfmd --doc` [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
 - [ ] 4.0
