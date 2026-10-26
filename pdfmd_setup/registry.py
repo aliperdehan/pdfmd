@@ -287,7 +287,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.table-widths", "Pipe-table column widths",
                (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
                 ("keep", "exactly the widths the separator's dashes say")), "auto",
-               "Unequal dashes are always kept; this is about equal ones.", "Tables"),
+               "Unequal dashes are kept (Pandoc's Markdown reader only; LaTeX engines only); this is about equal ones.", "Tables"),
         # -- code
         choice("options.code-wrap", "Long code lines (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",
                "Needs fvextra (in every full TeX Live). Per block: {wrap=false}.", "Code"),

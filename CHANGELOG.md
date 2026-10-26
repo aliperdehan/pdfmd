@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.42b — 2026-10-26
+
+Pre-edit state: commit `4efe2c5`. Documentation only (the README and the notes in `pdfmd.py` and `--setup`): `PDFMD_VERSION` stays 3.30.42.
+
+### Fixed
+- The notes on pipe-table column widths claimed more than the code does. Unequal separator dashes are kept only under Pandoc's own Markdown reader (a document with front matter or a linked metadata file); under `gfm` they carry no width and every table is balanced. Colons count as dashes. The balancing runs for the LaTeX engines only; the other writers take Pandoc's widths, equal columns for `---|---` with a long line under the Markdown reader. The behaviour itself is unchanged and queued.
+
 ## v3.30.42 — 2026-10-26
 
 Pre-edit state: commit `0ae751a` (v3.30.41).

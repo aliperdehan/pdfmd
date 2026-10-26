@@ -1116,8 +1116,10 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
 Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
     lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text
     width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.
-    Unequal dashes (`--|-----`) are a choice and kept. `pdfmd-options: {table-widths: keep}` (or the same in the
-    config, or --setup) leaves every table as written; `--no-auto tablewidth` switches the filter off.
+    Unequal dashes (`--|-----`) are a choice and kept, but only under Pandoc's own Markdown reader (front matter, or a
+    linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
+    `pdfmd-options: {table-widths: keep}` (or the same in the config, or --setup) leaves every table as written;
+    `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's widths as given.
 
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/

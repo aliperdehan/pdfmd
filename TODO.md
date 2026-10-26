@@ -12,6 +12,7 @@ wait for an answer before any code.
 
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
+- [ ] **decide** whether chatter level `off` also hides ERROR lines (advice: no) [3dj]
 
 ## Features, agreed
 
@@ -26,6 +27,16 @@ wait for an answer before any code.
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
+
+## Tables line, one feature line (3.31.0, full suite) [3dj]
+
+- [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine
+- [ ] Chatter ladder: `--chatter`, `-q`, `--mute ID`, `--log`, `--summary`; one `emit`; per document and in `--setup`
+- [ ] Table pre-pass: dash look-alikes, `+` and `=` separators, `table-colons`, `table-repair` modes, "not a table" warning, `--fix-tables`
+- [ ] Character budget from paper, margins and font size, not 95
+- [ ] CSV `widths`: repair a wrong count, `*` for a free column, never drop data
+- [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
+- [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
 
 ## Other tools' command lines
 
