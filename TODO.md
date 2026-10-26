@@ -10,7 +10,6 @@ wait for an answer before any code.
 
 ## Next: small and concrete
 
-- [ ] After a failed TeX run, name the causes that reach pdfmd only as "Fatal error occurred" (unwritable cache, corrupt luaotfload database) with a one-page probe [3dd]
 - [ ] Indent div (`::: {indent=false}`) in docx and odt: a paragraph style, not a note [3ca]
 
 ## Decide first

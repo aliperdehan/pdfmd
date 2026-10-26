@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.35 — 2026-10-26
+
+Pre-edit state: commit `bbb6a47` (v3.30.34).
+
+### Added
+- **A LuaTeX that cannot start names why.** An unwritable TeX cache and a corrupt luaotfload database both reached pdfmd only as Pandoc's `lualatex failed (!  ==> Fatal error occurred, no output PDF file produced!)`: the cause is in the engine's own console, and the two looked alike although the fixes differ. When lualatex fails with that line and the text names no known cause, pdfmd runs a one-line page with the same engine in the same environment (once per run, 120 s at most) and classifies what it prints: `cause: the TeX cache folder is not writable; set TEXMFVAR and TEXMFCACHE to a folder you can write to`, or `the LuaTeX font database is corrupt; run luaotfload-tool --update --force, or delete the luatex-cache folders`. `--doctor --deep` shows the same cause after the reason an engine failed. The signature `no writeable cache path` is matched across a wrapped console line (macOS prints `quiting`, Linux `quitting`). Checked with a read-only `TEXMFVAR`/`TEXMFCACHE` on macOS. `tests/test_tex_cause.py`.
+
 ## v3.30.34 — 2026-10-26
 
 Pre-edit state: commit `210497a` (v3.30.33).

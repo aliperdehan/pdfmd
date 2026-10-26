@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.34"
+PDFMD_VERSION = "3.30.35"
 import argparse
 import atexit
 import csv
@@ -6062,7 +6062,9 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
             text = done.stdout + done.stderr
             found = re.search(r"failed \((.*?)\); (?:no more engines|trying)", text)
             lines = [line.strip() for line in text.splitlines() if line.strip()]
-            results.append((entry, False, found.group(1) if found else (lines[-1][:160] if lines else "no output")))
+            why = found.group(1) if found else (lines[-1][:160] if lines else "no output")
+            cause = re.search(r"(?m)^\s+cause: (.+)$", text)                       # the TeX cause line (v3.30.35), when there is one
+            results.append((entry, False, f"{why}; {cause.group(1)}" if cause else why))
     return results
 
 
@@ -18324,7 +18326,7 @@ def engine_failure_reason(stderr: str) -> str | None:
 # What a failed TeX run's text says about WHY, for the causes whose log signature is known (signatures from
 # real logs: a missing luaotfload, a missing package, a corrupt font database, an unwritable cache). First match wins.
 TEX_CAUSES = (
-    (r"no writeable cache path", "the TeX cache folder is not writable",
+    (r"no\s+writeable\s+cache\s+path", "the TeX cache folder is not writable",
      "set TEXMFVAR and TEXMFCACHE to a folder you can write to"),
     (r"luaotfload-database\.lua:\d+: \[string", "the LuaTeX font database is corrupt",
      "run `luaotfload-tool --update --force`, or delete the luatex-cache folders"),
@@ -18350,6 +18352,35 @@ def tex_failure_cause(text: str) -> tuple[str, str] | None:
             return cause.format(style), fix
         return cause, fix
     return None
+
+
+TEX_PROBE_DOCUMENT = "\\documentclass{article}\\usepackage{fontspec}\\begin{document}x\\end{document}\n"
+TEX_PROBES: dict[str, tuple[str, str] | None] = {}
+
+
+def probe_tex_cause(engine: str, timeout: int = 120) -> tuple[str, str] | None:
+    """Pandoc reports a LuaTeX run that cannot start its font loader only as `Fatal error occurred, no output PDF file
+    produced`; the cause (an unwritable cache, a corrupt font database) is in the engine's own console. Run a one-line page
+    with the same engine, in the same environment, and read that. Asked once per engine in a run; None when it cannot tell."""
+    if engine not in TEX_PROBES:
+        TEX_PROBES[engine] = None
+        executable = which(engine) if engine == "lualatex" else None
+        if executable:
+            with tempfile.TemporaryDirectory(prefix="pdfmd-texprobe-") as scratch:
+                folder = Path(scratch)
+                (folder / "probe.tex").write_text(TEX_PROBE_DOCUMENT, encoding="utf-8")
+                try:
+                    done = subprocess.run([executable, "-interaction=nonstopmode", "-halt-on-error", "probe.tex"], cwd=folder,
+                                          capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+                                          stdin=subprocess.DEVNULL)
+                    text = done.stdout + done.stderr
+                except (OSError, subprocess.TimeoutExpired):
+                    text = ""
+                log = folder / "probe.log"
+                if log.is_file():
+                    text += "\n" + log.read_text(encoding="utf-8", errors="replace")
+            TEX_PROBES[engine] = tex_failure_cause(text)
+    return TEX_PROBES[engine]
 
 
 SHOWN_LOCATIONS: set[tuple[str, str]] = set()
@@ -18428,6 +18459,8 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
             SHOWN_LOCATIONS.add((label, where))
             print(f"      {where}", file=sys.stderr)
     known = tex_failure_cause(result.stderr)
+    if known is None and engine == "lualatex" and "Fatal error occurred" in result.stderr:
+        known = probe_tex_cause(engine)                                  # the cause is in the console, not in Pandoc's text
     if known and (label, known[0]) not in SHOWN_LOCATIONS:             # once per document, not once per engine
         SHOWN_LOCATIONS.add((label, known[0]))
         print(f"      cause: {known[0]}; {known[1]}", file=sys.stderr)
