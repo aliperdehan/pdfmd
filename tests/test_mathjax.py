@@ -6,7 +6,6 @@ the filter itself (with stand-ins for node, so it needs only Pandoc) and, where 
 from __future__ import annotations
 
 import io
-import json
 import os
 import re
 import shutil

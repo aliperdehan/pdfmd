@@ -80,7 +80,9 @@ local function asciify(doc)
                              table.concat(list, "\0"))
     local pieces = ok and split(result, #list) or nil
     if not pieces then
-      io.stderr:write("WARN  ascii: the transliteration helper did not answer; the text is mapped on the written file instead\n")
+      local why = ok and "it answered with another number of pieces than it was given"
+        or (tostring(result):gsub("%s+", " "):sub(1, 240))
+      io.stderr:write("WARN  ascii: the transliteration helper did not answer (" .. why .. "); the text is mapped on the written file instead\n")
     else
       for index, text in ipairs(list) do answers[text] = pieces[index] end
     end

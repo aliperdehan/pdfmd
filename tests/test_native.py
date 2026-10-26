@@ -615,7 +615,7 @@ class InstallToolsTests(unittest.TestCase):
 
     def test_pandoc_and_full_installs(self):
         done = subprocess.CompletedProcess([], 0)
-        with mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done) as run:
+        with mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done):
             self.assertTrue(pdfmd.install_extra("pandoc"))
         with mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 1)):
             self.assertFalse(pdfmd.install_extra("pandoc"))

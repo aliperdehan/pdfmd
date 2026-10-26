@@ -913,7 +913,8 @@ What the window shows: headings, **bold**, *italic*, `code`, ~~strike~~, links, 
 blocks, rules, footnotes at the end, and every table as a box grid (a rule between rows, a bold header, columns as wide as
 their widest cell, right- and centre-aligned as the table says, cells wrapped to the window when it is narrower, wide
 characters counted as two; a cell that spans columns or rows is drawn across them, its text wrapped to the merged width, the
-borders inside it left out, and the crossings drawn as the neighbours ask: `┬ ┴ ┼ ├ ┤`). The text is wrapped to the window's
+borders inside it left out, and the crossings drawn as the neighbours ask: `┬ ┴ ┼ ├ ┤`; with no Pandoc a Markdown pipe table cannot
+span, and an HTML `<table>` with `colspan`/`rowspan` is how a span reaches the built-in parser). The text is wrapped to the window's
 width (`--width N` for another; 120 when there is no window). Fenced code with a language (`python`, `bash`/`sh`, `json`,
 `yaml`, `c`, `cpp`, `java`, `javascript`, `rust`, `go`) has its keywords, strings, comments and numbers in colour; any other
 language, and every block when colour is off, stays as it was.

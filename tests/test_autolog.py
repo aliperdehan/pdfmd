@@ -175,7 +175,7 @@ class Builds(unittest.TestCase):
     def test_found_style_path_lists_each_file_with_its_path(self):
         (self.root / "home" / "config.yaml").write_text("options:\n  found-style: path\n", encoding="utf-8")
         self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[0],
-                         "FOUND     metadata/metadata.yaml, metadata/preamble.tex")
+                         f"FOUND     {Path('metadata', 'metadata.yaml')}, {Path('metadata', 'preamble.tex')}")      # the OS's separator
 
     def test_a_batch_prints_one_found_and_one_defaults_line(self):
         for name in ("e.md", "f.md"):

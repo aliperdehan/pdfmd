@@ -16,8 +16,10 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
+from pandoc_support import tex_tree_env  # noqa: E402
 
 # A stand-in for lualatex: it makes the job's PDF and the .dim file the job opens, and notes each run.
 FAKE_ENGINE = """#!/bin/sh
@@ -50,7 +52,7 @@ class Styles(unittest.TestCase):
             (tree / "cachey" / "cachey.sty").write_text("\\ProvidesPackage{cachey}\n\\ifdefined\\pdfmdCacheDir\\fi\n",
                                                         encoding="utf-8")
             (tree / "plain" / "plain.sty").write_text("\\ProvidesPackage{plain}\n", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"TEXMFHOME": str(Path(folder) / "texmf")}):
+            with mock.patch.dict(os.environ, tex_tree_env(Path(folder) / "texmf")):
                 preamble = ("\\documentclass{article}\n\\usepackage[draft]{cachey,plain}\n"
                             "% \\usepackage{notloaded}\n\\RequirePackage{missing-package}\n")
                 found = pdfmd.picture_cache_styles(preamble)
@@ -66,7 +68,7 @@ class Styles(unittest.TestCase):
             (tree / "oldy-pdfmd.yaml").write_text(
                 "picture-cache:\n  dir: OldyDir\n  render: OldyRender\n  requests: .oldyreq\n"
                 "  wd: Oldy@wd\n  ht: Oldy@ht\n  dp: Oldy@dp\n  bogus: x\n  dir2: \"a b\"\n", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"TEXMFHOME": str(Path(folder) / "texmf")}):
+            with mock.patch.dict(os.environ, tex_tree_env(Path(folder) / "texmf")):
                 found = pdfmd.picture_cache_styles("\\usepackage{oldy}")
         self.assertEqual([name for name, _, _ in found], ["oldy"])
         self.assertEqual(found[0][2]["dir"], "OldyDir")

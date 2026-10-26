@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 import os
-import shutil
 import sys
 import tempfile
 import unittest
@@ -58,8 +56,7 @@ class Pictures(unittest.TestCase):
         except ImportError:
             self.skipTest("needs Pillow")
         import struct
-        import zlib
-        from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObject, StreamObject
+        from pypdf.generic import DictionaryObject, NameObject, NumberObject, StreamObject
         picture = Image.new("1", (37, 21), 1)
         for x in range(37):
             for y in range(21):

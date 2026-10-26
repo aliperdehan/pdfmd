@@ -4,10 +4,8 @@ lookup answered by a function), so no network is used; node, where there is one,
 from __future__ import annotations
 
 import io
-import json
 import os
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile

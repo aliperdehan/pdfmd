@@ -167,7 +167,8 @@ styled when piped into `less -R`; `NO_COLOR` or `--color never` takes the stylin
 file (`report.ansi`), and `-o -` sends any format to standard output. Cells that span columns or rows are drawn across them,
 fenced code in a known language is coloured (python, bash, json, yaml, c, cpp, java, javascript, rust, go), and a `$$..$$` formula
 with a fraction, root, sum, product, integral or limit is stacked on several rows. The pager is `$PDFMD_PAGER`, else `$PAGER`, else
-`pdfmd-options: {pager_command: "bat --paging=always"}`, else `less -FRX`. README: "Read it in the terminal".
+`pdfmd-options: {pager_command: "bat --paging=always"}`, else `less -FRX`. With no Pandoc the built-in parser reads the Markdown; a pipe
+table cannot span, but an HTML `<table>` with `colspan`/`rowspan` is drawn with its spans. README: "Read it in the terminal".
 
 ### 1.11 Compute the numbers of a calculation
 

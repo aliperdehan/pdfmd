@@ -15,7 +15,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pdfmd  # noqa: E402
 from pdfmd_tables import sheets  # noqa: E402
 
 try:

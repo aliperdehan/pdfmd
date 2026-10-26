@@ -40,6 +40,31 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.26 — 2026-10-26
+
+Pre-edit state: commit `9b054bb` (v3.30.25). Merged from PR 8 (`cloud/portability`), squashed.
+
+### Fixed (Windows)
+
+- `report#section/sub` kept its slash on Windows (`Path()` turned it into a backslash, so the section was never found).
+- A pager or editor typed with a Windows path (`C:\Program Files\...`) keeps its backslashes (`shlex` in POSIX mode ate them): `split_command()`.
+- The calculator's seed run wrote Pandoc's output to the null device; Pandoc's binary writers cannot open `NUL` on Windows. It writes to a file in the scratch folder.
+- A file with a kept source (`--keep-source`) whose line ends had become CRLF (git's `autocrlf`, an editor) "kept no pdfmd source", `--restore` could not give it back, and it was reported as edited. The trailer is read as LF text and the hash ignores the difference.
+- The ASCII filter's helper (`--to ascii`) never started on Windows: its command and paths went through Pandoc's metadata with their backslashes. The paths have forward slashes, and the `WARN` says why the helper did not answer.
+- TeX engines were started with a temporary folder under its Windows short name (`C:\Users\RUNNER~1\...`); the engine reads its command line as TeX, where `~` is active, and MiKTeX's LuaLaTeX opened no file. The label draft pass, the pictures drawn for Word files and the cache build failed there. `tex_argument()` gives the long name.
+- A picture's folder was never taken out of a Word description on Windows.
+- `--verbose` says how the label draft pass ended when it left no `.aux`; `provide_writable_places` creates the temporary `texmf-var`/`texmf-config` folders it points at.
+- A busy disk image (macOS, `Calibre` install) is detached again before it is forced: four tries a second apart, then `-force`.
+
+### Added
+
+- The built-in parser (no Pandoc) draws an HTML `<table>`'s `colspan` and `rowspan` (`pdfmd_ansi/native.py`). Golden tests.
+
+### Changed (CI, tests)
+
+- The lint job runs `ruff check --select F` on the code and the tests (two unused locals, seven unused imports, a duplicated dictionary key; no behaviour changes). The Windows job (`windows-latex`) installs poppler, the fonts the tests name, and runs with Python's UTF-8 mode.
+- The tests: the OS separator in what a run prints, Lua paths in forward slashes, `TEXINPUTS` with `os.pathsep`, a file to discard instead of `NUL`, line ends as Pandoc wrote them, a closed `.docx` before the folder is removed. Two `test_readonly_home.Builds` tests are skipped on Windows (MiKTeX's LuaLaTeX stops in luaotfload when LOCALAPPDATA is redirected).
+
 ## v3.30.25 — 2026-10-26
 
 Pre-edit state: commit `abb652a` (v3.30.24). Issue 12.

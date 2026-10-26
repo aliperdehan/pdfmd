@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html
 import re
-from datetime import date, datetime
+from datetime import datetime
 
 PAPER_TYPST = {"a3": "a3", "a4": "a4", "a5": "a5", "a6": "a6", "letter": "us-letter", "legal": "us-legal",
                "us-letter": "us-letter", "us-legal": "us-legal", "b5": "iso-b5", "executive": "us-executive"}

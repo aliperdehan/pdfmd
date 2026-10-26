@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.25"
+PDFMD_VERSION = "3.30.26"
 import argparse
 import atexit
 import csv
@@ -3418,8 +3418,8 @@ def ascii_filter_args(scratch: Path, missing: str, smart: bool = False) -> list[
     if filter_path is None:
         raise SystemExit("--to ascii needs pdfmd_lua/ascii.lua and pdfmd_flat (install pdfmd-cli; a lone copy of "
                          "pdfmd.py cannot make ASCII text)")
-    config = {"pdfmd-ascii": {"command": sys.executable, "script": str(Path(__file__).resolve()), "missing": missing,
-                              "report": str(scratch / "report.json"), "smart": "keep" if smart else "all"}}
+    config = {"pdfmd-ascii": {"command": Path(sys.executable).as_posix(), "script": Path(__file__).resolve().as_posix(),
+                              "missing": missing, "report": (scratch / "report.json").as_posix(), "smart": "keep" if smart else "all"}}
     map_file = scratch / "ascii.yaml"
     map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
     return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
@@ -3662,10 +3662,19 @@ def view_pager_setting(first: Path) -> str:
     return "" if value in (None, False, True) else str(value).strip()
 
 
+def split_command(text: str) -> list[str]:
+    """A command line typed by a person (`$PAGER`, `--editor`) as words. POSIX rules eat the backslashes of a Windows path
+    (`C:\\Tools\\less.exe` -> `C:Toolsless.exe`), so on Windows the backslashes stay and only the quotes around a word go."""
+    if os.name != "nt":
+        return shlex.split(text)
+    return [word[1:-1] if len(word) > 1 and word[0] == word[-1] and word[0] in "\"'" else word
+            for word in shlex.split(text, posix=False)]
+
+
 def pager_command(setting: str = "") -> list[str]:
     """The pager as words: `$PDFMD_PAGER`, else `$PAGER`, else the `pager_command` setting, else `less -FRX`. The environment
     wins over the setting, so one shell can override a project's choice."""
-    return shlex.split(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
+    return split_command(os.environ.get("PDFMD_PAGER") or os.environ.get("PAGER") or setting or VIEW_PAGER)
 
 
 def run_pager(text: str, setting: str = "") -> None:
@@ -6903,7 +6912,6 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
         return run(cmd)
     scratch = arguments.scratch
     target = context["target"]
-    note = context["note"]
     first = list(cmd)
     if output.suffix.lower() == ".pdf":
         # the first run only lists fragments: write the engine's own source format instead of building a PDF
@@ -8219,6 +8227,17 @@ def safe_unpack_tar(archive: Path, target: Path) -> None:
         bundle.extractall(target)
 
 
+def detach_disk_image(mount: Path, attempts: int = 4, pause: float = 1.0) -> bool:
+    """`hdiutil detach` for a mounted image, tried `attempts` times with a pause between (macOS answers "resource busy" for a
+    moment after a copy, e.g. while Spotlight looks at the volume), then once with -force. True when it is detached."""
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(pause)
+        if subprocess.run(["hdiutil", "detach", str(mount)], capture_output=True).returncode == 0:
+            return True
+    return subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True).returncode == 0
+
+
 def install_calibre_dmg(image: Path, applications: Path) -> Path:
     """Mount Calibre's disk image read-only and copy calibre.app into `applications` (replacing a copy there);
     returns the app's ebook-convert."""
@@ -8242,8 +8261,7 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
             raise OSError("ditto could not copy calibre.app: " + (copied.stderr.strip().splitlines() or ["?"])[-1])
     finally:
         if attached:
-            if subprocess.run(["hdiutil", "detach", str(mount)], capture_output=True).returncode != 0:
-                subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True)
+            detach_disk_image(mount)
         shutil.rmtree(mount, ignore_errors=True)
     return destination / "Contents" / "MacOS" / "ebook-convert"
 
@@ -12348,7 +12366,6 @@ def notes_to_entries(text: str, whole: bool = False) -> tuple[str, list]:
         kept: list[str] = []
         heading_at: int | None = None
         for raw in body.split("\n"):
-            probe = raw[len(indent):] if raw.startswith(indent) else raw
             own = (stamp_line_pattern(indent).match(raw)
                    or re.match(rf"^{re.escape(indent)}  - (?:Compiled|Restored)\b", raw))
             entry = note_entry(raw) if own else None
@@ -12664,7 +12681,7 @@ def editor_command(args) -> list[str] | None:
     if value is None or not str(value).strip():
         return None
     try:
-        return shlex.split(str(value))
+        return split_command(str(value))
     except ValueError as error:
         raise SystemExit(f"--editor {value!r}: {error}")
 
@@ -15155,6 +15172,7 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
         raise SystemExit(f"--section '{request}' names no heading")
     tiers = LOOKUP_TIERS if FUZZY_LOOKUP else LOOKUP_TIERS[:3]
     pool = list(headings)
+    pool_owner = None                                      # the heading the pool is inside, from the second name on
     for position, name in enumerate(names):
         last = position == len(names) - 1
         candidates = [heading for heading in pool if not last or level is None or heading.level == level]
@@ -15172,7 +15190,7 @@ def find_heading(headings: list[Heading], request: str, describe=None) -> Headin
                                 for heading in candidates[:12])
             raise NoHeadingMatches(f"--section '{request}' matches no heading"
                              + (f" at level {level}" if last and level else "")
-                             + (f" under '{pool_owner.text}'" if position else "")
+                             + (f" under '{pool_owner.text}'" if pool_owner else "")
                              + f". Headings: {choices or 'none'}" + (" ..." if len(candidates) > 12 else ""))
         heading = candidates[found[0]]
         announce_lookup(name, describe(heading), *found[1:], words=HEADING_FIELD_WORDS, subject="heading or element")
@@ -18238,6 +18256,14 @@ def tex_bibliography_tool(text: str) -> str | None:
     return None
 
 
+def tex_argument(path) -> str:
+    """A path as it goes on a TeX engine's command line. The engine reads that line as TeX, where `~` is an active
+    character: on Windows, a temporary folder under its short name (`C:\\Users\\RUNNER~1\\AppData\\Local\\Temp`, what
+    the CI runner and any long user name give) made MiKTeX's LuaLaTeX look for no file at all (`texput.log`). The long
+    name has no `~`; elsewhere the path is unchanged."""
+    return str(Path(path).resolve()) if os.name == "nt" else str(path)
+
+
 def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[str] | None:
     """Build one direct-compile pass's command line for ``engine``.
 
@@ -18250,12 +18276,12 @@ def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[
     """
     if engine in {"lualatex", "xelatex", "pdflatex"}:
         return [engine, "-interaction=nonstopmode", "-halt-on-error", "-file-line-error",
-                f"-output-directory={output_dir}", str(tex_path)]
+                f"-output-directory={tex_argument(output_dir)}", tex_argument(tex_path)]
     if engine == "latexmk":
         return ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error",
-                f"-output-directory={output_dir}", str(tex_path)]
+                f"-output-directory={tex_argument(output_dir)}", tex_argument(tex_path)]
     if engine == "tectonic":
-        return ["tectonic", "-o", str(output_dir), str(tex_path)]
+        return ["tectonic", "-o", tex_argument(output_dir), tex_argument(tex_path)]
     return None
 
 
@@ -18451,8 +18477,9 @@ def provide_writable_places() -> None:
     if (not tex_user_tree_writable()
             and any(which(name) for name in ("lualatex", "xelatex", "pdflatex", "latexmk", "tectonic"))):
         folder = temporary_place("texmf")
-        os.environ["TEXMFVAR"] = str(folder / "texmf-var")
-        os.environ["TEXMFCONFIG"] = str(folder / "texmf-config")
+        for name, variable in (("texmf-var", "TEXMFVAR"), ("texmf-config", "TEXMFCONFIG")):
+            (folder / name).mkdir(parents=True, exist_ok=True)         # (an engine that does not make its own cache folder needs it there)
+            os.environ[variable] = str(folder / name)
         redirected.append("the TeX user tree (font names, formats)")
     if redirected:
         note_place_once("places", f"{' and '.join(redirected)} cannot be written (a read-only home?): this run uses a temporary "
@@ -19048,7 +19075,7 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         return None, 0
     dump = scratch / "calc-names.tsv"
     cmd = ["pandoc", *(str(file.resolve()) for file in before), *(["-f", from_format] if from_format else []),
-           "-t", "native", "-o", os.devnull, *arguments, "-M", "pdfmd-calc-dump=" + str(dump)]
+           "-t", "native", "-o", str(scratch / "calc-names.native"), *arguments, "-M", "pdfmd-calc-dump=" + str(dump)]
     cwd = pandoc_working_directory(md_path.parent)
     log_cmd(cmd, cwd, verbose)
     started = time.time()
@@ -19166,15 +19193,18 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         pandoc_cwd = pandoc_working_directory(metadata_list[0].parent if metadata_list else md_path.parent)
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
-                   str(scratch), str(tex_path)]
+                   tex_argument(scratch), tex_argument(tex_path)]
         whole = tex_path.read_text(encoding="utf-8", errors="replace")
         quick = not auto_disabled(no_auto, "draftpictures") and whole.count("\\begin{document}") == 1
+
+        last_run: dict = {}
 
         def draft_pass(text: str) -> None:
             tex_path.write_text(text, encoding="utf-8")
             try:
-                subprocess.run(command, cwd=pandoc_cwd, env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
-                               capture_output=True, text=True, timeout=1800)
+                last_run["done"] = subprocess.run(command, cwd=pandoc_cwd,
+                                                  env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
+                                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             except (OSError, subprocess.SubprocessError) as error:
                 if verbose:
                     print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
@@ -19203,6 +19233,10 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                       f"{found} labels in {time.time() - began:.1f} s")
         elif verbose:
             print("LABELS    the draft pass left no .aux; the scan alone is used")
+            done = last_run.get("done")
+            if done is not None:
+                tail = " | ".join(line.strip() for line in (done.stdout + done.stderr).splitlines()[-4:] if line.strip())
+                print(f"LABELS    {draft_engine} exited {done.returncode}: {tail[:300]}")
     if markers:
         headers.insert(0, defs)
     return LabelScan(headers, result.labels, result.steps, markers, exact, result.skipped)
@@ -19559,7 +19593,7 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
             + (f"\\shipout\\vbox{{\\kern{margin}\\hbox{{\\kern{margin}\\box\\z@\\kern{margin}}}\\kern{margin}}}\n"
                if margin != "0pt" else "\\shipout\\hbox{\\box\\z@}\n") + "\\end{document}\n", encoding="utf-8")
         cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
-               f"-output-directory={plot_dir}", str(job)]
+               f"-output-directory={tex_argument(plot_dir)}", tex_argument(job)]
         log_cmd(cmd, cwd, verbose)
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
         for _ in range(passes - 1):
@@ -22503,7 +22537,7 @@ def find_batchocr() -> list[str] | None:
     an alias that is not on PATH), `batchocr` on PATH, or the module in this Python."""
     override = os.environ.get("PDFMD_BATCHOCR")
     if override:
-        return shlex.split(override, posix=os.name != "nt")
+        return split_command(override)
     found = which("batchocr")
     if found:
         return [found]
@@ -25778,6 +25812,8 @@ def run_main() -> None:
     if len(paths) == 1 and re.search(r"[#@]", str(paths[0])) and not paths[0].exists():
         # The whole string, not .name: a section path (`doc#results/yield`) has a slash.
         base, separator, suffix = re.split(r"([#@])", str(paths[0]), maxsplit=1)
+        if os.sep != "/":
+            suffix = suffix.replace(os.sep, "/")        # Path turned `doc#results/yield` into `doc#results\\yield` on Windows
         if base and not base.endswith(("/", os.sep)):
             paths = [Path(base)]
         else:

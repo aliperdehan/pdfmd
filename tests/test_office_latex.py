@@ -62,7 +62,7 @@ class Labels(unittest.TestCase):
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Translators(unittest.TestCase):
     def lua(self, code: str) -> str:
-        script = ("FORMAT = 'docx'\nPDFMD_OFFICE_EXPORT = {}\ndofile('" + str(FILTER) + "')\nlocal E = PDFMD_OFFICE_EXPORT\n" + code)
+        script = ("FORMAT = 'docx'\nPDFMD_OFFICE_EXPORT = {}\ndofile('" + FILTER.as_posix() + "')\nlocal E = PDFMD_OFFICE_EXPORT\n" + code)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "t.lua"
             path.write_text(script, encoding="utf-8")

@@ -11,7 +11,6 @@ Ctrl-K cut line, Ctrl-U paste, Ctrl-Z undo, Ctrl-Y redo, Ctrl-X exit.
 
 from __future__ import annotations
 
-import os
 import re
 import tempfile
 import threading

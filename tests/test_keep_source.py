@@ -109,6 +109,35 @@ class Trailer(unittest.TestCase):
             keep.find(text.replace("pdfmd-source 1", "pdfmd-source 99"))
 
 
+class LineEnds(unittest.TestCase):
+    """A file whose line ends were converted still carries its source: Pandoc writes CRLF on Windows, and git (autocrlf) or an editor
+    converts a checked-out file."""
+
+    ENTRIES = {"doc.md": b"---\ntitle: T\n---\n\ntext\r\nmore\n", "d.csv": b"a,b\n1,2\n"}
+    BODY = "# T\n\nText.\n"
+
+    def test_the_source_comes_back_from_crlf_text_in_every_mode(self):
+        for mode in keep.MODES:
+            trailer = keep.pack(self.ENTRIES, self.BODY, mode)
+            variants = {"all converted": (self.BODY + "\n" + trailer).replace("\n", "\r\n"),
+                        "the body only (Pandoc on Windows)": self.BODY.replace("\n", "\r\n") + "\r\n" + trailer}
+            for name, text in variants.items():
+                with self.subTest(mode=mode, variant=name):
+                    body, found = keep.split(text)
+                    self.assertIsNotNone(found)
+                    self.assertEqual(keep.unpack(found), self.ENTRIES)
+                    self.assertEqual(keep.digest(body), found.body_hash)           # and the body is not reported as edited
+                    self.assertTrue(text[found.start:].startswith(keep.MARKER))
+
+    def test_lf_text_is_as_before_and_a_body_that_talks_about_the_marker_is_not_the_trailer(self):
+        trailer = keep.pack(self.ENTRIES, self.BODY, "packed")
+        text = keep.append(self.BODY, trailer)
+        body, found = keep.split(text)
+        self.assertEqual((body, keep.unpack(found)), (self.BODY + "\n", self.ENTRIES))
+        self.assertIsNone(keep.find("# T\r\n\r\nno trailer here -->\r\n"))
+        self.assertEqual(keep.digest("a\r\nb\r\n"), keep.digest("a\nb\n"))
+
+
 @needs_pandoc(3, 1, 3)
 class CommandLine(unittest.TestCase):
     def setUp(self):

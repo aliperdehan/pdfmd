@@ -67,8 +67,8 @@ class Reading(Tree):
     def test_the_folders_metadata_sits_between_the_files_and_the_global_one(self):
         self.config.write_text("options: {}\n", encoding="utf-8")
         (self.config.parent / "metadata.yaml").write_text("author: Global\n", encoding="utf-8")
-        far = self.put("a", "metadata.yaml", "author: Far\n")
-        near = self.put("a/b", "metadata.yaml", "author: Near\n")
+        self.put("a", "metadata.yaml", "author: Far\n")
+        self.put("a/b", "metadata.yaml", "author: Near\n")
         (self.root / "a" / "b" / "metadata.yaml").write_text("title: Local\n", encoding="utf-8")
         found = pdfmd.find_metadata(self.doc.parent, None, document_stem="d", document=self.doc)
         names = [str(item.relative_to(self.root)) if item.is_relative_to(self.root) else "global" for item in found]

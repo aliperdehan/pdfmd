@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -573,6 +572,76 @@ class PipelineBlocks(unittest.TestCase):
         self.assertEqual(shown[top + 1].count("│"), 2)
         joined = "\n".join(shown)
         self.assertRegex(joined, r"│ tall +│ x +│\n│ +├─+┤\n│ +│ y +│")             # the tall cell's right neighbours are two rows
+
+
+# --- the no-Pandoc parser: HTML tables are the way a span reaches it ------------------------------------------------------
+
+HTML_SPAN_TABLE = """<table>
+<tr><th colspan="2">Group <b>one</b></th><th>Z</th></tr>
+<tr><td rowspan="2">tall</td><td>b</td><td>c</td></tr>
+<tr><td>d</td><td>e &amp; f <code>x y</code></td></tr>
+</table>
+"""
+
+HTML_SPAN_GRID = """T
+
+┌───────────┬───────────┐
+│ Group one │ Z         │
+├──────┬────┼───────────┤
+│ tall │ b  │ c         │
+│      ├────┼───────────┤
+│      │ d  │ e & f x y │
+└──────┴────┴───────────┘
+
+After"""
+
+
+class NativeSpans(unittest.TestCase):
+    """Markdown pipe tables cannot span, so the built-in parser (no Pandoc) draws a span from an HTML `<table>` with colspan/rowspan,
+    through the renderer a Pandoc table goes through."""
+
+    def draw(self, source: str, width: int = 60) -> str:
+        return render(from_markdown(source), width=width, color=False).rstrip("\n")
+
+    def test_colspan_and_rowspan_are_drawn_across_the_merged_cells(self):
+        self.assertEqual(self.draw("# T\n\n" + HTML_SPAN_TABLE + "\nAfter\n"), HTML_SPAN_GRID)
+
+    def test_the_cells_are_pandoc_cells_with_their_spans(self):
+        table = from_markdown(HTML_SPAN_TABLE)["blocks"][0]["c"]
+        head = table[3][1]
+        self.assertEqual([cell[3] for cell in head[0][1]], [2, 1])                 # colspans of the header row
+        body = table[4][0][3]
+        self.assertEqual([cell[2] for cell in body[0][1]], [2, 1, 1])              # the rowspan of "tall"
+        self.assertEqual(len(table[2]), 3)                                         # three columns
+
+    def test_a_table_without_th_rows_has_no_head(self):
+        shown = self.draw("<table><tr><td>a</td><td>b</td></tr><tr><td colspan='2'>wide</td></tr></table>")
+        self.assertEqual(shown.splitlines()[0][0], "┌")
+        self.assertIn("wide", shown)
+        self.assertEqual(len({len(line) for line in shown.splitlines()}), 1)       # every line the same width
+
+    def test_a_pipe_table_is_as_before_and_an_empty_html_table_is_left_out(self):
+        pipe = "| a | b |\n|---|---|\n| 1 | 2 |\n"
+        self.assertEqual(self.draw(pipe), "┌───┬───┐\n│ a │ b │\n├───┼───┤\n│ 1 │ 2 │\n└───┴───┘")
+        self.assertEqual(self.draw("Before\n\n<table></table>\n\nAfter\n"), "Before\n\nAfter")
+
+    def test_a_cell_that_is_never_closed_still_draws(self):
+        shown = self.draw("<table><tr><th>one<th>two<tr><td>1<td>2</table>")
+        for word in ("one", "two", "1", "2"):
+            self.assertIn(word, shown)
+
+    def test_without_pandoc_a_span_table_is_drawn_by_pdfmd(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-ansi-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "nobin").mkdir()
+        (directory / "s.md").write_text("# T\n\n" + HTML_SPAN_TABLE + "\nAfter\n", encoding="utf-8")
+        environment = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "PAGER", "PDFMD_PAGER")}
+        environment.update({"PDFMD_CONFIG": "", "PATH": str(directory / "nobin")})
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--view", "s.md", "--color", "never", "--width", "60"],
+                              cwd=directory, capture_output=True, text=True, encoding="utf-8", env=environment)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("built-in parser", done.stderr)
+        self.assertIn("│ tall │ b  │ c         │\n│      ├────┼───────────┤", done.stdout)
 
 
 if __name__ == "__main__":

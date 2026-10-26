@@ -12,8 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sheets
-from .scan import (FENCE_RE, CsvBlock, FoundTable, caption_parts, find_csv_blocks, find_tables, split_row,
-                   unescape_cell)
+from .scan import CsvBlock, FoundTable, caption_parts, find_csv_blocks, find_tables
 
 DEFAULT_ROWS, DEFAULT_COLUMNS = 10, 7                   # the caps a `.csv` block applies unless `rows=`/`cols=` say
 SEPARATOR_CELL_RE = re.compile(r"^\s*:?-+:?\s*$")

@@ -367,16 +367,16 @@ class PackageDefaults(unittest.TestCase):
             work.mkdir()
             (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
             (work / "d.md").write_text("---\ntitle: T\n---\n\n# Head\n\nText.\n", encoding="utf-8")
-            environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+            environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//{os.pathsep}"}
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=work,
                                   capture_output=True, text=True, env=environment)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("shipped with the mypkg package", done.stdout)
-            archive = zipfile.ZipFile(work / "d.docx")
-            styles = archive.read("word/styles.xml").decode()
-            heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
-            self.assertIn('w:val="FF0000"', heading)                       # Heading 1 looks like the package's MyH
-            self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy
+            with zipfile.ZipFile(work / "d.docx") as archive:             # (closed: Windows cannot remove a folder with an open file in it)
+                styles = archive.read("word/styles.xml").decode()
+                heading = re.search(r'w:styleId="Heading1".*?</w:style>', styles, re.S).group(0)
+                self.assertIn('w:val="FF0000"', heading)                   # Heading 1 looks like the package's MyH
+                self.assertRegex(archive.read("word/document.xml").decode(), r"<w:titlePg\s*/>")   # by-option: fancy
 
 
 @unittest.skipUnless(PANDOC and shutil.which("kpsewhich"), "needs Pandoc and kpsewhich")
@@ -400,7 +400,7 @@ class PackageHelper(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text("\\usepackage{mypkg}\n\\newcommand{\\MyKey}{none}\n", encoding="utf-8")
         (work / "d.md").write_text(f"---\n{front}---\n\nText.\n", encoding="utf-8")
-        environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//:"}
+        environment = {**os.environ, "PDFMD_CONFIG": "", "TEXINPUTS": f"{root / 'tex'}//{os.pathsep}"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "latex", "-o", "d.tex", "--no-stamp",
                                "--no-backup"], cwd=work, capture_output=True, text=True, env=environment)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -422,7 +422,6 @@ class PackageHelper(unittest.TestCase):
 
     def test_the_office_section_supplies_word_defaults(self):
         sys.path.insert(0, str(ROOT))
-        import pdfmd
         directory = tempfile.mkdtemp(prefix="pdfmd-helper-")
         self.addCleanup(shutil.rmtree, directory, True)
         root = Path(directory)
@@ -436,7 +435,7 @@ class PackageHelper(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text("\\usepackage[fancy]{mypkg}\n", encoding="utf-8")
         (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
-        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//{os.pathsep}"
         self.addCleanup(os.environ.pop, "TEXINPUTS", None)
         options = pdfmd.office_options(work / "d.md", [])
         self.assertEqual(options["fonts"], "Serif")                   # <package>-office.yaml, beside the helper
@@ -450,7 +449,6 @@ class PackagePick(unittest.TestCase):
 
     def options(self, preamble: str, yaml_text: str | None = None):
         sys.path.insert(0, str(ROOT))
-        import pdfmd
         directory = tempfile.mkdtemp(prefix="pdfmd-pick-")
         self.addCleanup(shutil.rmtree, directory, True)
         root = Path(directory)
@@ -464,7 +462,7 @@ class PackagePick(unittest.TestCase):
         work.mkdir()
         (work / "preamble.tex").write_text(preamble, encoding="utf-8")
         (work / "d.md").write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
-        os.environ["TEXINPUTS"] = f"{root / 'tex'}//:"
+        os.environ["TEXINPUTS"] = f"{root / 'tex'}//{os.pathsep}"
         self.addCleanup(os.environ.pop, "TEXINPUTS", None)
         return pdfmd.office_options(work / "d.md", [])
 

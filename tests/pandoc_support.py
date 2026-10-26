@@ -6,9 +6,12 @@ older versions do without.
 
 from __future__ import annotations
 
+import atexit
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 
@@ -24,6 +27,20 @@ def _version() -> tuple[int, ...]:
 
 
 PANDOC_VERSION = _version()
+
+
+def tex_tree_env(tree) -> dict:
+    """The variables that make kpsewhich (TeX Live and MiKTeX) look in a TeX tree of the test's own: TEXMFHOME, and TEXINPUTS with the
+    platform's separator (a `:` would cut a Windows drive letter in two; a trailing separator keeps the default search path)."""
+    return {"TEXMFHOME": str(tree), "TEXINPUTS": f"{tree}//{os.pathsep}"}
+
+
+def discard_path(suffix: str) -> str:
+    """A file for a Pandoc output a test does not read. The null device will not do: Pandoc's binary writers (odt, docx) cannot open
+    `NUL` on Windows ("NUL: withBinaryFile: does not exist")."""
+    directory = tempfile.mkdtemp(prefix="pdfmd-discard-")
+    atexit.register(shutil.rmtree, directory, True)
+    return os.path.join(directory, "out" + suffix)
 
 
 def _crossref_usable() -> bool:

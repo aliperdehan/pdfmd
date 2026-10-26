@@ -14,8 +14,10 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
+from pandoc_support import tex_tree_env  # noqa: E402
 
 
 def write(path: Path, text: str) -> Path:
@@ -31,7 +33,7 @@ class Helper(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name) / "doc"
         tree = Path(self.folder.name) / "texmf" / "tex" / "latex" / "thing"
-        patcher = mock.patch.dict(os.environ, {"TEXMFHOME": str(Path(self.folder.name) / "texmf")})
+        patcher = mock.patch.dict(os.environ, tex_tree_env(Path(self.folder.name) / "texmf"))
         patcher.start()
         self.addCleanup(patcher.stop)
         pdfmd.kpsewhich_locate.cache_clear() if hasattr(pdfmd.kpsewhich_locate, "cache_clear") else None

@@ -18,7 +18,6 @@ os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
-import pdfmd  # noqa: E402
 from pdfmd_flat import asciify, keep  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
 
@@ -156,7 +155,7 @@ class CommandLine(unittest.TestCase):
     def read(self, name: str) -> str:
         data = (self.directory / name).read_bytes()
         self.assertTrue(data.isascii(), f"{name} is not ASCII")
-        return data.decode("ascii")
+        return data.decode("ascii").replace("\r\n", "\n")       # (Pandoc writes a text file with the platform's line ends: CRLF on Windows)
 
     def test_text_beside_the_source_under_its_own_name(self):
         self.write("doc.md", HOSTILE)
@@ -232,7 +231,7 @@ class CommandLine(unittest.TestCase):
         (self.directory / "d" / "b.md").write_text("# B\n\nCafé\n", encoding="utf-8")
         result = self.run_pdfmd("-b", "d", "-o", "out", "--to", "ascii", "--ascii-missing", "fail")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("FAIL  d/a.md", result.stdout + result.stderr)
+        self.assertIn("FAIL  " + str(Path("d", "a.md")), result.stdout + result.stderr)      # the OS's separator
         self.assertFalse((self.directory / "out" / "a.ascii.txt").exists())
         self.assertIn("Cafe", self.read("out/b.ascii.txt"))
 
@@ -260,6 +259,23 @@ class CommandLine(unittest.TestCase):
         restored = self.run_pdfmd("--restore", "doc.ascii.gfm.md")
         self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
         self.assertIn("Café α.", (self.directory / "doc.ascii.gfm.restored" / "doc.md").read_text(encoding="utf-8"))
+
+
+@needs_pandoc(3, 1, 3)
+class HelperFailure(unittest.TestCase):
+    def test_a_helper_that_cannot_start_is_named_in_the_warning_and_the_text_is_still_mapped(self):
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-ascii-helper-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        config = directory / "ascii.yaml"
+        config.write_text('pdfmd-ascii: {command: "' + str(directory / "no-such-python").replace("\\", "/") + '", script: "x.py", '
+                          'missing: question, report: "' + (directory / "r.json").as_posix() + '", smart: all}\n', encoding="utf-8")
+        done = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--metadata-file", str(config), "--lua-filter",
+                               str(ROOT / "pdfmd_lua" / "ascii.lua")], input="Caf\u00e9 \u65e5.\n", capture_output=True, text=True,
+                              encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertRegex(done.stderr, r"WARN  ascii: the transliteration helper did not answer \(.+\); the text is mapped on the written file")
+        self.assertIn("no-such-python", done.stderr)                       # the reason is the system's own words about the command
+
 
 
 if __name__ == "__main__":
