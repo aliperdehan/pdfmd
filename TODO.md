@@ -13,10 +13,6 @@ wait for an answer before any code.
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 
-## Bugs
-
-- [ ] `papersize: a4,landscape` (or `--paper a4,landscape`) works in the built-in renderers but not on the LaTeX route: Pandoc writes `[a4,landscapepaper]`, LaTeX drops the option ("Unused global option") and the page is Letter, silently. Split it into `papersize` and `geometry: landscape` for every writer, or refuse it [3di]
-
 ## Features, agreed
 
 - [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
@@ -48,7 +44,7 @@ is low priority. [3di]
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
-- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo and bundled for `pdfmd --doc` [3dg]
+- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo and bundled for `pdfmd --doc`; every feature page says the version it appeared in, the versions of its fixes and the latest version it was tested on, with a re-test pass against rot, an entry with its tests required of every new feature, a page per version, and the pages rendered by pdfmd itself; every confusion point found while writing gets a fix or an accepted spelling and a test, on every route and fallback (the paper bug of 3.30.42 was found only by trying other engines) [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
 - [ ] 4.0
 

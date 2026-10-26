@@ -12,6 +12,11 @@
 -- Pictures, with a Pandoc before 3.2 building a PDF: it runs Typst in its own working folder (a discovered metadata
 -- file's, not always the document's) without fetching the pictures first, so a relative path is looked for there. Each
 -- is made the absolute path of the file found on the resource path (pdfmd gives Typst --root=/ with such a Pandoc).
+--
+-- A landscape page (v3.30.42). The template has no variable for it: pdfmd sets `pdfmd-page-flipped` (for `papersize:
+-- a4,landscape`, `geometry: landscape`, `classoption: landscape`) and `#set page(flipped: true)` goes into
+-- `header-includes`, ahead of the template's own page rule, which leaves the flip alone. An --include-in-header replaces
+-- it, as it replaces the document's own header-includes.
 
 if not FORMAT:match("^typst") then return {} end
 
@@ -97,4 +102,21 @@ local function absolute_pictures(doc)
   end})
 end
 
-return {{Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}
+local variables = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.variables or {}
+
+local function flipped_page(meta)
+  if variables["pdfmd-page-flipped"] == nil then return nil end
+  local rule = pandoc.MetaBlocks({pandoc.RawBlock("typst", "#set page(flipped: true)")})
+  local includes = meta["header-includes"]
+  if includes == nil then
+    meta["header-includes"] = pandoc.MetaList({rule})
+  elseif pandoc.utils.type(includes) == "List" then
+    includes:insert(rule)
+    meta["header-includes"] = includes
+  else
+    meta["header-includes"] = pandoc.MetaList({includes, rule})
+  end
+  return meta
+end
+
+return {{Meta = flipped_page, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}

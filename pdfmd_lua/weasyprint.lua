@@ -21,6 +21,10 @@
 -- wide as its table; a table is at least 4in wide (LaTeX's caption width) and wider as its text needs. A numbered
 -- equation (the LaTeX filter's three-cell table) spans the line, its number at the margin, without a table's rules.
 -- An --include-in-header replaces the style, as it replaces the document's own header-includes.
+--
+-- The page (v3.30.42). Pandoc's HTML has no paper, and WeasyPrint printed A4 whatever `papersize:` said. pdfmd sets
+-- `pdfmd-page` (the size in points, turned for landscape, or `landscape` alone) and `@page { size: ... }` goes with the
+-- styles above; a --css file or `document-css: false` keeps it, as for the formulas: it is about the page, not the look.
 
 if not FORMAT:match("^html") then return {} end
 
@@ -48,8 +52,14 @@ local function katex_style()
   return string.format("<style>\nhtml .katex { font-size: %sem; }\n</style>\n", tostring(scale))
 end
 
+local function page_style()
+  local size = variable("pdfmd-page")
+  if size == nil then return "" end
+  return string.format("<style>\n@page { size: %s; }\n</style>\n", size)
+end
+
 local function Meta(meta)
-  local extra = katex_style()
+  local extra = katex_style() .. page_style()
   local css = not (variables.css or meta["document-css"] == false)
   if not css and extra == "" then return nil end
   local style = pandoc.MetaBlocks({pandoc.RawBlock("html", (css and TABLE_STYLE or "") .. (css and "\n" or "") .. extra)})

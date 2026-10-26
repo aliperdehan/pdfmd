@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.41"
+PDFMD_VERSION = "3.30.42"
 import argparse
 import atexit
 import csv
@@ -6396,7 +6396,10 @@ def effective_metadata(md_path: Path, metadata_files: list[Path], variables: lis
         merged.update(metadata_file_yaml(path))
     if md_path.suffix.lower() in (".md", ".markdown", ".txt", ""):
         try:
-            merged.update(front_matter_dict(md_path.read_text(encoding="utf-8-sig")))
+            front = front_matter_dict(md_path.read_text(encoding="utf-8-sig"))
+            if "pagesize" in front and "papersize" not in front:
+                front = {**front, "papersize": front["pagesize"]}         # the typo pdfmd reads as papersize (pagesize_typo_value)
+            merged.update(front)
         except (OSError, UnicodeDecodeError):
             pass
     from_variables: dict = {}
@@ -6405,6 +6408,10 @@ def effective_metadata(md_path: Path, metadata_files: list[Path], variables: lis
         key, value = (match.group(1), match.group(2)) if match else (variable, "true")
         from_variables.setdefault(key, []).append(value)
     for key, values in from_variables.items():
+        if key == "papersize" and len(values) == 1 and paper_words(values[0])[1] and not paper_words(values[0])[0]:
+            before = scalar_text(merged.get("papersize"))              # `--paper landscape`: the size stays what it was
+            merged[key] = f"{before},{values[0]}" if before else values[0]
+            continue
         merged[key] = values[0] if len(values) == 1 and key != "geometry" else values
     return merged
 
@@ -11336,6 +11343,81 @@ def typst_papersize_translation(value: str | None) -> str | None:
     if not value:
         return None
     return TYPST_PAPERSIZE_ALIASES.get(value.strip().casefold())
+
+
+def paper_kind(engine: str | None, no_auto: list[str] | None) -> str | None:
+    """The kind of paper handling (paper_variables) for an engine or output: LaTeX ones, Typst, WeasyPrint."""
+    if auto_disabled(no_auto, "papersize"):
+        return None
+    return "tex" if engine in LATEX_ENGINES - {"context"} | {"tex"} else engine if engine in ("typst", "weasyprint") else None
+
+
+PAPER_ORIENTATIONS = ("landscape", "portrait")
+LATEX_CLASS_PAPERS = frozenset({"a4", "a5", "b5", "letter", "legal", "executive"})      # the paper options of a LaTeX class
+TYPST_PAPER_NAMES = {"letter": "us-letter", "legal": "us-legal", "tabloid": "us-tabloid", "ledger": "us-ledger",
+                     "executive": "us-executive", "folio": "us-foolscap-folio"}
+
+
+def paper_words(value) -> tuple[str, str]:
+    """`a4,landscape` -> (`a4`, `landscape`): the size and the orientation of a `papersize:` value, "" for each that is not
+    there. The size is lower case, without a trailing `paper` (`a4paper`) and with `us-letter` as `letter`."""
+    size, orientation = "", ""
+    for word in re.split(r"[,\s]+", scalar_text(value)):
+        name = word.casefold()
+        if name in PAPER_ORIENTATIONS:
+            orientation = name
+        elif name:
+            name = PAPER_NAME_ALIASES.get(name, name)
+            size = size or (name[:-5] if name.endswith("paper") and len(name) > 5 else name)
+    return size, orientation
+
+
+def paper_variables(md_path: Path, metadata_files: list[Path], variables: list[str], pagesize_typo: str | None,
+                    kind: str | None) -> tuple[list[str], str | None]:
+    """(variables, pagesize_typo) with the paper of the document settled for one kind of output (v3.30.42): "tex" (a LaTeX
+    engine), "typst" or "weasyprint"; any other kind is returned as it came. Pandoc's `papersize` is a LaTeX class option, so
+    `a4,landscape` printed `[a4,landscapepaper]` (a Letter page, silently), `a4paper` printed `a4paperpaper`, `a3` is no
+    class option, and Typst and WeasyPrint did not read it: pdfmd gives each engine its own spelling. The paper of
+    `--paper`, `-V papersize=` or the front matter, its orientation word, and `landscape` in `geometry:` or
+    `classoption:` all reach the page. A single `-V papersize=` is left alone when it is already right."""
+    if kind not in ("tex", "typst", "weasyprint"):
+        return variables, pagesize_typo
+    given = [item.split("=", 1)[1] for item in variables if item.startswith("papersize=")]
+    merged = effective_metadata(md_path, metadata_files, variables)
+    raw = given[-1] if given else (pagesize_typo or scalar_text(merged.get("papersize")))
+    size, orientation = paper_words(raw)
+    module = office_module()
+    landscape = orientation == "landscape"
+    if not orientation and module is not None:
+        landscape = module.spec_from_metadata(merged, None, "exact").landscape
+    rest = [item for item in variables if not item.startswith("papersize=")]
+    if kind == "tex":
+        extra: list[str] = []
+        paper = size
+        if size not in LATEX_CLASS_PAPERS and re.fullmatch(r"[abc][0-6]", size):
+            paper = ""                                       # `a3`: geometry has it, the class does not
+            extra.append(f"geometry:{size}paper")
+        if orientation == "landscape":
+            extra.append("geometry:landscape")
+        if len(given) <= 1 and paper == raw and not extra:
+            return variables, pagesize_typo
+        if not raw:
+            return variables, pagesize_typo
+        return rest + ([f"papersize={paper}"] if paper or not given else []) + extra, None
+    if kind == "typst":
+        if not raw and not landscape:
+            return variables, pagesize_typo
+        name = TYPST_PAPER_NAMES.get(size) or (f"iso-{size}" if re.fullmatch(r"[bc][0-8]", size) else size)
+        return rest + ([f"papersize={name}"] if name else []) + (["pdfmd-page-flipped=true"] if landscape else []), None
+    points = NATIVE_PAPER_POINTS.get(size)
+    if points is None and not landscape:
+        return variables, pagesize_typo
+    if points is None:
+        css = "landscape"
+    else:
+        width, height = (points[1], points[0]) if landscape else points
+        css = f"{width:g}pt {height:g}pt"
+    return rest + [f"pdfmd-page={css}"], pagesize_typo
 
 
 TYPST_MARGIN_RE = re.compile(r"^(?P<indent>[ \t]*)margin(?P<colon>[ \t]*:[ \t]*)(?P<val>\S.*?)[ \t]*$",
@@ -20703,7 +20785,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
             if monofont_needed:
                 cmd += font_args("monofont", default_monofont())
-            for variable in variables:
+            for variable in paper_variables(md_path, metadata_files, variables, None, paper_kind("tex", no_auto))[0]:
                 cmd += ["-V", variable]
             if shift_heading:
                 cmd += ["--shift-heading-level-by=-1"]
@@ -21112,6 +21194,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                   f"(papersize: is) -- using papersize={pagesize_typo} on LaTeX-family "
                                   "targets. Set papersize: yourself, or --no-auto papersize, to silence "
                                   "this and keep the Letter default")
+            variables, pagesize_typo = paper_variables(md_path, metadata_files, variables, pagesize_typo,
+                                                      paper_kind("tex" if target_format in ("latex", "beamer") else target_format, no_auto))
             tex_first_font = (None if not is_tex_target else
                               mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
                                               document_font, mainfont_auto, no_auto, note))
@@ -21441,14 +21525,16 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             cmd += ["-V", f"geometry:{margin_option}"]
                     if monofont_needed and engine in LATEX_ENGINES:
                         cmd += font_args("monofont", default_monofont())
-                    if pagesize_typo and engine in LATEX_ENGINES:
-                        cmd += ["-V", f"papersize={pagesize_typo}"]
-                    for variable in variables:
+                    page_variables, page_typo = paper_variables(md_path, metadata_files, variables, pagesize_typo,
+                                                                paper_kind(engine, no_auto))
+                    if page_typo and engine in LATEX_ENGINES:
+                        cmd += ["-V", f"papersize={page_typo}"]
+                    for variable in page_variables:
                         cmd += ["-V", variable]
                     if engine == "typst" and not auto_disabled(no_auto, "papersize"):
                         typst_size = typst_papersize_translation(
-                            pagesize_typo or next((v.split("=", 1)[1] for v in variables
-                                                   if v.startswith("papersize=")), None)
+                            page_typo or next((v.split("=", 1)[1] for v in page_variables
+                                               if v.startswith("papersize=")), None)
                             or frontmatter_papersize_value(md_path))
                         if typst_size:
                             note("PAPERSIZE", f"{md_path}: translating papersize for the typst "
@@ -24222,7 +24308,7 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
     if npm.get("--format") and "--paper" not in out:
         out += ["--paper", npm["--format"].casefold()]
     if npm.get("--orientation", "").casefold() == "landscape":
-        out += ["-V", "geometry:landscape"]       # the LaTeX route; `papersize: a4,landscape` is read by the built-in renderers only
+        out += ["-V", "geometry:landscape"]       # every engine reads it (paper_variables)
     for side, key in (("margin", "--border"), ("top", "--border-top"), ("left", "--border-left"), ("bottom", "--border-bottom"),
                       ("right", "--border-right")):
         if npm.get(key):
@@ -25167,8 +25253,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--attach-links", action="store_true",
                         help="attach the local files the document links to, with a paperclip in the margin beside the link")
     parser.add_argument("--paper", default=None, metavar="SIZE",
-                        help="paper size (a4, letter ...); same as -V papersize=SIZE, and applies to the "
-                             "native renderers too")
+                        help="paper size (a4, letter ...), with the orientation if you like: a4,landscape; same as "
+                             "-V papersize=SIZE, but written for each engine (LaTeX, Typst, WeasyPrint, Calibre, the "
+                             "browsers and the native renderers all turn the page)")
     parser.add_argument("--family", choices=("helvetica", "times"), default=None,
                         help="font family of the built-in renderer (inkmd)")
     parser.add_argument("--no-autolinks", action="store_true",
@@ -26668,7 +26755,9 @@ def run_main() -> None:
                                 cmd += ["-V", f"geometry:{margin_option}"]
                         if report_monofont_needed:
                             cmd += font_args("monofont", default_monofont())
-                    for variable in variables:
+                    for variable in paper_variables(files[0], metadata_files, variables, None,
+                                                    paper_kind("tex" if target_format in ("latex", "beamer") else target_format,
+                                                               report_no_auto))[0]:
                         cmd += ["-V", variable]
                     if report_preambles and is_tex_target:
                         for preamble in report_preambles:
@@ -26802,7 +26891,8 @@ def run_main() -> None:
                             cmd += font_args("monofont", default_monofont())
                         if engine in LATEX_ENGINES:
                             cmd += document_font_args(list(files), metadata_files, variables)
-                        for variable in variables:
+                        for variable in paper_variables(files[0], metadata_files, variables, None,
+                                                        paper_kind(engine, report_no_auto))[0]:
                             cmd += ["-V", variable]
                         if preambles and engine in LATEX_ENGINES:
                             for preamble in preambles:

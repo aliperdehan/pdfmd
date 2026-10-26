@@ -40,6 +40,27 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.42 — 2026-10-26
+
+Pre-edit state: commit `0ae751a` (v3.30.41).
+
+### Fixed
+- **`--paper a4,landscape` (and `papersize: a4,landscape`) turned no page but the built-in renderers'.** Pandoc's `papersize` is a
+  LaTeX class option: on the LaTeX engines it printed `[a4,landscapepaper]`, LaTeX said "Unused global option" and the page was
+  Letter, silently; Calibre and the browsers lost the orientation too (the Word-file reader did not split the list item); WeasyPrint
+  ignored the paper altogether (A4 whatever `papersize:` said); Typst stopped on `a4,landscape`, and on a plain `--paper letter`
+  (pdfmd's translation to `us-letter` came as a second `-V papersize=`, and Pandoc joined the two into `letterus-letter`). One
+  function, `paper_variables`, now settles the paper for each engine: LaTeX gets the size as a class option and the turn as
+  `geometry:landscape`; Typst gets its own name (`us-letter`, `iso-b5`) once and `#set page(flipped: true)` through `typst.lua`;
+  WeasyPrint gets `@page { size: ... }` through `weasyprint.lua`; Calibre and the browsers read the list item. The same page comes
+  from `geometry: landscape` and `classoption: landscape`, and from the `pagesize:` typo, which now also beats a `papersize:` of the
+  settings in the Calibre, browser and Word readers (as it did for LaTeX).
+- Spellings that printed a Letter page on LaTeX: `a4paper` (became `a4paperpaper`), `A4`, `us-letter`, and `a3` (no class option;
+  `geometry:a3paper` now). `--paper landscape` alone keeps the size the settings name.
+- `--no-auto papersize` leaves all of this to Pandoc. Measured on Pandoc 3.12 with LuaLaTeX, Typst, WeasyPrint, Calibre and
+  the built-in renderer, for `a4,landscape`, `letter,landscape`, `a4`, `letter`, `a4paper`, `a3`, `us-letter,portrait`, `landscape`
+  and front matter `papersize`, `pagesize`, `geometry`, `classoption`.
+
 ## v3.30.41 — 2026-10-26
 
 Pre-edit state: commit `c2732a2` (v3.30.40).

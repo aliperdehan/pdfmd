@@ -1444,7 +1444,7 @@ other option is pdfmd's.
 `mdpdf` turns bookmarks and attached links on and combines several inputs into one
 PDF; like the Go `mdpdf` it also takes the output as a second name (`mdpdf notes.md notes.pdf`).
 The npm `mdpdf` has other keys under the same name, and `mdpdf` answers those too: `--style FILE` (and the `MDPDF_STYLES`
-variable) is a style sheet, `--format A4|Letter` the paper, `--orientation landscape` a turned page (the LaTeX route), and
+variable) is a style sheet, `--format A4|Letter` the paper, `--orientation landscape` a turned page, and
 `--border`, `--border-top|-left|-bottom|-right` the margins (`mm`, `cm`, `in`, `px`). A style sheet is read by the HTML engines
 only, so `-e html` is added unless an engine is named. `--header`/`--footer` are told apart by their value: a `.html` or `.hbs`
 file is the npm one's (Puppeteer markup, which pdfmd cannot use, so it is named on standard error and left out, with `--h-height`,
@@ -1962,6 +1962,12 @@ punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or 
 contain on one page where it fits: LaTeX's `samepage` environment, Typst's `#block(breakable: false)[...]`, a `break-inside:
 avoid` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text and say once that it is not held.
 `--markup keep` for one run.
+
+**The paper** (v3.30.42). `--paper a4,landscape`, `papersize: a4,landscape`, `geometry: landscape` and `classoption: landscape` turn
+the page on every engine: LaTeX (the size as a class option, the turn through `geometry`), Typst (`flipped`), WeasyPrint (`@page`
+size, which it ignored before: a `papersize: letter` printed A4), Calibre, the browsers, Word and the built-in renderers. Other
+spellings work too: `a4paper`, `us-letter`, `A4`, and `a3`, `a2`... (LaTeX classes have no `a3`; pdfmd gives it to `geometry`).
+`--paper landscape` alone turns whatever paper the settings name. `--no-auto papersize` leaves all of it to Pandoc.
 
 **Landscape pages** (v3.29, `markup: landscape`). A fenced `::: landscape`, a div with `style="page: landscape"` and, for writers
 that are not LaTeX, a raw `\begin{landscape}` ... `\end{landscape}` put what they hold on pages turned sideways, the document

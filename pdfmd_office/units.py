@@ -42,10 +42,8 @@ def length_to_twips(value) -> int | None:
 
 def parse_paper(value) -> tuple[tuple[int, int] | None, bool]:
     """`a4`, `letter`, `a4paper`, `landscape`... or 'a4,landscape' -> ((width, height) | None, landscape)."""
-    if isinstance(value, (list, tuple)):
-        words = [str(item) for item in value]
-    else:
-        words = [part for part in re.split(r"[,\s]+", str(value or "")) if part]
+    items = value if isinstance(value, (list, tuple)) else [value]
+    words = [part for item in items for part in re.split(r"[,\s]+", str(item or "")) if part]
     size, landscape = None, False
     for word in words:
         name = word.strip().lower()
