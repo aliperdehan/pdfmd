@@ -35,6 +35,22 @@ class CsvTables(unittest.TestCase):
         gfm = self.native(block % ' reader="gfm"')
         self.assertNotIn("Subscript", gfm)
 
+    def test_a_caption_with_several_attribute_words_is_read_and_a_brace_in_prose_is_not(self):
+        out = self.native('::: {.csv file="d.csv"}\n:::\n\n: Raw data {#tbl:raw keep=9}\n\nAfter.\n')
+        self.assertIn('( "tbl:raw" , [] , [ ( "keep" , "9" ) ] )', out)
+        self.assertNotIn("keep=9", out.replace('"keep" , "9"', ""))
+        prose = self.native('::: {.csv file="d.csv"}\n:::\n\n: Set {x} and {y}\n')
+        self.assertIn('Str "{x}"', prose)
+
+    def test_keep_on_the_div_reaches_the_table_and_the_caption_wins(self):
+        block = '::: {.csv file="d.csv" %s}\n:::\n%s'
+        self.assertIn('( "" , [] , [ ( "keep" , "4" ) ] )', self.native(block % ("keep=4", "")))
+        self.assertIn('( "" , [ "keep" ] , [] )', self.native(block % (".keep", "")))
+        self.assertIn('( "" , [ "nokeep" ] , [] )', self.native(block % (".nokeep", "")))
+        both = self.native(block % ("keep=4", "\n: Raw {keep=9}\n"))
+        self.assertIn('[ ( "keep" , "9" ) ]', both)
+        self.assertNotIn('"keep" , "4"', both)
+
     def test_a_caption_line_after_the_block_becomes_the_tables_caption(self):
         out = self.native('::: {.csv file="d.csv"}\n:::\n\n: Raw data, H~2~O {#tbl:raw}\n\nAfter.\n')
         self.assertNotIn('Str ":"', out)

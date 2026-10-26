@@ -8,9 +8,6 @@ The number in brackets, `[3dc]`, is the entry in the maintainer's working notes 
 holds the agreed details (design, decisions, measured facts). Items marked **decide**
 wait for an answer before any code.
 
-## Next: small and concrete
-
-
 ## Decide first
 
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
@@ -26,7 +23,7 @@ wait for an answer before any code.
 - [ ] CSS: headings in Word and Typst; MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, typeset output, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu, 3cw]
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
-- [ ] `table-keep` limits: grid tables, height-based rule, `.csv` tables, Pandoc floor [3cf]
+- [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
 

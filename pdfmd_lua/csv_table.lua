@@ -167,29 +167,35 @@ local function escape_cell(text)
 end
 
 -- the attribute block at the end of a caption, `{#tbl:id .class key=value}`, as (identifier, classes, pairs);
--- the inlines without it
+-- the inlines without it. The block may hold several words (Pandoc reads them as Str, Space, Str ...): every word must be an
+-- `#id`, a `.class` or a `key=value`, so a brace in the caption's prose (`{x}`) is not taken for one.
 local function split_attributes(inlines)
   local copy = {}
   for i, inline in ipairs(inlines) do copy[i] = inline end
   local last = copy[#copy]
-  if last and last.t == "Str" then
-    local inner = last.text:match("^{(.*)}$")
-    if inner and inner:match("^%s*[#%.]") then
-      local identifier, classes, pairs_ = "", {}, {}
-      for token in inner:gmatch("%S+") do
-        local id = token:match("^#(.+)$")
-        local class = token:match("^%.(.+)$")
-        local key, value = token:match('^([%w_%-]+)="?([^"]*)"?$')
-        if id then identifier = id
-        elseif class then classes[#classes + 1] = class
-        elseif key then pairs_[#pairs_ + 1] = {key, value} end
-      end
-      table.remove(copy)
-      while #copy > 0 and (copy[#copy].t == "Space" or copy[#copy].t == "SoftBreak") do table.remove(copy) end
-      return identifier, classes, pairs_, copy
-    end
+  if not (last and last.t == "Str" and last.text:sub(-1) == "}") then return "", {}, {}, copy end
+  local first = #copy
+  while first >= 1 and (copy[first].t == "Str" or copy[first].t == "Space") and not (copy[first].t == "Str" and copy[first].text:sub(1, 1) == "{") do
+    first = first - 1
   end
-  return "", {}, {}, copy
+  if first < 1 or copy[first].t ~= "Str" then return "", {}, {}, copy end
+  local words = {}
+  for i = first, #copy do words[#words + 1] = copy[i].t == "Space" and " " or copy[i].text end
+  local inner = table.concat(words):match("^{(.*)}$")
+  if not inner or inner:match("^%s*$") then return "", {}, {}, copy end
+  local identifier, classes, pairs_ = "", {}, {}
+  for token in inner:gmatch("%S+") do
+    local id = token:match("^#(.+)$")
+    local class = token:match("^%.(.+)$")
+    local key, value = token:match('^([%w_%-]+)="?([^"]*)"?$')
+    if id then identifier = id
+    elseif class then classes[#classes + 1] = class
+    elseif key then pairs_[#pairs_ + 1] = {key, value}
+    else return "", {}, {}, copy end
+  end
+  for _ = #copy, first, -1 do table.remove(copy) end
+  while #copy > 0 and (copy[#copy].t == "Space" or copy[#copy].t == "SoftBreak") do table.remove(copy) end
+  return identifier, classes, pairs_, copy
 end
 
 local function inlines_of_text(text, reader)
@@ -541,6 +547,31 @@ local function attach_caption(blocks, inlines, div)
   end
 end
 
+-- `::: {.csv keep=4}` / `.keep` / `.nokeep` on the div reach the table's own attributes, where a filter that keeps a short
+-- table on one page (nulabreport.lua: `{.keep}`, `{.nokeep}`, `{keep=N}` after a caption) looks for them; a caption's own
+-- attributes win
+local function inherit_keep(made, div)
+  local wanted = {}
+  for _, class in ipairs(div.classes) do
+    if class == "keep" or class == "nokeep" then wanted[#wanted + 1] = class end
+  end
+  local count = div.attributes["keep"]
+  if #wanted == 0 and not count then return end
+  for _, item in ipairs(made) do
+    if item.t == "Table" then
+      local attr = item.attr
+      for _, class in ipairs(wanted) do
+        if not attr.classes:includes(class) and not attr.classes:includes(class == "keep" and "nokeep" or "keep") then
+          attr.classes:insert(class)
+        end
+      end
+      if count and attr.attributes["keep"] == nil and not attr.classes:includes("nokeep") then attr.attributes["keep"] = count end
+      item.attr = attr
+      return
+    end
+  end
+end
+
 function Blocks(blocks)
   local out, changed, i = {}, false, 1
   while i <= #blocks do
@@ -566,6 +597,7 @@ function Blocks(blocks)
           end
         end
       end
+      inherit_keep(made, block)
       for _, item in ipairs(made) do out[#out + 1] = item end
     else
       out[#out + 1] = block

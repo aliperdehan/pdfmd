@@ -40,6 +40,16 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.38 — 2026-10-26
+
+Pre-edit state: commit `d4ae514` (v3.30.37).
+
+### Fixed
+- **A `.csv` block's caption with several attribute words was printed as text.** `Table: Raw data {#tbl:raw keep=9}` (or the `: Raw data {...}` form) after a `::: {.csv}` block gave the table no id and no attributes and left `{#tbl:raw keep=9}` in the caption: only a block of one word (`{#tbl:raw}`, `{.keep}`) was read. The block may hold several words now, every one an `#id`, a `.class` or a `key=value`, and a `key=value` block (`{keep=9}`) counts. A brace in the caption's prose (`Set {x} and {y}`) is still prose.
+
+### Added
+- **`keep` on a `.csv` div reaches the table.** `::: {.csv file="x.csv" keep=4}`, `::: {.csv .keep}` and `.nokeep` put `keep=4`, `keep` or `nokeep` on the table's own attributes, where a filter that keeps a short table on one page (nulabreport.lua) looks for them; the caption's own attributes win. `tests/test_csv_table.py`.
+
 ## v3.30.37 — 2026-10-26
 
 Pre-edit state: commit `276f947` (v3.30.36).

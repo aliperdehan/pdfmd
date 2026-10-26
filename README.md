@@ -1682,7 +1682,9 @@ whole: it moves to the next page instead of splitting). pdfmd sets it for a run 
 `--table-keep N` (0 lets every table break), or `pdfmd-options: {table-keep: N}` in the front matter, a metadata file or the
 config (also in `pdfmd --setup`). The command line wins over `pdfmd-options`, which wins over a `tablekeep:` in the
 metadata. Without any of them nothing is passed, and the filter uses its own default. A filter that does not read
-`tablekeep` ignores it.
+`tablekeep` ignores it. One table can say it for itself in its caption (`Table: Raw data {.keep}`, `{.nokeep}`, `{keep=4}`; several
+attribute words are fine: `{#tbl:raw keep=4}`), and a `.csv` block can say it on the div, `::: {.csv file="x.csv" keep=4}` or
+`::: {.csv .nokeep}`; the caption's own attributes win over the div's.
 
 This works for every output format.
 
