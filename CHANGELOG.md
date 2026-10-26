@@ -40,6 +40,16 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.29 — 2026-10-26
+
+Pre-edit state: commit `470de88` (v3.30.28). Merged from PR 9 (`cloud/calc-checks`), squashed.
+
+### Added
+
+- `--check` reports the calculator's undefined names (`calc-undefined`, an error): a span, a `::: calc` line or an `{ans}` that uses a name nothing defines, with its line and its part, in document order. A document without a calculator never starts Pandoc for it.
+- `--check` notes a name defined more than once (`calc-redefined`, severity `note`, a third severity that is counted and never fails `--check`, not even with `--strict`). A normal build says nothing about it.
+- `calc: {export: FILE}`, `--calc-export FILE`, `PDFMD_CALC_EXPORT` (for `-j` workers): after a build, `name,value,digits` with one row per name, sorted, `%.17g`, written atomically, readable back as a `constants` file. Not written without names, with `calc` off, after a failed build, or for a part built alone without the seed. `--attach-source` and `--embed-metadata files` leave it out unless it is also read. A `--setup` row (`options.calc.export`), the inventory entry, the help topic, README and recipes.
+
 ## v3.30.28 — 2026-10-26
 
 Pre-edit state: commit `b065576` (v3.30.27). Merged from PR 11 (`cloud/partial-provenance`), squashed; it met 3.30.23's partial history in `pdfmd.py`, resolved by keeping both.

@@ -39,6 +39,8 @@ CODES: dict[str, tuple[str, str]] = {
     "heading-space": ("warning", "#Heading without a space after the # (it is a paragraph)"),
     "heading-empty": ("warning", "a heading with no text"),
     "asset-large": ("warning", "an image or data file bigger than the size budget (--max-asset-mb)"),
+    "calc-undefined": ("error", "a calculator span, `::: calc` line or {ans} that uses a name nothing defines"),
+    "calc-redefined": ("note", "a calculator name defined more than once (a use sees the nearest definition above it, else the first below)"),
 }
 
 
@@ -315,10 +317,12 @@ def suggestion(word: str, known) -> str:
 
 
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
-         folders: list[Path] | None = None, asset_limit: int | None = None) -> list[Problem]:
+         folders: list[Path] | None = None, asset_limit: int | None = None,
+         calc: "tuple[list, list] | None" = None) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
     ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
-    image or data file."""
+    image or data file; ``calc`` is what the calculator's filter found (see calc_names): the uses of undefined names and
+    the definitions of names defined more than once."""
     analyses = [Analysis(source) for source in sources]
     findings = Findings()
     for analysis in analyses:
@@ -338,6 +342,8 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
     citations(analyses, findings, bibliography)
+    if calc:
+        calc_names(analyses, findings, *calc)
     problems = [problem for problem in findings.problems if problem.code not in ignore]
     order = {analysis.source.label: number for number, analysis in enumerate(analyses)}
     return sorted(problems, key=lambda item: (order.get(item.file, 0), item.line))
@@ -579,3 +585,96 @@ def citations(analyses: list[Analysis], findings: Findings, bibliography: Biblio
         more = f" ({len(places)} uses)" if len(places) > 1 else ""
         findings.add(analysis, line, "cite-missing",
                      f"@{key} is not in the bibliography{more}{suggestion(key.casefold(), bibliography.keys)}")
+
+
+# --- The calculator's names ----------------------------------------------------------------------------------------
+#
+# Which names the calculator (pdfmd_lua/calc.lua) can see is its own business: pdfmd runs the filter in check mode and hands over
+# what it found as `uses` -- [(name, text of the place)], one per statement that uses a name nothing defines -- and `definitions` --
+# [(name, text of the place, "document" | "constants")], every definition of a name that has several, in document order. The filter
+# knows the text of a place, not its line (Pandoc's Markdown reader keeps no positions), so the line is found here, by that text.
+
+CALC_FENCES = ("{=}", "{=calc}")
+
+
+def calc_places(analysis: Analysis) -> list[tuple[int, str]]:
+    """(line, the line with its blanks collapsed) of every line of a source that can hold a calculator place: anything but front
+    matter and code (a `{=calc}` fence is calculator lines)."""
+    lines = analysis.source.text.split("\n")
+    first = analysis.source.text.count("\n", 0, analysis.front_end)
+    places, fence = [], None
+    for number in range(first, len(lines)):
+        line = lines[number]
+        found = FENCE_RE.match(line)
+        if fence:
+            if found and found.group(2)[0] == fence[0][0] and len(found.group(2)) >= len(fence[0]) and not found.group(3).strip():
+                fence = None
+            elif fence[1]:
+                places.append((number + 1, " ".join(line.split())))
+            continue
+        if found:
+            fence = (found.group(2), found.group(3).strip() in CALC_FENCES)
+            continue
+        places.append((number + 1, " ".join(line.split())))
+    return places
+
+
+def calc_names(analyses: list[Analysis], findings: Findings, uses: list, definitions: list) -> None:
+    """`calc-undefined` for each use of a name nothing defines, `calc-redefined` (a note) for a name defined more than once."""
+    places = [[(number, text) for number, text in calc_places(analysis)] for analysis in analyses]
+    cursors: dict[str, dict[str, tuple[int, int]]] = {"use": {}, "definition": {}}   # text of a place -> (source, index) of the last match
+
+    def locate(text: str, kind: str) -> tuple[int, int] | None:
+        key = " ".join(text.split())
+        if not key:
+            return None
+        cursor = cursors[kind]
+        start = cursor.get(key, (0, -1))
+        for source in range(start[0], len(places)):
+            for index in range(start[1] + 1 if source == start[0] else 0, len(places[source])):
+                if key in places[source][index][1]:
+                    cursor[key] = (source, index)
+                    return source, places[source][index][0]
+        return None
+
+    group_text, group_names, spot = None, set(), None
+    for name, text in uses:
+        if text == group_text and name not in group_names:        # another name of the statement just placed
+            group_names.add(name)
+        else:
+            group_text, group_names, spot = text, {name}, locate(text, "use")
+        source, line = spot if spot else (0, 0)
+        shown = " ".join(text.split())
+        shown = shown if len(shown) <= 70 else shown[:67] + "..."
+        findings.add(analyses[source], line, "calc-undefined",
+                     f"'{name}' is not defined for the calculator; give it a value with `{name} = 2 + 2`{{=}} somewhere "
+                     f"(used in `{shown}`)")
+    grouped: dict[str, list] = {}
+    for name, text, origin in definitions:
+        grouped.setdefault(name, []).append((text, origin))
+    for name, items in grouped.items():
+        found: list[tuple[int, int] | None] = []
+        constants = 0
+        for text, origin in items:
+            if origin == "constants":
+                constants += 1
+                continue
+            found.append(locate(text, "definition"))
+        by_file: dict[int, list[int]] = {}
+        for spot in found:
+            if spot:
+                by_file.setdefault(spot[0], []).append(spot[1])
+        where = []
+        if constants:
+            where.append(f"the constants file{' ' + str(constants) + ' times' if constants > 1 else ''}")
+        for source, lines in by_file.items():
+            label = analyses[source].source.label
+            counted = [f"{line}" + (f" (x{lines.count(line)})" if lines.count(line) > 1 else "") for line in dict.fromkeys(lines)]
+            where.append(f"{label}: line{'s' if len(counted) > 1 else ''} {', '.join(counted)}")
+        if not found or not any(found):
+            continue                                              # defined in the constants file only, or nowhere to be found
+        last_source, last_line = max((spot for spot in found if spot), key=lambda spot: (spot[0], spot[1]))
+        first_source, first_line = min(spot for spot in found if spot)
+        findings.add(analyses[first_source], first_line, "calc-redefined",
+                     f"{name} is defined {len(items)} times ({'; '.join(where)}); a use below them sees the last one "
+                     f"({analyses[last_source].source.label}: line {last_line})")

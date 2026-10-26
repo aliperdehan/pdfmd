@@ -46,7 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -85,7 +85,7 @@ FOLDER_OPTIONS = frozenset({
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
-    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.strict",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
@@ -453,6 +453,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A CSV file, columns name,value[,digits[,note]] (a header row is fine, # lines are skipped), read before the document: "
              "`t18` then works in `t18`{=4sf} and {subs}. Looked for beside the document and its metadata files. Empty: none. "
              "Per run: --calc-constants.", "Calculations"),
+        text("options.calc.export", "A file the calculator's names are written to",
+             "A CSV, columns name,value,digits: the value of the last definition of each name after a build that evaluated names "
+             "(the mirror of the constants file, which can read it back). Beside the document unless the path is absolute. "
+             "Empty: none. Per run: --calc-export.", "Calculations"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "

@@ -795,6 +795,7 @@ local function register(text, default)
     for _, statement in ipairs(statements) do
       STATEMENTS[#STATEMENTS + 1] = statement
       statement.id = #STATEMENTS
+      statement.source = text                                    -- the text of the place that holds it (pdfmd --check finds its line by it)
       for _, name in ipairs(statement.names) do
         NAMED[name] = NAMED[name] or {}
         table.insert(NAMED[name], statement)
@@ -1487,6 +1488,53 @@ local function dump_names(path)
   file:close()
 end
 
+-- pdfmd --check (3.30.22): `-M pdfmd-calc-check=FILE` writes what the check reports, after the first pass has read every place of
+-- the document (nothing is evaluated for it, and the output of the build is not used). Tab-separated, one record a line, the
+-- text of a place with \\, tab and line ends escaped:
+--   U  name  place          a use of a name no span, `::: calc` line, {ans} or constants file defines (one per statement)
+--   D  name  place  origin  one definition of a name that has several, in document order; origin is "constants" for a
+--                           line of `calc: {constants: file}` (which has no line in the document) and "document" otherwise
+local function escape_field(text)
+  return (text:gsub("[\\\t\r\n]", {["\\"] = "\\\\", ["\t"] = "\\t", ["\r"] = "\\r", ["\n"] = "\\n"}))
+end
+
+local function check_report(path, constants_end)
+  local file = io.open(path, "w")
+  if not file then return end
+  for _, statement in ipairs(STATEMENTS) do
+    if not statement.repeat_of and statement.expr and statement.source then
+      local ok, tokens = pcall(tokenize, statement.expr)       -- a statement that does not parse is the build's WARN, not a name
+      if ok then
+        local seen = {}
+        for index, token in ipairs(tokens) do
+          if token.kind == "name" and not seen[token.value] then
+            local following = tokens[index + 1]
+            local call = following and following.kind == "op" and following.value == "("
+            if not call and CONSTANTS[token.value] == nil and (SOFT[token.value] or not FUNCTIONS[token.value])
+                and not NAMED[token.value] then
+              seen[token.value] = true
+              file:write("U\t", token.value, "\t", escape_field(statement.source), "\n")
+            end
+          end
+        end
+      end
+    end
+  end
+  local names = {}
+  for name, list in pairs(NAMED) do
+    if #list > 1 then names[#names + 1] = name end
+  end
+  table.sort(names, function(a, b) return NAMED[a][1].id < NAMED[b][1].id end)
+  for _, name in ipairs(names) do
+    for _, statement in ipairs(NAMED[name]) do
+      if statement.source then
+        file:write("D\t", name, "\t", escape_field(statement.source), "\t", statement.id <= constants_end and "constants" or "document", "\n")
+      end
+    end
+  end
+  file:close()
+end
+
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
   if div.classes:includes("hide") or div.classes:includes("hidden") then      -- `::: {.calc .hide}`: statements, nothing printed
@@ -1528,10 +1576,11 @@ return {{Pandoc = function(doc)
   local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
   local seed = doc.meta["pdfmd-calc-seed"]
   seed = seed and pandoc.utils.stringify(seed) or nil
+  local constants_end = 0
   for _, which in ipairs({1, 2}) do
     pass, occurrence, fence_cursor, table_count = which, 0, 1, 0
     statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
-    if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
+    if which == 1 then constants_end = #STATEMENTS end    if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
     doc = doc:walk({traverse = "topdown", Div = function(div)
         local out, descend = calc_div(div)               -- two results: `x or y` would drop the second (do not walk into the output)
         if out ~= nil then return out, descend end
@@ -1545,5 +1594,7 @@ return {{Pandoc = function(doc)
   end
   local dump = doc.meta["pdfmd-calc-dump"]
   if dump then dump_names(pandoc.utils.stringify(dump)) end
+  local check = doc.meta["pdfmd-calc-check"]
+  if check then check_report(pandoc.utils.stringify(check), constants_end) end
   return doc
 end}}

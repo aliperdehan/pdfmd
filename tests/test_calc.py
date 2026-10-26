@@ -23,6 +23,15 @@ os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
+
+
+def pypdf_available() -> bool:
+    try:
+        import pypdf  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
 CALC_LUA = ROOT / "pdfmd_lua" / "calc.lua"
 
 # expression -> the text it becomes (R's print: 7 significant digits, 20 and not 20.0)
@@ -1119,6 +1128,137 @@ class PartBuiltAlone(unittest.TestCase):
                 pdfmd.seed_calc_mode(self.directory / "report.md", [])
             finally:
                 pdfmd.SEED_CALC_CLI = old
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Export(unittest.TestCase):
+    """`calc: {export: FILE}` / --calc-export / PDFMD_CALC_EXPORT: the names of the calculator after a build, as name,value,digits
+    -- the file `constants` reads (3.30.22)."""
+
+    TEXT = ("---\ntitle: X\n---\n\nVolumes `V = 37.58 - 34.11 = {ans:2dp}`{=}, `n = V / 4`{=3sf}, `t = 2.101`{=} and "
+            "`V = 40.00 - 28.18 = {ans:2dp}`{=}; `big = Inf`{=}.\n")
+    EXPECTED = "name,value,digits\nV,11.82,2dp\nbig,inf,\nn,0.86749999999999972,3sf\nt,2.101,\n"
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-calc-export-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "x.md").write_text(self.TEXT, encoding="utf-8")
+
+    def run_pdfmd(self, *arguments: str, env: dict | None = None, cwd: Path | None = None):
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("PDFMD_CALC")}
+        environment.update({"PDFMD_CONFIG": "", **(env or {})})
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments, "--no-backup", "--no-stamp", "--to", "latex", "-o", "out.tex"],
+                              cwd=cwd or self.directory, capture_output=True, text=True, encoding="utf-8", env=environment)
+
+    def export(self, name: str = "results.csv") -> str:
+        return (self.directory / name).read_text(encoding="utf-8")
+
+    def test_the_last_value_of_each_name_in_its_digits_sorted_and_only_finite_numbers(self):
+        done = self.run_pdfmd("x.md", "--calc-export", "results.csv")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.export(), self.EXPECTED.replace("big,inf,\n", ""))          # V: the LAST definition; Inf has no form to write
+        self.assertIn("CALC  3 names written to results.csv", done.stdout)
+
+    def test_the_file_is_a_constants_file_and_the_numbers_round_trip(self):
+        self.run_pdfmd("x.md", "--calc-export", "results.csv")
+        (self.directory / "y.md").write_text("---\ntitle: Y\npdfmd-options:\n  calc: {constants: results.csv}\n---\n\n"
+                                            "`V`{=} and `n * 2`{=3sf} and `t`{=} and `V + 1`{=}.\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "y.md", "--no-backup", "--no-stamp", "--to", "plain", "-o", "y.txt"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                              env={**os.environ, "PDFMD_CONFIG": ""})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual((self.directory / "y.txt").read_text(encoding="utf-8").strip().replace("\r\n", "\n"), "11.82 and 1.73 and 2.101 and 12.82.")
+        names = pdfmd.calc_constants_statements(self.directory / "results.csv")
+        self.assertEqual(names, ["V = 11.82 = {ans:2dp}", "n = 0.86749999999999972 = {ans:3sf}", "t = 2.101"])
+
+    def test_the_flag_the_environment_and_the_document_name_it_and_the_command_line_wins(self):
+        self.run_pdfmd("x.md", env={"PDFMD_CALC_EXPORT": "from-env.csv"})                         # what a -j worker is given
+        self.assertTrue((self.directory / "from-env.csv").is_file())
+        (self.directory / "d.md").write_text(self.TEXT.replace("title: X", "title: D\npdfmd-options:\n  calc: {export: tables/from-doc.csv}"),
+                                            encoding="utf-8")
+        self.run_pdfmd("d.md")
+        self.assertTrue((self.directory / "tables" / "from-doc.csv").is_file())                   # the folder is made
+        self.run_pdfmd("d.md", "--calc-export", "from-flag.csv")
+        self.assertTrue((self.directory / "from-flag.csv").is_file())
+        self.assertEqual(self.export("from-flag.csv"), self.export("from-doc.csv".replace("from-doc.csv", "tables/from-doc.csv")))
+        elsewhere = self.directory / "elsewhere"
+        elsewhere.mkdir()
+        self.run_pdfmd("x.md", "--calc-export", str(elsewhere / "abs.csv"))
+        self.assertTrue((elsewhere / "abs.csv").is_file())                                          # an absolute path is where it says
+        (self.directory / "sub").mkdir()
+        (self.directory / "sub" / "z.md").write_text(self.TEXT, encoding="utf-8")
+        self.run_pdfmd("sub/z.md", "--calc-export", "r.csv")
+        self.assertTrue((self.directory / "sub" / "r.csv").is_file())                               # a relative one is beside the document
+        self.assertFalse((self.directory / "r.csv").exists())
+
+    def test_nothing_is_written_without_names_with_calc_off_or_when_the_build_fails(self):
+        (self.directory / "plain.md").write_text("---\ntitle: P\n---\n\nOnly `2 + 2`{=} here.\n", encoding="utf-8")
+        self.run_pdfmd("plain.md", "--calc-export", "none.csv")
+        self.assertFalse((self.directory / "none.csv").exists())
+        self.run_pdfmd("x.md", "--calc-export", "off.csv", "--no-calc")
+        self.assertFalse((self.directory / "off.csv").exists())
+        self.run_pdfmd("x.md", "--calc-export", "")
+        self.assertEqual([path.name for path in self.directory.glob("*.csv")], [])
+
+    def test_a_file_is_replaced_whole_and_a_path_that_cannot_be_written_is_a_warning_not_a_failure(self):
+        (self.directory / "results.csv").write_text("old\n", encoding="utf-8")
+        self.run_pdfmd("x.md", "--calc-export", "results.csv")
+        self.assertEqual(self.export(), self.EXPECTED.replace("big,inf,\n", ""))
+        self.assertEqual([path.name for path in self.directory.iterdir() if path.name.endswith(".part")], [])
+        (self.directory / "adir").mkdir()
+        done = self.run_pdfmd("x.md", "--calc-export", "adir")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("WARN  calc: could not write adir", done.stderr)
+        self.assertTrue((self.directory / "out.tex").is_file())
+
+    def test_a_part_built_alone_writes_it_with_the_seed_and_says_so_without(self):
+        parts = self.directory / "parts"
+        parts.mkdir()
+        (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n  calc: {export: results.csv}\n---\n\nScaffold.\n", encoding="utf-8")
+        (parts / "50-calc.md").write_text("# Calc\n\n::: calc\nV = 40.00 - 28.18 = {ans:2dp}\n:::\n", encoding="utf-8")
+        (parts / "60-more.md").write_text("# More\n\nNow `V * 2`{=} and `w = 5`{=}.\n", encoding="utf-8")
+        done = self.run_pdfmd("report.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        whole = self.export()
+        self.assertEqual([line.split(",")[0] for line in whole.splitlines()], ["name", "V", "w"])
+        (self.directory / "results.csv").unlink()
+        done = self.run_pdfmd("report@60")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.export(), whole)                                                     # the seed carried V from part 50
+        (self.directory / "results.csv").unlink()
+        done = self.run_pdfmd("report@60", "--seed-calc", "off")
+        self.assertFalse((self.directory / "results.csv").exists())
+        self.assertIn("NOTE  calc: results.csv is not written for a part built alone", done.stderr)
+        done = self.run_pdfmd("report@50")                                                    # nothing stands above part 50 but the scaffold
+        self.assertFalse((self.directory / "results.csv").exists())
+
+    @unittest.skipUnless(shutil.which("lualatex") and pypdf_available(), "needs LuaLaTeX and pypdf")
+    def test_it_does_not_travel_with_attach_source_but_a_constants_file_does(self):
+        def attached(extra: str) -> list[str]:
+            (self.directory / "a.md").write_text(self.TEXT.replace("title: X", "title: A\npdfmd-options:\n  calc: {export: results.csv%s}" % extra),
+                                                encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "--attach-source", "--no-backup", "--no-stamp",
+                                   "-e", "lualatex"], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                                  env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            import pypdf
+            files = {name: (data[0] if isinstance(data, list) else data) for name, data in pypdf.PdfReader(self.directory / "a.pdf").attachments.items()}
+            return files["pdfmd-source.md"].decode("utf-8")        # the source carries the files it reads inside itself
+
+        source = attached("")
+        self.assertTrue((self.directory / "results.csv").is_file())
+        self.assertNotIn("results.csv", source.split("---\n", 2)[2])                                 # (only the option naming it, in the front matter)
+        self.assertNotIn("name: results.csv", source)
+        source = attached(", constants: results.csv")                                              # the same file, now read as input
+        self.assertIn("name: results.csv", source)
+        (self.directory / "a.md").write_text(self.TEXT.replace("title: X", "title: A\npdfmd-options:\n  calc: {export: results.csv}")
+                                            + '\n::: {.csv file="results.csv"}\n:::\n', encoding="utf-8")   # the body reads last time's results
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "--attach-source", "--no-backup", "--no-stamp", "-e", "lualatex"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        import pypdf
+        data = pypdf.PdfReader(self.directory / "a.pdf").attachments["pdfmd-source.md"]
+        self.assertIn("name: results.csv", (data[0] if isinstance(data, list) else data).decode("utf-8"))
 
 
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")
