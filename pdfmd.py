@@ -23249,7 +23249,7 @@ def route_ebook_input(args) -> None:
     args.path = [markdown]
 
 
-PDF_TO_STDOUT = False        # set by `-o -` on PDF inputs (v3.30.39)
+PDF_TO_STDOUT_CLI = False        # set by `-o -` on PDF inputs (v3.30.39)
 
 
 def route_pdf_input(args, extra: list[str]) -> int | None:
@@ -23298,8 +23298,8 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
         raise SystemExit(batchocr_missing_message(version))
     suffix = ".md" if fmt == "md" else ".txt"
     call = [*command, *map(str, rest), "--to", fmt]
-    to_stdout = any(item in ("-s", "--stdout") for item in extra) or PDF_TO_STDOUT
-    if PDF_TO_STDOUT and not any(item in ("-s", "--stdout") for item in extra):
+    to_stdout = any(item in ("-s", "--stdout") for item in extra) or PDF_TO_STDOUT_CLI
+    if PDF_TO_STDOUT_CLI and not any(item in ("-s", "--stdout") for item in extra):
         extra = [*extra, "--stdout"]
     produced: list[Path] = []
     if out is not None and not to_stdout:
@@ -26114,8 +26114,8 @@ def run_main() -> None:
         os.environ[ANSI_WIDTH_ENV] = str(args.width)
     if (args.out is not None and str(args.out) == "-" and not args.view and args.path
             and all(path.suffix.lower() == ".pdf" for path in args.path)):
-        global PDF_TO_STDOUT
-        args.out, PDF_TO_STDOUT = None, True     # `pdfmd x.pdf -o -`: the Markdown on standard output (M1ck4's pdfmd pipes so)
+        global PDF_TO_STDOUT_CLI
+        args.out, PDF_TO_STDOUT_CLI = None, True     # `pdfmd x.pdf -o -`: the Markdown on standard output (M1ck4's pdfmd pipes so)
     if args.view or (args.out is not None and str(args.out) == "-"):
         raise SystemExit(terminal_view(args))
     if args.path and [str(path) for path in args.path] == ["-"]:

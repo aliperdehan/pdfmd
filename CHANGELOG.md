@@ -107,7 +107,7 @@ Pre-edit state: commit `e069268` (v3.30.38).
   (`--cover c.pdf`), when it is the only argument, and when the one before it is a PDF too. The original `mdpdf` never reads a PDF,
   so nothing it accepted changes. `pdfmd` itself does not do this: for pdfmd a PDF argument is an input.
 - **`pdfmd x.pdf -o -`: the Markdown on standard output.** M1ck4's `pdfmd` (archived 2026-05-08) pipes that way; for PDF inputs it
-  now means batchocr's `--stdout` (it was the terminal view, which refuses a PDF). `pdfmd x.pdf --stdout` worked already.
+  now means batchocr's `--stdout` (it was the terminal view, which refuses a PDF). `pdfmd x.pdf --stdout` worked already. The setting reaches `-j` workers (`tests/test_jobs.py` caught the first version, which did not).
 
 ## v3.30.38 — 2026-10-26
 
