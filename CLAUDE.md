@@ -107,6 +107,10 @@ publisher is registered to exactly those names.
 that same commit (the changelog is the record of what shipped); when a plan adds or changes an item,
 edit the line. Keep it free of personal paths and names, like every file here.
 
+Keep it lean: one short line per item, never a paragraph. Design, decisions, wishes and measured facts go in the
+maintainer's working notes (the master queue), and the line carries only the bracketed entry id that points there. When a
+line grows past one sentence or two, move the rest to the notes.
+
 ## Version numbers
 
 One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line
