@@ -25,6 +25,9 @@ wait for an answer before any code.
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
+- [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
+- [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
+- [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
