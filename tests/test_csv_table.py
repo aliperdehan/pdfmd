@@ -122,17 +122,14 @@ class InlineData(CsvTables):
         self.assertNotIn('Str "9"', out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Limits(unittest.TestCase):
     """The cap for every table (v3.27.2): --csv-rows/--csv-cols, `pdfmd-options: {csv: ...}`, the config; a div's own
     rows=/cols= still win."""
 
     DATA = "a,b,c,d,e,f,g,h,i\n" + "".join(f"{n},2,3,4,5,6,7,8,9\n" for n in range(1, 16))
 
-    def build(self, markdown: str, *flags: str, front: str = "", config: str | None = None, target: str = "native"):
+    def build(self, markdown: str, *flags: str, front: str = "", config: str | None = None, target: str = "native",
+              extra_env: dict | None = None):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
         self.addCleanup(shutil.rmtree, directory, True)
         (directory / "d.csv").write_text(self.DATA, encoding="utf-8")
@@ -140,6 +137,8 @@ class Limits(unittest.TestCase):
         env = {**os.environ, "PDFMD_CONFIG": ""}
         env.pop("PDFMD_CSV_ROWS", None)
         env.pop("PDFMD_CSV_COLS", None)
+        env.pop("PDFMD_CSV_NOTE", None)
+        env.update(extra_env or {})
         if config is not None:
             (directory / "config.yaml").write_text(config, encoding="utf-8")
             env["PDFMD_CONFIG"] = str(directory / "config.yaml")
@@ -159,10 +158,71 @@ class Limits(unittest.TestCase):
     def test_the_default_cap_and_its_note(self):
         native, stderr = self.build('::: {.csv file="d.csv"}\n:::\n')
         self.assertEqual(self.rows_and_columns(native), (11, 8))           # 7 + a row of … + 3; 5 + … + 2
-        self.assertIn("the first 7 and the last 3 of 15 rows", " ".join(re.findall(r'Str "([^"]*)"', native)))
+        self.assertIn("(showing the first 7 and the last 3 of 15 rows, the first 5 and the last 2 of 9 columns)",
+                      " ".join(re.findall(r'Str "([^"]*)"', native)))
         self.assertTrue('Str "15"' in native, "the last row is missing")
-        self.assertIn("--csv-rows", native)                                  # the note under the table says how
-        self.assertIn("WARN", stderr)
+        self.assertNotIn("--csv-rows", native)                               # the note states the fact; the advice is in the WARN
+        self.assertNotIn("rows=all", native)
+        self.assertEqual(stderr.count("WARN"), 1, stderr)
+        self.assertIn("rows=all or rows=N on the .csv div shows more rows, --csv-rows for every table", stderr)
+        self.assertIn("cols=all or cols=N on the .csv div shows more columns, --csv-cols for every table", stderr)
+
+    def words(self, native: str) -> str:
+        return " ".join(re.findall(r'Str "([^"]*)"', native))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_note_names_only_what_was_cut(self):
+        native, stderr = self.build('::: {.csv file="d.csv" cols="all"}\n:::\n')
+        self.assertIn("(showing the first 7 and the last 3 of 15 rows)", self.words(native))
+        self.assertNotIn("column", self.words(native))
+        self.assertNotIn("cols=all", stderr)                                  # no advice about a dimension that was not cut
+        native, stderr = self.build('::: {.csv file="d.csv" rows="all"}\n:::\n')
+        self.assertIn("(showing the first 5 and the last 2 of 9 columns)", self.words(native))
+        self.assertNotIn("15", self.words(native).split("(showing")[1])
+        self.assertNotIn("rows=all", stderr)
+        native, stderr = self.build('::: {.csv file="d.csv" rows="all" cols="all"}\n:::\n')
+        self.assertNotIn("showing", self.words(native))                       # nothing cut: no note, no WARN
+        self.assertNotIn("WARN", stderr)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_note_can_be_off_or_full(self):
+        for how in (dict(block='::: {.csv file="d.csv" note=off}\n:::\n'),
+                    dict(block='::: {.csv file="d.csv"}\n:::\n', front="pdfmd-options:\n  csv: {note: off}\n"),
+                    dict(block='::: {.csv file="d.csv"}\n:::\n', flags=("--csv-note", "off")),
+                    dict(block='::: {.csv file="d.csv"}\n:::\n', extra_env={"PDFMD_CSV_NOTE": "off"}),
+                    dict(block='::: {.csv file="d.csv"}\n:::\n', config="options:\n  csv: {note: off}\n")):
+            native, stderr = self.build(how["block"], *how.get("flags", ()), front=how.get("front", ""), config=how.get("config"),
+                                        extra_env=how.get("extra_env"))
+            self.assertNotIn("showing", self.words(native), how)
+            self.assertEqual(self.rows_and_columns(native), (11, 8), how)     # the … rows still mark the cut
+            self.assertIn("WARN", stderr)                                     # and stderr still says how to see more
+            self.assertIn("rows=all or rows=N", stderr)
+        native, _ = self.build('::: {.csv file="d.csv" note=full}\n:::\n')
+        self.assertIn('Code ( "" , [] , [] ) "rows=all"', native)             # the advice is back, in code spans, as it used to be
+        self.assertIn('Code ( "" , [] , [] ) "--csv-cols"', native)
+        self.assertIn("(showing the first 7 and the last 3 of 15 rows, the first 5 and the last 2 of 9 columns \\8211 use",
+                      self.words(native))
+        native, _ = self.build('::: {.csv file="d.csv" note=off}\n:::\n', "--csv-note", "full")
+        self.assertNotIn("showing", self.words(native))                       # the div wins over the command line
+        native, _ = self.build('::: {.csv file="d.csv"}\n:::\n', "--csv-note", "short", front="pdfmd-options:\n  csv: {note: off}\n")
+        self.assertIn("(showing", self.words(native))                         # the command line wins over the document
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_a_bad_note_is_said(self):
+        native, stderr = self.build('::: {.csv file="d.csv" note=loud}\n:::\n')
+        self.assertIn("note=loud is not short, off or full; short is used", stderr)
+        self.assertIn("(showing", self.words(native))
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "x.md", "--csv-note", "loud"], cwd=directory,
+                              capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("short, off or full", done.stderr)
+        (directory / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  csv: {note: loud}\n---\n\n::: {.csv}\na,b\n1,2\n:::\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "native", "-o", "o.native"], cwd=directory,
+                              capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("pdfmd-options.csv.note must be short, off or full", done.stderr)
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_command_line_the_document_and_the_config(self):
@@ -249,3 +309,40 @@ class Limits(unittest.TestCase):
         self.assertEqual(lines[0].count("|"), 10)                                          # 9 columns
         lines = pdfmd.csv_div_table('.csv file="d.csv" rows="1"', directory, None, None, {**pdfmd.CSV_DEFAULTS, "rows": 3})
         self.assertEqual(len([line for line in lines if line.startswith("| ")]), 3)
+
+    def test_the_built_in_renderer_writes_the_same_note(self):
+        sys.path.insert(0, str(ROOT))
+        import contextlib
+        import io
+        import pdfmd
+        directory = Path(tempfile.mkdtemp(prefix="pdfmd-csv-limits-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        (directory / "d.csv").write_text(self.DATA, encoding="utf-8")
+
+        def table(attributes: str, **defaults):
+            with contextlib.redirect_stderr(io.StringIO()) as seen:
+                return pdfmd.csv_div_table(attributes, directory, None, None, {**pdfmd.CSV_DEFAULTS, **defaults}), seen.getvalue()
+
+        lines, said = table('.csv file="d.csv"')
+        self.assertEqual(lines[-1], "*(showing the first 7 and the last 3 of 15 rows, the first 5 and the last 2 of 9 columns)*")
+        self.assertEqual(said.count("WARN"), 1, said)
+        self.assertIn("rows=all or rows=N on the .csv div shows more rows, --csv-rows for every table", said)
+        lines, said = table('.csv file="d.csv" cols="all"')
+        self.assertEqual(lines[-1], "*(showing the first 7 and the last 3 of 15 rows)*")          # (it used to add "9 of 9 columns")
+        self.assertNotIn("cols=all", said)
+        lines, said = table('.csv file="d.csv" note=off')
+        self.assertNotIn("showing", "\n".join(lines))
+        self.assertIn("…", "\n".join(lines))
+        lines, _ = table('.csv file="d.csv"', note="off")
+        self.assertNotIn("showing", "\n".join(lines))
+        lines, _ = table('.csv file="d.csv" note=full')
+        self.assertIn("--csv-rows", lines[-1])
+        self.assertIn("showing the first 7 and the last 3 of 15 rows, the first 5 and the last 2 of 9 columns -- use", lines[-1])
+        lines, said = table('.csv file="d.csv" rows="all" cols="all"')
+        self.assertEqual((said, "showing" in "\n".join(lines)), ("", False))
+        lines, said = table('.csv file="d.csv" note=loud')
+        self.assertIn("note='loud' is not short, off or full", said)
+
+
+if __name__ == "__main__":
+    unittest.main()

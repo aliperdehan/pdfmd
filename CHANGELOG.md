@@ -40,6 +40,20 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.27 — 2026-10-26
+
+Pre-edit state: commit `b575748` (v3.30.26). Merged from PR 10 (`cloud/csv-notes`), squashed.
+
+### Fixed
+
+- The note under a cut `.csv` table states the fact only, only for the dimension that was cut (it said "2 of 2 columns" when no column was cut), without code spans. The advice moved to a once-per-table `WARN` on stderr.
+- `--extract-inline-csv`, `--expand-tables` and `--check` know the bare `::: csv`.
+- The stray `unittest.main()` in the middle of `tests/test_csv_table.py` is at the end.
+
+### Added
+
+- `note=short|off|full` (default `short`): a div's `note=`, `csv: {note}`, `--csv-note`, `PDFMD_CSV_NOTE`, a `--setup` row, the inventory entry, the help topic, README and recipes; in the Lua filter and in the built-in renderer. `full` is the only mode that keeps code spans (other writers get them as Pandoc writes them).
+
 ## v3.30.26 — 2026-10-26
 
 Pre-edit state: commit `9b054bb` (v3.30.25). Merged from PR 8 (`cloud/portability`), squashed.

@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.26"
+PDFMD_VERSION = "3.30.27"
 import argparse
 import atexit
 import csv
@@ -2453,9 +2453,44 @@ def contains_csv_table(md_path: Path) -> bool:
 # PDFMD_CSV_ROWS / PDFMD_CSV_COLS, as --strict does), else `pdfmd-options: {csv: {rows, cols, header, reader}}` (the
 # document, its metadata files, the config: field by field), else 10 rows x 7 columns, a header row and Pandoc's
 # Markdown in the cells. A div's own rows= / cols= / header= / reader= still win for that one table.
-CSV_DEFAULTS = {"rows": 10, "cols": 7, "header": True, "reader": "markdown", "delimiter": "auto", "cut": "ends"}
+CSV_DEFAULTS = {"rows": 10, "cols": 7, "header": True, "reader": "markdown", "delimiter": "auto", "cut": "ends", "note": "short"}
 CSV_CUTS = ("ends", "head")
 CSV_ENV = {"rows": "PDFMD_CSV_ROWS", "cols": "PDFMD_CSV_COLS"}
+# The note under a table that was cut (v3.30.22): `short` states the fact only ("showing the first 7 and the last 3 of 11 rows", only
+# for what was cut), `full` adds the advice that used to stand in every PDF, `off` leaves it out (the `...` row still marks the cut).
+# The advice is in the WARN on stderr, once per table, whatever the note says. --csv-note (PDFMD_CSV_NOTE for -j workers), else
+# `pdfmd-options: {csv: {note: off}}`, else short; a div's own note= wins for that table.
+CSV_NOTES = ("short", "off", "full")
+CSV_NOTE_ENV = "PDFMD_CSV_NOTE"
+
+
+def csv_note_mode(value) -> str | None:
+    """A note mode from a command line, an option or a div attribute: short, off or full (YAML reads a bare `off` as False and
+    `on` as True, so those count too); None when it is none of them."""
+    if value is True:
+        return "short"
+    if value is False:
+        return "off"
+    text = str(value).strip().casefold()
+    text = {"on": "short", "true": "short", "false": "off", "no": "off", "yes": "short", "none": "off"}.get(text, text)
+    return text if text in CSV_NOTES else None
+
+
+def csv_note_argument(value: str) -> str:
+    found = csv_note_mode(value)
+    if found is None:
+        raise argparse.ArgumentTypeError(f"{value!r}: short, off or full")
+    return found
+
+
+def csv_cut_advice(rows_cut: bool, cols_cut: bool) -> str:
+    """How to see more of a table that was cut, for the dimensions that were."""
+    parts = []
+    if rows_cut:
+        parts.append("rows=all or rows=N on the .csv div shows more rows, --csv-rows for every table")
+    if cols_cut:
+        parts.append("cols=all or cols=N on the .csv div shows more columns, --csv-cols for every table")
+    return "; ".join(parts)
 
 
 def csv_count(value) -> int | str | None:
@@ -2537,6 +2572,13 @@ def csv_defaults(md_path: Path | None, metadata_files: list[Path] = ()) -> dict:
         if cut not in CSV_CUTS:
             raise SystemExit(f"{where}: pdfmd-options.csv.cut must be ends or head, not {option['cut']!r}")
         chosen["cut"] = cut
+    note = os.environ.get(CSV_NOTE_ENV)
+    if note is None and option.get("note") is not None:
+        note = option["note"]
+        if csv_note_mode(note) is None:
+            raise SystemExit(f"{where}: pdfmd-options.csv.note must be short, off or full, not {note!r}")
+    if note is not None and csv_note_mode(note) is not None:
+        chosen["note"] = csv_note_mode(note)
     return chosen
 
 
@@ -5040,10 +5082,20 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
             if head is not None and tail:
                 return f"the first {head} and the last {tail} of {total} {noun}{plural}"
             return f"{shown_count} of {total} {noun}{plural}"
-        lines += ["", f"*(showing {part(row_head, row_tail, len(kept_rows), len(rows), 'row')}, "
-                      f"{part(column_head, column_tail, shown_columns, total_columns, 'column')} -- use "
-                      "`rows=all`/`cols=all`, or `rows=N`/`cols=N`, on this `.csv` div to include more, or "
-                      "`--csv-rows`/`--csv-cols` for every table)*"]
+        facts = ", ".join(piece for piece in (
+            part(row_head, row_tail, len(kept_rows), len(rows), "row") if row_head is not None else "",
+            part(column_head, column_tail, shown_columns, total_columns, "column") if column_head is not None else "") if piece)
+        advice = csv_cut_advice(row_head is not None, column_head is not None)
+        mode = csv_note_mode(options.get("note")) if options.get("note") is not None else None
+        if options.get("note") is not None and mode is None:
+            native_note("csv", f"note={options['note']!r} is not short, off or full; short is used", source)
+        mode = mode or defaults.get("note") or "short"
+        native_note("csv", f"showing {facts} -- {advice}", source)
+        if mode == "full":
+            lines += ["", f"*(showing {facts} -- use `rows=all`/`cols=all`, or `rows=N`/`cols=N`, on this `.csv` div to include "
+                          "more, or `--csv-rows`/`--csv-cols` for every table)*"]
+        elif mode == "short":
+            lines += ["", f"*(showing {facts})*"]
     return lines
 
 
@@ -24827,6 +24879,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
                              "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "
                              "or --setup")
+    parser.add_argument("--csv-note", type=csv_note_argument, default=None, metavar="MODE",
+                        help="the note under a `::: {.csv}` table that was cut: short (default; the fact only: \"showing the first 7 "
+                             "and the last 3 of 11 rows\"), off (none; the \u2026 row still marks the cut) or full (adds how to show "
+                             "more). The advice is in the warning on stderr whatever this says. A div's note= wins. "
+                             "Also `pdfmd-options: {csv: {note: off}}`, or --setup")
     parser.add_argument("--csv-rows", type=csv_count_argument, default=None, metavar="N|all",
                         help="how many data rows a `::: {.csv}` table shows when its div does not say (default 10). "
                              "Also `pdfmd-options: {csv: {rows: N}}`, or --setup")
@@ -25475,7 +25532,7 @@ def run_main() -> None:
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
-    for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"])):
+    for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"]), (args.csv_note, CSV_NOTE_ENV)):
         if value is not None:
             os.environ[variable] = str(value)
     if args.csv is not None:

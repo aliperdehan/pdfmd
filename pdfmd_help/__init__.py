@@ -27,7 +27,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--no-attach-source", "--no-attach-csl", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
         "--slim", "--trust-embedded", "--hybrid", "--check-source")),
     "tables": ("tables as CSV files, and back", (
-        "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv", "--no-csv", "--csv-rows", "--csv-cols", "--table-keep", "--table-numbers", "--table-names",
+        "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv", "--no-csv", "--csv-rows", "--csv-cols", "--csv-note", "--table-keep", "--table-numbers", "--table-names",
         "--tables-dir", "--tables-inline", "--dry-run")),
     "history": ("build notes, backups, versions of a document", (
         "--stamp", "--no-stamp", "--stamp-mode", "--stamp-store", "--stamp-packages", "--stamp-scope",

@@ -142,7 +142,7 @@ class NormaliseTests(unittest.TestCase):
             self.assertNotIn("| 8 |", source.text)
             self.assertIn("| … | … | … |", source.text)
             self.assertIn("| 10 | 100 |", source.text)
-            self.assertIn("showing the first 7 and the last 3 of 12 rows, 3 of 3 columns", source.text)
+            self.assertIn("showing the first 7 and the last 3 of 12 rows)", source.text)
             full, _ = pdfmd.normalise_gfm('::: {.csv file="data.csv" rows=all header="false"}\n:::\n', "inkmd",
                                           base_dir=Path(directory))
             self.assertIn("| Column 1 | Column 2 | Column 3 |", full.text)
