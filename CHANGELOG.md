@@ -40,6 +40,19 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.28 — 2026-10-26
+
+Pre-edit state: commit `b065576` (v3.30.27). Merged from PR 11 (`cloud/partial-provenance`), squashed; it met 3.30.23's partial history in `pdfmd.py`, resolved by keeping both.
+
+### Fixed
+
+- A partial parts build (`report#intro`, `@60`) keeps the provenance of its PDF (Creator suffix, `PdfmdVersions`, `PdfmdBuildDate`, and a new `PdfmdPartial` naming the parts) and never stamps the `.md`. Word and OpenDocument files never carried these properties. With `stamp: {partial: true}` the "partial" entry of the history (3.30.23) is still written, after the PDF's provenance, by one function (`stamp_build`) that replaces `stamp_unless_partial`; the cache route's intermediate `.tex` stage writes neither.
+- The snapshots of one build are one `BACKUP` line (`report.md + 6 parts -> .backups/, parts/.backups/ (...)`); the per-file lines follow only with `--verbose`.
+
+### Tests
+
+- `tests.test_partial_provenance`, `tests.test_backup_summary`.
+
 ## v3.30.27 — 2026-10-26
 
 Pre-edit state: commit `b575748` (v3.30.26). Merged from PR 10 (`cloud/csv-notes`), squashed.
