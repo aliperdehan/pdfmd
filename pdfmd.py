@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.31"
+PDFMD_VERSION = "3.30.32"
 import argparse
 import atexit
 import csv
@@ -4045,6 +4045,8 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
     """
     if requested and "," in requested:
         return engine_chain(requested, presentation, label)
+    if requested and not re.search(r"[\\/]", requested) and requested.casefold().endswith(".exe"):
+        requested = requested[:-4]          # `-e lualatex.exe`: the name Windows shows for the engine
     if requested and requested.casefold() == "pandoc":
         candidates = installed_engines() if which("pandoc") else []
         if presentation:
@@ -4066,7 +4068,7 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
             if not installed_in_group:
                 raise SystemExit(
                     f"{label} restricted to the '{family}' engine family, but none of "
-                    + ", ".join(group) + " is installed. Install one, or pass a bare "
+                    + ", ".join(group) + " is installed on PATH. Install one, or pass a bare "
                     "-e for the full, unrestricted fallback chain."
                 )
             if presentation:
@@ -6070,6 +6072,9 @@ def doctor_report(deep: bool = False) -> bool:
         for limit in pandoc_limits(pandoc_version()):
             line(None, f"with Pandoc {version}, not available: {limit}")
     engines = installed_engines()
+    if TEX_FOUND_AT is not None:
+        line(None, f"TeX found at {TEX_FOUND_AT}, which is not on PATH; pdfmd uses it for its own runs "
+                   "(add the folder to PATH to use it elsewhere, or set PDFMD_TEX_BIN for another place)")
     line(bool(engines), "PDF engines: " + (", ".join(engines) if engines else "none"),
          "pdfmd --install typst", "a PDF engine (Typst is the quickest)")
     if engines:
@@ -7588,6 +7593,60 @@ def use_managed_tools() -> None:
     extra = [str(folder) for folder in managed_tool_directories() if str(folder) not in entries]
     if extra:
         os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), *extra]).strip(os.pathsep)
+    use_tex_install()
+
+
+TEX_ENGINE_NAMES = ("lualatex", "xelatex", "pdflatex", "latexmk")
+TEX_FOUND_AT: Path | None = None             # the TeX folder use_tex_install() put on PATH, for --doctor and --verbose
+
+
+def tex_install_patterns(system: str | None = None, environ: dict | None = None) -> list[str]:
+    """Where TeX Live and MiKTeX put their programs when the installer did not (or could not) add them to PATH:
+    glob patterns, the year of a TeX Live (`bin/windows`, `bin/x86_64-linux`) matched by `*`, newest first once sorted."""
+    system = (system or platform.system()).lower()
+    environ = os.environ if environ is None else environ
+    patterns: list[str] = []
+    if system == "windows":
+        drive = environ.get("SystemDrive", "C:")
+        program_files = [environ.get(name) for name in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)")]
+        for root in dict.fromkeys([f"{drive}\\texlive", *(f"{base}\\texlive" for base in program_files if base),
+                                   str(Path(environ.get("USERPROFILE", "~")).expanduser() / "texlive")]):
+            patterns.append(str(Path(root) / "*" / "bin" / "*"))
+        miktex = [str(Path(environ["LOCALAPPDATA"]) / "Programs" / "MiKTeX" / "miktex" / "bin" / "x64")] \
+            if environ.get("LOCALAPPDATA") else []
+        patterns += miktex + [str(Path(base) / "MiKTeX*" / "miktex" / "bin" / "x64") for base in program_files if base]
+    else:
+        patterns += ["/usr/local/texlive/*/bin/*", str(Path("~/texlive").expanduser() / "*" / "bin" / "*"),
+                     "/Library/TeX/texbin", "/usr/texbin"]
+    return patterns
+
+
+def find_tex_directory(patterns: list[str]) -> Path | None:
+    """The first (newest year first) folder among the glob patterns that holds a TeX engine program."""
+    import glob
+    found: list[Path] = []
+    for pattern in patterns:
+        found += [Path(match) for match in glob.glob(pattern) if Path(match).is_dir()]
+    for folder in sorted(found, key=lambda path: str(path), reverse=True):
+        if any((folder / (name + suffix)).is_file() for name in TEX_ENGINE_NAMES for suffix in ("", ".exe")):
+            return folder
+    return None
+
+
+def use_tex_install() -> None:
+    """A TeX that is installed but not on PATH (TeX Live's installer on Windows can leave it off, a shell started before
+    the install does not have it yet) is used all the same: its folder goes behind PATH, for pdfmd's own runs.
+    `PDFMD_TEX_BIN` names a folder for an install in an unusual place. Nothing is done when a TeX engine is on PATH."""
+    global TEX_FOUND_AT
+    if any(shutil.which(name) for name in TEX_ENGINE_NAMES):
+        return
+    chosen = os.environ.get("PDFMD_TEX_BIN", "").strip()
+    folder = find_tex_directory([chosen]) if chosen else None
+    folder = folder or find_tex_directory(tex_install_patterns())
+    if folder is None:
+        return
+    TEX_FOUND_AT = folder
+    os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), str(folder)]).strip(os.pathsep)
 
 
 TYPST_REPOSITORY = "typst/typst"

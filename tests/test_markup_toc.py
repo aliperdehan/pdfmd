@@ -90,7 +90,7 @@ class Build(unittest.TestCase):
         for extra in ((), ("--no-cache",)):
             done = self.build("-e", engine, "-o", "d.pdf", *extra)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            text = subprocess.run(["pdftotext", str(Path(self._tmp.name) / "d.pdf"), "-"], capture_output=True, text=True).stdout
+            text = subprocess.run(["pdftotext", str(Path(self._tmp.name) / "d.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("Contents", text)
             self.assertRegex(text, r"Sub emph \. \. \.")                              # a leader and a page number: it is filled
 

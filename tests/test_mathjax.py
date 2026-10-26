@@ -321,7 +321,7 @@ class Real(unittest.TestCase):
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
 
     def words(self) -> list[tuple[str, float, float]]:
-        out = subprocess.run(["pdftotext", "-bbox", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+        out = subprocess.run(["pdftotext", "-bbox", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         return [(match.group(4), float(match.group(1)), float(match.group(2)))
                 for match in re.finditer(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="[\d.]+">([^<]*)</word>', out)]
 
@@ -332,10 +332,10 @@ class Real(unittest.TestCase):
         self.assertNotIn("typeset math", said)
         self.assertNotIn("could not", said)
         self.assertNotIn("WARNING: Ignored", said)
-        fonts = subprocess.run(["pdffonts", str(self.directory / "doc.pdf")], capture_output=True, text=True).stdout
+        fonts = subprocess.run(["pdffonts", str(self.directory / "doc.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("MJX-STX", fonts)
         self.assertNotIn("\\frac", subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True,
-                                                  text=True).stdout)
+                                                  text=True, encoding="utf-8", errors="replace").stdout)
 
     def test_an_accent_sits_on_its_letter_not_three_points_over_it(self):
         # WeasyPrint took each glyph box 0.262em too tall: a hat floated ~3.4pt higher than it should (v3.28.46)

@@ -201,7 +201,7 @@ class Builds(Scratch):
         self.assertTrue((out / "d.pdf").is_file(), done.stdout + done.stderr)
         self.assertIn("Pandoc runs in a temporary folder", done.stdout + done.stderr)
         if shutil.which("pdftotext"):
-            text = subprocess.run(["pdftotext", str(out / "d.pdf"), "-"], capture_output=True, text=True).stdout
+            text = subprocess.run(["pdftotext", str(out / "d.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("water", text)                                       # data.csv, found beside the document
             self.assertIn("Knuth", text)                                       # refs.bib too
         self.assertEqual(sorted(path.name for path in source.iterdir()), ["d.md", "data.csv", "refs.bib"])

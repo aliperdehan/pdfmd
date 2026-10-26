@@ -36,6 +36,15 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.select("calibre,pandoc"), ["calibre", "lualatex", "xelatex", "typst", "weasyprint"])
         self.assertEqual(self.select("pandoc"), ["lualatex", "xelatex", "typst", "weasyprint"])         # never Calibre
 
+    def test_the_name_windows_shows_works_too(self):
+        # `-e lualatex.exe` (v3.30.32): a trailing .exe is the same engine, alone or in a list; a path is left as it is
+        self.assertEqual(self.select("lualatex.exe"), ["lualatex"])
+        self.assertEqual(self.select("lualatex.EXE"), ["lualatex"])
+        self.assertEqual(self.select("typst.exe,lualatex.EXE"), ["typst", "lualatex"])
+        with self.assertRaises(SystemExit) as caught:
+            self.select("/opt/bin/nothing.exe")
+        self.assertIn("/opt/bin/nothing.exe", str(caught.exception))
+
     def test_named_means_named(self):
         # an engine that is installed but not in the list is not tried
         chain = self.select("typst,lualatex")

@@ -293,7 +293,7 @@ class Rendered(unittest.TestCase):
                                capture_output=True, env={**os.environ, "PDFMD_CONFIG": ""})
                 subprocess.run([SOFFICE, "--headless", "--convert-to", "pdf", "--outdir", str(folder), str(folder / "doc.docx")],
                                capture_output=True)
-                info = subprocess.run(["pdfinfo", str(folder / "doc.pdf")], capture_output=True, text=True).stdout
+                info = subprocess.run(["pdfinfo", str(folder / "doc.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
                 found = re.search(r"Page size:\s+([\d.]+) x ([\d.]+)", info)
                 self.assertAlmostEqual(float(found.group(1)), width, delta=1.5, msg=name)
                 self.assertAlmostEqual(float(found.group(2)), height, delta=1.5, msg=name)

@@ -34,7 +34,7 @@ class SofficeParts(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), request, "-e", "soffice", "-o", output],
                               cwd=self.root, capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        return subprocess.run(["pdftotext", str(self.root / output), "-"], capture_output=True, text=True).stdout
+        return subprocess.run(["pdftotext", str(self.root / output), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
 
     def test_the_whole_split_document(self):
         text = self.build("report", "full.pdf")
@@ -59,7 +59,7 @@ class NativeParts(unittest.TestCase):
                               cwd=self.root, capture_output=True, text=True,
                               env={**os.environ, "PATH": "/nonexistent", "PDFMD_CONFIG": ""})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        return subprocess.run(["pdftotext", str(self.root / output), "-"], capture_output=True, text=True).stdout
+        return subprocess.run(["pdftotext", str(self.root / output), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
 
     setUp = SofficeParts.setUp
 

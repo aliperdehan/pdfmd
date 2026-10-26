@@ -160,7 +160,7 @@ class TypstEndToEnd(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("TYPSTDIRECT", done.stdout)
         if shutil.which("pdfinfo"):
-            info = subprocess.run(["pdfinfo", str(self.directory / "d.pdf")], capture_output=True, text=True).stdout
+            info = subprocess.run(["pdfinfo", str(self.directory / "d.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("340.157 x 170.079", info)                      # 12 cm x 6 cm
 
     def test_no_pandoc_is_needed(self):
@@ -198,7 +198,7 @@ class HtmlEndToEnd(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("HTMLDIRECT", done.stdout)
         if shutil.which("pdfinfo"):
-            info = subprocess.run(["pdfinfo", str(self.directory / "page.pdf")], capture_output=True, text=True).stdout
+            info = subprocess.run(["pdfinfo", str(self.directory / "page.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("419.528 x 595.276", info)                      # A5
 
 
@@ -253,11 +253,11 @@ class ApplyDefaultsEndToEnd(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pdfinfo"), "needs pdfinfo")
     def test_defaults_are_applied_only_when_asked(self):
         self.assertEqual(self.run_pdfmd("d.typ", "-o", "plain.pdf").returncode, 0)
-        plain = subprocess.run(["pdfinfo", str(self.directory / "plain.pdf")], capture_output=True, text=True).stdout
+        plain = subprocess.run(["pdfinfo", str(self.directory / "plain.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertNotIn("From Metadata", plain)
         done = self.run_pdfmd("d.typ", "--apply-defaults", "-o", "with.pdf")
         self.assertEqual(done.returncode, 0, done.stderr)
-        info = subprocess.run(["pdfinfo", str(self.directory / "with.pdf")], capture_output=True, text=True).stdout
+        info = subprocess.run(["pdfinfo", str(self.directory / "with.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("From Metadata", info)
         self.assertIn("297.638 x 419.528", info)                             # A6
         self.assertEqual([item.name for item in self.directory.iterdir() if "pdfmd-defaults" in item.name], [])

@@ -315,7 +315,7 @@ class CalcCheck(unittest.TestCase):
 
     def test_undefined_names_and_a_name_defined_often_are_reported_in_document_order(self):
         done = self.check("report.md", "--check")
-        lines = done.stdout.splitlines()
+        lines = done.stdout.replace("\\", "/").splitlines()       # (Windows prints parts\10-a.md)
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertEqual([line.split(": ")[0] for line in lines[:-1]],
                          ["report.md:7", "report.md:7", "parts/10-a.md:4", "parts/60-b.md:3", "parts/60-b.md:3"])

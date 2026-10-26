@@ -40,6 +40,21 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.32 — 2026-10-26
+
+Pre-edit state: commit `0f6d680` (v3.30.31). Issue 15.
+
+### Fixed
+
+- A TeX Live or MiKTeX that is installed but not on `PATH` was reported as "no TeX engine installed": on Windows `--doctor` listed only Typst, the default run fell back to Typst without a word (a document with `\ce` or `\SI` built without LaTeX) and `-e tex` stopped with an error. When no TeX engine is on `PATH`, pdfmd now looks in the usual places (TeX Live: `C:\texlive\<year>\bin\*`, `%ProgramFiles%\texlive`, `~/texlive`, `/usr/local/texlive/<year>/bin/*`, `/Library/TeX/texbin`; MiKTeX: `%LOCALAPPDATA%\Programs\MiKTeX`, `%ProgramFiles%\MiKTeX*`), newest year first, and puts the folder it found behind `PATH` for its own runs. `PDFMD_TEX_BIN` names a folder for an install in an unusual place. `--doctor` prints `NOTE  TeX found at ..., which is not on PATH`. Nothing changes when a TeX engine is on `PATH`.
+- The message of `-e tex` with nothing found now says the engines are not installed "on PATH".
+- `-e lualatex.exe` (and `-e typst.exe,lualatex.EXE`): a trailing `.exe` is dropped from an engine word, so the name Windows shows for the engine works. A word with a path in it is left as written.
+
+### Tests
+
+- `tests/test_tex_bin.py`. `tests.test_calc.PartBuiltAlone` shows Pandoc's own error when its first run fails (it hid it behind `check=True`).
+- Windows with MiKTeX (the non-gating `windows-latex` job, found by a short debug run): the job puts poppler's folder in front of Git Bash's, whose `pdftotext` is xpdf's (no `-bbox`, Latin-1 output); the poppler calls in the tests decode UTF-8 with `errors="replace"`; `test_calc` writes Pandoc's discarded output to a file (Pandoc cannot open `nul`); `test_check` compares paths with `/`; `test_embedding` passes `-e lualatex`, not `lualatex.EXE` (which pdfmd now also accepts). Test code and CI only.
+
 ## v3.30.31 — 2026-10-26
 
 Pre-edit state: commit `16fad47` (v3.30.30 + the CLAUDE.md rule).

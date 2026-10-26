@@ -638,7 +638,7 @@ class OtherOutputs(unittest.TestCase):
         root = self.folder("pdfmd-options:\n  office: {latex: auto, labels: off}\n")
         done = self.run_pdfmd(root, "-e", "typst")
         self.assertEqual(done.returncode, 0, done.stderr)
-        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("After.", text)
         self.assertNotIn("\\ce", text)
         self.assertTrue(list((root / "cache").rglob("*.svg")))        # the picture was drawn
@@ -656,7 +656,7 @@ class OtherOutputs(unittest.TestCase):
         root = self.folder()
         done = self.run_pdfmd(root, "-e", "soffice")
         self.assertEqual(done.returncode, 0, done.stderr)
-        info = subprocess.run(["pdfinfo", str(root / "d.pdf")], capture_output=True, text=True).stdout
+        info = subprocess.run(["pdfinfo", str(root / "d.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("A4", info)
         self.assertTrue(list((root / "cache").rglob("*.svg")))
 
@@ -666,7 +666,7 @@ class OtherOutputs(unittest.TestCase):
         root = self.folder()
         done = self.run_pdfmd(root, "-e", "typst")
         self.assertEqual(done.returncode, 0, done.stderr)
-        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("H2O", text.replace("\n", ""))
         self.assertTrue(list((root / "cache").rglob("*.svg")))
         said_no = self.folder("pdfmd-options:\n  raw: {typst: [typst]}\n")    # the document says Typst takes no LaTeX
@@ -684,7 +684,7 @@ class OtherOutputs(unittest.TestCase):
         done = self.run_pdfmd(root, "-e", "")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("(typst;", done.stdout)
-        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(root / "d.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("H2O", text.replace("\n", ""))
 
 

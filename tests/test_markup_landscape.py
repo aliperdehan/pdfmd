@@ -96,7 +96,7 @@ class Build(unittest.TestCase):
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-e", "weasyprint", "-o", "d.pdf", "--no-stamp"],
                                   cwd=root, env=env, capture_output=True, text=True, timeout=300)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            info = subprocess.run(["pdfinfo", "-f", "1", "-l", "5", str(root / "d.pdf")], capture_output=True, text=True).stdout
+            info = subprocess.run(["pdfinfo", "-f", "1", "-l", "5", str(root / "d.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             sizes = [line.split("size:")[1].split("pts")[0].split("x") for line in info.splitlines() if "size:" in line and "Page" in line]
             shapes = ["landscape" if float(width) > float(height) else "portrait" for width, height in sizes]
             self.assertEqual(shapes, ["portrait", "landscape", "portrait"])

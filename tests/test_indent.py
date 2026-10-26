@@ -197,7 +197,7 @@ NAMES = ("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot")
 
 def first_words(pdf: Path) -> dict[str, float]:
     """The left edge of every word that ends in a full stop and starts a line (`Inside.`), from pdftotext -bbox."""
-    xml = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"], capture_output=True, text=True).stdout
+    xml = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
     edges = {}
     for match in re.finditer(r'<word xMin="([\d.]+)"[^>]*>([A-Z][a-z]+)\.</word>', xml):
         edges[match.group(2)] = float(match.group(1))

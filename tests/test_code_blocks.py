@@ -142,7 +142,7 @@ class Built(unittest.TestCase):
                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg")})
         self.assertEqual(done.returncode, 0, done.stderr)
         return subprocess.run(["pdftotext", "-bbox", str(directory / "c.pdf"), "-"], capture_output=True,
-                              text=True).stdout
+                              text=True, encoding="utf-8", errors="replace").stdout
 
     @staticmethod
     def rightmost(boxes: str) -> tuple[float, float]:

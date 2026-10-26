@@ -150,7 +150,7 @@ class Building(Folder):
         done = self.build(name, *arguments)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         text = subprocess.run(["pdftotext", str(self.directory / Path(name).with_suffix(".pdf")), "-"],
-                              capture_output=True, text=True).stdout
+                              capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("Lorem ipsum", text)
 
     def test_the_documents_own_with_code(self):
@@ -201,7 +201,7 @@ class Building(Folder):
                                "-e", "lualatex"], capture_output=True, text=True, encoding="utf-8", cwd=self.directory,
                               env={**os.environ, "PDFMD_NO_PROMPT": "1", "TEXINPUTS": f"{self.directory / 'tex'}//{os.pathsep}"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        text = subprocess.run(["pdftotext", str(self.directory / "r.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(self.directory / "r.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("Experiment 7 done", " ".join(text.split()))
 
     def test_a_header_file_of_the_callers_own_replaces_them_as_in_pandoc(self):
