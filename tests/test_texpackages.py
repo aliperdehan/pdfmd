@@ -71,7 +71,7 @@ class Building(unittest.TestCase):
         text_out = ""
         if (self.directory / "doc.pdf").is_file():
             text_out = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True,
-                                      text=True).stdout
+                                      text=True, encoding="utf-8", errors="replace").stdout
         return done, text_out
 
     def test_chemistry_and_units_build_without_a_preamble(self):

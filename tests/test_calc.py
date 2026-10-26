@@ -563,7 +563,7 @@ class Switches(unittest.TestCase):
 
 
 def words(pdf: Path) -> str:
-    return " ".join(subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout.split())
+    return " ".join(subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.split())
 
 
 # Reference values: qt(0.975, df) from R 4.6.1 (the first block, as printed to 12 figures), the rest from SciPy.
@@ -1043,8 +1043,9 @@ class PartBuiltAlone(unittest.TestCase):
         before = self.directory / "before.md"
         before.write_text((self.parts / "50-calculations.md").read_text(encoding="utf-8"), encoding="utf-8")
         dump = self.directory / "names.tsv"
-        subprocess.run([PANDOC, str(before), "-t", "native", "-o", os.devnull, "--lua-filter", str(CALC_LUA), "-M", f"pdfmd-calc-dump={dump}"],
-                       capture_output=True, text=True, check=True)
+        first = subprocess.run([PANDOC, str(before), "-t", "native", "-o", str(self.directory / "discarded.native"), "--lua-filter", str(CALC_LUA), "-M", f"pdfmd-calc-dump={dump}"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self.assertEqual(first.returncode, 0, first.stderr)
         lines = dump.read_text(encoding="utf-8").splitlines()
         self.assertEqual([line.split("\t")[0] for line in lines], ["V", "n", "t"])
         self.assertEqual(lines[0].split("\t")[1], "11.82")          # the LAST definition of V, at full precision

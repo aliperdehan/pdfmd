@@ -238,4 +238,8 @@ jobs:
           pdfmd --install fonts:dejavu
       - run: pdfmd --check-dependencies
       - name: The whole test suite
-        run: python -m unittest discover -s tests -v
+        # Git Bash puts Git's own ucrt64/bin first on PATH, and its pdftotext is xpdf's (no -bbox, Latin-1 output): poppler's goes in front
+        run: |
+          export PATH="/c/ProgramData/chocolatey/bin:$PATH"
+          pdftotext -v 2>&1 | head -1
+          python -m unittest discover -s tests -v

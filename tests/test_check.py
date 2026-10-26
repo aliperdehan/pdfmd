@@ -317,11 +317,11 @@ class CalcCheck(unittest.TestCase):
         done = self.check("report.md", "--check")
         lines = done.stdout.splitlines()
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertEqual([line.split(": ")[0] for line in lines[:-1]],
+        self.assertEqual([line.split(": ")[0].replace("\\", "/") for line in lines[:-1]],
                          ["report.md:7", "report.md:7", "parts/10-a.md:4", "parts/60-b.md:3", "parts/60-b.md:3"])
         self.assertIn("report.md:7: error: 'y' is not defined for the calculator", lines[0])
         self.assertIn("report.md:7: note: V is defined 3 times (report.md: line 7; parts/10-a.md: line 6; parts/60-b.md: line 3); "
-                      "a use below them sees the last one (parts/60-b.md: line 3)  [calc-redefined]", lines[1])
+                      "a use below them sees the last one (parts/60-b.md: line 3)  [calc-redefined]", lines[1].replace("\\", "/"))
         self.assertIn("parts/10-a.md:4: error: 'zz' is not defined", lines[2])
         self.assertIn("'a' is not defined", lines[3])
         self.assertIn("'b' is not defined", lines[4])

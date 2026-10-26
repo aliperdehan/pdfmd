@@ -209,11 +209,11 @@ class FilesEndToEnd(Env):
         alone = self.directory / "alone"
         alone.mkdir()
         shutil.copy(source / "one.md", alone / "one.md")
-        done = self.run_pdfmd("one.md", "-e", Path(LATEX).name, cwd=alone)
+        done = self.run_pdfmd("one.md", "-e", Path(LATEX).stem, cwd=alone)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        listing = subprocess.run(["pdfimages", "-list", str(alone / "one.pdf")], capture_output=True, text=True).stdout
+        listing = subprocess.run(["pdfimages", "-list", str(alone / "one.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertEqual(len([line for line in listing.splitlines()[2:] if line.strip()]), 2)       # a Markdown and a raw image
-        text = subprocess.run(["pdftotext", str(alone / "one.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(alone / "one.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("Stock", text)
         self.assertIn("Ink", text)
 

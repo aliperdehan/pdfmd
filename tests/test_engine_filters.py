@@ -304,7 +304,7 @@ class WeasyPrintMath(unittest.TestCase):
         self.assertNotIn("WARNING: Ignored", said)                  # WeasyPrint's CSS complaints (v3.28.11)
         if shutil.which("pdftotext"):
             text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True,
-                                  text=True).stdout
+                                  text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("α", text)
             self.assertNotIn("x2+ab", text)                    # MathML's flat text, before the TeX, is gone
 
@@ -318,7 +318,7 @@ class WeasyPrintMath(unittest.TestCase):
         # v3.28.3: "Ta / ble / 1: / A / rat / her" at the width of a one-column table
         done = self.build("---\ntitle: M\n---\n\n| a |\n|---|\n| 1 |\n\n: A rather long caption for a narrow table\n")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+        text = subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("A rather long caption for a narrow table", " ".join(text.split()))
 
 
@@ -339,10 +339,10 @@ class WeasyPrintKatex(unittest.TestCase):
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
 
     def fonts(self) -> str:
-        return subprocess.run(["pdffonts", str(self.directory / "doc.pdf")], capture_output=True, text=True).stdout
+        return subprocess.run(["pdffonts", str(self.directory / "doc.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
 
     def text(self) -> str:
-        return subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+        return subprocess.run(["pdftotext", str(self.directory / "doc.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
 
     @unittest.skipUnless(shutil.which("pdffonts") and shutil.which("pdftotext"), "needs Poppler")
     def test_math_is_typeset_without_a_word_said(self):
@@ -382,7 +382,7 @@ class WeasyPrintKatex(unittest.TestCase):
         # typeset, it is raw HTML, which the page's <title> (the PDF's Title) leaves out: "Energy  here"
         done = self.build("---\ntitle: Energy $E = mc^2$ here\n---\n\nWords.\n")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        info = subprocess.run(["pdfinfo", str(self.directory / "doc.pdf")], capture_output=True, text=True).stdout
+        info = subprocess.run(["pdfinfo", str(self.directory / "doc.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("Energy E = mc^2 here", info)
         self.assertIn("KaTeX_Main", self.fonts())                  # on the page, typeset
 

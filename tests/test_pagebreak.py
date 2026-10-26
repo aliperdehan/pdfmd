@@ -184,7 +184,7 @@ FIVE = "\n\n".join(["One.", "<!-- pagebreak -->", "Two.", "\\newpage", "Three.",
 def pages(pdf: Path) -> int | None:
     if not shutil.which("pdfinfo"):
         return None
-    info = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True).stdout
+    info = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
     found = re.search(r"Pages:\s+(\d+)", info)
     return int(found.group(1)) if found else None
 

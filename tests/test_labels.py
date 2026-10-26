@@ -233,7 +233,7 @@ class PartsBuild(unittest.TestCase):
                               cwd=self.root, env=self.environment, capture_output=True, text=True)
 
     def text(self, name):
-        done = subprocess.run(["pdftotext", "-layout", str(self.root / name), "-"], capture_output=True, text=True)
+        done = subprocess.run(["pdftotext", "-layout", str(self.root / name), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         return re.sub(r"\s+", " ", done.stdout)
 
     def test_a_part_alone_prints_the_numbers_of_the_full_build(self):
@@ -301,7 +301,7 @@ class UnknownWrapper(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#use", "-e", "lualatex", *arguments],
                               cwd=self.root, env=self.environment, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True)
+        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         return re.sub(r"\s+", " ", text.stdout), done.stdout
 
     def test_the_scan_leaves_it_undefined_rather_than_wrong(self):
@@ -352,7 +352,7 @@ class QuickDraft(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#use", "-e", "lualatex", "--seed-labels",
                                "draft", "--verbose"], cwd=self.root, env=self.environment, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True)
+        text = subprocess.run(["pdftotext", str(self.root / "report.use.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         return re.sub(r"\s+", " ", text.stdout), done.stdout
 
     def test_the_pictures_are_not_drawn_and_the_numbers_stay(self):
@@ -402,7 +402,7 @@ class SectionBuild(unittest.TestCase):
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc#results", "-e", "lualatex"],
                                   cwd=root, env=environment, capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            text = subprocess.run(["pdftotext", str(root / "doc.results.pdf"), "-"], capture_output=True, text=True).stdout
+            text = subprocess.run(["pdftotext", str(root / "doc.results.pdf"), "-"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             self.assertIn("Back to Section 1", text)
             self.assertNotIn("??", text)
 

@@ -161,6 +161,8 @@ folders; the system installers below do the same job:
 - **at least one PDF engine**. [Typst](https://typst.app) is the quickest
   start; a TeX distribution (MacTeX, TeX Live) gives the best results and
   is what you need for LaTeX packages and math-heavy documents.
+  A TeX Live or MiKTeX that is installed but not on `PATH` (Windows: `C:\texlive\2026\bin\windows`) is found in its usual
+  places and used for pdfmd's own runs; `PDFMD_TEX_BIN` names a folder for an install somewhere else, and `pdfmd --doctor` says where it found one.
 
 ```sh
 brew install pipx pandoc typst              # macOS, the quick start
