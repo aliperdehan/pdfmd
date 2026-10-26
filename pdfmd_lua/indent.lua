@@ -19,7 +19,9 @@
 -- LaTeX and Beamer get `\begingroup\setlength{\parindent}{..}` ... `\endgroup`, Typst `#[#set par(first-line-indent: ..)`
 -- ... `]`, HTML-family writers a `text-indent` style on the div. Pandoc Markdown, GFM, CommonMark and the like keep the
 -- div as written. Every other writer (Word, OpenDocument, EPUB's CSS aside, plain text ...) has no per-block indent
--- to set: the text stays, the setting is dropped, with a NOTE on stderr.
+-- to set: the text stays, the setting is dropped, with a NOTE on stderr. Word and OpenDocument (v3.30.36) get a paragraph
+-- style per length, `pdfmd-indent-<length>` (a custom-style div: Pandoc puts it on the plain paragraphs inside, and leaves
+-- lists, quotes, code and tables in their own styles); pdfmd_office writes the first-line indent into it afterwards.
 --
 -- This filter is added only when a document has such a div (pdfmd.py: indent_filter_args()).
 
@@ -28,6 +30,7 @@ local target = FORMAT:lower():gsub("[+-].*$", "")
 local TEX = {latex = true, beamer = true}
 local HTML = {html = true, html4 = true, html5 = true, epub = true, epub2 = true, epub3 = true, revealjs = true,
   slidy = true, slideous = true, s5 = true, dzslides = true, chunkedhtml = true}
+local OFFICE = {docx = true, odt = true, opendocument = true}
 local KEEP = {markdown = true, markdown_strict = true, markdown_phpextra = true, markdown_mmd = true, gfm = true,
   commonmark = true, commonmark_x = true, json = true, native = true}
 
@@ -157,6 +160,10 @@ return {{Div = function(div)
     local style = "text-indent: " .. value
     local old = attr.attributes["style"]
     attr.attributes["style"] = old and old ~= "" and (old:gsub(";%s*$", "") .. "; " .. style) or style
+    return pandoc.Div(div.content, attr)
+  elseif OFFICE[target] and not value:find("%%") and not value:find("rem") then
+    -- the style name carries the length (a "." is not kept: "1.5em" is "1p5em"); pdfmd_office reads it back
+    attr.attributes["custom-style"] = "pdfmd-indent-" .. value:gsub("%.", "p")
     return pandoc.Div(div.content, attr)
   elseif KEEP[target] then
     return nil

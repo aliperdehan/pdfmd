@@ -7,7 +7,10 @@ import io
 import re
 import zipfile
 
+from pathlib import Path
+
 from .spec import OfficeSpec
+from .units import length_to_twips
 
 
 def _attr(tag: str, name: str, value: str | None) -> str:
@@ -166,3 +169,37 @@ def patch_odt(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
             else:
                 target.writestr(item, content)
     return out.getvalue()
+
+
+INDENT_USED = re.compile(r'text:style-name="pdfmd-indent-([0-9p]+[a-z]+)"')
+
+
+def finish_indents(path: Path) -> int:
+    """Define the `pdfmd-indent-<length>` paragraph styles pdfmd_lua/indent.lua put on a stretch of text (Pandoc only names
+    them in an `.odt`), based on Text body, with the first-line indent the name says; returns how many were added. A file
+    with none of them is not touched. An em is 12 pt here, as in a Word file."""
+    with zipfile.ZipFile(path) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+        infos = {item.filename: item for item in archive.infolist()}
+    content = entries.get("content.xml", b"").decode("utf-8")
+    styles = entries.get("styles.xml", b"").decode("utf-8")
+    added = 0
+    for token in dict.fromkeys(INDENT_USED.findall(content)):
+        name = f"pdfmd-indent-{token}"
+        found = re.fullmatch(r"(\d+(?:p\d+)?)([a-z]+)", token)
+        twips = length_to_twips(found.group(1).replace("p", ".") + found.group(2)) if found else None
+        if twips is None or "</office:styles>" not in styles or _style_span(styles, name) is not None:
+            continue
+        style = (f'<style:style style:name="{name}" style:family="paragraph" style:parent-style-name="Text_20_body">'
+                 f'<style:paragraph-properties fo:text-indent="{_inch(twips)}"/></style:style>')
+        styles = styles.replace("</office:styles>", style + "</office:styles>", 1)
+        added += 1
+    if not added:
+        return 0
+    entries["styles.xml"] = styles.encode("utf-8")
+    temporary = path.with_suffix(path.suffix + ".part")
+    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as target:
+        for name, data in entries.items():
+            target.writestr(infos[name] if name in infos else name, data)
+    temporary.replace(path)
+    return added

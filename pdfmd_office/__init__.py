@@ -16,6 +16,12 @@ from .properties import finish_properties
 from .spec import OfficeSpec, spec_from_metadata
 from .units import PAPER_TWIPS, length_to_twips, parse_geometry, parse_paper
 
+def finish_odt(path) -> int:
+    """The styles of an `.odt` Pandoc wrote that its text names but it does not define (the indent div)."""
+    from .odt import finish_indents
+    return finish_indents(path)
+
+
 def patch_reference(kind: str, data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
     """A reference document of `kind` ('docx', 'odt') with `spec` written into it."""
     if kind == "docx":
@@ -26,5 +32,5 @@ def patch_reference(kind: str, data: bytes, spec: OfficeSpec, house: bool = True
     raise ValueError(f"no reference-document patching for {kind}")
 
 
-__all__ = ["finish_docx", "finish_markup", "finish_properties", "centre_tables", "fragments", "labels_only", "caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
+__all__ = ["finish_docx", "finish_markup", "finish_odt", "finish_properties", "centre_tables", "fragments", "labels_only", "caption_separator", "cref_names", "parse_aux", "default_reference", "patch_docx", "patch_reference", "OfficeSpec", "PAPER_TWIPS", "length_to_twips", "office_font", "parse_geometry", "parse_paper",
            "spec_from_metadata"]

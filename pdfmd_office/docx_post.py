@@ -12,6 +12,9 @@ import re
 import zipfile
 from pathlib import Path
 
+from .docx import _edit_style
+from .units import length_to_twips
+
 REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 SVG_EXTENSION = ('<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">'
                  '<asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="%s"/>'
@@ -172,6 +175,28 @@ def style_markup(styles: str) -> tuple[str, int]:
     return styles, changed
 
 
+INDENT_STYLE = re.compile(r'w:styleId="pdfmd-indent-([0-9p]+[a-z]+)"')
+
+
+def indent_twips(token: str) -> int | None:
+    """`pdfmd-indent-1p5em` -> 360 twips (an em is 12 pt here; the filter writes a "." as "p")."""
+    found = re.fullmatch(r"(\d+(?:p\d+)?)([a-z]+)", token)
+    return length_to_twips(found.group(1).replace("p", ".") + found.group(2)) if found else None
+
+
+def style_indents(styles: str) -> tuple[str, int]:
+    """The first-line indent of the `pdfmd-indent-<length>` paragraph styles pdfmd_lua/indent.lua puts on a stretch of
+    text (Pandoc makes the styles empty, based on Body Text, which brings the document's own indent)."""
+    changed = 0
+    for token in dict.fromkeys(INDENT_STYLE.findall(styles)):
+        twips = indent_twips(token)
+        if twips is None:
+            continue
+        styles = _edit_style(styles, f"pdfmd-indent-{token}", "pPr", "ind", f'<w:ind w:firstLine="{twips}"/>')
+        changed += 1
+    return styles, changed
+
+
 def final_section(document: str) -> re.Match | None:
     """The `<w:sectPr>` of the whole body: the last one, after every paragraph."""
     found = None
@@ -259,6 +284,8 @@ def finish_markup(path: Path) -> int:
     styles = entries["word/styles.xml"].decode("utf-8") if "word/styles.xml" in entries else ""
     used = any(f'w:val="{name}"' in document for name in MARKUP_STYLES)
     styles, styled = style_markup(styles) if used else (styles, 0)
+    styles, indented = style_indents(styles) if "pdfmd-indent-" in styles else (styles, 0)
+    styled += indented
     document, sections = sections_markup(document)
     if not styled and not sections:
         return 0

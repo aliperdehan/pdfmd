@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.35"
+PDFMD_VERSION = "3.30.36"
 import argparse
 import atexit
 import csv
@@ -6998,6 +6998,13 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
     result = build_office_pandoc(cmd, output, arguments, pandoc_cwd, verbose, debug)
     target = Path(cmd[cmd.index("-o") + 1]) if "-o" in cmd else None
     module = office_module()
+    if result.returncode == 0 and module is not None and target is not None and target.suffix.lower() == ".odt":
+        path = target if target.is_absolute() else pandoc_cwd / target
+        if path.is_file():
+            try:
+                module.finish_odt(path)
+            except (OSError, zipfile.BadZipFile, KeyError) as error:
+                print(f"WARN  could not finish the styles of {path.name} ({error})", file=sys.stderr)
     if result.returncode == 0 and module is not None and target is not None and target.suffix.lower() == ".docx":
         path = target if target.is_absolute() else pandoc_cwd / target
         if path.is_file():

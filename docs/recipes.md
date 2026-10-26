@@ -140,8 +140,10 @@ Indented again.
 `indent=false` (also `no`, `off`, `0`), `indent=true` (1.5em) or a length (`2em`, `12pt`, `5mm`; a bare number is em);
 `::: noindent` and `::: {.noindent}` are the short forms of `indent=false`, `.indent` of `indent=true`. Divs nest, and the
 div's `#id` stays. LaTeX and Beamer set `\parindent` in a group, Typst a `first-line-indent` rule, HTML (and EPUB) a
-`text-indent` style on the div. Pandoc Markdown and GFM keep the div as written. Word, OpenDocument and the other formats
-have no per-block indent: the text stays, the setting is dropped, with a NOTE. The document's own indent is Pandoc's
+`text-indent` style on the div. Pandoc Markdown and GFM keep the div as written. Word and OpenDocument files get a paragraph
+style for each length (`pdfmd-indent-0pt`, `pdfmd-indent-2em`; an em is 12 pt there) on the plain paragraphs of the div; its lists,
+quotes, code and tables keep their own styles. The other formats have no per-block indent: the text stays, the setting is dropped,
+with a NOTE. The document's own indent is Pandoc's
 `indent: true` in the front matter (none is the default).
 
 Pandoc reads `::: indent=3in` as a div whose one class is `indent=3in`; only the braced form carries attributes. So the

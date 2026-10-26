@@ -10,7 +10,6 @@ wait for an answer before any code.
 
 ## Next: small and concrete
 
-- [ ] Indent div (`::: {indent=false}`) in docx and odt: a paragraph style, not a note [3ca]
 
 ## Decide first
 

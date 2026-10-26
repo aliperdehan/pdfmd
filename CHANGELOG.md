@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.36 — 2026-10-26
+
+Pre-edit state: commit `bdc81b1` (v3.30.35).
+
+### Added
+- **The indent div works in Word and OpenDocument.** `::: {indent=false}` (and `noindent`, `indent=2em`, ...) printed a NOTE and changed nothing in a `.docx` or `.odt`, so a Word file did not match the PDF. `pdfmd_lua/indent.lua` now gives the plain paragraphs of the div a paragraph style named for the length, `pdfmd-indent-0pt`, `pdfmd-indent-2em` (Pandoc applies a custom-style div to the paragraphs directly inside it and leaves lists, quotes, code and tables in their own styles); `pdfmd_office` writes the first-line indent into the style afterwards (`w:ind w:firstLine` in a Word file, `fo:text-indent` in an OpenDocument file, where Pandoc only names the style and does not define it). An em is 12 pt there. The paragraphs after the div are the document's own again. A length in `%` or `rem` is still left out with the NOTE. Checked in LibreOffice: the div's first line starts at the margin (72 pt), `2em` at 96 pt, the body text after it at its own indent. `tests/test_indent_office.py`.
+
 ## v3.30.35 — 2026-10-26
 
 Pre-edit state: commit `bbb6a47` (v3.30.34).
