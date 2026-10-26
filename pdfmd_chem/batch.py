@@ -87,7 +87,7 @@ def own_packages(preamble: str) -> str:
     if not names:
         return ""
     try:
-        done = subprocess.run(["kpsewhich", "-var-value", "TEXMFDIST", *names], capture_output=True, text=True,
+        done = subprocess.run(["kpsewhich", "-var-value", "TEXMFDIST", *names], capture_output=True, encoding="utf-8", errors="replace",
                               timeout=20)
     except (OSError, subprocess.SubprocessError):
         return ""

@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.29"
+PDFMD_VERSION = "3.30.30"
 import argparse
 import atexit
 import csv
@@ -3818,7 +3818,7 @@ def terminal_view(args) -> int:
                 built = scratch / f"{number:03d}{suffix}"
                 command = [sys.executable, str(Path(__file__).resolve()), *view_child_arguments(sys.argv[1:], args.path or []),
                            "--to", target, "-o", str(built), "--no-stamp", "--no-backup", str(source)]
-                done = subprocess.run(command, capture_output=True, text=True, stdin=subprocess.DEVNULL, env=environment)
+                done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=environment)
                 # the child's OK / DEFAULTS lines would sit above the document: shown for a failure or with --verbose
                 sys.stderr.write((done.stdout if done.returncode != 0 or args.verbose else "") + done.stderr)
                 if done.returncode != 0 or not built.is_file():
@@ -5751,7 +5751,7 @@ def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, v
         if sys.platform != "win32":
             environment.setdefault("QT_QPA_PLATFORM", "offscreen")
         log_cmd(cmd, scratch, verbose)
-        done = subprocess.run(cmd, capture_output=True, text=True, cwd=scratch, env=environment)
+        done = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch, env=environment)
         if done.returncode != 0 or not produced.is_file():
             said = [line for line in (done.stderr + "\n" + done.stdout).splitlines() if line.strip()]
             raise RuntimeError("ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
@@ -6028,7 +6028,7 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
             try:
                 done = subprocess.run([sys.executable, str(Path(__file__).resolve()), "sample.md", "-e", engine,
                                        "-o", output.name, "--no-backup", "--no-stamp"],
-                                      capture_output=True, text=True, cwd=folder, env=environment, timeout=timeout)
+                                      capture_output=True, encoding="utf-8", errors="replace", cwd=folder, env=environment, timeout=timeout)
             except subprocess.TimeoutExpired:
                 results.append((entry, False, f"no answer after {timeout} s"))
                 continue
@@ -6677,7 +6677,7 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
             note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
             command = office_pdfmd_command(md_path, metadata_files, variables, no_auto,
                                            "-o", str(scratch / f"{md_path.stem}.pdf"), "--cache")
-            done = subprocess.run(command, capture_output=True, text=True)
+            done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             if done.returncode != 0:
                 print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
                       "instead (build the PDF to see why)", file=sys.stderr)
@@ -6990,7 +6990,7 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
     fragments LaTeX must draw (compiled in the document's own preamble, cached), once to put their
     pictures in; a `.docx` is then finished (SVG beside the PNG, baselines, widths)."""
     def run(command: list[str]):
-        return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd)
+        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
 
     module = office_module()
     context = arguments.context if hasattr(arguments, "context") else {}
@@ -7116,7 +7116,7 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
             if args.no_auto is not None:
                 command += ["--no-auto", *args.no_auto]
             command += pandoc_options
-            done = subprocess.run(command, env={**os.environ, "PDFMD_OFFICE_CHECK": "1"}, capture_output=True, text=True)
+            done = subprocess.run(command, env={**os.environ, "PDFMD_OFFICE_CHECK": "1"}, capture_output=True, encoding="utf-8", errors="replace")
             print(done.stdout.rstrip())
             sys.stderr.write(done.stderr)
             status = max(status, done.returncode)
@@ -7334,7 +7334,7 @@ def templates_module():
 
 def git_user_name() -> str:
     try:
-        done = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, timeout=10)
+        done = subprocess.run(["git", "config", "user.name"], capture_output=True, encoding="utf-8", errors="replace", timeout=10)
     except (OSError, subprocess.SubprocessError):
         return ""
     return done.stdout.strip() if done.returncode == 0 else ""
@@ -7424,7 +7424,7 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
             tex_file = scratch / "fragments-preamble.tex"
             command = office_pdfmd_command(md_path, metadata_files, context["variables"], context["no_auto"],
                                            "--to", "latex", "-o", str(tex_file))
-            done = subprocess.run(command, capture_output=True, text=True)
+            done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             text = tex_file.read_text(encoding="utf-8") if tex_file.is_file() else ""
             preamble = module.fragments.preamble_of(text) or ""
             if done.returncode != 0 or not preamble:
@@ -8248,7 +8248,7 @@ def install_graphviz() -> bool:
             return False
     use_managed_tools()
     try:
-        ran = subprocess.run([str(launchers[0]), "-Tsvg"], input="digraph { a -> b }", capture_output=True, text=True,
+        ran = subprocess.run([str(launchers[0]), "-Tsvg"], input="digraph { a -> b }", capture_output=True, encoding="utf-8", errors="replace",
                              timeout=60, env={**os.environ, "PATH": os.pathsep.join(
                                  [str(tools_directory()), os.environ.get("PATH", "")])})
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -8373,7 +8373,7 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
     attached = False
     try:
         done = subprocess.run(["hdiutil", "attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint", str(mount), str(image)],
-                              capture_output=True, text=True)
+                              capture_output=True, encoding="utf-8", errors="replace")
         if done.returncode != 0:
             raise OSError("hdiutil could not open the disk image: " + (done.stderr.strip().splitlines() or ["?"])[-1])
         attached = True
@@ -8384,7 +8384,7 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
         destination = applications / "calibre.app"
         if destination.exists():
             shutil.rmtree(destination)
-        copied = subprocess.run(["ditto", str(app), str(destination)], capture_output=True, text=True)
+        copied = subprocess.run(["ditto", str(app), str(destination)], capture_output=True, encoding="utf-8", errors="replace")
         if copied.returncode != 0:
             raise OSError("ditto could not copy calibre.app: " + (copied.stderr.strip().splitlines() or ["?"])[-1])
     finally:
@@ -8464,7 +8464,7 @@ def install_calibre(fetch=None, release: dict | None = None, applications: Path 
     if sys.platform != "win32":
         environment.setdefault("QT_QPA_PLATFORM", "offscreen")
     try:
-        ran = subprocess.run([str(target), "--version"], capture_output=True, text=True, timeout=120, env=environment)
+        ran = subprocess.run([str(target), "--version"], capture_output=True, encoding="utf-8", errors="replace", timeout=120, env=environment)
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"Calibre was unpacked to {target} but does not run here: {error}", file=sys.stderr)
         return False
@@ -8719,7 +8719,7 @@ def install_extra(kind: str) -> bool:
     command = [sys.executable, "-m", "pip", "install", *specs]
     print(f"INSTALL  {kind} ({INSTALL_SIZES[kind]}): " + " ".join(shlex.quote(part) for part in command))
     try:
-        completed = subprocess.run(command, stderr=subprocess.PIPE, text=True)
+        completed = subprocess.run(command, stderr=subprocess.PIPE, encoding="utf-8", errors="replace")
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr)
         if completed.returncode != 0 and "externally-managed-environment" in (completed.stderr or ""):
@@ -8948,7 +8948,7 @@ def render_document(path: Path, title: str) -> Path | None:
                      encoding="utf-8")
     command = ["pandoc", str(path), "-f", "gfm", "-s", "--toc", "--toc-depth=2", "--metadata", f"title={title}", "--css",
                style.name, "-o", str(target)]
-    done = subprocess.run(command, capture_output=True, text=True, cwd=target.parent)
+    done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=target.parent)
     return target if done.returncode == 0 and target.is_file() else None
 
 
@@ -10038,7 +10038,7 @@ def template_has_variable(writer: str, variable: str) -> bool:
     key = (writer, variable)
     if key not in _TEMPLATE_VARIABLES:
         try:
-            done = subprocess.run(["pandoc", "-D", writer], capture_output=True, text=True, timeout=60)
+            done = subprocess.run(["pandoc", "-D", writer], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
             _TEMPLATE_VARIABLES[key] = done.returncode == 0 and f"$if({variable})$" in done.stdout
         except (OSError, subprocess.SubprocessError):
             _TEMPLATE_VARIABLES[key] = False
@@ -11475,7 +11475,7 @@ def contains_crossref(md_path: Path) -> bool:
 def crossref_built_for(executable: str) -> tuple[int, ...] | None:
     """The Pandoc version a pandoc-crossref was built with (from its --version), or None when it does not say."""
     try:
-        done = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=20)
+        done = subprocess.run([executable, "--version"], capture_output=True, encoding="utf-8", errors="replace", timeout=20)
     except (OSError, subprocess.SubprocessError):
         return None
     found = re.search(r"built with Pandoc v(\d+(?:\.\d+)+)", done.stdout + done.stderr)
@@ -14088,8 +14088,9 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                 creator = str(existing.get("/Creator") or "").strip()
                 if not creator.endswith("pdfmd-cli"):
                     existing["/Creator"] = f"{creator} via pdfmd-cli" if creator else "pdfmd-cli"
-                writer = pypdf.PdfWriter()
-                writer.append(reader)
+                # clone_from, not append(): append() drops the whole outline of a PDF whose bookmarks are typed
+                # `/Type /Outlines` (Calibre 9.16 writes them so), and a Calibre PDF's bookmarks are its headings
+                writer = pypdf.PdfWriter(clone_from=reader)
                 writer.add_metadata({
                     **existing,
                     f"/{PDF_INFO_VERSIONS_KEY}": summary,
@@ -15504,9 +15505,9 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
             continue
         (destination / entry.name).symlink_to(os.path.relpath(entry.absolute(), destination),
                                                target_is_directory=entry.is_dir())
-    original = subprocess.run(["pandoc", str(source), "-t", "native"], capture_output=True, text=True)
+    original = subprocess.run(["pandoc", str(source), "-t", "native"], capture_output=True, encoding="utf-8", errors="replace")
     split = subprocess.run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
-                           capture_output=True, text=True)
+                           capture_output=True, encoding="utf-8", errors="replace")
     print(f"SPLIT  {display_path(source)} -> {display_path(scaffold)} + {len(written)} parts in "
           f"{display_path(parts_dir)}")
     if original.returncode == 0 and original.stdout == split.stdout:
@@ -15710,7 +15711,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     if not default.is_file():
         try:
             done = subprocess.run(["pandoc", "--print-default-data-file", "default.csl"], capture_output=True,
-                                  text=True, timeout=60)
+                                  encoding="utf-8", errors="replace", timeout=60)
         except (OSError, subprocess.SubprocessError):
             done = None
         if done is None or done.returncode != 0 or "<style" not in done.stdout:
@@ -17698,7 +17699,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
             cmd += ["--metadata-file", str(metadata_file)]
         for lua_filter in filters:
             cmd += ["--lua-filter", str(lua_filter)]
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=first.parent)
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=first.parent)
         if result.returncode != 0:
             print(f"WARN  --lua-mode apply: Pandoc failed ({result.stderr.strip().splitlines()[-1:] or ['?']}); "
                   "the filters are embedded instead", file=sys.stderr)
@@ -18469,7 +18470,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
 
     def run(cmd: list[str], cwd: Path, env: dict | None = None) -> subprocess.CompletedProcess:
         log_cmd(cmd, cwd, verbose)
-        return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+        return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
 
     engine_env = env
     cmd = latex_engine_command(engine, tex_path, output_dir)
@@ -19759,11 +19760,11 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         cmd = [engine, "-interaction=nonstopmode", "-halt-on-error", "-recorder",
                f"-output-directory={tex_argument(plot_dir)}", tex_argument(job)]
         log_cmd(cmd, cwd, verbose)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
         for _ in range(passes - 1):
             if result.returncode != 0:
                 break
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+            result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
         produced = plot_dir / f"r-{key}.pdf"
         ok = result.returncode == 0 and produced.exists() and dim.exists()
         if ok:
@@ -19913,7 +19914,7 @@ def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: s
               f"-env:UserInstallation=file://{profile_dir}",
               "--convert-to", "txt:Text" if target == "txt" else target, "--outdir", str(scratch), str(input_path)]
         log_cmd(cmd, input_path.parent, verbose)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=input_path.parent)
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=input_path.parent)
         produced = scratch / f"{input_path.stem}.{target}"
         if result.returncode != 0 or not produced.exists():
             reason = result.stderr.strip() or result.stdout.strip() or f"soffice failed to produce a {target}"
@@ -20008,7 +20009,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                     result = run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
                 else:
                     log_cmd(cmd, pandoc_cwd, verbose)
-                    result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
                 office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"
@@ -20104,7 +20105,7 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     if sys.platform != "win32":
         environment.setdefault("QT_QPA_PLATFORM", "offscreen")
     log_cmd(cmd, html.parent, verbose)
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=html.parent, env=environment)
+    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=html.parent, env=environment)
     if result.returncode != 0 or not produced.is_file():
         said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
         return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
@@ -20303,7 +20304,7 @@ def run_calibre_convert(source: Path, output: Path, verbose: bool, extra: list[s
         if sys.platform != "win32":
             environment.setdefault("QT_QPA_PLATFORM", "offscreen")
         log_cmd(cmd, source.parent, verbose)
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=scratch, env=environment)
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch, env=environment)
         if result.returncode != 0 or not produced.is_file():
             said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
             return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
@@ -20514,7 +20515,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             log_cmd(cmd, pandoc_cwd, verbose)
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+            result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
         if result.returncode != 0 or not tex_path.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
         if verbose:
@@ -21050,7 +21051,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                     else:
                         log_cmd(cmd, pandoc_cwd, verbose)
-                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd,
+                        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                                 env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
                     ascii_problem = (ascii_finish(output, Path(ascii_scratch.name), ascii_missing_mode, md_path)
                                      if ascii_scratch is not None and result.returncode == 0 else None)
@@ -21315,7 +21316,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
                     def run_pandoc(command: list[str], target: Path):
                         log_cmd(command, pandoc_cwd, verbose)
-                        return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd,
+                        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=tex_search_env(md_path.parent, pandoc_cwd))
                     return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose)
 
@@ -21584,7 +21585,7 @@ def tex_distribution_roots() -> tuple[Path, ...]:
     if kpsewhich:
         for variable in ("TEXMFDIST", "TEXMFMAIN", "TEXMFSYSVAR", "TEXMFSYSCONFIG"):
             try:
-                value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, text=True,
+                value = subprocess.run([kpsewhich, "-var-value", variable], capture_output=True, encoding="utf-8", errors="replace",
                                        timeout=30).stdout.strip()
             except (OSError, subprocess.SubprocessError):
                 continue
@@ -21626,7 +21627,7 @@ def tex_tree_graphics(words: tuple[str, ...]) -> tuple[Path, ...]:
         return ()
     names = [word + suffix for word in words for suffix in GRAPHIC_SUFFIXES]
     try:
-        out = subprocess.run([kpsewhich, *names], capture_output=True, text=True, timeout=60,
+        out = subprocess.run([kpsewhich, *names], capture_output=True, encoding="utf-8", errors="replace", timeout=60,
                              cwd=tempfile.gettempdir()).stdout.split("\n")
     except (OSError, subprocess.SubprocessError):
         return ()
@@ -21646,7 +21647,7 @@ def find_in_tex_tree(name: str) -> Path | None:
     if not kpsewhich:
         return None
     try:
-        found = subprocess.run([kpsewhich, name], capture_output=True, text=True, timeout=30,
+        found = subprocess.run([kpsewhich, name], capture_output=True, encoding="utf-8", errors="replace", timeout=30,
                                cwd=tempfile.gettempdir()).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return None
@@ -22094,7 +22095,7 @@ def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf
     texlive = None
     if which("kpsewhich"):
         try:
-            texlive = subprocess.run(["kpsewhich", "--version"], capture_output=True, text=True,
+            texlive = subprocess.run(["kpsewhich", "--version"], capture_output=True, encoding="utf-8", errors="replace",
                                      timeout=30).stdout.splitlines()[0].strip() or None
         except (OSError, subprocess.SubprocessError, IndexError):
             pass
@@ -22737,7 +22738,7 @@ def find_batchocr() -> list[str] | None:
 
 def batchocr_version(command: list[str]) -> tuple[int, ...] | None:
     try:
-        text = subprocess.run([*command, "--version"], capture_output=True, text=True, timeout=60).stdout
+        text = subprocess.run([*command, "--version"], capture_output=True, encoding="utf-8", errors="replace", timeout=60).stdout
         return tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", text).group(1).split("."))
     except (OSError, subprocess.SubprocessError, AttributeError, ValueError):
         return None
@@ -22910,7 +22911,7 @@ def route_ebook_input(args) -> None:
     except ImportError:
         pass
     log_cmd(command, scratch, args.verbose)
-    made = subprocess.run(command, capture_output=True, text=True, cwd=scratch)
+    made = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch)
     if made.returncode != 0 or not markdown.is_file():
         raise SystemExit(f"{book.name}: Pandoc could not read it ({(made.stderr.strip().splitlines() or ['no output'])[-1]})")
     print(f"BOOK      {book.name} read as Markdown ({markdown.stat().st_size // 1024 or 1} KB"
@@ -24270,14 +24271,14 @@ def odf_source_for(path: Path, metadata_files: list[Path], variables: list[str],
             command = [binary, "--headless", "--norestore", f"-env:UserInstallation=file://{scratch_dir / 'profile'}",
                        "--convert-to", family, "--outdir", str(scratch_dir), str(path)]
             log_cmd(command, path.parent, verbose)
-            subprocess.run(command, capture_output=True, text=True, cwd=path.parent)
+            subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=path.parent)
             made = scratch_dir / f"{path.stem}.{family}"
             return (made.read_bytes(), family) if made.is_file() else None
         target = scratch_dir / f"{path.stem}.odt"
         command = office_pdfmd_command(path, metadata_files, variables, no_auto, "-o", str(target), "--no-hybrid",
                                        "--no-attach-source")
         log_cmd(command, path.parent, verbose)
-        done = subprocess.run(command, capture_output=True, text=True, cwd=path.parent,
+        done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=path.parent,
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
         return (target.read_bytes(), "odt") if done.returncode == 0 and target.is_file() else None
 
@@ -24625,7 +24626,7 @@ def convert_qmd(source: Path, output: Path, target_format: str,
     # directory, so render there and move the result to the real destination
     # afterward (covers -o/--out pointing elsewhere, or --destination-cwd).
     cmd = [quarto, "render", source.name, "--to", target_format, "-o", output.name]
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=source.parent)
+    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=source.parent)
     rendered = source.parent / output.name
     if result.returncode == 0 and rendered.exists() and rendered.resolve() != output.resolve():
         rendered.replace(output)
@@ -26333,7 +26334,7 @@ def run_main() -> None:
                                                    args.verbose, args.debug)
                     else:
                         log_cmd(cmd, pandoc_cwd, args.verbose)
-                        result = subprocess.run(cmd, capture_output=True, text=True, cwd=pandoc_cwd)
+                        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
                     office_finish(report_office_arguments, files[0], args.verbose)
             else:
                 preambles = document_preambles(files[0], pandoc_options, report_no_auto)
@@ -26461,7 +26462,7 @@ def run_main() -> None:
 
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)
-                            return subprocess.run(command, capture_output=True, text=True, cwd=pandoc_cwd,
+                            return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                                   env=tex_search_env(files[0].parent, pandoc_cwd))
                         report_page = lambda: (browser_page_css(files[0], metadata_files, variables) if engine in BROWSER_ENGINES
                                              else calibre_page_options(files[0], metadata_files, variables))
@@ -26884,7 +26885,7 @@ def _api_command(source: Path, to: str | None, output: Path, extra_args, metadat
 
 def _api_run(command: list[str], cwd: Path | None, timeout: float | None) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(command, capture_output=True, text=True, cwd=cwd, timeout=timeout)
+        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, timeout=timeout)
     except subprocess.TimeoutExpired as error:
         raise PdfmdError(f"pdfmd timed out after {timeout} s", 124) from error
 

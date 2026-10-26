@@ -151,5 +151,23 @@ class Source(unittest.TestCase):
         self.assertGreaterEqual(checked, 2)
 
 
+class SubprocessDecoding(unittest.TestCase):
+    def test_no_text_mode_call_leaves_the_decoding_to_the_console_code_page(self):
+        """issue 13: `text=True` decodes with the ANSI code page on Windows; fc-list, Pandoc and TeX write UTF-8, and a byte
+        the page cannot decode ended the reader thread and made `.stdout` None. Every call names its encoding."""
+        import ast
+        sources = [ROOT / "pdfmd.py", *sorted(ROOT.glob("pdfmd_*/*.py"))]
+        bad = []
+        for path in sources:
+            if "pdfmd_inkmd" in path.parts:
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in ("run", "Popen", "check_output"):
+                    names = {keyword.arg for keyword in node.keywords}
+                    if ("text" in names or "universal_newlines" in names) and "encoding" not in names:
+                        bad.append(f"{path.name}:{node.lineno}")
+        self.assertEqual(bad, [])
+
+
 if __name__ == "__main__":
     unittest.main()

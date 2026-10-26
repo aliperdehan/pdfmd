@@ -94,13 +94,13 @@ def _run(name: str, svg: Path, produced: Path, scratch: Path, which, soffice) ->
             profile = scratch / "profile"
             command = [soffice(), "--headless", "--norestore", f"-env:UserInstallation=file://{profile}",
                        "--convert-to", "pdf", "--outdir", str(scratch), str(svg)]
-            done = subprocess.run(command, capture_output=True, text=True, timeout=120)
+            done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
             made = scratch / f"{svg.stem}.pdf"
             if made.is_file():
                 made.replace(produced)
                 return True, ""
             return False, (done.stderr.strip() or done.stdout.strip() or "no PDF made").splitlines()[-1]
-        done = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
         return done.returncode == 0, (done.stderr.strip() or done.stdout.strip()).splitlines()[-1:] and \
             (done.stderr.strip() or done.stdout.strip()).splitlines()[-1] or ""
     except Exception as error:  # noqa: BLE001 -- a converter that fails must not stop the next one

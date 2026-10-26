@@ -87,5 +87,24 @@ class Builds(unittest.TestCase):
 
 
 
+@unittest.skipUnless(pypdf, "needs pypdf")
+class OutlineSurvives(unittest.TestCase):
+    def test_bookmarks_calibre_writes_are_kept(self):
+        """Calibre 9.16 types every bookmark `/Type /Outlines` (a bookmark is not an outline); pypdf's append() dropped the
+        whole outline then, and the stamp of the finished PDF went through append()"""
+        from pypdf.generic import NameObject
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "calibre.pdf"
+            writer = pypdf.PdfWriter()
+            writer.add_blank_page(200, 200)
+            writer.add_outline_item("Introduction", 0).get_object()[NameObject("/Type")] = NameObject("/Outlines")
+            writer.write(path)
+            self.assertEqual([entry.title for entry in pypdf.PdfReader(str(path)).outline], ["Introduction"])
+            pdfmd.stamp_pdf_metadata_posthoc(path, {**pdfmd.DEFAULT_STAMP_OPTIONS, "pdf_metadata": True}, [], False)
+            reader = pypdf.PdfReader(str(path))
+            self.assertIn("PdfmdVersions", str(reader.metadata))
+            self.assertEqual([entry.title for entry in reader.outline], ["Introduction"])
+
+
 if __name__ == "__main__":
     unittest.main()

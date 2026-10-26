@@ -234,6 +234,7 @@ class Routes(unittest.TestCase):
         self.assertNotIn("pdfmd-chem", self.out["markdown"])
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class WhatItCannotConvert(unittest.TestCase):
     """issue 12: an empty unit in a formula took the whole formula down, and the loss was silent"""
 

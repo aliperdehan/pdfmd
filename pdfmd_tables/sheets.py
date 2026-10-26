@@ -89,7 +89,7 @@ def _with_soffice(path: Path, sheet: str | None, soffice: str | None) -> str:
         # UTF-8, comma, quote; sheet number last
         filter_text = f"csv:Text - txt - csv (StarCalc):44,34,76,1,,0,false,true,false,false,false,{number}"
         done = subprocess.run([soffice, "--headless", "--convert-to", filter_text, "--outdir", scratch, str(path)],
-                              capture_output=True, text=True, timeout=180)
+                              capture_output=True, encoding="utf-8", errors="replace", timeout=180)
         made = sorted(Path(scratch).glob("*.csv"))
         if done.returncode != 0 or not made:
             raise SheetError("LibreOffice could not convert it: " + ((done.stderr or done.stdout).strip().splitlines() or ["?"])[-1])

@@ -40,6 +40,20 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.30 — 2026-10-26
+
+Pre-edit state: commit `69dc4a6` (v3.30.29). Issue 13.
+
+### Fixed
+
+- The PDF made by `-e calibre` lost its bookmarks with Calibre 9.16 (`tests.test_calibre.Builds.test_a_document` failed on every machine with it since 2026-10-14). The bookmarks were there in what `ebook-convert` wrote: pdfmd's own stamp of the finished PDF (`PdfmdVersions`, `Creator`) copied it with pypdf's `append()`, which drops the whole outline of a PDF whose bookmarks are typed `/Type /Outlines`, as Calibre 9.16 writes them. The stamp clones the document instead.
+- Every `subprocess` call of pdfmd that reads text names its encoding (`utf-8`, undecodable bytes replaced): `text=True` alone decodes with the ANSI code page on Windows, and Pandoc, TeX, `fc-list` and `kpsewhich` write UTF-8, so a byte the page could not decode made the reader thread die and `.stdout` come back as `None` (issue 13: every build stopped in `installed_font_families()` with TeX Live's `fc-list` on the PATH; that call itself was repaired by `ec8cbfe`, unreleased until now). 46 calls in `pdfmd.py` and five helper modules.
+
+### Tests
+
+- `tests.test_partial_provenance.OutlineSurvives`, `tests.test_probes.SubprocessDecoding` (no `run`/`Popen`/`check_output` call with `text=` and no `encoding=`).
+- `tests.test_chem.WhatItCannotConvert` (v3.30.25) runs pdfmd on a Typst route that needs Pandoc, so it is skipped without Pandoc, like its neighbours; the first CI run of the combined tree failed the `native` jobs on it.
+
 ## v3.30.29 — 2026-10-26
 
 Pre-edit state: commit `470de88` (v3.30.28). Merged from PR 9 (`cloud/calc-checks`), squashed.

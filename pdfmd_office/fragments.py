@@ -77,7 +77,7 @@ def parse_dimension(text: str) -> float:
 
 
 def _run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(command, capture_output=True, text=True, **kwargs)
+    return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", **kwargs)
 
 
 def tools_available() -> bool:
