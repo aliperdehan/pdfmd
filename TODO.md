@@ -12,7 +12,6 @@ wait for an answer before any code.
 
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
-- [ ] **decide** whether chatter level `off` also hides ERROR lines (advice: no) [3dj]
 
 ## Features, agreed
 
