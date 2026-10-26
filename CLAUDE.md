@@ -101,6 +101,12 @@ changelog commit, pushed. A push without a version bump publishes nothing.
 Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
 publisher is registered to exactly those names.
 
+## TODO.md
+
+`TODO.md` lists the open work, one line per item. When a commit finishes an item, delete its line in
+that same commit (the changelog is the record of what shipped); when a plan adds or changes an item,
+edit the line. Keep it free of personal paths and names, like every file here.
+
 ## Version numbers
 
 One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line

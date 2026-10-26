@@ -40,6 +40,16 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.32b — 2026-10-26
+
+Pre-edit state: commit `3b97509` (v3.30.32). A docs-only commit: `PDFMD_VERSION` stays 3.30.32.
+
+### Added
+- `TODO.md`: the open work, one line per item, grouped as next / decide first / agreed features / before 4.0 / investigate first / other repositories. `CLAUDE.md` says to delete an item in the commit that finishes it.
+
+### Fixed
+- `tests/test_doc.py` accepts a lettered newest changelog heading (`v3.30.32b`); it compared the heading with `PDFMD_VERSION` exactly, so the first docs-only commit under the 3.30.30 rule would have failed it.
+
 ## v3.30.32 — 2026-10-26
 
 Pre-edit state: commit `0f6d680` (v3.30.31). Issue 15.

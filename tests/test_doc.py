@@ -85,8 +85,9 @@ class Reading(unittest.TestCase):
 
     def test_the_first_section_of_the_changelog_is_its_newest_entry(self):
         first = pdfmd.document_section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), "1")
-        self.assertEqual(first[0].split()[0], f"v{pdfmd.PDFMD_VERSION}")
-        self.assertEqual(run("--doc", "changelog", "1").stdout.splitlines()[0].split()[:2], ["##", f"v{pdfmd.PDFMD_VERSION}"])
+        newest = re.compile(rf"v{re.escape(pdfmd.PDFMD_VERSION)}[a-z]*")                  # (a docs- or test-only commit adds a letter)
+        self.assertRegex(first[0].split()[0], newest)
+        self.assertRegex(run("--doc", "changelog", "1").stdout.splitlines()[0].split()[1], newest)
         header = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n---\n", 1)[0]
         self.assertNotIn("<!--", header)                                                  # the "why 2.0.0" paragraph is visible
 
