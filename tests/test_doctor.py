@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -82,6 +82,53 @@ class DoctorTests(unittest.TestCase):
         with mock.patch.object(pdfmd.subprocess, "run", side_effect=run):
             (result,) = pdfmd.deep_checks(["calibre:azw3"])
         self.assertEqual(result[:2], ("calibre:azw3", True))
+
+
+class ForeignCommands(unittest.TestCase):
+    """v3.30.41: `--doctor` names a command of pdfmd's (`mdpdf`, `md2pdf` ...) that another program answers on the PATH."""
+
+    def distribution(self, root: Path, names=("pdfmd", "mdpdf", "md2pdf")):
+        from types import SimpleNamespace
+        files = [PurePosixPath("bin") / name for name in names] + [PurePosixPath("pdfmd.py")]
+        return SimpleNamespace(entry_points=[SimpleNamespace(name=name, group="console_scripts") for name in names],
+                               files=files, locate_file=lambda file: root / file)
+
+    def found(self, root: Path, on_path: dict[str, Path]):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        with mock.patch.object(pdfmd.importlib.metadata, "distribution", lambda name: self.distribution(root)), \
+                mock.patch.object(pdfmd, "which", lambda name: str(on_path[name]) if name in on_path else None):
+            return pdfmd.foreign_commands()
+
+    def test_a_name_answered_by_another_program_is_named(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bin").mkdir()
+            elsewhere = root / "other"
+            elsewhere.mkdir()
+            for name in ("pdfmd", "mdpdf", "md2pdf"):
+                (root / "bin" / name).write_text("#!/bin/sh\n", encoding="utf-8")
+            (elsewhere / "md2pdf").write_text("#!/bin/sh\n", encoding="utf-8")
+            result = self.found(root, {"pdfmd": root / "bin" / "pdfmd", "mdpdf": root / "bin" / "mdpdf",
+                                       "md2pdf": elsewhere / "md2pdf"})
+        self.assertEqual(result, [("md2pdf", str(elsewhere / "md2pdf"))])
+
+    def test_names_that_are_ours_or_not_on_the_path_say_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bin").mkdir()
+            (root / "bin" / "pdfmd").write_text("#!/bin/sh\n", encoding="utf-8")
+            self.assertEqual(self.found(root, {"pdfmd": root / "bin" / "pdfmd"}), [])
+
+    def test_a_checkout_without_the_package_says_nothing(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+
+        def missing(name):
+            raise pdfmd.importlib.metadata.PackageNotFoundError(name)
+
+        with mock.patch.object(pdfmd.importlib.metadata, "distribution", missing):
+            self.assertEqual(pdfmd.foreign_commands(), [])
 
 
 if __name__ == "__main__":

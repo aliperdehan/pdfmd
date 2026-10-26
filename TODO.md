@@ -13,6 +13,10 @@ wait for an answer before any code.
 - [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 
+## Bugs
+
+- [ ] `papersize: a4,landscape` (or `--paper a4,landscape`) works in the built-in renderers but not on the LaTeX route: Pandoc writes `[a4,landscapepaper]`, LaTeX drops the option ("Unused global option") and the page is Letter, silently. Split it into `papersize` and `geometry: landscape` for every writer, or refuse it [3di]
+
 ## Features, agreed
 
 - [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
@@ -34,11 +38,10 @@ what pdfmd lacks. Plain `pdfmd` keeps its own meanings (`-p` is slides, `-s`, `-
 batchocr's, so what is listed for it lands in batchocr. Never delegate to a copy of another tool. The quick ones first; the rest
 is low priority. [3di]
 
-- [ ] `mdpdf` also answers the npm `mdpdf`: `--style`, `--border[-top|-left|-bottom|-right]`, `--format`, `--orientation`, `--h-height`, `--f-height`, `--no-emoji`, `--gh-style`, `--debug`, `MDPDF_STYLES`; `--header`/`--footer` told apart by value (an existing `.html`/`.hbs` file is npm's, a comma template is PyPI's)
-- [ ] `--doctor` names the program that answers `pdfmd`, `mdpdf`, `inkmd` and `md2pdf` on the PATH when it is not this one
 - [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
 - [ ] `md2pdf` leftovers: `pdfmd --install math` installs `pymd2pdf`, whose own `md2pdf` script then replaces pdfmd's in the same folder (restore it after the install)
 - [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert)
+- [ ] **decide** long keys of the other personas (`--stylesheet`, `--border`, `--orientation`, `--format`, `--as-html`...) accepted by plain `pdfmd` when no downstream program (Pandoc, Calibre, batchocr) has the key; short and clashing keys (`-h`, `-s`, `-c`, `-e`, `--css`, `--header`) stay persona-only; a test compares the table against `pandoc --help` [3di]
 - [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
 
 ## Before 4.0

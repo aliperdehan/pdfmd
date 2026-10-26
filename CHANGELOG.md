@@ -40,6 +40,23 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.30.41 — 2026-10-26
+
+Pre-edit state: commit `c2732a2` (v3.30.40).
+
+### Added
+- **`mdpdf` answers the npm `mdpdf` too.** `--style FILE` and `MDPDF_STYLES` (a style sheet; `-e html` is added unless an engine is
+  named), `--format` (paper), `--orientation landscape` (`-V geometry:landscape`: the LaTeX route; `papersize: a4,landscape` is read
+  by the built-in renderers only), `--border` and `--border-top|-left|-bottom|-right` (margins as `geometry:` variables; px count as
+  0.75 pt). `--header`/`--footer` are told apart by the value: an `.html`, `.htm` or `.hbs` file, or any file that exists, is the npm
+  one's Puppeteer markup and is dropped; a template `"left,middle,right"` stays the PyPI one's. Dropped with a note on standard
+  error, never silently: those headers and footers, `--h-height`, `--f-height`, `--no-emoji`, `--gh-style`, `--debug`.
+- **`--doctor` names a command of pdfmd's that another program answers.** `pdfmd`, `mdpdf`, `md2pdf`, `inkmd` and the others are
+  shared by several tools, and the one installed last owns each name; a "Command names" section says which names on the PATH are not
+  pdfmd's and how to take them back (`pip install --force-reinstall --no-deps pdfmd-cli`). It reads the installed package's own list
+  of scripts, so it says nothing from a checkout, and nothing when every name is pdfmd's. Checked in a scratch virtualenv with a
+  different `md2pdf` ahead on the PATH.
+
 ## v3.30.40 — 2026-10-26
 
 Pre-edit state: commit `e606b1b` (v3.30.39).

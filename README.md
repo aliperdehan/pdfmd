@@ -308,7 +308,7 @@ which is the better file. `-e soffice` with another target (`.tex`, `.md`) lists
 
 For everything at once, `pdfmd --doctor` is one page on the Markdown-to-PDF tools, fonts
 and emoji, PDF reading (batchocr, Tesseract, Poppler, OCR languages), your config file and
-the cache, ending with the command that fixes each missing piece:
+the cache (and, when another program answers one of pdfmd's command names such as `mdpdf` or `md2pdf`, which), ending with the command that fixes each missing piece:
 
 ```console
 $ pdfmd --doctor
@@ -1442,7 +1442,13 @@ It takes the current folder when you name none (`pdfmd -b` alone refuses), and e
 other option is pdfmd's.
 
 `mdpdf` turns bookmarks and attached links on and combines several inputs into one
-PDF; like the Go `mdpdf` it also takes the output as a second name (`mdpdf notes.md notes.pdf`). `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
+PDF; like the Go `mdpdf` it also takes the output as a second name (`mdpdf notes.md notes.pdf`).
+The npm `mdpdf` has other keys under the same name, and `mdpdf` answers those too: `--style FILE` (and the `MDPDF_STYLES`
+variable) is a style sheet, `--format A4|Letter` the paper, `--orientation landscape` a turned page (the LaTeX route), and
+`--border`, `--border-top|-left|-bottom|-right` the margins (`mm`, `cm`, `in`, `px`). A style sheet is read by the HTML engines
+only, so `-e html` is added unless an engine is named. `--header`/`--footer` are told apart by their value: a `.html` or `.hbs`
+file is the npm one's (Puppeteer markup, which pdfmd cannot use, so it is named on standard error and left out, with `--h-height`,
+`--f-height`, `--no-emoji`, `--gh-style` and `--debug`); anything else is the PyPI one's `"left,middle,right"` template. `inkmd` is `pdfmd -e inkmd`; like inkmd it writes the PDF to standard output
 when you give `-o -`, or no `-o` while output is piped (at a terminal it writes
 `notes.pdf` beside the file instead). The default page is pdfmd's, not Letter: pass
 `-p letter` / `--page-size letter`. If the original `mdpdf` or `inkmd` package is

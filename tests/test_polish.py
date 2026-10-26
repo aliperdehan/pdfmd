@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 try:
@@ -134,6 +135,30 @@ class MdpdfKeys(unittest.TestCase):
         self.assertEqual(self.translate("doc.md", "made.pdf", "-p", "A4", "-e", "inkmd")[2:],
                          ["doc.md", "--out", "made.pdf", "--paper", "a4", "-e", "inkmd"])
         self.assertEqual(self.translate("doc.md", "made.pdf", "-o", "x.pdf").count("--out"), 1)
+
+    def test_the_npm_mdpdfs_keys(self):
+        # v3.30.41: the npm mdpdf (Puppeteer) has its own keys under the same command name
+        with mock.patch.dict(os.environ, {"MDPDF_STYLES": ""}):
+            result = self.translate("--style", "s.css", "--format", "Letter", "--orientation", "landscape",
+                                    "--border", "20mm", "--border-top=10px", "doc.md")
+        self.assertEqual(result[:2], ["-e", "html"])                  # only an HTML engine reads a style sheet
+        self.assertIn("--css", result)
+        self.assertEqual(result[result.index("--paper") + 1], "letter")
+        self.assertEqual([result[i + 1] for i, token in enumerate(result) if token == "-V"],
+                         ["geometry:landscape", "geometry:margin=20mm", "geometry:top=7.5pt"])
+
+    def test_mdpdf_styles_is_used_when_no_style_is_given(self):
+        with mock.patch.dict(os.environ, {"MDPDF_STYLES": "env.css"}):
+            self.assertIn("env.css", self.translate("doc.md"))
+            self.assertNotIn("env.css", self.translate("--style", "own.css", "doc.md"))
+
+    def test_a_header_that_is_an_html_file_is_the_npm_one_and_a_template_is_the_pypi_one(self):
+        with contextlib.redirect_stderr(io.StringIO()) as noted:
+            result = self.translate("--header", "head.hbs", "--h-height", "22", "--footer", ",,{page}", "--no-emoji", "doc.md")
+        self.assertNotIn("--header", result)
+        self.assertEqual(result[result.index("--footer") + 1], ",,{page}")
+        for said in ("--header head.hbs", "--h-height 22", "--no-emoji"):
+            self.assertIn(said, noted.getvalue())
 
     def test_the_entry_point_exists(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

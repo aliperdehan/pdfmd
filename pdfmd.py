@@ -1414,7 +1414,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.40"
+PDFMD_VERSION = "3.30.41"
 import argparse
 import atexit
 import csv
@@ -6068,6 +6068,30 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
     return results
 
 
+def foreign_commands() -> list[tuple[str, str]]:
+    """The commands this install provides (``pdfmd``, ``mdpdf``, ``md2pdf``, ``inkmd`` ...) whose name another program answers on the
+    PATH: (name, path). Several tools share those names and the one installed last owns each. Empty when pdfmd is not installed as
+    a package (a checkout, a lone pdfmd.py) or when every name is its own."""
+    try:
+        dist = importlib.metadata.distribution("pdfmd-cli")
+    except importlib.metadata.PackageNotFoundError:
+        return []
+    names = {entry.name for entry in dist.entry_points if entry.group == "console_scripts"}
+    ours: dict[str, set[Path]] = {}
+    for file in dist.files or []:
+        if file.stem in names and file.parent.name in ("bin", "Scripts"):
+            try:
+                ours.setdefault(file.stem, set()).add(Path(dist.locate_file(file)).resolve())
+            except OSError:
+                continue
+    found: list[tuple[str, str]] = []
+    for name in sorted(names):
+        path = which(name)
+        if path and ours.get(name) and Path(path).resolve() not in ours[name]:
+            found.append((name, path))
+    return found
+
+
 def doctor_report(deep: bool = False) -> bool:
     """`--doctor`: one page on everything pdfmd uses (tools, fonts, PDF reading, config, cache) and
     what to run to fix what is missing. True unless no PDF can be made at all. ``deep`` also builds a small
@@ -6203,6 +6227,14 @@ def doctor_report(deep: bool = False) -> bool:
         from pdfmd_unicode import tessdata
         own = tessdata.installed(tessdata_directory())
         line(None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
+
+    foreign = foreign_commands()
+    if foreign:
+        print("\nCommand names:")
+        for name, path in foreign:
+            line(None, f"`{name}` on the PATH is another program's, not pdfmd's: {display_path(Path(path))}  "
+                       f"(the last install owns a name; `pdfmd-cli` is always pdfmd's; to take `{name}` back: "
+                       "pip install --force-reinstall --no-deps pdfmd-cli)")
 
     if deep:
         print("\nSmoke test (a small page with maths, code and a table, built with each engine):")
@@ -24109,16 +24141,37 @@ MDPDF_KEYS = {"-o": "--out", "--output": "--out", "-h": "--header", "--header": 
               "-p": "--paper", "--paper": "--paper"}
 
 
+# The npm `mdpdf` (Puppeteer; elliotblackburn) has other keys under the same command name (v3.30.41). They do not collide
+# with the PyPI mdpdf's, except --header/--footer: a template "left,middle,right" there, an HTML file here, told apart by the value.
+MDPDF_NPM_VALUE_KEYS = ("--style", "--h-height", "--f-height", "--border", "--border-top", "--border-left", "--border-bottom",
+                        "--border-right", "--format", "--orientation")
+MDPDF_NPM_FLAGS = ("--gh-style", "--no-emoji", "--debug")
+
+
+def mdpdf_npm_file(value: str) -> bool:
+    """A --header/--footer value that is the npm mdpdf's HTML file, not the PyPI mdpdf's template."""
+    return value.lower().endswith((".html", ".htm", ".hbs")) or Path(value).is_file()
+
+
+def mdpdf_npm_length(value: str) -> str:
+    """A length of the npm mdpdf (mm, cm, in, px) as one the page setup knows: px are CSS pixels, 0.75 pt each."""
+    match = re.fullmatch(r"\s*([0-9.]+)\s*px\s*", value)
+    return f"{float(match.group(1)) * 0.75:g}pt" if match else value.strip()
+
+
 def mdpdf_translate(argv: list[str]) -> list[str]:
     """The ``mdpdf`` command's own keys (``-o -h -f -t -s -a -k -p`` and their long forms) as pdfmd options,
     plus what mdpdf always does: bookmarks and attached linked files. Anything else is a pdfmd option as
-    usual. Wildcards in the inputs are expanded here, as mdpdf does, for shells that do not, and several
+    usual (the npm mdpdf's ``--style --format --orientation --border* MDPDF_STYLES`` too, its ``--header FILE.html`` and the rest named
+    on stderr and left out). Wildcards in the inputs are expanded here, as mdpdf does, for shells that do not, and several
     Markdown inputs are combined into one PDF (``--report``), as mdpdf does. A last positional ending in
     ``.pdf`` after another positional is the output (``mdpdf in.md out.pdf``, the form of the Go ``mdpdf`` and
     ``md2static``); mdpdf itself never reads a PDF, and an option's value (``--cover x.pdf``) is not mistaken
     for it because the token before it is the option."""
     out, rest, literal, documents = ["--bookmarks", "--attach-links"], list(argv), False, 0
     previous, second = None, None                 # the last token read, when it was a positional; where the output is
+    npm: dict[str, str] = {}                      # the npm mdpdf's values by key; ignored: what pdfmd has no use for
+    ignored: list[str] = []
     while rest:
         token = rest.pop(0)
         if literal or token == "-" or not token.startswith("-"):
@@ -24139,6 +24192,14 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
             key, equals, value = token.partition("=")
         else:
             key, equals, value = token[:2], "", token[2:]
+        if token.startswith("--") and (key in MDPDF_NPM_VALUE_KEYS or key in MDPDF_NPM_FLAGS):
+            if key in MDPDF_NPM_FLAGS:
+                ignored.append(key)
+            elif equals or rest:
+                npm[key] = value if equals else rest.pop(0)
+            else:
+                out.append(token)                     # missing value: let the parser complain
+            continue
         if key not in MDPDF_KEYS:
             out.append(token)
             continue
@@ -24147,9 +24208,30 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
                 out.append(MDPDF_KEYS[key])           # missing value: let the parser complain
                 continue
             value = rest.pop(0)
+        if key in ("--header", "--footer") and mdpdf_npm_file(value):
+            ignored.append(f"{key} {value}")          # an HTML file for Puppeteer: pdfmd's header is a template
+            continue
         out += [MDPDF_KEYS[key], value.casefold() if key in ("-p", "--paper") else value]
     if second is not None and "--out" not in out:
         out[second:second + 1] = ["--out", out[second]]
+    style = npm.pop("--style", None) or os.environ.get("MDPDF_STYLES")
+    if style:
+        out += ["--css", style]
+        if not any(token in ("-e", "--engine") or token.startswith(("-e", "--engine=")) for token in out):
+            out = ["-e", "html", *out]                # only an HTML engine reads a style sheet
+    if npm.get("--format") and "--paper" not in out:
+        out += ["--paper", npm["--format"].casefold()]
+    if npm.get("--orientation", "").casefold() == "landscape":
+        out += ["-V", "geometry:landscape"]       # the LaTeX route; `papersize: a4,landscape` is read by the built-in renderers only
+    for side, key in (("margin", "--border"), ("top", "--border-top"), ("left", "--border-left"), ("bottom", "--border-bottom"),
+                      ("right", "--border-right")):
+        if npm.get(key):
+            out += ["-V", f"geometry:{side}={mdpdf_npm_length(npm[key])}"]
+    for key in ("--h-height", "--f-height"):
+        if key in npm:
+            ignored.append(f"{key} {npm[key]}")
+    if ignored:
+        print(f"NOTE  mdpdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
     if documents > 1 and "--report" not in out and "-r" not in out:
         out.append("--report")                      # several inputs make one PDF, as in mdpdf
     return out
