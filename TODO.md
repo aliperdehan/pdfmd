@@ -28,7 +28,8 @@ wait for an answer before any code.
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
-- [ ] **decide** rename `table-widths` to `column-widths` (old name stays an alias) and `table-word-floor` to `column-word-floor`; whole-table width is a separate future key [3dl]
+- [ ] Rename `table-widths` to `column-widths` (old name stays an alias) and `table-word-floor` to `column-word-floor`, built together with the next item; a whole-table width is a separate future key [3dl]
+- [ ] **decide** `column-word-ceil`: a column never wider than its longest cell, the airy-table mirror of the word floor; default, what it measures, name [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
@@ -63,7 +64,7 @@ is low priority. [3di]
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
-- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); feature pages carry the version added, fixed and last tested [3dg]
+- [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
 - [ ] 4.0
 
