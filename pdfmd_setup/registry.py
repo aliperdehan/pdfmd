@@ -41,7 +41,7 @@ UNSET = {
     "options.attach-bibliography": "only the cited entries", "options.attach-csl": "off",
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
     "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
-    "options.line-numbers": "off", "options.line-number-step": "1",
+    "options.line-numbers": "off", "options.line-number-step": "1", "options.column-outlier": "2",
     "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
@@ -295,6 +295,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("off", "the widths are exactly as chosen, words break where they must")), "on",
                "Words longer than 16 characters are not protected. One table: {word-floor=off} after its caption (Pandoc 3.8.2 or newer). "
                "Not used under table-widths keep.", "Tables"),
+        text("options.column-outlier", "A cell this many times longer than the next wraps instead of widening its column",
+             "Default 2; 0 switches it off. A column of at least four rows, a cell of at least 30 characters. "
+             "One table: {column-outlier=3} after its caption (Pandoc 3.8.2 or newer).", "Tables", "config", "number"),
         # -- code
         choice("options.code-wrap", "Long code lines (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",
                "Needs fvextra (in every full TeX Live). Per block: {wrap=false}.", "Code"),

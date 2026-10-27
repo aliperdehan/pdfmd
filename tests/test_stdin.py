@@ -32,6 +32,16 @@ class Stdin(unittest.TestCase):
             self.assertTrue((Path(directory) / "stdin.pdf").read_bytes().startswith(b"%PDF-"))
             self.assertEqual(sorted(item.name for item in Path(directory).iterdir() if item.name.startswith(".")), [])
 
+    def test_a_pipe_without_the_dash_is_not_read_and_the_error_names_the_dash(self):
+        # decided 2026-10-27: plain `pdfmd` never reads standard input (a script's inherited pipe looks the same)
+        with tempfile.TemporaryDirectory() as directory:
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py")], cwd=directory, input="# Hi\n", capture_output=True,
+                                  text=True, env={**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory})
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("No Markdown files found", done.stderr)
+            self.assertIn("`pdfmd -`", done.stderr)
+            self.assertEqual(sorted(item.name for item in Path(directory).iterdir()), [])
+
     def test_o_names_the_result(self):
         with tempfile.TemporaryDirectory() as directory:
             done = run(directory, "# Hi\n", "-e", "inkmd", "-o", "named.pdf")

@@ -152,6 +152,60 @@ class Config(unittest.TestCase):
             self.assertEqual(len(pdfmd.width_filter_args(Path("f.lua"))), 2)
 
 
+SITES = ("| Site | pH of mucus | Clearance of mucus |\n|---|---|---|\n"
+         "| Nose and lung | 5.5 to 6.5 | respiratory tract 10 min to 20 min |\n"
+         "| Eye | 7.8 (slightly basic) | 5.0 min to 7.7 min |\n| Mouth | 6.2 to 7.4 | |\n"
+         "| Stomach | lumen 1.0 to 2.0 to 7.0 at the epithelial surface; food changes it | GI tract 4 h to 6 h |\n"
+         "| Vagina (adult) | 4.0 to 5.0 | |\n")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Outliers(unittest.TestCase):
+    """v3.31.0: one very long cell does not size its column (`column-outlier`, default 2 times the next-longest cell)."""
+
+    ROOM = 95 - 3 * 3
+
+    def chars(self, text, *extra):
+        [cols] = widths(text, *extra)
+        return [round(share * self.ROOM, 1) for share in cols]
+
+    def test_the_others_keep_their_room_and_the_outlier_wraps(self):
+        site, ph, clearance = self.chars(SITES)
+        self.assertGreaterEqual(clearance, 34)                         # "respiratory tract 10 min to 20 min" on one line
+        self.assertGreaterEqual(site, 14)                              # "Vagina (adult)"
+        self.assertLess(ph, 66)                                        # the 66-character note wraps
+        off = self.chars(SITES, "-M", "pdfmd-column-outlier=0")
+        self.assertGreater(off[1], ph)                                 # without the rule the note took its full width
+        self.assertLess(off[2], clearance)
+
+    def test_the_ratio_is_adjustable_and_a_higher_one_does_not_fire(self):
+        self.assertEqual(self.chars(SITES, "-M", "pdfmd-column-outlier=3.5"), self.chars(SITES, "-M", "pdfmd-column-outlier=0"))
+        self.assertEqual(self.chars("---\npdfmd-options:\n  column-outlier: off\n---\n\n" + SITES),
+                         self.chars(SITES, "-M", "pdfmd-column-outlier=0"))
+
+    @unittest.skipUnless(pandoc_version() >= (3, 8, 2), "caption attributes need Pandoc 3.8.2")
+    def test_one_table_can_say_so_after_its_caption(self):
+        self.assertEqual(self.chars(SITES + "\n: Sites {column-outlier=0}\n"), self.chars(SITES, "-M", "pdfmd-column-outlier=0"))
+
+    def test_a_table_of_only_long_cells_is_not_judged(self):
+        long = " ".join(["alpha"] * 12)
+        text = "| A | B |\n|---|---|\n" + f"| {long} | {long[:-6]} |\n" * 5
+        self.assertEqual(self.chars(text), self.chars(text, "-M", "pdfmd-column-outlier=0"))
+
+    def test_a_short_column_is_not_judged(self):
+        text = f"| A | B |\n|---|---|\n| x | {LONG} |\n| y | short |\n| z | tiny |\n"      # three rows only
+        self.assertEqual(self.chars(text), self.chars(text, "-M", "pdfmd-column-outlier=0"))
+
+    def test_the_config_value_reaches_the_filter(self):
+        import pdfmd
+        from unittest import mock
+        for value, expected in ((3, "3"), ("off", "0"), ("2.5", "2.5")):
+            with mock.patch.object(pdfmd, "config_options", lambda *a, v=value: {"column-outlier": v}):
+                self.assertEqual(pdfmd.width_filter_args(Path("f.lua"))[2:], ["-M", f"pdfmd-column-outlier={expected}"])
+        with mock.patch.object(pdfmd, "config_options", lambda *a: {"column-outlier": "sideways"}):
+            self.assertEqual(len(pdfmd.width_filter_args(Path("f.lua"))), 2)
+
+
 class Packaging(unittest.TestCase):
     def test_the_filters_ship_as_files_in_a_package(self):
         sys.path.insert(0, str(ROOT))

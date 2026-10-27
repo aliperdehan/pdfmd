@@ -40,6 +40,18 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.2 — 2026-10-27
+
+Pre-edit state: commit `041a8f0`. Still the tables line.
+
+### Added
+- **`column-outlier`** (default 2; 0 switches it off; `pdfmd-options`, the config, `--setup`, or `{column-outlier=N}` after a table's caption): one cell
+  more than twice as long as the next-longest of its column (a column of four rows or more, a cell of at least 30 characters) no longer sizes the
+  column, so the others keep the room that holds them on one line; the outlier wraps, and what is left over goes to its column. The one-line "natural
+  width" test still counts the real longest cell, so an outlier never runs past the margin. (The two minimums were constants here; 3.31.3 makes them settings.)
+- **Plain `pdfmd` never reads standard input** (decided: a script's inherited pipe looks the same as `echo x | pdfmd`). In a folder without Markdown
+  files the error now names `pdfmd -` when standard input is not a terminal.
+
 ## v3.31.1 — 2026-10-27
 
 Pre-edit state: commit `12cc24a`. Still the tables line.

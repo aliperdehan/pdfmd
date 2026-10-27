@@ -10,7 +10,6 @@ wait for an answer before any code.
 
 ## Decide first
 
-- [ ] **decide** the bare-pipe trigger for plain `pdfmd` (stdin cannot be probed reliably) [3cd]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 
 ## Features, agreed
@@ -30,7 +29,6 @@ wait for an answer before any code.
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
 - [ ] Rename `table-widths` to `column-widths` (old name stays an alias) and `table-word-floor` to `column-word-floor`, built together with the next item; a whole-table width is a separate future key [3dl]
 - [ ] `column-word-ceil` (on by default; a column is never wider than its longest cell by more than `column-ceil-margin`, 25% of the line), built with the rename [3dl]
-- [ ] Outlier cells: one very long cell must not stretch its column; `column-outlier` ratio, detected before balancing; check on the real guide tables [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]

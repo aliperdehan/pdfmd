@@ -1120,6 +1120,8 @@ Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the
     linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
     v3.31.0: a chosen column too narrow for its longest word (a word of up to 16 characters) is widened to it and the
     other columns give up the room (`table-word-floor: off` for a table where breaking a word is meant).
+    A cell more than `column-outlier` (2) times longer than the next one in its column, at least 30 characters, in a
+    column of four rows or more, does not size its column: it wraps and the others keep their room (0 switches it off).
     `pdfmd-options: {table-widths: keep}` (or the same in the config, or --setup) leaves every table as written;
     `force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
     caption wins. `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's
@@ -1420,7 +1422,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.1"
+PDFMD_VERSION = "3.31.2"
 import argparse
 import atexit
 import csv
@@ -2214,6 +2216,13 @@ def width_filter_args(width_filter: Path) -> list[str]:
             value = "on" if value else "off"
         if isinstance(value, str) and value.strip().casefold() in allowed:
             args += ["-M", f"pdfmd-{key}={value.strip().casefold()}"]
+    ratio = config_options().get("column-outlier")
+    if isinstance(ratio, (int, float)) and not isinstance(ratio, bool) and ratio >= 0:
+        args += ["-M", f"pdfmd-column-outlier={ratio}"]
+    elif isinstance(ratio, str) and ratio.strip().casefold() in ("off", "false"):
+        args += ["-M", "pdfmd-column-outlier=0"]
+    elif isinstance(ratio, str) and ratio.strip().replace(".", "", 1).isdigit():
+        args += ["-M", f"pdfmd-column-outlier={ratio.strip()}"]
     return args
 
 
@@ -26511,7 +26520,13 @@ def run_main() -> None:
         """The one Markdown file of a folder (what `pdfmd` and `pdfmd '#section'` mean)."""
         markdown_files = sorted(directory.glob("*.md"), key=lambda path: path.name.casefold())
         if not markdown_files:
-            raise SystemExit("No Markdown files found in the current directory.")
+            hint = ""
+            try:
+                if not sys.stdin.isatty():
+                    hint = " To build Markdown piped in, name it: `pdfmd -` reads standard input."
+            except (AttributeError, ValueError, OSError):
+                pass
+            raise SystemExit("No Markdown files found in the current directory." + hint)
         if len(markdown_files) > 1:
             names = ", ".join(path.name for path in markdown_files)
             raise SystemExit(

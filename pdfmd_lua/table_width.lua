@@ -73,6 +73,36 @@ local function collect(tbl)
   return rows, longest, word
 end
 
+-- A cell that is far longer than every other cell of its column (a 66-character note among cells of 8 to 24) must not
+-- size the column: the others would starve to hold it on one line. The cap of such a column is its next-longest cell
+-- and the outlier wraps; what is left over goes back to the outlier's column at the end (best_widths). `ratio` is the
+-- times-longer threshold (0 switches it off); a column of fewer than OUTLIER_ROWS rows, or an outlier shorter than
+-- OUTLIER_LENGTH characters, is never judged.
+local OUTLIER_ROWS = 4
+local OUTLIER_LENGTH = 30
+
+local function outlier_caps(rows, longest, ratio)
+  local caps = {}
+  for c = 1, #longest do
+    caps[c] = longest[c]
+    if ratio > 0 then
+      local first, second, count = 0, 0, 0
+      for _, lengths in ipairs(rows) do
+        local length = lengths[c] or 0
+        if length > 0 then
+          count = count + 1
+          if length > first then first, second = length, first
+          elseif length > second then second = length end
+        end
+      end
+      if count >= OUTLIER_ROWS and first >= OUTLIER_LENGTH and second > 0 and first > ratio * second then
+        caps[c] = second
+      end
+    end
+  end
+  return caps
+end
+
 -- A long table is judged on an even sample of its rows: the widths do not need every row to be right.
 local SAMPLE = 200
 
@@ -103,11 +133,12 @@ end
 -- narrower than its longest word, nor wider than its longest cell. Widths are handed out where they buy the
 -- most, by steps of 1, 2, 4 and 8 characters (a single character often buys nothing at all and several do);
 -- what is left over after that goes to the columns that still have text to unwrap.
-local function best_widths(rows, longest, word, room)
+local function best_widths(rows, longest, word, room, caps)
+  caps = caps or longest
   local n = #longest
   local widths, floor_sum = {}, 0
   for c = 1, n do
-    widths[c] = math.min(word[c], longest[c])
+    widths[c] = math.min(word[c], caps[c])
     floor_sum = floor_sum + widths[c]
   end
   if floor_sum >= room then            -- not even the words fit: shrink them evenly
@@ -120,7 +151,7 @@ local function best_widths(rows, longest, word, room)
   while remaining > 0 do
     local best_c, best_step, best_rate, best_room = nil, nil, 0, 0
     for c = 1, n do
-      local spare = longest[c] - widths[c]
+      local spare = caps[c] - widths[c]
       if spare > 0 then
         for _, step in ipairs({1, 2, 4, 8}) do
           if step <= remaining and step <= spare then
@@ -139,12 +170,17 @@ local function best_widths(rows, longest, word, room)
     remaining = remaining - best_step
     current = total_height(sampled, widths)
   end
-  if remaining > 0 then                -- nothing buys a line any more: let the long cells breathe
-    local wanted = 0
-    for c = 1, n do wanted = wanted + (longest[c] - widths[c]) end
-    if wanted > 0 then
-      local share = math.min(1, remaining / wanted)
-      for c = 1, n do widths[c] = widths[c] + (longest[c] - widths[c]) * share end
+  -- nothing buys a line any more: let the long cells breathe, first up to each column's cap (every ordinary cell on
+  -- one line), and only what is left after that up to an outlier's real length
+  for _, limit in ipairs({caps, longest}) do
+    if remaining > 0 then
+      local wanted = 0
+      for c = 1, n do wanted = wanted + (limit[c] - widths[c]) end
+      if wanted > 0 then
+        local share = math.min(1, remaining / wanted)
+        for c = 1, n do widths[c] = widths[c] + (limit[c] - widths[c]) * share end
+        remaining = remaining - wanted * share
+      end
     end
   end
   return widths
@@ -231,7 +267,7 @@ end
 -- (`{widths=force word-floor=off}` after its caption) win over them. widths: auto (equal dashes are "no opinion",
 -- unequal ones a choice), keep (every table as written), force (the dashes are ignored, every table is balanced).
 -- word-floor: on or off, whether a chosen column is raised to its longest word.
-local MODE, FLOOR = "auto", true
+local MODE, FLOOR, OUTLIER = "auto", true, 2
 local MODES = {auto = true, keep = true, force = true}
 local SWITCH = {on = true, ["true"] = true, yes = true, off = false, ["false"] = false, no = false}
 
@@ -251,6 +287,13 @@ local function rebalance(tbl)
     local given = SWITCH[attributes["word-floor"]:lower()]
     if given ~= nil then floor = given end
     attributes["word-floor"] = nil
+  end
+  local outlier = OUTLIER
+  if attributes["column-outlier"] ~= nil then
+    local given = tonumber(attributes["column-outlier"])
+    if attributes["column-outlier"]:lower() == "off" then given = 0 end
+    if given ~= nil and given >= 0 then outlier = given end
+    attributes["column-outlier"] = nil
   end
   if mode == "keep" then return nil end
   local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and mode ~= "force"
@@ -275,7 +318,8 @@ local function rebalance(tbl)
     return tbl
   end
 
-  local widths = best_widths(rows, longest, word, CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD)
+  local widths = best_widths(rows, longest, word, CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD,
+                             outlier_caps(rows, longest, outlier))
   local sum = 0
   for i = 1, ncols do sum = sum + widths[i] end
   for i, spec in ipairs(tbl.colspecs) do
@@ -301,5 +345,10 @@ function Pandoc(doc)
   if mode ~= nil and MODES[mode] then MODE = mode end
   local floor = SWITCH[setting(doc.meta, "table-word-floor") or ""]
   if floor ~= nil then FLOOR = floor end
+  local ratio = setting(doc.meta, "column-outlier")
+  if ratio ~= nil then
+    if ratio == "off" or ratio == "false" then ratio = "0" end
+    if tonumber(ratio) ~= nil and tonumber(ratio) >= 0 then OUTLIER = tonumber(ratio) end
+  end
   return pandoc.Pandoc(doc.blocks:walk({Table = rebalance}), doc.meta)
 end
