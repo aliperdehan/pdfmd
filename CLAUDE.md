@@ -109,6 +109,13 @@ options, the answer, the reason, what it touches. It also gets a short line in `
 the next compaction; a decision that exists only there gets re-asked, re-derived or never built. Code follows the record,
 never the other way round, and a decision changed later is edited in the notes, not only in the code.
 
+## No hardcoded thresholds
+
+A number that changes behaviour (a ratio, a limit, a minimum length, a margin, a cap) is a setting: a `pdfmd-options` key,
+a `--setup` row, per table where a table can carry it, its default written in the docs. A constant stays in the code only
+when the author says so or the situation presses (a file-format fact, a speed limit, a case with no sensible knob), and then
+the author is told in the same reply and the constant is recorded in the maintainer's notes with the reason.
+
 ## TODO.md
 
 `TODO.md` lists the open work, one line per item. When a commit finishes an item, delete its line in

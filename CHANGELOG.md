@@ -40,6 +40,26 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.3 — 2026-10-27
+
+Pre-edit state: commit `4d6291b`. Still the tables line: the settings of the width filter are named for what they set, and none of their numbers is a constant.
+
+### Added
+- **`column-outlier-rows`** (default 4), **`column-outlier-length`** (30) and **`column-word-floor-limit`** (16, the longest word the floor protects) are
+  settings; they were constants in the filter. Every number of the filter (`column-outlier` too) can be given per table, `{column-outlier=3
+  column-outlier-rows=6 column-outlier-length=40 column-word-floor-limit=24}` after the caption (Pandoc 3.8.2 or newer), in `pdfmd-options`, in the
+  config and in `--setup`.
+- **`column-count-raw-tex: on|off`**, a KLUDGE until a real width estimator exists: raw TeX in a cell counted as nothing (a cell of "respiratory
+  tract \SIrange{10}{20}{\minute}" was sized as 17 characters and printed as 34, so its column wrapped while another took the room). `\SI`,
+  `\SIrange`, `\num`, `\ce` and other raw TeX now count as about what they print. Off (or `{count-raw-tex=off}` on a table) gives the old behaviour.
+
+### Changed
+- **`table-widths` is now `column-widths`, and `table-word-floor` is `column-word-floor`**: "table width" read as the width of the whole table, and
+  these set the columns'. The older names are still read everywhere (the config, `--setup`, `pdfmd-options`, `-M`).
+
+### Docs
+- `CLAUDE.md`: "No hardcoded thresholds": a number that changes behaviour is a setting; a constant that must stay in the code is reported to the author.
+
 ## v3.31.2 — 2026-10-27
 
 Pre-edit state: commit `041a8f0`. Still the tables line.

@@ -1119,10 +1119,10 @@ Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the
     Unequal dashes (`--|-----`) are a choice and kept, but only under Pandoc's own Markdown reader (front matter, or a
     linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
     v3.31.0: a chosen column too narrow for its longest word (a word of up to 16 characters) is widened to it and the
-    other columns give up the room (`table-word-floor: off` for a table where breaking a word is meant).
+    other columns give up the room (`column-word-floor: off` for a table where breaking a word is meant).
     A cell more than `column-outlier` (2) times longer than the next one in its column, at least 30 characters, in a
     column of four rows or more, does not size its column: it wraps and the others keep their room (0 switches it off).
-    `pdfmd-options: {table-widths: keep}` (or the same in the config, or --setup) leaves every table as written;
+    `pdfmd-options: {column-widths: keep}` (or the same in the config, or --setup; `table-widths` is the older name) leaves every table as written;
     `force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
     caption wins. `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's
     widths as given.
@@ -1422,7 +1422,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.2"
+PDFMD_VERSION = "3.31.3"
 import argparse
 import atexit
 import csv
@@ -2206,23 +2206,31 @@ CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 
 def width_filter_args(width_filter: Path) -> list[str]:
-    """``--lua-filter`` for the table-width filter, with the global `table-widths` (auto, keep, force) and
-    `table-word-floor` (on, off) settings handed to it; a document's own `pdfmd-options: {table-widths: ...}` reaches
-    it through the metadata and wins."""
+    """``--lua-filter`` for the table-width filter, with the global column settings of the config or `--setup` handed
+    to it (`column-widths`, `column-word-floor`, `column-count-raw-tex`, and the numbers `column-outlier`,
+    `column-outlier-rows`, `column-outlier-length`, `column-word-floor-limit`); a document's own `pdfmd-options` reaches
+    it through the metadata and wins. `table-widths` and `table-word-floor` are the older names, still read."""
     args = ["--lua-filter", str(width_filter)]
-    for key, allowed in (("table-widths", ("auto", "keep", "force")), ("table-word-floor", ("on", "off", "true", "false"))):
-        value = config_options().get(key)
+    options = config_options()
+    words = (("column-widths", "table-widths", ("auto", "keep", "force")),
+             ("column-word-floor", "table-word-floor", ("on", "off", "true", "false")),
+             ("column-count-raw-tex", None, ("on", "off", "true", "false")))
+    for key, older, allowed in words:
+        value = options.get(key)
+        if value is None and older:
+            value = options.get(older)
         if isinstance(value, bool):
             value = "on" if value else "off"
         if isinstance(value, str) and value.strip().casefold() in allowed:
             args += ["-M", f"pdfmd-{key}={value.strip().casefold()}"]
-    ratio = config_options().get("column-outlier")
-    if isinstance(ratio, (int, float)) and not isinstance(ratio, bool) and ratio >= 0:
-        args += ["-M", f"pdfmd-column-outlier={ratio}"]
-    elif isinstance(ratio, str) and ratio.strip().casefold() in ("off", "false"):
-        args += ["-M", "pdfmd-column-outlier=0"]
-    elif isinstance(ratio, str) and ratio.strip().replace(".", "", 1).isdigit():
-        args += ["-M", f"pdfmd-column-outlier={ratio.strip()}"]
+    for key in ("column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"):
+        number = options.get(key)
+        if isinstance(number, str) and number.strip().casefold() in ("off", "false"):
+            number = 0
+        elif isinstance(number, str) and number.strip().replace(".", "", 1).isdigit():
+            number = float(number) if "." in number else int(number)
+        if isinstance(number, (int, float)) and not isinstance(number, bool) and number >= 0:
+            args += ["-M", f"pdfmd-{key}={number}"]
     return args
 
 
@@ -10092,10 +10100,10 @@ def tablewidth_note(md_path, note) -> None:
     widened = sum(1 for mark in seen if mark.endswith("w"))
     if count:
         note("TABLEWIDTH", f"{md_path}: {count} wide table{'s' if count != 1 else ''} had no column widths (or "
-                           "`table-widths: force` is set); pdfmd balanced the columns (--no-auto tablewidth stops it)")
+                           "`column-widths: force` is set); pdfmd balanced the columns (--no-auto tablewidth stops it)")
     if widened:
         note("TABLEWIDTH", f"{md_path}: {widened} table{'s' if widened != 1 else ''} had a column too narrow for its "
-                           "longest word; pdfmd widened it and took the room from the others (`table-widths: keep` "
+                           "longest word; pdfmd widened it and took the room from the others (`column-widths: keep` "
                            "leaves the widths as written)")
 
 

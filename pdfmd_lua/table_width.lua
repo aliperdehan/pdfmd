@@ -33,8 +33,45 @@ local function math_overcount(contents)
   return overcount
 end
 
-local function cell_length(cell)
-  local length = #pandoc.utils.stringify(cell.contents) - math_overcount(cell.contents)
+-- KLUDGE, until the true width estimator exists (TODO "A true width estimator"): `pandoc.utils.stringify` counts a raw
+-- TeX inline as nothing, so a cell of "respiratory tract \SIrange{10}{20}{\minute}" was measured as 17 characters and
+-- printed as 34. These guesses stand in for the typeset text: `\SI{a}{u}` is the number and a unit word,
+-- `\SIrange{a}{b}{u}` is "a unit to b unit", `\num{a}` is a, `\ce{...}` is its text, any other raw TeX is the characters
+-- outside command names. A unit is 2 characters per command in it (`\milli\gram` is 4) or its own characters. The
+-- number stands for how it is printed, not for the source. Switch: `column-count-raw-tex: off`.
+local function unit_word(unit)
+  local _, commands = unit:gsub("\\%a+", "")
+  local rest = unit:gsub("\\%a+", ""):gsub("[{}%s]", "")
+  return string.rep("x", math.max(2, 2 * commands + #rest))
+end
+
+local function raw_estimate(code)
+  local name, rest = code:match("^\\(%a+)%*?(.*)$")
+  if name == "SI" or name == "qty" then
+    local number, unit = rest:match("^%s*%[?[^%]{]*%]?%s*{([^}]*)}%s*{([^}]*)}")
+    if number then return number .. "_" .. unit_word(unit) end
+  elseif name == "SIrange" or name == "qtyrange" then
+    local low, high, unit = rest:match("^%s*%[?[^%]{]*%]?%s*{([^}]*)}%s*{([^}]*)}%s*{([^}]*)}")
+    if low then return low .. "_" .. unit_word(unit) .. " to " .. high .. "_" .. unit_word(unit) end
+  elseif name == "num" then
+    local number = rest:match("^%s*%[?[^%]{]*%]?%s*{([^}]*)}")
+    if number then return number end
+  end
+  return (code:gsub("\\%a+", ""):gsub("[{}\\^_$]", ""))
+end
+
+local function cell_text(cell, count_raw)
+  if not count_raw then return pandoc.utils.stringify(cell.contents) end
+  local counted = cell.contents:walk({
+    RawInline = function(raw)
+      if raw.format == "tex" or raw.format == "latex" then return pandoc.Str(raw_estimate(raw.text)) end
+    end
+  })
+  return pandoc.utils.stringify(counted)
+end
+
+local function cell_length(cell, count_raw)
+  local length = #cell_text(cell, count_raw) - math_overcount(cell.contents)
   if length < 1 then length = 1 end
   return length
 end
@@ -42,7 +79,7 @@ end
 
 -- Where a table's text goes: for every column, the length of each row's cell, so that the height a row
 -- takes at a given column width can be worked out (a row is as tall as its tallest cell).
-local function collect(tbl)
+local function collect(tbl, count_raw)
   local ncols = #tbl.colspecs
   local rows, longest, word = {}, {}, {}
   for i = 1, ncols do longest[i] = 1; word[i] = 1 end
@@ -51,9 +88,9 @@ local function collect(tbl)
     for i = 1, ncols do lengths[i] = 0 end
     for i, cell in ipairs(row.cells) do
       local span = cell.col_span or 1
-      local share = math.max(1, math.ceil(cell_length(cell) / span))
+      local share = math.max(1, math.ceil(cell_length(cell, count_raw) / span))
       local widest = 1
-      for text in pandoc.utils.stringify(cell.contents):gmatch("%S+") do
+      for text in cell_text(cell, count_raw):gmatch("%S+") do
         if #text > widest then widest = #text end
       end
       widest = math.ceil(widest / span)
@@ -76,12 +113,10 @@ end
 -- A cell that is far longer than every other cell of its column (a 66-character note among cells of 8 to 24) must not
 -- size the column: the others would starve to hold it on one line. The cap of such a column is its next-longest cell
 -- and the outlier wraps; what is left over goes back to the outlier's column at the end (best_widths). `ratio` is the
--- times-longer threshold (0 switches it off); a column of fewer than OUTLIER_ROWS rows, or an outlier shorter than
--- OUTLIER_LENGTH characters, is never judged.
-local OUTLIER_ROWS = 4
-local OUTLIER_LENGTH = 30
-
-local function outlier_caps(rows, longest, ratio)
+-- times-longer threshold (`column-outlier`, 0 switches it off); a column of fewer than `column-outlier-rows` rows,
+-- or an outlier shorter than `column-outlier-length` characters, is never judged.
+local function outlier_caps(rows, longest, o)
+  local ratio, min_rows, min_length = o["column-outlier"], o["column-outlier-rows"], o["column-outlier-length"]
   local caps = {}
   for c = 1, #longest do
     caps[c] = longest[c]
@@ -95,7 +130,7 @@ local function outlier_caps(rows, longest, ratio)
           elseif length > second then second = length end
         end
       end
-      if count >= OUTLIER_ROWS and first >= OUTLIER_LENGTH and second > 0 and first > ratio * second then
+      if count >= min_rows and first >= min_length and second > 0 and first > ratio * second then
         caps[c] = second
       end
     end
@@ -221,18 +256,16 @@ end
 
 -- Widths the author chose are kept, except for one thing nobody chooses: a column too narrow for its own longest
 -- word, which LaTeX then breaks in the middle ("Sus-tained"). Such a column is raised to that word (a word longer
--- than WORD_CAP characters, a URL say, is not worth the room) and the other columns give up the space in
+-- than `column-word-floor-limit` characters, a URL say, is not worth the room) and the other columns give up the space in
 -- proportion to what they were given, none below its own floor. A table where every column already holds its
 -- longest word is returned untouched; one whose floors do not fit at all keeps the choice.
-local WORD_CAP = 16
-
-local function keep_words(tbl)
+local function keep_words(tbl, o)
   local ncols = #tbl.colspecs
-  local _, longest, word = collect(tbl)
+  local _, longest, word = collect(tbl, o.count_raw)
   local room = CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD
   local floor_, chars, floor_sum, short = {}, {}, 0, false
   for c = 1, ncols do
-    floor_[c] = math.min(word[c], longest[c], WORD_CAP)
+    floor_[c] = math.min(word[c], longest[c], o["column-word-floor-limit"])
     chars[c] = tbl.colspecs[c][2] * room
     floor_sum = floor_sum + floor_[c]
     if chars[c] < floor_[c] - 1e-9 then short = true end
@@ -263,13 +296,57 @@ local function keep_words(tbl)
   return tbl
 end
 
--- The two settings, set from the metadata before the walk (see Pandoc below), and a table's own attributes
--- (`{widths=force word-floor=off}` after its caption) win over them. widths: auto (equal dashes are "no opinion",
--- unequal ones a choice), keep (every table as written), force (the dashes are ignored, every table is balanced).
--- word-floor: on or off, whether a chosen column is raised to its longest word.
-local MODE, FLOOR, OUTLIER = "auto", true, 2
+-- The settings, set from the metadata before the walk (see Pandoc below); a table's own attributes
+-- (`{widths=force word-floor=off column-outlier=3}` after its caption) win over them. widths: auto (equal dashes are
+-- "no opinion", unequal ones a choice), keep (every table as written), force (the dashes are ignored, every table is
+-- balanced). word-floor: on or off, whether a chosen column is raised to its longest word. The numbers are
+-- settings too, none is a constant: column-outlier (times longer than the next cell; 0 = off), column-outlier-rows,
+-- column-outlier-length, column-word-floor-limit (the longest word the floor protects).
 local MODES = {auto = true, keep = true, force = true}
 local SWITCH = {on = true, ["true"] = true, yes = true, off = false, ["false"] = false, no = false}
+local GLOBAL = {
+  mode = "auto", floor = true, count_raw = true,
+  ["column-outlier"] = 2, ["column-outlier-rows"] = 4, ["column-outlier-length"] = 30, ["column-word-floor-limit"] = 16,
+}
+local NUMBERS = {"column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"}
+
+local function number_of(text)
+  if text == nil then return nil end
+  text = text:lower()
+  if text == "off" or text == "false" then return 0 end
+  local value = tonumber(text)
+  if value ~= nil and value >= 0 then return value end
+  return nil
+end
+
+-- the settings of one table: the global ones, then its own attributes (which are taken off the table)
+local function table_options(attributes)
+  local o = {}
+  for key, value in pairs(GLOBAL) do o[key] = value end
+  local given = attributes["widths"]
+  if given ~= nil then
+    if MODES[given:lower()] then o.mode = given:lower() end
+    attributes["widths"] = nil
+  end
+  given = attributes["word-floor"]
+  if given ~= nil then
+    if SWITCH[given:lower()] ~= nil then o.floor = SWITCH[given:lower()] end
+    attributes["word-floor"] = nil
+  end
+  given = attributes["count-raw-tex"]
+  if given ~= nil then
+    if SWITCH[given:lower()] ~= nil then o.count_raw = SWITCH[given:lower()] end
+    attributes["count-raw-tex"] = nil
+  end
+  for _, key in ipairs(NUMBERS) do
+    if attributes[key] ~= nil then
+      local value = number_of(attributes[key])
+      if value ~= nil then o[key] = value end
+      attributes[key] = nil
+    end
+  end
+  return o
+end
 
 local function rebalance(tbl)
   tables_seen = tables_seen + 1
@@ -277,28 +354,11 @@ local function rebalance(tbl)
   if ncols == 0 then return nil end
   local attributes = tbl.attr.attributes
   if attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
-  local mode, floor = MODE, FLOOR
-  if attributes["widths"] ~= nil then
-    local given = attributes["widths"]:lower()
-    if MODES[given] then mode = given end
-    attributes["widths"] = nil
-  end
-  if attributes["word-floor"] ~= nil then
-    local given = SWITCH[attributes["word-floor"]:lower()]
-    if given ~= nil then floor = given end
-    attributes["word-floor"] = nil
-  end
-  local outlier = OUTLIER
-  if attributes["column-outlier"] ~= nil then
-    local given = tonumber(attributes["column-outlier"])
-    if attributes["column-outlier"]:lower() == "off" then given = 0 end
-    if given ~= nil and given >= 0 then outlier = given end
-    attributes["column-outlier"] = nil
-  end
-  if mode == "keep" then return nil end
-  local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and mode ~= "force"
+  local o = table_options(attributes)
+  if o.mode == "keep" then return nil end
+  local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and o.mode ~= "force"
   if chosen then
-    if floor then return keep_words(tbl) end
+    if o.floor then return keep_words(tbl, o) end
     return nil
   end
   if ncols == 1 and not has_default(tbl.colspecs) then
@@ -306,7 +366,7 @@ local function rebalance(tbl)
     return tbl
   end
 
-  local rows, longest, word = collect(tbl)
+  local rows, longest, word = collect(tbl, o.count_raw)
   local total = 0
   for i = 1, ncols do total = total + longest[i] end
   -- The table's own content already fits a line: leave it at its natural size (and give back the natural
@@ -319,7 +379,7 @@ local function rebalance(tbl)
   end
 
   local widths = best_widths(rows, longest, word, CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD,
-                             outlier_caps(rows, longest, outlier))
+                             outlier_caps(rows, longest, o))
   local sum = 0
   for i = 1, ncols do sum = sum + widths[i] end
   for i, spec in ipairs(tbl.colspecs) do
@@ -330,7 +390,7 @@ local function rebalance(tbl)
 end
 
 -- A setting comes from the document's own `pdfmd-options` first, then from the global one pdfmd hands over
--- (`-M pdfmd-table-widths=...`, from the config or --setup).
+-- (`-M pdfmd-column-widths=...`, from the config or --setup). `table-widths` and `table-word-floor` are older names.
 local function setting(meta, name)
   local options = meta["pdfmd-options"]
   local value = nil
@@ -341,14 +401,15 @@ local function setting(meta, name)
 end
 
 function Pandoc(doc)
-  local mode = setting(doc.meta, "table-widths")
-  if mode ~= nil and MODES[mode] then MODE = mode end
-  local floor = SWITCH[setting(doc.meta, "table-word-floor") or ""]
-  if floor ~= nil then FLOOR = floor end
-  local ratio = setting(doc.meta, "column-outlier")
-  if ratio ~= nil then
-    if ratio == "off" or ratio == "false" then ratio = "0" end
-    if tonumber(ratio) ~= nil and tonumber(ratio) >= 0 then OUTLIER = tonumber(ratio) end
+  local mode = setting(doc.meta, "column-widths") or setting(doc.meta, "table-widths")
+  if mode ~= nil and MODES[mode] then GLOBAL.mode = mode end
+  local floor = SWITCH[setting(doc.meta, "column-word-floor") or setting(doc.meta, "table-word-floor") or ""]
+  if floor ~= nil then GLOBAL.floor = floor end
+  local raw = SWITCH[setting(doc.meta, "column-count-raw-tex") or ""]
+  if raw ~= nil then GLOBAL.count_raw = raw end
+  for _, key in ipairs(NUMBERS) do
+    local value = number_of(setting(doc.meta, key))
+    if value ~= nil then GLOBAL[key] = value end
   end
   return pandoc.Pandoc(doc.blocks:walk({Table = rebalance}), doc.meta)
 end

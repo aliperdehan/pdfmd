@@ -27,8 +27,9 @@ wait for an answer before any code.
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
-- [ ] Rename `table-widths` to `column-widths` (old name stays an alias) and `table-word-floor` to `column-word-floor`, built together with the next item; a whole-table width is a separate future key [3dl]
-- [ ] `column-word-ceil` (on by default; a column is never wider than its longest cell by more than `column-ceil-margin`, 25% of the line), built with the rename [3dl]
+- [ ] `column-word-ceil` (on by default; a column is never wider than its longest cell by more than `column-ceil-margin`, 25% of the line) [3dl]
+- [ ] Make the old constants settings: the budget 95, the column overhead 3, the math divisor 3, the sample size 200 (the author to say which) [3dl]
+- [ ] `table-keep` by height: keep a short table whole when it is under `table-keep-height` of a page (default 25%), plus orphan control; mechanics unspiked [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
@@ -43,7 +44,7 @@ wait for an answer before any code.
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
 - [ ] Width modes beyond auto/keep/force: combinations, per column, more per-table spellings [3dl]
-- [ ] A true width estimator for math, raw HTML and typography instead of character counts [3dl]
+- [ ] A true width estimator for math, raw HTML and typography instead of character counts; then delete the raw-TeX kludge (`column-count-raw-tex`) [3dl]
 - [ ] Cache the balanced widths per table by content hash [3dl]
 
 ## Other tools' command lines
