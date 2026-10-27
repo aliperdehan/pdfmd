@@ -128,15 +128,19 @@ line grows past one sentence or two, move the rest to the notes.
 
 ## Version numbers
 
-One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line
-is a patch (`3.N.x`), whatever it adds, so the version count stays small. The changelog
-entry and the `PDFMD_VERSION` bump still go in the same commit as the change.
+One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line that changes code, a feature,
+a setting or behaviour is a patch (`3.N.x`, +0.0.1) with a changelog entry of its own, in the same commit as the change and
+the `PDFMD_VERSION` bump. One commit, one version, one entry: never grouped by feature, never folded into the previous
+entry, even while the minor is unreleased.
 
-**Test-only and CI-only commits do not bump.** A commit that changes no shipped code (a test, a
-workflow, a docs file) keeps its changelog entry under the previous version with a letter:
-`## v3.30.30b — date`, then `c`, and so on. `PDFMD_VERSION` stays as it is, so `publish.yml`
-releases nothing. The letter lives only in `CHANGELOG.md`: as a version it would be a PEP 440
-pre-release (`3.30.30a0`), which sorts before 3.30.30. The tests that read the changelog match
-`## v<digits>.<digits>.<digits>` followed by a word boundary, so a lettered heading is skipped by
-them. A fix that is not yet released (the version is not on PyPI) goes into its own version's
-entry instead: no new heading at all.
+**No bump for a commit that changes no shipped code.**
+- A test, a workflow or a docs file (README, this file) that is the commit's whole change keeps a changelog entry under the
+  previous version with a letter: `## v3.30.30b — date`, then `c`, and so on. `PDFMD_VERSION` stays as it is, so
+  `publish.yml` releases nothing. The letter lives only in `CHANGELOG.md`: as a version it would be a PEP 440 pre-release
+  (`3.30.30a0`), which sorts before 3.30.30. The tests that read the changelog match `## v<digits>.<digits>.<digits>`
+  followed by a word boundary, so a lettered heading is skipped by them.
+- A commit that changes only `TODO.md` has no changelog entry at all, only its commit message, and a TODO line is never
+  listed in another commit's entry.
+
+**Only a fix to a bug that the unreleased version itself introduced** (the version is not on PyPI) goes into that
+version's entry with no new heading. A new feature or setting in a later commit does not: it is a patch of its own.

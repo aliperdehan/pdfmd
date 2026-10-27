@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.3b — 2026-10-27
+
+Pre-edit state: commit `b08a7b4`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.3.
+
+### Docs
+- `CLAUDE.md`, "Version numbers": one commit is one version and one entry; a test, workflow or docs file alone takes a lettered entry; a commit that changes only `TODO.md` has no entry; the unreleased-fix clause is for a fix to a bug of that very version only.
+
 ## v3.31.3 — 2026-10-27
 
 Pre-edit state: commit `4d6291b`. Still the tables line: the settings of the width filter are named for what they set, and none of their numbers is a constant.
