@@ -27,6 +27,8 @@ wait for an answer before any code.
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
+- [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS (today only preambles, filters, metadata, reference docs) [3dl]
+- [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
 
@@ -39,6 +41,9 @@ wait for an answer before any code.
 - [ ] CSV `widths`: repair a wrong count, `*` for a free column, never drop data
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
+- [ ] Width modes beyond auto/keep/force: combinations, per column, more per-table spellings [3dl]
+- [ ] A true width estimator for math, raw HTML and typography instead of character counts [3dl]
+- [ ] Cache the balanced widths per table by content hash [3dl]
 
 ## Other tools' command lines
 
@@ -70,3 +75,4 @@ is low priority. [3di]
 
 - [ ] inkmd: a quote right after a list is read as a paragraph; fix upstream, re-vendor [3ci]
 - [ ] nulabreport: grid tables cannot be kept whole (`labtabular`) [3cf]
+- [ ] nulabreport: decide `table-word-floor: off` for its chemical-names tables [3dl]

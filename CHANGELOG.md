@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.0b — 2026-10-27
+
+Pre-edit state: commit `15f70ee`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.0.
+
+### Docs
+- `CLAUDE.md`: "Decisions are recorded first": every decision goes into the maintainer's notes, at full context, and a short `TODO.md` line, before any code.
+
 ## v3.31.0 — 2026-10-27
 
 Pre-edit state: commit `d296523`. Opens the tables line (the plan is in the maintainer's notes): the first change is to the pipe-table width filter.

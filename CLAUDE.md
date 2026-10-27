@@ -101,6 +101,14 @@ changelog commit, pushed. A push without a version bump publishes nothing.
 Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
 publisher is registered to exactly those names.
 
+## Decisions are recorded first
+
+Every decision the author makes in chat (a choice between options, a wish, a design answer, a refusal) is written into the
+maintainer's working notes (the master queue) at full context, in the same turn and before any code: the question, the
+options, the answer, the reason, what it touches. It also gets a short line in `TODO.md` with the entry id. Chat is lost at
+the next compaction; a decision that exists only there gets re-asked, re-derived or never built. Code follows the record,
+never the other way round, and a decision changed later is edited in the notes, not only in the code.
+
 ## TODO.md
 
 `TODO.md` lists the open work, one line per item. When a commit finishes an item, delete its line in
