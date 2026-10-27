@@ -173,23 +173,91 @@ end
 -- pdfmd asks to hear about a table it had to resize (PDFMD_TABLEWIDTH_LOG: a file it reads afterwards); nothing
 -- is written when the variable is not set, or for a table that already fits
 local tables_seen = 0           -- the table's place in the document: engines tried one after the other count it once
-local function report()
+local function report(kind)
   local path = os.getenv("PDFMD_TABLEWIDTH_LOG")
   if path == nil or path == "" then return end
   local handle = io.open(path, "a")
   if handle then
-    handle:write(tables_seen .. "\n")
+    handle:write(tables_seen .. (kind or "") .. "\n")
     handle:close()
   end
 end
+
+-- Widths the author chose are kept, except for one thing nobody chooses: a column too narrow for its own longest
+-- word, which LaTeX then breaks in the middle ("Sus-tained"). Such a column is raised to that word (a word longer
+-- than WORD_CAP characters, a URL say, is not worth the room) and the other columns give up the space in
+-- proportion to what they were given, none below its own floor. A table where every column already holds its
+-- longest word is returned untouched; one whose floors do not fit at all keeps the choice.
+local WORD_CAP = 16
+
+local function keep_words(tbl)
+  local ncols = #tbl.colspecs
+  local _, longest, word = collect(tbl)
+  local room = CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD
+  local floor_, chars, floor_sum, short = {}, {}, 0, false
+  for c = 1, ncols do
+    floor_[c] = math.min(word[c], longest[c], WORD_CAP)
+    chars[c] = tbl.colspecs[c][2] * room
+    floor_sum = floor_sum + floor_[c]
+    if chars[c] < floor_[c] - 1e-9 then short = true end
+  end
+  if not short or floor_sum >= room then return nil end
+  local widths, locked = {}, {}
+  for c = 1, ncols do
+    if chars[c] < floor_[c] then widths[c] = floor_[c]; locked[c] = true end
+  end
+  local changed = true
+  while changed do
+    changed = false
+    local left, free = room, 0
+    for c = 1, ncols do
+      if locked[c] then left = left - widths[c] else free = free + chars[c] end
+    end
+    for c = 1, ncols do
+      if not locked[c] then
+        widths[c] = chars[c] * left / free
+        if widths[c] < floor_[c] then widths[c] = floor_[c]; locked[c] = true; changed = true end
+      end
+    end
+  end
+  for c, spec in ipairs(tbl.colspecs) do
+    tbl.colspecs[c] = {spec[1], widths[c] / room}
+  end
+  report("w")
+  return tbl
+end
+
+-- The two settings, set from the metadata before the walk (see Pandoc below), and a table's own attributes
+-- (`{widths=force word-floor=off}` after its caption) win over them. widths: auto (equal dashes are "no opinion",
+-- unequal ones a choice), keep (every table as written), force (the dashes are ignored, every table is balanced).
+-- word-floor: on or off, whether a chosen column is raised to its longest word.
+local MODE, FLOOR = "auto", true
+local MODES = {auto = true, keep = true, force = true}
+local SWITCH = {on = true, ["true"] = true, yes = true, off = false, ["false"] = false, no = false}
 
 local function rebalance(tbl)
   tables_seen = tables_seen + 1
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
-  if tbl.attr.attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
-  local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs)
-  if chosen then return nil end
+  local attributes = tbl.attr.attributes
+  if attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
+  local mode, floor = MODE, FLOOR
+  if attributes["widths"] ~= nil then
+    local given = attributes["widths"]:lower()
+    if MODES[given] then mode = given end
+    attributes["widths"] = nil
+  end
+  if attributes["word-floor"] ~= nil then
+    local given = SWITCH[attributes["word-floor"]:lower()]
+    if given ~= nil then floor = given end
+    attributes["word-floor"] = nil
+  end
+  if mode == "keep" then return nil end
+  local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and mode ~= "force"
+  if chosen then
+    if floor then return keep_words(tbl) end
+    return nil
+  end
   if ncols == 1 and not has_default(tbl.colspecs) then
     tbl.colspecs[1] = {tbl.colspecs[1][1]}
     return tbl
@@ -217,15 +285,21 @@ local function rebalance(tbl)
   return tbl
 end
 
--- `table-widths: keep` (pdfmd-options, or the global setting) leaves every table as the document wrote it.
-local function setting(meta)
-  local value = meta["pdfmd-table-widths"]
+-- A setting comes from the document's own `pdfmd-options` first, then from the global one pdfmd hands over
+-- (`-M pdfmd-table-widths=...`, from the config or --setup).
+local function setting(meta, name)
   local options = meta["pdfmd-options"]
-  if value == nil and options ~= nil and options["table-widths"] ~= nil then value = options["table-widths"] end
-  return value and pandoc.utils.stringify(value) or "auto"
+  local value = nil
+  if options ~= nil then value = options[name] end                    -- YAML `off` is the boolean false
+  if value == nil then value = meta["pdfmd-" .. name] end
+  if value == nil then return nil end
+  return pandoc.utils.stringify(value):lower()
 end
 
 function Pandoc(doc)
-  if setting(doc.meta) == "keep" then return nil end
+  local mode = setting(doc.meta, "table-widths")
+  if mode ~= nil and MODES[mode] then MODE = mode end
+  local floor = SWITCH[setting(doc.meta, "table-word-floor") or ""]
+  if floor ~= nil then FLOOR = floor end
   return pandoc.Pandoc(doc.blocks:walk({Table = rebalance}), doc.meta)
 end

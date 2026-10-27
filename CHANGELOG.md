@@ -40,6 +40,28 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.0 — 2026-10-27
+
+Pre-edit state: commit `d296523`. Opens the tables line (the plan is in the maintainer's notes): the first change is to the pipe-table width filter.
+
+### Fixed
+- **A column the author chose could break words in the middle.** A pipe table whose separator dashes are unequal (`|:-------|:-------------|`) is a
+  choice and was kept as written, even when a column came out narrower than its own longest word and LaTeX cut "Sustained" into "Sus-tained". A
+  chosen column too narrow for its longest word (a word of up to 16 characters; a URL is not worth the room) is now widened to it, and the
+  other columns give up the space in proportion to what they had, none below its own longest word. A table where every column already holds its
+  words is untouched, byte for byte. The note `AUTO TABLEWIDTH` says when it happened.
+
+### Added
+- **`table-word-floor: on|off`** (`pdfmd-options`, the config, `--setup` "Tables"): off leaves a chosen table exactly as written, for a table where
+  breaking a word is meant (long chemical names in a narrow column).
+- **`table-widths: force`** next to `auto` and `keep`: the dashes are ignored and every table gets the widths that give the fewest lines.
+- **A table's own `{widths=auto|keep|force word-floor=on|off}`** after its caption wins over the document and the config (Pandoc 3.8.2 or newer,
+  which keeps a caption's attributes on the table; older ones print them in the caption).
+- A document's `pdfmd-options` now wins over the global `table-widths` of the config (the global value used to shadow it).
+
+### Changed
+- The `AUTO TABLEWIDTH` note no longer says the tables "had no column widths" only: it also covers `table-widths: force`.
+
 ## v3.30.42b — 2026-10-26
 
 Pre-edit state: commit `4efe2c5`. Documentation only (the README and the notes in `pdfmd.py` and `--setup`): `PDFMD_VERSION` stays 3.30.42.

@@ -83,6 +83,75 @@ class Auto(unittest.TestCase):
         self.assertGreater(min(x, y, z), 0.1)
 
 
+def pandoc_version() -> tuple:
+    out = subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.split()[1]
+    return tuple(int(part) for part in out.split(".")[:3])
+
+
+# a chosen table (1 : 12 : 6 dashes) whose first column is a few characters wide but holds "Immediate"
+NARROW = (f"| Type | What it is | Example |\n|-|------------|------|\n"
+          f"| Immediate | {LONG} | tablets, patches |\n| Targeted | short | carriers |\n")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Modes(unittest.TestCase):
+    """v3.31.0: `table-word-floor` and the `force` mode of `table-widths`, global, per document and per table."""
+
+    def test_a_chosen_column_too_narrow_for_its_longest_word_is_widened_to_it(self):
+        [cols] = widths(NARROW)
+        self.assertAlmostEqual(sum(cols), 1.0, places=6)
+        self.assertGreaterEqual(cols[0] * (95 - 3 * 3), 9 - 1e-6)       # "Immediate" fits whole
+        self.assertGreater(cols[1], cols[2])                           # the others keep their order
+
+    def test_a_chosen_table_that_already_fits_is_left_exactly_as_written(self):
+        [cols] = widths(f"| A | B |\n|----------|-----------|\n| {LONG} | ok |\n")
+        self.assertAlmostEqual(cols[0], 10 / 21, places=9)
+        self.assertAlmostEqual(cols[1], 11 / 21, places=9)
+
+    def test_the_floor_can_be_switched_off_everywhere(self):
+        for extra in (["-M", "pdfmd-table-word-floor=off"],):
+            [cols] = widths(NARROW, *extra)
+            self.assertAlmostEqual(cols[0], 1 / 19, places=6)
+        [cols] = widths("---\npdfmd-options:\n  table-word-floor: off\n---\n\n" + NARROW)
+        self.assertAlmostEqual(cols[0], 1 / 19, places=6)
+
+    def test_the_document_wins_over_the_global_setting(self):
+        [cols] = widths("---\npdfmd-options:\n  table-word-floor: on\n---\n\n" + NARROW, "-M", "pdfmd-table-word-floor=off")
+        self.assertGreater(cols[0], 1 / 19)
+
+    def test_keep_means_exactly_as_written_without_the_floor(self):
+        [cols] = widths(NARROW, "-M", "pdfmd-table-widths=keep")
+        self.assertAlmostEqual(cols[0], 1 / 19, places=6)
+
+    def test_force_ignores_unequal_dashes(self):
+        text = f"| A | B |\n|--|-----------|\n| {LONG} | ok |\n"
+        [cols] = widths(text, "-M", "pdfmd-table-widths=force")
+        self.assertGreater(cols[0], 0.6)                               # the dashes said 2 : 11
+        [cols] = widths("---\npdfmd-options:\n  table-widths: force\n---\n\n" + text)
+        self.assertGreater(cols[0], 0.6)
+
+    @unittest.skipUnless(pandoc_version() >= (3, 8, 2), "caption attributes need Pandoc 3.8.2")
+    def test_one_table_can_say_so_after_its_caption(self):
+        [cols] = widths(NARROW + "\n: Caption {word-floor=off}\n")
+        self.assertAlmostEqual(cols[0], 1 / 19, places=6)
+        text = f"| A | B |\n|--|-----------|\n| {LONG} | ok |\n\n: Caption {{widths=force}}\n"
+        [cols] = widths(text)
+        self.assertGreater(cols[0], 0.6)
+        [cols] = widths(text.replace("force", "keep"), "-M", "pdfmd-table-widths=force")
+        self.assertAlmostEqual(cols[0], 2 / 13, places=6)
+
+
+class Config(unittest.TestCase):
+    def test_the_global_settings_reach_the_filter(self):
+        import pdfmd
+        from unittest import mock
+        with mock.patch.object(pdfmd, "config_options", lambda *a: {"table-widths": "Force", "table-word-floor": False}):
+            args = pdfmd.width_filter_args(Path("f.lua"))
+        self.assertEqual(args[2:], ["-M", "pdfmd-table-widths=force", "-M", "pdfmd-table-word-floor=off"])
+        with mock.patch.object(pdfmd, "config_options", lambda *a: {"table-widths": "sideways"}):
+            self.assertEqual(len(pdfmd.width_filter_args(Path("f.lua"))), 2)
+
+
 class Packaging(unittest.TestCase):
     def test_the_filters_ship_as_files_in_a_package(self):
         sys.path.insert(0, str(ROOT))

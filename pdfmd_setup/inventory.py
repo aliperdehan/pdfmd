@@ -197,6 +197,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "strict": "options.strict",
     "strip-comments": "options.strip-comments",
     "table-widths": "options.table-widths",
+    "table-word-floor": "options.table-word-floor",
     "text-to-markdown": "options.text-to-markdown",
     "unicode": "options.unicode",
 }

@@ -1118,8 +1118,12 @@ Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the
     width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.
     Unequal dashes (`--|-----`) are a choice and kept, but only under Pandoc's own Markdown reader (front matter, or a
     linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
+    v3.31.0: a chosen column too narrow for its longest word (a word of up to 16 characters) is widened to it and the
+    other columns give up the room (`table-word-floor: off` for a table where breaking a word is meant).
     `pdfmd-options: {table-widths: keep}` (or the same in the config, or --setup) leaves every table as written;
-    `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's widths as given.
+    `force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
+    caption wins. `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's
+    widths as given.
 
 Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
@@ -1416,7 +1420,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.30.42"
+PDFMD_VERSION = "3.31.0"
 import argparse
 import atexit
 import csv
@@ -2200,12 +2204,16 @@ CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 
 def width_filter_args(width_filter: Path) -> list[str]:
-    """``--lua-filter`` for the table-width filter, with the global `table-widths` setting (auto or keep)
-    handed to it; a document's own `pdfmd-options: {table-widths: ...}` reaches it through the metadata."""
+    """``--lua-filter`` for the table-width filter, with the global `table-widths` (auto, keep, force) and
+    `table-word-floor` (on, off) settings handed to it; a document's own `pdfmd-options: {table-widths: ...}` reaches
+    it through the metadata and wins."""
     args = ["--lua-filter", str(width_filter)]
-    value = config_options().get("table-widths")
-    if isinstance(value, str) and value.strip().casefold() in ("auto", "keep"):
-        args += ["-M", f"pdfmd-table-widths={value.strip().casefold()}"]
+    for key, allowed in (("table-widths", ("auto", "keep", "force")), ("table-word-floor", ("on", "off", "true", "false"))):
+        value = config_options().get(key)
+        if isinstance(value, bool):
+            value = "on" if value else "off"
+        if isinstance(value, str) and value.strip().casefold() in allowed:
+            args += ["-M", f"pdfmd-{key}={value.strip().casefold()}"]
     return args
 
 
@@ -10067,13 +10075,19 @@ def tablewidth_note(md_path, note) -> None:
         return
     log = Path(name)
     try:
-        count = len(set(log.read_text(encoding="utf-8").split()))
+        seen = set(log.read_text(encoding="utf-8").split())
         log.unlink(missing_ok=True)
     except OSError:
         return
+    count = sum(1 for mark in seen if not mark.endswith("w"))
+    widened = sum(1 for mark in seen if mark.endswith("w"))
     if count:
-        note("TABLEWIDTH", f"{md_path}: {count} wide table{'s' if count != 1 else ''} had no column widths and would "
-                           "run past the margin; pdfmd balanced the columns (--no-auto tablewidth stops it)")
+        note("TABLEWIDTH", f"{md_path}: {count} wide table{'s' if count != 1 else ''} had no column widths (or "
+                           "`table-widths: force` is set); pdfmd balanced the columns (--no-auto tablewidth stops it)")
+    if widened:
+        note("TABLEWIDTH", f"{md_path}: {widened} table{'s' if widened != 1 else ''} had a column too narrow for its "
+                           "longest word; pdfmd widened it and took the room from the others (`table-widths: keep` "
+                           "leaves the widths as written)")
 
 
 # -- Script-aware font fallback (v3.23.0) ----------------------------------------
