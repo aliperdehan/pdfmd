@@ -289,11 +289,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("keep", "exactly the widths the separator's dashes say"),
                 ("force", "the dashes are ignored: every table gets the widths that give the fewest lines")), "auto",
                "Auto keeps unequal dashes (Pandoc's Markdown reader only; LaTeX engines only) and balances equal ones. "
-               "One table: {widths=force} after its caption.", "Tables"),
+               "One table: {widths=force} after its caption (Pandoc 3.8.2 or newer).", "Tables"),
         choice("options.table-word-floor", "A narrow column keeps its longest word whole",
                (("on", "a chosen column too narrow for its longest word is widened to it"),
                 ("off", "the widths are exactly as chosen, words break where they must")), "on",
-               "Words longer than 16 characters are not protected. One table: {word-floor=off} after its caption. "
+               "Words longer than 16 characters are not protected. One table: {word-floor=off} after its caption (Pandoc 3.8.2 or newer). "
                "Not used under table-widths keep.", "Tables"),
         # -- code
         choice("options.code-wrap", "Long code lines (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",

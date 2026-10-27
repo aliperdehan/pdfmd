@@ -1420,7 +1420,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.0"
+PDFMD_VERSION = "3.31.1"
 import argparse
 import atexit
 import csv
@@ -4326,7 +4326,7 @@ PANDOC_MIN = (3, 1, 3)
 PANDOC_FEATURES = (
     ((3, 4), "Word files: the borderless style of numbered equations (the equation and its number sit in a plain table)"),
     ((3, 8, 2), "a table caption's {#id} read as the table's identifier: --extract-tables leaves a table whose caption "
-                "has one"),
+                "has one, and a table's own {widths=... word-floor=...} reaches the width filter"),
 )
 
 

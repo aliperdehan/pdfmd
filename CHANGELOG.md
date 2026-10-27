@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.1 — 2026-10-27
+
+Pre-edit state: commit `12cc24a`. Still the tables line.
+
+### Changed
+- `--doctor` lists the Pandoc 3.8.2 floor for a table's own `{widths=... word-floor=...}` (it reads the table's attributes from the caption), and the `--setup` notes of both keys say so.
+
 ## v3.31.0b — 2026-10-27
 
 Pre-edit state: commit `15f70ee`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.0.
