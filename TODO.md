@@ -11,6 +11,7 @@ wait for an answer before any code.
 ## Decide first
 
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
+- [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
 
 ## Features, agreed
 
