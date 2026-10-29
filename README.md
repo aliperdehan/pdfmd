@@ -2104,6 +2104,18 @@ second, `12.4 s` under a minute, `3:07`, `1:02:03` and from a day `1 d 02:03:04`
 `pdfmd-options` keys, `--setup` rows and flags (`--build-time` / `--no-build-time`, `--time-format STYLE`); the history file
 (`NAME.hst`) records each build's seconds as `took=`.
 
+**The record of a build.** Whatever the console showed, every build writes what happened to a plain-text file, so the one who
+debugs reads it instead of building again. It holds the command line, the versions of pdfmd, Pandoc and the engines, every command
+that ran, everything pdfmd printed (also what only `-v` prints at the places that print it), what each engine answered, the steps
+and their times. A build that failed ends with `full record: ~/.cache/pdfmd/builds/paper-1a2b3c4d/20261029-140533-failed.log`;
+`pdfmd --last-build paper.md` prints the newest record of a document and `--last-build --failed paper.md` the newest failed one
+(a good build after a bad one does not erase it). The records sit in the cache, where `cache: location` says (`global`: `~/.cache/pdfmd/builds`;
+`document`: `.cache/pdfmd/builds` beside the file, which then travels with the folder). `build-log: on|failed|off`
+(`--build-log MODE`), `build-log-keep` (the newest N stay, 5, and the newest failed one) and `build-log-max-size` (KB; a longer record keeps its start
+and its end; 512) are `pdfmd-options` keys and `--setup` rows. The home folder is written as `~` in the file, so a record can be pasted into a bug report.
+`pdfmd --clear-cache` removes them with the rest of the cache. A record that cannot be written never fails a build. Not yet in a record: the
+messages that only `-v` prints, a build of a `.qmd`, a direct `.typ`/`.html` build and a report or book build.
+
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.
 

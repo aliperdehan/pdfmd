@@ -51,7 +51,7 @@ UNSET = {
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.reader": "gfm without front matter, markdown with it",
-    "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
+    "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
     "options.check-ignore": "none",
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
     "options.office.reference-doc": "one beside the document, else Pandoc's",
@@ -88,6 +88,7 @@ FOLDER_OPTIONS = frozenset({
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
+    "options.build-log", "options.build-log-keep", "options.build-log-max-size",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
@@ -501,6 +502,15 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), seconds (12.4 s), words (3 min 7 s) or a "
              "template with {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2} {ms}, e.g. `{h}:{mm}:{ss}`. Per run: --time-format.",
              "Messages"),
+        choice("options.build-log", "Keep a record of each build for debugging afterwards",
+               (("on", "every build"), ("failed", "only a build that failed"), ("off", "none")), "on",
+               "A plain-text file in the cache (where `cache: location` says) with the command line, the commands run, what pdfmd "
+               "printed and what the engines said. A failed build prints its path; `pdfmd --last-build FILE [--failed]` shows it. "
+               "Per run: --build-log MODE.", "Messages"),
+        text("options.build-log-keep", "How many records of a document to keep",
+             "The newest ones, and the newest failed one whatever its age. Default 5.", "Messages", "config", "number"),
+        text("options.build-log-max-size", "Size cap of one record (KB)",
+             "A longer record keeps its start and its end. Default 512.", "Messages", "config", "number"),
         text("options.ok-delimiter", "What stands between the source and the file in the closing line",
              "OK    report.md > report.pdf. Any short text: >, ->, =>.", "Messages"),
         # -- checks and limits

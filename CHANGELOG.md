@@ -40,6 +40,29 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.5 — 2026-10-29
+
+Pre-edit state: commit `3cb13f4`. Still under 3.31, in front of the rest of the tables work.
+
+### Added
+- **The record of a build.** Every build writes a plain-text file to the cache: the command line, the versions (pdfmd, Python, Pandoc, the engines), every
+  command run (the `CMD` lines, whatever `--verbose` said), everything pdfmd printed, what each engine answered (exit code, stderr, stdout), the steps and their
+  times, and what the build answered; the home folder is written as `~`. It sits where `cache: location` says (`~/.cache/pdfmd/builds/NAME-HASH/`, or
+  `.cache/pdfmd/builds/NAME/` beside the document), one file per build (`20261029-140533-ok.log`, `-failed.log`). A failed build ends with `full record: PATH`
+  (`--verbose` also names the record of a good one); a build that stopped with an error is recorded too.
+- **`pdfmd --last-build FILE [--failed]`** prints the newest record, or the newest failed one; none: a message and exit status 1.
+- **`build-log: on|failed|off`** (default on; `--build-log MODE`), **`build-log-keep`** (default 5; the newest ones stay, and the newest failed one whatever its age,
+  so a good build never erases a failure) and **`build-log-max-size`** (KB, default 512; a longer record keeps its start and more of its end), in `pdfmd-options`,
+  the config and `--setup`.
+- The package `pdfmd_buildinfo.record` (pure): scrubbing, clipping, naming, atomic writing and pruning.
+
+### Notes
+- A first version, built from the central points (no `emit` yet): the lines that only `--verbose` prints at their own print sites are not in the record until every
+  message goes through one function. A `.qmd`, a direct `.typ`/`.html` build and a report or book build are not recorded yet. A record that cannot be written
+  (read-only or full disk) never fails a build.
+- `tests/test_00_environment.py` turns the record off for the suite as a whole (it would make a record for each of the thousand documents the tests build); the
+  tests of the record ask for it.
+
 ## v3.31.4 — 2026-10-29
 
 Pre-edit state: commit `f05d80e`. Still under 3.31, in front of the rest of the tables work (the author asked for it at once).

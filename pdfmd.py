@@ -1028,6 +1028,13 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     and `time-format: auto|clock|seconds|words|TEMPLATE` (`--time-format`; tokens {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2}
     {ms}) are `pdfmd-options` keys and `--setup` rows; the history file records the seconds as `took=`.
 
+    Every build leaves a record (v3.31.5): a plain-text file in the cache (`cache: location`: ~/.cache/pdfmd/builds/, or
+    .cache/pdfmd/builds/ beside the document) with the command line, the settings and versions, every command run, what pdfmd
+    printed whatever --verbose said, what the engines answered, the steps and their times. A build that failed prints
+    `full record: PATH`; `pdfmd --last-build FILE [--failed]` shows the newest. `build-log: on|failed|off` (--build-log MODE),
+    `build-log-keep` (5; the newest failed record stays besides) and `build-log-max-size` (KB, 512) are `pdfmd-options` keys
+    and `--setup` rows. The home folder is written as `~` in the file.
+
     A Lua filter pdfmd finds by itself is noted (v3.26.11): a NOTE the first time this machine runs it and the first
     time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;
     only `--strict` skips a new or edited filter outside a trusted folder.
@@ -1427,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.4"
+PDFMD_VERSION = "3.31.5"
 import argparse
 import atexit
 import csv
@@ -12751,6 +12758,231 @@ def time_breakdown(result) -> list[str]:
     return lines
 
 
+# -- The record of a build (v3.31.5) ---------------------------------------------------------------------------------
+# Every build writes what happened to a plain-text file in the cache (`cache: location`, global or beside the document):
+# the command line, the settings that decided, every command run, everything pdfmd printed (whatever --verbose said), what
+# the engines said, the steps and their times. A failed build prints where it is; `pdfmd --last-build FILE [--failed]` shows
+# it. The newest `build-log-keep` records stay, and the newest failed one whatever its age. `build-log: on|failed|off`,
+# `build-log-keep`, `build-log-max-size` (KB); the command line `--build-log MODE` reaches -j workers as PDFMD_BUILD_LOG.
+# The first version has no `emit` behind it: it holds the console text, the CMD lines and the engines' output; the
+# lines that only --verbose prints at their print sites join it when every message goes through one function.
+BUILD_LOG_CLI: str | None = None
+BUILD_LOG_MODES = ("on", "failed", "off")
+BUILD_LOG_KEEP = 5            # defaults of the two numbers; both are settings
+BUILD_LOG_KILOBYTES = 512
+
+
+def record_module():
+    """pdfmd_buildinfo.record, or None in a lone pdfmd.py."""
+    try:
+        from pdfmd_buildinfo import record
+        return record
+    except ImportError:
+        return None
+
+
+def record_note(text: str) -> None:
+    """Add lines to the record of the build that is running (nothing when there is none)."""
+    lines = BUILD.get("record")
+    if lines is not None and text:
+        lines.extend(text.rstrip("\n").split("\n"))
+
+
+def noted(label, engine: bool = False):
+    """Decorator: what a subprocess answered (exit code, stderr, stdout) goes into the record of the build; with
+    ``engine``, the label also joins the engines the build tried."""
+    def decorate(function):
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs):
+            result = function(*args, **kwargs)
+            if isinstance(result, subprocess.CompletedProcess):
+                name = label(args, kwargs) if callable(label) else label
+                if engine and name not in BUILD["tried"]:
+                    BUILD["tried"].append(name)
+                record_note(f"----- {name}: exit {result.returncode} -----")
+                for stream, text in (("stderr", result.stderr), ("stdout", result.stdout)):
+                    if isinstance(text, str) and text.strip():
+                        record_note(f"[{stream}]\n{text.strip()}")
+            return result
+        return wrapper
+    return decorate
+
+
+class _RecordTee:
+    """A text stream that passes everything on and keeps each line, in order, in the record."""
+
+    def __init__(self, stream, lines: list[str]):
+        self._stream, self._lines, self._partial = stream, lines, ""
+
+    def write(self, text):
+        self._partial += text
+        *complete, self._partial = self._partial.split("\n")
+        self._lines.extend(complete)
+        return self._stream.write(text)
+
+    def finish(self) -> None:
+        if self._partial:
+            self._lines.append(self._partial)
+            self._partial = ""
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+def build_log_mode_word(value) -> str | None:
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    text = str(value).strip().casefold() if value is not None else ""
+    return {"on": "on", "true": "on", "yes": "on", "off": "off", "false": "off", "no": "off", "failed": "failed"}.get(text)
+
+
+def resolve_build_log(md_path: Path, metadata_files: list[Path]) -> tuple[str, int, int]:
+    """(on | failed | off, how many records to keep, the size cap in KB): the command line, else the document's
+    `pdfmd-options` (`build-log`, `build-log-keep`, `build-log-max-size`), its metadata files', the config's, else on, 5, 512."""
+    def option(key: str):
+        if md_path.suffix.lower() in (".md", ".markdown"):
+            return first_pdfmd_option(md_path, metadata_files, key)
+        return config_options().get(key)
+
+    mode = build_log_mode_word(BUILD_LOG_CLI or os.environ.get("PDFMD_BUILD_LOG")) or build_log_mode_word(option("build-log")) or "on"
+    keep = option_flag_number(option("build-log-keep"))
+    kilobytes = option_flag_number(option("build-log-max-size"))
+    return (mode, int(keep) if keep and keep >= 1 else BUILD_LOG_KEEP,
+            int(kilobytes) if kilobytes and kilobytes > 0 else BUILD_LOG_KILOBYTES)
+
+
+def build_record_folders(md_path: Path, metadata_files: list[Path] | None = None) -> list[Path]:
+    """Where ``md_path``'s records are kept: [the folder its cache location names]; for a look-up, both places."""
+    stem = safe_stem(md_path.stem)
+    document = md_path.resolve().parent / LOCAL_CACHE_DIRNAME / "builds" / stem
+    machine = cache_root() / "builds" / f"{stem}-{hashlib.sha1(str(md_path.resolve()).encode('utf-8')).hexdigest()[:8]}"
+    if metadata_files is None:
+        return [machine, document]
+    try:
+        where = cache_location(md_path, metadata_files) if md_path.suffix.lower() in (".md", ".markdown") else "global"
+    except (SystemExit, OSError):
+        where = "global"
+    return [document if where == "document" else machine]
+
+
+class BuildRecorder:
+    """The record of one build: it listens to the console from the start, and writes the file when the build ends."""
+
+    def __init__(self, md_path: Path, metadata_files: list[Path], mode: str, keep: int, kilobytes: int):
+        self.md_path, self.metadata_files, self.mode, self.keep, self.kilobytes = md_path, metadata_files, mode, keep, kilobytes
+        self.lines: list[str] = []
+        self.started = datetime.now()
+        self.out, self.err = sys.stdout, sys.stderr
+        self.tees = (_RecordTee(self.out, self.lines), _RecordTee(self.err, self.lines))
+        sys.stdout, sys.stderr = self.tees
+        BUILD["record"] = self.lines
+
+    @classmethod
+    def start(cls, md_path: Path, metadata_files: list[Path]) -> "BuildRecorder | None":
+        """The recorder, or None when the record is off or cannot be made: a record never fails a build."""
+        try:
+            if record_module() is None:
+                return None
+            mode, keep, kilobytes = resolve_build_log(md_path, metadata_files)
+            return None if mode == "off" else cls(md_path, metadata_files, mode, keep, kilobytes)
+        except Exception:
+            return None
+
+    def stop(self) -> None:
+        for tee in self.tees:
+            tee.finish()
+        if sys.stdout is self.tees[0]:
+            sys.stdout = self.out
+        if sys.stderr is self.tees[1]:
+            sys.stderr = self.err
+        BUILD["record"] = None
+
+    def header(self, built, failure: str) -> list[str]:
+        ok = built is not None and bool(built[1])
+        command = os.environ.get("PDFMD_COMMAND_LINE") or shlex.join(sys.argv[1:])
+        pandoc = ".".join(str(part) for part in pandoc_version()) if which("pandoc") else "not found"
+        engines = [name for name in [*BUILD["tried"], *(built.failed if built is not None else []),
+                                     (built.engine if built is not None else "") or ""] if name]
+        rows = [("pdfmd", f"{PDFMD_VERSION}   python {platform.python_version()}   {platform.platform()}"),
+                ("when", f"{self.started:%Y-%m-%d %H:%M:%S}"),
+                ("document", str(self.md_path.resolve())),
+                ("folder", str(Path.cwd())),
+                ("command", f"pdfmd {command}"),
+                ("pandoc", pandoc),
+                ("engines", ", ".join(f"{name}: {engine_version_line(name) or 'no version'}" for name in dict.fromkeys(engines)) or "none")]
+        took = getattr(built, "seconds", None) if built is not None else None
+        timing = timing_module()
+        spent = f"  in {timing.format_duration(took)}" if took is not None and timing else ""
+        by = engine_label(built).strip() if built is not None else ""
+        rows.append(("result", ("ok" if ok else "FAILED") + spent + (f"  {by}" if by else "")))
+        if built is not None and getattr(built, "output", None):
+            rows.append(("output", str(built.output)))
+        if failure:
+            rows.append(("reason", failure))
+        return ["pdfmd build record", *(f"{name + ':':<10} {value}" for name, value in rows)]
+
+    def finish(self, built=None, failure: str = "") -> Path | None:
+        """Stop listening and write the record (a failed build always; a good one unless build-log is `failed`). The path."""
+        self.stop()
+        ok = built is not None and bool(built[1])
+        if ok and self.mode == "failed":
+            return None
+        try:
+            steps = time_breakdown(built) if built is not None else []
+            answer = built[2].strip() if built is not None and len(built) > 2 and isinstance(built[2], str) else ""
+            text = "\n".join([*self.header(built, failure), "", *steps, "",
+                              "----- what pdfmd printed, and what it ran -----", *self.lines, "",
+                              *(["----- what the build answered (the last 3000 characters of Pandoc's messages) -----", answer, ""]
+                                if answer else [])])
+            folder = self.build_folder()
+            prepare_cache_root(folder.parent.parent)
+            return record_module().write(folder, text, ok, self.keep, self.kilobytes * 1024)
+        except Exception:
+            return None
+
+    def build_folder(self) -> Path:
+        return build_record_folders(self.md_path, self.metadata_files)[0]
+
+
+def under_home(path: Path) -> str:
+    """``path`` with the home folder written as ``~`` (a record path is printed, and pasted into reports)."""
+    text, home = str(path), str(Path.home())
+    return "~" + text[len(home):] if text == home or text.startswith(home + os.sep) else text
+
+
+def failure_text(error: BaseException) -> str:
+    if isinstance(error, SystemExit):
+        return str(error.code) if isinstance(error.code, str) else f"exit {error.code}"
+    if isinstance(error, KeyboardInterrupt):
+        return "interrupted"
+    return f"{type(error).__name__}: {error}"
+
+
+def last_build_command(args) -> int:
+    """`pdfmd --last-build FILE [--failed]`: the newest record of FILE."""
+    record = record_module()
+    if record is None:
+        print("ERROR  --last-build needs the pdfmd_buildinfo package (a full install of pdfmd-cli).", file=sys.stderr)
+        return 1
+    status = 0
+    targets = args.path or [Path.cwd()]
+    for target in targets:
+        try:
+            document = find_markdown(target)
+        except FileNotFoundError as error:
+            raise SystemExit(f"ERROR  {error}")
+        found = record.newest_of(build_record_folders(document), failed=args.failed)
+        if found is None:
+            print(f"{display_path(document)}: no record of a {'failed ' if args.failed else ''}build "
+                  "(build-log is off, or it was never built here)", file=sys.stderr)
+            status = 1
+            continue
+        if len(targets) > 1:
+            print(f"==> {display_path(found)} <==")
+        sys.stdout.write(found.read_text(encoding="utf-8", errors="replace"))
+    return status
+
+
 def history_module():
     """pdfmd_history, or None in a lone pdfmd.py."""
     try:
@@ -18600,10 +18832,12 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     re-runnable even when an argument has spaces (a metadata file path
     under a directory with one, for instance).
     """
+    line = ("CMD  " + " ".join(shlex.quote(display_path(Path(part))) for part in cmd)
+            + f"  (cwd={display_path(cwd)})")
     if not verbose:
+        record_note(line)             # the record has it whatever --verbose said
         return
-    print("CMD  " + " ".join(shlex.quote(display_path(Path(part))) for part in cmd)
-          + f"  (cwd={display_path(cwd)})", file=sys.stderr)
+    print(line, file=sys.stderr)
 
 
 def engine_failure_reason(stderr: str) -> str | None:
@@ -19455,7 +19689,7 @@ def safe_stem(name: str) -> str:
 # not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
 # about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None}     # what built the file convert_one is working on
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": []}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -19471,6 +19705,7 @@ class Built(tuple):
         self = super().__new__(cls, items)
         self.engine, self.failed, self.output = engine, list(failed), output
         self.seconds, self.time_text, self.time_style, self.steps = None, "", "auto", []     # see attach_time
+        self.record_path = None                                                       # see BuildRecorder
         return self
 
 
@@ -20825,6 +21060,7 @@ WEASYPRINT_CSS_NOISE = re.compile(r"(?m)^WARNING: (?:Ignored `[^`\n]*` at \d+:\d
 
 
 @timed(lambda args, kwargs: "pandoc + " + str(kwargs["engine"] if "engine" in kwargs else args[1]))
+@noted(lambda args, kwargs: str(kwargs["engine"] if "engine" in kwargs else args[1]), engine=True)
 def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, page_options,
                        verbose: bool) -> subprocess.CompletedProcess:
     """Run one engine's Pandoc command: `run_pandoc(command, target)` as it is, or for "calibre" into an HTML
@@ -21848,14 +22084,25 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"], BUILD["partial"], BUILD["root"] = None, [], None, [], None, None
     begin_timer()
+    BUILD["tried"] = []
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
-    with warning_capture() as seen:
-        result = _convert_one_recorded(md_path, *args, **kwargs)
-        if result[1]:
-            check_output_budget(BUILD["output"], BUILD["sources"] or [md_path], md_path, metadata_files)
-    return finish_build(result, seen, md_path, metadata_files)
+    recorder = BuildRecorder.start(md_path, metadata_files)
+    try:
+        with warning_capture() as seen:
+            result = _convert_one_recorded(md_path, *args, **kwargs)
+            if result[1]:
+                check_output_budget(BUILD["output"], BUILD["sources"] or [md_path], md_path, metadata_files)
+        built = finish_build(result, seen, md_path, metadata_files)
+    except BaseException as error:
+        where = recorder.finish(None, failure_text(error)) if recorder else None
+        if where:
+            print(f"      full record: {under_home(where)}", file=sys.stderr)
+        raise
+    if recorder:
+        built.record_path = recorder.finish(built)
+    return built
 
 
 def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: list[Path] | None,
@@ -25286,6 +25533,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-time", action=argparse.BooleanOptionalAction, default=None,
                         help="print how long a build took on its closing line (`OK  a.md > a.pdf  in 3:07`; on by default; "
                              "--verbose adds the time of every step). Also `pdfmd-options: {build-time: off}`")
+    parser.add_argument("--build-log", choices=BUILD_LOG_MODES, metavar="MODE",
+                        help="the record of each build, kept in the cache for debugging afterwards (on, failed: only a build "
+                             "that failed, off). Also `pdfmd-options: {build-log: failed}`; `build-log-keep` and "
+                             "`build-log-max-size` (KB) are settings too")
+    parser.add_argument("--last-build", action="store_true",
+                        help="print the newest record of FILE's build (see --build-log)")
+    parser.add_argument("--failed", action="store_true", help="with --last-build: the newest record of a build that failed")
     parser.add_argument("--time-format", metavar="STYLE",
                         help="how a time is written: auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), "
                              "seconds (12.4 s), words (3 min 7 s), or a template with {d} {h} {hh} {m} {mm} {s} {ss} {s1} "
@@ -26342,8 +26596,11 @@ def run_main() -> None:
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
-    global BUILD_TIME_CLI, TIME_FORMAT_CLI
-    BUILD_TIME_CLI, TIME_FORMAT_CLI = args.build_time, args.time_format
+    global BUILD_TIME_CLI, TIME_FORMAT_CLI, BUILD_LOG_CLI
+    BUILD_TIME_CLI, TIME_FORMAT_CLI, BUILD_LOG_CLI = args.build_time, args.time_format, args.build_log
+    if args.build_log:
+        os.environ["PDFMD_BUILD_LOG"] = args.build_log
+    os.environ.setdefault("PDFMD_COMMAND_LINE", shlex.join(sys.argv[1:]))
     if args.build_time is not None:
         os.environ["PDFMD_BUILD_TIME"] = "1" if args.build_time else "0"
     if args.time_format:
@@ -26427,6 +26684,10 @@ def run_main() -> None:
         raise SystemExit(0 if dependency_report() else 1)
     if args.extract_tables or args.expand_tables or args.extract_inline_csv:
         raise SystemExit(tables_command(args))
+    if args.failed and not args.last_build:
+        raise SystemExit("--failed goes with --last-build: pdfmd --last-build --failed FILE")
+    if args.last_build:
+        raise SystemExit(last_build_command(args))
     if args.history or args.history_diff or args.history_restore:
         if args.history_diff and args.history_restore:
             raise SystemExit("--history-diff and --history-restore are different things; pick one.")
@@ -27492,6 +27753,8 @@ def run_main() -> None:
                 print(line)
         if error:
             print(error)
+        if getattr(result, "record_path", None) and (args.verbose or not ok):
+            print(f"{'      full record: ' if not ok else 'RECORD  '}{under_home(result.record_path)}")
     if args.batch and args.bopen is not None:
         built = [Path(result.output) for result in results
                  if result[1] and getattr(result, "output", None) is not None and Path(result.output).is_file()]
