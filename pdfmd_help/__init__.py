@@ -55,7 +55,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
         "-v", "--no-auto", "--full-paths", "--debug", "--keep-aux", "--strict", "--check", "--check-ignore",
-        "--max-asset-mb", "--max-output-mb")),
+        "--max-asset-mb", "--max-output-mb", "--build-time", "--no-build-time", "--time-format")),
 }
 
 COMMON = {

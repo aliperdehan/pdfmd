@@ -51,7 +51,7 @@ UNSET = {
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.reader": "gfm without front matter, markdown with it",
-    "options.strict": "off", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
+    "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit",
     "options.check-ignore": "none",
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
     "options.office.reference-doc": "one beside the document, else Pandoc's",
@@ -87,7 +87,7 @@ FOLDER_OPTIONS = frozenset({
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.strict",
-    "options.max-asset-mb", "options.max-output-mb", "options.check-ignore",
+    "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
@@ -494,6 +494,13 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("group", "files of one folder together: metadata: metadata.yaml + preamble.tex"),
                 ("path", "each with its path: metadata/metadata.yaml, metadata/preamble.tex")), "group",
                "Only this setting; a document does not change it.", "Messages"),
+        choice("options.build-time", "Say how long a build took", on_off, "",
+               "On the closing line: `OK    report.md > report.pdf  in 3:07`; --verbose adds the time of every step. "
+               "Per run: --build-time / --no-build-time.", "Messages"),
+        text("options.time-format", "How a time is written",
+             "auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), seconds (12.4 s), words (3 min 7 s) or a "
+             "template with {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2} {ms}, e.g. `{h}:{mm}:{ss}`. Per run: --time-format.",
+             "Messages"),
         text("options.ok-delimiter", "What stands between the source and the file in the closing line",
              "OK    report.md > report.pdf. Any short text: >, ->, =>.", "Messages"),
         # -- checks and limits

@@ -86,7 +86,7 @@ class Build(unittest.TestCase):
     def test_the_page_pandoc_writes_is_printed_with_the_documents_paper_and_the_print_style(self):
         done = self.run_pdfmd("-e", "chrome")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("OK    d.md > d.pdf  (chrome)", done.stdout)
+        self.assertRegex(done.stdout, r"OK    d\.md > d\.pdf(?:  in [\d.:]+(?: s)?)?  \(chrome\)")
         self.assertTrue((self.directory / "d.pdf").read_bytes().startswith(b"%PDF"))
         call = json.loads(self.log.read_text(encoding="utf-8"))
         html = call["html"]

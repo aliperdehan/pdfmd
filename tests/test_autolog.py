@@ -132,7 +132,7 @@ class Builds(unittest.TestCase):
         self.assertTrue(lines[1].startswith("DEFAULTS  global metadata, margin 1in"), lines[1])
         self.assertIn("font STIX Two Text", lines[1])
         self.assertIn("code in JetBrains Mono", lines[1])
-        self.assertEqual(lines[-1], "OK    d.md > d.tex")
+        self.assertRegex(lines[-1], r"^OK    d\.md > d\.tex(?:  in [\d.:]+(?: s)?)?$")
         self.assertLessEqual(len(lines), 4, lines)
         self.assertTrue(all(len(line) <= 110 for line in lines), lines)
         self.assertFalse(any(line.startswith("AUTO YAML") for line in lines))
@@ -168,9 +168,9 @@ class Builds(unittest.TestCase):
         self.assertIn("AUTO TABLEWIDTH", "\n".join(self.run_pdfmd("w.md", "--to", "latex", "--verbose")))
 
     def test_the_closing_line_names_the_file_and_the_delimiter_is_a_setting(self):
-        self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[-1], "OK    d.md > d.tex")
+        self.assertRegex(self.run_pdfmd("d.md", "--to", "latex")[-1], r"^OK    d\.md > d\.tex(?:  in [\d.:]+(?: s)?)?$")
         (self.root / "home" / "config.yaml").write_text("options:\n  ok-delimiter: '->'\n", encoding="utf-8")
-        self.assertEqual(self.run_pdfmd("d.md", "--to", "latex")[-1], "OK    d.md -> d.tex")
+        self.assertRegex(self.run_pdfmd("d.md", "--to", "latex")[-1], r"^OK    d\.md -> d\.tex(?:  in [\d.:]+(?: s)?)?$")
 
     def test_found_style_path_lists_each_file_with_its_path(self):
         (self.root / "home" / "config.yaml").write_text("options:\n  found-style: path\n", encoding="utf-8")

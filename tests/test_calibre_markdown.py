@@ -98,7 +98,7 @@ class Build(unittest.TestCase):
         done = self.run_pdfmd()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("NATIVE  d.md via calibre", done.stdout)
-        self.assertIn("OK    d.md > d.pdf  (calibre)", done.stdout)
+        self.assertRegex(done.stdout, r"OK    d\.md > d\.pdf(?:  in [\d.:]+(?: s)?)?  \(calibre\)")
         self.assertIn("Calibre's Markdown reader", done.stdout)
         call = json.loads(self.log.read_text(encoding="utf-8"))
         args = call["args"]

@@ -2091,8 +2091,18 @@ build that quietly fell back to Typst does not look like one that did not:
 $ pdfmd paper
 WARN  paper.md: lualatex failed (! Undefined control sequence.); trying xelatex...
 WARN  paper.md: xelatex failed (! Undefined control sequence.); trying typst...
-OK    paper.md > paper.pdf  (typst; lualatex, xelatex failed)
+OK    paper.md > paper.pdf  in 41.3 s  (typst; lualatex, xelatex failed)
 ```
+
+**How long it took.** The closing line says how long the build ran (`in 41.3 s`), also for a build that failed. `-v` adds a `TIME`
+line for every step (the engine, the history, the backup, ...) and what no step covers. The time is `auto`: `0.42 s` under a
+second, `12.4 s` under a minute, `3:07`, `1:02:03` and from a day `1 d 02:03:04`. `time-format` changes it: `clock`
+(`03:07`, hours never wrap into days: `30:00:00`), `seconds` (`187.0 s`), `words` (`3 min 7 s`), or a template with `{d}` days,
+`{h}`/`{hh}` hours, `{m}`/`{mm}` minutes, `{s}`/`{ss}` seconds, `{s1}`/`{s2}` seconds with one or two decimals and `{ms}`:
+`{h}:{mm}:{ss}`, `{s} s`. A unit with a larger one in the template wraps (minutes at 60 beside `{h}`); the largest counts everything
+(`{s} s` is `187 s` for 3 min 7 s). `build-time: off` (or `--no-build-time`) leaves the time off the line. Both settings are
+`pdfmd-options` keys, `--setup` rows and flags (`--build-time` / `--no-build-time`, `--time-format STYLE`); the history file
+(`NAME.hst`) records each build's seconds as `took=`.
 
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.

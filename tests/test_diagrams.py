@@ -197,7 +197,7 @@ class Diagrams(unittest.TestCase):
         for engine in [name for name in ("lualatex", "typst") if has(name)]:
             done = self.run_pdfmd("doc.md", "-e", engine, "-o", f"{engine}.pdf")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertRegex(done.stdout, rf"OK    doc\.md > \S+  \({engine}\)")
+            self.assertRegex(done.stdout, rf"OK    doc\.md > \S+(?:  in [\d.:]+(?: s)?)?  \({engine}\)")
             data = (self.directory / f"{engine}.pdf").read_bytes()
             self.assertTrue(data.startswith(b"%PDF-"))
             try:

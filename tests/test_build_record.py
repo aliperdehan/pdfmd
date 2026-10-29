@@ -93,7 +93,7 @@ class CommandLine(unittest.TestCase):
         self.write("doc.md", "# Hi\n\nText\n")
         done = self.run_pdfmd("doc.md", bare=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertRegex(done.stdout, r"(?m)^OK    doc\.md > doc\.pdf  \((inkmd|md2pdf)\)$")
+        self.assertRegex(done.stdout, r"(?m)^OK    doc\.md > doc\.pdf(?:  in [\d.:]+(?: s)?)?  \((inkmd|md2pdf)\)$")
 
     def test_strict_applies_to_the_built_in_renderer_too(self):
         self.write("doc.md", "---\ntitle: T\nlang: en\ncustom: 1\n---\n\n# Hi\n\nText\n")
@@ -156,7 +156,7 @@ class ClosingLineOfTheCacheRoute(unittest.TestCase):
         out = self.run_pdfmd()
         ok = [line for line in out.splitlines() if line.startswith("OK")]
         self.assertEqual(len(ok), 1, out)
-        self.assertRegex(ok[0], r"^OK\s+report\.md > report\.second\.pdf\s+\(lualatex\)$")
+        self.assertRegex(ok[0], r"^OK\s+report\.md > report\.second\.pdf(?:\s+in [\d.:]+(?: s)?)?\s+\(lualatex\)$")
         self.assertTrue((self.directory / "report.second.pdf").exists())
 
     def test_to_latex_still_names_the_tex(self):

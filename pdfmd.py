@@ -1023,6 +1023,11 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `--no-strict` overrides) turns a build that printed a WARN line, or about which Pandoc warned (a missing image or
     citation, a LaTeX undefined reference), into a failed file: the output is kept, the exit code is 1.
 
+    The closing line says how long the build took (v3.31.4): `OK    report.md > report.pdf  in 3:07  (lualatex)`, also for
+    a file that failed. `--verbose` adds a TIME line for every step. `build-time: on|off` (`--build-time` / `--no-build-time`)
+    and `time-format: auto|clock|seconds|words|TEMPLATE` (`--time-format`; tokens {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2}
+    {ms}) are `pdfmd-options` keys and `--setup` rows; the history file records the seconds as `took=`.
+
     A Lua filter pdfmd finds by itself is noted (v3.26.11): a NOTE the first time this machine runs it and the first
     time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;
     only `--strict` skips a new or edited filter outside a trusted folder.
@@ -1422,7 +1427,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.3"
+PDFMD_VERSION = "3.31.4"
 import argparse
 import atexit
 import csv
@@ -1449,6 +1454,7 @@ import zlib
 from collections import namedtuple
 from pathlib import PurePosixPath
 from fnmatch import fnmatchcase
+import functools
 from functools import lru_cache
 import logging
 import math
@@ -12645,6 +12651,106 @@ def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
 HISTORY_TIME_RE = re.compile(r"^(?P<text>.*?)\s+--\s+(?P<when>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$")
 
 
+# -- How long a build took (v3.31.4) --------------------------------------------------------------------------------
+# A timer starts with every build (BUILD["timer"]); the steps that matter carry @timed(...). The closing line says
+# `OK    report.md > report.pdf  in 3:07  (lualatex)`; --verbose adds a TIME line per step. `build-time: on|off` and
+# `time-format: auto|clock|seconds|words|TEMPLATE` (pdfmd-options, --setup, --build-time / --no-build-time, --time-format);
+# the package pdfmd_buildinfo writes the durations. The command line reaches -j workers as PDFMD_BUILD_TIME / PDFMD_TIME_FORMAT.
+BUILD_TIME_CLI: bool | None = None
+TIME_FORMAT_CLI: str | None = None
+
+
+def timing_module():
+    """pdfmd_buildinfo.timing, or None in a lone pdfmd.py (no time is shown then)."""
+    try:
+        from pdfmd_buildinfo import timing
+        return timing
+    except ImportError:
+        return None
+
+
+def begin_timer() -> None:
+    """Start the clock of the build that is about to run."""
+    timing = timing_module()
+    BUILD["timer"] = timing.Timer() if timing else None
+
+
+def timed(name):
+    """Decorator: the call is a step of the build's timer. ``name`` is the step's name, or a function of (args, kwargs)."""
+    def decorate(function):
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs):
+            timer = BUILD.get("timer")
+            if timer is None:
+                return function(*args, **kwargs)
+            with timer.step(name(args, kwargs) if callable(name) else name):
+                return function(*args, **kwargs)
+        return wrapper
+    return decorate
+
+
+def resolve_build_time(md_path: Path, metadata_files: list[Path]) -> tuple[bool, str]:
+    """(whether the closing line shows the time, its style): the command line, else the document's `pdfmd-options`
+    (`build-time`, `time-format`), its metadata files', the config file's, else on and `auto`."""
+    show = BUILD_TIME_CLI
+    if show is None and os.environ.get("PDFMD_BUILD_TIME") in ("0", "1"):
+        show = os.environ["PDFMD_BUILD_TIME"] == "1"
+    style = TIME_FORMAT_CLI or os.environ.get("PDFMD_TIME_FORMAT") or ""
+
+    def option(key: str):
+        if md_path.suffix.lower() in (".md", ".markdown"):
+            return first_pdfmd_option(md_path, metadata_files, key)
+        return config_options().get(key)
+
+    if show is None:
+        show = option_flag(option("build-time"))
+        show = True if show is None else show
+    if not style:
+        style = str(option("time-format") or "auto").strip()
+    timing = timing_module()
+    problem = timing.check_style(style) if timing else None
+    if problem:
+        print(f"WARN  {display_path(md_path)}: {problem}; using auto", file=sys.stderr)
+        style = "auto"
+    return show, style
+
+
+def attach_time(built: "Built", md_path: Path, metadata_files: list[Path]) -> "Built":
+    """Put the build's time, as it is to be written, and its steps on ``built``."""
+    timer, timing = BUILD.get("timer"), timing_module()
+    if timer is None or timing is None:
+        return built
+    show, style = resolve_build_time(md_path, metadata_files)
+    built.seconds = timer.elapsed()
+    built.time_text = timing.format_duration(built.seconds, style) if show else ""
+    built.time_style = style
+    built.steps = [(step.name, step.depth, step.seconds) for step in timer.steps]
+    return built
+
+
+def time_label(result) -> str:
+    """`  in 3:07` for the closing line; nothing when the time is off."""
+    text = getattr(result, "time_text", "")
+    return f"  in {text}" if text else ""
+
+
+def time_breakdown(result) -> list[str]:
+    """The TIME lines of --verbose: the whole build, then every step, a step inside another indented, and what no step
+    covers (finding the files and settings, the pre-passes, Pandoc's own work for formats with no engine)."""
+    timing = timing_module()
+    seconds = getattr(result, "seconds", None)
+    if timing is None or seconds is None:
+        return []
+    style = getattr(result, "time_style", "auto")
+    steps = getattr(result, "steps", [])
+    lines = [f"TIME  {display_path(result[0])}  {timing.format_duration(seconds, style)}"]
+    lines += [f"TIME  {'  ' * (depth + 1)}{name}  {timing.format_duration(took, style)}" for name, depth, took in steps]
+    covered = sum(took for _, depth, took in steps if depth == 0)
+    if steps and seconds - covered > 0:
+        lines.append(f"TIME    the rest (files, settings, pre-passes)  {timing.format_duration(seconds - covered, style)}")
+    return lines
+
+
 def history_module():
     """pdfmd_history, or None in a lone pdfmd.py."""
     try:
@@ -12703,6 +12809,7 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
     parts = part_digests([Path(item) for item in BUILD["sources"][1:]], BUILD.get("root"))     # so a later partial entry can say what changed
     entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (
         ("sha", digest), ("out", output.name), ("git", (where[0] + ("+" if where[1] else "")) if where else ""),
+        ("took", f"{BUILD['timer'].elapsed():.1f}" if BUILD.get("timer") is not None else ""),
         ("shas", ",".join(f"{name}:{part}" for name, part in parts if part))) if item[1]))
     path = history_file(md_path, metadata_files)
     try:
@@ -13695,6 +13802,7 @@ def record_partial_history(md_path: Path, metadata_files: list[Path], preamble_f
         print(f"AUTO HISTORY  {display_path(path)}: {entry.when} partial ({shown})")
 
 
+@timed("stamp and history")
 def stamp_build(partial: bool, skip: bool, md_path: Path, *args, **kwargs) -> None:
     """stamp_after_success for a finished build. A partial parts-mode build isn't the report, so it writes no BUILD NOTES
     stamp into the source (it would claim the report was built) -- but its PDF still says what made it (Creator,
@@ -14023,6 +14131,7 @@ def backup_unchanged(previous: Path, current: Path) -> bool:
     return BACKUP_IGNORED_LINE_RE.sub("", old_text) == BACKUP_IGNORED_LINE_RE.sub("", new_text)
 
 
+@timed("backup")
 def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
                          verbose: bool, cli_format: str | None = None, collect: "list[Path] | None" = None) -> None:
     """Snapshot md_path into its backup directory if --backup/
@@ -16792,6 +16901,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
     return mark_assembled(joined, partial=partial)
 
 
+@timed("assemble text")
 def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
                              plan: "EmbedPlan | None" = None,
@@ -19345,7 +19455,7 @@ def safe_stem(name: str) -> str:
 # not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
 # about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None}     # what built the file convert_one is working on
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -19360,6 +19470,7 @@ class Built(tuple):
     def __new__(cls, items, engine: str | None = None, failed=(), output=None):
         self = super().__new__(cls, items)
         self.engine, self.failed, self.output = engine, list(failed), output
+        self.seconds, self.time_text, self.time_style, self.steps = None, "", "auto", []     # see attach_time
         return self
 
 
@@ -19474,6 +19585,7 @@ def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[
                       f"{limit:g} MB asset budget (--max-asset-mb, pdfmd-options.max-asset-mb)", file=sys.stderr)
 
 
+@timed("size budget")
 def check_output_budget(output: Path | None, sources: list[Path], md_path: Path, metadata_files: list[Path]) -> None:
     """WARN when the output is over the output budget, with the largest images behind it."""
     _, limit = resolve_budget(md_path, metadata_files)
@@ -19571,6 +19683,7 @@ def seed_calc_mode(md_path: Path, metadata_files: list[Path]) -> str:
     return mode
 
 
+@timed("calc seed")
 def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Path], before: list[Path],
                     scratch: Path, from_format: str | None, verbose: bool) -> tuple[Path | None, int]:
     """The names a part built alone needs from the parts before it (v3.30.19; `pdfmd-options: {seed-calc: auto|scan|off}`).
@@ -19642,6 +19755,7 @@ def select_wanted(mode: str, target_format: str, engines: list[str], presentatio
     return True
 
 
+@timed("label scan")
 def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str], variables: list[str],
                      slide_level: int | None, pandoc_options: list[str], metadata_file, preamble_files,
                      from_format: str | None, no_auto: list[str] | None, stamp_overrides: dict,
@@ -20060,6 +20174,7 @@ def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
     return found
 
 
+@timed("plots")
 def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Path, preamble: str,
                          engine: str, cwd: Path, env: dict | None, roots: list[Path],
                          verbose: bool, aliases: dict[str, list[str]] | None = None) -> tuple[int, int]:
@@ -20138,6 +20253,7 @@ AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".
                       ".fls", ".fdb_latexmk", ".log", ".pdf")
 
 
+@timed("LaTeX (direct)")
 def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                        keep_aux: bool, verbose: bool, debug: bool,
                        aux_dir: Path | None = None, cwd: Path | None = None,
@@ -20240,6 +20356,7 @@ OFFICE_INPUT_EXTENSIONS = frozenset({
 })
 
 
+@timed("soffice")
 def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: str = "pdf") -> tuple[bool, str]:
     """Convert one file to PDF (or ``target``: doc, rtf, odt, txt, epub: v3.29.1) via headless LibreOffice, into ``output``.
 
@@ -20435,6 +20552,7 @@ def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: l
     return options
 
 
+@timed("calibre")
 def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool) -> subprocess.CompletedProcess:
     """`ebook-convert` the HTML page into `output` (written beside the page first, so a failed run leaves no
     half-written PDF). Qt runs offscreen on macOS and Linux: no window, and no display needed on a server."""
@@ -20676,6 +20794,7 @@ def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[
             f"@page landscape {{ size: {points(height)} {points(width)} !important; }}\n")        # for markup: landscape, the same paper turned
 
 
+@timed("browser print")
 def run_browser_print(html: Path, output: Path, engine: str, page_css: str, verbose: bool) -> subprocess.CompletedProcess:
     """Print the page with headless `engine` (chrome, chromium, edge, brave) into `output`: the page gets the paper and
     margins as `@page` and the print style of CALIBRE_CSS (Pandoc's own is for a screen). The browser writes into a scratch
@@ -20705,6 +20824,7 @@ WEASYPRINT_CSS_NOISE = re.compile(r"(?m)^WARNING: (?:Ignored `[^`\n]*` at \d+:\d
                                   r"[ \t]*(?:\n|$)")
 
 
+@timed(lambda args, kwargs: "pandoc + " + str(kwargs["engine"] if "engine" in kwargs else args[1]))
 def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, page_options,
                        verbose: bool) -> subprocess.CompletedProcess:
     """Run one engine's Pandoc command: `run_pandoc(command, target)` as it is, or for "calibre" into an HTML
@@ -21721,12 +21841,13 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
     if result[1] and problems and resolve_strict(md_path, metadata_files):
         result = (result[0], False, strict_message(problems))
-    return Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"])
+    return attach_time(Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"]), md_path, metadata_files)
 
 
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"], BUILD["partial"], BUILD["root"] = None, [], None, [], None, None
+    begin_timer()
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
@@ -22625,6 +22746,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     return attachments, merged, manifest
 
 
+@timed("attach source")
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
@@ -24133,6 +24255,7 @@ def polish_wanted() -> bool:
                 or options.get("attach_links") or options.get("info"))
 
 
+@timed("polish PDF")
 def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> None:
     """Apply the requested finishing touches to the built ``pdf_path``; a failure leaves the PDF as it was."""
     options = POLISH_CLI
@@ -25160,6 +25283,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
                              "a Pandoc [WARNING]...) counts as failed: the output is kept, the exit code is 1 "
                              "(also `pdfmd-options: {strict: true}`); --no-strict overrides the document")
+    parser.add_argument("--build-time", action=argparse.BooleanOptionalAction, default=None,
+                        help="print how long a build took on its closing line (`OK  a.md > a.pdf  in 3:07`; on by default; "
+                             "--verbose adds the time of every step). Also `pdfmd-options: {build-time: off}`")
+    parser.add_argument("--time-format", metavar="STYLE",
+                        help="how a time is written: auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), "
+                             "seconds (12.4 s), words (3 min 7 s), or a template with {d} {h} {hh} {m} {mm} {s} {ss} {s1} "
+                             "{s2} {ms}, e.g. '{h}:{mm}:{ss}'. Also `pdfmd-options: {time-format: clock}`")
     parser.add_argument("--max-asset-mb", type=float, metavar="MB",
                         help="a size budget for one image or data file: the build warns about each one over it before it "
                              "starts, --check reports it (asset-large). Also `pdfmd-options: {max-asset-mb: 5}`; 0 turns "
@@ -26212,6 +26342,16 @@ def run_main() -> None:
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
+    global BUILD_TIME_CLI, TIME_FORMAT_CLI
+    BUILD_TIME_CLI, TIME_FORMAT_CLI = args.build_time, args.time_format
+    if args.build_time is not None:
+        os.environ["PDFMD_BUILD_TIME"] = "1" if args.build_time else "0"
+    if args.time_format:
+        timing = timing_module()
+        problem = timing.check_style(args.time_format) if timing else None
+        if problem:
+            raise SystemExit(f"--time-format: {problem}")
+        os.environ["PDFMD_TIME_FORMAT"] = args.time_format
     for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"]), (args.csv_note, CSV_NOTE_ENV)):
         if value is not None:
             os.environ[variable] = str(value)
@@ -26646,6 +26786,7 @@ def run_main() -> None:
         need_engines(target_format)
         engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
         BUILD["engine"], BUILD["failed"] = None, []
+        begin_timer()
         report_capture = warning_capture()
         report_seen = report_capture.__enter__()       # --strict: the warnings of this build (closed before the OK lines)
         report_from, report_reader_reason = (
@@ -27048,8 +27189,12 @@ def run_main() -> None:
                     print(f"YAML  {display_path(metadata_file)}")
         if not args.verbose:
             AUTO_LOG.flush()
+        report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
         print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
-              + engine_label(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"])))
+              + time_label(report_built) + engine_label(report_built))
+        if args.verbose:
+            for line in time_breakdown(report_built):
+                print(line)
         if result.stderr:
             print(result.stderr[-3000:])
         if report_strict_failed:
@@ -27211,6 +27356,7 @@ def run_main() -> None:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
                                  "format in the document's own Quarto front matter instead")
             BUILD["engine"], BUILD["failed"] = None, []
+            begin_timer()
             with warning_capture() as seen:
                 built = convert_qmd(source, output, target_format, variables, pandoc_options)
             results = [finish_build(built, seen, source, [])]
@@ -27220,6 +27366,7 @@ def run_main() -> None:
                 backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
         elif direct_kind is not None:
             BUILD["engine"], BUILD["failed"] = None, []
+            begin_timer()
             with warning_capture() as seen:
                 built = convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
                                        apply_defaults=(config_options().get("apply-defaults", False) if args.apply_defaults is None
@@ -27339,7 +27486,10 @@ def run_main() -> None:
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
-        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{built_name(result)}{engine_label(result)}")
+        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{built_name(result)}{time_label(result)}{engine_label(result)}")
+        if args.verbose:
+            for line in time_breakdown(result):
+                print(line)
         if error:
             print(error)
     if args.batch and args.bopen is not None:

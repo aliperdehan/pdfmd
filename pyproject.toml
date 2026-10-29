@@ -65,7 +65,7 @@ pan-tec = "pdfmd:pan_tec_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
-packages = ["pdfmd_ansi", "pdfmd_check", "pdfmd_chem", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_raw", "pdfmd_setup", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode"]
+packages = ["pdfmd_ansi", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_raw", "pdfmd_setup", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode"]
 
 [tool.setuptools.package-data]
 pdfmd_docs = ["*.md"]

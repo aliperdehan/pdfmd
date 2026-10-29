@@ -40,6 +40,24 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.4 — 2026-10-29
+
+Pre-edit state: commit `f05d80e`. Still under 3.31, in front of the rest of the tables work (the author asked for it at once).
+
+### Added
+- **How long a build took.** The closing line ends in the time, `OK    report.md > report.pdf  in 3:07  (lualatex)`, also for a file that failed
+  (`FAIL  report.md  in 0.15 s`) and for a report or book build. Written by `time-format` (the new package `pdfmd_buildinfo`): `auto` (the default;
+  `0.42 s`, `12.4 s`, `3:07`, `1:02:03`, `1 d 02:03:04`), `clock` (`03:07`; hours never wrap into days), `seconds`, `words`, or a template with
+  `{d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2} {ms}`; a unit wraps only under a larger one of the template, and the time is rounded to the smallest unit shown.
+- **`build-time: on|off`** (default on) and **`time-format`**, in `pdfmd-options`, the config, `--setup`, and as `--build-time` / `--no-build-time` and
+  `--time-format STYLE`. A wrong format stops the command line and warns for a document (it reads as `auto`).
+- **`--verbose` prints a `TIME` line for every step**: the engine run (`pandoc + lualatex`; a font retry is a second line), the label and calc passes, plots,
+  polish, attach-source, backup, history, the size budget; and "the rest" (finding files and settings, the pre-passes no step covers).
+- **The history file records the seconds** of a build (`took=187.4`) when the history goes to `NAME.hst`; nothing is written into the document's BUILD NOTES.
+
+### Changed
+- The tests that matched the whole closing line take the time into account.
+
 ## v3.31.3b — 2026-10-27
 
 Pre-edit state: commit `b08a7b4`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.3.

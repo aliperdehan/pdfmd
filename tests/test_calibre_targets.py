@@ -315,7 +315,7 @@ class Build(unittest.TestCase):
         # the bug: `-o d.azw3` wrote a PDF named d.azw3
         done = self.run_pdfmd("-o", "d.azw3")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("OK    d.md > d.azw3  (calibre)", done.stdout)
+        self.assertRegex(done.stdout, r"OK    d\.md > d\.azw3(?:  in [\d.:]+(?: s)?)?  \(calibre\)")
         made = (self.directory / "d.azw3").read_bytes()
         self.assertTrue(made.startswith(b"PK"), made[:8])                           # the stand-in copied an EPUB (a zip)
         self.assertNotIn(b"%PDF", made[:8])
@@ -328,7 +328,7 @@ class Build(unittest.TestCase):
         done = self.run_pdfmd("--to", "mobi")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertTrue((self.directory / "d.mobi").is_file())
-        self.assertIn("OK    d.md > d.mobi  (calibre)", done.stdout)
+        self.assertRegex(done.stdout, r"OK    d\.md > d\.mobi(?:  in [\d.:]+(?: s)?)?  \(calibre\)")
 
     def test_e_calibre_takes_a_shared_format_with_a_note(self):
         done = self.run_pdfmd("-e", "calibre", "-o", "d.docx")
@@ -430,7 +430,7 @@ class SofficeBuild(unittest.TestCase):
     def test_doc_is_made_from_the_word_file_pandoc_writes(self):
         done = self.run_pdfmd("-o", "d.doc")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("OK    d.md > d.doc  (soffice)", done.stdout)
+        self.assertRegex(done.stdout, r"OK    d\.md > d\.doc(?:  in [\d.:]+(?: s)?)?  \(soffice\)")
         self.assertTrue((self.directory / "d.doc").read_bytes().startswith(b"PK"))            # the stand-in copied the .docx
         (call,) = self.calls()
         self.assertEqual(call[call.index("--convert-to") + 1], "doc")
