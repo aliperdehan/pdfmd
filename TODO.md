@@ -12,7 +12,7 @@ wait for an answer before any code.
 
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
-- [ ] **decide** build time on the result line and per step (togglable, adjustable format) and a stored build record for debugging after the fact; design draft, open questions [3dn]
+- [ ] Build record: the lines only -v prints (in progress, 3.31.6), LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
 ## Features, agreed
 
@@ -72,6 +72,7 @@ is low priority. [3di]
 
 ## Investigate first, no commitment
 
+- [ ] pdfmd-gui: an Overleaf-like project view; one local web UI plus thin native wrappers, a client of the CLI, never obligatory; its foundation (emit, `--json`, the split, the generated reference) ships in 3.x before 4.0 [3do]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
 
