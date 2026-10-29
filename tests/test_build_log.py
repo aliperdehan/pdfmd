@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import pdfmd  # noqa: E402,F401
 from pdfmd_buildinfo import record  # noqa: E402
 
 
@@ -64,6 +65,35 @@ class Pure(unittest.TestCase):
         self.assertIsNone(record.newest_of([self.path / "none"]))
 
 
+class VerbosePrint(unittest.TestCase):
+    def test_shown_goes_to_the_console_and_hidden_to_the_record_only(self):
+        import contextlib
+        import io
+        import pdfmd
+        lines: list[str] = []
+        saved = pdfmd.BUILD["record"]
+        pdfmd.BUILD["record"] = lines
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                pdfmd.vprint(True, "seen", 1)
+                pdfmd.vprint(False, "hidden", 2)
+                pdfmd.vprint(False, "a", "b", sep="-")
+            self.assertEqual(out.getvalue(), "seen 1\n")
+            self.assertEqual(lines, ["hidden 2", "a-b"])
+        finally:
+            pdfmd.BUILD["record"] = saved
+
+    def test_no_record_running_nothing_happens(self):
+        import pdfmd
+        saved = pdfmd.BUILD["record"]
+        pdfmd.BUILD["record"] = None
+        try:
+            pdfmd.vprint(False, "nowhere")
+        finally:
+            pdfmd.BUILD["record"] = saved
+
+
 class Builds(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -93,6 +123,16 @@ class Builds(unittest.TestCase):
                          "what pdfmd printed, and what it ran", "TIME  d.md"):
             self.assertIn(expected, text)
         self.assertNotIn("full record", done.stdout)               # nothing to point at when the build went well
+
+    def test_the_record_holds_every_line_that_only_verbose_prints(self):
+        quiet = self.run_pdfmd()
+        self.assertNotIn("AUTO ", quiet.stdout)                       # the console is as it was without -v
+        record_text = self.records()[0].read_text(encoding="utf-8")
+        loud = self.run_pdfmd("--verbose", "--build-log", "off")
+        auto = [line for line in loud.stdout.splitlines() if line.startswith("AUTO ")]
+        self.assertTrue(auto)
+        for line in auto:
+            self.assertIn(line.split("  ")[0] + "  ", record_text, line)
 
     def test_verbose_names_the_record(self):
         self.assertRegex(self.run_pdfmd("--verbose").stdout, r"(?m)^RECORD  \S+-ok\.log$")

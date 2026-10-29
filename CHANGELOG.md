@@ -40,6 +40,16 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.6 — 2026-10-29
+
+Pre-edit state: commit `9f09a1f`. Still under 3.31. The first step of `emit` (the chatter ladder of the tables line, which is NOT started).
+
+### Changed
+- **The record of a build holds the lines that only `--verbose` shows.** The 40 or so places that printed under `--verbose` (the `AUTO` decisions, `CALC`,
+  `LABELS`, `OFFICE`, `HYBRID`, the direct routes, backups and the history) call `vprint(shown, ...)`: on the console when `--verbose` is on, as before, and in the record
+  always. The metadata files the build used are in the record too. The console without `-v` is unchanged. `WARN`, `NOTE` and `ERROR` lines still print directly
+  (the console shows them anyway); the chatter ladder will move them to one `emit(level, id, text)` and `vprint` becomes its verbose level.
+
 ## v3.31.5 — 2026-10-29
 
 Pre-edit state: commit `3cb13f4`. Still under 3.31, in front of the rest of the tables work.

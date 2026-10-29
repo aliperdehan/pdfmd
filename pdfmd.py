@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.5"
+PDFMD_VERSION = "3.31.6"
 import argparse
 import atexit
 import csv
@@ -3655,8 +3655,8 @@ def ansi_finish(json_file: Path, output: Path, md_path: Path, verbose: bool = Fa
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
         return f"{display_path(md_path)}: --to ansi could not draw what Pandoc made ({type(error).__name__}: {error})"
     write_text_lf(output, text)
-    if skipped and verbose:
-        print(f"NOTE  ansi: {display_path(md_path)}: {skipped} raw piece{'s' if skipped != 1 else ''} (LaTeX, Word XML) "
+    if skipped:
+        vprint(verbose, f"NOTE  ansi: {display_path(md_path)}: {skipped} raw piece{'s' if skipped != 1 else ''} (LaTeX, Word XML) "
               "no terminal can show left out", file=sys.stderr)
     return None
 
@@ -4239,8 +4239,7 @@ def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
         return engines
     resolved = select_engines(requested, presentation,
                               label=f"pdf-engine setting for {md_path.name}")
-    if verbose:
-        print(f"ENGINE  {md_path}: " + " -> ".join(resolved))
+    vprint(verbose, f"ENGINE  {md_path}: " + " -> ".join(resolved))
     return resolved
 
 
@@ -5687,8 +5686,7 @@ def set_pdf_info(pdf_path: Path, metadata: dict, verbose: bool, creator: str = "
         writer.add_metadata({**(dict(reader.metadata) if reader.metadata else {}), **info})
         atomic_write_pdf(writer, pdf_path)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
-        if verbose:
-            print(f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr)
+        vprint(verbose, f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr)
 
 
 @contextmanager
@@ -6844,10 +6842,10 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
         return
     left = data.get("left_over") or []
     done = int(data.get("math", 0)) + int(data.get("native", 0))
-    if done and verbose:
-        print(f"OFFICE  {md_path}: {data.get('math', 0)} formula(s) and {data.get('native', 0)} LaTeX piece(s) made native")
-    if data.get("chem_calls") and verbose:
-        print(f"OFFICE  {md_path}: \\ce and siunitx converted in {data['chem_calls']} call(s) of pdfmd_chem")
+    if done:
+        vprint(verbose, f"OFFICE  {md_path}: {data.get('math', 0)} formula(s) and {data.get('native', 0)} LaTeX piece(s) made native")
+    if data.get("chem_calls"):
+        vprint(verbose, f"OFFICE  {md_path}: \\ce and siunitx converted in {data['chem_calls']} call(s) of pdfmd_chem")
     if left:
         kinds: dict[str, int] = {}
         for item in left:
@@ -6856,9 +6854,8 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
         name = {"docx": "Word", "odt": "OpenDocument", "typst": "Typst", "html": "HTML"}.get(target, target)
         print(f"WARN  {md_path}: LaTeX the {name} output could not express: "
               + ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items())), file=sys.stderr)
-        if verbose:
-            for item in left[:20]:
-                print(f"      {item['kind']}: {' '.join(item['tex'].split())[:110]}", file=sys.stderr)
+        for item in left[:20]:
+            vprint(verbose, f"      {item['kind']}: {' '.join(item['tex'].split())[:110]}", file=sys.stderr)
 
 
 @contextmanager
@@ -7161,8 +7158,8 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
         except (OSError, zipfile.BadZipFile, KeyError) as error:
             print(f"WARN  {context['md_path']}: could not finish the pictures in {output.name} ({error})", file=sys.stderr)
             done = 0
-        if done and verbose:
-            print(f"OFFICE  {context['md_path']}: {done} LaTeX picture(s) drawn by LaTeX and embedded (SVG with PNG fallback)")
+        if done:
+            vprint(verbose, f"OFFICE  {context['md_path']}: {done} LaTeX picture(s) drawn by LaTeX and embedded (SVG with PNG fallback)")
     return result
 
 
@@ -9532,6 +9529,7 @@ class AutoLog:
         if verbose:
             print(f"AUTO {kind}  {detail}")
             return
+        record_note(f"AUTO {kind}  {detail}")           # the record has it whatever --verbose said
         if heading is None:
             found = self.classify(kind, detail)
             heading, short = found if found else (None, None)
@@ -9541,16 +9539,22 @@ class AutoLog:
             return
         self.items[(heading, kind if kind in self.ONE_OF else short)] = (self.RANK.get(kind, 9), short)
 
+    @staticmethod
+    def file_line(kind: str, path: Path) -> str:
+        """The AUTO line of a file pdfmd picked up."""
+        if kind == "YAML" and is_global_metadata(path):
+            return (f"AUTO {kind}  {display_path(path)}  "
+                    + ("(the global metadata of pdfmd --setup)" if preset_name(path) == "default"
+                       else f"(the preset {preset_name(path)} of pdfmd --setup)"))
+        return f"AUTO {kind}  {display_path(path)}"
+
     def record_file(self, kind: str, path: Path, verbose: bool) -> None:
         """A file pdfmd picked up (AUTO YAML / AUTO TEX): FOUND, but the global metadata is a default."""
+        line = self.file_line(kind, path)
         if verbose:
-            if kind == "YAML" and is_global_metadata(path):
-                print(f"AUTO {kind}  {display_path(path)}  "
-                      + ("(the global metadata of pdfmd --setup)" if preset_name(path) == "default"
-                         else f"(the preset {preset_name(path)} of pdfmd --setup)"))
-            else:
-                print(f"AUTO {kind}  {display_path(path)}")
+            print(line)
             return
+        record_note(line)
         if kind == "YAML" and is_global_metadata(path):
             self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata" if preset_name(path) == "default"
                                                   else f"preset {preset_name(path)}")
@@ -12481,10 +12485,10 @@ def stamp_summary(options: dict, texts: list[str], verbose: bool) -> str:
         version = package_version(name)
         if version:
             parts.append(f"{name} {version}")
-        elif verbose:
-            print(f"WARN  --stamp: {name} is loaded but its version could not be "
-                 "determined (kpsewhich missing, package not installed, or no "
-                 "\\ProvidesPackage line)", file=sys.stderr)
+        else:
+            vprint(verbose, f"WARN  --stamp: {name} is loaded but its version could not be "
+                   "determined (kpsewhich missing, package not installed, or no "
+                   "\\ProvidesPackage line)", file=sys.stderr)
     parts.append(f"pdfmd v{PDFMD_VERSION}")
     return ", ".join(parts)
 
@@ -12651,8 +12655,7 @@ def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
     atomic_write_text(md_path, updated)
     if warning:
         print(f"WARN  {md_path}: {warning}", file=sys.stderr)
-    if verbose:
-        print(f"AUTO STAMP  {md_path}: {new_line}")
+    vprint(verbose, f"AUTO STAMP  {md_path}: {new_line}")
 
 
 HISTORY_TIME_RE = re.compile(r"^(?P<text>.*?)\s+--\s+(?P<when>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$")
@@ -12764,8 +12767,8 @@ def time_breakdown(result) -> list[str]:
 # the engines said, the steps and their times. A failed build prints where it is; `pdfmd --last-build FILE [--failed]` shows
 # it. The newest `build-log-keep` records stay, and the newest failed one whatever its age. `build-log: on|failed|off`,
 # `build-log-keep`, `build-log-max-size` (KB); the command line `--build-log MODE` reaches -j workers as PDFMD_BUILD_LOG.
-# The first version has no `emit` behind it: it holds the console text, the CMD lines and the engines' output; the
-# lines that only --verbose prints at their print sites join it when every message goes through one function.
+# It holds the console text, the CMD lines, the engines' output and the lines that only --verbose prints (v3.31.6: those
+# sites call vprint(), the first step of `emit`; WARN/NOTE/ERROR still print directly, and the console shows them anyway).
 BUILD_LOG_CLI: str | None = None
 BUILD_LOG_MODES = ("on", "failed", "off")
 BUILD_LOG_KEEP = 5            # defaults of the two numbers; both are settings
@@ -12786,6 +12789,16 @@ def record_note(text: str) -> None:
     lines = BUILD.get("record")
     if lines is not None and text:
         lines.extend(text.rstrip("\n").split("\n"))
+
+
+def vprint(shown: bool, *args, **kwargs) -> None:
+    """print() for a line that only --verbose shows: on the console when ``shown``, and always in the record of the build
+    (the first step of `emit`: the sites that print under --verbose go through here, the chatter ladder turns it into
+    emit(level, id, text))."""
+    if shown:
+        print(*args, **kwargs)
+    else:
+        record_note(str(kwargs.get("sep", " ")).join(str(item) for item in args))
 
 
 def noted(label, engine: bool = False):
@@ -12876,6 +12889,8 @@ class BuildRecorder:
         self.tees = (_RecordTee(self.out, self.lines), _RecordTee(self.err, self.lines))
         sys.stdout, sys.stderr = self.tees
         BUILD["record"] = self.lines
+        for path in metadata_files:             # main announces these after the build, when the record is closed
+            record_note(AutoLog.file_line("YAML", path))
 
     @classmethod
     def start(cls, md_path: Path, metadata_files: list[Path]) -> "BuildRecorder | None":
@@ -13050,8 +13065,7 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
         print(f"WARN  {display_path(md_path)}: cannot write {display_path(path)} ({error.strerror or error})", file=sys.stderr)
         return True
     backup_notice(path.parent, resolve_backup_options(md_path, list(metadata_files), None))
-    if verbose:
-        print(f"AUTO HISTORY  {display_path(path)}: {entry.when} compiled")
+    vprint(verbose, f"AUTO HISTORY  {display_path(path)}: {entry.when} compiled")
     return True
 
 
@@ -14030,8 +14044,7 @@ def record_partial_history(md_path: Path, metadata_files: list[Path], preamble_f
     except OSError as error:
         print(f"WARN  {display_path(md_path)}: cannot write {display_path(path)} ({error.strerror or error})", file=sys.stderr)
         return
-    if verbose:
-        print(f"AUTO HISTORY  {display_path(path)}: {entry.when} partial ({shown})")
+    vprint(verbose, f"AUTO HISTORY  {display_path(path)}: {entry.when} partial ({shown})")
 
 
 @timed("stamp and history")
@@ -14384,9 +14397,8 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         backup_notice(backup_dir, options)
         every, prunable = backup_snapshots(backup_dir, md_path, template)
         if every and backup_unchanged(every[-1], md_path):
-            if verbose:
-                print(f"AUTO BACKUP  {display_path(md_path)}: unchanged since "
-                      f"{display_path(every[-1])}; skipped")
+            vprint(verbose, f"AUTO BACKUP  {display_path(md_path)}: unchanged since "
+                  f"{display_path(every[-1])}; skipped")
             return
         target = backup_target(backup_dir, template, md_path)
         shutil.copy2(md_path, target)
@@ -14398,8 +14410,7 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         if options["keep"] and len(prunable) > options["keep"]:
             for old in prunable[:-options["keep"]]:
                 old.unlink()
-                if verbose:
-                    print(f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
+                vprint(verbose, f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
     except OSError as error:
         print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
 
@@ -14630,10 +14641,9 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
     if not options.get("pdf_metadata"):
         return
     if pypdf is None:
-        if verbose:
-            print("WARN  --stamp: pdf_metadata is on but pypdf is not installed "
-                  "(pip install pypdf) -- skipping the PDF Info-dictionary stamp",
-                  file=sys.stderr)
+        vprint(verbose, "WARN  --stamp: pdf_metadata is on but pypdf is not installed "
+              "(pip install pypdf) -- skipping the PDF Info-dictionary stamp",
+              file=sys.stderr)
         return
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
         return
@@ -19211,9 +19221,8 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         passes += 1
         if result.returncode != 0:
             return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
-    if verbose:
-        print(f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes} pass(es)"
-              + (f" + {bib_tool}" if bib_tool else ""))
+    vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes} pass(es)"
+          + (f" + {bib_tool}" if bib_tool else ""))
     return True, ""
 
 
@@ -19940,16 +19949,13 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     except OSError as error:
-        if verbose:
-            print(f"CALC      the names of the parts left out could not be evaluated ({error})")
+        vprint(verbose, f"CALC      the names of the parts left out could not be evaluated ({error})")
         return None, 0
     if done.returncode != 0 or not dump.is_file():
-        if verbose:
-            print("CALC      the names of the parts left out could not be evaluated; the build goes on without them")
+        vprint(verbose, "CALC      the names of the parts left out could not be evaluated; the build goes on without them")
         return None, 0
     count = sum(1 for line in dump.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
-    if verbose:
-        print(f"CALC      {count} names of the parts left out evaluated in {time.time() - started:.1f} s")
+    vprint(verbose, f"CALC      {count} names of the parts left out evaluated in {time.time() - started:.1f} s")
     return (dump, count) if count else (None, 0)
 
 
@@ -20006,8 +20012,8 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     if markers:
         defs.write_text(PARTS_MARKER_DEFS, encoding="utf-8")
     draft_engine = next((engine for engine in engines if engine in DRAFT_FLAGS), None) if draft else None
-    if draft and draft_engine is None and verbose:
-        print("LABELS    no engine here can run a draft pass (lualatex, xelatex, pdflatex); the scan alone is used")
+    if draft and draft_engine is None:
+        vprint(verbose, "LABELS    no engine here can run a draft pass (lualatex, xelatex, pdflatex); the scan alone is used")
     cheap = ["svg", "remoteimages", "pdfimages"]
     scan_no_auto = no_auto if (no_auto is not None and not no_auto) else [*(no_auto or []), *cheap]
     saved_build = dict(BUILD)
@@ -20024,27 +20030,24 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                                  partial=False, cache_cli=False, skip_stamp=True, parts_root=parts_root,
                                  part_markers=bool(all_parts and parts_root), trust_embedded=trust_embedded)
     except (SystemExit, Exception) as error:  # noqa: BLE001 -- the scan is a convenience; the build must not die of it
-        if verbose:
-            print(f"LABELS    the whole-document scan failed ({error}); references to parts left out stay ??")
+        vprint(verbose, f"LABELS    the whole-document scan failed ({error}); references to parts left out stay ??")
         return None
     finally:
         BUILD.clear()
         BUILD.update(saved_build)                  # what the scan recorded (its scratch .tex) is not the build's
         AUTO_LOG.restore(saved_log)                # its summary went to nowhere and must not take the build's FOUND items
     if not built[1] or not tex_path.is_file():
-        if verbose:
-            print("LABELS    the whole-document scan failed; references to parts left out stay ??")
+        vprint(verbose, "LABELS    the whole-document scan failed; references to parts left out stay ??")
         return None
     result = pdfmd_labels.scan(tex_path.read_text(encoding="utf-8", errors="replace"))
     if not result.labels and not result.parts():
         return None
     seed = scratch / "labels-seed.tex"
     seed.write_text(pdfmd_labels.render(result), encoding="utf-8")
-    if verbose:
-        print(f"LABELS    scanned the whole document in {time.time() - started:.1f} s: {result.labels} labels, "
-              f"{result.steps} numbered items, {result.parts()} parts"
-              + (f"; {result.skipped} labels left out (after a caption in an environment it does not know)"
-                 if result.skipped else ""))
+    vprint(verbose, f"LABELS    scanned the whole document in {time.time() - started:.1f} s: {result.labels} labels, "
+          f"{result.steps} numbered items, {result.parts()} parts"
+          + (f"; {result.skipped} labels left out (after a caption in an environment it does not know)"
+             if result.skipped else ""))
     headers = [seed]
     exact = False
     if draft_engine is not None:
@@ -20065,17 +20068,15 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
                                                   env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
                                                   capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             except (OSError, subprocess.SubprocessError) as error:
-                if verbose:
-                    print(f"LABELS    the draft pass could not run ({error}); the scan alone is used")
+                vprint(verbose, f"LABELS    the draft pass could not run ({error}); the scan alone is used")
 
         if quick:
             draft_pass(whole.replace("\\begin{document}",
                                      draft_skip_text(*package_draft_skips(md_path, metadata_list)) + "\\begin{document}"))
             problem = draft_skip_problem(scratch / "labels-scan.log", scratch / "labels-scan.aux", whole)
             if problem:
-                if verbose:
-                    print(f"LABELS    the draft pass without the pictures cannot be trusted ({problem}); "
-                          "running it with them")
+                vprint(verbose, f"LABELS    the draft pass without the pictures cannot be trusted ({problem}); "
+                      "running it with them")
                 quick = False
                 draft_pass(whole)
         else:
@@ -20087,15 +20088,14 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
             hook.write_text("\\AtBeginDocument{\\InputIfFileExists{\"%s\"}{}{}}\n" % aux_seed.as_posix(), encoding="utf-8")
             headers.insert(0, hook)
             exact = True
-            if verbose:
-                print(f"LABELS    draft pass over the whole document{' (pictures not drawn, page numbers ??)' if quick else ''}: "
-                      f"{found} labels in {time.time() - began:.1f} s")
-        elif verbose:
-            print("LABELS    the draft pass left no .aux; the scan alone is used")
+            vprint(verbose, f"LABELS    draft pass over the whole document{' (pictures not drawn, page numbers ??)' if quick else ''}: "
+                  f"{found} labels in {time.time() - began:.1f} s")
+        else:
+            vprint(verbose, "LABELS    the draft pass left no .aux; the scan alone is used")
             done = last_run.get("done")
             if done is not None:
                 tail = " | ".join(line.strip() for line in (done.stdout + done.stderr).splitlines()[-4:] if line.strip())
-                print(f"LABELS    {draft_engine} exited {done.returncode}: {tail[:300]}")
+                vprint(verbose, f"LABELS    {draft_engine} exited {done.returncode}: {tail[:300]}")
     if markers:
         headers.insert(0, defs)
     return LabelScan(headers, result.labels, result.steps, markers, exact, result.skipped)
@@ -20360,8 +20360,7 @@ def validate_plot_entries(plot_dir: Path, verbose: bool, roots: list[Path] | Non
             for suffix in (".deps", ".dim", ".pdf"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
             dropped += 1
-            if verbose:
-                print(f"AUTO CACHE  plot {key[:8]}: an input changed; dropped")
+            vprint(verbose, f"AUTO CACHE  plot {key[:8]}: an input changed; dropped")
         elif moved:
             try:
                 deps_file.write_text(json.dumps({**deps, "__roots__": current}), encoding="utf-8")
@@ -20471,9 +20470,8 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         else:
             for suffix in (".dim", ".pdf", ".deps"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
-            if verbose:
-                print(f"AUTO CACHE  plot {key[:8]} failed to render: "
-                      + (tex_log_failure_reason(result.stdout) or result.stdout[-300:].strip()))
+            vprint(verbose, f"AUTO CACHE  plot {key[:8]} failed to render: "
+                  + (tex_log_failure_reason(result.stdout) or result.stdout[-300:].strip()))
         for leftover in plot_dir.glob(f"r-{key}.*"):
             leftover.unlink(missing_ok=True)
         return ok
@@ -20531,8 +20529,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                 for leftover in output_dir.glob(f"{tex_path.stem}.*"):
                     if leftover.name.endswith(AUX_CLEAN_SUFFIXES):
                         leftover.unlink(missing_ok=True)
-                if verbose:
-                    print(f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
+                vprint(verbose, f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
                 ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
             if ok:
                 produced = output_dir / f"{tex_path.stem}.pdf"
@@ -20543,10 +20540,9 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                 # refuses to "copy" a file onto itself.
                 if produced.resolve() != output.resolve():
                     shutil.copy2(produced, output)
-                if verbose:
-                    where = ("in place (--keep-aux)" if keep_aux else
-                             f"in the cache {output_dir}" if aux_dir else "in a scratch directory, then discarded")
-                    print(f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
+                where = ("in place (--keep-aux)" if keep_aux else
+                         f"in the cache {output_dir}" if aux_dir else "in a scratch directory, then discarded")
+                vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
                 record_engine(engine, failed_engines)
                 return True, ""
             last_reason = reason
@@ -20628,8 +20624,7 @@ def convert_office_direct(input_path: Path, output: Path, verbose: bool, debug: 
     """Convert an office document straight to PDF -- no Pandoc involved."""
     ok, reason = run_soffice_convert(input_path, output, verbose)
     if ok:
-        if verbose:
-            print(f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)")
+        vprint(verbose, f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)")
     else:
         fake_result = subprocess.CompletedProcess(args=["soffice"], returncode=1, stdout="", stderr=reason)
         report_engine_failure(str(input_path), "soffice", fake_result, [], debug)
@@ -20661,8 +20656,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
 
         def note(kind: str, detail: str) -> None:
-            if verbose:
-                print(f"AUTO {kind}  {detail}")
+            vprint(verbose, f"AUTO {kind}  {detail}")
         with prepared_latex_inputs([title_source or md_path, *pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True) as prepared:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
@@ -21137,8 +21131,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     # because they're only ever Pandoc INPUT (--metadata-file/a title
     # source) -- Pandoc has no concept of "jobname" to derive.
     def note(kind: str, detail: str) -> None:
-        if verbose:
-            print(f"AUTO {kind}  {detail}")
+        vprint(verbose, f"AUTO {kind}  {detail}")
 
     nativebib_font = mainfont_choice([md_path], metadata_files, variables, font or None, document_font,
                                      mainfont_auto, no_auto, note)
@@ -21219,10 +21212,9 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
         if result.returncode != 0 or not tex_path.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
-        if verbose:
-            where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
-            print(f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
-                  f"instead of --citeproc; intermediate .tex {where}")
+        where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
+        vprint(verbose, f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
+               f"instead of --citeproc; intermediate .tex {where}")
         return compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug)
     finally:
         # Under --keep-aux, leave the intermediate .tex for inspection too --
@@ -21848,9 +21840,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
-                    if verbose:
-                        print(f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
-                              "(last-resort fallback)")
+                    vprint(verbose, f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
+                          "(last-resort fallback)")
                     record_engine(engine, failed_engines)
                     break
                 failed_families.add(family)
@@ -23025,16 +23016,16 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
           + "); `pdfmd --restore` writes it back")
     stored = {item["path"] for item in kept}
     unstored = [image["path"] for image in manifest["images"] if image["path"] not in stored]
-    if unstored and verbose:
-        print(f"NOTE  images the text points at are recorded, not stored (the PDF holds them; "
+    if unstored:
+        vprint(verbose, f"NOTE  images the text points at are recorded, not stored (the PDF holds them; "
               f"`--bundle referenced` stores the files): {', '.join(unstored)}")
     if manifest.get("outside"):
         print(f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
     for line in requirement_lines(manifest):
         if line.startswith("NEEDS") and "not stored" in line:
             print("NOTE  " + line[10:])
-        elif verbose:
-            print(line)
+        else:
+            vprint(verbose, line)
 
 
 # -- Markdown that carries its source (v3.26.4) -----------------------------------
@@ -25069,9 +25060,9 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             backup_after_success(backed_up, metadata_files, backup, verbose, backup_format, collect=saved)
         if saved:
             print(backup_summary(md_path, saved))
-            if verbose and len(saved) > 1:
+            if len(saved) > 1:
                 for target in saved:
-                    print(f"  BACKUP  {display_path(target)}")
+                    vprint(verbose, f"  BACKUP  {display_path(target)}")
         if target_format == "pdf" and source_override is None and not partial:
             polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
                        [md_path, *(extra_inputs or [])], verbose)
@@ -25198,8 +25189,8 @@ def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path],
         if attach_hybrid(pdf_path, data, extension):
             print(f"HYBRID    {display_path(pdf_path)}: carries {display_path(path)} as Original.{extension} "
                   f"({len(data) // 1024 or 1} KB); LibreOffice opens the PDF as an editable document")
-        elif verbose:
-            print(f"HYBRID    {display_path(pdf_path)}: already carries its OpenDocument source")
+        else:
+            vprint(verbose, f"HYBRID    {display_path(pdf_path)}: already carries its OpenDocument source")
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         print(f"WARN  hybrid: could not attach the OpenDocument copy to {display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
@@ -25411,8 +25402,7 @@ def convert_direct(kind: str, source: Path, output: Path, engine_request: str | 
         # beside the original, so what it refers to by a relative path is found; removed afterwards
         copy = source.with_name(f".{source.stem}.pdfmd-defaults{source.suffix}")
         copy.write_text(prelude + text if kind == "typst" else changed, encoding="utf-8")
-        if verbose:
-            print(f"AUTO APPLYDEFAULTS  {display_path(source)}: " + ", ".join(sorted(given)))
+        vprint(verbose, f"AUTO APPLYDEFAULTS  {display_path(source)}: " + ", ".join(sorted(given)))
     try:
         return _convert_direct(kind, source, copy or source, output, engine_request, verbose, debug, direct,
                                prelude.count("\n"), text)
@@ -25433,9 +25423,9 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
             reason = re.sub(r"(?m)^(\s*)(\d+)( │)", lambda found: f"{found.group(1)}{max(1, int(found.group(2)) - offset)}{found.group(3)}", reason)
         if ok:
             record_engine("typst")
-        if ok and verbose:
-            print(f"AUTO TYPSTDIRECT  {display_path(source)}: compiled with Typst directly (no Pandoc)")
-        elif not ok:
+        if ok:
+            vprint(verbose, f"AUTO TYPSTDIRECT  {display_path(source)}: compiled with Typst directly (no Pandoc)")
+        else:
             print(f"WARN  {display_path(source)}: typst failed", file=sys.stderr)
         return source, ok, reason
     order = direct.html_attempts(text, engine_request, which, resolve_soffice)
@@ -25457,8 +25447,8 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
                                           on_failure=failed, log=lambda command, cwd: log_cmd(command, cwd, verbose))
     if ok and used:
         record_engine(str(used))
-    if ok and verbose:
-        print(f"AUTO HTMLDIRECT  {display_path(source)}: {used} (no Pandoc)")
+    if ok:
+        vprint(verbose, f"AUTO HTMLDIRECT  {display_path(source)}: {used} (no Pandoc)")
     return source, ok, reason
 
 
