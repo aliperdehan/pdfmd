@@ -12,6 +12,7 @@ wait for an answer before any code.
 
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
+- [ ] **decide** build time on the result line and per step (togglable, adjustable format) and a stored build record for debugging after the fact; design draft, open questions [3dn]
 
 ## Features, agreed
 
