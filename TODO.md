@@ -12,7 +12,7 @@ wait for an answer before any code.
 
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
-- [ ] Build record: the lines only -v prints (in progress, 3.31.6), LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
+- [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
 ## Features, agreed
 
