@@ -17,28 +17,14 @@ PDFMD_VERSION = "2.0.0"
 `pdfmd --version` prints it. Bump it there and add an entry here in the
 same commit as the change.
 
-**Why this starts at 2.0.0, not 1.0.0.** `pdfmd.py` began as a one-line
-`pandoc file.md -o file.pdf` wrapper and was revised many times since — across
-ChatGPT, ChatGPT Codex, Claude Chat, Cowork, and Claude Code sessions — with no
-version marker or changelog kept at any point. `backups/pdfmd.py.bak-*` has
-snapshots from a handful of points in that history, but not from the
-ChatGPT/Codex/Cowork era at all, so reconstructing an honest "v1.x" changelog
-from what's actually on disk isn't possible — only a partial,
-misleadingly-precise-looking one. Decided 2026-09-16 (the author): start real
-changelog tracking now, at 2.0.0, rather than fabricate the gap. If the full
-history ever matters, it would need pulling the actual chat transcripts from
-each of those tools, not guessing from diffs between inconsistent backup
-snapshots.
-
-**Update, 2026-10-05:** an approximate outline of the earlier history has since
-been reconstructed, at the very end of this file (see "Before 2.0.0 —
-reconstructed history"), from the saved Codex transcripts and the surviving
-backup snapshots. It is explicitly NOT reliable: its 1.x numbers are invented,
-snapshot-based entries cover windows of days rather than single changes, and
-anything done in unsaved sessions (other ChatGPT chats, claude.ai, Cowork) is
-missing. Real tracking still begins at 2.0.0.
-
 ---
+
+## v3.31.13b — 2026-10-30
+
+Pre-edit state: commit `c4491c7`. Docs only: `PDFMD_VERSION` stays 3.31.13.
+
+### Docs
+- `CHANGELOG.md`: the note "Why this starts at 2.0.0, not 1.0.0" and its 2026-10-05 update moved from the top of the file to the end of the v2.0.0 entry, so the file opens with the version rule and the newest entry.
 
 ## v3.31.13 — 2026-10-30
 
@@ -9351,6 +9337,27 @@ package being built.
   script's own typical use so far; revisit if a document with an unusual
   page shape trips the same "wrongly rebalanced" or "wrongly left alone"
   symptom in the other direction.
+
+**Why this starts at 2.0.0, not 1.0.0.** `pdfmd.py` began as a one-line
+`pandoc file.md -o file.pdf` wrapper and was revised many times since — across
+ChatGPT, ChatGPT Codex, Claude Chat, Cowork, and Claude Code sessions — with no
+version marker or changelog kept at any point. `backups/pdfmd.py.bak-*` has
+snapshots from a handful of points in that history, but not from the
+ChatGPT/Codex/Cowork era at all, so reconstructing an honest "v1.x" changelog
+from what's actually on disk isn't possible — only a partial,
+misleadingly-precise-looking one. Decided 2026-09-16 (the author): start real
+changelog tracking now, at 2.0.0, rather than fabricate the gap. If the full
+history ever matters, it would need pulling the actual chat transcripts from
+each of those tools, not guessing from diffs between inconsistent backup
+snapshots.
+
+**Update, 2026-10-05:** an approximate outline of the earlier history has since
+been reconstructed, at the very end of this file (see "Before 2.0.0 —
+reconstructed history"), from the saved Codex transcripts and the surviving
+backup snapshots. It is explicitly NOT reliable: its 1.x numbers are invented,
+snapshot-based entries cover windows of days rather than single changes, and
+anything done in unsaved sessions (other ChatGPT chats, claude.ai, Cowork) is
+missing. Real tracking still begins at 2.0.0.
 
 ---
 
