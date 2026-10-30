@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.15 — 2026-10-31
+
+Pre-edit state: commit `0695669`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **A `.csv` block of an `.xlsx` on Windows.** The map from a sheet to its converted CSV (a `--metadata-file`) held `C:\Users\...\x.csv`; Pandoc reads metadata as Markdown, so the backslashes went and the block came out empty ("could not open the converted sheet"). The path is written with forward slashes (`as_posix()`; no change on macOS and Linux), like 3.31.8 and 3.31.13. By the Windows test session (pull request #32).
+
 ## v3.31.14 — 2026-10-31
 
 Pre-edit state: commit `0f8f11a`. Still under 3.31. Merged from a pull request of the Windows test session.

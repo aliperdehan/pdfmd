@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.14"
+PDFMD_VERSION = "3.31.15"
 import argparse
 import atexit
 import csv
@@ -2679,8 +2679,8 @@ def spreadsheet_args(files: list[Path]) -> list[str]:
                 continue
             path = (Path(source).parent / name).resolve()
             try:
-                mapping[key] = str(sheets.cached_csv(path, block.attributes.get("sheet") or None, cache_root() / "sheets",
-                                                     resolve_soffice()))
+                mapping[key] = sheets.cached_csv(path, block.attributes.get("sheet") or None, cache_root() / "sheets",
+                                                 resolve_soffice()).as_posix()      # Pandoc reads metadata as Markdown: a backslash would go
             except (OSError, sheets.SheetError) as error:
                 said = "no such file" if isinstance(error, FileNotFoundError) else error
                 print(f"WARN  {display_path(Path(source))}: {name}: {said}", file=sys.stderr)
