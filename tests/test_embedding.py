@@ -101,7 +101,7 @@ class HybridEndToEnd(Env):
         self.assertIn("HYBRID", done.stdout)
         self.assertEqual(list(pypdf.PdfReader(self.directory / "a.pdf").attachments), ["Original.odt"])
         scratch = self.directory / "lo"
-        subprocess.run([SOFFICE, "--headless", "--norestore", f"-env:UserInstallation=file://{scratch}/profile",
+        subprocess.run([SOFFICE, "--headless", "--norestore", f"-env:UserInstallation={(scratch / 'profile').as_uri()}",
                         "--convert-to", "txt:Text", "--outdir", str(scratch), str(self.directory / "a.pdf")],
                        capture_output=True, text=True)
         self.assertIn("Hello world from the source.", (scratch / "a.txt").read_text(encoding="utf-8-sig"))
