@@ -3992,6 +3992,119 @@ ENGINE_GROUPS: dict[str, tuple[str, ...]] = {
 }
 
 
+# The tools pdfmd runs that Windows installers leave off PATH: tool -> (the `options:` key of the config that names it,
+# its programs, its folders below an install root, other roots as (variable, folder below it), whether its folder goes on
+# PATH for pdfmd's own runs). The folders are a file-system fact about those installers, not a behaviour threshold; a `*`
+# matches a version in a folder name (poppler's builds). soffice stays off PATH: its folder holds a python.exe and DLLs of its own.
+FOUND_TOOLS = {
+    "tesseract": ("tesseract-path", ("tesseract",), ("Tesseract-OCR",), (), True),
+    "soffice": ("soffice-path", ("soffice", "libreoffice"), ("LibreOffice/program",), (), False),
+    "dot": ("dot-path", ("dot",), ("Graphviz/bin", "Graphviz*/bin"), (), True),
+    "mmdc": ("mmdc-path", ("mmdc",), (), (("APPDATA", "npm"),), True),
+    "poppler": ("poppler-path", ("pdftotext", "pdftoppm"), ("poppler*/Library/bin", "poppler*/bin"), (), True),
+    "calibre": (None, ("ebook-convert",), ("Calibre2",), (), False),
+}
+WINDOWS_INSTALL_ROOTS = (("ProgramFiles", ""), ("ProgramW6432", ""), ("ProgramFiles(x86)", ""), ("LOCALAPPDATA", "Programs"))
+TOOLS_FOUND: dict[str, tuple[str, str]] = {}      # tool -> (file, "key" | "probe") for what use_found_tools() found off PATH
+TOOL_WARNED: set[str] = set()
+
+
+def tool_program(folder: Path, program: str) -> Path | None:
+    """The file of ``program`` in ``folder`` (with the extensions Windows runs a program by there)."""
+    for suffix in ((".exe", ".cmd", ".bat", ".com") if sys.platform == "win32" else ("",)):
+        if (folder / (program + suffix)).is_file():
+            return folder / (program + suffix)
+    return None
+
+
+def app_path_file(program: str) -> Path | None:
+    """The file the Windows registry (``App Paths``) gives for ``program.exe``, or None. PDFMD_NO_APP_PATHS=1 skips it; that
+    switch is for the tests (a test that hides a tool must not find it through the registry), not a setting."""
+    if sys.platform != "win32" or os.environ.get("PDFMD_NO_APP_PATHS"):
+        return None
+    try:
+        import winreg
+    except ImportError:
+        return None
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{program}.exe") as key:
+                value = winreg.QueryValueEx(key, "")[0]
+        except OSError:
+            continue
+        file = Path(os.path.expandvars(str(value).strip().strip('"')))
+        if file.is_file():
+            return file
+    return None
+
+
+def locate_tool(name: str) -> tuple[str | None, str]:
+    """(the tool's file, how it was found) for a tool of FOUND_TOOLS: ``"key"`` (the config's ``options.<tool>-path``, a file or a
+    folder; a folder only for poppler), ``"path"`` (PATH), ``"probe"`` (the usual Windows install folders, then the registry's
+    App Paths), or (None, ""). A key that names nothing is said once and passed over."""
+    key, programs, folders, roots, _ = FOUND_TOOLS[name]
+    named = config_options().get(key) if key else None
+    if isinstance(named, str) and named.strip():
+        place = Path(os.path.expandvars(named.strip())).expanduser()
+        found = (next((tool_program(place, program) for program in programs if tool_program(place, program)), None)
+                 if place.is_dir() else place if place.is_file() and name != "poppler" else None)
+        if found:
+            return str(found), "key"
+        if f"{key}:{named}" not in TOOL_WARNED:
+            TOOL_WARNED.add(f"{key}:{named}")
+            print(f"WARN  config: options.{key} ({named}) holds no {programs[0]}; looking on PATH and in the usual folders",
+                  file=sys.stderr)
+    for program in programs:
+        found = which(program)
+        if found:
+            return found, "path"
+    if sys.platform == "win32":
+        places = [Path(os.environ[variable]) / below for variable, below in WINDOWS_INSTALL_ROOTS if os.environ.get(variable)]
+        for root in places:
+            for pattern in folders:
+                for folder in sorted(root.glob(pattern), reverse=True):
+                    for program in programs:
+                        if tool_program(folder, program):
+                            return str(tool_program(folder, program)), "probe"
+        for variable, below in roots:
+            if os.environ.get(variable):
+                for program in programs:
+                    if tool_program(Path(os.environ[variable]) / below, program):
+                        return str(tool_program(Path(os.environ[variable]) / below, program)), "probe"
+        for program in programs:
+            if app_path_file(program):
+                return str(app_path_file(program)), "probe"
+    return None, ""
+
+
+def use_found_tools() -> None:
+    """A tool that is installed but not on PATH (a Windows installer often leaves it off) is used all the same: its folder goes
+    on PATH for pdfmd's own runs and the programs and filters it starts, in front when the config names it, behind otherwise.
+    ``--doctor`` says where it was found."""
+    for name, (_, _, _, _, on_path) in FOUND_TOOLS.items():
+        file, how = locate_tool(name)
+        if how not in ("key", "probe"):
+            continue
+        TOOLS_FOUND[name] = (file, how)
+        entries = os.environ.get("PATH", "").split(os.pathsep)
+        folder = str(Path(file).parent)
+        if on_path and folder not in entries:
+            order = [folder, *entries] if how == "key" else [*entries, folder]
+            os.environ["PATH"] = os.pathsep.join(entry for entry in order if entry)
+
+
+def tool_note(name: str) -> str:
+    """What ``--doctor`` adds to a tool that is not found on PATH: where it was found, or the setting that names it."""
+    if name not in FOUND_TOOLS:
+        return ""
+    file, how = TOOLS_FOUND.get(name) or locate_tool(name)
+    if how == "key":
+        return f"set by options.{FOUND_TOOLS[name][0]}"
+    if how == "probe":
+        return f"found at {Path(file).parent}, not on PATH (pdfmd uses it anyway)"
+    return ""
+
+
 def resolve_soffice() -> str | None:
     """Locate the LibreOffice/soffice binary, beyond a bare PATH lookup.
 
@@ -4001,25 +4114,18 @@ def resolve_soffice() -> str | None:
     subprocess (neither one consults shell aliases, only PATH), so a plain
     which("soffice") silently reports it missing even though it works
     fine for the user every day at a terminal prompt. Checked, in order:
-    `soffice` on PATH, `libreoffice` on PATH (the usual Linux package
-    name -- often a symlink to the same binary), then the standard macOS
-    app-bundle path directly, or on Windows the default install folders
-    under %ProgramFiles% / %ProgramFiles(x86)%.
+    `options.soffice-path` of the config, `soffice` on PATH, `libreoffice` on
+    PATH (the usual Linux package name -- often a symlink to the same binary),
+    then the standard macOS app-bundle path directly, or on Windows the usual
+    install folders and the registry's App Paths (see locate_tool()).
     """
-    for name in ("soffice", "libreoffice"):
-        found = which(name)
-        if found:
-            return found
+    found = locate_tool("soffice")[0]
+    if found:
+        return found
     if sys.platform == "darwin":
         mac_path = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
         if mac_path.exists():
             return str(mac_path)
-    if sys.platform == "win32":
-        # The Windows installer doesn't add LibreOffice to PATH.
-        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
-            base = os.environ.get(variable)
-            if base and (Path(base) / "LibreOffice" / "program" / "soffice.exe").exists():
-                return str(Path(base) / "LibreOffice" / "program" / "soffice.exe")
     return None
 
 
@@ -4046,10 +4152,10 @@ def resolve_calibre() -> str | None:
     if sys.platform == "darwin":
         places += [Path(folder) / "calibre.app" / "Contents" / "MacOS" / "ebook-convert"
                    for folder in ("/Applications", Path.home() / "Applications")]
-    if sys.platform == "win32":
-        places += [Path(os.environ[variable]) / "Calibre2" / "ebook-convert.exe"
-                   for variable in ("ProgramFiles", "ProgramFiles(x86)") if os.environ.get(variable)]
-    return next((str(place) for place in places if place.is_file()), None)
+    found = next((str(place) for place in places if place.is_file()), None)
+    if found is None and sys.platform == "win32":
+        found = locate_tool("calibre")[0]
+    return found
 
 
 def engine_executable(engine: str) -> str | None:
@@ -6173,7 +6279,8 @@ def doctor_report(deep: bool = False) -> bool:
     quarto = which("quarto")
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()
-    line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)"))
+    line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)")
+         + (f"  -- {tool_note('soffice')}" if soffice and tool_note("soffice") else ""))
     line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it; `pdfmd --install calibre`)"))
     if which("weasyprint"):
         jax, runtime = mathjax_runtime(), katex_runtime()
@@ -6207,7 +6314,7 @@ def doctor_report(deep: bool = False) -> bool:
              "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
-    drawn_by = [f"{name} ({tool})" for tool, name, _ in DIAGRAM_TOOLS if which(tool)]
+    drawn_by = [f"{name} ({tool}{', ' + tool_note(tool) if tool_note(tool) else ''})" for tool, name, _ in DIAGRAM_TOOLS if which(tool)]
     line(None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
          + (", ".join(drawn_by) if drawn_by else "nothing installed ("
             + "; ".join(f"{name}: {hint.split('  |')[0]}" for _, name, hint in DIAGRAM_TOOLS) + ")"))
@@ -6259,7 +6366,8 @@ def doctor_report(deep: bool = False) -> bool:
     for tool, programs in (("tesseract", ("tesseract",)), ("poppler", ("pdftotext", "pdftoppm"))):
         found = [program for program in programs if which(program)]
         line(len(found) == len(programs), f"{tool}: " + (", ".join(found) or "not found")
-             + (f"  ({which(found[0])})" if found else ""),
+             + (f"  ({which(found[0])})" if found else "")
+             + (f"  -- {tool_note(tool)}" if found and tool_note(tool) else ""),
              tesseract_install_hint(), f"{tool} (scanned PDFs)")
     if module is not None:
         from pdfmd_unicode import tessdata
@@ -7699,6 +7807,7 @@ def use_managed_tools() -> None:
     if extra:
         os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), *extra]).strip(os.pathsep)
     use_tex_install()
+    use_found_tools()
 
 
 TEX_ENGINE_NAMES = ("lualatex", "xelatex", "pdflatex", "latexmk")

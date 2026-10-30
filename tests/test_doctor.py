@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 def doctor(path: str, home: str, *extra: str) -> subprocess.CompletedProcess:
     environment = {**os.environ, "PATH": path, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "",
                    "XDG_CONFIG_HOME": home, "XDG_CACHE_HOME": home, "XDG_DATA_HOME": home,
-                   "LOCALAPPDATA": home, "APPDATA": home}
+                   "LOCALAPPDATA": home, "APPDATA": home, "PDFMD_NO_APP_PATHS": "1",
+                   "ProgramFiles": home, "ProgramW6432": home, "ProgramFiles(x86)": home}      # no tool turns up in a Windows install folder
     return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--doctor", *extra], env=environment,
                           capture_output=True, text=True)
 

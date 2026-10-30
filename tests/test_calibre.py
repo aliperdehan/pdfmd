@@ -36,7 +36,8 @@ class Finding(unittest.TestCase):
             binary.parent.mkdir()
             binary.write_bytes(b"")
             with mock.patch.object(pdfmd, "which", lambda name: None), mock.patch.object(pdfmd.sys, "platform", "win32"), \
-                    mock.patch.dict(os.environ, {"ProgramFiles": folder}):
+                    mock.patch.dict(os.environ, {"ProgramFiles": folder, "ProgramW6432": "", "ProgramFiles(x86)": "",
+                                                 "LOCALAPPDATA": "", "PDFMD_NO_APP_PATHS": "1"}):
                 self.assertEqual(pdfmd.resolve_calibre(), str(binary))
 
     def test_not_installed(self):

@@ -61,6 +61,9 @@ UNSET = {
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
+    "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
+    "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
+    "options.poppler-path": "PATH, then the usual install folders",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -68,7 +71,8 @@ UNSET = {
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit", "disabled"})
+MACHINE = frozenset({"setup-ui", "translit", "disabled", "options.tesseract-path", "options.soffice-path", "options.dot-path",
+                     "options.mmdc-path", "options.poppler-path"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
 # layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
@@ -533,6 +537,17 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "For a folder: what the setup above it switched off (the nearest setup that names a kind decides it): `auto: {margin: on}`.",
                 "Automatic behaviour"),
+        # -- tool locations (this computer: Windows installers often leave a tool off PATH)
+        text("options.tesseract-path", "Tesseract", "The tesseract program, or the folder that holds it. Without it pdfmd looks on "
+             "PATH, then in the usual Windows install folders.", "Tool locations"),
+        text("options.soffice-path", "LibreOffice", "The soffice program, or the folder that holds it. Without it pdfmd looks on "
+             "PATH, then in the usual Windows install folders.", "Tool locations"),
+        text("options.dot-path", "Graphviz", "The dot program, or the folder that holds it. Without it pdfmd looks on PATH, "
+             "then in the usual Windows install folders.", "Tool locations"),
+        text("options.mmdc-path", "Mermaid", "The mmdc program, or the folder that holds it. Without it pdfmd looks on PATH, "
+             "then in npm's global folder.", "Tool locations"),
+        text("options.poppler-path", "Poppler", "The folder that holds pdftotext and pdftoppm. Without it pdfmd looks on PATH, "
+             "then in the usual Windows install folders.", "Tool locations"),
         Setting("disabled", "Features switched off", "multi", feature_choices(), "",
                 "Hidden from --help, completion and this screen, refused on the command line; "
                 "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),
