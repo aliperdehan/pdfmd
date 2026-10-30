@@ -166,7 +166,11 @@ class TypstEndToEnd(unittest.TestCase):
     def test_no_pandoc_is_needed(self):
         bin_dir = self.directory / "bin"
         bin_dir.mkdir()
-        (bin_dir / "typst").symlink_to(shutil.which("typst"))
+        typst = Path(shutil.which("typst"))
+        try:
+            (bin_dir / typst.name).symlink_to(typst)                      # typst.exe by its own name on Windows, where a link needs a privilege
+        except OSError:
+            shutil.copy2(typst, bin_dir / typst.name)
         done = self.run_pdfmd("d.typ", env={**self.env, "PATH": str(bin_dir)})
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((self.directory / "d.pdf").is_file())
