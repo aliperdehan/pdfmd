@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
@@ -147,7 +148,7 @@ class ClosingLineOfTheCacheRoute(unittest.TestCase):
         (self.directory / "parts" / "20-second.md").write_text("# Second\n\nMore.\n", encoding="utf-8")
 
     def run_pdfmd(self, *arguments: str) -> str:
-        env = {**os.environ, "XDG_CACHE_HOME": str(self.directory / "cache")}          # the cache route, in a folder of its own
+        env = {**os.environ, **cache_env(self.directory / "cache")}          # the cache route, in a folder of its own
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report#second", "--no-backup", "--cache", "-e",
                                "lualatex", *arguments], cwd=self.directory, env=env, capture_output=True, text=True, encoding="utf-8")
         return done.stdout + done.stderr
