@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.16b — 2026-10-31
+
+Pre-edit state: commit `80d19d0`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.16.
+
+### Docs
+- **`docs/windows.md`**: pdfmd on Windows, environment problems and how to fix them (16 entries and a checklist: tools off PATH, a terminal that predates an install, non-UTF-8 locales, symlink privilege, the `python3` Store stub, LibreOffice hangs, files in use, Git Bash paths, PowerShell 5.1, memory, backslashes in re-read paths, where pdfmd keeps its files, CRLF scripts, symlinks and `sh` stand-ins in tests), each tied to the pdfmd version that fixed it. Written by the Windows test session (pull request #34). Not yet wired into `pdfmd --doc` (the documentation programme, 3dg).
+
 ## v3.31.16 — 2026-10-31
 
 Pre-edit state: commit `e9445e7`. Still under 3.31. Merged from a pull request of the Windows test session.
