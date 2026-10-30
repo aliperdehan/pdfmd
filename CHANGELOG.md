@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9c — 2026-10-30
+
+Pre-edit state: commit `d4f4cf1`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- `tests/test_indent_office.py` closes the `ZipFile` it opens before the temporary folder is removed (`WinError 32` on Windows). By the Windows test session (pull request #20).
+
 ## v3.31.9b — 2026-10-30
 
 Pre-edit state: commit `28f1168`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
