@@ -4156,6 +4156,68 @@ def run_soffice(command: list[str], **options) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(command, process.returncode, out, err)
 
 
+def tool_folders_off_path() -> list[tuple[str, str]]:
+    """(folder, why) for each folder of a tool pdfmd found off PATH that `pdfmd --user-path add` may put on the user PATH: the
+    tools whose folder holds only their own programs (not LibreOffice or Chrome, whose folders hold others) and a TeX install."""
+    found: dict[str, str] = {}
+    for name, (file, _) in TOOLS_FOUND.items():
+        if FOUND_TOOLS[name][4]:
+            found.setdefault(str(Path(file).parent), f"{name} found there")
+    if TEX_FOUND_AT is not None:
+        found.setdefault(str(TEX_FOUND_AT), "TeX found there")
+    return list(found.items())
+
+
+def user_path_hint() -> str:
+    """The closing line of ``--doctor`` on Windows when a tool pdfmd found is not on the user PATH; "" otherwise."""
+    if sys.platform != "win32" or not tool_folders_off_path():
+        return ""
+    try:
+        from pdfmd_setup import userpath
+        registry = userpath.Registry()
+        change = userpath.plan_add(registry.read(), registry.machine(), tool_folders_off_path())
+    except (ImportError, OSError):
+        return ""
+    if not change.add:
+        return ""
+    return (f"NOTE  {len(change.add)} tool folder{'' if len(change.add) == 1 else 's'} found off PATH: `pdfmd --user-path add` puts "
+            f"{'it' if len(change.add) == 1 else 'them'} on your user PATH (it asks first; `pdfmd --user-path remove` takes them off)")
+
+
+def user_path_command(args) -> int:
+    """`--user-path add|remove|show [FOLDER...]`, and its spelled-out forms --add-to-path, --remove-from-path, --show-user-path."""
+    from pdfmd_setup import userpath
+    if args.user_path:
+        verb, folders = args.user_path[0].lower(), list(args.user_path[1:])
+    elif args.add_to_path is not None:
+        verb, folders = "add", list(args.add_to_path)
+    else:
+        verb, folders = ("remove" if args.remove_from_path else "show"), []
+    if verb not in userpath.VERBS:
+        print(f"--user-path takes {', '.join(userpath.VERBS)}, not {verb!r}.", file=sys.stderr)
+        return 2
+    if verb != "add" and folders:
+        print(f"--user-path {verb} takes no folder.", file=sys.stderr)
+        return 2
+    if sys.platform != "win32":
+        print("--user-path changes the Windows user PATH. On macOS and Linux put the folder on PATH in your shell's profile:\n"
+              '  export PATH="FOLDER:$PATH"', file=sys.stderr)
+        return 1
+    return userpath.run(verb, folders, backend=userpath.Registry(), record=config_root() / userpath.RECORD_NAME,
+                        found=tool_folders_off_path, dry_run=args.dry_run, yes=args.yes, version=PDFMD_VERSION,
+                        interactive=sys.stdin.isatty() and not os.environ.get("PDFMD_NO_PROMPT"))
+
+
+def setup_actions() -> dict:
+    """The `--setup` rows that run something instead of storing a value (the Windows user PATH), by row key."""
+    if sys.platform != "win32":
+        return {}
+    from pdfmd_setup import userpath
+    context = dict(backend=userpath.Registry(), record=config_root() / userpath.RECORD_NAME, found=tool_folders_off_path,
+                   version=PDFMD_VERSION)
+    return {"user-path": lambda say, read_line: userpath.menu(say, read_line, **context)}
+
+
 def resolve_soffice() -> str | None:
     """Locate the LibreOffice/soffice binary, beyond a bare PATH lookup.
 
@@ -6479,6 +6541,9 @@ def doctor_report(deep: bool = False) -> bool:
             print(f"  {number}. {' and '.join(what)}\n       {fix}")
     else:
         print("Everything pdfmd uses is in place.")
+    hint = user_path_hint()
+    if hint:
+        print(hint)
     return bool(pandoc and engines) or bool(available_native_engines())
 
 
@@ -9429,7 +9494,8 @@ def setup_command(screen: str = "") -> bool:
         shown_path = f"the settings of {display_path(folder.resolve())} and every folder under it  ({display_path(path)})"
     saved = module.run(stores, NO_AUTO_KINDS, shown_path, screen or None, flag_names=flag_names(),
                        flag_topics=flag_topics(), folder=folder is not None,
-                       inherited=setup_sources(module, folder, stores) if folder is not None else None)
+                       inherited=setup_sources(module, folder, stores) if folder is not None else None,
+                       actions=setup_actions())
     if not saved:
         print("Nothing saved.")
         return True
@@ -26009,6 +26075,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
+    parser.add_argument("--user-path", nargs="+", metavar=("VERB", "FOLDER"),
+                        help="Windows: put folders on your USER PATH (no administrator rights; it asks first, --yes skips the "
+                             "question, --dry-run only shows). `--user-path add FOLDER...` adds the folders you name, or, with no "
+                             "folder, those of the tools pdfmd found off PATH (--doctor names them); `--user-path remove` takes off "
+                             "exactly what pdfmd added; `--user-path show` lists the entries. Nothing else in pdfmd touches PATH. "
+                             "The global --setup has the same as a row")
+    parser.add_argument("--add-to-path", nargs="*", metavar="FOLDER", default=None,
+                        help="the same as --user-path add [FOLDER...]")
+    parser.add_argument("--remove-from-path", action="store_true", help="the same as --user-path remove")
+    parser.add_argument("--show-user-path", action="store_true", help="the same as --user-path show")
+    parser.add_argument("--yes", action="store_true",
+                        help="with --user-path (or --add-to-path, --remove-from-path): do not ask first")
     parser.add_argument("--init", nargs="?", const="", metavar="TEMPLATE",
                         help="start a new document from a template: `pdfmd --init article paper` makes the folder paper/ "
                              "(a template that is one file makes paper.md) with the title, author and date filled in "
@@ -26848,6 +26926,8 @@ def run_main() -> None:
             sys.stdout.reconfigure(newline="\n")          # CRLF in a shell script breaks it in Git Bash and WSL
         sys.stdout.write(completion_script(args.completion))
         raise SystemExit(0)
+    if args.user_path or args.add_to_path is not None or args.remove_from_path or args.show_user_path:
+        raise SystemExit(user_path_command(args))
     if args.deep and not args.doctor:
         raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:

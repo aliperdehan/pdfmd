@@ -655,9 +655,9 @@ class Registry(unittest.TestCase):
 
     def test_every_setting_has_a_key_a_kind_and_choices(self):
         for setting in SETTINGS:
-            self.assertIn(setting.kind, ("choice", "multi", "text"))
+            self.assertIn(setting.kind, ("choice", "multi", "text", "action"))
             self.assertIn(setting.store, ("config", "metadata"))
-            self.assertEqual(bool(setting.choices), setting.kind != "text", setting.key)
+            self.assertEqual(bool(setting.choices), setting.kind not in ("text", "action"), setting.key)
 
     def test_an_unset_setting_says_what_pdfmd_does_instead(self):
         for setting in SETTINGS:
