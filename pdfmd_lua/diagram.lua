@@ -111,6 +111,10 @@ local function run_in(folder, command, args)
   if POSIX then
     run, run_args = "/bin/sh", {"-c", 'exec "$@" 2>pdfmd-tool.err', "sh", command}
     for _, value in ipairs(args) do run_args[#run_args + 1] = value end
+  elseif command == "mmdc" then
+    -- on Windows npm writes mmdc.cmd, a command script: a program started by its bare name has to be an .exe, so cmd starts it
+    run, run_args = "cmd", {"/c", command}
+    for _, value in ipairs(args) do run_args[#run_args + 1] = value end
   end
   local ok = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(run, run_args, "") end)
   if POSIX then

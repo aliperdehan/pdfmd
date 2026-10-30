@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.12 — 2026-10-30
+
+Pre-edit state: commit `83f8331`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **Mermaid diagrams on Windows.** `diagram.lua` started `mmdc` by its bare name; npm writes `mmdc.cmd` on Windows, a command script that a program started by name cannot be, so a ```mermaid block stayed code ("could not be drawn") with `mmdc` on PATH. On Windows the filter now starts it as `cmd /c mmdc ...`; macOS and Linux are unchanged. With 3.31.8's slash fix a real `mmdc` 12 builds an inline SVG. `tests/test_diagram_shim.py` (Windows only, a stand-in `mmdc.cmd`) fails without the change. By the Windows test session (pull request #25).
+
 ## v3.31.11 — 2026-10-30
 
 Pre-edit state: commit `a080381`. Still under 3.31. Merged from a pull request of the Windows test session.
