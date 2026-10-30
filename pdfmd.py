@@ -2381,6 +2381,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
                 mapping[reference.path] = converted
     args: list[str] = []
     if mapping:
+        mapping = {name: Path(path).as_posix() for name, path in mapping.items()}      # LaTeX reads a backslash as a command
         digest = hashlib.sha1(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest()[:16]
         map_file = cache_root() / "images" / "maps" / f"{digest}.yaml"
         if not map_file.is_file():
