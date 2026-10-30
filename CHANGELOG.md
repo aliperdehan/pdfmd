@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.19 — 2026-10-30
+
+Pre-edit state: commit `aeaad80`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+The plot cache records the files a plot job read, and drops any that is not under the report's folders. TeX writes a Windows drive letter in lower case (`d:/work/lab/ir/product.csv`) where the report's folder is `D:\work\lab`, and the comparison was case-sensitive, so every CSV was dropped as foreign and an edit to it showed as a stale plot. `plot_recorded_inputs` now compares through `os.path.normcase` on both sides (the identity on macOS and Linux).
+
+- Found by the nulabreport smoke test on Windows: after a CSV edit the cached build differed from the uncached one in 96 of 1114 words; with the fix the checks pass and the `.deps` files list the CSVs.
+- Test: `tests/test_plot_cache.py` (`test_a_lower_case_drive_letter_is_still_the_reports_folder`), Windows only, fails without the fix.
+
 ## v3.31.18 — 2026-10-31
 
 Pre-edit state: commit `a66a343`. Still under 3.31. Merged from a pull request of the Windows test session.
