@@ -62,11 +62,13 @@ class Labels(unittest.TestCase):
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Translators(unittest.TestCase):
     def lua(self, code: str) -> str:
-        script = ("FORMAT = 'docx'\nPDFMD_OFFICE_EXPORT = {}\ndofile('" + FILTER.as_posix() + "')\nlocal E = PDFMD_OFFICE_EXPORT\n" + code)
+        # the interpreter is the one running the tests, as pdfmd passes it (`python3` is not a command everywhere, Windows)
+        script = ("FORMAT = 'docx'\nPDFMD_OFFICE_EXPORT = {}\ndofile('" + FILTER.as_posix() + "')\nlocal E = PDFMD_OFFICE_EXPORT\n"
+                  "E.chem.python = '" + Path(sys.executable).as_posix() + "'\n" + code)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "t.lua"
             path.write_text(script, encoding="utf-8")
-            done = subprocess.run(["pandoc", "lua", str(path)], capture_output=True, text=True)
+            done = subprocess.run(["pandoc", "lua", str(path)], capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout.strip()
 
@@ -105,8 +107,9 @@ class Translators(unittest.TestCase):
             root = Path(directory)
             (root / "d.md").write_text(text, encoding="utf-8")
             done = subprocess.run(["pandoc", "d.md", "--lua-filter", str(FILTER), "-M", "pdfmd-office-latex=auto",
+                                   "-M", f"pdfmd-office-python={Path(sys.executable).as_posix()}",
                                    "-M", f"pdfmd-office-report={root / 'report.json'}", *arguments], cwd=root,
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(done.returncode, 0, done.stderr)
             report = json.loads((root / "report.json").read_text(encoding="utf-8"))
         return done.stdout, report, done.stderr
@@ -174,8 +177,9 @@ class Documents(unittest.TestCase):
     def document_xml(self, markdown: str, *extra: str) -> str:
         source = self.root / "d.md"
         source.write_text(markdown, encoding="utf-8")
-        done = subprocess.run(["pandoc", str(source), "-o", str(self.root / "d.docx"), "--lua-filter", str(FILTER), *extra],
-                              capture_output=True, text=True, cwd=self.root)
+        done = subprocess.run(["pandoc", str(source), "-o", str(self.root / "d.docx"), "--lua-filter", str(FILTER),
+                               "-M", f"pdfmd-office-python={Path(sys.executable).as_posix()}", *extra],
+                              capture_output=True, text=True, encoding="utf-8", cwd=self.root)
         self.assertEqual(done.returncode, 0, done.stderr)
         return zipfile.ZipFile(self.root / "d.docx").read("word/document.xml").decode("utf-8")
 
@@ -304,7 +308,8 @@ class Anchors(unittest.TestCase):
         """`before` goes ahead of the filter, as pdfmd puts --citeproc."""
         (self.root / "d.md").write_text(markdown, encoding="utf-8")
         target = ["-o", output] if "." in output else ["-t", output]
-        done = subprocess.run(["pandoc", "d.md", *target, *before, "--lua-filter", str(FILTER)], capture_output=True,
+        done = subprocess.run(["pandoc", "d.md", *target, *before, "--lua-filter", str(FILTER),
+                               "-M", f"pdfmd-office-python={Path(sys.executable).as_posix()}"], capture_output=True,
                               text=True, encoding="utf-8", cwd=self.root)
         self.assertEqual(done.returncode, 0, done.stderr)
         return done
@@ -488,8 +493,9 @@ class DisplayBlocks(unittest.TestCase):
             root = Path(directory)
             (root / "d.md").write_text("```{=latex}\n\\par\\nointerlineskip\n\\[\\ce{H2O} = \\SI{5}{\\milli\\liter}\\]\n\\par\\nointerlineskip\n```\n",
                                        encoding="utf-8")
-            done = subprocess.run(["pandoc", "d.md", "-o", "d.docx", "--lua-filter", str(FILTER)], cwd=root,
-                                  capture_output=True, text=True)
+            done = subprocess.run(["pandoc", "d.md", "-o", "d.docx", "--lua-filter", str(FILTER),
+                                   "-M", f"pdfmd-office-python={Path(sys.executable).as_posix()}"], cwd=root,
+                                  capture_output=True, text=True, encoding="utf-8")
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertNotIn("Could not convert", done.stderr)
             xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
