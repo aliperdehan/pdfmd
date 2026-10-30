@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.14 — 2026-10-31
+
+Pre-edit state: commit `0f8f11a`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **`pdfmd --completion` prints its script with Unix line ends on Windows.** Python's text-mode standard output wrote CRLF, and `source <(pdfmd --completion bash)` failed in Git Bash and WSL ("syntax error near unexpected token `$'{\r''"). The command keeps plain newlines (`sys.stdout.reconfigure(newline="\n")`); macOS and Linux are unchanged. A test checks the bytes. By the Windows test session (pull request #30).
+
 ## v3.31.13b — 2026-10-30
 
 Pre-edit state: commit `c4491c7`. Docs only: `PDFMD_VERSION` stays 3.31.13.
