@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.8"
+PDFMD_VERSION = "3.31.9"
 import argparse
 import atexit
 import csv
@@ -20612,7 +20612,7 @@ def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: s
     try:
         profile_dir = scratch / "profile"
         cmd = [binary, "--headless", "--norestore",
-              f"-env:UserInstallation=file://{profile_dir}",
+              f"-env:UserInstallation={profile_dir.as_uri()}",       # a real file URL: on Windows LibreOffice hangs on file://C:\...
               "--convert-to", "txt:Text" if target == "txt" else target, "--outdir", str(scratch), str(input_path)]
         log_cmd(cmd, input_path.parent, verbose)
         result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=input_path.parent)
@@ -25135,7 +25135,7 @@ def odf_source_for(path: Path, metadata_files: list[Path], variables: list[str],
             binary = resolve_soffice()
             if binary is None:
                 return None
-            command = [binary, "--headless", "--norestore", f"-env:UserInstallation=file://{scratch_dir / 'profile'}",
+            command = [binary, "--headless", "--norestore", f"-env:UserInstallation={(scratch_dir / 'profile').as_uri()}",
                        "--convert-to", family, "--outdir", str(scratch_dir), str(path)]
             log_cmd(command, path.parent, verbose)
             subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=path.parent)

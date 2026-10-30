@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9 — 2026-10-30
+
+Pre-edit state: commit `0b1f055`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **LibreOffice's throwaway profile on Windows.** The three places that start `soffice` with `-env:UserInstallation=file://{profile}` (the Office converter, the ODF reader, the SVG converter of `pdfmd_images`) built `file://C:\...`, which is not a file URL: headless LibreOffice then waited for ever with no output (25+ minutes measured), or exited 1 without a PDF. They pass `Path.as_uri()` now (`file:///C:/...`, percent-encoded; the same string on macOS and Linux). A test (`tests/test_svg_profile.py`) fails without the change. A time limit for the call is not added: it needs a setting and waits for the author. By the Windows test session (pull request #18).
+
 ## v3.31.8 — 2026-10-30
 
 Pre-edit state: commit `57919d1`. Still under 3.31. Merged from a pull request of the Windows test session.
