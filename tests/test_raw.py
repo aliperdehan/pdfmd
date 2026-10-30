@@ -99,7 +99,7 @@ class Filter(unittest.TestCase):
     def convert(self, target: str, table: dict, *filters: Path) -> str:
         config = self.folder / "config.yaml"
         import json
-        config.write_text(json.dumps({"pdfmd-raw": table, "pdfmd-raw-cache": str(self.folder / "cache")}), encoding="utf-8")
+        config.write_text(json.dumps({"pdfmd-raw": table, "pdfmd-raw-cache": (self.folder / "cache").as_posix()}), encoding="utf-8")
         command = [PANDOC, "doc.md", "-t", target, "--metadata-file", str(config)]
         for item in filters or (RAW_LUA,):
             command += ["--lua-filter", str(item)]
@@ -169,7 +169,7 @@ class PdfImages(unittest.TestCase):
         (self.folder / "d.md").write_text('---\ntitle: T\n---\n\n![the figure](fig.pdf)\n\nRaw: <img src="fig.pdf" width="80">\n',
                                           encoding="utf-8")
         import json
-        (self.folder / "cfg.yaml").write_text(json.dumps({"pdfmd-raw-cache": str(self.folder / "cache")}), encoding="utf-8")
+        (self.folder / "cfg.yaml").write_text(json.dumps({"pdfmd-raw-cache": (self.folder / "cache").as_posix()}), encoding="utf-8")
 
     def html(self, *filters):
         command = [PANDOC, "d.md", "-t", "html", "--metadata-file", "cfg.yaml"]

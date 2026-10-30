@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.8 — 2026-10-30
+
+Pre-edit state: commit `57919d1`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **The raw filters on Windows.** `pdfmd-raw-cache`, `-work` and `-preamble` were written into the generated YAML metadata file with `str(Path)`; Pandoc reads a string there as Markdown, where a backslash escapes, so a Windows path lost its backslashes and the PDF images and the Typst/LaTeX raw pictures were not converted. They are written with forward slashes now (`as_posix()`; no change on macOS and Linux). By the Windows test session (pull request #17).
+
 ## v3.31.7 — 2026-10-30
 
 Pre-edit state: commit `9813fde`. Still under 3.31. Merged from a pull request of the Windows test session.
