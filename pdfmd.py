@@ -3392,12 +3392,13 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     if table is None and not pdf_images and not diagrams:
         return []
     folder = cache_root() / "raw"
-    config: dict = {"pdfmd-raw-cache": str(folder / "pictures")}
+    # Pandoc reads a string in a metadata file as Markdown, where a backslash escapes: a Windows path keeps forward slashes
+    config: dict = {"pdfmd-raw-cache": (folder / "pictures").as_posix()}
     if flat_pictures is not None:       # flat Markdown: the pictures it needs sit beside the output, linked by a relative path
-        config = {"pdfmd-raw-cache": str(flat_pictures), "pdfmd-raw-rel": flat_pictures.name,
-                  "pdfmd-raw-work": str(folder / "pictures")}       # the SVGs go beside the output, the drawn PDFs stay in the cache
+        config = {"pdfmd-raw-cache": flat_pictures.as_posix(), "pdfmd-raw-rel": flat_pictures.name,
+                  "pdfmd-raw-work": (folder / "pictures").as_posix()}       # the SVGs go beside the output, the drawn PDFs stay in the cache
     if preamble:            # a LaTeX picture is drawn with the document's own preamble
-        config["pdfmd-raw-preamble"] = [str(item) for item in preamble]
+        config["pdfmd-raw-preamble"] = [Path(item).as_posix() for item in preamble]
     if table is not None:
         config["pdfmd-raw"] = table
     if diagrams:
