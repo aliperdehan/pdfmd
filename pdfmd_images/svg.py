@@ -92,7 +92,7 @@ def _run(name: str, svg: Path, produced: Path, scratch: Path, which, soffice) ->
             return True, ""
         else:                                                     # soffice: Draw sizes the page to the drawing
             profile = scratch / "profile"
-            command = [soffice(), "--headless", "--norestore", f"-env:UserInstallation=file://{profile}",
+            command = [soffice(), "--headless", "--norestore", f"-env:UserInstallation={profile.as_uri()}",
                        "--convert-to", "pdf", "--outdir", str(scratch), str(svg)]
             done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
             made = scratch / f"{svg.stem}.pdf"
