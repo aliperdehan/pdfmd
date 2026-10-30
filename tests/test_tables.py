@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import pdfmd  # noqa: E402
 import pdfmd_tables as tables  # noqa: E402
 from pandoc_support import PANDOC_VERSION, needs_pandoc  # noqa: E402
+from env_support import config_env  # noqa: E402
 
 FILTER = ROOT / "pdfmd_lua" / "csv_table.lua"
 PANDOC = shutil.which("pandoc")
@@ -317,7 +318,7 @@ class InlineCsv(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-inline-csv-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        self.env = {**os.environ, **config_env(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
         (self.directory / "doc.md").write_text(IGNORING, encoding="utf-8")
 
     def run_pdfmd(self, *args):
@@ -380,7 +381,7 @@ class CommandLine(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-tables-cli-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "doc.md").write_text(DOCUMENT, encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env = {**os.environ, **config_env(self.directory / "xdg"), "PDFMD_CONFIG": ""}
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
@@ -468,7 +469,7 @@ class MixedDocument(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "doc.md").write_text(MIXED, encoding="utf-8")
         (self.directory / "old.csv").write_text("p,q\n7,8\n", encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env = {**os.environ, **config_env(self.directory / "xdg"), "PDFMD_CONFIG": ""}
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,

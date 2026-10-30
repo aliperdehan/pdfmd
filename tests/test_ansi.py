@@ -13,6 +13,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from env_support import hidden_tools  # noqa: E402
 
 from pdfmd_ansi import render, strip_ansi, visible_width           # noqa: E402
 from pdfmd_ansi.native import from_markdown                       # noqa: E402
@@ -125,6 +127,7 @@ class Pipeline(unittest.TestCase):
         environment.update({"PDFMD_CONFIG": "", **(env or {})})
         if path is not None:
             environment["PATH"] = path
+            environment.update(hidden_tools(path))
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory, input=stdin,
                               capture_output=True, text=True, encoding="utf-8", env=environment)
 
@@ -636,7 +639,7 @@ class NativeSpans(unittest.TestCase):
         (directory / "nobin").mkdir()
         (directory / "s.md").write_text("# T\n\n" + HTML_SPAN_TABLE + "\nAfter\n", encoding="utf-8")
         environment = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "PAGER", "PDFMD_PAGER")}
-        environment.update({"PDFMD_CONFIG": "", "PATH": str(directory / "nobin")})
+        environment.update({"PDFMD_CONFIG": "", "PATH": str(directory / "nobin"), **hidden_tools(directory / "nobin")})
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--view", "s.md", "--color", "never", "--width", "60"],
                               cwd=directory, capture_output=True, text=True, encoding="utf-8", env=environment)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

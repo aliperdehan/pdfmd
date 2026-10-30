@@ -23,6 +23,7 @@ import pdfmd_check  # noqa: E402
 from pdfmd_check import Bibliography, Source, lint  # noqa: E402
 from pdfmd_check.lint import heading_identifiers  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
+from env_support import hidden_tools  # noqa: E402
 
 
 def codes(text: str, bibliography=None, folder: Path | None = None, **extra) -> list[str]:
@@ -373,7 +374,7 @@ class CalcCheck(unittest.TestCase):
         self.assertIn("no problems", off.stdout, off.stdout + off.stderr)
         empty = self.directory / "empty"
         empty.mkdir()
-        environment = {**os.environ, "PDFMD_CONFIG": "", "PATH": str(empty)}
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PATH": str(empty), **hidden_tools(empty)}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "--check"], cwd=self.directory,
                               capture_output=True, text=True, encoding="utf-8", env=environment)
         self.assertIn("NOTE  --check: the names of the calculator are not checked without Pandoc", done.stderr)

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 from cache_support import cache_env  # noqa: E402
+from env_support import hidden_tools  # noqa: E402
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
@@ -84,6 +85,7 @@ class CommandLine(unittest.TestCase):
             empty.mkdir(exist_ok=True)
             environment["PATH"] = str(empty)
             environment["PDFMD_CALIBRE"] = ""
+            environment.update(hidden_tools(empty))
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
                               encoding="utf-8", cwd=self.directory, env=environment)
 
