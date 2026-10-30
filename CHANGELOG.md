@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.13 — 2026-10-30
+
+Pre-edit state: commit `5204a2c`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **Converted SVG pictures on Windows.** `image_filter_args` wrote the converted PDF's path into the image map with backslashes; `images.lua` puts it into raw LaTeX, where a backslash is a command (`lualatex`: ``File `C:-1234.pdf' not found``). The path is written with forward slashes (`as_posix()`; no change on macOS and Linux). By the Windows test session (pull request #28).
+
 ## v3.31.12 — 2026-10-30
 
 Pre-edit state: commit `83f8331`. Still under 3.31. Merged from a pull request of the Windows test session.
