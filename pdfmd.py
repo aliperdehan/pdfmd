@@ -26784,6 +26784,8 @@ def run_main() -> None:
     if args.init_reference:
         raise SystemExit(0 if init_reference(args.init_reference) else 1)
     if args.completion:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(newline="\n")          # CRLF in a shell script breaks it in Git Bash and WSL
         sys.stdout.write(completion_script(args.completion))
         raise SystemExit(0)
     if args.deep and not args.doctor:

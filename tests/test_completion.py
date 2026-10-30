@@ -32,7 +32,7 @@ class CompletionTests(unittest.TestCase):
                 continue
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / f"c.{shell}"
-                path.write_text(pdfmd.completion_script(shell), encoding="utf-8")
+                path.write_bytes(pdfmd.completion_script(shell).encode("utf-8"))      # write_text would turn each newline into CRLF on Windows
                 # by name, from its folder: a Windows path with backslashes means nothing to a POSIX shell (Git Bash)
                 done = subprocess.run([program, "-n", path.name], capture_output=True, text=True, encoding="utf-8", cwd=directory)
                 self.assertEqual(done.returncode, 0, f"{shell}: {done.stderr}")
@@ -42,6 +42,11 @@ class CompletionTests(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue(done.stdout.startswith("#compdef pdfmd"))
+
+    def test_the_command_prints_it_with_unix_line_ends(self):
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--completion", "bash"], capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(b"\r", done.stdout)                  # CRLF in a shell script breaks it in Git Bash and WSL
 
 
 if __name__ == "__main__":
