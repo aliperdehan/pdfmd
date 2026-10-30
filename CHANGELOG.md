@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.7 — 2026-10-30
+
+Pre-edit state: commit `9813fde`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **`--split` no longer crashes on Windows without the symlink privilege.** `split_into_parts` linked the files and folders next to the source into the scaffold with `symlink_to`; an ordinary Windows user (no Developer Mode, not elevated) gets `WinError 1314`. It now copies the file or folder when the link cannot be made. macOS and Linux still link. A test covers the copy; the command-line split test globs the parts folder only. By the Windows test session (pull request #16).
+
 ## v3.31.6 — 2026-10-29
 
 Pre-edit state: commit `9f09a1f`. Still under 3.31. The first step of `emit` (the chatter ladder of the tables line, which is NOT started).

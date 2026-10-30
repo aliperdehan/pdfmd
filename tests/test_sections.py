@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -162,6 +163,22 @@ class SplitAtHeadings(unittest.TestCase):
         self.assertEqual(pdfmd.split_top_level_sections("just text", 1), [["just text"]])
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_without_the_symlink_privilege_the_files_beside_the_document_are_copied(self):
+        # Windows without Developer Mode (and not elevated) refuses symlinks: --split then copies instead of crashing
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "book.md").write_text("---\ntitle: T\n---\n\nLead.\n\n# One\n\nA.\n\n# Two\n\nB.\n", encoding="utf-8")
+            (root / "pic.png").write_bytes(b"png")
+            (root / "figs").mkdir()
+            (root / "figs" / "a.txt").write_text("a", encoding="utf-8")
+            with mock.patch.object(Path, "symlink_to", side_effect=OSError("symlinks are not allowed")), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(pdfmd.split_into_parts(root / "book.md", root / "out"), 0)
+            self.assertFalse((root / "out" / "pic.png").is_symlink())
+            self.assertEqual((root / "out" / "pic.png").read_bytes(), b"png")
+            self.assertEqual((root / "out" / "figs" / "a.txt").read_text(encoding="utf-8"), "a")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_cli_splits_a_mixed_document_and_the_parts_read_back_identically(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -175,8 +192,8 @@ class SplitAtHeadings(unittest.TestCase):
                                          "--split-depth", depth], cwd=root, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("identical document", result.stdout)
-                self.assertEqual(sorted(path.name for path in (root / f"out{depth}").rglob("*.md")
-                                        if path.name != "book.md"), expected)
+                # the parts folder only: a sibling output folder is linked (or, without symlinks, copied) beside it
+                self.assertEqual(sorted(path.name for path in (root / f"out{depth}" / "parts").rglob("*.md")), expected)
 
 
 class LabelledElements(unittest.TestCase):

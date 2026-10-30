@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.6"
+PDFMD_VERSION = "3.31.7"
 import argparse
 import atexit
 import csv
@@ -16089,8 +16089,15 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
                 or entry.suffix.lower() in {".pdf", ".md"} or (destination / entry.name).exists()
                 or entry.resolve() in (destination, *destination.parents)):
             continue
-        (destination / entry.name).symlink_to(os.path.relpath(entry.absolute(), destination),
-                                               target_is_directory=entry.is_dir())
+        link = destination / entry.name
+        try:
+            link.symlink_to(os.path.relpath(entry.absolute(), destination), target_is_directory=entry.is_dir())
+        except OSError:
+            # Windows without the symlink privilege (no Developer Mode, not elevated) cannot link: copy instead
+            if entry.is_dir():
+                shutil.copytree(entry, link)
+            else:
+                shutil.copy2(entry, link)
     original = subprocess.run(["pandoc", str(source), "-t", "native"], capture_output=True, encoding="utf-8", errors="replace")
     split = subprocess.run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
                            capture_output=True, encoding="utf-8", errors="replace")
