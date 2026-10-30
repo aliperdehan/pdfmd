@@ -126,7 +126,7 @@ class Pipeline(unittest.TestCase):
         if path is not None:
             environment["PATH"] = path
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory, input=stdin,
-                              capture_output=True, text=True, env=environment)
+                              capture_output=True, text=True, encoding="utf-8", env=environment)
 
     def test_to_ansi_writes_a_file_with_styling_and_math_as_text(self):
         done = self.run_pdfmd("a.md", "--to", "ansi", "--width", "70", "--no-stamp", "--no-backup")
@@ -208,7 +208,7 @@ class Pipeline(unittest.TestCase):
 
 class Setup(unittest.TestCase):
     def test_the_flags_are_in_the_help_the_setup_and_the_packages(self):
-        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--help", "view"], capture_output=True, text=True,
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--help", "view"], capture_output=True, text=True, encoding="utf-8",
                               env={**os.environ, "PDFMD_CONFIG": ""})
         for flag in ("--view", "--pager", "--color", "--width"):
             self.assertIn(flag, done.stdout)
@@ -546,7 +546,7 @@ class PipelineBlocks(unittest.TestCase):
         environment = {key: value for key, value in os.environ.items() if key not in ("NO_COLOR", "PAGER", "PDFMD_PAGER")}
         environment["PDFMD_CONFIG"] = ""
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--view", "m.md", "--width", "50", *args], cwd=self.directory,
-                              capture_output=True, text=True, env=environment)
+                              capture_output=True, text=True, encoding="utf-8", env=environment)
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout
 
