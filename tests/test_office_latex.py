@@ -427,7 +427,7 @@ class Pictures(unittest.TestCase):
             (root / name).write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
         (root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  office: {labels: off}\n---\n\n" + markdown, encoding="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx"], cwd=root, capture_output=True,
-                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
         return root, done
 
     def test_unknown_latex_becomes_a_vector_picture_with_a_png_fallback(self):
@@ -451,7 +451,7 @@ class Pictures(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         again = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "d.docx", "-v"], cwd=root,
                                capture_output=True, text=True,
-                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertNotIn("drawing 1 LaTeX fragment", again.stdout)      # cached
 
@@ -513,7 +513,7 @@ class CheckDocx(unittest.TestCase):
                                        "\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n", encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--check-docx"], cwd=root,
                                   capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
-                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+                                                                       "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("pictures drawn by LaTeX: 1", done.stdout)
             self.assertIn("tikzpicture", done.stdout)
@@ -527,7 +527,7 @@ class CheckDocx(unittest.TestCase):
                                        "\\begin{tikzpicture}\\draw (0,0) circle (1cm);\\end{tikzpicture}\n", encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--check-docx"], cwd=root,
                                   capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
-                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+                                                                       "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("pictures drawn by LaTeX: 1", done.stdout)
             self.assertNotIn("usepackage", done.stdout + done.stderr)
@@ -543,7 +543,7 @@ class SeveralEquations(unittest.TestCase):
                                        encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "docx"], cwd=root,
                                   capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
-                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+                                                                       "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertNotIn("eqno", done.stdout + done.stderr)
             xml = zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()
@@ -562,7 +562,7 @@ class PartsReferences(unittest.TestCase):
             (root / "parts" / "20-results.md").write_text("# Results\n\nBy \\ref{eq:a} it follows.\n", encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "--to", "docx"], cwd=root,
                                   capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
-                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+                                                                       "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             xml = zipfile.ZipFile(root / "report.docx").read("word/document.xml").decode()
             self.assertNotIn("??", xml)
@@ -580,7 +580,7 @@ class PicturesMode(unittest.TestCase):
                                        "Water \\ce{H2O} and $E = mc^2 + \\frac{a}{b}$.\n", encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "docx"], cwd=root,
                                   capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": "",
-                                                                       "XDG_CACHE_HOME": str(root / "cache")})
+                                                                       "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             with zipfile.ZipFile(root / "d.docx") as archive:
                 return archive.read("word/document.xml").decode() + " ".join(archive.namelist())
@@ -637,7 +637,7 @@ class OtherOutputs(unittest.TestCase):
 
     def run_pdfmd(self, root: Path, *arguments: str):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *arguments], cwd=root, capture_output=True,
-                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache")})
+                              text=True, env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"), "LOCALAPPDATA": str(root / "cache")})
 
     @unittest.skipUnless(TYPST, "needs Typst")
     def test_typst_gets_the_drawing_when_the_document_asks(self):
@@ -755,7 +755,7 @@ class Properties(unittest.TestCase):
     def pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=self.root,
                               capture_output=True, text=True,
-                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"),
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"), "LOCALAPPDATA": str(self.root / "cache"),
                                    "XDG_CONFIG_HOME": str(self.root / "config"), "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return done

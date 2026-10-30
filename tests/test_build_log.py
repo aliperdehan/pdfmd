@@ -101,7 +101,7 @@ class Builds(unittest.TestCase):
         self.path = Path(self.folder.name)
         self.cache = self.path / "cache"
         self.env = {key: value for key, value in os.environ.items() if key != "PDFMD_BUILD_LOG"}
-        self.env["XDG_CACHE_HOME"] = str(self.cache)
+        self.env["XDG_CACHE_HOME"] = self.env["LOCALAPPDATA"] = str(self.cache)        # the cache folder: XDG, on Windows LOCALAPPDATA
         self.env["PDFMD_NO_PROMPT"] = "1"
 
     def run_pdfmd(self, *arguments, front="", good=True):
@@ -198,7 +198,7 @@ class Builds(unittest.TestCase):
 
     def test_a_cache_that_cannot_be_written_does_not_fail_the_build(self):
         (self.path / "blocked").write_text("a file where the cache folder should be", encoding="utf-8")
-        self.env["XDG_CACHE_HOME"] = str(self.path / "blocked")
+        self.env["XDG_CACHE_HOME"] = self.env["LOCALAPPDATA"] = str(self.path / "blocked")
         done = self.run_pdfmd()
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((self.path / "d.html").is_file())

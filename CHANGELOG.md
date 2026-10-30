@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9d — 2026-10-30
+
+Pre-edit state: commit `63ddd01`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- The build-log and office-LaTeX tests point the cache at their own folder through `LOCALAPPDATA` as well as `XDG_CACHE_HOME` (Windows reads the first; the records went to the real user cache and the tests found none). By the Windows test session (pull request #21).
+
 ## v3.31.9c — 2026-10-30
 
 Pre-edit state: commit `d4f4cf1`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
