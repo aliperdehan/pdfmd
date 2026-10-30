@@ -16,6 +16,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 import os as _os, tempfile as _tempfile  # noqa: E402
 _os.environ["PDFMD_CONFIG"] = ""
@@ -147,7 +149,7 @@ class Builds(unittest.TestCase):
                 "| a | b |\n|---|---|\n| 1 | 2 |\n\n# Second section\n\nMore words.\n", encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
                                   cwd=root, capture_output=True, text=True,
-                                  env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"),
+                                  env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
                                        "XDG_CONFIG_HOME": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("(calibre)", done.stdout)
@@ -170,7 +172,7 @@ class Builds(unittest.TestCase):
             (root / "doc.md").write_text("---\ntitle: Trial\n---\n\n" + NARROW_TABLE, encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
                                   cwd=root, capture_output=True, text=True,
-                                  env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "cache"),
+                                  env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
                                        "XDG_CONFIG_HOME": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             text = " ".join("".join(page.extract_text() for page in pypdf.PdfReader(str(root / "doc.pdf")).pages).split())

@@ -16,6 +16,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 import pdfmd  # noqa: E402
 import pdfmd_images as images  # noqa: E402
@@ -98,7 +100,7 @@ class Arguments(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "a.svg").write_text(SVG, encoding="utf-8")
         self.cache = self.directory / "cache"
-        patcher = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.cache)})
+        patcher = mock.patch.dict(os.environ, {**cache_env(self.cache)})
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -220,7 +222,7 @@ class Remote(unittest.TestCase):
         fake(bin_dir, "rsvg-convert", 'while [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done; printf %%PDF-1.4 > "$out"')
         source = self.directory / "d.md"
         source.write_text(f"![badge]({self.base}/badge.svg) ![photo]({self.base}/pic)\n", encoding="utf-8")
-        environment = {"XDG_CACHE_HOME": str(self.directory / "cache"), "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        environment = {**cache_env(self.directory / "cache"), "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
         with mock.patch.dict(os.environ, environment), mock.patch("pdfmd_images.svg._python_module", return_value=False), \
                 mock.patch.object(pdfmd, "which", side_effect=lambda name: str(bin_dir / name) if name == "rsvg-convert" else None):
             args = pdfmd.image_filter_args(None, [source])
@@ -237,7 +239,7 @@ class Remote(unittest.TestCase):
         self.stop_server()
         source.write_text("".join(f"![i{n}](http://127.0.0.1:{port}/{n}.png)\n" for n in range(3)), encoding="utf-8")
         errors = io.StringIO()
-        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.directory / "cache")}), redirect_stderr(errors), \
+        with mock.patch.dict(os.environ, {**cache_env(self.directory / "cache")}), redirect_stderr(errors), \
                 mock.patch("pdfmd_images.remote.urllib.request.urlopen", side_effect=__import__("urllib.error").error.URLError("no DNS")):
             args = pdfmd.image_filter_args(None, [source])
         self.assertEqual(errors.getvalue().count("no network"), 1)
@@ -275,7 +277,7 @@ class EndToEnd(unittest.TestCase):
         (self.directory / "raw.md").write_text("---\ntitle: Raw\n---\n\n\\begin{figure}\n\\centering\n"
                                                "\\includegraphics[width=0.5\\textwidth]{a.svg}\n\\caption{raw svg}\n\\end{figure}\n",
                                                encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "XDG_CACHE_HOME": str(self.directory / "cache"),
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), **cache_env(self.directory / "cache"),
                     "PDFMD_CONFIG": ""}
 
     def build(self, name, *args):

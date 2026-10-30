@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9f — 2026-10-30
+
+Pre-edit state: commit `ea1a7f7`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- One helper, `tests/cache_support.py` (`cache_env(folder)`), names the cache folder for every system (`XDG_CACHE_HOME` and `LOCALAPPDATA`); seven test modules use it (build_record, calibre, chem, compat, images, markup_word, raw). By the Windows test session (pull request #27).
+
 ## v3.31.9e — 2026-10-30
 
 Pre-edit state: commit `57cf5e8`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.

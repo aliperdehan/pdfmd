@@ -18,6 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 from pdfmd_chem import batch, render, siunitx  # noqa: E402
 
@@ -201,7 +203,7 @@ class Routes(unittest.TestCase):
             extra = ["-s"] if target == "markdown" else []
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", target, "-o", f"d.{target}",
                                    *extra], cwd=root, capture_output=True, text=True,
-                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "c"),
+                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", **cache_env(root / "c"),
                                        "PDFMD_NO_PROMPT": "1"})
             assert done.returncode == 0, done.stdout + done.stderr
             cls.out[target] = (root / f"d.{target}").read_text(encoding="utf-8")
@@ -244,7 +246,7 @@ class WhatItCannotConvert(unittest.TestCase):
             (root / "d.md").write_text(text, encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--from", "markdown", "--to", "typst",
                                    "-o", "d.typ"], cwd=root, capture_output=True, text=True,
-                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(root / "c"),
+                                  env={**__import__("os").environ, "PDFMD_CONFIG": "", **cache_env(root / "c"),
                                        "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             return (root / "d.typ").read_text(encoding="utf-8"), done.stdout + done.stderr

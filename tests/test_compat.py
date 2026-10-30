@@ -15,6 +15,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 import pdfmd  # noqa: E402
 
@@ -95,7 +97,7 @@ class Zipapp(unittest.TestCase):
         built = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_zipapp.py"), "-o", str(archive)],
                                capture_output=True, text=True)
         self.assertEqual(built.returncode, 0, built.stderr)
-        env = {**os.environ, "XDG_CACHE_HOME": str(directory / "cache"), "XDG_CONFIG_HOME": str(directory / "cfg"),
+        env = {**os.environ, **cache_env(directory / "cache"), "XDG_CONFIG_HOME": str(directory / "cfg"),
                "PDFMD_NO_PROMPT": "1"}
         # -S: without site-packages, so PyYAML and pypdf can only be the copies inside the file
         done = subprocess.run([sys.executable, "-S", str(archive), "--version"], cwd=directory, capture_output=True,
@@ -126,7 +128,7 @@ class Zipapp(unittest.TestCase):
                        capture_output=True)
         (directory / "t.md").write_text("---\ntitle: Zipapp\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```\nprint('hi')\n```\n",
                                         encoding="utf-8")
-        env = {**os.environ, "XDG_CACHE_HOME": str(directory / "cache"), "XDG_CONFIG_HOME": str(directory / "cfg"),
+        env = {**os.environ, **cache_env(directory / "cache"), "XDG_CONFIG_HOME": str(directory / "cfg"),
                "PDFMD_NO_PROMPT": "1"}
         done = subprocess.run([sys.executable, "-S", str(archive), "t.md", "--verbose"], cwd=directory, capture_output=True,
                               text=True, env=env)

@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from cache_support import cache_env  # noqa: E402
 
 import pdfmd  # noqa: E402
 from pdfmd_office import docx_post  # noqa: E402
@@ -119,7 +121,7 @@ class Build(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-o", "doc.docx", "--markup", "center", "highlight",
                                "landscape", *extra], cwd=root, capture_output=True, text=True, encoding="utf-8",
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
-                                   "XDG_CACHE_HOME": str(root / "cache"), "XDG_CONFIG_HOME": str(root / "config")})
+                                   **cache_env(root / "cache"), "XDG_CONFIG_HOME": str(root / "config")})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotIn("not applied", done.stdout + done.stderr)
         return root / "doc.docx"
