@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import os as _os, tempfile as _tempfile  # noqa: E402
 _os.environ["PDFMD_CONFIG"] = ""
 _os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
+_os.environ["APPDATA"] = _os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
 from pandoc_support import tex_tree_env  # noqa: E402

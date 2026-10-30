@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def run(directory: str, text: str, *arguments: str, bare: bool = True) -> subprocess.CompletedProcess:
     path = Path(directory) / "empty-bin"
     path.mkdir(exist_ok=True)
-    environment = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory}
+    environment = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory, "APPDATA": directory}
     if bare:                                       # nothing but Python: the built-in renderer (no Pandoc, no TeX)
         environment.update(PATH=str(path), PDFMD_CALIBRE="")
     return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "-", *arguments], cwd=directory, env=environment,
@@ -36,7 +36,7 @@ class Stdin(unittest.TestCase):
         # decided 2026-10-27: plain `pdfmd` never reads standard input (a script's inherited pipe looks the same)
         with tempfile.TemporaryDirectory() as directory:
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py")], cwd=directory, input="# Hi\n", capture_output=True,
-                                  text=True, env={**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory})
+                                  text=True, env={**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory, "APPDATA": directory})
             self.assertNotEqual(done.returncode, 0)
             self.assertIn("No Markdown files found", done.stderr)
             self.assertIn("`pdfmd -`", done.stderr)

@@ -567,7 +567,7 @@ class BareCsv(unittest.TestCase):
     def test_the_command_lines_and_check(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-bare-csv-"))
         self.addCleanup(shutil.rmtree, directory, True)
-        env = {**os.environ, "XDG_CONFIG_HOME": str(directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        env = {**os.environ, "XDG_CONFIG_HOME": str(directory / "xdg"), "APPDATA": str(directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
 
         def run(*args):
             return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=directory, capture_output=True, text=True, env=env)

@@ -127,7 +127,7 @@ class CommandLine(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.directory, True)
         self.document = self.directory / "doc.md"
         self.document.write_text(DOCUMENT, encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,

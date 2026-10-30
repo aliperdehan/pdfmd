@@ -67,7 +67,7 @@ class Builds(unittest.TestCase):
         self.write("parts/10-intro.md", "# Intro\n\nOne.\n")
         self.write("parts/20-calc.md", "# Calc\n\nTwo.\n")
         self.write("parts/30-disc.md", "# Disc\n\nThree.\n")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
 
     def write(self, name, text):
         (self.directory / name).write_text(text, encoding="utf-8")

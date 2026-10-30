@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 import os as _os, tempfile as _tempfile  # noqa: E402
 _os.environ["PDFMD_CONFIG"] = ""
 _os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
+_os.environ["APPDATA"] = _os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
 from pdfmd_office import (OfficeSpec, docx, length_to_twips, office_font, parse_geometry, parse_paper,  # noqa: E402
@@ -199,7 +200,7 @@ class Discovery(unittest.TestCase):
         self.reference = docx.default_reference()
 
     def build(self, *arguments, name="doc.md", cwd=None):
-        environment = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(self.root / "cfg")}
+        environment = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(self.root / "cfg"), "APPDATA": str(self.root / "cfg")}
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), name, *arguments], cwd=cwd or self.root,
                               env=environment, capture_output=True, text=True)
 
