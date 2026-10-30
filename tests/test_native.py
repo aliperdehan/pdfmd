@@ -25,6 +25,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from env_support import hidden_tools  # noqa: E402
 
 # never read or write the real user's config and state while testing
 import os as _os, tempfile as _tempfile  # noqa: E402
@@ -390,7 +392,7 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
     def run_pdfmd(self, *arguments, cwd):
         empty = Path(cwd) / "empty-bin"
         empty.mkdir(exist_ok=True)
-        environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1"}
+        environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1", **hidden_tools(empty)}
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=cwd,
                               env=environment, capture_output=True, text=True)
 

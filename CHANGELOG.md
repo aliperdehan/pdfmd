@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.15b — 2026-10-31
+
+Pre-edit state: commit `9b5b5b5`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.15.
+
+### Tests
+- The full run on Windows (cp1251, every tool installed) found tests that assumed a Unix or macOS machine. New `tests/env_support.py`: `hidden_tools(folder)` (a run with no tools on PATH also hides the Windows install folders and the registry lookup, so the nine "without Pandoc" tests of ansi, build_record, check and native really have no Pandoc), `config_env(folder)` (a settings folder named for `XDG_CONFIG_HOME` and `APPDATA`; `test_tables`), `can_symlink()`. `test_direct` puts `typst` on PATH under the program's own name and copies it when a link is refused; the Calibre archive test skips where symbolic links are not allowed. By the Windows test session (pull request #31).
+
 ## v3.31.15 — 2026-10-31
 
 Pre-edit state: commit `0695669`. Still under 3.31. Merged from a pull request of the Windows test session.
