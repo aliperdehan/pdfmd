@@ -204,6 +204,8 @@ OPTIONS: dict[str, str | Omitted] = {
     "column-outlier-length": "options.column-outlier-length", "column-count-raw-tex": "options.column-count-raw-tex",
     "text-to-markdown": "options.text-to-markdown",
     "unicode": "options.unicode",
+    "tesseract-path": "options.tesseract-path", "soffice-path": "options.soffice-path", "dot-path": "options.dot-path",
+    "mmdc-path": "options.mmdc-path", "poppler-path": "options.poppler-path",
 }
 
 

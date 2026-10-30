@@ -40,6 +40,21 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.10 — 2026-10-30
+
+Pre-edit state: commit `56c5e9b`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Added
+- **Tools that a Windows installer leaves off PATH are found and used: Tesseract, LibreOffice, Graphviz (`dot`), Mermaid (`mmdc`), Poppler.** `winget` and the vendors' installers often skip PATH, so `--doctor` said "not found" for programs that were installed. One lookup (`locate_tool()`, table `FOUND_TOOLS`) now tries, in this order: the config key, PATH, then on Windows the usual install folders (`%ProgramFiles%`, `%ProgramW6432%`, `%ProgramFiles(x86)%`, `%LOCALAPPDATA%\Programs`, `%APPDATA%\npm` for `mmdc`) and the registry's `App Paths`. A tool found off PATH has its folder added to the PATH of pdfmd and of the programs and filters it starts (in front when the config names it, behind otherwise); LibreOffice is resolved by path only, because its folder holds a `python.exe` and DLLs of its own. The folders are a file-system fact about those installers, not a behaviour threshold.
+- **Five config keys, `options.tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path`, `poppler-path`,** in `pdfmd --setup` ("Tool locations", per machine; a folder's `--setup DIR` never offers them): a file or a folder (`poppler-path` takes the folder holding `pdftotext` and `pdftoppm`). A key that names nothing warns once and is passed over. No command-line flag, no `pdfmd-options` key.
+- `--doctor` says where a tool was found: `found at X, not on PATH (pdfmd uses it anyway)` or `set by options.KEY`; the README has a Windows note.
+
+### Changed
+- `resolve_soffice()` and `resolve_calibre()` use the same lookup. `PDFMD_NO_APP_PATHS=1` turns the registry probe off; it is for the tests (so that a test that hides a tool does not find it again), not a setting.
+
+### Notes
+- The next patch adds `pandoc-path`, `typst-path` and `chrome-path` on the same lookup. By the Windows test session (pull request #23, entry 3dq of the maintainer's notes).
+
 ## v3.31.9h — 2026-10-30
 
 Pre-edit state: commit `7c57727`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
