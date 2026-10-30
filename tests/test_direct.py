@@ -149,7 +149,7 @@ class TypstEndToEnd(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-direct-typst-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "d.typ").write_text(TYPST, encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
 
     def run_pdfmd(self, *args, env=None):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
@@ -194,7 +194,7 @@ class HtmlEndToEnd(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-direct-html-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "page.html").write_text(PAGE, encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
 
     def test_the_pages_own_size_survives(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "page.html", "--verbose"], cwd=self.directory,
@@ -248,7 +248,7 @@ class ApplyDefaultsEndToEnd(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "d.typ").write_text("= Doc\nText.\n", encoding="utf-8")
         (self.directory / "metadata.yaml").write_text("title: From Metadata\nauthor: Ada\npapersize: a6\n", encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": ""}
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
@@ -291,7 +291,7 @@ class TexFallback(unittest.TestCase):
         self.addCleanup(shutil.rmtree, directory, True)
         (directory / "broken.tex").write_text("\\documentclass{article}\n\\usepackage{nosuchpackagexyz}\n"
                                               "\\begin{document}\nHello fallback.\n\\end{document}\n", encoding="utf-8")
-        env = {**os.environ, "XDG_CONFIG_HOME": str(directory / "xdg"), "PDFMD_CONFIG": ""}
+        env = {**os.environ, "XDG_CONFIG_HOME": str(directory / "xdg"), "APPDATA": str(directory / "xdg"), "PDFMD_CONFIG": ""}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "broken.tex"], cwd=directory,
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)

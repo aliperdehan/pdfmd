@@ -45,7 +45,7 @@ SOFFICE = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
 
 
 def run(directory: str, *arguments: str) -> subprocess.CompletedProcess:
-    environment = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory}
+    environment = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": directory, "APPDATA": directory}
     return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=directory, env=environment,
                           capture_output=True, text=True)
 
@@ -130,7 +130,7 @@ class Built(unittest.TestCase):
                     out = Path(folder.name) / "lo"
                     done = subprocess.run([str(SOFFICE) if SOFFICE.is_file() else "soffice", "--headless", "--convert-to", "pdf",
                                            "--outdir", str(out), str(path)], capture_output=True, text=True,
-                                          env={**os.environ, "HOME": folder.name})
+                                          env={**os.environ, "HOME": folder.name, "USERPROFILE": folder.name})
                     pdf = out / "t.pdf"
                     self.assertTrue(pdf.is_file(), done.stdout + done.stderr)
                     boxes = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"], capture_output=True, text=True).stdout

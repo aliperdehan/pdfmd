@@ -139,7 +139,7 @@ class Built(unittest.TestCase):
             f"---\ntitle: T\n---\n\nAn ordinary paragraph with some Han text 漢字 so that pdfmd adds its own header file.\n\n```bash\n{LONG}\n```\n\n```\n{LONG}\n```\n", encoding="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "c.md", "-e", "lualatex", "--no-stamp",
                                "--no-backup", *args], cwd=directory, capture_output=True, text=True,
-                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg")})
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg"), "APPDATA": str(directory / "xdg")})
         self.assertEqual(done.returncode, 0, done.stderr)
         return subprocess.run(["pdftotext", "-bbox", str(directory / "c.pdf"), "-"], capture_output=True,
                               text=True, encoding="utf-8", errors="replace").stdout
@@ -180,7 +180,7 @@ class WithAClassThatOverridesDisplayMath(unittest.TestCase):
             "\\begin{equation}\ny = 2\n\\end{equation}\n", encoding="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "m.md", "-e", "lualatex", "--no-stamp", "--no-backup"],
                               cwd=directory, capture_output=True, text=True,
-                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg")})
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg"), "APPDATA": str(directory / "xdg")})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotIn("failed", done.stderr)
 

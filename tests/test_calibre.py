@@ -151,7 +151,7 @@ class Builds(unittest.TestCase):
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
                                   cwd=root, capture_output=True, text=True,
                                   env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
-                                       "XDG_CONFIG_HOME": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
+                                       "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("(calibre)", done.stdout)
             reader = pypdf.PdfReader(str(root / "doc.pdf"))
@@ -174,7 +174,7 @@ class Builds(unittest.TestCase):
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
                                   cwd=root, capture_output=True, text=True,
                                   env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
-                                       "XDG_CONFIG_HOME": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
+                                       "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             text = " ".join("".join(page.extract_text() for page in pypdf.PdfReader(str(root / "doc.pdf")).pages).split())
             self.assertIn("A rather long caption for a narrow table, set whole", text)

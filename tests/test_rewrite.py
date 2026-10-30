@@ -16,7 +16,7 @@ def run(directory: str, *arguments: str, text: str | None = None) -> subprocess.
     empty = Path(directory) / "empty-bin"
     empty.mkdir(exist_ok=True)
     environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "",
-                   "XDG_CONFIG_HOME": directory}           # nothing but Python: the built-in renderer builds the PDF
+                   "XDG_CONFIG_HOME": directory, "APPDATA": directory}           # nothing but Python: the built-in renderer builds the PDF
     return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=directory, env=environment,
                           input=text, capture_output=True, text=True)
 

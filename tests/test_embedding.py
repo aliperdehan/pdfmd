@@ -48,7 +48,7 @@ class Env(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-embedding-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
 
     def run_pdfmd(self, *args, cwd=None):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=cwd or self.directory,

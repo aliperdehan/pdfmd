@@ -756,7 +756,7 @@ class Properties(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=self.root,
                               capture_output=True, text=True,
                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"), "LOCALAPPDATA": str(self.root / "cache"),
-                                   "XDG_CONFIG_HOME": str(self.root / "config"), "PDFMD_NO_PROMPT": "1"})
+                                   "XDG_CONFIG_HOME": str(self.root / "config"), "APPDATA": str(self.root / "config"), "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return done
 

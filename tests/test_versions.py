@@ -36,7 +36,7 @@ class Base(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-versions-"))
         self.addCleanup(shutil.rmtree, self.directory, True)
         self.document = make(self.directory, "report.md", FRONT + "Version five (current).\n")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
                     "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@e", "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@e"}
         patcher = mock.patch.dict(os.environ, self.env)
         patcher.start()

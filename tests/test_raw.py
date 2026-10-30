@@ -18,6 +18,7 @@ from cache_support import cache_env  # noqa: E402
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
+os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd_raw  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
@@ -190,7 +191,7 @@ class PdfImages(unittest.TestCase):
         self.assertIn("fig.pdf", done.stdout)
 
     def test_through_pdfmd_and_switched_off_by_no_auto(self):
-        env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], **cache_env(self.folder / "xdg")}
+        env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "APPDATA": os.environ["XDG_CONFIG_HOME"], **cache_env(self.folder / "xdg")}
         run = lambda *extra: subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-t", "html", "--self-contained",
                                              *extra], capture_output=True, text=True, cwd=self.folder, env=env)
         self.assertEqual(run("-o", "on.html").returncode, 0)
@@ -204,7 +205,7 @@ class CommandLine(unittest.TestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix="pdfmd-rawcli-"))
         self.addCleanup(shutil.rmtree, self.folder, True)
-        self.env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], **cache_env(self.folder / "xdg")}
+        self.env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "APPDATA": os.environ["XDG_CONFIG_HOME"], **cache_env(self.folder / "xdg")}
         (self.folder / "raw.md").write_text(DOCUMENT, encoding="utf-8")
 
     def build(self, *extra) -> str:

@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.15c — 2026-10-31
+
+Pre-edit state: commit `939b66f`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.15.
+
+### Tests
+- A settings folder is named for Windows (`APPDATA`) wherever one is named for `XDG_CONFIG_HOME`: 25 test modules (on Windows pdfmd keeps its settings in `%APPDATA%\pdfmd`, so those tests read and wrote the real folder); `test_indent_office` sets `USERPROFILE` with `HOME`. By the Windows test session (pull request #33).
+
 ## v3.31.15b — 2026-10-31
 
 Pre-edit state: commit `9b5b5b5`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.15.

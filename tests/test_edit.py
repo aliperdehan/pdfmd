@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
+os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd_edit  # noqa: E402
 
@@ -89,7 +90,7 @@ class VsCode(unittest.TestCase):
         import json
         import re
         with tempfile.TemporaryDirectory() as folder:
-            env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+            env = {**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "APPDATA": os.environ["XDG_CONFIG_HOME"]}
             first = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--init-vscode"], cwd=folder,
                                    capture_output=True, text=True, env=env)
             self.assertEqual(first.returncode, 0, first.stderr)
@@ -120,7 +121,7 @@ class CommandLine(unittest.TestCase):
     @unittest.skipIf(pdfmd_edit.available(), "prompt_toolkit is installed")
     def test_without_prompt_toolkit_it_says_how_to_get_it(self):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "--edit"], capture_output=True, text=True,
-                              env={**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]})
+                              env={**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "APPDATA": os.environ["XDG_CONFIG_HOME"]})
         self.assertEqual(done.returncode, 1)
         self.assertIn("--install tui", done.stderr)
 

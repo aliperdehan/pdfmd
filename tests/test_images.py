@@ -277,7 +277,7 @@ class EndToEnd(unittest.TestCase):
         (self.directory / "raw.md").write_text("---\ntitle: Raw\n---\n\n\\begin{figure}\n\\centering\n"
                                                "\\includegraphics[width=0.5\\textwidth]{a.svg}\n\\caption{raw svg}\n\\end{figure}\n",
                                                encoding="utf-8")
-        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), **cache_env(self.directory / "cache"),
+        self.env = {**os.environ, "XDG_CONFIG_HOME": str(self.directory / "xdg"), "APPDATA": str(self.directory / "xdg"), **cache_env(self.directory / "cache"),
                     "PDFMD_CONFIG": ""}
 
     def build(self, name, *args):

@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
+os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
 import pdfmd_help  # noqa: E402
@@ -22,7 +23,7 @@ import pdfmd_help  # noqa: E402
 
 def run(*args):
     return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], capture_output=True, text=True,
-                          env={**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]})
+                          env={**os.environ, "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "APPDATA": os.environ["XDG_CONFIG_HOME"]})
 
 
 class TieredHelp(unittest.TestCase):
