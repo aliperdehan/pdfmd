@@ -48,6 +48,15 @@ wait for an answer before any code.
 - [ ] A true width estimator for math, raw HTML and typography instead of character counts; then delete the raw-TeX kludge (`column-count-raw-tex`) [3dl]
 - [ ] Cache the balanced widths per table by content hash [3dl]
 
+## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; waits for nulabreport's Windows maintenance [3du]
+
+- [ ] Kits C1: the `.kit` format v1 (modes with aliases, package and `\input` lines, Lua, defaults, parts to carry), discovery by normalised name with a cached location, `kits:` in the config, `--kits`, a `--setup` row
+- [ ] Kits C2: selection (`nulabreport:qca`, `nulabreport[qca]`, `"[qca]nulabreport"`, mappings, lists); the global `kit:` at the bottom, `--kit` replaces (the `kit-stack` setting: `off`, `all` or chosen layers makes it stack), bare `--kit` and `none|off` switch off; the kit's defaults, Lua, CSL and bibliography in the build
+- [ ] Kits C3: the generated preamble and the clash rules against `preamble.tex`, `header-includes` and `--include-in-header`; messages with ids at their chatter levels
+- [ ] Kits C4: attach-source and bundle carry the kit's parts and record its name and version
+- [ ] nulabreport side, after its Windows maintenance: its `.kit`, course codes as mode aliases, starters without `metadata/`; real builds of copies of 220/LR6 and LR9-10; smoke test
+- [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; fetch, `--install kit`, the trust prompt; Typst, HTML, Word parts; `--kit new|check|pack`; the kit guide [3du, 3dg]
+
 ## Other tools' command lines
 
 Answer the keys of the other `pdfmd`, `mdpdf` and `md2pdf` tools under their own command names, check their behaviour, take
@@ -64,6 +73,9 @@ is low priority. [3di]
 ## Before 4.0
 
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
+- [ ] Windows test session on a second machine: fork + pull requests, the Mac session merges and bumps the version [3dp]
+- [ ] Tool paths per document and on the command line: the `tesseract-path`, `soffice-path` ... keys also as `pdfmd-options` and flags, so one document can pin another version of a tool [3dt]
+- [ ] Windows guide (16 sections): the Windows session adds it to the repo as a docs file; wire it into `pdfmd --doc` with the documentation programme [3dg, 3dp]
 - [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
