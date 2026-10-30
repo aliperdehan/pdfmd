@@ -98,8 +98,8 @@ class Built(unittest.TestCase):
     def test_docx_paragraphs_in_the_div_have_the_style_and_lists_and_the_rest_keep_theirs(self):
         path, folder = self.build("docx")
         with folder:
-            archive = zipfile.ZipFile(path)
-            document, styles = archive.read("word/document.xml").decode(), archive.read("word/styles.xml").decode()
+            with zipfile.ZipFile(path) as archive:                           # closed before the folder goes (Windows keeps it)
+                document, styles = archive.read("word/document.xml").decode(), archive.read("word/styles.xml").decode()
             used = [(re.findall(r'pStyle w:val="([^"]+)"', p), "".join(re.findall(r"<w:t[^>]*>([^<]*)", p)))
                     for p in re.findall(r"<w:p>.*?</w:p>", document, re.S)]
             by_text = {text: style for style, text in used}
@@ -113,9 +113,9 @@ class Built(unittest.TestCase):
     def test_odt_defines_the_styles_its_text_names(self):
         path, folder = self.build("odt")
         with folder:
-            archive = zipfile.ZipFile(path)
-            names = set(re.findall(r'text:style-name="(pdfmd-indent-[^"]+)"', archive.read("content.xml").decode()))
-            styles = archive.read("styles.xml").decode()
+            with zipfile.ZipFile(path) as archive:
+                names = set(re.findall(r'text:style-name="(pdfmd-indent-[^"]+)"', archive.read("content.xml").decode()))
+                styles = archive.read("styles.xml").decode()
             self.assertEqual(names, {"pdfmd-indent-0pt", "pdfmd-indent-2em"})
             for name in names:
                 self.assertIn(f'style:name="{name}"', styles)
