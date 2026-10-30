@@ -19,6 +19,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+sys.path.insert(0, str(ROOT / "tests"))
+from env_support import can_symlink  # noqa: E402
+
 import pdfmd  # noqa: E402
 
 SCRIPT = "#!/bin/sh\necho 'ebook-convert (calibre 9.99.0)'\n"
@@ -72,6 +75,7 @@ class Unpack(unittest.TestCase):
                 bundle.addfile(info)
         return path
 
+    @unittest.skipUnless(can_symlink(), "this account may not create symbolic links (Windows without Developer Mode)")
     def test_a_good_archive_is_unpacked(self):
         target = self.directory / "out"
         pdfmd.safe_unpack_tar(self.archive({"ebook-convert": b"x", "lib/a.so": b"y"}, {"lib/b.so": "a.so"}), target)
