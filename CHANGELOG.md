@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.11 — 2026-10-30
+
+Pre-edit state: commit `a080381`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Added
+- **Pandoc, Typst and Chrome are found and used when a Windows installer leaves them off PATH,** on the lookup of 3.31.10: the keys `options.pandoc-path`, `typst-path` and `chrome-path` (`--setup`, "Tool locations"; a file or a folder), then PATH, then the usual folders (Pandoc under `%LOCALAPPDATA%\Pandoc`, Typst in WinGet's `Links` and `Packages`, Chrome under `Google\Chrome\Application`). The folders of Pandoc and Typst go on the PATH of pdfmd and its programs; a Chrome named by the key is handed to the browser engines through the existing `PDFMD_BROWSER`. `--doctor` adds the same `found at X, not on PATH` / `set by options.KEY` notes. By the Windows test session (pull request #24, entry 3dq).
+
 ## v3.31.10 — 2026-10-30
 
 Pre-edit state: commit `56c5e9b`. Still under 3.31. Merged from a pull request of the Windows test session.
