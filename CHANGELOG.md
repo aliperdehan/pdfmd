@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9b — 2026-10-30
+
+Pre-edit state: commit `28f1168`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- The helpers of `tests/test_office_latex.py` that run Pandoc with the office filter alone pass `pdfmd-office-python` (the running interpreter), as the real pipeline does; on Windows `python3` is the Microsoft Store stub. Nine tests. By the Windows test session (pull request #19).
+
 ## v3.31.9 — 2026-10-30
 
 Pre-edit state: commit `0b1f055`. Still under 3.31. Merged from a pull request of the Windows test session.
