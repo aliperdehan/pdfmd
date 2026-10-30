@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9e — 2026-10-30
+
+Pre-edit state: commit `57cf5e8`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- `tests/test_completion.py` hands bash a path Git Bash can read (forward slashes); `tests/test_edit_pdf.py` no longer uses the Unix command `true` as an editor. By the Windows test session (pull request #22).
+
 ## v3.31.9d — 2026-10-30
 
 Pre-edit state: commit `63ddd01`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.

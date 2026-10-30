@@ -79,7 +79,7 @@ class EditPdf(unittest.TestCase):
     def test_no_change_leaves_the_pdf_alone(self):
         pdf = self.build()
         before = pdf.read_bytes()
-        done = self.run_pdfmd("--edit", "report.pdf", "--editor", "true")
+        done = self.run_pdfmd("--edit", "report.pdf", "--editor", f"{sys.executable} -c pass")      # an editor that changes nothing
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("No change", done.stdout)
         self.assertEqual(pdf.read_bytes(), before)
