@@ -52,6 +52,23 @@ class ToolLocations(unittest.TestCase):
             self.assertEqual(pdfmd.locate_tool(name), (str(file), "probe"), name)
         self.assertEqual(pdfmd.resolve_soffice(), str(wanted["soffice"]))
 
+    def test_pandoc_typst_and_chrome_are_found_in_their_install_folders(self):
+        wanted = {"pandoc": self.make("local", "Pandoc", "pandoc.exe"),
+                  "typst": self.make("local", "Microsoft", "WinGet", "Packages", "Typst.Typst_x", "typst-x86_64-pc-windows-msvc",
+                                     "typst.exe"),
+                  "chrome": self.make("pf86", "Google", "Chrome", "Application", "chrome.exe")}
+        for name, file in wanted.items():
+            self.assertEqual(pdfmd.locate_tool(name), (str(file), "probe"), name)
+        self.make("local", "Microsoft", "WinGet", "Links", "typst.exe")
+        self.assertEqual(pdfmd.locate_tool("typst")[1], "probe")
+
+    def test_a_named_chrome_is_the_browser_the_engines_use(self):
+        chrome = self.make("mine", "chrome.exe")
+        self.config = {"chrome-path": str(chrome.parent)}
+        pdfmd.use_found_tools()
+        self.assertEqual(os.environ["PDFMD_BROWSER"], str(chrome))
+        self.assertNotIn(str(chrome.parent), os.environ["PATH"].split(os.pathsep))      # a browser's folder is not for PATH
+
     def test_a_tool_on_path_is_used_before_a_folder(self):
         self.make("pf", "Graphviz", "bin", "dot.exe")
         self.on_path["dot"] = "elsewhere/dot"

@@ -164,10 +164,11 @@ folders; the system installers below do the same job:
   is what you need for LaTeX packages and math-heavy documents.
   A TeX Live or MiKTeX that is installed but not on `PATH` (Windows: `C:\texlive\2026\bin\windows`) is found in its usual
   places and used for pdfmd's own runs; `PDFMD_TEX_BIN` names a folder for an install somewhere else, and `pdfmd --doctor` says where it found one.
-  **Windows:** the installers of Tesseract, LibreOffice, Graphviz and Poppler, and `npm install -g` for Mermaid, often leave
+  **Windows:** the installers of Pandoc, Typst, Tesseract, LibreOffice, Graphviz and Poppler, and `npm install -g` for Mermaid, often leave
   their folder off `PATH`. pdfmd looks in the usual install folders (and the registry's App Paths) and uses what it finds, and
   `pdfmd --doctor` says so. For an install somewhere else, name it in `pdfmd --setup` (section "Tool locations") or in the
-  config's `options:`: `tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path` (a program or its folder) and `poppler-path` (a folder).
+  config's `options:`: `pandoc-path`, `typst-path`, `chrome-path`, `tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path`
+  (a program or its folder) and `poppler-path` (a folder).
 
 ```sh
 brew install pipx pandoc typst              # macOS, the quick start

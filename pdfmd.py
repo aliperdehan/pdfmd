@@ -4003,6 +4003,10 @@ FOUND_TOOLS = {
     "mmdc": ("mmdc-path", ("mmdc",), (), (("APPDATA", "npm"),), True),
     "poppler": ("poppler-path", ("pdftotext", "pdftoppm"), ("poppler*/Library/bin", "poppler*/bin"), (), True),
     "calibre": (None, ("ebook-convert",), ("Calibre2",), (), False),
+    "pandoc": ("pandoc-path", ("pandoc",), ("Pandoc",), (("LOCALAPPDATA", "Pandoc"),), True),
+    "typst": ("typst-path", ("typst",), (), (("LOCALAPPDATA", "Microsoft/WinGet/Links"),
+                                              ("LOCALAPPDATA", "Microsoft/WinGet/Packages/Typst.Typst_*/typst-*")), True),
+    "chrome": ("chrome-path", ("chrome",), ("Google/Chrome/Application",), (), False),      # by PDFMD_BROWSER, see use_found_tools()
 }
 WINDOWS_INSTALL_ROOTS = (("ProgramFiles", ""), ("ProgramW6432", ""), ("ProgramFiles(x86)", ""), ("LOCALAPPDATA", "Programs"))
 TOOLS_FOUND: dict[str, tuple[str, str]] = {}      # tool -> (file, "key" | "probe") for what use_found_tools() found off PATH
@@ -4067,10 +4071,10 @@ def locate_tool(name: str) -> tuple[str | None, str]:
                         if tool_program(folder, program):
                             return str(tool_program(folder, program)), "probe"
         for variable, below in roots:
-            if os.environ.get(variable):
+            for folder in sorted(Path(os.environ[variable]).glob(below), reverse=True) if os.environ.get(variable) else []:
                 for program in programs:
-                    if tool_program(Path(os.environ[variable]) / below, program):
-                        return str(tool_program(Path(os.environ[variable]) / below, program)), "probe"
+                    if tool_program(folder, program):
+                        return str(tool_program(folder, program)), "probe"
         for program in programs:
             if app_path_file(program):
                 return str(app_path_file(program)), "probe"
@@ -4086,6 +4090,8 @@ def use_found_tools() -> None:
         if how not in ("key", "probe"):
             continue
         TOOLS_FOUND[name] = (file, how)
+        if name == "chrome" and how == "key":
+            os.environ.setdefault("PDFMD_BROWSER", file)       # the browser engines already read this for Chrome
         entries = os.environ.get("PATH", "").split(os.pathsep)
         folder = str(Path(file).parent)
         if on_path and folder not in entries:
@@ -6253,7 +6259,8 @@ def doctor_report(deep: bool = False) -> bool:
     print("\nMarkdown to PDF:")
     pandoc = which("pandoc")
     version = ".".join(map(str, pandoc_version())) if pandoc else ""
-    line(bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else ""),
+    line(bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else "")
+         + (f"  -- {tool_note('pandoc')}" if pandoc and tool_note("pandoc") else ""),
          "pdfmd --install pandoc", "Pandoc (without it only the plain built-in renderer runs)")
     if pandoc and pandoc_version() < PANDOC_MIN:
         line(False, f"pandoc {version} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with",
@@ -6276,6 +6283,9 @@ def doctor_report(deep: bool = False) -> bool:
     if not pandoc or not engines:
         native = available_native_engines()
         line(bool(native), "built-in renderer: " + (", ".join(native) if native else "none"))
+    for name in ("typst", "chrome"):
+        if tool_note(name):
+            line(None, f"{name}: {TOOLS_FOUND.get(name, (locate_tool(name)[0],))[0]}  -- {tool_note(name)}")
     quarto = which("quarto")
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()

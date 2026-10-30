@@ -206,6 +206,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "unicode": "options.unicode",
     "tesseract-path": "options.tesseract-path", "soffice-path": "options.soffice-path", "dot-path": "options.dot-path",
     "mmdc-path": "options.mmdc-path", "poppler-path": "options.poppler-path",
+    "pandoc-path": "options.pandoc-path", "typst-path": "options.typst-path", "chrome-path": "options.chrome-path",
 }
 
 

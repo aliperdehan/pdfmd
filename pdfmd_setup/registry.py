@@ -64,6 +64,8 @@ UNSET = {
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
     "options.poppler-path": "PATH, then the usual install folders",
+    "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
+    "options.chrome-path": "PATH, then the usual install folders",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -72,7 +74,7 @@ UNSET = {
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
 MACHINE = frozenset({"setup-ui", "translit", "disabled", "options.tesseract-path", "options.soffice-path", "options.dot-path",
-                     "options.mmdc-path", "options.poppler-path"})
+                     "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
 # layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
@@ -548,6 +550,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "then in npm's global folder.", "Tool locations"),
         text("options.poppler-path", "Poppler", "The folder that holds pdftotext and pdftoppm. Without it pdfmd looks on PATH, "
              "then in the usual Windows install folders.", "Tool locations"),
+        text("options.pandoc-path", "Pandoc", "The pandoc program, or the folder that holds it. Without it pdfmd looks on PATH, "
+             "then in the usual Windows install folders.", "Tool locations"),
+        text("options.typst-path", "Typst", "The typst program, or the folder that holds it. Without it pdfmd looks on PATH, "
+             "then in the usual Windows install folders.", "Tool locations"),
+        text("options.chrome-path", "Chrome", "The chrome program, or the folder that holds it (the browser that prints HTML "
+             "pages). Without it pdfmd looks on PATH, then in the usual Windows install folders.", "Tool locations"),
         Setting("disabled", "Features switched off", "multi", feature_choices(), "",
                 "Hidden from --help, completion and this screen, refused on the command line; "
                 "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),
