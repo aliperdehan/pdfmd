@@ -20646,7 +20646,9 @@ def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
             # the job's own .tex, deleted once it has run: a cache beside the document (`location: document`) is
             # under the report's folder, and recording it dropped every entry at the next build
             continue
-        if any(str(candidate).startswith(str(root) + os.sep) for root in roots):
+        # normcase: TeX writes a Windows drive letter in lower case (d:/work/...) where the root is D:\work, and a
+        # file it read under the report's folder was dropped as foreign, so a CSV edit showed as a stale plot
+        if any(os.path.normcase(str(candidate)).startswith(os.path.normcase(str(root)) + os.sep) for root in roots):
             digest = sha1_file(candidate)
             if digest:
                 found[str(candidate)] = digest

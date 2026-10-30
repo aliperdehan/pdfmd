@@ -134,6 +134,20 @@ class Inputs(CacheCase):
         plots.mkdir(parents=True)
         self.assertEqual(set(self.recorded(plots)), {str(self.csv), str(self.vendored)})
 
+    @unittest.skipUnless(os.name == "nt", "a drive letter, and its case, exist only on Windows")
+    def test_a_lower_case_drive_letter_is_still_the_reports_folder(self):
+        # TeX writes `d:/work/lab/ir/product.csv` where the report's folder is `D:\work\lab`; the CSV was dropped as
+        # foreign and an edit to it showed as a stale plot
+        plots = self.root / "cache" / "plots-abc"
+        plots.mkdir(parents=True)
+        spelled = str(self.csv).replace("\\", "/")
+        spelled = spelled[0].swapcase() + spelled[1:]
+        self.assertNotEqual(spelled[0], str(self.csv)[0])
+        fls = plots / "r-k1.fls"
+        fls.write_text(f"PWD {self.report}\nINPUT {spelled}\n", encoding="utf-8")
+        found = pdfmd.plot_recorded_inputs(fls, [self.report, self.tree])
+        self.assertEqual([os.path.normcase(name) for name in found], [os.path.normcase(str(self.csv))])
+
     def test_a_cache_beside_the_document_does_not_record_its_own_job(self):
         # `location: document`: the plot folder is under the report's folder, and the job's .tex (deleted once it
         # has run) was recorded as an input, so every entry was dropped at the next build
