@@ -40,6 +40,13 @@ missing. Real tracking still begins at 2.0.0.
 
 ---
 
+## v3.31.9h — 2026-10-30
+
+Pre-edit state: commit `7c57727`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.
+
+### Tests
+- `tests/test_build_log.py`: the test that needs an `AUTO` line made no file of its own and found the author's global `metadata.yaml`; on a clean machine there was none. It writes its own `metadata.yaml` beside the document and asserts that line. By the Windows test session (pull request #26).
+
 ## v3.31.9g — 2026-10-30
 
 Pre-edit state: commit `d4bca2e`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.9.

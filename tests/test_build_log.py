@@ -125,12 +125,13 @@ class Builds(unittest.TestCase):
         self.assertNotIn("full record", done.stdout)               # nothing to point at when the build went well
 
     def test_the_record_holds_every_line_that_only_verbose_prints(self):
+        (self.path / "metadata.yaml").write_text("author: A\n", encoding="utf-8")      # a file pdfmd finds by itself: an AUTO line of our own
         quiet = self.run_pdfmd()
         self.assertNotIn("AUTO ", quiet.stdout)                       # the console is as it was without -v
         record_text = self.records()[0].read_text(encoding="utf-8")
         loud = self.run_pdfmd("--verbose", "--build-log", "off")
         auto = [line for line in loud.stdout.splitlines() if line.startswith("AUTO ")]
-        self.assertTrue(auto)
+        self.assertTrue(any(line.startswith("AUTO YAML") and "metadata.yaml" in line for line in auto), loud.stdout)
         for line in auto:
             self.assertIn(line.split("  ")[0] + "  ", record_text, line)
 
