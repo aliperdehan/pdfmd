@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 class Setting:
     key: str                          # dotted path into the config mapping
     title: str
-    kind: str                         # "choice" | "multi" | "text"
+    kind: str                         # "choice" | "multi" | "text" | "action" (runs something; stores nothing, shown only where pdfmd_setup.run is given it)
     choices: tuple[tuple[str, str], ...] = ()      # (value, what it means)
     default: str = ""                 # what pdfmd does when the key is not set (a choice value, or "" for none)
     help: str = ""
@@ -66,6 +66,7 @@ UNSET = {
     "options.poppler-path": "PATH, then the usual install folders",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
+    "user-path": "nothing changed until you choose it",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -73,7 +74,7 @@ UNSET = {
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit", "disabled", "options.tesseract-path", "options.soffice-path", "options.dot-path",
+MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "options.tesseract-path", "options.soffice-path", "options.dot-path",
                      "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
@@ -560,6 +561,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "then in the usual Windows install folders.", "Tool locations"),
         text("options.chrome-path", "Chrome", "The chrome program, or the folder that holds it (the browser that prints HTML "
              "pages). Without it pdfmd looks on PATH, then in the usual Windows install folders.", "Tool locations"),
+        Setting("user-path", "Windows user PATH", "action", (), "",
+                "Windows only. Put the folders of the tools pdfmd found off PATH, or a folder you name, on your user PATH; "
+                "show it; take off what pdfmd added. Asks before it writes (pdfmd --user-path).", "Tool locations"),
         Setting("disabled", "Features switched off", "multi", feature_choices(), "",
                 "Hidden from --help, completion and this screen, refused on the command line; "
                 "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),

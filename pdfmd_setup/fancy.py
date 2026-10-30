@@ -14,11 +14,14 @@ def available() -> bool:
 
 
 def run(stores: dict, settings: list[Setting], path: str, input=None, output=None, ask=None,
-        left_out: list[str] | None = None, hidden=lambda setting: False) -> bool:
+        left_out: list[str] | None = None, hidden=lambda setting: False, actions: dict | None = None) -> bool:
     """Edit `stores` ({"config": ..., "metadata": ...}) in place; True when the user chose to save. `input`/`output`
     let a test drive it; `ask(title, now)` answers a text setting (default: a prompt on the real terminal); `o` shows
     `left_out`, the flags and keys that are not settable here; `hidden(setting)` leaves the rows of switched-off
-    features out, and `d` opens the "Features switched off" row (v3.27.8; `r` resets a row, which `d` used to)."""
+    features out, and `d` opens the "Features switched off" row (v3.27.8; `r` resets a row, which `d` used to). `actions`
+    maps the key of an "action" row to what it does (it gets `say` and `read_line`, on the real terminal, after the screen
+    is left); an action row without one is not shown."""
+    actions = actions or {}
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.data_structures import Point
@@ -31,7 +34,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
     switch = next((setting for setting in settings if setting.key == "disabled"), None)
 
     def rows() -> list[Setting]:
-        shown = [setting for setting in settings if not hidden(setting)]
+        shown = [setting for setting in settings if not hidden(setting) and (setting.kind != "action" or setting.key in actions)]
         state["row"] = min(state["row"], len(shown) - 1)
         return shown
 
@@ -82,7 +85,8 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
             if index == state["row"]:
                 state["line"] = sum(text.count("\n") for _, text in lines)
             lines.append((style, f"  {setting.title:<46}"))
-            lines.append((style + " class:value" if style else "class:value", f"{shown(setting, read(stores, setting))}\n"))
+            lines.append((style + " class:value" if style else "class:value",
+                          ("(enter to use it)" if setting.kind == "action" else shown(setting, read(stores, setting))) + "\n"))
         current = rows()[state["row"]]
         lines.append(("class:help", f"\n {current.help}\n"))
         lines.append(("class:help", "\n up/down move   space/right next value   left previous   r default   enter: choose list"
@@ -131,7 +135,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         if leaving():
             return
         setting = state["sub"] or rows()[state["row"]]
-        if setting.kind == "text":
+        if setting.kind in ("text", "action"):
             result["edit"] = setting
             event.app.exit()
         elif setting.kind == "multi":
@@ -160,7 +164,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         setting = rows()[state["row"]]
         if setting.kind == "multi":
             state["sub"], state["subrow"] = setting, 0
-        elif setting.kind == "text":
+        elif setting.kind in ("text", "action"):
             result["edit"] = setting
             event.app.exit()
         else:
@@ -221,6 +225,9 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         setting = result["edit"]
         if setting is None:
             break
+        if setting.kind == "action":                   # leave the full screen, do it on the terminal, then come back
+            actions[setting.key](print, input)
+            continue
         # a text setting: leave the full screen for a prompt, then come back
         current = read(stores, setting)
         answer = (ask or _prompt)(setting, "" if current is None else str(current))

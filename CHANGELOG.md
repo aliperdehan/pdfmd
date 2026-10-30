@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.18 — 2026-10-31
+
+Pre-edit state: commit `a66a343`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Added
+- **`pdfmd --user-path add|remove|show [FOLDER...]` (Windows): put folders on the user PATH, and take them off again.** Spelled-out forms: `--add-to-path`, `--remove-from-path`, `--show-user-path`; `--yes` skips the question, `--dry-run` writes nothing. Opt-in only: nothing in pdfmd calls it by itself. It writes `Path` under `HKEY_CURRENT_USER\Environment` (no administrator rights), keeps the registry type (`setx` would cut the value at 1024 characters and turn it into `REG_SZ`), copies every other entry byte for byte and appends at the end so a new folder never shadows a program of the machine PATH. `add` with no folder takes the folders of the tools pdfmd found off PATH (3.31.10); a folder you name may be any existing folder. It lists what it will do and asks first (no terminal or `PDFMD_NO_PROMPT` without `--yes` refuses); folders already on the user or machine PATH are skipped; the running programs are told (`WM_SETTINGCHANGE`) and the PowerShell line that refreshes the current window is printed. What was added is recorded in `path-added.json` in pdfmd's settings folder (state, not a setting); `remove` takes off exactly those entries and leaves a folder the user already removed alone. On macOS and Linux the command exits 1 and prints the `export PATH=...` line for the shell profile.
+- **A new kind of `--setup` row: an action** (`pdfmd_setup/__init__.py` takes `actions=`; the plain and the full-screen setup both draw it). The first is "Windows user PATH" in "Tool locations" (add the found folders / add a folder you name / show / undo); per machine, shown on Windows only, never in a folder's setup.
+- `--doctor` ends with one note on Windows when tools it found are not on the user PATH.
+- The code is `pdfmd_setup/userpath.py` (four-method backend: `Registry` is the real one, tests use a fake and, on Windows, a throwaway key named by `PDFMD_USER_ENV_KEY`, a test-only variable); `tests/test_user_path.py` (26 tests). Decision 3dr of the maintainer's notes; by the Windows test session (pull request #35).
+
 ## v3.31.17 — 2026-10-31
 
 Pre-edit state: commit `61be750`. Still under 3.31. Merged from a pull request of the Windows test session.

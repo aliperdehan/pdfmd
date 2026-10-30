@@ -11,9 +11,12 @@ from .registry import shown as shown_value
 def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[str], str] = input,
         say: Callable[[str], None] = print, nudge: str = "", left_out: list[str] | None = None,
         hidden: Callable[[Setting], bool] = lambda setting: False,
-        inherited: Callable[[Setting], tuple | None] | None = None) -> bool:
+        inherited: Callable[[Setting], tuple | None] | None = None,
+        actions: dict[str, Callable[[Callable[[str], None], Callable[[str], str]], None]] | None = None) -> bool:
     """Edit `stores` ({"config": {...}, "metadata": {...}}) in place; True when the user chose to save. `left_out` is
-    what `o` prints: the flags and keys that are not settable here, and why (pdfmd_setup.inventory)."""
+    what `o` prints: the flags and keys that are not settable here, and why (pdfmd_setup.inventory). `actions` maps the key of
+    an "action" row to what it does (it gets `say` and `read_line`); an action row without one is not shown."""
+    actions = actions or {}
     changed = False
     say(f"pdfmd setup  --  {path}")
     if inherited is not None:
@@ -24,7 +27,8 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
     while True:
         say("")
         section = None
-        shown = [setting for setting in settings if not hidden(setting)]
+        usable = [setting for setting in settings if setting.kind != "action" or setting.key in actions]
+        shown = [setting for setting in usable if not hidden(setting)]
         for number, setting in enumerate(shown, start=1):
             if setting.section != section:
                 section = setting.section
@@ -32,9 +36,10 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
             value = read(stores, setting)
             above = inherited(setting) if value is None and inherited is not None else None
             say(f"  {number:>2}. {setting.title:<44} "
-                + (f"{shown_value(setting, above[0])}  ({above[1]})" if above else shown_value(setting, value)))
-        if len(shown) < len(settings):
-            say(f"  ({len(settings) - len(shown)} rows of switched-off features are hidden: d)")
+                + ("(choose it to use it)" if setting.kind == "action" else
+                   f"{shown_value(setting, above[0])}  ({above[1]})" if above else shown_value(setting, value)))
+        if len(shown) < len(usable):
+            say(f"  ({len(usable) - len(shown)} rows of switched-off features are hidden: d)")
         say("")
         try:
             answer = read_line("Number to change, d = features switched off, o = what is not here and why, "
@@ -65,14 +70,18 @@ def run(stores: dict, settings: list[Setting], path: str, read_line: Callable[[s
         if not answer.isdigit() or not 1 <= int(answer) <= len(shown):
             say("Not a number from the list.")
             continue
-        if edit(stores, shown[int(answer) - 1], read_line, say):
+        if edit(stores, shown[int(answer) - 1], read_line, say, actions):
             changed = True
 
 
-def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: Callable[[str], None]) -> bool:
-    current = read(stores, setting)
+def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: Callable[[str], None],
+         actions: dict | None = None) -> bool:
     say("")
     say(setting.title + (" -- " + setting.help if setting.help else ""))
+    if setting.kind == "action":                       # it does its work now and stores nothing
+        (actions or {})[setting.key](say, read_line)
+        return False
+    current = read(stores, setting)
     if setting.kind == "text":
         say(f"  now: {shown_value(setting, current)}")
         try:
