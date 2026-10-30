@@ -33,7 +33,8 @@ class CompletionTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / f"c.{shell}"
                 path.write_text(pdfmd.completion_script(shell), encoding="utf-8")
-                done = subprocess.run([program, "-n", str(path)], capture_output=True, text=True)
+                # by name, from its folder: a Windows path with backslashes means nothing to a POSIX shell (Git Bash)
+                done = subprocess.run([program, "-n", path.name], capture_output=True, text=True, encoding="utf-8", cwd=directory)
                 self.assertEqual(done.returncode, 0, f"{shell}: {done.stderr}")
 
     def test_the_command_prints_it(self):
