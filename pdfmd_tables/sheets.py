@@ -79,7 +79,7 @@ def _with_pandas(path: Path, sheet: str | None) -> str:
     return _csv(frame.itertuples(index=False, name=None) if len(frame) else [])
 
 
-def _with_soffice(path: Path, sheet: str | None, soffice: str | None) -> str:
+def _with_soffice(path: Path, sheet: str | None, soffice: str | None, run=None) -> str:
     if not soffice:
         raise ImportError("LibreOffice is not installed")
     if sheet and not sheet.isdigit():
@@ -88,22 +88,22 @@ def _with_soffice(path: Path, sheet: str | None, soffice: str | None) -> str:
     with tempfile.TemporaryDirectory(prefix="pdfmd-sheet-") as scratch:
         # UTF-8, comma, quote; sheet number last
         filter_text = f"csv:Text - txt - csv (StarCalc):44,34,76,1,,0,false,true,false,false,false,{number}"
-        done = subprocess.run([soffice, "--headless", "--convert-to", filter_text, "--outdir", scratch, str(path)],
-                              capture_output=True, encoding="utf-8", errors="replace", timeout=180)
+        command = [soffice, "--headless", "--convert-to", filter_text, "--outdir", scratch, str(path)]
+        done = run(command) if run else subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=180)
         made = sorted(Path(scratch).glob("*.csv"))
         if done.returncode != 0 or not made:
             raise SheetError("LibreOffice could not convert it: " + ((done.stderr or done.stdout).strip().splitlines() or ["?"])[-1])
         return made[0].read_text(encoding="utf-8-sig")
 
 
-def to_csv(path: Path, sheet: str | None = None, soffice: str | None = None) -> str:
+def to_csv(path: Path, sheet: str | None = None, soffice: str | None = None, run=None) -> str:
     """The sheet as CSV text. Raises SheetError with what to install when no reader can."""
     problems: list[str] = []
     readers = []
     if path.suffix.lower() in (".xlsx", ".xlsm"):
         readers.append(("openpyxl", lambda: _with_openpyxl(path, sheet)))
     readers.append(("pandas", lambda: _with_pandas(path, sheet)))
-    readers.append(("LibreOffice", lambda: _with_soffice(path, sheet, soffice or shutil.which("soffice"))))
+    readers.append(("LibreOffice", lambda: _with_soffice(path, sheet, soffice or shutil.which("soffice"), run)))
     for label, read in readers:
         try:
             return read()
@@ -117,13 +117,13 @@ def to_csv(path: Path, sheet: str | None = None, soffice: str | None = None) -> 
                      "Install openpyxl (pip install openpyxl) or LibreOffice, or save it as CSV")
 
 
-def cached_csv(path: Path, sheet: str | None, cache: Path, soffice: str | None = None) -> Path:
+def cached_csv(path: Path, sheet: str | None, cache: Path, soffice: str | None = None, run=None) -> Path:
     """The sheet as a CSV file in `cache` (named by the file's content and the sheet), made once."""
     key = hashlib.sha1(path.read_bytes() + b"\0" + (sheet or "").encode("utf-8")).hexdigest()[:20]
     target = cache / f"{key}.csv"
     if not target.is_file():
         cache.mkdir(parents=True, exist_ok=True)
-        text = to_csv(path, sheet, soffice)
+        text = to_csv(path, sheet, soffice, run)
         temporary = target.with_suffix(".part")
         temporary.write_text(text, encoding="utf-8", newline="")
         temporary.replace(target)

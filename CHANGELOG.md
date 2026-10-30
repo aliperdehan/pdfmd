@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.16 — 2026-10-31
+
+Pre-edit state: commit `e9445e7`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Added
+- **`soffice-timeout`: a LibreOffice run has a time limit.** Every start of LibreOffice (the Office converter and the `-e soffice` route, the ODF reader of hybrid builds, spreadsheets read through it, the SVG converter) goes through one runner, `run_soffice()`: a run that takes longer than the limit is stopped together with the processes it started (the process group on macOS and Linux, `taskkill /T` on Windows), and its file fails with a message that names the setting; the other files of a batch go on. Default 300 seconds. **`0`: LibreOffice is never run** (it counts as not installed; `--doctor` says it is turned off). **A negative number (`-1`): no limit.** The key is in `pdfmd-options` (per document, and in a folder's setup), the config and `pdfmd --setup` ("Checks and limits"); no command-line flag. The two hard-coded limits it replaces (120 s for an SVG, 180 s for a sheet) are gone; the packages take the runner as an argument (`run=`), and without one keep their old limit. `tests/test_soffice_timeout.py`. Decision 3ds of the maintainer's notes.
+
+### Notes
+- The default is a constant the author has not confirmed as a number (300); a first start with a new profile takes 20 to 30 seconds and a large document more, so a low default would break working builds.
+
 ## v3.31.15c — 2026-10-31
 
 Pre-edit state: commit `939b66f`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.15.

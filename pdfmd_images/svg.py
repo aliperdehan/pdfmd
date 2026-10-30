@@ -46,8 +46,9 @@ def cache_name(svg: Path) -> str:
 
 
 def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shutil.which,
-                soffice: Callable[[], str | None] = lambda: None) -> tuple[Path | None, str]:
-    """(the PDF in `cache`, "") or (None, why not). A conversion made before is reused."""
+                soffice: Callable[[], str | None] = lambda: None, run=None) -> tuple[Path | None, str]:
+    """(the PDF in `cache`, "") or (None, why not). A conversion made before is reused. `run(command)` starts the LibreOffice
+    command (pdfmd's, which applies the `soffice-timeout` limit); without it the command runs for at most 120 s."""
     target = cache / cache_name(svg)
     if target.is_file() and target.stat().st_size > 0:
         return target, ""
@@ -60,7 +61,7 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
         scratch = Path(tempfile.mkdtemp(prefix="pdfmd-svg-"))
         try:
             produced = scratch / "out.pdf"
-            ok, reason = _run(name, svg, produced, scratch, which, soffice)
+            ok, reason = _run(name, svg, produced, scratch, which, soffice, run)
             if ok and produced.is_file() and produced.stat().st_size > 0:
                 partial = target.with_suffix(".part")
                 shutil.copyfile(produced, partial)
@@ -72,7 +73,7 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
     return None, "; ".join(reasons)
 
 
-def _run(name: str, svg: Path, produced: Path, scratch: Path, which, soffice) -> tuple[bool, str]:
+def _run(name: str, svg: Path, produced: Path, scratch: Path, which, soffice, run=None) -> tuple[bool, str]:
     try:
         if name == "rsvg-convert":
             command = [which("rsvg-convert"), "-f", "pdf", "-o", str(produced), str(svg)]
@@ -94,7 +95,8 @@ def _run(name: str, svg: Path, produced: Path, scratch: Path, which, soffice) ->
             profile = scratch / "profile"
             command = [soffice(), "--headless", "--norestore", f"-env:UserInstallation={profile.as_uri()}",
                        "--convert-to", "pdf", "--outdir", str(scratch), str(svg)]
-            done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
+            done = (run(command) if run else
+                    subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", timeout=120))
             made = scratch / f"{svg.stem}.pdf"
             if made.is_file():
                 made.replace(produced)

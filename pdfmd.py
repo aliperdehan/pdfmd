@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.15"
+PDFMD_VERSION = "3.31.16"
 import argparse
 import atexit
 import csv
@@ -1470,6 +1470,7 @@ import posixpath
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -2338,7 +2339,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
     raw_graphics = False
 
     def to_pdf(file: Path, source: Path, written: str) -> str | None:
-        pdf, why = pdfmd_images.convert_svg(file, cache_root() / "images", which, resolve_soffice)
+        pdf, why = pdfmd_images.convert_svg(file, cache_root() / "images", which, resolve_soffice, run_soffice)
         if pdf is None and str(file) not in SVG_WARNED:
             SVG_WARNED.add(str(file))
             print(f"WARN  {display_path(source)}: {written} is an SVG and LaTeX cannot read it; {why}", file=sys.stderr)
@@ -2680,7 +2681,7 @@ def spreadsheet_args(files: list[Path]) -> list[str]:
             path = (Path(source).parent / name).resolve()
             try:
                 mapping[key] = sheets.cached_csv(path, block.attributes.get("sheet") or None, cache_root() / "sheets",
-                                                 resolve_soffice()).as_posix()      # Pandoc reads metadata as Markdown: a backslash would go
+                                                 resolve_soffice(), run_soffice).as_posix()      # Pandoc reads metadata as Markdown: a backslash would go
             except (OSError, sheets.SheetError) as error:
                 said = "no such file" if isinstance(error, FileNotFoundError) else error
                 print(f"WARN  {display_path(Path(source))}: {name}: {said}", file=sys.stderr)
@@ -4113,6 +4114,48 @@ def tool_note(name: str) -> str:
     return ""
 
 
+SOFFICE_TIMEOUT = 300.0          # seconds a LibreOffice run may take when nothing says otherwise: the `soffice-timeout` setting's default
+SOFFICE_TIMEOUT_NOW: float | None = None        # what the document being built says (set by convert_one); None: the config's
+
+
+def soffice_timeout_from(value) -> float:
+    """The `soffice-timeout` setting as seconds: 0 = LibreOffice is never run, a negative number = no limit, not set or
+    not a number = SOFFICE_TIMEOUT."""
+    number = option_flag_number(value)
+    return SOFFICE_TIMEOUT if number is None else number
+
+
+def soffice_limit() -> float:
+    """Seconds one LibreOffice run may take (0: never run it; negative: no limit)."""
+    return SOFFICE_TIMEOUT_NOW if SOFFICE_TIMEOUT_NOW is not None else soffice_timeout_from(config_options().get("soffice-timeout"))
+
+
+def run_soffice(command: list[str], **options) -> subprocess.CompletedProcess:
+    """subprocess.run for a LibreOffice command under the `soffice-timeout` limit: output captured as text, and when the
+    time is up the whole process tree is stopped (the launcher starts the real program as a child) and the result is a
+    failed run whose stderr names the setting. `cwd` is the only option passed on."""
+    limit = soffice_limit()
+    if limit == 0:
+        return subprocess.CompletedProcess(command, 1, "", "LibreOffice is turned off by the setting `soffice-timeout: 0`")
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", errors="replace",
+                               cwd=options.get("cwd"), **flags)
+    try:
+        out, err = process.communicate(timeout=None if limit < 0 else limit)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                process.kill()
+        process.communicate()
+        return subprocess.CompletedProcess(command, 124, "", f"LibreOffice did not finish in {limit:g} s and was stopped "
+                                           "(the setting `soffice-timeout`: seconds, 0 = never run it, -1 = no limit)")
+    return subprocess.CompletedProcess(command, process.returncode, out, err)
+
+
 def resolve_soffice() -> str | None:
     """Locate the LibreOffice/soffice binary, beyond a bare PATH lookup.
 
@@ -4127,6 +4170,8 @@ def resolve_soffice() -> str | None:
     then the standard macOS app-bundle path directly, or on Windows the usual
     install folders and the registry's App Paths (see locate_tool()).
     """
+    if soffice_limit() == 0:                 # `soffice-timeout: 0`: LibreOffice is turned off, whatever is installed
+        return None
     found = locate_tool("soffice")[0]
     if found:
         return found
@@ -6291,7 +6336,8 @@ def doctor_report(deep: bool = False) -> bool:
     quarto = which("quarto")
     line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = resolve_soffice()
-    line(None, "LibreOffice: " + (soffice or "not installed (only Office files need it)")
+    line(None, "LibreOffice: " + (soffice or ("turned off by `soffice-timeout: 0`" if soffice_limit() == 0
+                                              else "not installed (only Office files need it)"))
          + (f"  -- {tool_note('soffice')}" if soffice and tool_note("soffice") else ""))
     line(None, "Calibre: " + (resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it; `pdfmd --install calibre`)"))
     if which("weasyprint"):
@@ -20735,7 +20781,7 @@ def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: s
               f"-env:UserInstallation={profile_dir.as_uri()}",       # a real file URL: on Windows LibreOffice hangs on file://C:\...
               "--convert-to", "txt:Text" if target == "txt" else target, "--outdir", str(scratch), str(input_path)]
         log_cmd(cmd, input_path.parent, verbose)
-        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=input_path.parent)
+        result = run_soffice(cmd, cwd=input_path.parent)
         produced = scratch / f"{input_path.stem}.{target}"
         if result.returncode != 0 or not produced.exists():
             reason = result.stderr.strip() or result.stdout.strip() or f"soffice failed to produce a {target}"
@@ -22199,6 +22245,14 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
     return attach_time(Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"]), md_path, metadata_files)
 
 
+def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
+    """The `soffice-timeout` of the document about to be built: its `pdfmd-options`, its metadata files', the config's."""
+    global SOFFICE_TIMEOUT_NOW
+    value = (first_pdfmd_option(md_path, metadata_files, "soffice-timeout") if md_path.suffix.lower() in (".md", ".markdown")
+             else config_options().get("soffice-timeout"))
+    SOFFICE_TIMEOUT_NOW = soffice_timeout_from(value)
+
+
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"], BUILD["partial"], BUILD["root"] = None, [], None, [], None, None
@@ -22207,6 +22261,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
+    set_soffice_limit(md_path, metadata_files)
     recorder = BuildRecorder.start(md_path, metadata_files)
     try:
         with warning_capture() as seen:
@@ -25258,7 +25313,7 @@ def odf_source_for(path: Path, metadata_files: list[Path], variables: list[str],
             command = [binary, "--headless", "--norestore", f"-env:UserInstallation={(scratch_dir / 'profile').as_uri()}",
                        "--convert-to", family, "--outdir", str(scratch_dir), str(path)]
             log_cmd(command, path.parent, verbose)
-            subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=path.parent)
+            run_soffice(command, cwd=path.parent)
             made = scratch_dir / f"{path.stem}.{family}"
             return (made.read_bytes(), family) if made.is_file() else None
         target = scratch_dir / f"{path.stem}.odt"
