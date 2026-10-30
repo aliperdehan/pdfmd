@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.17 — 2026-10-31
+
+Pre-edit state: commit `61be750`. Still under 3.31. Merged from a pull request of the Windows test session.
+
+### Fixed
+- **The build record of a `-e soffice` build on Windows.** The record runs `soffice --version`; on Windows `soffice.exe` (the window launcher) never answers it, so the probe waited its 10 s, the record said "soffice: no version" and the `soffice.bin` it had started stayed in the process list. `engine_version_line()` now asks the program `resolve_soffice()` found and, on Windows, the `soffice.com` beside it (answers in 0.3 s, leaves nothing). Three tests in `tests/test_probes.py`. By the Windows test session (pull request #35).
+
 ## v3.31.16b — 2026-10-31
 
 Pre-edit state: commit `80d19d0`. Tests only (from a pull request of the Windows test session): `PDFMD_VERSION` stays 3.31.16.

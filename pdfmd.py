@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.16"
+PDFMD_VERSION = "3.31.17"
 import argparse
 import atexit
 import csv
@@ -20391,7 +20391,12 @@ def read_text_or_none(path: Path | None) -> str | None:
 
 @lru_cache(maxsize=None)
 def engine_version_line(engine: str) -> str:
-    done = run_probe([engine, "--version"])
+    program = engine
+    if engine == "soffice":                    # found beyond PATH too; on Windows soffice.exe is the window launcher, which does not
+        program = engine_executable("soffice") or engine      # answer --version and leaves soffice.bin running: soffice.com does
+        if os.name == "nt" and Path(program).suffix.lower() == ".exe" and Path(program).with_suffix(".com").is_file():
+            program = str(Path(program).with_suffix(".com"))
+    done = run_probe([program, "--version"])
     out = done.stdout if done else ""
     return out.splitlines()[0] if out else ""
 

@@ -76,6 +76,37 @@ class Helper(unittest.TestCase):
         self.assertEqual(seen.getvalue(), "")
 
 
+class SofficeVersion(unittest.TestCase):
+    """soffice.exe, LibreOffice's window launcher on Windows, does not answer --version and leaves soffice.bin running after the
+    timeout; soffice.com, the console launcher beside it, answers at once. The probe asks the second where it is there."""
+
+    def asked(self, executable: str) -> list:
+        seen: list = []
+        pdfmd.engine_version_line.cache_clear()
+        self.addCleanup(pdfmd.engine_version_line.cache_clear)
+        with mock.patch.object(pdfmd, "engine_executable", lambda name: executable), \
+                mock.patch.object(pdfmd, "run_probe", lambda command, **options: seen.append(command)):
+            pdfmd.engine_version_line("soffice")
+        return seen[0]
+
+    def test_the_console_launcher_answers_where_it_stands_beside_the_window_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window, console = Path(folder) / "soffice.exe", Path(folder) / "soffice.com"
+            window.write_bytes(b"")
+            console.write_bytes(b"")
+            expected = str(console) if os.name == "nt" else str(window)
+            self.assertEqual(self.asked(str(window)), [expected, "--version"])
+
+    def test_without_the_console_launcher_the_program_found_is_asked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            window = Path(folder) / "soffice.exe"
+            window.write_bytes(b"")
+            self.assertEqual(self.asked(str(window)), [str(window), "--version"])
+
+    def test_a_soffice_not_found_is_asked_by_name(self):
+        self.assertEqual(self.asked(""), ["soffice", "--version"])
+
+
 @unittest.skipIf(sys.platform == "win32", "a script named pandoc on PATH")
 class HungProgram(unittest.TestCase):
     """A `pandoc` and a `kpsewhich` that never answer: pdfmd goes on as if they were not there."""
