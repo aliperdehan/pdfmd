@@ -26,6 +26,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [One document](#one-document)
   - [Keep the old file: `--no-rewrite`](#keep-the-old-file---no-rewrite)
   - [Check a document before you build it](#check-a-document-before-you-build-it)
+  - [Crop a PDF to what it draws](#crop-a-pdf-to-what-it-draws)
   - [A small editor](#a-small-editor)
   - [In VS Code](#in-vs-code)
   - [A size budget for images and output](#a-size-budget-for-images-and-output)
@@ -556,6 +557,21 @@ see the other parts' labels, so check the scaffold, not a part, to judge links a
 Leave a check out for the project with `pdfmd-options: {check-ignore: [heading-jump]}` (a document, a metadata file or
 the config), or on one line with `<!-- pdfmd-check: ignore image-missing -->` on it or on the line above. `pdfmd --check`
 is for Markdown; the build's own `WARN` and `--strict` still catch what only a build can see.
+
+### Crop a PDF to what it draws
+
+```sh
+pdfmd --crop formula.pdf                          # formula-crop.pdf: every page cut to its ink, 2 pt of room
+pdfmd --crop formula.pdf -o tight.pdf --crop-pad 0
+pdfmd --crop a.pdf b.pdf -o cropped/              # several: -o is a folder
+pdfmd --crop page.pdf --crop-ignore-bottom 40 --crop-page 1   # first page only, its bottom 40 pt (a page number) not counted
+```
+
+The ink is what Ghostscript's `bbox` device finds painted on the page; only the page's media and crop box change, so the page
+stays vector and nothing is redrawn. It is what [eqpop](https://github.com/aliperdehan/eqpop) does to a rendered formula, on any
+machine that has Ghostscript and pypdf (a rotated page is handled; a page that draws nothing is left as it is, with a NOTE).
+`--crop-pad PT` sets the room around the ink (default 2), `--crop-ignore-bottom PT` leaves the foot of each page out of the
+measurement, `--crop-page N` keeps that page alone. The source is never changed: the result is `NAME-crop.pdf` beside it, or `-o`.
 
 ### A small editor
 

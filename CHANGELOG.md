@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.20 — 2026-10-31
+
+Pre-edit state: commit `db904bd`. Still under 3.31.
+
+`pdfmd --crop FILE.pdf...` cuts a finished PDF to what it draws. It is the crop of eqpop (the macOS popup that renders a formula to a cropped PDF), made portable so eqpop can later hand the job to pdfmd.
+
+- The ink of each page is what Ghostscript's `bbox` device finds painted (the same measurement `pdfmd_office/fragments.py` uses for a fragment); pypdf then sets the media box and the crop box (and the trim, bleed and art boxes if the page has them) to that box plus a pad, never beyond the page's own box. The page stays vector. A rotated page is measured as displayed and cut in its own coordinates; a page that draws nothing is left as it is, with a NOTE.
+- The result is `NAME-crop.pdf` beside the source (the source is never changed), `-o FILE` for one PDF or `-o FOLDER` for several; `-o` the source itself crops in place, through a `.part` file.
+- Settings, each a flag with its default written in `--help`: `--crop-pad PT` (default 2), `--crop-ignore-bottom PT` (default 0; leaves the foot of each page out of the measurement, e.g. a page number), `--crop-page N` (keep that page alone; default every page, each to its own ink). They are `--setup`-omitted (about one run), like `--check-docx`.
+- New package `pdfmd_crop` (`crop_pdf`, `ink_boxes`); `--help crop` is its topic. Without Ghostscript or pypdf the command says what to install.
+- Test: `tests/test_crop.py` (pages drawn by Ghostscript from PostScript, so the ink is known: pad, foot, one page, rotation by 90/180/270, a blank page, in place, the command line).
+
 ## v3.31.19 — 2026-10-30
 
 Pre-edit state: commit `aeaad80`. Still under 3.31. Merged from a pull request of the Windows test session.

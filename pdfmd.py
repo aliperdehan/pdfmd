@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.19"
+PDFMD_VERSION = "3.31.20"
 import argparse
 import atexit
 import csv
@@ -7461,6 +7461,46 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
             print(done.stdout.rstrip())
             sys.stderr.write(done.stderr)
             status = max(status, done.returncode)
+    return status
+
+
+def crop_command(args) -> int:
+    """`pdfmd --crop FILE.pdf...`: each page cut to its ink (pdfmd_crop). The result is NAME-crop.pdf beside the source;
+    `-o` names the file (one source) or the folder (several)."""
+    from pdfmd_crop import DEFAULT_PAD, CropError, crop_pdf
+    sources = list(args.path)
+    if not sources:
+        print("--crop takes the PDF files to crop: pdfmd --crop formula.pdf", file=sys.stderr)
+        return 1
+    out = args.out
+    if out is not None and len(sources) > 1 and not (out.is_dir() or out.suffix.lower() != ".pdf"):
+        print(f"--crop of {len(sources)} files: -o names a folder, not a file ({out})", file=sys.stderr)
+        return 1
+    pad = DEFAULT_PAD if args.crop_pad is None else args.crop_pad
+    status = 0
+    for source in sources:
+        if not source.is_file():
+            print(f"ERROR  {display_path(source)}: no such file", file=sys.stderr)
+            status = 1
+            continue
+        if out is None:
+            target = source.with_name(source.stem + "-crop.pdf")
+        elif len(sources) > 1 or out.is_dir():
+            out.mkdir(parents=True, exist_ok=True)
+            target = out / (source.stem + "-crop.pdf")
+        else:
+            target = out
+        try:
+            done = crop_pdf(source, target, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
+        except CropError as error:
+            print(f"ERROR  {display_path(source)}: {error}", file=sys.stderr)
+            status = 1
+            continue
+        first = 1 if args.crop_page is None else args.crop_page
+        empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
+        print(f"OK    {display_path(source)} > {display_path(target)}  ({len(done.boxes)} of {done.pages} page{'' if done.pages == 1 else 's'})")
+        if empty:
+            print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
     return status
 
 
@@ -26107,6 +26147,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
+    parser.add_argument("--crop", action="store_true",
+                        help="cut each page of the PDF files you name to what it draws (the page stays vector; only its "
+                             "boxes change), writing NAME-crop.pdf beside each, or -o FILE (one PDF) / -o FOLDER. "
+                             "Needs Ghostscript and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page")
+    parser.add_argument("--crop-pad", type=float, default=None, metavar="PT",
+                        help="with --crop: points of room left around the ink (default 2)")
+    parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
+                        help="with --crop: do not look at the bottom PT points of each page (a page number); default 0")
+    parser.add_argument("--crop-page", type=int, default=None, metavar="N",
+                        help="with --crop: keep page N alone, cropped (default: every page, each to its own ink)")
     parser.add_argument("--editor", metavar="CMD", default=None,
                         help="with --edit: an editor of your own instead of the built-in one (\"code --wait\", \"vim\"); "
                              "the file is watched and rebuilt on every save. On a PDF that carries its source the "
@@ -26934,6 +26984,10 @@ def run_main() -> None:
         raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
+    if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
+        raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
+    if args.crop:
+        raise SystemExit(crop_command(args))
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))
     if args.init is not None:

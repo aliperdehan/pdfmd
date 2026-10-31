@@ -575,6 +575,8 @@ pdfmd report.md --check-docx            # what becomes native, what is drawn as 
 pdfmd --init-reference                  # reference.docx with pdfmd's look, to restyle in Word (also odt, pptx)
 ```
 
+A finished PDF can be cut to its ink: `pdfmd --crop figure.pdf` writes `figure-crop.pdf` (README, "Crop a PDF to what it draws").
+
 ```yaml
 pdfmd-options:
   office:
@@ -935,6 +937,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
 | check the source | `--check`, `--check-ignore`, `--strict`, `--max-asset-mb`, `--max-output-mb` |
 | a new document | `--init` |
+| crop a PDF to its ink | `--crop`, `--crop-pad`, `--crop-ignore-bottom`, `--crop-page` |
 | tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
 
