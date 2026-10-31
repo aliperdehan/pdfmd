@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.26"
+PDFMD_VERSION = "3.31.27"
 import argparse
 import atexit
 import csv
@@ -7476,7 +7476,7 @@ def picture_target(args) -> str | None:
 # the options of the command line that `picture_build` must not hand on to the build of the intermediate PDF, and how
 # many words each takes (-b and --recursive: the files are built one at a time here)
 PICTURE_OPTIONS = {"--crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
-                   "--image-quality": 1, "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
+                   "--image-quality": 1, "--page-folder": 0, "--no-page-folder": 0, "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
 
 
 def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
@@ -7513,6 +7513,16 @@ def picture_sources(args) -> list[Path] | str:
     folder = args.path[0]
     files = sorted(folder.rglob("*.md") if args.recursive else folder.glob("*.md"))
     return files or f"-b: no Markdown files in {display_path(folder)}"
+
+
+def picture_page_folder(args, source: Path) -> bool:
+    """Whether the pages of a picture go into a folder: --page-folder / --no-page-folder, else the `page-folder` option of
+    the document (front matter), its folder layers and the config, else yes."""
+    if args.page_folder is not None:
+        return args.page_folder
+    value = first_pdfmd_option(source, [], "page-folder") if source.suffix.lower() in (".md", ".markdown") else config_options().get("page-folder")
+    flag = option_flag(value)
+    return True if flag is None else flag
 
 
 def picture_targets(args) -> list[str]:
@@ -7571,9 +7581,10 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
                     part.replace(destination)
                     written.append(destination)
                 else:
-                    made = pictures(pdf, destination, target, dpi, quality)
+                    made = pictures(pdf, destination, target, dpi, quality, picture_page_folder(args, markdown))
                     if len(made) > 1 and target not in ("tiff", "ps"):
-                        err_lines.append(f"NOTE  {len(made)} pages: one {target} each, in {display_path(made[0].parent)}/")
+                        where = "beside it" if made[0].parent == destination.parent else f"in {display_path(made[0].parent)}/"
+                        err_lines.append(f"NOTE  {len(made)} pages: one {target} each, {where}")
                     written += made
         except (CropError, OSError) as error:
             return 1, out_lines, err_lines + [f"ERROR  {display_path(source)}: {error}"]
@@ -26295,6 +26306,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --to png, jpg or tiff: pixels per inch of the picture (default 300)")
     parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
                         help="with --to jpg: the JPEG quality (default 90)")
+    parser.add_argument("--page-folder", action=argparse.BooleanOptionalAction, default=None,
+                        help="with a picture target of several pages: put them in a folder NAME/ (001.png ...; the default) "
+                             "or, with --no-page-folder, beside the document as NAME-001.png ... (also `pdfmd-options: "
+                             "{page-folder: false}`)")
     parser.add_argument("--crop-page", type=int, default=None, metavar="N",
                         help="with --crop: keep page N alone, cropped (default: every page, each to its own ink)")
     parser.add_argument("--editor", metavar="CMD", default=None,

@@ -244,6 +244,22 @@ class Pictures(unittest.TestCase):
         self.assertIn("PDF already", done.stderr)
         self.assertFalse((self.dir / "formula-crop.pdf").exists())
 
+    def test_the_pages_can_sit_beside_the_document_instead_of_in_a_folder(self):
+        done = self.run_pdfmd("formula.pdf", "--to", "png", "--image-dpi", "30", "--no-page-folder")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((self.dir / "formula-001.png").is_file() and (self.dir / "formula-002.png").is_file())
+        self.assertFalse((self.dir / "formula").exists())
+        self.assertIn("beside it", done.stderr)
+
+    def test_the_folder_switch_is_an_option_of_the_document_and_of_the_folder_layers(self):
+        text = "---\npdfmd-options:\n  page-folder: false\n---\n\npage one\n\n\\newpage\n\npage two\n"
+        (self.dir / "doc.md").write_text(text, encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "--to", "png", "--image-dpi", "30", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((self.dir / "doc-001.png").is_file(), done.stderr)
+        done = self.run_pdfmd("doc.md", "--to", "png", "--image-dpi", "30", "--page-folder", path=self.native_path())   # the flag wins
+        self.assertTrue((self.dir / "doc" / "001.png").is_file(), done.stderr)
+
     def test_svg(self):
         if not (shutil.which("pdftocairo") or shutil.which("mutool")):
             self.skipTest("needs pdftocairo or mutool")

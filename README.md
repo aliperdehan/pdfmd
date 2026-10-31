@@ -584,7 +584,8 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
   without `--crop` draws the whole page: a crop is asked for, never implied.
 - **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page (`tiff` and `ps` keep all pages in one file): `NAME.png` beside the
   document for a one-page result, a folder `NAME/` with `001.png`, `002.png` ... for several (with a NOTE); `--crop-page 1` gives
-  the plain name. `-o a.png` with several pages gives the folder `a/`.
+  the plain name. `-o a.png` with several pages gives the folder `a/`. `--no-page-folder` (or `pdfmd-options: {page-folder: false}`,
+  or the `--setup` row) writes `NAME-001.png` ... beside the document instead.
 - **Names.** A Markdown source gives `NAME.pdf|png|svg` beside it (`-d`: in the current folder); a PDF source gives
   `NAME-crop.pdf`, so the source is never overwritten unless `-o` names it. The intermediate PDF of a Markdown source is built
   with your other options (`-e`, `-y` ...) but with no build stamp or backup.

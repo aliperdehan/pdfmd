@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.27 — 2026-10-31
+
+Pre-edit state: commit `1eb332d`. Still under 3.31.
+
+`--no-page-folder`: the pages of a picture target go beside the document as `NAME-001.png`, `NAME-002.png` ... instead of into the folder `NAME/` (3.31.22); `--page-folder` is the default. The author's wish (3dv): "for people who want exactly this behaviour".
+
+- A setting: `pdfmd-options: {page-folder: false}` in a Markdown file's front matter, in a folder layer's `config.yaml` or the config, a `--setup` row ("Several pages of a picture go into a folder"), the command line over all of them. Not yet read from separate metadata files (queued with the post-build step, 3dv).
+- Test: `tests/test_crop.py` (beside the document; the option in front matter, the flag over it).
+
 ## v3.31.26 — 2026-10-31
 
 Pre-edit state: commit `0655fc9`. Still under 3.31.

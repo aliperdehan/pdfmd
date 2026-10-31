@@ -30,10 +30,11 @@ def _pages(pdf: Path) -> int:
     return len(PdfReader(str(pdf)).pages)
 
 
-def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quality: int = DEFAULT_QUALITY) -> list[Path]:
+def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quality: int = DEFAULT_QUALITY,
+             folder: bool = True) -> list[Path]:
     """Draw every page of `pdf` as `kind` ("png", "jpg" or "svg"). One page is written to `target`; several go into a folder
-    named like `target` without its suffix, as `001.png`, `002.png`... (zero-padded so they sort). Returns the files
-    written. Raises CropError."""
+    named like `target` without its suffix, as `001.png`, `002.png`... (zero-padded so they sort); with `folder` off
+    they are written beside it as `NAME-001.png`... Returns the files written. Raises CropError."""
     if kind not in KINDS:
         raise CropError(f"cannot draw a PDF as {kind}: {', '.join(KINDS)} only")
     if dpi <= 0:
@@ -43,9 +44,14 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
     count = _pages(pdf)
     width = max(3, len(str(count)))
     folder_of_pages = target.with_suffix("")
-    names = [target] if count == 1 or kind in ONE_FILE else [folder_of_pages / f"{number:0{width}d}{target.suffix}" for number in range(1, count + 1)]
+    if count == 1 or kind in ONE_FILE:
+        names = [target]
+    elif folder:
+        names = [folder_of_pages / f"{number:0{width}d}{target.suffix}" for number in range(1, count + 1)]
+    else:
+        names = [target.with_name(f"{target.stem}-{number:0{width}d}{target.suffix}") for number in range(1, count + 1)]
     with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
-        folder = Path(scratch)
+        work = Path(scratch)
         if kind in ("tiff", "eps", "ps"):
             gs = ghostscript()
             if gs is None:
@@ -53,16 +59,16 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
             device = {"tiff": ["-sDEVICE=tiff24nc", "-sCompression=lzw", f"-r{dpi:g}"], "eps": ["-sDEVICE=eps2write"],
                       "ps": ["-sDEVICE=ps2write"]}[kind]
             pattern = "pages." + kind if kind in ONE_FILE else "page-%d." + kind
-            done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", *device, f"-sOutputFile={folder / pattern}", str(pdf)])
-            made = [folder / pattern] if kind in ONE_FILE else [folder / f"page-{number}.{kind}" for number in range(1, count + 1)]
+            done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", *device, f"-sOutputFile={work / pattern}", str(pdf)])
+            made = [work / pattern] if kind in ONE_FILE else [work / f"page-{number}.{kind}" for number in range(1, count + 1)]
         elif kind in ("png", "jpg"):
             gs = ghostscript()
             if gs is None:
                 raise CropError(f"--to {kind} needs Ghostscript (brew install ghostscript, apt install ghostscript)")
             device = ["-sDEVICE=pngalpha"] if kind == "png" else ["-sDEVICE=jpeg", f"-dJPEGQ={quality}"]
             done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
-                         *device, f"-r{dpi:g}", f"-sOutputFile={folder / ('page-%d.' + kind)}", str(pdf)])
-            made = [folder / f"page-{number}.{kind}" for number in range(1, count + 1)]
+                         *device, f"-r{dpi:g}", f"-sOutputFile={work / ('page-%d.' + kind)}", str(pdf)])
+            made = [work / f"page-{number}.{kind}" for number in range(1, count + 1)]
         else:
             cairo, mupdf = shutil.which("pdftocairo"), shutil.which("mutool")
             if cairo is None and mupdf is None:
@@ -70,7 +76,7 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
             made = []
             done = subprocess.CompletedProcess([], 0, "", "")
             for number in range(1, count + 1):
-                one = folder / f"page-{number}.svg"
+                one = work / f"page-{number}.svg"
                 if cairo is not None:
                     done = _run([cairo, "-svg", "-f", str(number), "-l", str(number), str(pdf), str(one)])
                 else:
