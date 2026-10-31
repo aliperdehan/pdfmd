@@ -21,7 +21,7 @@ wait for an answer before any code.
 - [ ] Metadata append: `author+: [B, C]` adds to what the layers below gave, and a `metadata-append: [author]` setting makes chosen keys append; a test and a docs line pin the order global < `.pdfmd/` < `metadata/` < document [3du]
 - [ ] Table captions from bold text: a `**Table 1: ...**` paragraph next to a table becomes its caption (the label words, stripping the label and on/off are settings); gfm and Pandoc Markdown [3dy]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
-- [ ] Settings layers: (folder layers carried: see Kits C4) a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
+- [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]
 - [ ] CSS: headings in Word and Typst; MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, typeset output, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu, 3cw]
@@ -52,10 +52,6 @@ wait for an answer before any code.
 
 ## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; started [3du]
 
-- [ ] Kits C1: the `.kit` format v1 (modes with aliases, package and `\input` lines, Lua, defaults, parts to carry), discovery by normalised name with a cached location, `kits:` in the config, `--kits`, a `--setup` row
-- [ ] Kits C2: selection (`nulabreport:qca`, `nulabreport[qca]`, `"[qca]nulabreport"`, mappings, lists); the global `kit:` at the bottom, `--kit` replaces (the `kit-stack` setting: `off`, `all` or chosen layers makes it stack), bare `--kit` and `none|off` switch off; the kit's defaults, Lua, CSL and bibliography in the build; the kit folder on `TEXINPUTS`/`BIBINPUTS` and its CSL by path, so a pdfmd user needs no `install.sh` (spike first); a `kit:` in a folder layer by name only
-- [ ] Kits C3: the generated preamble and the clash rules against `preamble.tex`, `header-includes` and `--include-in-header`; messages with ids at their chatter levels
-- [ ] Kits C4: attach-source and bundle carry the kit's parts, its name and version, the resolved kit selection and the folder layers in force (`.pdfmd/` restored into the report's folder, merged with its own; `ATTACH_FORMAT` 3)
 - [ ] nulabreport side (its maintenance is done): its `.kit`, course codes as mode aliases, starters without `metadata/` (which stays supported), a course-level `.pdfmd/` in `220/` and `LR9-10`, the manual updated; real builds of copies of 220/LR6 and LR9-10; smoke test
 - [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; fetch, `--install kit`, the trust prompt; Typst, HTML, Word parts; `--kit new|check|pack`; the kit guide [3du, 3dg]
 - [ ] nulabreport at three levels (bare `.sty`, a pandoc defaults file plus the Lua filter mapping the front-matter keys, a pdfmd kit); no custom `.latex`; spike first (does `-H` replace a filter's `header-includes`?), then bare-pandoc and bare-`.sty` lanes in its smoke test [3dw, 3dk, 3du]
