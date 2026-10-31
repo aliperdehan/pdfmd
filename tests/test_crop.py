@@ -232,13 +232,13 @@ class Pictures(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((self.dir / "note.pdf").is_file() and (self.dir / "note.png").is_file())
 
-    def test_several_targets_need_a_folder_for_o_and_only_picture_formats(self):
+    def test_several_targets_need_a_folder_for_o(self):
         done = self.run_pdfmd("formula.pdf", "--crop", "--to", "png,pdf", "-o", "x.png")
         self.assertEqual(done.returncode, 1)
         self.assertIn("names a folder", done.stderr)
-        done = self.run_pdfmd("formula.pdf", "--to", "png,docx")
+        done = self.run_pdfmd("formula.pdf", "--to", "png,docx", "-o", "x.docx")
         self.assertEqual(done.returncode, 1)
-        self.assertIn("a run of its own", done.stderr)
+        self.assertIn("names a folder", done.stderr)
         done = self.run_pdfmd("formula.pdf", "--to", "pdf,png", "--image-dpi", "72")   # a PDF to pdf without a crop: nothing to write
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("PDF already", done.stderr)
@@ -259,6 +259,14 @@ class Pictures(unittest.TestCase):
         self.assertTrue((self.dir / "doc-001.png").is_file(), done.stderr)
         done = self.run_pdfmd("doc.md", "--to", "png", "--image-dpi", "30", "--page-folder", path=self.native_path())   # the flag wins
         self.assertTrue((self.dir / "doc" / "001.png").is_file(), done.stderr)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_a_format_that_is_not_a_picture_is_a_run_of_its_own(self):
+        (self.dir / "note.md").write_text("# T\n\ntext\n", encoding="utf-8")
+        done = self.run_pdfmd("note.md", "--to", "html,png", "--crop", "--crop-ignore-bottom", "60", "--image-dpi", "30", "-o", "out",
+                              path=os.environ.get("PATH", "") + os.pathsep + str(Path(GS).parent))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(sorted(path.name for path in (self.dir / "out").iterdir()), ["note.html", "note.png"])
 
     def test_svg(self):
         if not (shutil.which("pdftocairo") or shutil.which("mutool")):

@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.27"
+PDFMD_VERSION = "3.31.28"
 import argparse
 import atexit
 import csv
@@ -7592,6 +7592,43 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
         return 1, out_lines, err_lines
     out_lines += [f"OK    {display_path(source)} > {display_path(path)}" for path in written]
     return 0, out_lines, err_lines
+
+
+# the options of a picture run that a build of another format must not get (the rest of the command line it does)
+TARGET_ONLY_OPTIONS = {"--crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
+                       "--image-quality": 1, "--page-folder": 0, "--no-page-folder": 0, "-t": 1, "--to": 1}
+
+
+def multi_target_command(args) -> int:
+    """`--to png,docx,tex`: one run of pdfmd per format that is not a picture (the same command line with that `--to`),
+    and one picture run for the picture formats (see picture_command). A plain `pdf` is a build of its own, with its stamp
+    and its backup, unless `--crop` cuts it or a source is a PDF already. `-o` is then a folder."""
+    formats = list(args.to_many)
+    cropped_pdf = args.crop or any(path.suffix.lower() == ".pdf" for path in args.path)
+    pictures = [name for name in formats if name in PICTURE_ONLY or (name == "pdf" and cropped_pdf)]
+    others = [name for name in formats if name not in pictures]
+    if len(formats) > 1 and args.out is not None and args.out.suffix and not args.out.is_dir():
+        print(f"{len(formats)} formats: -o names a folder, not a file ({args.out})", file=sys.stderr)
+        return 1
+    if args.out is not None and len(formats) > 1:
+        args.out.mkdir(parents=True, exist_ok=True)
+    kept, skip = [], 0
+    for word in sys.argv[1:]:
+        if skip:
+            skip -= 1
+        elif word.split("=", 1)[0] in TARGET_ONLY_OPTIONS:
+            skip = 0 if "=" in word else TARGET_ONLY_OPTIONS[word]
+        else:
+            kept.append(word)
+    status = 0
+    for name in others:
+        sys.stdout.flush()
+        done = subprocess.run([sys.executable, str(Path(__file__).resolve()), *kept, "--to", name])
+        status = max(status, done.returncode)
+    if pictures:
+        args.to_many = pictures
+        status = max(status, picture_command(args))
+    return status
 
 
 def picture_command(args) -> int:
@@ -26183,7 +26220,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Default is pdf. An -o/--out filename with a recognized extension "
                              "(single-file/report modes only, e.g. -o notes.html) implies this too; "
                              "an explicit --to always wins. No PDF engine is involved, or required "
-                             "to be installed, for a non-pdf target -- Pandoc writes that format directly")
+                             "to be installed, for a non-pdf target -- Pandoc writes that format directly. "
+                             "Also png, jpg, tiff, eps, ps, svg (pictures; see --crop), and a list without spaces: "
+                             "--to png,docx,tex (one run each; -o is then a folder)")
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
@@ -26983,10 +27022,6 @@ def run_main() -> None:
             name = DEFAULT_OUTPUT_ALIASES.get(name, name)
             if name and name not in wanted:
                 wanted.append(name)
-        others = [name for name in wanted if name not in PICTURE_FORMATS]
-        if others:
-            raise SystemExit(f"--to takes several formats only among {', '.join(PICTURE_FORMATS)}; {', '.join(others)} "
-                             f"has to be a run of its own: pdfmd FILE --to {others[0]}")
         args.to_many, args.to = wanted, wanted[0]
     if args.to:
         # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
@@ -27157,7 +27192,9 @@ def run_main() -> None:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
     if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or args.to_many or picture_target(args) in PICTURE_ONLY):
         raise SystemExit("--image-dpi and --image-quality go with --to png, jpg, tiff, eps, ps or svg")
-    if args.crop or args.to_many or picture_target(args) in PICTURE_ONLY:
+    if args.to_many:
+        raise SystemExit(multi_target_command(args))
+    if args.crop or picture_target(args) in PICTURE_ONLY:
         raise SystemExit(picture_command(args))
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))

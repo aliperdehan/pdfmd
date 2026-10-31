@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.28 — 2026-10-31
+
+Pre-edit state: commit `fe93e0a`. Still under 3.31.
+
+`--to png,docx,tex`: the list may now hold any format, not only pictures (3.31.26 refused the others). The author's wish (3dv).
+
+- pdfmd runs itself once per format that is not a picture (the same command line, minus the picture options, with that `--to`), then once for the pictures (`picture_command`). A plain `pdf` is one of those ordinary runs, with its build stamp, backup and attached source, unless `--crop` is given or a source is a PDF already, when it belongs to the picture run (cropped, or a NOTE). The list has no spaces (the shell would split it); a quoted `"png, pdf"` works too.
+- `-o` with more than one format must be a folder (made if need be); otherwise each result is beside its source.
+- Not yet: a document or a setting asking for several formats (`default-output` takes one); logged with the post-build step (3dv).
+- Test: `tests/test_crop.py` (a folder of `html` and `png` from one command; `-o` as a file refused).
+
 ## v3.31.27 — 2026-10-31
 
 Pre-edit state: commit `1eb332d`. Still under 3.31.
