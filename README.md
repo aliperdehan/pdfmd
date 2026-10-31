@@ -586,8 +586,10 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 - **Names.** A Markdown source gives `NAME.pdf|png|svg` beside it (`-d`: in the current folder); a PDF source gives
   `NAME-crop.pdf`, so the source is never overwritten unless `-o` names it. The intermediate PDF of a Markdown source is built
   with your other options (`-e`, `-y` ...) but with no build stamp or backup.
-- `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut. `-b`, `-r` and `-p` are refused; build
-  the PDF, then crop it.
+- `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut.
+- **Many files.** Name them (`pdfmd *.tex --crop -o out/`, a PDF, Markdown or anything pdfmd builds), or use `-b` on a folder
+  (`pdfmd notes -b --crop -o out/ -j 4`: its `*.md`, `--recursive` for subfolders; `-j` files at a time). `-r` makes one result
+  of a report folder, named after the folder; `-p` draws a picture per slide.
 
 ### A small editor
 

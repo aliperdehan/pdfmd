@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.23 — 2026-10-31
+
+Pre-edit state: commit `19d38ab`. Still under 3.31.
+
+`--crop` and `--to png|svg` work with `-b`, `-r` and `-p`; 3.31.21 refused them. The author's wish (3dv): `pdfmd notes -b --crop -o out/` to turn a folder of sources into cropped pictures.
+
+- **`-b`** takes the one folder it takes everywhere (`*.md`, `--recursive` for subfolders) and works through its files, `-j` at a time; **`-r`** builds the report and gives one result named after the folder (inside it, like the report itself); **`-p`** builds the slides and draws a picture per slide. Files named on the command line need no `-b`: `pdfmd *.tex --crop -o out/` crops the PDF of every `.tex`.
+- `-b` and `--recursive` are not handed on to the build of each file's PDF (the files are built one at a time).
+- Test: `tests/test_crop.py` (a folder with `-b -j 2 -o`, `-b` without a folder, a report as a picture; the Markdown builds run on the built-in renderer with no Pandoc on the path).
+
 ## v3.31.22 — 2026-10-31
 
 Pre-edit state: commit `a2a987e`. Still under 3.31.

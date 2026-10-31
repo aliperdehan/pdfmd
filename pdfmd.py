@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.22"
+PDFMD_VERSION = "3.31.23"
 import argparse
 import atexit
 import csv
@@ -7470,16 +7470,18 @@ PICTURE_FORMATS = ("pdf", "png", "svg")
 def picture_target(args) -> str | None:
     """`--to`, else the format `-o` names by its suffix: png and svg are the ones that choose the picture command."""
     return args.to or (format_from_output(args.out) if args.out else None)
-# the options of the command line that `pdfmd_picture_build` must not hand on to the build of the intermediate PDF, and how
-# many words each takes
+
+
+# the options of the command line that `picture_build` must not hand on to the build of the intermediate PDF, and how
+# many words each takes (-b and --recursive: the files are built one at a time here)
 PICTURE_OPTIONS = {"--crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
-                   "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1}
+                   "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
 
 
-def picture_build(args, source: Path, scratch: Path) -> Path | None:
+def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
     """The PDF pdfmd makes of the Markdown `source` (a run of pdfmd itself with every option of this command line but
-    the ones in PICTURE_OPTIONS, and without a build stamp, a backup or a renamed older result), in `scratch`; None when
-    the build failed (its messages are already on the screen)."""
+    the ones in PICTURE_OPTIONS, and without a build stamp, a backup or a renamed older result), in `scratch`, and what
+    the build printed on stderr; None for the PDF when the build failed."""
     typed = {str(path) for path in args.path}
     kept, skip = [], 0
     for word in sys.argv[1:]:
@@ -7495,27 +7497,88 @@ def picture_build(args, source: Path, scratch: Path) -> Path | None:
     command = [sys.executable, str(Path(__file__).resolve()), *kept, str(source), "--to", "pdf", "-o", str(built),
                "--no-stamp", "--no-backup", "--rewrite"]
     done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
-    sys.stderr.write(done.stderr)
-    return built if done.returncode == 0 and built.is_file() else None
+    return (built if done.returncode == 0 and built.is_file() else None), done.stderr
+
+
+def picture_sources(args) -> list[Path] | str:
+    """What `picture_command` works through: the files named, or with -b the Markdown files of the one folder named
+    (the files `-b` builds: `*.md`, in subfolders too with --recursive). A string is the reason there are none."""
+    if not args.path:
+        return f"--{'crop' if args.crop else 'to ' + (picture_target(args) or 'png')} takes the files to work on: pdfmd --crop formula.pdf"
+    if not args.batch:
+        return list(args.path)
+    if len(args.path) != 1 or not args.path[0].is_dir():
+        return "-b takes one folder"
+    folder = args.path[0]
+    files = sorted(folder.rglob("*.md") if args.recursive else folder.glob("*.md"))
+    return files or f"-b: no Markdown files in {display_path(folder)}"
+
+
+def picture_one(args, source: Path, destination_for, pad: float, dpi: float) -> tuple[int, list[str], list[str]]:
+    """One source through the build, the crop and the pictures: (exit status, lines for stdout, lines for stderr)."""
+    from pdfmd_crop import CropError, crop_pdf
+    from pdfmd_crop.images import pictures
+    target = picture_target(args) or "pdf"
+    out_lines: list[str] = []
+    err_lines: list[str] = []
+    from_pdf = source.suffix.lower() == ".pdf"
+    if from_pdf and not source.is_file():
+        return 1, [], [f"ERROR  {display_path(source)}: no such file"]
+    if args.report and not from_pdf:
+        markdown = source.resolve()   # a report is a folder (or a scaffold); its result is named after it
+    else:
+        try:
+            markdown = source if from_pdf else find_markdown(source)
+        except FileNotFoundError as error:
+            return 1, [], [str(error)]
+    stem = markdown.name if args.report and markdown.is_dir() else markdown.stem
+    home = markdown if args.report and markdown.is_dir() else markdown.parent
+    destination = destination_for(stem + ("-crop" if from_pdf and target == "pdf" else "") + "." + target, home)
+    with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
+        folder = Path(scratch)
+        if from_pdf:
+            pdf = markdown
+        else:
+            pdf, printed = picture_build(args, markdown, folder)
+            if printed:
+                err_lines += printed.rstrip("\n").split("\n")
+            if pdf is None:
+                return 1, out_lines, err_lines
+        try:
+            if args.crop:
+                cropped = destination if target == "pdf" else folder / "cropped.pdf"
+                done = crop_pdf(pdf, cropped, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
+                first = 1 if args.crop_page is None else args.crop_page
+                empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
+                if empty:
+                    err_lines.append(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is")
+                pdf = cropped
+            if target == "pdf":
+                written = [destination]
+            else:
+                written = pictures(pdf, destination, target, dpi)
+                if len(written) > 1:
+                    err_lines.append(f"NOTE  {len(written)} pages: one {target} each, in {display_path(written[0].parent)}/")
+        except CropError as error:
+            return 1, out_lines, err_lines + [f"ERROR  {display_path(source)}: {error}"]
+    out_lines += [f"OK    {display_path(source)} > {display_path(path)}" for path in written]
+    return 0, out_lines, err_lines
 
 
 def picture_command(args) -> int:
-    """`pdfmd --crop` and `--to png|svg`: a PDF (or the PDF pdfmd builds from a Markdown source) cut to its ink with
-    --crop, and drawn as pictures when the target is png or svg. See pdfmd_crop; the rules are in the changelog of 3.31.20/21."""
-    from pdfmd_crop import DEFAULT_PAD, CropError, crop_pdf
-    from pdfmd_crop.images import DEFAULT_DPI, pictures
-    target = args.to or (format_from_output(args.out) if args.out else None) or "pdf"
+    """`pdfmd --crop` and `--to png|svg`: a PDF (or the PDF pdfmd builds from a source) cut to its ink with --crop, and
+    drawn as pictures when the target is png or svg. Files named on the command line, or with -b the Markdown files of a
+    folder (`-j` at a time); with -r the report of a folder is one result. See pdfmd_crop and the changelog."""
+    from pdfmd_crop import DEFAULT_PAD
+    from pdfmd_crop.images import DEFAULT_DPI
+    target = picture_target(args) or "pdf"
     if target not in PICTURE_FORMATS:
         print(f"--crop cuts a PDF page: it goes with --to pdf, png or svg, not {target} "
               f"(a {target} file has no page box to cut)", file=sys.stderr)
         return 1
-    if args.batch or args.report or args.presentation:
-        print("--crop and --to png|svg take the files one by one: not with -b, -r or -p "
-              "(build the PDF, then `pdfmd --crop` it)", file=sys.stderr)
-        return 1
-    sources = list(args.path)
-    if not sources:
-        print(f"--{'crop' if args.crop else 'to ' + target} takes the files to work on: pdfmd --crop formula.pdf", file=sys.stderr)
+    sources = picture_sources(args)
+    if isinstance(sources, str):
+        print(sources, file=sys.stderr)
         return 1
     out = args.out
     if out is not None:
@@ -7523,63 +7586,33 @@ def picture_command(args) -> int:
         if named is not None and named != target and not out.is_dir():
             print(f"-o {out} is a {named} file, but the target is {target}", file=sys.stderr)
             return 1
-    many_outputs = out is not None and (len(sources) > 1 or out.is_dir() or not out.suffix)
+    into_folder = out is not None and (len(sources) > 1 or out.is_dir() or not out.suffix)
     if out is not None and len(sources) > 1 and out.suffix and not out.is_dir():
         print(f"{len(sources)} files: -o names a folder, not a file ({out})", file=sys.stderr)
         return 1
+    if into_folder:
+        out.mkdir(parents=True, exist_ok=True)
+
+    def destination_for(name: str, home: Path) -> Path:
+        if out is None:
+            return (Path.cwd() if args.destination_cwd else home) / name
+        return out / name if into_folder else out
+
     pad = DEFAULT_PAD if args.crop_pad is None else args.crop_pad
     dpi = DEFAULT_DPI if args.image_dpi is None else args.image_dpi
+    if args.batch and len(sources) > 1 and max(1, args.jobs) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            results = list(pool.map(lambda source: picture_one(args, source, destination_for, pad, dpi), sources))
+    else:
+        results = [picture_one(args, source, destination_for, pad, dpi) for source in sources]
     status = 0
-    for source in sources:
-        from_pdf = source.suffix.lower() == ".pdf"
-        if from_pdf and not source.is_file():
-            print(f"ERROR  {display_path(source)}: no such file", file=sys.stderr)
-            status = 1
-            continue
-        try:
-            markdown = source if from_pdf else find_markdown(source)
-        except FileNotFoundError as error:
-            print(str(error), file=sys.stderr)
-            status = 1
-            continue
-        extension = "." + target
-        name = markdown.stem + ("-crop" if from_pdf and target == "pdf" else "") + extension
-        if out is None:
-            destination = (Path.cwd() if args.destination_cwd else markdown.parent) / name
-        elif many_outputs:
-            out.mkdir(parents=True, exist_ok=True)
-            destination = out / name
-        else:
-            destination = out
-        with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
-            folder = Path(scratch)
-            pdf = markdown if from_pdf else picture_build(args, markdown, folder)
-            if pdf is None:
-                status = 1
-                continue
-            try:
-                if args.crop:
-                    cropped = destination if target == "pdf" else folder / "cropped.pdf"
-                    done = crop_pdf(pdf, cropped, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
-                    first = 1 if args.crop_page is None else args.crop_page
-                    empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
-                    if empty:
-                        print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
-                    pdf, pages = cropped, len(done.boxes)
-                else:
-                    pages = None
-                if target == "pdf":
-                    written = [destination]
-                else:
-                    written = pictures(pdf, destination, target, dpi)
-                    if len(written) > 1:
-                        print(f"NOTE  {len(written)} pages: one {target} each, in {display_path(written[0].parent)}/", file=sys.stderr)
-            except CropError as error:
-                print(f"ERROR  {display_path(source)}: {error}", file=sys.stderr)
-                status = 1
-                continue
-        for path in written:
-            print(f"OK    {display_path(source)} > {display_path(path)}")
+    for code, out_lines, err_lines in results:
+        status = max(status, code)
+        for line in out_lines:
+            print(line)
+        for line in err_lines:
+            print(line, file=sys.stderr)
     return status
 
 

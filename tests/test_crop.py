@@ -213,9 +213,31 @@ class Pictures(unittest.TestCase):
         self.assertIn("pdf, png or svg", done.stderr)
         self.assertEqual(sorted(path.name for path in self.dir.iterdir() if path.suffix != ".ps"), ["formula.pdf"])
 
-    def test_batch_and_report_are_refused(self):
-        for option in ("-b", "-r"):
-            self.assertEqual(self.run_pdfmd(option, "--crop", "formula.pdf").returncode, 1, option)
+    def native_path(self) -> str:
+        return str(Path(GS).parent) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
+
+    def test_batch_crops_every_markdown_file_of_a_folder_into_o(self):
+        folder = self.dir / "notes"
+        folder.mkdir()
+        for name in ("a", "b"):
+            (folder / f"{name}.md").write_text(f"# {name}\n\ntext\n", encoding="utf-8")
+        done = self.run_pdfmd("notes", "-b", "--crop", "--crop-ignore-bottom", "60", "-o", "out", "-j", "2", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(sorted(path.name for path in (self.dir / "out").iterdir()), ["a.pdf", "b.pdf"])
+        box = media(self.dir / "out" / "a.pdf")
+        self.assertLess(box[3] - box[1], 100)
+
+    def test_batch_needs_one_folder(self):
+        self.assertEqual(self.run_pdfmd("-b", "--crop", "formula.pdf").returncode, 1)
+
+    def test_a_report_is_one_result_named_after_its_folder(self):
+        folder = self.dir / "rep"
+        folder.mkdir()
+        for name in ("01-a", "02-b"):
+            (folder / f"{name}.md").write_text(f"# {name}\n\ntext\n", encoding="utf-8")
+        done = self.run_pdfmd("rep", "-r", "--crop", "--crop-ignore-bottom", "60", "--to", "png", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((folder / "rep.png").is_file() or (folder / "rep" / "001.png").is_file())
 
     def test_a_dpi_without_a_picture_is_refused(self):
         self.assertNotEqual(self.run_pdfmd("formula.pdf", "--image-dpi", "100").returncode, 0)
