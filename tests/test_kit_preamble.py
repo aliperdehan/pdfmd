@@ -219,13 +219,13 @@ class Builds(unittest.TestCase):
         """The reason for the merge: LaTeX stops with an Option clash when two \\usepackage lines of one package differ."""
         write(self.folder / "preamble.tex", "\\usepackage[qca,draft]{labstyle}\n\\input{chemicals}\n")
         environment = {**os.environ, "PDFMD_CONFIG": str(self.config), "XDG_CACHE_HOME": str(self.root / "cache"),
-                       "PDFMD_NO_PROMPT": "1", "PDFMD_BUILD_LOG": "off",
-                       "TEXINPUTS": str(self.root / "course" / "kits" / "lab") + "//" + os.pathsep}
+                       "PDFMD_NO_PROMPT": "1", "PDFMD_BUILD_LOG": "off"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "-e", "pdflatex", "-o", "out.pdf", "--no-backup",
                                "--no-stamp"], capture_output=True, text=True, cwd=self.folder, env=environment)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertTrue((self.folder / "out.pdf").read_bytes().startswith(b"%PDF"))
+        self.assertTrue((self.folder / "out.pdf").read_bytes().startswith(b"%PDF"))      # the kit's folder is on TEXINPUTS: no install
         # without pdfmd's settling the same two lines are the clash
+        environment = {**environment, "TEXINPUTS": str(self.root / "course" / "kits" / "lab") + "//" + os.pathsep}
         clash = self.root / "clash.tex"
         write(clash, "\\documentclass{article}\n\\usepackage[qca]{labstyle}\n\\usepackage[qca,draft]{labstyle}\n\\begin{document}x\\end{document}\n")
         bare = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error", clash.name], capture_output=True, text=True,

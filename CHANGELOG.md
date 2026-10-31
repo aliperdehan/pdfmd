@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.37 — 2026-10-31
+
+Pre-edit state: commit `6a21c23`. Still under 3.31. `[kits]`, the spike of entry 3du (point 12).
+
+A chosen kit works from its own folder: no install into the TeX tree.
+
+- The kit's folder, and the folders its `carry:` names with `//` (a logo found by its bare name), go on `TEXINPUTS` and `BIBINPUTS` of the engine's environment (`tex_search_env`, new third argument; the six call sites pass the document). They follow `.` and any value the environment had and come before TeX's own path. The kit's whole folder is not searched recursively: it may hold a repository's worth of data, and kpathsea walks every folder under a `//`. No kit, no change: `tex_search_env` still returns None where it did.
+- Checked with real lualatex on a copy of a real report: with `TEXMFHOME` pointing at an empty folder (so `kpsewhich nulabreport.sty` finds nothing) the report builds from the kit's folder alone, pixel-identical to the build with the package installed.
+- `tests/test_kit_preamble.py`'s real compile no longer sets `TEXINPUTS` itself: its package exists only in the kit's folder. Tests: `tests/test_kit_texinputs.py`.
+
 ## v3.31.36 — 2026-10-31
 
 Pre-edit state: commit `e9c09d3`. Still under 3.31. `[kits]`, C4 of entry 3du (the folder layers' part).

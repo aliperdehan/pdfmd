@@ -2543,6 +2543,11 @@ mode of the same kit is a contradiction, where a `preamble.tex` found in the fol
 stays after the kit's lines. Only a whole line is rewritten: the package inside a list or behind a macro stops the build and names
 the line. `--verbose` shows the quiet outcomes (`KIT-SAME`, `KIT-MERGE`).
 
+**A kit needs no install.** A chosen kit's folder is put on `TEXINPUTS` and `BIBINPUTS` of the LaTeX run (after the folder
+itself, before TeX's own path; the folders its `carry:` names too, searched recursively, so a logo is found by its bare name),
+so its `.sty` and the library it `\input`s are found without linking anything into the TeX tree. A kit is then one folder: clone it,
+name it under `kits:` of the config (or `--kit PATH`), and select it.
+
 **A kit travels with the source.** `--attach-source`, `--keep-source` and `--bundle` hold what the kit wrote (`--embed-metadata`, its
 preamble only): its preamble goes into the source first (with what your own LaTeX said twice settled in it, as in the build), its defaults and Lua
 filter go in as the metadata and filter files they already are, and the files its `carry:` list names are stored beside the

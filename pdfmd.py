@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.36"
+PDFMD_VERSION = "3.31.37"
 import argparse
 import atexit
 import csv
@@ -1868,7 +1868,22 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
     return ["--resource-path", os.pathsep.join(entries + [str(d) for d in extra])]
 
 
-def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str] | None:
+def kit_search_folders(document: Path | None) -> list[str]:
+    """The TeX search path entries of the kits chosen for ``document``: each kit's folder (its package, the library it `\\input`s)
+    and, `//` recursive, the folders its `carry:` names (a logo found by its bare name). The kit's whole folder is not searched
+    recursively: it may hold a repository's worth of data. They come after the default path, so an installed copy is the same file
+    or stays where it was."""
+    if document is None or yaml is None:
+        return []
+    found: list[str] = []
+    for item in active_kits(document, None, None):
+        found.append(str(item.kit.folder))
+        found += [f"{item.kit.folder / entry.rstrip('/')}//" for entry in item.kit.carry
+                  if (item.kit.folder / entry.rstrip("/")).is_dir()]
+    return list(dict.fromkeys(found))
+
+
+def tex_search_env(document_directory: Path, pandoc_cwd: Path, document: Path | None = None) -> dict[str, str] | None:
     """TEXINPUTS for the pdf-engine subprocess, so a raw LaTeX command with a
     relative path still resolves against the document's own directory even
     when pandoc_cwd points elsewhere (see resource_path_option's docstring
@@ -1897,7 +1912,8 @@ def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str]
     common case with no metadata/ subfolder or out-of-tree -y in play,
     where nothing is broken and nothing needs fixing.
     """
-    if document_directory == pandoc_cwd and not EMBEDDED_RESOURCE_DIRS:
+    kit_dirs = kit_search_folders(document)
+    if document_directory == pandoc_cwd and not EMBEDDED_RESOURCE_DIRS and not kit_dirs:
         return None
     env = os.environ.copy()
     if document_directory != pandoc_cwd:
@@ -1908,6 +1924,9 @@ def tex_search_env(document_directory: Path, pandoc_cwd: Path) -> dict[str, str]
                             + os.pathsep + env.get("BIBINPUTS", ""))
         env["TEXINPUTS"] = (((env.get("TEXINPUTS") or ".").rstrip(os.pathsep)) + os.pathsep
                             + os.pathsep.join(str(item) for item in EMBEDDED_RESOURCE_DIRS) + os.pathsep)
+    if kit_dirs:                                              # a kit works from its folder, with no install into the TeX tree
+        for name in ("TEXINPUTS", "BIBINPUTS"):
+            env[name] = (((env.get(name) or ".").rstrip(os.pathsep)) + os.pathsep + os.pathsep.join(kit_dirs) + os.pathsep)
     return env
 
 
@@ -8595,7 +8614,7 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
         note("OFFICE", f"{md_path}: drawing {len(todo)} LaTeX fragment(s) with {engines[0]}"
                        f" ({len(latex_items) - len(todo)} cached)")
         pandoc_work = pandoc_cwd
-        tex_env = tex_search_env(md_path.parent, pandoc_work)
+        tex_env = tex_search_env(md_path.parent, pandoc_work, md_path)
         work = scratch / "fragments"
         work.mkdir(exist_ok=True)
 
@@ -21146,7 +21165,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
             tex_path.write_text(text, encoding="utf-8")
             try:
                 last_run["done"] = subprocess.run(command, cwd=pandoc_cwd,
-                                                  env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd) or {})},
+                                                  env={**os.environ, **(tex_search_env(md_path.parent, pandoc_cwd, md_path) or {})},
                                                   capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             except (OSError, subprocess.SubprocessError) as error:
                 vprint(verbose, f"LABELS    the draft pass could not run ({error}); the scan alone is used")
@@ -22835,7 +22854,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     else:
                         log_cmd(cmd, pandoc_cwd, verbose)
                         result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
-                                                env=tex_search_env(md_path.parent, pandoc_cwd) if flat_markdown else None)
+                                                env=tex_search_env(md_path.parent, pandoc_cwd, md_path) if flat_markdown else None)
                     ascii_problem = (ascii_finish(output, Path(ascii_scratch.name), ascii_missing_mode, md_path)
                                      if ascii_scratch is not None and result.returncode == 0 else None)
                     if ansi_json is not None and result.returncode == 0:
@@ -23101,7 +23120,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     def run_pandoc(command: list[str], target: Path):
                         log_cmd(command, pandoc_cwd, verbose)
                         return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
-                                              env=tex_search_env(md_path.parent, pandoc_cwd))
+                                              env=tex_search_env(md_path.parent, pandoc_cwd, md_path))
                     return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose)
 
                 first_font = mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
@@ -26425,7 +26444,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         if not built[1]:
             return built
         pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
-        tex_env = tex_search_env(md_path.parent, pandoc_cwd)
+        tex_env = tex_search_env(md_path.parent, pandoc_cwd, md_path)
         plot_dir = None
         aliases: dict[str, list[str]] = {}
         preamble_text = ""
@@ -28590,7 +28609,7 @@ def run_main() -> None:
                         def run_report_pandoc(command: list[str], target: Path):
                             log_cmd(command, pandoc_cwd, args.verbose)
                             return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
-                                                  env=tex_search_env(files[0].parent, pandoc_cwd))
+                                                  env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))
                         report_page = lambda: (browser_page_css(files[0], metadata_files, variables) if engine in BROWSER_ENGINES
                                              else calibre_page_options(files[0], metadata_files, variables))
                         if engine == "calibre" or engine in BROWSER_ENGINES or (engine in ("typst", "weasyprint") and office_fallback_wanted(
