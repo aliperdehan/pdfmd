@@ -156,7 +156,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "engine": "options.pdf-engine", "pdf-engine": "options.pdf-engine",
     "fallback": "options.fallback", "missing": "options.missing",
     "header": "options.header", "footer": "options.footer",
-    "smiles.engine": "options.smiles.engine", "smiles.format": "options.smiles.format", "smiles.office-format": "options.smiles.office-format",
+    "smiles.engine": "options.smiles.engine", "smiles.format": "options.smiles.format", "smiles.office-format": "options.smiles.office-format", "smiles.palette": "options.smiles.palette",
     "smiles.cell-width": "options.smiles.cell-width", "smiles.cell-height": "options.smiles.cell-height", "smiles.per-row": "options.smiles.per-row",
     "smiles.bond-length": "options.smiles.bond-length", "smiles.dpi": "options.smiles.dpi",
     "gfm.scripts": "options.gfm.scripts", "gfm.math": "options.gfm.math", "gfm.title": "options.gfm.title",

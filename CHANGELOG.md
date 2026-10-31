@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.43 — 2026-10-31
+
+Pre-edit state: commit `c32ad4b`. Still under 3.31. Entry 3ec (the author's answer: "rdkit's colouring is a fun feature, so keep it on"; first said black by default, then corrected to colour by default).
+
+The atom colours of a structure are a setting.
+
+- `palette` (`color`, `bw`; `pdfmd-options.smiles.palette`, a `palette=` attribute on a block, a `--setup` row under Chemical structures, a folder setting): `color` is RDKit's own colouring (O red, N blue, S yellow...) and the default; `bw` draws every atom black, as a chemfig drawing is. The palette is part of the picture's cache key, so changing it draws a new picture and never reuses the other. (Chemfig can colour with `\color` too, but looks worse: not built.)
+- Tests: `tests/test_smiles.py`.
+
 ## v3.31.42b — 2026-10-31
 
 Pre-edit state: commit `bbce97f`. No shipped code changes (a formula, a workflow, a script, the README, a test), so no version bump. Entry 3ed (the author: no separate repositories; the tap moves here).

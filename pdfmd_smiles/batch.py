@@ -94,7 +94,7 @@ def draw_one(item: dict, base: dict, cache: Path, target: str) -> dict:
     key = hashlib.sha1(json.dumps({"v": VERSION, "engine": "rdkit", "engine-version": rdkit.__version__, "kind": kind,
                                    "molecules": molecules, "format": fmt, "cell": [settings["cell-width"], settings["cell-height"]],
                                    "per-row": settings["per-row"], "dpi": settings["dpi"],
-                                   "bond-length": settings["bond-length"]},
+                                   "bond-length": settings["bond-length"], "palette": settings["palette"]},
                                   sort_keys=True).encode("utf-8")).hexdigest()[:24]
     count = len(molecules)
     columns = min(count, settings["per-row"])
@@ -115,6 +115,8 @@ def draw_one(item: dict, base: dict, cache: Path, target: str) -> dict:
         drawer = rdMolDraw2D.MolDraw2DSVG(width, height, cell_w, cell_h)
     drawer.drawOptions().clearBackground = False
     drawer.drawOptions().fixedBondLength = settings["bond-length"] * (settings["dpi"] / 96.0 if fmt == "png" else 1)
+    if settings["palette"] == "bw":
+        drawer.drawOptions().useBWAtomPalette()                  # RDKit's own atom colours are the `color` palette (the default)
     drawer.DrawMolecules(mols, legends=legends)
     drawer.FinishDrawing()
     data = drawer.GetDrawingText()

@@ -115,6 +115,16 @@ class Drawing(unittest.TestCase):
         self.assertIn(self.ask([{"text": ASPIRIN, "attributes": {}}], target="tex")[0]["format"],
                       ("pdf", "png") if shutil.which("rsvg-convert") is None else ("pdf",))
 
+    def test_the_palette_is_colour_unless_black_and_white_is_asked_for(self):
+        def svg(**attributes):
+            return Path(self.ask([{"text": "C[N+](=O)[O-]", "attributes": attributes}])[0]["file"]).read_text(encoding="utf-8").upper()
+        coloured, plain = svg(), svg(palette="bw")
+        self.assertIn("#FF0000", coloured)                    # the red of an oxygen
+        self.assertNotIn("#FF0000", plain)
+        self.assertEqual(svg(palette="color"), coloured)
+        with self.assertRaises(pdfmd_smiles.SmilesError):
+            pdfmd_smiles.resolve({"palette": "rainbow"})
+
     def test_one_line_one_structure_laid_in_rows(self):
         answer = self.ask([{"text": f"{ASPIRIN}\nCCO\nCCN\nCCC\n", "attributes": {"columns": "2"}}])[0]
         self.assertEqual((answer["count"], answer["width"], answer["height"]), (4, 500, 400))

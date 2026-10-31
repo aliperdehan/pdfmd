@@ -9,7 +9,7 @@
 -- with `caption="..."` it is a figure (`{#fig:id}` works with pandoc-crossref). The body is one structure per line (a name after
 -- the SMILES is written under it), or a molfile / SD file / Tripos mol2 / InChI (`kind=` says which; it is read from the text or
 -- the file's extension otherwise), or `file="x.mol"` names a file beside the document. Block attributes are the settings of
--- `pdfmd-options.smiles` (engine, format, office-format, cell-width, cell-height, columns, dpi) and `width=`.
+-- `pdfmd-options.smiles` (engine, format, office-format, palette, cell-width, cell-height, columns, bond-length, dpi) and `width=`.
 --
 -- Every block of a document is drawn by ONE call of `python3 pdfmd_smiles` (RDKit is imported once). Where the drawing cannot be
 -- done (RDKit missing, a structure that does not read) the block stays as it is, with one warning.

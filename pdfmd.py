@@ -1054,7 +1054,7 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     beside the document. It is drawn with RDKit (pdfmd_smiles; one call per document, pictures kept by content, engine and
     settings) as a PDF for LaTeX, an SVG for HTML and Typst, a PNG for Word and OpenDocument (`office-format: svg` for SVG), an
     SVG beside flat Markdown, a figure when it has a caption (`{#fig:id}` works with pandoc-crossref). The settings are
-    `pdfmd-options.smiles` (engine, format, office-format, cell-width, cell-height, per-row, bond-length, dpi), each also an
+    `pdfmd-options.smiles` (engine, format, office-format, palette, cell-width, cell-height, per-row, bond-length, dpi), each also an
     attribute of the block; `--no-auto smiles` leaves the blocks as code. Chemfig and Indigo as engines are to follow.
 
     `pdfmd --init [TEMPLATE] [NAME]` (v3.26.17) starts a document from a template (pdfmd_templates: article, report, notes,
@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.42"
+PDFMD_VERSION = "3.31.43"
 import argparse
 import atexit
 import csv

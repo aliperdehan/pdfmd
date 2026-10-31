@@ -19,10 +19,11 @@ VERSION = 1                     # part of every picture's cache key: raise it wh
 
 # `pdfmd-options.smiles` and the attributes of a block (the same names). `columns` is the attribute name of `per-row`.
 DEFAULTS: dict = {"engine": "auto", "format": "auto", "office-format": "png", "cell-width": 250, "cell-height": 200,
-                  "per-row": 3, "dpi": 300, "bond-length": 40}
+                  "per-row": 3, "dpi": 300, "bond-length": 40, "palette": "color"}
 ENGINES = ("auto", "rdkit")
 FORMATS = ("auto", "svg", "png", "pdf")
 OFFICE_FORMATS = ("png", "svg")
+PALETTES = ("color", "bw")
 KINDS = ("auto", "smiles", "mol", "mol2", "inchi")
 NUMBERS = ("cell-width", "cell-height", "per-row", "dpi", "bond-length")
 ALIASES = {"columns": "per-row", "per_row": "per-row", "cell_width": "cell-width", "cell_height": "cell-height",
@@ -57,7 +58,7 @@ def normalise(options: dict | None, where: str) -> dict:
             chosen[key] = number
         else:
             word = str(value).strip().casefold()
-            allowed = {"engine": ENGINES, "format": FORMATS, "office-format": OFFICE_FORMATS}[key]
+            allowed = {"engine": ENGINES, "format": FORMATS, "office-format": OFFICE_FORMATS, "palette": PALETTES}[key]
             if word not in allowed:
                 raise SmilesError(f"{where}: {key} {value!r}: choose one of {', '.join(allowed)}")
             chosen[key] = word
