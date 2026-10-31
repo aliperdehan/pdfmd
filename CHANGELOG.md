@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.31.22 — 2026-10-31
+
+Pre-edit state: commit `a2a987e`. Still under 3.31.
+
+A picture target with more than one page no longer scatters `NAME-1.png`, `NAME-2.png` beside the document: one page is `NAME.png` beside it, several go into a folder `NAME/` as `001.png`, `002.png` ... (zero-padded to at least three digits, wider for a thousand pages, so they sort). `-o a.png` with several pages gives the folder `a/`. The author's wish (3dv).
+
+- Test: `tests/test_crop.py` (`test_png_without_crop_is_the_whole_page_one_file_per_page`).
+
 ## v3.31.21 — 2026-10-31
 
 Pre-edit state: commit `27c28e8`. Still under 3.31.

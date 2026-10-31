@@ -26,14 +26,17 @@ def _pages(pdf: Path) -> int:
 
 
 def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI) -> list[Path]:
-    """Draw every page of `pdf` as `kind` ("png" or "svg"). One page is written to `target`; several to `target` with
-    `-1`, `-2`... before the suffix. Returns the files written. Raises CropError."""
+    """Draw every page of `pdf` as `kind` ("png" or "svg"). One page is written to `target`; several go into a folder
+    named like `target` without its suffix, as `001.png`, `002.png`... (zero-padded so they sort). Returns the files
+    written. Raises CropError."""
     if kind not in ("png", "svg"):
         raise CropError(f"cannot draw a PDF as {kind}: png and svg only")
     if dpi <= 0:
         raise CropError("--image-dpi takes a number above 0")
     count = _pages(pdf)
-    names = [target] if count == 1 else [target.with_name(f"{target.stem}-{number}{target.suffix}") for number in range(1, count + 1)]
+    width = max(3, len(str(count)))
+    folder_of_pages = target.with_suffix("")
+    names = [target] if count == 1 else [folder_of_pages / f"{number:0{width}d}{target.suffix}" for number in range(1, count + 1)]
     with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
         folder = Path(scratch)
         if kind == "png":
@@ -63,6 +66,7 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI) -> li
             raise CropError(f"could not draw {pdf.name} as {kind}: {detail}")
         for source, name in zip(made, names):
             try:
+                name.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(source), str(name))
             except OSError as error:
                 raise CropError(f"could not write {name}: {error}") from error

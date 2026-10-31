@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.21"
+PDFMD_VERSION = "3.31.22"
 import argparse
 import atexit
 import csv
@@ -7573,7 +7573,7 @@ def picture_command(args) -> int:
                 else:
                     written = pictures(pdf, destination, target, dpi)
                     if len(written) > 1:
-                        print(f"NOTE  {len(written)} pages: one {target} each ({written[0].name} ... {written[-1].name})", file=sys.stderr)
+                        print(f"NOTE  {len(written)} pages: one {target} each, in {display_path(written[0].parent)}/", file=sys.stderr)
             except CropError as error:
                 print(f"ERROR  {display_path(source)}: {error}", file=sys.stderr)
                 status = 1

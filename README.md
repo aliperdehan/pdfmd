@@ -580,8 +580,9 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 - **Targets.** `--to pdf` (the default), `png` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by Ghostscript on a
   transparent background at `--image-dpi` (default 300); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
   without `--crop` draws the whole page: a crop is asked for, never implied.
-- **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page: `NAME.png` for a
-  one-page result, `NAME-1.png`, `NAME-2.png` ... for several (with a NOTE); `--crop-page 1` gives the plain name.
+- **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page: `NAME.png` beside the
+  document for a one-page result, a folder `NAME/` with `001.png`, `002.png` ... for several (with a NOTE); `--crop-page 1` gives
+  the plain name. `-o a.png` with several pages gives the folder `a/`.
 - **Names.** A Markdown source gives `NAME.pdf|png|svg` beside it (`-d`: in the current folder); a PDF source gives
   `NAME-crop.pdf`, so the source is never overwritten unless `-o` names it. The intermediate PDF of a Markdown source is built
   with your other options (`-e`, `-y` ...) but with no build stamp or backup.

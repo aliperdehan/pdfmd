@@ -185,8 +185,9 @@ class Pictures(unittest.TestCase):
     def test_png_without_crop_is_the_whole_page_one_file_per_page(self):
         done = self.run_pdfmd("formula.pdf", "--to", "png", "--image-dpi", "72")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(png_size(self.dir / "formula-1.png"), (200, 100))
-        self.assertTrue((self.dir / "formula-2.png").is_file())
+        self.assertEqual(png_size(self.dir / "formula" / "001.png"), (200, 100))
+        self.assertTrue((self.dir / "formula" / "002.png").is_file())
+        self.assertFalse((self.dir / "formula.png").exists())
         self.assertIn("2 pages", done.stderr)
 
     def test_png_with_crop_is_the_ink_and_one_page_gets_the_plain_name(self):
