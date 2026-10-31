@@ -57,6 +57,17 @@ wait for an answer before any code.
 - [ ] Kits C4: attach-source and bundle carry the kit's parts, its name and version, the resolved kit selection and the folder layers in force (`.pdfmd/` restored into the report's folder, merged with its own; `ATTACH_FORMAT` 3)
 - [ ] nulabreport side, after its Windows maintenance: its `.kit`, course codes as mode aliases, starters without `metadata/` (which stays supported), a course-level `.pdfmd/` in `220/` and `LR9-10`, the manual updated; real builds of copies of 220/LR6 and LR9-10; smoke test
 - [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; fetch, `--install kit`, the trust prompt; Typst, HTML, Word parts; `--kit new|check|pack`; the kit guide [3du, 3dg]
+- [ ] nulabreport at three levels (bare `.sty`, a pandoc defaults file plus the Lua filter mapping the front-matter keys, a pdfmd kit); no custom `.latex`; spike first (does `-H` replace a filter's `header-includes`?), then bare-pandoc and bare-`.sty` lanes in its smoke test [3dw, 3dk, 3du]
+
+## Pictures and crop, carried inside 3.31 [3dv]
+
+- [ ] The post-build step: crop, layout and pictures read `pdfmd-options` at every level (front matter, metadata files, folder layers, config, `--setup` rows, command line) and work on the real output PDF; replaces 3.31.21's re-run of pdfmd in a scratch folder; `default-output` takes a list
+- [ ] Layouts `long` (pages stacked into one tall page, any engine; a seamless tall page via Typst `height: auto`, LaTeX to 16383 pt) and `grid` (fewest columns*width + rows*height), with gap and background, with and without `--crop`
+- [ ] Tools: a fallback chain for the ink box, PNG, SVG (gs, mutool, pdftocairo, pdftoppm, sips, pypdfium2), a tool-path setting, `--doctor` lines; `--install` and `--doctor` bring them from pip, brew, winget (Ghostscript on Windows: `gswin64c`, the installer)
+- [ ] A page-numbers setting (`pdfmd-options: {page-numbers: off}`, a flag and a `--setup` row), written per engine without replacing the document's `header-includes` (LaTeX `\pagestyle{empty}`, Typst `numbering: none`, the built-in renderer, Word); `--crop` of a Markdown source then builds without them
+- [ ] `--image-background`; webp (Pillow, pypdfium2 or ImageMagick); `--to pdf,docx` for formats that are not pictures (a loop of runs)
+- [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`pdfmd_office/fragments.py` has the pieces)
+- [ ] eqpop calls `pdfmd --crop`, its own AppKit crop stays as the fallback (eqpop repository)
 
 ## Other tools' command lines
 
