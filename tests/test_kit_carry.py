@@ -96,7 +96,7 @@ class Carry(unittest.TestCase):
         self.assertEqual(manifest["kits"], [{"name": "lab", "version": "2.5.1", "mode": "qca", "package": "labstyle",
                                              "carried": ["badge.png", "chemicals.tex", "labstyle.sty", "logo.pdf"]}])
         self.assertIn("`carry: missing.tex` names nothing", self.notes)
-        self.assertEqual(manifest["format"], pdfmd.ATTACH_FORMAT)
+        self.assertEqual(manifest["format"], pdfmd.ATTACH_FORMAT_PLAIN)
 
     def test_a_name_the_documents_folder_holds_is_left_to_the_folder(self):
         _, _, manifest = self.attach(self.report(files=[("chemicals.tex", "\\newcommand{\\chem}{mine}\n")]))

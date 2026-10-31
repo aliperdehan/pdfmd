@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.36 — 2026-10-31
+
+Pre-edit state: commit `e9c09d3`. Still under 3.31. `[kits]`, C4 of entry 3du (the folder layers' part).
+
+An attached source carries the folder settings the build used, and `--restore` writes them back.
+
+- The manifest gets `layers: {options: {...}}`: the `options:` of the `.pdfmd/config.yaml` files above the report, nearest layer winning, flattened into one mapping, without `kit` and `kit-stack` (what a kit wrote is in the source already, and a restored `kit:` would name a kit the machine may not have). `--restore` writes it to `.pdfmd/config.yaml` of the restored folder with a comment line, prints a `FOLDER` line, and leaves a `.pdfmd/config.yaml` that is already there as it is, with a NOTE of what the build used besides. The folders' `.pdfmd/metadata.yaml` files already travel as metadata files; the folder's own value wins, as for every restore.
+- **Attachment format 3, but only for a source with layers.** `ATTACH_FORMAT` (what this pdfmd reads) is 3 and `ATTACH_FORMAT_PLAIN` (what it writes otherwise) stays 2, so a PDF is not refused by an older pdfmd unless it needs the layers, as a refusal is better than restoring a report that builds differently.
+- README: the kit's carrying paragraph says `--embed-metadata` holds the preamble only (3.31.35 said it held the parts).
+- Checked on a copy of a real report: a folder layer with `kit: nulabreport:qca` and `bundle-max-mb: 50` is attached, restored, and the restored folder holds `.pdfmd/config.yaml` with the second only.
+- Tests: `tests/test_attach_layers.py`, `tests/test_attach_format.py`.
+
 ## v3.31.35 — 2026-10-31
 
 Pre-edit state: commit `6ab64f0`. Still under 3.31. `[kits]`, C4 of entry 3du (the kit's part).

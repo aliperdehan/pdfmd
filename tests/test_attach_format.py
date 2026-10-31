@@ -1,4 +1,5 @@
-"""v3.28.45: the manifest of an attached source is format 2; a pdfmd that reads up to 1 refuses it, this one reads 1 and 2."""
+"""v3.28.45: the manifest of an attached source is format 2; a pdfmd that reads up to 1 refuses it, this one reads 1 and 2.
+v3.31.36: format 3 is written only for a source with folder layers (a plain one stays 2); this one reads up to 3."""
 
 from __future__ import annotations
 
@@ -43,23 +44,23 @@ class Format(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             return pdfmd.restore_attachments_in_place(self.pdf, attachments, self.root / out, False)
 
-    def test_a_new_manifest_is_format_2(self):
-        self.assertEqual(pdfmd.ATTACH_FORMAT, 2)
+    def test_a_plain_manifest_is_format_2_and_this_pdfmd_reads_up_to_3(self):
+        self.assertEqual((pdfmd.ATTACH_FORMAT, pdfmd.ATTACH_FORMAT_PLAIN), (3, 2))
         self.assertEqual(self.manifest["format"], 2)
 
-    def test_format_1_and_2_both_restore(self):
-        for number in (1, 2):
+    def test_format_1_2_and_3_all_restore(self):
+        for number in (1, 2, 3):
             status = self.restore({**self.manifest, "format": number}, f"out{number}")
             self.assertEqual(status, 0)
             self.assertIn("Text.", (self.root / f"out{number}" / "doc.md").read_text(encoding="utf-8"))
 
     def test_a_newer_format_is_refused_with_the_versions(self):
         with self.assertRaises(SystemExit) as raised:
-            self.restore({**self.manifest, "format": 3, "pdfmd": "9.9.9"}, "out3")
+            self.restore({**self.manifest, "format": 4, "pdfmd": "9.9.9"}, "out4")
         text = str(raised.exception)
-        for word in ("newer pdfmd", "pdfmd 9.9.9", "format 3", f"reads up to {pdfmd.ATTACH_FORMAT}", "upgrade pdfmd"):
+        for word in ("newer pdfmd", "pdfmd 9.9.9", "format 4", f"reads up to {pdfmd.ATTACH_FORMAT}", "upgrade pdfmd"):
             self.assertIn(word, text)
-        self.assertFalse((self.root / "out3").exists())
+        self.assertFalse((self.root / "out4").exists())
 
 
 if __name__ == "__main__":

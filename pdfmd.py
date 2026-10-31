@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.35"
+PDFMD_VERSION = "3.31.36"
 import argparse
 import atexit
 import csv
@@ -7221,6 +7221,20 @@ def kit_embedded_preambles(document: Path, metadata_files: list[Path], preamble_
     settled = [kit_cache_tex(f"kit-{path.stem}-", text, 12) if text != read_text_best_effort(path) else path
                for path, text in zip(files, texts)]
     return [kit_cache_tex(KIT_HEADER_PREFIX, body, 16), *settled]
+
+
+def folder_options_in_force(md_path: Path) -> dict:
+    """The `options:` of the folder settings (`.pdfmd/config.yaml`) above ``md_path``, nearest layer winning, as one mapping: what an
+    attached source takes along so a restored report builds with the same settings. Left out: `kit` and `kit-stack` (what a kit
+    wrote is in the source itself), and what a folder cannot set anyway."""
+    try:
+        layers = folder_layer_files(str(md_path.resolve().parent))
+    except OSError:
+        return {}
+    merged: dict = {}
+    for path, options in reversed(layers):
+        merged = merge_options(merged, folder_options_safe(path, options))
+    return {key: value for key, value in merged.items() if key not in ("kit", "kit-stack")}
 
 
 def kit_carried_files(kits: list, base: Path, limit: float) -> tuple[dict[str, Path], list[dict], list[str]]:
@@ -23214,8 +23228,12 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
 # wrote, comments and drafts included.
 # The manifest's `format`: 1 = the layout of v3.22 to v3.28.37 (files as attachments); 2 = v3.28.38 and later (the chain of
 # folders, text files as blocks of the source with line markers, `eol: crlf`, `..` files). A pdfmd that reads up to 1 refuses a
-# 2 with "upgrade pdfmd" instead of restoring half of it; this one reads both.
-ATTACH_FORMAT = 2
+# 2 with "upgrade pdfmd" instead of restoring half of it; this one reads both. 3 = v3.31.36: the manifest holds `layers`, the
+# options of the folder settings the build used, restored to `.pdfmd/config.yaml`; a pdfmd that does not know them would
+# restore a report that builds differently. It is written ONLY for a source that has layers: every other manifest stays 2,
+# so a PDF is not refused by an older pdfmd for nothing.
+ATTACH_FORMAT = 3
+ATTACH_FORMAT_PLAIN = 2
 ATTACH_MANIFEST = "pdfmd-manifest.json"
 ATTACH_SOURCE = "pdfmd-source.md"
 ATTACH_KEYS = ("attach-source", "embed-source")
@@ -23737,7 +23755,7 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "EmbedPlan | Non
             front_text = found_front.group(0) if found_front else None
         except (OSError, UnicodeDecodeError):
             pass
-    return {"format": ATTACH_FORMAT, "pdfmd": PDFMD_VERSION, "kind": "source",
+    return {"format": ATTACH_FORMAT_PLAIN, "pdfmd": PDFMD_VERSION, "kind": "source",
             "mode": "report" if report else "document",
             "parts": (parts_setting(md_path, list(plan.metadata_files) if plan else []) if parts and not report else None),
             "name": relative_posix(base, md_path), "source": ATTACH_SOURCE, "sha256": sha256_text(merged),
@@ -23916,6 +23934,10 @@ def requirement_lines(manifest: dict) -> list[str]:
                      + (f" (mode {kit['mode']})" if kit.get("mode") else "")
                      + (f": its {len(kit['carried'])} parts are stored" if kit.get("carried") else "")
                      + "; what it wrote is in the source, so a rebuild needs no kit")
+    layers = (manifest.get("layers") or {}).get("options")
+    if layers:
+        lines.append(f"FOLDER    settings the build used: {', '.join(str(key) for key in layers)}"
+                     f"; written to {FOLDER_DIR}/config.yaml of the restored folder")
     if needs.get("fonts"):
         lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
     made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
@@ -24081,6 +24103,10 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     manifest["requirements"] = attachment_requirements(merged, deps, set(extras), output if is_pdf else None)
     if kit_record:
         manifest["kits"] = kit_record
+    layers = folder_options_in_force(md_path) if yaml is not None else {}
+    if layers:
+        manifest["layers"] = {"options": layers}
+        manifest["format"] = ATTACH_FORMAT
     attachments = {
         ATTACH_SOURCE: merged.encode("utf-8"),
         ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
@@ -25112,6 +25138,20 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         print(f"IMAGE     {name} comes back as {new} (the PDF holds the drawing, not the original file)")
     if renamed:
         files = {name: restored_image_paths(name, content, renamed) for name, content in files.items()}
+    layers = (manifest.get("layers") or {}).get("options")
+    if layers and not single and yaml is not None:
+        settings = f"{FOLDER_DIR}/config.yaml"
+        if (target / settings).exists():
+            own = folder_file_data(target / settings) or {}
+            own = own.get("options") if isinstance(own.get("options"), dict) else {}
+            differ = [f"{key}: {value}" for key, value in layers.items() if own.get(key) != value]
+            if differ:
+                print(f"NOTE  {settings} is already in {display_path(target)} and is kept as it is; the build also used "
+                      f"{'; '.join(differ)}")
+        else:
+            files[settings] = ("# written by pdfmd --restore: the folder settings (the options of the .pdfmd/config.yaml files above\n"
+                               "# the report, nearest first) the PDF was built with\n"
+                               + yaml.safe_dump({"options": layers}, allow_unicode=True, sort_keys=False))
     clashes = [item for item in files if (target / item).exists()]
     if clashes:
         raise SystemExit(f"{display_path(target)} already holds {', '.join(clashes)}; nothing was written "

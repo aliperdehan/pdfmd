@@ -2360,8 +2360,11 @@ until it says `enabled: true`, as in the global file. A build lists the folder f
 (`--verbose`: `AUTO SETTINGS`). A folder's options cannot name code (a Lua filter or a preamble is read from the document's own
 front matter only, and a folder's `office: {profile: ...}`, a Lua file, is ignored with a `WARN`), a `.pdfmd/config.yaml` owned by another user (a shared `/tmp`) is not read, and a path in it (`css: house.css`)
 is relative to the document, as everywhere, not to the folder file (Pandoc takes a path in the folder's `metadata.yaml` from the
-`.pdfmd` folder, so the setup does not offer those). Carrying a folder's files in an attached source or a bundle is not done yet:
-a restored PDF builds with the settings of the folder it is restored into.
+`.pdfmd` folder, so the setup does not offer those). An attached source carries the `options:` of the folder settings a build
+used (the nearest layer winning, flattened into one mapping, without `kit` and `kit-stack`: what a kit wrote is in the source
+itself), and `pdfmd --restore` writes them to `.pdfmd/config.yaml` of the restored folder; a `.pdfmd/config.yaml` that is already
+there stays as it is and a NOTE lists what the build used besides. The folders' `.pdfmd/metadata.yaml` files travel as the
+metadata files they are. Such a manifest is attachment format 3 (every other stays 2, so an older pdfmd still reads it).
 
 ```yaml
 translit: [greek, hangul]
@@ -2540,8 +2543,8 @@ mode of the same kit is a contradiction, where a `preamble.tex` found in the fol
 stays after the kit's lines. Only a whole line is rewritten: the package inside a list or behind a macro stops the build and names
 the line. `--verbose` shows the quiet outcomes (`KIT-SAME`, `KIT-MERGE`).
 
-**A kit travels with the source.** `--attach-source`, `--keep-source`, `--bundle` and `--embed-metadata` hold what the kit wrote: its
-preamble goes into the source first (with what your own LaTeX said twice settled in it, as in the build), its defaults and Lua
+**A kit travels with the source.** `--attach-source`, `--keep-source` and `--bundle` hold what the kit wrote (`--embed-metadata`, its
+preamble only): its preamble goes into the source first (with what your own LaTeX said twice settled in it, as in the build), its defaults and Lua
 filter go in as the metadata and filter files they already are, and the files its `carry:` list names are stored beside the
 document: a named file keeps its path, a named folder is carried by its files, which land beside the document (TeX looks there
 first, so a package that finds its logo by a bare name finds it again). A file the document's folder already holds is left to the
