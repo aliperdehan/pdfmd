@@ -132,6 +132,7 @@ AUTO_HELP = {
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
     "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
+    "kit": "a package's pdfmd helper file from a kit", "kpsewhich": "a package's pdfmd helper file from the installed copy",
 }
 
 

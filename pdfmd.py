@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.28"
+PDFMD_VERSION = "3.31.29"
 import argparse
 import atexit
 import csv
@@ -1767,7 +1767,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures", "remotecsl", "mathfont", "css", "mathjax",
+    "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -6691,12 +6691,13 @@ def package_places(folder: Path) -> list[Path]:
     return [folder, folder / "office", folder / "pdfmd"]
 
 
-def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
-    """{name: path} of the files TeX finds, one kpsewhich call for all of them (a missing name is left out)."""
+def kpsewhich_locate(names: list[str], cwd: str | None = None) -> dict[str, Path]:
+    """{name: path} of the files TeX finds, one kpsewhich call for all of them (a missing name is left out). TeX looks in the
+    current folder first; `cwd` runs the search from another one."""
     kpsewhich = which("kpsewhich")
     if not kpsewhich or not names:
         return {}
-    done = run_probe([kpsewhich, *names])
+    done = run_probe([kpsewhich, *names], cwd=cwd)
     found: dict[str, Path] = {}
     for line in (done.stdout if done else "").splitlines():
         if line.strip():
@@ -6704,12 +6705,8 @@ def kpsewhich_locate(names: list[str]) -> dict[str, Path]:
     return found
 
 
-def package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
-    """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
-    (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
-    (front-matter key -> the macro it fills), `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`), `lua:` (Lua
-    filters besides `<package>.lua`), `draft-skip:` (`commands:`, `spans:` a draft pass need not draw) and `picture-cache:`
-    (the names the package uses for the picture cache's protocol)."""
+def read_package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
+    """`<package>-pdfmd.yaml` (or a plain `pdfmd.yaml`) in this one folder or its `pdfmd/` folder; (mapping, path) or None."""
     if yaml is None:
         return None
     for candidate in (folder / f"{package}-pdfmd.yaml", folder / "pdfmd" / f"{package}-pdfmd.yaml", folder / "pdfmd" / "pdfmd.yaml"):
@@ -6719,6 +6716,54 @@ def package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
             except (OSError, yaml.YAMLError):
                 return None
             return (data, candidate) if isinstance(data, dict) else None
+    return None
+
+
+def kit_package_folders(package: str) -> list[Path]:
+    """The folders of the selected kits that ship `<package>.sty`. Kits are not built yet (entry 3du, C2 fills this in), so
+    the answer is none; the helper search below already asks, in its place."""
+    return []
+
+
+KPSEWHICH_FOLDERS: dict[tuple, Path | None] = {}   # (package, the variables that steer TeX's search) -> its folder
+
+
+def installed_package_folder(package: str) -> Path | None:
+    """The folder of the installed `<package>.sty` that kpsewhich finds (through a symlink to its real folder), or None;
+    one kpsewhich call per package and search path. Asked from an empty folder: from the document's own, TeX would answer
+    with the lone copy this is looked up for."""
+    key = (package, *(os.environ.get(name) for name in ("TEXINPUTS", "TEXMFHOME", "TEXMFLOCAL", "TEXMF")))
+    if key not in KPSEWHICH_FOLDERS:
+        with tempfile.TemporaryDirectory(prefix="pdfmd-kpse-") as empty:
+            located = kpsewhich_locate([package + ".sty"], empty).get(package + ".sty")
+        KPSEWHICH_FOLDERS[key] = located.resolve().parent if located else None
+    return KPSEWHICH_FOLDERS[key]
+
+
+def package_helper(folder: Path, package: str, no_auto: list[str] | None = None) -> tuple[dict, Path] | None:
+    """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
+    (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
+    (front-matter key -> the macro it fills), `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`), `lua:` (Lua
+    filters besides `<package>.lua`), `draft-skip:` (`commands:`, `spans:` a draft pass need not draw) and `picture-cache:`
+    (the names the package uses for the picture cache's protocol).
+
+    The `.sty` that wins may be a lone copy beside the document (TeX's own order), which carries no helper file, and its
+    `latex-keys:` would be lost without a word (v3.31.29): the same file is then looked for beside the `.sty` of a selected
+    kit, then of the installed copy kpsewhich finds; the path returned is the one that gave it. `--no-auto kit` and
+    `--no-auto kpsewhich` (bare `--no-auto` too) take those places off."""
+    found = read_package_helper(folder, package)
+    if found or yaml is None:
+        return found
+    others: list[Path] = [] if auto_disabled(no_auto, "kit") else kit_package_folders(package)
+    if not auto_disabled(no_auto, "kpsewhich"):
+        installed = installed_package_folder(package)
+        if installed:
+            others.append(installed)
+    for other in others:
+        if other != folder.resolve():
+            found = read_package_helper(other, package)
+            if found:
+                return found
     return None
 
 
@@ -6783,7 +6828,7 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
     return found
 
 
-def office_defaults_sources(folder: Path, package: str) -> list[tuple[dict, Path]]:
+def office_defaults_sources(folder: Path, package: str, no_auto: list[str] | None = None) -> list[tuple[dict, Path]]:
     """(mapping, its file) for each place a package keeps defaults of a Word/ODT build, best first:
     `<package>-office.yaml` (beside the `.sty`, in `office/` or `pdfmd/`), then the `office:` section of
     `<package>-pdfmd.yaml`."""
@@ -6799,7 +6844,7 @@ def office_defaults_sources(folder: Path, package: str) -> list[tuple[dict, Path
                 data = None
             if isinstance(data, dict):
                 sources.append((data, candidate))
-    helper = package_helper(folder, package)
+    helper = package_helper(folder, package, no_auto)
     if helper and isinstance(helper[0].get("office"), dict):
         sources.append((dict(helper[0]["office"]), helper[1]))
     return sources
@@ -6850,7 +6895,7 @@ def office_options(md_path: Path, metadata_files: list[Path], no_auto: list[str]
     value = first_pdfmd_option(md_path, metadata_files, "office", with_config=False)
     options = dict(value) if isinstance(value, dict) else {}
     for folder, package, chosen in reversed(office_packages(md_path, metadata_files, no_auto)):
-        for data, candidate in office_defaults_sources(folder, package):
+        for data, candidate in office_defaults_sources(folder, package, no_auto):
             # `by-option:` holds what an option of \usepackage[...] adds (orgchem: footer wording...)
             variants = data.pop("by-option", None)
             if isinstance(variants, dict):
@@ -10297,12 +10342,13 @@ def document_header_includes(text: str) -> str | None:
 # \\renewcommand{\\<macro>}{<value>}, appended after the preambles so the preamble can supply a default with \\newcommand.
 # A package says which in `<package>-pdfmd.yaml` beside its .sty (`latex-keys:`); until v3.28.37 one package's own
 # vocabulary was a table here as well, and is gone: pdfmd names no package.
-def package_latex_keys(md_path: Path, metadata_files: list[Path] | None = None) -> dict[str, str]:
+def package_latex_keys(md_path: Path, metadata_files: list[Path] | None = None,
+                       no_auto: list[str] | None = None) -> dict[str, str]:
     """{front-matter key: macro name} the LaTeX packages of the document's preamble (or its metadata's header-includes)
     ask for in their `<package>-pdfmd.yaml` (`latex-keys:`)."""
     keys: dict[str, str] = {}
     for folder, package, _ in office_packages(md_path, metadata_files or [], None):
-        helper = package_helper(folder, package)
+        helper = package_helper(folder, package, no_auto)
         wanted = helper[0].get("latex-keys") if helper else None
         if isinstance(wanted, dict):
             for key, macro in wanted.items():
@@ -10312,10 +10358,11 @@ def package_latex_keys(md_path: Path, metadata_files: list[Path] | None = None) 
     return keys
 
 
-def document_latex_definitions(md_path: Path, metadata_files: list[Path] | None = None) -> str:
+def document_latex_definitions(md_path: Path, metadata_files: list[Path] | None = None,
+                               no_auto: list[str] | None = None) -> str:
     """Return \\renewcommand lines for the front-matter keys of the document's packages."""
     lines = []
-    for key, macro in package_latex_keys(md_path, metadata_files).items():
+    for key, macro in package_latex_keys(md_path, metadata_files, no_auto).items():
         value = frontmatter_value(md_path, key)
         if value:
             lines.append(f"\\renewcommand{{\\{macro}}}{{{value}}}")
@@ -10323,13 +10370,14 @@ def document_latex_definitions(md_path: Path, metadata_files: list[Path] | None 
 
 
 @contextmanager
-def document_header_file(md_path: Path, active: bool, metadata_files: list[Path] | None = None) -> Iterator[Path | None]:
+def document_header_file(md_path: Path, active: bool, metadata_files: list[Path] | None = None,
+                         no_auto: list[str] | None = None) -> Iterator[Path | None]:
     """Yield a temporary .tex holding the document's own preamble additions."""
     if not active:
         yield None
         return
     try:
-        definitions = document_latex_definitions(md_path, metadata_files)
+        definitions = document_latex_definitions(md_path, metadata_files, no_auto)
         includes = document_header_includes(md_path.read_text(encoding="utf-8-sig")) or ""
         if PREAMBLE_END_MARK in includes:
             # An embedded preamble (see EMBED_KINDS): definitions go after it.
@@ -10355,20 +10403,20 @@ def document_header_file(md_path: Path, active: bool, metadata_files: list[Path]
 
 
 
-def package_lua_names(md_path: Path, metadata_files: list[Path]) -> list[str]:
+def package_lua_names(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> list[str]:
     """The Lua filters a document's LaTeX packages bring: `<package>.lua` for each local package its preamble loads, and what
     the package's `<package>-pdfmd.yaml` lists under `lua:` (v3.28.37; before, one package's name was written in pdfmd)."""
     names: list[str] = []
     for folder, package, _ in office_packages(md_path, metadata_files, None):
         listed = [f"{package}.lua"]
-        helper = package_helper(folder, package)
+        helper = package_helper(folder, package, no_auto)
         extra = helper[0].get("lua") if helper else None
         listed += [str(item) for item in ([extra] if isinstance(extra, str) else extra if isinstance(extra, list) else [])]
         names += [name for name in listed if name not in names and "/" not in name and "\\" not in name]
     return names
 
 
-def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
+def find_lua_filters(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> list[Path]:
     """Find Pandoc Lua filters that belong to a document, without guessing.
 
     Only these names are auto-applied: a filter matching the document's own stem
@@ -10379,7 +10427,7 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path]) -> list[Path]:
     """
     directories: list[Path] = accessory_directories(md_path.parent, md_path.stem)
     directories += [metadata.parent for metadata in metadata_files]
-    wanted = (f"{md_path.stem}.lua", *package_lua_names(md_path, metadata_files))
+    wanted = (f"{md_path.stem}.lua", *package_lua_names(md_path, metadata_files, no_auto))
     found: list[Path] = []
     seen: set[Path] = set()
     for directory in directories:
@@ -20034,13 +20082,14 @@ PART_COUNTER_RE = re.compile(r"^\\pdfmd@part\{([^{}]*)\}\{([^{}]*)\}\s*$")
 SEED_LABEL_RE = re.compile(r"^\\newlabel\{([^{}]*)\}(\{.*\})\s*$")
 
 
-def package_draft_skips(md_path: Path, metadata_files: list[Path]) -> tuple[list[str], dict[str, str]]:
+def package_draft_skips(md_path: Path, metadata_files: list[Path],
+                        no_auto: list[str] | None = None) -> tuple[list[str], dict[str, str]]:
     """(commands, spans) the draft pass need not draw: DRAFT_SKIP_COMMANDS and DRAFT_SKIP_SPANS and what the packages the
     document loads add in their `<package>-pdfmd.yaml` (`draft-skip:`); names are letters only."""
     commands = list(DRAFT_SKIP_COMMANDS)
     spans = dict(DRAFT_SKIP_SPANS)
     for folder, package, _ in office_packages(md_path, metadata_files, None):
-        helper = package_helper(folder, package)
+        helper = package_helper(folder, package, no_auto)
         wanted = helper[0].get("draft-skip") if helper else None
         if not isinstance(wanted, dict):
             continue
@@ -20535,7 +20584,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
 
         if quick:
             draft_pass(whole.replace("\\begin{document}",
-                                     draft_skip_text(*package_draft_skips(md_path, metadata_list)) + "\\begin{document}"))
+                                     draft_skip_text(*package_draft_skips(md_path, metadata_list, no_auto)) + "\\begin{document}"))
             problem = draft_skip_problem(scratch / "labels-scan.log", scratch / "labels-scan.aux", whole)
             if problem:
                 vprint(verbose, f"LABELS    the draft pass without the pictures cannot be trusted ({problem}); "
@@ -21612,7 +21661,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     try:
         with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], True) as prepared, \
                 document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text),
-                                         metadata_files) as header_file, \
+                                         metadata_files, no_auto) as header_file, \
                 pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
                 script_fallback([md_path], metadata_files, variables, preamble_files, nativebib_font, None,
                                 no_auto, note) as (fonts_header, fonts_filter):
@@ -21913,7 +21962,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     if reader_reason:
         note("READER", reader_reason)
         reader_notice(md_path, reader_reason)
-    lua_filters = [] if discovery_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files)
+    lua_filters = [] if discovery_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files, no_auto)
     if not auto_disabled(no_auto, "lua"):
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in lua_filters:
@@ -22054,7 +22103,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                        typst_engine=(target_format == "typst"),
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
-                                         and is_tex_target, metadata_files) as header_file, \
+                                         and is_tex_target, metadata_files, no_auto) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file, \
                     (script_fallback([md_path, *parts_inputs], metadata_files, variables, preamble_files or [],
                                      tex_first_font, None, no_auto, note)
@@ -22322,7 +22371,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                        typst_engine=(engine == "typst")) as prepared, \
                     document_header_file(md_path, (bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
-                                         and engine in LATEX_ENGINES, metadata_files) as header_file, \
+                                         and engine in LATEX_ENGINES, metadata_files, no_auto) as header_file, \
                     pdf_metadata_header_file(pdf_meta_snippet_text if engine in LATEX_ENGINES else None) as pdf_meta_file:
                 source, *prepared_metadata = prepared
 
@@ -22583,7 +22632,7 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
         return None
     kinds, lua_mode = resolved
     discovered_lua = ([] if (discovery_disabled(no_auto, "lua") or "lua" not in kinds)
-                      else find_lua_filters(md_path, metadata_files))
+                      else find_lua_filters(md_path, metadata_files, no_auto))
     if not auto_disabled(no_auto, "lua") and "lua" in kinds:
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in discovered_lua:
@@ -26642,7 +26691,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "docstring), papersize (a document's own pagesize: front-matter key, "
                              "auto-translated to Pandoc's real papersize: variable since pagesize: alone "
                              "silently does nothing -- disabling this KIND leaves that typo uncorrected, "
-                             "same as before this existed). An "
+                             "same as before this existed), kit / kpsewhich (a package's "
+                             "<package>-pdfmd.yaml is read from the next place that has it when none sits beside "
+                             "the .sty the document uses: a selected kit that ships the package, then the "
+                             "installed copy; each takes one place off). An "
                              "explicit -y/-H/-f/-V/--from always wins over --no-auto metadata/preamble "
                              "regardless of this flag -- --no-auto only stops pdfmd from filling in or "
                              "discovering what's otherwise unset. Same KIND names work in a document's "
@@ -27680,7 +27732,7 @@ def run_main() -> None:
                                            doc_count=len(files),
                                            drop_embedded_preamble=not is_tex_target) as prepared, \
                         document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
-                                             and is_tex_target, metadata_files) as report_header_file, \
+                                             and is_tex_target, metadata_files, report_no_auto) as report_header_file, \
                         pdf_metadata_header_file(report_pdf_meta_snippet_text) as report_pdf_meta_file, \
                         (script_fallback(list(files), metadata_files, variables, report_preambles,
                                          report_tex_font, None, report_no_auto, report_note)
@@ -27837,7 +27889,7 @@ def run_main() -> None:
                             managed_fonts_css(engine) as report_fonts_css, \
                             document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
                                                             or bool(report_pdf_meta_snippet_text))
-                                                 and engine in LATEX_ENGINES, metadata_files) as report_header_file:
+                                                 and engine in LATEX_ENGINES, metadata_files, report_no_auto) as report_header_file:
                         prepared_files = prepared[:len(files)]
                         prepared_metadata = prepared[len(files):]
                         cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]

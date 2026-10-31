@@ -2111,6 +2111,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 | `texpackages` | `\ce{H2O}` (mhchem) or `\SI{25}{\celsius}`, `\num`, `\qty` (siunitx) in a LaTeX build whose preamble does not load the package | loads it, last in the preamble, unless it is loaded already (your options win), the command is defined some other way, or the package is not installed |
 | `draftpictures` | a part (or section) built alone with `seed-labels: draft` | the draft pass over the whole document does not draw TikZ pictures (pgfplots too), `\chemfig`, chemfig schemes or images: they step no counter. A page reference into what was left out prints `??`; a picture that ends inside a macro makes pdfmd run the pass again with the pictures |
+| `kit`, `kpsewhich` | a package's `.sty` beside the document (or in a kit) with no `<package>-pdfmd.yaml` next to it | the helper file is read from the next place that has it: a selected kit that ships the package, then the installed copy TeX finds; `--no-auto kit` / `--no-auto kpsewhich` take one place off, a bare `--no-auto` both (a lone copy of the `.sty` then loses the package's front-matter keys, such as the experiment number) |
 
 `-v` explains each decision and prints the exact command it runs:
 

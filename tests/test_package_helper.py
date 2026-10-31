@@ -86,6 +86,48 @@ class Helper(unittest.TestCase):
         self.assertIn("\\@ifundefined{chemfig}{}{\\let\\chemfig\\pdfmd@chemfig}", text)
         self.assertNotIn("@@", text)
 
+    # v3.31.29: a lone `.sty` beside the document wins over the installed one (TeX's order) but carries no helper file
+    def lone_copy(self):
+        write(self.root / "thing.sty", "\\ProvidesPackage{thing}\n")
+        # a build runs in the document's folder, where kpsewhich answers with that lone copy
+        here = os.getcwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, here)
+        return write(self.root / "preamble.tex", "\\usepackage{thing}\n")
+
+    def test_a_lone_copy_beside_the_document_reads_the_installed_helper(self):
+        pre = self.lone_copy()
+        self.assertEqual(pdfmd.package_latex_keys(self.md, [pre]), {"performed": "ThingPerformed"})
+        self.assertIn("\\renewcommand{\\ThingPerformed}{2026-01-02}", pdfmd.document_latex_definitions(self.md, [pre]))
+        self.assertIn("extra.lua", pdfmd.package_lua_names(self.md, [pre]))
+        commands, _ = pdfmd.package_draft_skips(self.md, [pre])
+        self.assertIn("circuit", commands)
+
+    def test_the_helper_beside_the_lone_copy_wins_over_the_installed_one(self):
+        pre = self.lone_copy()
+        write(self.root / "thing-pdfmd.yaml", "latex-keys:\n  performed: LocalPerformed\n")
+        self.assertEqual(pdfmd.package_latex_keys(self.md, [pre]), {"performed": "LocalPerformed"})
+
+    def test_no_auto_kpsewhich_and_a_bare_no_auto_stop_the_borrowing_and_kit_does_not(self):
+        pre = self.lone_copy()
+        self.assertEqual(pdfmd.package_latex_keys(self.md, [pre], ["kpsewhich"]), {})
+        self.assertEqual(pdfmd.package_latex_keys(self.md, [pre], []), {})
+        self.assertEqual(pdfmd.package_latex_keys(self.md, [pre], ["kit"]), {"performed": "ThingPerformed"})
+        self.assertEqual(pdfmd.document_latex_definitions(self.md, [pre], ["kpsewhich"]), "")
+        self.assertNotIn("extra.lua", pdfmd.package_lua_names(self.md, [pre], ["kpsewhich"]))
+
+    def test_a_kit_that_ships_the_package_is_asked_before_the_installed_copy(self):
+        pre = self.lone_copy()
+        kit = Path(self.folder.name) / "kit"
+        write(kit / "thing-pdfmd.yaml", "latex-keys:\n  performed: KitPerformed\n")
+        with mock.patch.object(pdfmd, "kit_package_folders", return_value=[kit]):
+            self.assertEqual(pdfmd.package_latex_keys(self.md, [pre]), {"performed": "KitPerformed"})
+            self.assertEqual(pdfmd.package_latex_keys(self.md, [pre], ["kit"]), {"performed": "ThingPerformed"})
+            self.assertEqual(pdfmd.package_latex_keys(self.md, [pre], ["kit", "kpsewhich"]), {})
+
+    def test_the_two_kinds_are_known_to_no_auto(self):
+        self.assertLessEqual({"kit", "kpsewhich"}, pdfmd.NO_AUTO_KINDS)
+
     def test_nothing_in_pdfmd_names_the_first_package(self):
         source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
         for word in ("DOCUMENT_LATEX_KEYS", '"nulabreport.lua"', '"nulabreport-office.lua"', "LEGACY_CACHE_NAMES"):

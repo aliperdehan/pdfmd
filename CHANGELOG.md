@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.31.29 — 2026-10-31
+
+Pre-edit state: commit `c268035`. Still under 3.31.
+
+A lone copy of a package's `.sty` beside the document no longer loses what the package tells pdfmd about itself (3dw).
+
+- Cause: TeX takes `<package>.sty` beside the document first, and pdfmd read `<package>-pdfmd.yaml` only in the folder of the `.sty` it had taken. A report folder holding just `nulabreport.sty` therefore had no `latex-keys:`: the experiment number printed `N/A`, and the performance date and the unknowns line were gone, with no message. (The same gap hid `lua:`, `office:` and `draft-skip:`.) The hard-coded table of those keys was removed in 3.28.37 on purpose ("pdfmd names no package") and stays removed.
+- `package_helper` now looks for the file in this order: beside the `.sty` the document uses (as before), beside the `.sty` of a selected kit that ships the package (kits are not built yet: the place is asked and answers nothing), then beside the installed copy `kpsewhich` finds (asked from an empty folder: TeX searches the current folder first, so from the document's own it answers with the lone copy). The file found keeps its own path, so the names it lists resolve beside it. A helper beside the lone copy still wins. The last two places are searched only when the first has none, so a build whose package carries its file pays nothing.
+- Two `--no-auto` kinds, `kit` and `kpsewhich` (`pdfmd-options: {no-auto: [kpsewhich]}` too, and a `--setup` row each), take one place off; a bare `--no-auto` takes both. On by default: a copy older than the installed helper fails loudly (a `\renewcommand` of a macro it lacks), where without the fallback it printed `N/A` silently.
+- `no_auto` now reaches `package_latex_keys`, `package_lua_names`, `find_lua_filters`, `package_draft_skips`, `document_header_file` and `office_defaults_sources`.
+- Checked through pdfmd itself: a copy of a real 28-page report with a lone `nulabreport.sty` beside it printed `#N/A` for the experiment before, and builds with the same text on every page as the copy without one now.
+- Tests (`tests/test_package_helper.py`): the lone copy reads the installed helper for keys, Lua names and draft skips; the helper beside it wins; `kpsewhich` and a bare `--no-auto` stop the borrowing and `kit` does not; a kit's folder is asked before the installed copy.
+
 ## v3.31.28 — 2026-10-31
 
 Pre-edit state: commit `fe93e0a`. Still under 3.31.
