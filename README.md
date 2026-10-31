@@ -152,8 +152,13 @@ On macOS, Homebrew installs it together with Pandoc and Typst, so nothing else
 is needed for a first PDF:
 
 ```sh
-brew install aliperdehan/tap/pdfmd
+brew tap aliperdehan/pdfmd https://github.com/aliperdehan/pdfmd
+brew trust aliperdehan/pdfmd       # Homebrew 7 and later load no formula of a tap you have not trusted
+brew install aliperdehan/pdfmd/pdfmd
 ```
+
+(The formula, `Formula/pdfmd.rb`, lives in this repository; the first command is needed because the repository is not
+named `homebrew-...`. The release workflow keeps it on the newest PyPI release.)
 
 To update later, run `pipx upgrade pdfmd-cli`. (The package is named
 `pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.

@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.42b — 2026-10-31
+
+Pre-edit state: commit `bbce97f`. No shipped code changes (a formula, a workflow, a script, the README, a test), so no version bump. Entry 3ed (the author: no separate repositories; the tap moves here).
+
+The Homebrew formula lives in this repository.
+
+- `Formula/pdfmd.rb` is the formula of the `aliperdehan/homebrew-tap` repository (pandoc, typst, libyaml, python@3.13; pyyaml and pypdf pinned by hand). Install: `brew tap aliperdehan/pdfmd https://github.com/aliperdehan/pdfmd`, `brew trust aliperdehan/pdfmd`, `brew install aliperdehan/pdfmd/pdfmd`. The URL is needed because the repository is not named `homebrew-...`; checked with a throwaway tap, which brew clones as `homebrew-<name>`. Homebrew 7 refuses a formula of a tap that is not trusted (`Refusing to load formula ... from untrusted tap`), so the README gives `brew trust` as the step in between; there are no users of the old tap yet, so nothing needs migrating. The old repository is deleted by the author once the new install has worked from GitHub.
+- `scripts/bump_formula.py` points the formula's `url` and `sha256` at a release on PyPI (a version that PyPI does not list yet is asked for again, `--tries` times `--wait` seconds apart); only those two lines change, the pinned resources are tested to stay as they are.
+- `publish.yml` has a `homebrew` job, `environment: homebrew` (a Deployment of its own on the repository page, as `pypi` is), after the PyPI upload: bump, `brew audit --strict`, build from source, `brew test`, then a commit to `main`. A push made with `GITHUB_TOKEN` starts no workflow, so it does not run the tests again. It also runs when the version is already on PyPI (`workflow_dispatch` repairs a formula that fell behind); the tap's daily schedule is gone, the release replaces it. Not run on GitHub yet: the first real run is the first push after this commit.
+- Tests: `tests/test_formula.py`.
+
 ## v3.31.42 — 2026-10-31
 
 Pre-edit state: commit `a609345`. Still under 3.31 (no minor before the tables are done). Entry 3ec (the author's wish: Obsidian draws SMILES through a plugin, pdfmd should draw the same notes). First slice of the `[smiles]` line.

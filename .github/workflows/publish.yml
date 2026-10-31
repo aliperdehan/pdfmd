@@ -72,3 +72,40 @@ jobs:
       - run: |
           git tag "v${{ needs.version.outputs.version }}"
           git push origin "v${{ needs.version.outputs.version }}"
+
+  # After the upload (or, when this version is already on PyPI, on its own: a manual run repairs a formula that fell behind):
+  # the Homebrew formula in this repository is pointed at the release, checked by brew on a Mac, and committed. A push made
+  # with GITHUB_TOKEN starts no workflow, so this does not run the tests again.
+  homebrew:
+    needs: [version, publish]
+    if: ${{ !cancelled() && needs.version.result == 'success' && (needs.version.outputs.new == 'false' || needs.publish.result == 'success') }}
+    runs-on: macos-latest
+    environment: homebrew
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - id: bump
+        run: |
+          result=$(python3 scripts/bump_formula.py "${{ needs.version.outputs.version }}")
+          echo "$result"
+          case "$result" in *unchanged) echo "changed=false" >> "$GITHUB_OUTPUT" ;; *) echo "changed=true" >> "$GITHUB_OUTPUT" ;; esac
+      - name: Audit, build and test the formula
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          brew tap-new local/ci --no-git
+          brew trust --tap local/ci || true      # Homebrew 7 loads no formula of an untrusted tap; an older brew has no `trust`
+          cp Formula/pdfmd.rb "$(brew --repository local/ci)/Formula/"
+          brew audit --strict local/ci/pdfmd
+          brew install --build-from-source local/ci/pdfmd
+          brew test local/ci/pdfmd
+      - name: Commit the formula
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "pdfmd ${{ needs.version.outputs.version }} (Homebrew formula)"
+          git pull --rebase origin main
+          git push origin HEAD:main
