@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.26 — 2026-10-31
+
+Pre-edit state: commit `0655fc9`. Still under 3.31.
+
+`--to png,pdf`: several picture targets in one run, from one build and one crop. The author's wish (3dv).
+
+- Any of `pdf, png, jpg, tiff, eps, ps, svg`, comma-separated, each written beside the others (`NAME.png`, `NAME.pdf` ...; a PDF source gives `NAME-crop.pdf` for pdf); `-o` is then a folder. A format that is not a picture (`--to pdf,docx`) is refused with the reason: it has to be a run of its own (queued: a loop of runs, 3dv).
+- A PDF source with `pdf` among the targets and no `--crop` writes nothing for pdf and says so (NOTE).
+- Test: `tests/test_crop.py` (several targets from a PDF and from Markdown; `-o` as a file, a non-picture format, a PDF to pdf).
+
 ## v3.31.25 — 2026-10-31
 
 Pre-edit state: commit `cd59372`. Still under 3.31.

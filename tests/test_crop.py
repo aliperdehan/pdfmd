@@ -222,6 +222,28 @@ class Pictures(unittest.TestCase):
         self.assertEqual(self.run_pdfmd("formula.pdf", "--crop", "--to", "tif", "-o", "x.tif", "--crop-page", "1").returncode, 0)
         self.assertTrue((self.dir / "x.tif").is_file())
 
+    def test_several_targets_come_from_one_build_and_sit_beside_each_other(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "1", "--to", "png,jpeg,pdf", "--image-dpi", "72")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for name in ("formula.png", "formula.jpg", "formula-crop.pdf"):
+            self.assertTrue((self.dir / name).is_file(), name)
+        (self.dir / "note.md").write_text("# T\n\ntext\n", encoding="utf-8")
+        done = self.run_pdfmd("note.md", "--crop", "--crop-ignore-bottom", "60", "--to", "pdf,png", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((self.dir / "note.pdf").is_file() and (self.dir / "note.png").is_file())
+
+    def test_several_targets_need_a_folder_for_o_and_only_picture_formats(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--to", "png,pdf", "-o", "x.png")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("names a folder", done.stderr)
+        done = self.run_pdfmd("formula.pdf", "--to", "png,docx")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("a run of its own", done.stderr)
+        done = self.run_pdfmd("formula.pdf", "--to", "pdf,png", "--image-dpi", "72")   # a PDF to pdf without a crop: nothing to write
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("PDF already", done.stderr)
+        self.assertFalse((self.dir / "formula-crop.pdf").exists())
+
     def test_svg(self):
         if not (shutil.which("pdftocairo") or shutil.which("mutool")):
             self.skipTest("needs pdftocairo or mutool")

@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.25"
+PDFMD_VERSION = "3.31.26"
 import argparse
 import atexit
 import csv
@@ -7515,11 +7515,17 @@ def picture_sources(args) -> list[Path] | str:
     return files or f"-b: no Markdown files in {display_path(folder)}"
 
 
+def picture_targets(args) -> list[str]:
+    """The formats asked for: `--to png,pdf` (several), `--to` or the suffix of `-o` (one), else pdf."""
+    return list(args.to_many or [picture_target(args) or "pdf"])
+
+
 def picture_one(args, source: Path, destination_for, pad: float, dpi: float, quality: int) -> tuple[int, list[str], list[str]]:
-    """One source through the build, the crop and the pictures: (exit status, lines for stdout, lines for stderr)."""
+    """One source through the build, the crop and the pictures, for every target: (exit status, lines for stdout, lines
+    for stderr). The PDF is built, and cropped, once."""
     from pdfmd_crop import CropError, crop_pdf
     from pdfmd_crop.images import pictures
-    target = picture_target(args) or "pdf"
+    targets = picture_targets(args)
     out_lines: list[str] = []
     err_lines: list[str] = []
     from_pdf = source.suffix.lower() == ".pdf"
@@ -7534,7 +7540,6 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
             return 1, [], [str(error)]
     stem = markdown.name if args.report and markdown.is_dir() else markdown.stem
     home = markdown if args.report and markdown.is_dir() else markdown.parent
-    destination = destination_for(stem + ("-crop" if from_pdf and target == "pdf" else "") + "." + target, home)
     with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
         folder = Path(scratch)
         if from_pdf:
@@ -7547,49 +7552,65 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
                 return 1, out_lines, err_lines
         try:
             if args.crop:
-                cropped = destination if target == "pdf" else folder / "cropped.pdf"
+                cropped = folder / "cropped.pdf"
                 done = crop_pdf(pdf, cropped, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
                 first = 1 if args.crop_page is None else args.crop_page
                 empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
                 if empty:
                     err_lines.append(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is")
                 pdf = cropped
-            if target == "pdf":
-                written = [destination]
-            else:
-                written = pictures(pdf, destination, target, dpi, quality)
-                if len(written) > 1:
-                    err_lines.append(f"NOTE  {len(written)} pages: one {target} each, in {display_path(written[0].parent)}/")
-        except CropError as error:
+            written: list[Path] = []
+            for target in targets:
+                destination = destination_for(stem + ("-crop" if from_pdf and target == "pdf" else "") + "." + target, home)
+                if target == "pdf":
+                    if from_pdf and not args.crop:
+                        err_lines.append(f"NOTE  {display_path(source)} is a PDF already: nothing to write for pdf")
+                        continue
+                    part = destination.with_name(destination.name + ".part")
+                    shutil.copyfile(pdf, part)
+                    part.replace(destination)
+                    written.append(destination)
+                else:
+                    made = pictures(pdf, destination, target, dpi, quality)
+                    if len(made) > 1 and target not in ("tiff", "ps"):
+                        err_lines.append(f"NOTE  {len(made)} pages: one {target} each, in {display_path(made[0].parent)}/")
+                    written += made
+        except (CropError, OSError) as error:
             return 1, out_lines, err_lines + [f"ERROR  {display_path(source)}: {error}"]
+    if not written:
+        return 1, out_lines, err_lines
     out_lines += [f"OK    {display_path(source)} > {display_path(path)}" for path in written]
     return 0, out_lines, err_lines
 
 
 def picture_command(args) -> int:
-    """`pdfmd --crop` and `--to png|svg`: a PDF (or the PDF pdfmd builds from a source) cut to its ink with --crop, and
-    drawn as pictures when the target is png or svg. Files named on the command line, or with -b the Markdown files of a
-    folder (`-j` at a time); with -r the report of a folder is one result. See pdfmd_crop and the changelog."""
+    """`pdfmd --crop` and `--to png|jpg|tiff|eps|ps|svg`: a PDF (or the PDF pdfmd builds from a source) cut to its ink with
+    --crop, and drawn as pictures when the target is one; `--to png,pdf` writes several. Files named on the command line,
+    or with -b the Markdown files of a folder (`-j` at a time); with -r the report of a folder is one result. See pdfmd_crop
+    and the changelog."""
     from pdfmd_crop import DEFAULT_PAD
     from pdfmd_crop.images import DEFAULT_DPI, DEFAULT_QUALITY
-    target = picture_target(args) or "pdf"
-    if target not in PICTURE_FORMATS:
-        print(f"--crop cuts a PDF page: it goes with --to pdf, png, jpg, tiff, eps, ps or svg, not {target} "
-              f"(a {target} file has no page box to cut)", file=sys.stderr)
-        return 1
+    targets = picture_targets(args)
+    for target in targets:
+        if target not in PICTURE_FORMATS:
+            print(f"--crop cuts a PDF page: it goes with --to pdf, png, jpg, tiff, eps, ps or svg, not {target} "
+                  f"(a {target} file has no page box to cut)", file=sys.stderr)
+            return 1
     sources = picture_sources(args)
     if isinstance(sources, str):
         print(sources, file=sys.stderr)
         return 1
     out = args.out
-    if out is not None:
+    if out is not None and len(targets) == 1:
         named = format_from_output(out)
-        if named is not None and named != target and not out.is_dir():
-            print(f"-o {out} is a {named} file, but the target is {target}", file=sys.stderr)
+        if named is not None and named != targets[0] and not out.is_dir():
+            print(f"-o {out} is a {named} file, but the target is {targets[0]}", file=sys.stderr)
             return 1
-    into_folder = out is not None and (len(sources) > 1 or out.is_dir() or not out.suffix)
-    if out is not None and len(sources) > 1 and out.suffix and not out.is_dir():
-        print(f"{len(sources)} files: -o names a folder, not a file ({out})", file=sys.stderr)
+    many = len(sources) > 1 or len(targets) > 1
+    into_folder = out is not None and (many or out.is_dir() or not out.suffix)
+    if out is not None and many and out.suffix and not out.is_dir():
+        print(f"{len(sources)} files and {len(targets)} format{'' if len(targets) == 1 else 's'}: -o names a folder, "
+              f"not a file ({out})", file=sys.stderr)
         return 1
     if into_folder:
         out.mkdir(parents=True, exist_ok=True)
@@ -26938,6 +26959,20 @@ def run_main() -> None:
             args.embed_metadata = ["all"]
     if args.debug:
         args.verbose = True
+    args.to_many = None
+    if args.to and "," in args.to:
+        # `--to png,pdf`: several picture formats from one build (see picture_command)
+        wanted = []
+        for name in args.to.split(","):
+            name = name.strip().casefold().lstrip(".")
+            name = DEFAULT_OUTPUT_ALIASES.get(name, name)
+            if name and name not in wanted:
+                wanted.append(name)
+        others = [name for name in wanted if name not in PICTURE_FORMATS]
+        if others:
+            raise SystemExit(f"--to takes several formats only among {', '.join(PICTURE_FORMATS)}; {', '.join(others)} "
+                             f"has to be a run of its own: pdfmd FILE --to {others[0]}")
+        args.to_many, args.to = wanted, wanted[0]
     if args.to:
         # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
         args.to = args.to.strip().casefold().lstrip(".")
@@ -27105,9 +27140,9 @@ def run_main() -> None:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
-    if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or picture_target(args) in PICTURE_ONLY):
+    if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or args.to_many or picture_target(args) in PICTURE_ONLY):
         raise SystemExit("--image-dpi and --image-quality go with --to png, jpg, tiff, eps, ps or svg")
-    if args.crop or picture_target(args) in PICTURE_ONLY:
+    if args.crop or args.to_many or picture_target(args) in PICTURE_ONLY:
         raise SystemExit(picture_command(args))
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))

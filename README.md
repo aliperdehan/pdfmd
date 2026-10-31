@@ -577,6 +577,8 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 - `--crop-pad PT` sets the room around the ink (default 2); `--crop-ignore-bottom PT` leaves the foot of each page out of the
   measurement (a page number: a pdfmd page carries one, so a formula built from Markdown wants `--crop-ignore-bottom`);
   `--crop-page N` keeps page N alone.
+- **Several at once.** `--to png,pdf` (any of the formats below) builds once and writes each beside the other (`NAME.png`,
+  `NAME.pdf`); `-o` is then a folder. Formats that are not pictures (docx, html ...) are a run of their own.
 - **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by
   Ghostscript on a transparent background at `--image-dpi` (default 300); JPEG the same on white, at `--image-quality` (default 90); `tiff` (LZW, white, all pages in one file), `eps` (vector; one file per page, its box is the ink) and `ps` (vector, all pages in one file); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
   without `--crop` draws the whole page: a crop is asked for, never implied.
