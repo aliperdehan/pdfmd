@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.23"
+PDFMD_VERSION = "3.31.24"
 import argparse
 import atexit
 import csv
@@ -7464,7 +7464,8 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
     return status
 
 
-PICTURE_FORMATS = ("pdf", "png", "svg")
+PICTURE_ONLY = ("png", "jpg", "svg")   # the targets only this command writes
+PICTURE_FORMATS = ("pdf", *PICTURE_ONLY)
 
 
 def picture_target(args) -> str | None:
@@ -7475,7 +7476,7 @@ def picture_target(args) -> str | None:
 # the options of the command line that `picture_build` must not hand on to the build of the intermediate PDF, and how
 # many words each takes (-b and --recursive: the files are built one at a time here)
 PICTURE_OPTIONS = {"--crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
-                   "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
+                   "--image-quality": 1, "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
 
 
 def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
@@ -7514,7 +7515,7 @@ def picture_sources(args) -> list[Path] | str:
     return files or f"-b: no Markdown files in {display_path(folder)}"
 
 
-def picture_one(args, source: Path, destination_for, pad: float, dpi: float) -> tuple[int, list[str], list[str]]:
+def picture_one(args, source: Path, destination_for, pad: float, dpi: float, quality: int) -> tuple[int, list[str], list[str]]:
     """One source through the build, the crop and the pictures: (exit status, lines for stdout, lines for stderr)."""
     from pdfmd_crop import CropError, crop_pdf
     from pdfmd_crop.images import pictures
@@ -7556,7 +7557,7 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float) -> 
             if target == "pdf":
                 written = [destination]
             else:
-                written = pictures(pdf, destination, target, dpi)
+                written = pictures(pdf, destination, target, dpi, quality)
                 if len(written) > 1:
                     err_lines.append(f"NOTE  {len(written)} pages: one {target} each, in {display_path(written[0].parent)}/")
         except CropError as error:
@@ -7570,7 +7571,7 @@ def picture_command(args) -> int:
     drawn as pictures when the target is png or svg. Files named on the command line, or with -b the Markdown files of a
     folder (`-j` at a time); with -r the report of a folder is one result. See pdfmd_crop and the changelog."""
     from pdfmd_crop import DEFAULT_PAD
-    from pdfmd_crop.images import DEFAULT_DPI
+    from pdfmd_crop.images import DEFAULT_DPI, DEFAULT_QUALITY
     target = picture_target(args) or "pdf"
     if target not in PICTURE_FORMATS:
         print(f"--crop cuts a PDF page: it goes with --to pdf, png or svg, not {target} "
@@ -7600,12 +7601,13 @@ def picture_command(args) -> int:
 
     pad = DEFAULT_PAD if args.crop_pad is None else args.crop_pad
     dpi = DEFAULT_DPI if args.image_dpi is None else args.image_dpi
+    quality = DEFAULT_QUALITY if args.image_quality is None else args.image_quality
     if args.batch and len(sources) > 1 and max(1, args.jobs) > 1:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-            results = list(pool.map(lambda source: picture_one(args, source, destination_for, pad, dpi), sources))
+            results = list(pool.map(lambda source: picture_one(args, source, destination_for, pad, dpi, quality), sources))
     else:
-        results = [picture_one(args, source, destination_for, pad, dpi) for source in sources]
+        results = [picture_one(args, source, destination_for, pad, dpi, quality) for source in sources]
     status = 0
     for code, out_lines, err_lines in results:
         status = max(status, code)
@@ -16512,7 +16514,7 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
 #   css: file.css | [..]   --css, relative to the document
 HTML_TARGETS = frozenset({"html", "html4", "html5"})
 DEFAULT_OUTPUT_ALIASES = {"tex": "latex", "txt": "txt", "text": "txt", "md": "markdown", "htm": "html",
-                          "typ": "typst", "markdown": "markdown"}
+                          "typ": "typst", "markdown": "markdown", "jpeg": "jpg"}
 # The math method, in whichever spelling the installed Pandoc has -- three
 # generations: `--math-method=X` (3.11, which deprecates the others and warns),
 # `--html-math-method=X` (a middle range of 3.x), and the short flags
@@ -19029,7 +19031,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
 # missing here fall back to ".<format>" -- a reasonable guess, since Pandoc's
 # own format names are usually also their file extension.
 FORMAT_EXTENSION = {
-    "pdf": ".pdf", "png": ".png", "svg": ".svg",
+    "pdf": ".pdf", "png": ".png", "svg": ".svg", "jpg": ".jpg",
     "html": ".html", "html4": ".html", "html5": ".html", "chunkedhtml": ".html",
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
@@ -19063,7 +19065,7 @@ EXTENSION_FORMAT = {
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
-    ".json": "json", ".pdf": "pdf", ".png": "png", ".svg": "svg",
+    ".json": "json", ".pdf": "pdf", ".png": "png", ".svg": "svg", ".jpg": "jpg", ".jpeg": "jpg",
     **{"." + name: name for name in CALIBRE_ONLY_FORMATS},
     ".doc": "doc",                                                    # LibreOffice writes it (v3.29.1; see soffice_goal)
 }
@@ -26269,7 +26271,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
                         help="with --crop: do not look at the bottom PT points of each page (a page number); default 0")
     parser.add_argument("--image-dpi", type=float, default=None, metavar="DPI",
-                        help="with --to png: pixels per inch of the picture (default 300)")
+                        help="with --to png or jpg: pixels per inch of the picture (default 300)")
+    parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
+                        help="with --to jpg: the JPEG quality (default 90)")
     parser.add_argument("--crop-page", type=int, default=None, metavar="N",
                         help="with --crop: keep page N alone, cropped (default: every page, each to its own ink)")
     parser.add_argument("--editor", metavar="CMD", default=None,
@@ -27101,9 +27105,9 @@ def run_main() -> None:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
-    if args.image_dpi is not None and not (args.crop or picture_target(args) in ("png", "svg")):
-        raise SystemExit("--image-dpi goes with --to png or --to svg")
-    if args.crop or picture_target(args) in ("png", "svg"):
+    if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or picture_target(args) in PICTURE_ONLY):
+        raise SystemExit("--image-dpi and --image-quality go with --to png, jpg or svg")
+    if args.crop or picture_target(args) in PICTURE_ONLY:
         raise SystemExit(picture_command(args))
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))

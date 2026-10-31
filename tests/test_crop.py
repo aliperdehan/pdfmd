@@ -200,6 +200,15 @@ class Pictures(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(png_size(self.dir / "tight.png"), (24, 24))   # 20 pt of ink and 2 pt of pad each side
 
+    def test_jpeg_is_white_and_takes_a_quality(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "1", "--crop-pad", "0", "--to", "jpeg", "--image-dpi", "72")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        data = (self.dir / "formula.jpg").read_bytes()
+        self.assertEqual(data[:2], b"\xff\xd8")
+        self.assertEqual(self.run_pdfmd("formula.pdf", "--to", "jpg", "--image-quality", "0").returncode, 1)
+        self.assertEqual(self.run_pdfmd("formula.pdf", "--crop", "-o", "x.jpeg", "--crop-page", "1").returncode, 0)
+        self.assertTrue((self.dir / "x.jpeg").is_file())
+
     def test_svg(self):
         if not (shutil.which("pdftocairo") or shutil.which("mutool")):
             self.skipTest("needs pdftocairo or mutool")

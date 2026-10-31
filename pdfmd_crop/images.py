@@ -1,7 +1,7 @@
-"""A PDF as pictures: one PNG or SVG per page (`pdfmd --to png|svg`, v3.31.21).
+"""A PDF as pictures: one PNG, JPEG or SVG per page (`pdfmd --to png|jpg|svg`, v3.31.21).
 
-PNG is drawn by Ghostscript's `pngalpha` device (a transparent background, the page's crop box as the picture's edge);
-SVG by poppler's `pdftocairo`, else MuPDF's `mutool`. Text stays text in the SVG only as far as those tools keep it.
+PNG is drawn by Ghostscript's `pngalpha` device (a transparent background, the page's crop box as the picture's edge),
+JPEG by its `jpeg` device (white: a JPEG has no transparency); SVG by poppler's `pdftocairo`, else MuPDF's `mutool`. Text stays text in the SVG only as far as those tools keep it.
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ from pathlib import Path
 
 from . import CropError, ghostscript
 
-DEFAULT_DPI = 300   # pixels per inch of a PNG; `--image-dpi`
+DEFAULT_DPI = 300   # pixels per inch of a PNG or JPEG; `--image-dpi`
+DEFAULT_QUALITY = 90   # JPEG quality, 1-100; `--image-quality`
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess:
@@ -25,27 +26,30 @@ def _pages(pdf: Path) -> int:
     return len(PdfReader(str(pdf)).pages)
 
 
-def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI) -> list[Path]:
-    """Draw every page of `pdf` as `kind` ("png" or "svg"). One page is written to `target`; several go into a folder
+def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quality: int = DEFAULT_QUALITY) -> list[Path]:
+    """Draw every page of `pdf` as `kind` ("png", "jpg" or "svg"). One page is written to `target`; several go into a folder
     named like `target` without its suffix, as `001.png`, `002.png`... (zero-padded so they sort). Returns the files
     written. Raises CropError."""
-    if kind not in ("png", "svg"):
-        raise CropError(f"cannot draw a PDF as {kind}: png and svg only")
+    if kind not in ("png", "jpg", "svg"):
+        raise CropError(f"cannot draw a PDF as {kind}: png, jpg and svg only")
     if dpi <= 0:
         raise CropError("--image-dpi takes a number above 0")
+    if not 1 <= quality <= 100:
+        raise CropError("--image-quality takes a number from 1 to 100")
     count = _pages(pdf)
     width = max(3, len(str(count)))
     folder_of_pages = target.with_suffix("")
     names = [target] if count == 1 else [folder_of_pages / f"{number:0{width}d}{target.suffix}" for number in range(1, count + 1)]
     with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
         folder = Path(scratch)
-        if kind == "png":
+        if kind in ("png", "jpg"):
             gs = ghostscript()
             if gs is None:
-                raise CropError("--to png needs Ghostscript (brew install ghostscript, apt install ghostscript)")
+                raise CropError(f"--to {kind} needs Ghostscript (brew install ghostscript, apt install ghostscript)")
+            device = ["-sDEVICE=pngalpha"] if kind == "png" else ["-sDEVICE=jpeg", f"-dJPEGQ={quality}"]
             done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
-                         "-sDEVICE=pngalpha", f"-r{dpi:g}", f"-sOutputFile={folder / 'page-%d.png'}", str(pdf)])
-            made = [folder / f"page-{number}.png" for number in range(1, count + 1)]
+                         *device, f"-r{dpi:g}", f"-sOutputFile={folder / ('page-%d.' + kind)}", str(pdf)])
+            made = [folder / f"page-{number}.{kind}" for number in range(1, count + 1)]
         else:
             cairo, mupdf = shutil.which("pdftocairo"), shutil.which("mutool")
             if cairo is None and mupdf is None:

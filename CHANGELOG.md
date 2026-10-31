@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.24 — 2026-10-31
+
+Pre-edit state: commit `36cd49e`. Still under 3.31.
+
+`--to jpg` (also `jpeg`; `-o x.jpg` and `-o x.jpeg` choose it by suffix). The author's wish (3dv).
+
+- Drawn by Ghostscript's `jpeg` device on white (a JPEG has no transparency) at `--image-dpi`, with `--image-quality 1-100` (default 90; a flag with its default in `--help`, `--setup`-omitted like the other picture flags). The file is `NAME.jpg` whichever spelling was typed.
+- `--image-dpi` and `--image-quality` without a picture target are an error.
+- Test: `tests/test_crop.py` (`test_jpeg_is_white_and_takes_a_quality`).
+
 ## v3.31.23 — 2026-10-31
 
 Pre-edit state: commit `19d38ab`. Still under 3.31.
