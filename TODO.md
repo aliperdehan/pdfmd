@@ -96,6 +96,7 @@ is low priority. [3di]
 
 - [ ] pdfmd-gui: an Overleaf-like project view; one local web UI plus thin native wrappers, a client of the CLI, never obligatory; its foundation (emit, `--json`, the split, the generated reference) ships in 3.x before 4.0 [3do]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
+- [ ] docx output and raw LaTeX multicols: nulabreport 1.29.1 writes tables between a raw `\begin{multicols}` and `\end{multicols}` as plain `tabular`; check what the docx (office) path does with those raw fences and the tables inside, since it parses raw LaTeX too
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
 
 ## In other repositories
