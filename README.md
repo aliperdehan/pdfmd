@@ -2483,7 +2483,7 @@ names no package and no course, the file is the data.
 ```yaml
 kit-format: 1                  # required; a larger number stops with "needs a newer pdfmd"
 name: nulabreport              # defaults to the folder's name
-version: 1.30.0
+version: 1.30.0                # optional: left out, the version the package's `\ProvidesPackage` line announces
 package: nulabreport           # the LaTeX package the kit ships (NAME.sty beside the file)
 default-mode: genchem          # the mode used when none is asked for
 modes:                         # one named variant of the kit

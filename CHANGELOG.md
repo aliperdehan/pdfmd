@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.34 — 2026-10-31
+
+Pre-edit state: commit `5420849`. Still under 3.31. `[kits]`.
+
+A kit that leaves out `version:` takes it from its own package.
+
+- A `.kit` with a `package:` and no `version:` reads the version from the `\ProvidesPackage{package}[date vX.Y.Z ...]` line of `package.sty` in the kit's folder. A kit that ships a package then cannot name a version the package no longer has (a number typed twice is stale at the next release). A `version:` that is written still wins; no `.sty`, or a line with no number, gives no version, as before.
+- `pdfmd --kits` shows it like a written one.
+- Tests: `tests/test_kits.py`.
+
 ## v3.31.33 — 2026-10-31
 
 Pre-edit state: commit `db18fa3`. Still under 3.31. `[kits]`, found by building a lean copy of a real pre-lab with the kit.

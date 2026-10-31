@@ -90,6 +90,19 @@ class Format(Scratch):
         kit = load_kit(write(self.root / "thing" / ".kit", "kit-format: 1\nversion: 2\n"))
         self.assertEqual((kit.name, kit.version, kit.modes, kit.package), ("thing", "2", {}, ""))
 
+    def test_a_missing_version_is_the_one_the_package_announces(self):
+        folder = self.root / "thing"
+        write(folder / "thing.sty", "\\NeedsTeXFormat{LaTeX2e}\n\\ProvidesPackage{thing}[2026/10/31 v1.28.30 A style]\n")
+        kit = load_kit(write(folder / ".kit", "kit-format: 1\npackage: thing\n"))
+        self.assertEqual(kit.version, "1.28.30")
+        self.assertEqual(load_kit(write(folder / ".kit", "kit-format: 1\npackage: thing\nversion: 7\n")).version, "7")   # a written one wins
+
+    def test_no_package_file_or_no_version_in_it_is_no_version(self):
+        folder = self.root / "thing"
+        self.assertEqual(load_kit(write(folder / ".kit", "kit-format: 1\npackage: thing\n")).version, "")
+        write(folder / "thing.sty", "\\ProvidesPackage{thing}[2026/10/31 a style with no number]\n")
+        self.assertEqual(load_kit(folder / ".kit").version, "")
+
     def test_a_missing_or_newer_format_stops(self):
         with self.assertRaises(KitError) as caught:
             load_kit(write(self.root / "a" / ".kit", "name: a\n"))

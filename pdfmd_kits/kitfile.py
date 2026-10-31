@@ -5,7 +5,7 @@ file is the data. Every path in it is relative to the kit's folder and stays ins
 
     kit-format: 1                  # required; a larger number stops with "needs a newer pdfmd"
     name: nulabreport              # defaults to the folder's name
-    version: 1.30.0
+    version: 1.30.0                # optional: left out, it is the version `<package>.sty` announces in \\ProvidesPackage
     description: House style of a chemistry department's lab reports
     package: nulabreport           # the LaTeX package the kit ships (NAME.sty beside this file); writes \\usepackage
     default-mode: genchem          # the mode used when none is asked for (optional)
@@ -251,9 +251,23 @@ def load_kit(path: Path, extra_aliases: dict | None = None) -> Kit:
     defaults = _files(data.get("defaults"), folder, "`defaults:`", problems)
     if problems:
         raise KitError([f"{path}: {problem}" for problem in problems], path)
+    if not version and package:
+        version = package_file_version(folder, package)
     return Kit(path=path, folder=folder, name=str(name), version=version, description=description, package=package,
                default_mode=default_mode, modes=modes, latex=latex, lua=lua, defaults=defaults, metadata=metadata,
                helper=helper, carry=tuple(carry), warnings=tuple(warnings))
+
+
+def package_file_version(folder: Path, package: str) -> str:
+    """The version a kit's own `<package>.sty` announces in its `\\ProvidesPackage{package}[date vX.Y.Z ...]` line, or "" (no
+    such file, no such line). A kit that leaves `version:` out takes it from here, so it cannot go stale at a release."""
+    try:
+        text = (Path(folder) / f"{package}.sty").read_text(encoding="utf-8-sig")
+    except OSError:
+        return ""
+    provides = re.search(rf"\\ProvidesPackage\{{{re.escape(package)}\}}\[([^\]]*)\]", text)
+    version = re.search(r"\bv(\d+(?:\.\d+)*[a-zA-Z]*)\b", provides.group(1)) if provides else None
+    return version.group(1) if version else ""
 
 
 def resolve_mode(kit: Kit, text) -> Mode | None:
