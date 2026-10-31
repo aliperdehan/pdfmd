@@ -1132,6 +1132,98 @@ class PartBuiltAlone(unittest.TestCase):
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
+class NamesBelow(unittest.TestCase):
+    """A part (or a section) built alone sees the names of the parts BELOW it as the full build does (3.31.44): the nearest
+    definition above, else the first one below, every number evaluated in its own place in the whole document."""
+
+    PARTS = {
+        "10-introduction.md": "# Introduction\n\n`x = 2`{=}\n",
+        "20-procedure.md": "# Procedure\n\nx is `x`{=}, y is `y`{=}.\n",
+        "30-calculations.md": "# Calculations\n\n::: calc\ny = x * 2 = {ans}\nx = 3 = {ans}\n:::\n\nHere `y`{=}.\n",
+        "40-discussion.md": "# Discussion\n\nNow x=`x`{=} and y=`y`{=}.\n",
+    }
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-calc-below-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "report.md").write_text("---\npdfmd-options:\n  parts: auto\n  calc:\n    digits: 1dp\n---\n\nScaffold.\n",
+                                                 encoding="utf-8")
+        (self.directory / "parts").mkdir()
+        for name, text in self.PARTS.items():
+            (self.directory / "parts" / name).write_text(text, encoding="utf-8")
+
+    def build(self, *arguments: str, source: str = "report") -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), source + (arguments[0] if arguments else ""), *arguments[1:],
+                               "--no-backup", "--to", "latex", "-o", "out.tex"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+
+    def tex(self) -> str:
+        return " ".join((self.directory / "out.tex").read_text(encoding="utf-8").split())
+
+    def test_the_full_build_is_the_reference(self):
+        done = self.build()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for line in ("x is 2.0, y is 4.0.", "Here 4.0.", "Now x=3.0 and y=4.0."):
+            self.assertIn(line, self.tex())
+
+    def test_a_part_alone_prints_what_the_full_build_prints(self):
+        for part, line in (("procedure", "x is 2.0, y is 4.0."), ("discussion", "Now x=3.0 and y=4.0.")):
+            with self.subTest(part=part):
+                done = self.build("#" + part)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn(line, self.tex())
+                self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+
+    def test_the_note_says_what_came_from_above_and_what_from_below(self):
+        done = self.build("#procedure")
+        self.assertIn("NOTE  calc: 1 names taken from part 10, 2 from parts 30-40 (defined below) (evaluated, not typeset)", done.stdout)
+
+    def test_the_first_part_has_only_names_from_below(self):
+        (self.directory / "parts" / "10-introduction.md").write_text("# Introduction\n\nStart `y`{=} and `x`{=}.\n", encoding="utf-8")
+        (self.directory / "parts" / "20-procedure.md").write_text("# Procedure\n\nx = 2 = {ans}\n\n::: calc\nx = 2 = {ans}\ny = x * 5 = {ans}\n:::\n", encoding="utf-8")
+        done = self.build("#introduction")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Start 10.0 and 2.0.", self.tex())      # the first definitions below: y = 10 (x was 2 then), x = 2
+        self.assertIn("NOTE  calc: 2 names taken from parts 20-40 (defined below)", done.stdout)
+        self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+
+    def test_the_part_s_own_definition_below_a_use_wins_over_a_later_part(self):
+        (self.directory / "parts" / "20-procedure.md").write_text("# Procedure\n\nUse `y`{=}.\n\n::: calc\ny = 7 = {ans}\n:::\n", encoding="utf-8")
+        done = self.build("#procedure")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Use 7.0.", self.tex())
+
+    def test_two_parts_side_by_side(self):
+        done = self.build("#procedure+calculations")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("x is 2.0, y is 4.0.", self.tex())
+        self.assertIn("Here 4.0.", self.tex())
+
+    def test_seed_calc_off_gives_up_both_halves(self):
+        done = self.build("#procedure", "--seed-calc", "off")
+        self.assertNotIn("names taken from", done.stdout)
+        self.assertGreaterEqual(done.stdout.count("WARN  calc"), 1)
+
+    def test_a_name_nowhere_still_warns(self):
+        (self.directory / "parts" / "20-procedure.md").write_text("# Procedure\n\n`ghost`{=} and `y`{=}.\n", encoding="utf-8")
+        done = self.build("#procedure")
+        lines = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc")]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("ghost", lines[0])
+
+    def test_a_section_built_alone_sees_the_sections_below_it(self):
+        text = "\n".join(part.read_text(encoding="utf-8") for part in sorted((self.directory / "parts").iterdir()))
+        (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  calc:\n    digits: 1dp\n---\n\n" + text, encoding="utf-8")
+        for section, line in (("Procedure", "x is 2.0, y is 4.0."), ("Introduction", None), ("Discussion", "Now x=3.0 and y=4.0.")):
+            with self.subTest(section=section):
+                done = self.build("#" + section, source="doc")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+                if line:
+                    self.assertIn(line, self.tex())
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
 class Export(unittest.TestCase):
     """`calc: {export: FILE}` / --calc-export / PDFMD_CALC_EXPORT: the names of the calculator after a build, as name,value,digits
     -- the file `constants` reads (3.30.22)."""

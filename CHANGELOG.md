@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.44 — 2026-11-01
+
+Pre-edit state: commit `c16091d`. Still under 3.31. Entry 3ef (the author's decision, with an example: the numbers of a part built alone are the numbers of the full build, names printing in the order they appear).
+
+A part built alone sees the calculator's names of the whole document, below it as well as above it.
+
+- Until now only the parts above the one built were evaluated (3.30.19), so a name defined in a later part was undefined in a part built alone, and the author had to build the Calculations part along with every part that prints its numbers. Now pdfmd reads the whole document with `calc.lua` alone (nothing typeset, about a second): the scaffold, then every part in order, a one-word paragraph `pdfmd-calc-mark-in` / `-out` around each part built. `calc.lua` writes (`-M pdfmd-calc-halves=FILE`) each name's last definition above the part built and its first definition below it, each evaluated in its own place, and the build reads them back, the first as before (`pdfmd-calc-seed`, standing above everything), the second as `pdfmd-calc-below` (standing after everything, so a name is taken from there only when nothing above or inside the part defines it). That is the full build's rule: the nearest definition above, else the first one below. With `x = 2` in the introduction, `y = x * 2` and then `x = 3` in the calculations, the procedure alone prints 2 and 4, the discussion alone 3 and 4, like the full build; the introduction alone, with every name below, works too.
+- Sections of a plain document (`doc#procedure`) too: the text above and below the sections chosen is read, each section marked. The NOTE says where the names came from: `NOTE  calc: 128 names taken from parts 10-50, 3 from parts 70-90 (defined below) (evaluated, not typeset)`. The same `seed-calc` setting (`auto`, `scan`, `off`) governs both halves; no new setting. The export file (`calc: {export:}`) of a part built alone still lists the names above it and inside it only.
+- KNOWN BUG, not fixed here (queued, entry 3eg): two parts built together that are not next to each other (`report#20+40`) take what the parts between them define as defined above both, so a number in part 20 can be the value a name gets only in part 30, silently. It was so before this version (the parts between were already read as "above"). Adjacent parts and sections are exact.
+- README (the paragraph on a part built alone), recipes 3.2, the `--seed-calc` help and its `--setup` row say the new rule. Tests: `tests/test_calc.py` (`NamesBelow`: the example above, the first part alone, the part's own definition winning, two parts side by side, `--seed-calc off`, a name that is nowhere, sections).
+
 ## v3.31.43 — 2026-10-31
 
 Pre-edit state: commit `c32ad4b`. Still under 3.31. Entry 3ec (the author's answer: "rdkit's colouring is a fun feature, so keep it on"; first said black by default, then corrected to colour by default).

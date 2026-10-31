@@ -974,15 +974,21 @@ silently. Not done yet: calculating plain prose without `{=}` or a div, `$..$` m
 checks a number you typed, spacing the operators for you (`C=n/V` printed as `C = n / V`),
 `.qmd` spellings. [docs/recipes.md](docs/recipes.md) 1.11 has the same in recipe form.
 
-**A part built alone keeps the names of the parts above it** (3.30.19). `pdfmd @60` of a split report builds the Discussion without the
-Calculations, so a `` `mean_A`{=2dp} `` there has nothing to find; pdfmd therefore has Pandoc read the parts above it (the scaffold, then
-every part left out that stands before the last one built) with the calculator only, nothing typeset (about a second), and the build starts
-from the names that came out: each at the value of its last definition above the part, at full precision, with the digits it was defined
-with. The same holds for a section of an ordinary document (`doc#discussion`) and the sections above it. Nothing is stored between builds,
-so editing part 50 and building part 60 shows the new number at once. The build says `NOTE  calc: 128 names taken from parts 10-50
-(evaluated, not typeset)`. `pdfmd-options: {seed-calc: off}` or `--seed-calc off` gives it up (a name defined in a part left out is then
-undefined, with the WARN above); `auto` (the default) and `scan` are the same. A name a later part defines is not known to an earlier
-one, as in the full build, where it counts only when nothing above defines it.
+**A part built alone sees the names of the whole document, in document order** (3.30.19 for the parts above it, 3.31.44 for the parts
+below it). `pdfmd report#60` builds the Discussion without the Calculations, so a `` `mean_A`{=2dp} `` there has nothing to find; pdfmd
+therefore has Pandoc read the whole document (the scaffold, then every part, the ones built marked) with the calculator only, nothing
+typeset (about a second), and the build starts from the names that came out. The rule is the full build's: a use sees the nearest
+definition above it, else the first one below it, and each value is the one the full build computes at that place, at full precision
+and with the digits it was defined with. Take an introduction that defines `x = 2`; a procedure that prints `x` and `y`; calculations that
+define `y = x * 2` and then `x = 3`; a discussion that prints both. Built alone, the procedure prints 2 and 4 (`y` is not defined yet
+there, so it is the first definition below, computed while `x` was still 2), and the discussion prints 3 and 4, as the full build does.
+A name the part defines itself always wins over the other parts. The same holds for a section of an ordinary document (`doc#procedure`),
+with the sections above and below. Nothing is stored between builds, so editing part 50 and building part 60 shows the new number at
+once. The build says `NOTE  calc: 128 names taken from parts 10-50, 3 from parts 70-90 (defined below) (evaluated, not typeset)`.
+`pdfmd-options: {seed-calc: off}` or `--seed-calc off` gives both up (a name defined in a part left out is then undefined, with the WARN
+above); `auto` (the default) and `scan` are the same. **Known bug (queued, 3eg):** when you build two parts that are not next to each
+other (`report#20+40`), what the parts between them define counts as defined above both, so a number in part 20 can be the value a
+name gets only in part 30, and nothing says so. Build parts that are next to each other, or the whole document, until it is fixed.
 
 **A table of names** (3.30.20). The shortest form is a div that holds the names: `::: calc-table`, a line `t# tinf`, and `:::`. It makes a real
 table of the names (`*` any run of characters, `?` one character, `#` a run of digits, so `t#` is t1, t2, t10 and not `t_welch`; a pattern

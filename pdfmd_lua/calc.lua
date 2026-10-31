@@ -616,6 +616,8 @@ local NOINDENT = false                                  -- set from pdfmd-calc-n
 local STATEMENTS = {}          -- every statement, in document order (id = position)
 local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
+local BUILT_NOW = false        -- between the marks `pdfmd-calc-mark-in` and `-out` (a names-only pass over a whole document, see halves)
+local LAST_IN, LAST_OUT        -- how many statements stood above the last part built, and up to its end (nil: no marks in the text)
 local pass = 1
 local occurrence = 0
 
@@ -795,6 +797,7 @@ local function register(text, default)
     for _, statement in ipairs(statements) do
       STATEMENTS[#STATEMENTS + 1] = statement
       statement.id = #STATEMENTS
+      statement.built = BUILT_NOW
       statement.source = text                                    -- the text of the place that holds it (pdfmd --check finds its line by it)
       for _, name in ipairs(statement.names) do
         NAMED[name] = NAMED[name] or {}
@@ -1420,6 +1423,18 @@ local function calc_table_div(div)
 end
 
 -- `::: {.calc-table t*}` is not a div for Pandoc (braces take .class, #id and key=value only): say so instead of printing it
+-- a paragraph that is only `pdfmd-calc-mark-in` or `pdfmd-calc-mark-out` (see dump_halves): where a part pdfmd builds begins and ends
+local function mark_of(block)
+  if block.t ~= "Para" or #block.content ~= 1 or block.content[1].t ~= "Str" then return false end
+  local which = block.content[1].text:match("^pdfmd%-calc%-mark%-(%a+)$")
+  if which ~= "in" and which ~= "out" then return false end
+  if pass == 1 then
+    BUILT_NOW = which == "in"
+    if BUILT_NOW then LAST_IN = #STATEMENTS else LAST_OUT = #STATEMENTS end
+  end
+  return true
+end
+
 local function misspelt_table(block)
   if pass ~= 2 then return nil end
   local text = pandoc.utils.stringify(block)
@@ -1448,7 +1463,7 @@ local function number_from(text)
   return x and x + 0.0 or nil
 end
 
-local function load_seed(path)
+local function load_seed(path, below)
   local file = io.open(path, "r")
   if not file then return end
   for line in file:lines() do
@@ -1460,7 +1475,7 @@ local function load_seed(path)
         local ok, parsed = pcall(parse_fmt, spec)
         if ok then fmt = parsed end
       end
-      local statement = {names = {name}, expr = name, value = x, fmt = fmt}
+      local statement = {names = {name}, expr = name, value = x, fmt = fmt, below = below}
       STATEMENTS[#STATEMENTS + 1] = statement
       statement.id = #STATEMENTS
       NAMED[name] = NAMED[name] or {}
@@ -1479,11 +1494,47 @@ local function dump_names(path)
   for _, name in ipairs(names) do
     local list = NAMED[name]
     local statement = list[#list]
-    local ok, value = pcall(value_of, statement)
+    if statement.below then statement = list[#list - 1] end         -- a definition of a later part is not the end state of this one
+    local ok, value = false, nil
+    if statement and not statement.below then ok, value = pcall(value_of, statement) end
     if ok and type(value) == "number" then
       local fmt = statement.fmt
       file:write(name, "\t", number_text(value), "\t", fmt and (fmt.n .. fmt.kind) or "", "\n")
     end
+  end
+  file:close()
+end
+
+-- A part built alone, any part of the document (3.31.44). pdfmd reads the WHOLE document with this filter and nothing else, with
+-- `pdfmd-calc-mark-in` / `-out` paragraphs around each part it is going to build, and `-M pdfmd-calc-halves=FILE`: the file holds
+-- A lines, the last definition of each name in the text left out ABOVE the last part built (it counts as defined above everything,
+-- as the dump does), and B lines, the first definition of each name in the text left out BELOW it (the real pass reads those
+-- with `-M pdfmd-calc-below=FILE`: they stand after everything, so a name is taken from there only when nothing above or inside the
+-- part defines it). Every value is the one of the full build, because it was evaluated in its own place in the whole document.
+local function dump_halves(path)
+  if not LAST_IN then return end
+  local names = {}
+  for name in pairs(NAMED) do names[#names + 1] = name end
+  table.sort(names)
+  local file = io.open(path, "w")
+  if not file then return end
+  local function write(kind, name, statement)
+    local ok, value = pcall(value_of, statement)
+    if ok and type(value) == "number" then
+      local fmt = statement.fmt
+      file:write(kind, "\t", name, "\t", number_text(value), "\t", fmt and (fmt.n .. fmt.kind) or "", "\n")
+    end
+  end
+  for _, name in ipairs(names) do
+    local above, below
+    for _, statement in ipairs(NAMED[name]) do
+      if not statement.built and not statement.below then
+        if statement.id <= LAST_IN then above = statement end
+        if statement.id > LAST_OUT and not below then below = statement end
+      end
+    end
+    if above then write("A", name, above) end
+    if below then write("B", name, below) end
   end
   file:close()
 end
@@ -1576,6 +1627,8 @@ return {{Pandoc = function(doc)
   local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
   local seed = doc.meta["pdfmd-calc-seed"]
   seed = seed and pandoc.utils.stringify(seed) or nil
+  local below = doc.meta["pdfmd-calc-below"]
+  below = below and pandoc.utils.stringify(below) or nil
   local constants_end = 0
   for _, which in ipairs({1, 2}) do
     pass, occurrence, fence_cursor, table_count = which, 0, 1, 0
@@ -1586,14 +1639,17 @@ return {{Pandoc = function(doc)
         if out ~= nil then return out, descend end
         return calc_table_div(div)
       end,
-      Para = function(block) misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block,
+      Para = function(block) if mark_of(block) then return nil end misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block,
       Inlines = process_inlines})
+    if which == 1 and below then load_seed(below, true) end   -- after everything of this build: only a name nothing above or inside defines comes from here
   end
   if WARNED >= 3 then                                  -- a report with names where numbers belong must not pass unnoticed
     io.stderr:write(string.format("WARN  calc: %d places were not evaluated (each is above); the output shows their code or text where the numbers belong\n", WARNED))
   end
   local dump = doc.meta["pdfmd-calc-dump"]
   if dump then dump_names(pandoc.utils.stringify(dump)) end
+  local halves = doc.meta["pdfmd-calc-halves"]
+  if halves then dump_halves(pandoc.utils.stringify(halves)) end
   local check = doc.meta["pdfmd-calc-check"]
   if check then check_report(pandoc.utils.stringify(check), constants_end) end
   return doc

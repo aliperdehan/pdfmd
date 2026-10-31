@@ -433,7 +433,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("scan", "a scan of the whole document"), ("draft", "a LaTeX pass over the whole document, without its pictures: exact"),
                 ("off", "none: ?? for references outside the part")), "auto", "", "Cache"),
         choice("options.seed-calc", "Calculator names in a part built alone",
-               (("auto", "evaluate the parts above it (the calculator only, nothing typeset)"),
+               (("auto", "evaluate the whole document (the calculator only, nothing typeset)"),
                 ("off", "none: a name defined in a part left out is undefined")), "auto", "", "Cache"),
         choice("options.cache.location", "Where the cache lives",
                (("global", "~/.cache/pdfmd"), ("document", ".cache/pdfmd beside the document")), "global", "", "Cache"),
