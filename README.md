@@ -2478,8 +2478,7 @@ next to the file's real copy, so you never need an absolute path.
 
 A **kit** is a named, versioned unit for a whole document pipeline: a LaTeX package, its Lua filter, default metadata, the
 citation style and the library files it needs. A kit is a folder that holds a YAML file named `.kit` (or `NAME.kit`); pdfmd
-names no package and no course, the file is the data. This release reads and finds kits (`pdfmd --kits`); choosing one for
-a document comes next.
+names no package and no course, the file is the data.
 
 ```yaml
 kit-format: 1                  # required; a larger number stops with "needs a newer pdfmd"
@@ -2512,6 +2511,24 @@ the `.kit`'s size and time; a miss is never remembered). Two different kits of o
 both; between places the order decides. `--no-auto kit` takes the searching off (the config's `kits:` and a path stay),
 `--no-auto kpsewhich` the TeX tree only. `pdfmd --kits` lists the kits, `pdfmd --kits NAME-OR-PATH` shows one in full and
 checks it. Searching is not selecting: a document that only says `\usepackage{nulabreport}` is not switched to the kit.
+
+**Choosing a kit.** `pdfmd-options: {kit: nulabreport:qca}` in a document, a metadata file, a folder's `.pdfmd/` files, a preset or
+the config's `options:`, or `--kit nulabreport:qca` for one run. The same choice can be written `nulabreport`, `nulabreport[qca]`
+(quote it in a shell), `"[qca]nulabreport"` (quote it in YAML), `{nulabreport: qca}`, or a list for the order; a value with `/`,
+`\` or a leading `~` or `.` is a path to the kit's folder or `.kit` file; `none` (or `off`, `no`, `false`) means no kit. A mode is
+matched by name or alias (`nulabreport:220`). The layers stack, lowest first: the config, a preset, the folders' files
+(`.pdfmd/`), the document. The same kit named higher up changes only the keys it names (the mode); different kits are added in
+order; `none` drops what is below. A folder's `kit:` names a kit (searched in `kits:` of the config, the config folder's `kits/` and
+the TeX tree), never a path and never the project's `kits/` folder.
+
+`--kit` replaces every `kit:` setting; give it several times to stack them; `--kit none` (or a bare `--kit` before another
+option) uses no kit. `kit-stack` (`pdfmd-options`, `--kit-stack`, a `--setup` row) makes `--kit` stack on the layers instead: `all`,
+or a list of `global`, `preset`, `folder`, `document`; so `--kit-stack all --kit nulabreport:orgchem` changes only the mode for one
+run.
+
+A chosen kit's `defaults`, `metadata` and its mode's are metadata files between the global metadata and the folders' own, so a
+folder tunes the kit and the document wins; its `lua` filters run; its folder is on Pandoc's resource path, so its `csl:` and
+`bibliography:` are found by name; `pdfmd --verbose` prints what it chose.
 
 ## Build stamps, history and snapshots
 

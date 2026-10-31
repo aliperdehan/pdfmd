@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.30"
+PDFMD_VERSION = "3.31.31"
 import argparse
 import atexit
 import csv
@@ -1855,6 +1855,10 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
         real_directory = metadata.resolve().parent
         if real_directory != metadata.parent.resolve() and real_directory not in extra:
             extra.append(real_directory)
+    for metadata in metadata_files or []:                      # a kit's own folder: its csl and bibliography are found by name
+        folder = KIT_METADATA.get(metadata)
+        if folder is not None and folder not in extra and folder != pandoc_cwd:
+            extra.append(folder)
     extra += [directory for directory in EMBEDDED_RESOURCE_DIRS if directory not in extra]
     if document_directory == pandoc_cwd and not extra:
         return []
@@ -6716,13 +6720,24 @@ def read_package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
             except (OSError, yaml.YAMLError):
                 return None
             return (data, candidate) if isinstance(data, dict) else None
+    kit = folder / ".kit"
+    if kit.is_file():                  # a kit's own file carries the same blocks, for the package it ships
+        try:
+            data = yaml.safe_load(kit.read_text(encoding="utf-8-sig"))
+        except (OSError, yaml.YAMLError):
+            return None
+        if isinstance(data, dict) and str(data.get("package") or "").casefold() == package.casefold():
+            return {key: data[key] for key in ("latex-keys", "picture-cache", "draft-skip", "office", "lua") if key in data}, kit
     return None
 
 
-def kit_package_folders(package: str) -> list[Path]:
-    """The folders of the selected kits that ship `<package>.sty`. Kits are not built yet (entry 3du, C2 fills this in), so
-    the answer is none; the helper search below already asks, in its place."""
-    return []
+def kit_package_folders(package: str, document: Path | None = None) -> list[Path]:
+    """The folders of the kits chosen for ``document`` that ship `<package>.sty` (the kit names its package)."""
+    chosen = [item for item in active_kits(document) if item.kit.package]
+    if not chosen:
+        return []
+    from pdfmd_kits import normalise
+    return [item.kit.folder for item in chosen if normalise(item.kit.package) == normalise(package)]
 
 
 KPSEWHICH_FOLDERS: dict[tuple, Path | None] = {}   # (package, the variables that steer TeX's search) -> its folder
@@ -6776,13 +6791,13 @@ def configured_kits() -> list[tuple[Path, dict]]:
     return found
 
 
-def kit_locations(base: Path | None = None, no_auto: list[str] | None = None) -> list:
+def kit_locations(base: Path | None = None, no_auto: list[str] | None = None, project: bool = True) -> list:
     """The folders a kit is searched in (pdfmd_kits.Location), in order."""
     from pdfmd_kits import Location
     base = (base or Path.cwd()).resolve()
     searching = not auto_disabled(no_auto, "kit")
     places = []
-    if searching:
+    if searching and project:
         places += [Location("a kits/ folder above the document", folder / "kits")
                    for folder in (base, *base.parents) if (folder / "kits").is_dir()]
     places += [Location("kits: in the config", path, aliases) for path, aliases in configured_kits() if path.is_dir()]
@@ -6797,13 +6812,16 @@ def kit_path_like(text: str) -> bool:
     return "/" in text or "\\" in text or text.startswith(("~", "."))
 
 
-def find_kit(reference: str, base: Path | None = None, no_auto: list[str] | None = None):
+def find_kit(reference: str, base: Path | None = None, no_auto: list[str] | None = None, named_only: bool = False):
     """pdfmd_kits.Found for a kit named by ``reference`` (a name, or a path to its folder or `.kit` file); raises
     pdfmd_kits.KitError when there is none, naming where it looked and the nearest names."""
     from pdfmd_kits import Found, KitError, find, list_kits
     from pdfmd_kits.discovery import kit_files
     base = (base or Path.cwd()).resolve()
     reference = str(reference).strip()
+    if named_only and kit_path_like(reference):
+        raise KitError(f"`{reference}` is a path, and a folder's `kit:` names a kit (a folder's options cannot name code); "
+                       "register the kit under `kits:` of the config file, or select it by path in the document")
     if kit_path_like(reference):
         path = Path(os.path.expandvars(reference)).expanduser()
         path = Path(os.path.normpath(path if path.is_absolute() else base / path))
@@ -6815,7 +6833,7 @@ def find_kit(reference: str, base: Path | None = None, no_auto: list[str] | None
     else:
         searching = not auto_disabled(no_auto, "kit")
         lookup = installed_package_folder if searching and not auto_disabled(no_auto, "kpsewhich") else None
-        locations = kit_locations(base, no_auto)
+        locations = kit_locations(base, no_auto, project=not named_only)
         found = find(reference, locations, lookup, kit_cache() if lookup else None)
         if found is None:
             from difflib import get_close_matches
@@ -6895,7 +6913,166 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
     return ok
 
 
-def package_helper(folder: Path, package: str, no_auto: list[str] | None = None) -> tuple[dict, Path] | None:
+# -- Kits: choose them (entry 3du, C2) -------------------------------------------------------------------------------------
+# `pdfmd-options: {kit: ...}` in the config (global), the global metadata or a preset (preset), a folder's `.pdfmd/` files
+# (folder; by NAME only), a document's own metadata and front matter (document); `--kit` above them all. pdfmd_kits.selection
+# has the grammar and the stacking. A selected kit supplies, in this order: its defaults as metadata files between the global
+# metadata and the folders' own (so a folder tunes the kit and the document wins), the folder of its package for the helper
+# lookup, its Lua filters, and its folder on Pandoc's resource path. The preamble it writes is C3.
+KIT_CLI: list | None = None                     # --kit, parsed (None: not given; [OFF]: bare --kit / none)
+KIT_STACK_CLI = None                            # --kit-stack, as given
+KIT_METADATA: dict[Path, Path] = {}             # a metadata file a kit supplies -> that kit's folder
+ACTIVE_KITS: dict[tuple, list] = {}             # the kits of one document in one run (the choice does not change mid-build)
+
+
+class ActiveKit:
+    """A kit chosen for a document: the loaded kit, its mode (or None), where it was found, and the selection behind it."""
+
+    def __init__(self, kit, mode, found, selection):
+        self.kit, self.mode, self.found, self.selection = kit, mode, found, selection
+
+    def describe(self) -> str:
+        return (f"{self.kit.name} {self.kit.version}".rstrip() + (f" mode {self.mode.name}" if self.mode else "")
+                + f" (chosen in the {self.selection.layer or 'command line'})")
+
+
+def set_kit_cli(values, stack_value) -> None:
+    """--kit (repeatable; bare = no kit) and --kit-stack, read once at the start of a run."""
+    global KIT_CLI, KIT_STACK_CLI
+    KIT_CLI, KIT_STACK_CLI = None, None
+    ACTIVE_KITS.clear()
+    if values is None and stack_value is None:
+        return                                                  # no kit asked for: the kit code is not even imported
+    from pdfmd_kits import selection
+    if values is not None:
+        KIT_CLI = []
+        for value in values:
+            try:
+                KIT_CLI += selection.parse(value, "command line") if value else [selection.OFF]
+            except selection.SelectionError as error:
+                raise SystemExit(f"--kit {value}: {error}")
+    if stack_value is not None:
+        try:
+            selection.parse_stack_setting(stack_value)
+        except selection.SelectionError as error:
+            raise SystemExit(f"--kit-stack: {error}")
+        KIT_STACK_CLI = stack_value
+
+
+def kit_layer_selections(md_path: Path, metadata_files: list[Path]) -> dict[str, list]:
+    """The `kit:` choices of each layer, parsed: {layer: [Selection]} (see pdfmd_kits.selection.LAYERS)."""
+    layers: dict[str, list] = {name: [] for name in ("global", "preset", "folder", "document")}
+
+    def add(layer: str, options, where: str) -> None:
+        if isinstance(options, dict) and "kit" in options:
+            from pdfmd_kits import selection
+            try:
+                layers[layer] += selection.parse(options["kit"], layer)
+            except selection.SelectionError as error:
+                raise SystemExit(f"{where}: kit: {error}")
+
+    add("global", config_options(), "the config file")
+    others = [path for path in metadata_files if path not in KIT_METADATA and not is_folder_metadata(path)]
+    for path in others:
+        if is_global_metadata(path):
+            add("preset", metadata_file_yaml(path).get("pdfmd-options"), str(path))
+    for directory, data, metadata in reversed(folder_walk(str(md_path.resolve().parent))):
+        if data is not None:
+            add("folder", data.get("options"), str(directory / "config.yaml"))
+        if metadata is not None:
+            add("folder", metadata_file_yaml(metadata).get("pdfmd-options"), str(metadata))
+    for path in pandoc_metadata_order(others):
+        if not is_global_metadata(path):
+            add("document", metadata_file_yaml(path).get("pdfmd-options"), str(path))
+    add("document", frontmatter_pdfmd_options(md_path), str(md_path))
+    return layers
+
+
+def active_kits(md_path: Path | None, metadata_files: list[Path] | None = None, no_auto: list[str] | None = None) -> list:
+    """The kits chosen for this document (ActiveKit, in stack order); [] when nothing selects one. Search is not selection:
+    a document that merely loads a kit's package gets none. Costs nothing for a document no layer gives a `kit:`."""
+    if md_path is None or yaml is None:
+        return []
+    key = (str(md_path.resolve()), None if no_auto is None else tuple(no_auto), len(KIT_CLI) if KIT_CLI is not None else -1)
+    if key in ACTIVE_KITS:
+        return ACTIVE_KITS[key]
+    ACTIVE_KITS[key] = []
+    try:
+        return _active_kits(md_path, metadata_files, no_auto, key)
+    except BaseException:
+        ACTIVE_KITS.pop(key, None)
+        raise
+
+
+def _active_kits(md_path: Path, metadata_files: list[Path] | None, no_auto: list[str] | None, key: tuple) -> list:
+    if metadata_files is None:
+        try:
+            found = find_metadata(md_path.parent, None, document_stem=md_path.stem, document=md_path, kits=False)
+        except (OSError, ValueError, SystemExit):
+            found = None
+        metadata_files = [] if found is None or found is AUTO_METADATA_DISABLED else (found if isinstance(found, list) else [found])
+    layers = kit_layer_selections(md_path, list(metadata_files))
+    if not any(layers.values()) and KIT_CLI is None:
+        return ACTIVE_KITS[key]
+    from pdfmd_kits import KitError, load_kit, resolve_mode, selection
+    try:
+        setting = selection.parse_stack_setting(
+            KIT_STACK_CLI if KIT_STACK_CLI is not None else first_pdfmd_option(
+                md_path, [path for path in metadata_files if path not in KIT_METADATA], "kit-stack"))
+    except selection.SelectionError as error:
+        raise SystemExit(str(error))
+    resolved = []
+    for choice in selection.combine(layers, KIT_CLI, setting):
+        try:
+            found = find_kit(choice.ref, md_path.parent, no_auto, named_only=choice.layer == "folder")
+            kit = load_kit(found.path, found.aliases)
+            mode = resolve_mode(kit, choice.mode)
+        except KitError as error:
+            raise SystemExit(f"{md_path.name}: kit `{choice.ref}` (chosen in the {choice.layer}): {error}")
+        for warning in kit.warnings:
+            print(f"WARN  {warning}", file=sys.stderr)
+        resolved.append(ActiveKit(kit, mode, found, choice))
+        if VERBOSE_OUTPUT:
+            print(f"AUTO KIT  {resolved[-1].describe()}")
+    ACTIVE_KITS[key] = resolved
+    return resolved
+
+
+def kit_overlay(kit, label: str, mapping: dict) -> Path | None:
+    """The kit's inline default metadata as a metadata file in the cache folder (named by its content, written once)."""
+    if not mapping or yaml is None:
+        return None
+    text = yaml.safe_dump(mapping, allow_unicode=True, sort_keys=False)
+    from pdfmd_kits import normalise
+    path = cache_root() / "kit-metadata" / f"{normalise(kit.name)}-{label}-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:10]}.yaml"
+    try:
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+            temporary.write_text(text, encoding="utf-8")
+            os.replace(temporary, path)
+    except OSError as error:
+        print(f"WARN  kit {kit.name}: cannot write its default metadata to {path} ({error.strerror or error}); left out", file=sys.stderr)
+        return None
+    return path
+
+
+def kit_metadata_files(kits: list) -> list[Path]:
+    """The metadata files the kits supply, lowest first: for each kit its defaults, its inline metadata, its mode's defaults, its
+    mode's metadata. Each is remembered in KIT_METADATA with the kit's folder."""
+    files: list[Path] = []
+    for item in kits:
+        kit, mode = item.kit, item.mode
+        parts = [*kit.defaults, kit_overlay(kit, "kit", kit.metadata),
+                 *(mode.defaults if mode else ()), kit_overlay(kit, "mode", mode.metadata if mode else {})]
+        for path in parts:
+            if path is not None and path not in files:
+                KIT_METADATA[path] = kit.folder
+                files.append(path)
+    return files
+
+
+def package_helper(folder: Path, package: str, no_auto: list[str] | None = None, document: Path | None = None) -> tuple[dict, Path] | None:
     """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
     (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
     (front-matter key -> the macro it fills), `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`), `lua:` (Lua
@@ -6909,7 +7086,7 @@ def package_helper(folder: Path, package: str, no_auto: list[str] | None = None)
     found = read_package_helper(folder, package)
     if found or yaml is None:
         return found
-    others: list[Path] = [] if auto_disabled(no_auto, "kit") else kit_package_folders(package)
+    others: list[Path] = [] if auto_disabled(no_auto, "kit") else kit_package_folders(package, document)
     if not auto_disabled(no_auto, "kpsewhich"):
         installed = installed_package_folder(package)
         if installed:
@@ -6956,8 +7133,10 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
     """(folder, package name) of each LaTeX package the document's preamble loads that is not part of the TeX
     distribution: a package may ship its Word support beside its .sty (`<name>-office.lua`,
     `<name>-office.yaml`, `<name>-reference.dotx`), found here."""
+    chosen = [(item.kit.folder, item.kit.package, list(item.mode.options) if item.mode else [])
+              for item in active_kits(md_path, metadata_files, None) if item.kit.package]
     if discovery_disabled(no_auto, "preamble"):
-        return []
+        return chosen
     texts = []
     for item in find_preambles(md_path.parent, md_path.stem, []):
         try:
@@ -6980,6 +7159,9 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
             folder = path.resolve().parent
             if not any(item[0] == folder and item[1] == package for item in found):
                 found.append((folder, package, options))
+    for entry in chosen:                                       # a kit loads its package itself; a copy the preamble resolved stands
+        if not any(item[1] == entry[1] for item in found):
+            found.append(entry)
     return found
 
 
@@ -10503,7 +10685,7 @@ def package_latex_keys(md_path: Path, metadata_files: list[Path] | None = None,
     ask for in their `<package>-pdfmd.yaml` (`latex-keys:`)."""
     keys: dict[str, str] = {}
     for folder, package, _ in office_packages(md_path, metadata_files or [], None):
-        helper = package_helper(folder, package, no_auto)
+        helper = package_helper(folder, package, no_auto, md_path)
         wanted = helper[0].get("latex-keys") if helper else None
         if isinstance(wanted, dict):
             for key, macro in wanted.items():
@@ -10564,7 +10746,7 @@ def package_lua_names(md_path: Path, metadata_files: list[Path], no_auto: list[s
     names: list[str] = []
     for folder, package, _ in office_packages(md_path, metadata_files, None):
         listed = [f"{package}.lua"]
-        helper = package_helper(folder, package, no_auto)
+        helper = package_helper(folder, package, no_auto, md_path)
         extra = helper[0].get("lua") if helper else None
         listed += [str(item) for item in ([extra] if isinstance(extra, str) else extra if isinstance(extra, list) else [])]
         names += [name for name in listed if name not in names and "/" not in name and "\\" not in name]
@@ -10588,6 +10770,11 @@ def find_lua_filters(md_path: Path, metadata_files: list[Path], no_auto: list[st
     for directory in directories:
         for name in wanted:
             candidate = (directory / name).resolve()
+            if candidate.is_file() and candidate not in seen:
+                seen.add(candidate)
+                found.append(candidate)
+    for item in active_kits(md_path, metadata_files, None):         # the Lua filters a chosen kit names
+        for candidate in (path.resolve() for path in item.kit.lua):
             if candidate.is_file() and candidate not in seen:
                 seen.add(candidate)
                 found.append(candidate)
@@ -15566,11 +15753,12 @@ def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
     in Pandoc too (v3.27.22). The list itself keeps the global file last (Pandoc runs in the folder of its first
     entry); what pdfmd reads out of the files itself follows this order too (metadata_files_by_priority)."""
     extra = next((path for path in metadata_files if is_global_metadata(path)), None)
-    folders = [path for path in metadata_files if path != extra and is_folder_metadata(path)]       # nearest first
-    local = [path for path in metadata_files if path != extra and not is_folder_metadata(path)]
+    supplied = [path for path in metadata_files if path != extra and path in KIT_METADATA]            # a kit's defaults, in its order
+    folders = [path for path in metadata_files if path != extra and path not in KIT_METADATA and is_folder_metadata(path)]       # nearest first
+    local = [path for path in metadata_files if path != extra and path not in KIT_METADATA and not is_folder_metadata(path)]
     if len(local) > 1 and metadata_precedence() == "first":
         local.reverse()
-    return [*([extra] if extra is not None else []), *reversed(folders), *local]
+    return [*([extra] if extra is not None else []), *supplied, *reversed(folders), *local]
 
 
 def metadata_files_by_priority(metadata_files) -> list[Path]:
@@ -15584,18 +15772,24 @@ def metadata_files_by_priority(metadata_files) -> list[Path]:
 def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                   document_class: str | None = None,
                   document_stem: str | None = None, document: Path | None = None,
-                  discover: bool = True) -> Path | list[Path] | object | None:
+                  discover: bool = True, kits: bool = True) -> Path | list[Path] | object | None:
     """Choose metadata files (see find_local_metadata), with the folders' and the global metadata file last when the files were
     found automatically (not named with -y). The global one is the lowest in priority: pandoc_metadata_order gives it to Pandoc
-    first. ``discover=False`` (explicit-only) looks for no file beside the document but keeps the folders' and the global ones."""
+    first. ``discover=False`` (explicit-only) looks for no file beside the document but keeps the folders' and the global ones.
+    The defaults of the kits chosen for the document (``kits``; entry 3du) come between the global file and the folders'."""
     found = find_local_metadata(directory, requested, report, document_class, document_stem) if discover else None
     extra, folders = None, []
     if requested is None and found is not AUTO_METADATA_DISABLED:
         extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
         folders = folder_metadata_files(str(directory.resolve()))          # the folders' own, between the files and the global
-    if (extra is None and not folders) or found is AUTO_METADATA_DISABLED:
+    supplied: list[Path] = []
+    if kits and document is not None and found is not AUTO_METADATA_DISABLED:
+        here = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders,
+                *([extra] if extra is not None else [])]
+        supplied = kit_metadata_files(active_kits(document, here))
+    if (extra is None and not folders and not supplied) or found is AUTO_METADATA_DISABLED:
         return found
-    listed = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders,
+    listed = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders, *supplied,
               *([extra] if extra is not None else [])]
     return listed[0] if len(listed) == 1 else listed
 
@@ -20244,7 +20438,7 @@ def package_draft_skips(md_path: Path, metadata_files: list[Path],
     commands = list(DRAFT_SKIP_COMMANDS)
     spans = dict(DRAFT_SKIP_SPANS)
     for folder, package, _ in office_packages(md_path, metadata_files, None):
-        helper = package_helper(folder, package, no_auto)
+        helper = package_helper(folder, package, no_auto, md_path)
         wanted = helper[0].get("draft-skip") if helper else None
         if not isinstance(wanted, dict):
             continue
@@ -26756,6 +26950,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "or the config says. Also `options: {global-metadata: false}` in --setup")
     parser.add_argument("--presets", action="store_true",
                         help="list the presets (global metadata files, see --preset) and the one a build here would use")
+    parser.add_argument("--kit", action="append", nargs="?", const="", default=None, metavar="KIT",
+                        help="use this kit for the run: nulabreport, nulabreport:qca, nulabreport[qca], or a path; repeat it to stack "
+                             "several. It replaces every `kit:` setting (the --kit-stack setting keeps some); `--kit none`, or "
+                             "a bare --kit before another option, uses no kit. A kit is a folder with a `.kit` file (--kits)")
+    parser.add_argument("--kit-stack", default=None, metavar="LAYERS",
+                        help="which kit settings --kit stacks on instead of replacing: all, or a list of global, preset, folder, "
+                             "document (e.g. folder,document); off (default) replaces them all. Also `pdfmd-options: {kit-stack: ...}`")
     parser.add_argument("--kits", nargs="*", default=None, metavar="NAME",
                         help="list the kits there are (a kit is a folder with a `.kit` file: a document pipeline such as a "
                              "house style), or show the named ones (a name or a path) in full and check them; where kits are "
@@ -27260,6 +27461,7 @@ def run_main() -> None:
         stdin_build(args)
     global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
     global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI, REWRITE_CLI
+    set_kit_cli(args.kit, args.kit_stack)
     REWRITE_CLI = True if args.watch else args.rewrite       # a watch rebuilds the same file on every save
     BUNDLE_PACKAGES_CLI = args.bundle_packages
     STRIP_COMMENTS_CLI = args.strip_comments

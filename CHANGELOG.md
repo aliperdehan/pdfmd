@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.31 — 2026-10-31
+
+Pre-edit state: commit `abe26bb`. Still under 3.31. `[kits]`, C2 of entry 3du.
+
+A document can choose a kit, and the kit's defaults, Lua filters and folder reach the build. (The preamble a kit writes is the next patch; until then a kit's package is loaded by the document's own preamble.)
+
+- **Choosing.** `pdfmd-options: {kit: ...}` in a document, a metadata file, a folder's `.pdfmd/` files, a preset or the config's `options:`; `--kit` on the command line. The value reads `nulabreport`, `nulabreport:qca` (no quotes needed), `nulabreport[qca]`, `"[qca]nulabreport"` (quoted), `{nulabreport: qca}`, `{nulabreport: {mode: qca}}`, a list for the order, a path (a value with `/`, `\` or a leading `~` or `.`), and `none|off|false|no` for no kit. A mode is matched by name or alias, ignoring case and `- _ .` and spaces; an unknown mode stops and lists the modes. README, section "Kits".
+- **Layers stack**, lowest first: the config's `kit:` (global), the global metadata or a preset, the folders' files (farthest first), the document's metadata files and front matter. The same kit named higher up replaces only the keys it names (a mode, say); different kits are added in order; `none` drops what is below. A folder's `kit:` names a kit and never searches the project's `kits/` folder or takes a path (a folder's options cannot name code); a message says so.
+- **`--kit`** replaces every `kit:` setting; repeated `--kit` stacks in order; `--kit none`, or a bare `--kit` before another option, means no kit. **`--kit-stack`** (also `pdfmd-options: {kit-stack: ...}` and a `--setup` row) says what `--kit` stacks on instead of replacing: `off` (default), `all`, or a list of `global`, `preset`, `folder`, `document`. Switches stay absolute whatever it says. `kit` and `kit-stack` are `--setup` rows ("Kits").
+- **What a chosen kit brings.** Its `defaults:` files, its inline `metadata:`, its mode's `defaults:` and `metadata:` as metadata files between the global metadata and the folders' own (the folder tunes the kit; the document wins; inline metadata is written once into `kit-metadata/` of the cache folder, named by its content); its `lua:` filters; its folder on Pandoc's resource path, so its `csl:` and `bibliography:` are found by name; its package, so `package_helper` and the Lua and Word lookups see it, and `kit_package_folders` (the 3.31.29 slot) answers; the helper blocks of its `.kit` (`latex-keys`, `draft-skip`, `office`, `lua`...) when no `<package>-pdfmd.yaml` stands beside the `.sty`. `--verbose` prints an `AUTO KIT` line per chosen kit. A document that no layer gives a `kit:` is read as before; the kit code is not imported.
+- Tests: `tests/test_kit_selection.py` (the grammar as a table, YAML spellings, stacking, `--kit` and `kit-stack`, and builds through pdfmd itself with a fixture kit).
+
 ## v3.31.30 — 2026-10-31
 
 Pre-edit state: commit `37bfee6`. Still under 3.31. `[kits]`, C1 of entry 3du.

@@ -66,7 +66,7 @@ UNSET = {
     "options.poppler-path": "PATH, then the usual install folders",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
-    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree",
+    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -96,7 +96,7 @@ FOLDER_OPTIONS = frozenset({
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout",
-    "options.no-auto", "options.auto.explicit-only", "options.auto.on",
+    "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
 # `.pdfmd`, not the document's (the author has not decided that yet)
@@ -552,6 +552,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("kits", "Folders of kits", "Comma-separated: a folder that is a kit, or one that holds kits (`pdfmd --kits` lists "
              "them). Names for a kit's modes, added without editing it, go in the file by hand: `- {path: ~/kits/x, aliases: "
              "{mode: [name]}}`.", "Kits", "config", "list"),
+        text("options.kit", "Kit for every document", "A kit to use when a document or its folder names none: `nulabreport`, "
+             "`nulabreport:qca`, or `none`. Layers stack: the document's own `kit:` is laid over this one.", "Kits"),
+        text("options.kit-stack", "What --kit stacks on", "`off` (default: --kit replaces every kit setting), `all`, or the "
+             "layers it keeps: global, preset, folder, document (e.g. folder,document).", "Kits"),
         # -- tool locations (this computer: Windows installers often leave a tool off PATH)
         text("options.tesseract-path", "Tesseract", "The tesseract program, or the folder that holds it. Without it pdfmd looks on "
              "PATH, then in the usual Windows install folders.", "Tool locations"),
