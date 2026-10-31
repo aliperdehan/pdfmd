@@ -2530,6 +2530,16 @@ A chosen kit's `defaults`, `metadata` and its mode's are metadata files between 
 folder tunes the kit and the document wins; its `lua` filters run; its folder is on Pandoc's resource path, so its `csl:` and
 `bibliography:` are found by name; `pdfmd --verbose` prints what it chose.
 
+**The preamble a kit writes.** For LaTeX output the kit's lines (`\usepackage[<mode options>]{package}`, then its `latex:` lines and its
+mode's) are one header file that comes before every other: your `preamble.tex`, `header-includes:` and `--include-in-header` files
+follow it, so a setting that needs the package finds it loaded. If your text says what the kit says, pdfmd settles it in the build
+copy (your files are never edited): the same `\usepackage` or `\input` line is dropped; extra options (`[qca,draft]` where the kit
+loads `[qca]`) are merged into the kit's line, because LaTeX stops with "Option clash" on two different lines; an option of another
+mode of the same kit is a contradiction, where a `preamble.tex` found in the folder yields to the kit with a warning
+(`KIT-YIELD`) and `header-includes:`, `--include-in-header` or a named preamble stop the build naming both sides; anything else
+stays after the kit's lines. Only a whole line is rewritten: the package inside a list or behind a macro stops the build and names
+the line. `--verbose` shows the quiet outcomes (`KIT-SAME`, `KIT-MERGE`).
+
 ## Build stamps, history and snapshots
 
 All are off by default.

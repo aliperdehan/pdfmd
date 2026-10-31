@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.32 — 2026-10-31
+
+Pre-edit state: commit `1ee4fb9`. Still under 3.31. `[kits]`, C3 of entry 3du.
+
+A chosen kit writes its own preamble, and what it and the user's LaTeX say twice is settled in the build copy (3du, point 9).
+
+- **The kit's lines come first.** One header file, `\usepackage[<mode options>]{package}`, then the kit's `latex:` lines and its mode's, goes ahead of every other `--include-in-header` (after pdfmd's code-wrapping header), so `\labsetup{...}` and the like in `preamble.tex`, `header-includes:` (the document's or a folder's metadata) or an `--include-in-header` file follow it. A kit's `latex-keys` now apply with no `preamble.tex` of the user's.
+- **Four outcomes** for the user's text, in copies in the cache folder (a user's file is never edited): the same line (the package with options the kit already gives, or an `\input` the kit writes) is dropped, `KIT-SAME`; extra options (`[qca,draft]` against `[qca]`) are merged into the kit's one line, `KIT-MERGE` (LaTeX itself stops on two different `\usepackage` lines of one package: "Option clash"); an option that belongs to another mode of the same kit is a contradiction: a preamble found in the folder yields with a WARN, `KIT-YIELD`, its line commented out, while `header-includes:`, an `--include-in-header` file or a named `preamble:` stop the build naming both sides; everything else stays after the kit's lines with no word. `KIT-SAME` and `KIT-MERGE` show with `--verbose`; the ids are fixed for the chatter ladder to come.
+- Only a whole-line `\usepackage[...]{name}` (options may span lines; `\RequirePackage` too) and a whole-line `\input{...}` are rewritten. The kit's package behind a macro or inside a list (`\usepackage{a,labstyle}`) stops the build and names the line; an `\input` in another shape is left alone.
+- `keep_header_includes` (the one place the finished command's header files are settled) does the work for every route; `document_header_file` is active when a kit writes a preamble, so the document's own `header-includes` are not dropped. Pure part: `pdfmd_kits/preamble.py`; tests: `tests/test_kit_preamble.py` (the resolver as a table, builds through pdfmd, and a real `pdflatex` run that survives the user's added option).
+
 ## v3.31.31 — 2026-10-31
 
 Pre-edit state: commit `abe26bb`. Still under 3.31. `[kits]`, C2 of entry 3du.

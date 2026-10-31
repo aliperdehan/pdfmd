@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.31"
+PDFMD_VERSION = "3.31.32"
 import argparse
 import atexit
 import csv
@@ -2436,6 +2436,18 @@ def pandoc_header_includes(sources: list[Path], metadata_files: list[Path]) -> t
 
 def keep_header_includes(cmd: list[str], sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
                          header_file: Path | None = None) -> None:
+    """The finished command's header files: a chosen kit's preamble goes in first (it is a header file, so the document's own
+    `header-includes` need giving back too), then `_keep_header_includes`, then what the kit and the user's own LaTeX say
+    twice is settled (kit_header_resolve)."""
+    document = sources[0] if sources else None
+    inserted = kit_header_insert(cmd, document, metadata_files)
+    _keep_header_includes(cmd, sources, metadata_files, pandoc_options, header_file)
+    if inserted:
+        kit_header_resolve(cmd, document, metadata_files, pandoc_options)
+
+
+def _keep_header_includes(cmd: list[str], sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
+                          header_file: Path | None = None) -> None:
     """Give back the `header-includes` pdfmd's own --include-in-header files took away (v3.27.18). Pandoc puts those
     files and `header-includes:` in one template variable and the command line wins, so the code-wrapping header of a
     document with code, graphicx for a raw \\includegraphics, the fonts header, a preamble.tex or the packages header
@@ -2463,7 +2475,8 @@ def keep_header_includes(cmd: list[str], sources: list[Path], metadata_files: li
         return
     packages = cache_root() / "tex"
     if where == "metadata":
-        at = next((index for index in positions if not cmd[index + 1].endswith("code_wrap.tex")), len(cmd))
+        at = next((index for index in positions if not cmd[index + 1].endswith("code_wrap.tex")
+                   and not Path(cmd[index + 1]).name.startswith(KIT_HEADER_PREFIX)), len(cmd))
     else:
         at = next((index for index in positions if Path(cmd[index + 1]).parent == packages
                    and Path(cmd[index + 1]).name.startswith("packages-")), len(cmd))
@@ -7072,6 +7085,109 @@ def kit_metadata_files(kits: list) -> list[Path]:
     return files
 
 
+# -- Kits: the preamble they write (entry 3du, C3) ----------------------------------------------------------------------
+# The kit's lines are one header file, first of all (after the code-wrapping header); the user's own LaTeX follows. What the kit
+# and the user's text say twice is settled in copies in the cache folder, never in the user's files: pdfmd_kits.preamble has the
+# four outcomes. Ids: KIT-SAME and KIT-MERGE are shown with --verbose, KIT-YIELD is a WARN.
+KIT_HEADER_PREFIX = "pdfmd-kit-"
+
+
+def kit_preamble_kits(document: Path | None, metadata_files: list[Path] | None) -> list:
+    return [item for item in active_kits(document, metadata_files, None)
+            if item.kit.package or item.kit.latex or (item.mode is not None and item.mode.latex)]
+
+
+def kit_writes_preamble(document: Path | None, metadata_files: list[Path] | None) -> bool:
+    return bool(document is not None and kit_preamble_kits(document, metadata_files))
+
+
+def header_argument_positions(cmd: list[str]) -> list[tuple[int, bool]]:
+    """(index of the file, whether it is the `--include-in-header=FILE` form) of each header file of ``cmd``."""
+    found = []
+    for index, item in enumerate(cmd):
+        if item in ("-H", "--include-in-header") and index + 1 < len(cmd):
+            found.append((index + 1, False))
+        elif item.startswith("--include-in-header="):
+            found.append((index, True))
+    return found
+
+
+def kit_header_insert(cmd: list[str], document: Path | None, metadata_files: list[Path]) -> bool:
+    """Step 1: a place for the kit's header file, before every other header file but the code-wrapping one."""
+    if not kit_writes_preamble(document, metadata_files):
+        return False
+    positions = [index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"]
+    at = next((index for index in positions if not cmd[index + 1].endswith("code_wrap.tex")), len(cmd))
+    cmd[at:at] = ["--include-in-header", str(cache_root() / "tex" / (KIT_HEADER_PREFIX + "pending.tex"))]
+    return True
+
+
+def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path], pandoc_options: list[str]) -> None:
+    """Step 2: read the other header files, settle what they say twice with the kits' lines, write the kits' header file."""
+    from pdfmd_kits import preamble
+    kits = kit_preamble_kits(document, metadata_files)
+    pending = next((index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"
+                    and Path(cmd[index + 1]).name == KIT_HEADER_PREFIX + "pending.tex"), None)
+    if pending is None:
+        return
+    auto = {path.resolve() for path in ([] if has_header_include_option(pandoc_options) else
+                                        find_preambles(document.parent, document.stem, []))}
+    named = {path.resolve() for path in frontmatter_extra_preambles(document)}
+    places = []                                          # (index, is the `=` form, path, name for messages, explicit)
+    for index, equals in header_argument_positions(cmd):
+        raw = cmd[index].split("=", 1)[1] if equals else cmd[index]
+        path = Path(raw)
+        if path.name.startswith(KIT_HEADER_PREFIX) or path.name == "code_wrap.tex" or not path.is_file():
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            resolved = path
+        places.append((index, equals, path, display_path(path), resolved not in auto or resolved in named))
+    texts = [read_text_best_effort(path) for _, _, path, _, _ in places]
+    blocks: list[str] = []
+    events = []
+    for item in kits:
+        kit, mode = item.kit, item.mode
+        own = tuple(mode.options) if mode else ()
+        foreign = frozenset(option for other in kit.modes.values() if other is not mode for option in other.options) - frozenset(own)
+        lines = [*kit.latex, *(mode.latex if mode else ())]
+        label = f"{kit.name}" + (f" {kit.version}" if kit.version else "") + (f" (mode {mode.name})" if mode else "")
+        sources = [preamble.Source(name, text, explicit) for text, (_, _, _, name, explicit) in zip(texts, places)]
+        try:
+            result = preamble.resolve(label, kit.package, own, foreign, preamble.kit_inputs(lines), sources)
+        except preamble.PreambleClash as error:
+            raise SystemExit(f"{document.name}: {error}")
+        texts = result.texts
+        events += result.events
+        blocks.append("\n".join([f"% pdfmd: kit {label}; written by pdfmd, edit the kit, not this file",
+                                *([preamble.package_line(kit.package, result.options)] if kit.package else []), *lines]))
+    for event in events:
+        if event.warn:
+            print(f"WARN  {event.id}  {event.message}", file=sys.stderr)
+        elif VERBOSE_OUTPUT:
+            print(f"AUTO {event.id}  {event.message}")
+    for (index, equals, path, _, _), text in zip(places, texts):
+        if text != read_text_best_effort(path):
+            copy = cache_root() / "tex" / f"kit-{path.stem}-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]}.tex"
+            try:
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                if not copy.is_file():
+                    copy.write_text(text, encoding="utf-8")
+            except OSError as error:
+                raise SystemExit(f"cannot write the build copy of {path.name} for the kit ({error.strerror or error})")
+            cmd[index] = f"--include-in-header={copy}" if equals else str(copy)
+    body = "\n".join(blocks) + "\n"
+    final = cache_root() / "tex" / f"{KIT_HEADER_PREFIX}{hashlib.sha1(body.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        final.parent.mkdir(parents=True, exist_ok=True)
+        if not final.is_file():
+            final.write_text(body, encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"cannot write the kit's preamble ({error.strerror or error})")
+    cmd[pending + 1] = str(final)
+
+
 def package_helper(folder: Path, package: str, no_auto: list[str] | None = None, document: Path | None = None) -> tuple[dict, Path] | None:
     """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
     (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
@@ -10710,6 +10826,8 @@ def document_latex_definitions(md_path: Path, metadata_files: list[Path] | None 
 def document_header_file(md_path: Path, active: bool, metadata_files: list[Path] | None = None,
                          no_auto: list[str] | None = None) -> Iterator[Path | None]:
     """Yield a temporary .tex holding the document's own preamble additions."""
+    if not active and kit_writes_preamble(md_path, metadata_files):
+        active = True                                    # the kit's header file would drop the document's own header-includes
     if not active:
         yield None
         return
