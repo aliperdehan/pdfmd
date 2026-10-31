@@ -67,7 +67,7 @@ FLAGS: dict[str, str | Omitted] = {
     "destination_cwd": RUN,
     "font": Omitted("run", "a fallback font for one run; the font rows and `pdfmd --install fonts` cover every document"),
     "engine": "options.pdf-engine", "to": "options.default-output", "from_format": "options.reader",
-    "install": CMD, "translit": "translit", "fallback": "options.fallback", "missing": "options.missing",
+    "install": CMD, "kits": "kits", "translit": "translit", "fallback": "options.fallback", "missing": "options.missing",
     "check_fonts": CMD, "show_config": CMD, "text_to_markdown": "options.text-to-markdown",
     "setup": CMD, "disabled": Omitted("run", "uses switched-off features for one run"), "init_config": CMD, "uninstall": CMD, "init_reference": CMD, "completion": CMD, "init": CMD,
     "user_path": "user-path", "add_to_path": "user-path", "remove_from_path": "user-path", "show_user_path": "user-path",

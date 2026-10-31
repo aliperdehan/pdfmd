@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.30 — 2026-10-31
+
+Pre-edit state: commit `37bfee6`. Still under 3.31. `[kits]`, C1 of entry 3du.
+
+Kits can be read and found (nothing chooses one for a document yet).
+
+- A **kit** is a folder with a `.kit` file, a YAML mapping that generalises `<package>-pdfmd.yaml`: `kit-format: 1`, name, version, `package`, `modes` (package options, a defaults file, default metadata, extra `latex` lines, `aliases` for course codes and the like), `default-mode`, `latex`, `lua`, `defaults`, `metadata`, the helper blocks (`latex-keys`, `picture-cache`, `draft-skip`, `office`) and `carry`. `settings:`, `requires:` and `options:` are reserved and accepted silently; an unknown key is a WARN; every fault of a file is listed at once; a path leaving the kit's folder, a missing file and a `kit-format` above 1 stop. README, section "Kits".
+- New package `pdfmd_kits` (`kitfile`: the format and the mode lookup, names compared ignoring case and `- _ .` and spaces; `discovery`: the search and the cache), pure, imported only when a kit is asked for: a build that selects none costs nothing.
+- Finding by name: a `kits/` folder beside the document and above it, `kits:` in the config file (a path, or `{path:, aliases: {MODE: [names]}}` to add mode names without editing the kit), a `kits/` folder beside the config file, then the folder of `NAME.sty` that kpsewhich finds (asked from an empty folder, the 3.31.29 lesson). The TeX-tree answer is cached in `kits.json` of the cache folder, written atomically, trusted only while the `.kit` has the same size and time; a corrupt cache or a miss is never an error and a miss is never stored. Two different kits of one name in one place stop the search naming both; between places the order decides. `--verbose` prints an `AUTO KIT` line.
+- `--no-auto kit` takes the searching off (a registered `kits:` folder and a path stay); `--no-auto kpsewhich` only the TeX tree.
+- `pdfmd --kits` lists the kits and their modes; `pdfmd --kits NAME-OR-PATH` shows one in full and checks it, with "did you mean" for a near name. `kits:` is a config key (a `--setup` row, *Folders of kits*, this computer only); `--kits` is an `Omitted` command in the inventory; tests: `tests/test_kits.py`.
+
 ## v3.31.29 — 2026-10-31
 
 Pre-edit state: commit `c268035`. Still under 3.31.

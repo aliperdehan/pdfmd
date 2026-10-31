@@ -11,7 +11,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
 [Word and OpenDocument output](#word-and-opendocument-output)).
 
 <!-- contents -->
-**Contents:** [Why](#why) · [Install](#install) · [Usage](#usage) · [What it does automatically](#what-it-does-automatically) · [Project files](#project-files) · [Build stamps, history and snapshots](#build-stamps-history-and-snapshots) · [Reference](#reference) · [License](#license)
+**Contents:** [Why](#why) · [Install](#install) · [Usage](#usage) · [What it does automatically](#what-it-does-automatically) · [Project files](#project-files) · [Kits](#kits) · [Build stamps, history and snapshots](#build-stamps-history-and-snapshots) · [Reference](#reference) · [License](#license)
 
 <details>
 <summary>All the sections</summary>
@@ -65,6 +65,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [Settings inside the document](#settings-inside-the-document)
   - [Your own defaults: the config file](#your-own-defaults-the-config-file)
 - [Project files](#project-files)
+- [Kits](#kits)
 - [Build stamps, history and snapshots](#build-stamps-history-and-snapshots)
 - [Reference](#reference)
 - [License](#license)
@@ -2472,6 +2473,45 @@ the first build of a folder you have just downloaded, so read its `.lua` first.
 One shared metadata file can also be **symlinked** into many folders. A
 relative `bibliography: refs.bib` inside it then finds the `refs.bib`
 next to the file's real copy, so you never need an absolute path.
+
+## Kits
+
+A **kit** is a named, versioned unit for a whole document pipeline: a LaTeX package, its Lua filter, default metadata, the
+citation style and the library files it needs. A kit is a folder that holds a YAML file named `.kit` (or `NAME.kit`); pdfmd
+names no package and no course, the file is the data. This release reads and finds kits (`pdfmd --kits`); choosing one for
+a document comes next.
+
+```yaml
+kit-format: 1                  # required; a larger number stops with "needs a newer pdfmd"
+name: nulabreport              # defaults to the folder's name
+version: 1.30.0
+package: nulabreport           # the LaTeX package the kit ships (NAME.sty beside the file)
+default-mode: genchem          # the mode used when none is asked for
+modes:                         # one named variant of the kit
+  qca:
+    aliases: [220, "chem 220"] # other names, matched ignoring case, - _ . and spaces
+    options: [qca]             # package options
+    defaults: qca.yaml         # a metadata file, relative to the kit's folder
+    metadata: {course: "CHEM 220L"}   # default front-matter keys of this mode
+latex: ['\input{chemicals}']   # lines written after the package line
+lua: [nulabreport.lua]         # Lua filters the kit adds to the build
+defaults: metadata.yaml        # metadata file(s) every mode gets
+latex-keys: {experiment: LabExperiment}   # the blocks of `<package>-pdfmd.yaml`, same meaning
+carry: [nulabreport.sty, assets/]         # what an attached source or a bundle takes along
+```
+
+Every path stays inside the kit's folder. `settings:`, `requires:` and `options:` are reserved for later; any other unknown
+key is a warning, not a stop. Several faults are listed together.
+
+**Finding a kit.** By name, ignoring case and `- _ .` and spaces (`Nu-Lab-Report` is `nulabreport`): the folder's name, the
+`NAME.kit` file's name or the `name:` it declares. The places, in order: a `kits/` folder beside the document and above it; the
+`kits:` of the config file (a folder that is a kit or one that holds kits; `- {path: ~/kits/x, aliases: {qca: [analytical]}}`
+adds mode names without editing the kit; the *Folders of kits* row of `--setup`); a `kits/` folder beside the config file;
+then the folder of `NAME.sty` that `kpsewhich` finds, whose answer is remembered in `kits.json` of the cache folder (checked by
+the `.kit`'s size and time; a miss is never remembered). Two different kits of one name in one place stop the search and name
+both; between places the order decides. `--no-auto kit` takes the searching off (the config's `kits:` and a path stay),
+`--no-auto kpsewhich` the TeX tree only. `pdfmd --kits` lists the kits, `pdfmd --kits NAME-OR-PATH` shows one in full and
+checks it. Searching is not selecting: a document that only says `\usepackage{nulabreport}` is not switched to the kit.
 
 ## Build stamps, history and snapshots
 

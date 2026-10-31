@@ -66,7 +66,7 @@ UNSET = {
     "options.poppler-path": "PATH, then the usual install folders",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
-    "user-path": "nothing changed until you choose it",
+    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -74,7 +74,7 @@ UNSET = {
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "options.tesseract-path", "options.soffice-path", "options.dot-path",
+MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.tesseract-path", "options.soffice-path", "options.dot-path",
                      "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
@@ -548,6 +548,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "For a folder: what the setup above it switched off (the nearest setup that names a kind decides it): `auto: {margin: on}`.",
                 "Automatic behaviour"),
+        # -- kits (entry 3du): a house style or any whole document pipeline, a folder with a `.kit` file
+        text("kits", "Folders of kits", "Comma-separated: a folder that is a kit, or one that holds kits (`pdfmd --kits` lists "
+             "them). Names for a kit's modes, added without editing it, go in the file by hand: `- {path: ~/kits/x, aliases: "
+             "{mode: [name]}}`.", "Kits", "config", "list"),
         # -- tool locations (this computer: Windows installers often leave a tool off PATH)
         text("options.tesseract-path", "Tesseract", "The tesseract program, or the folder that holds it. Without it pdfmd looks on "
              "PATH, then in the usual Windows install folders.", "Tool locations"),

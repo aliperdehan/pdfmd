@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.29"
+PDFMD_VERSION = "3.31.30"
 import argparse
 import atexit
 import csv
@@ -6163,7 +6163,7 @@ def data_root() -> Path:
 # romanization packs of the lookup (below --translit and PDFMD_TRANSLIT). The decisions pdfmd itself
 # remembers for the user (filters it trusts, a dismissed offer) live in the same folder.
 CONFIG_FILENAME = "config.yaml"
-CONFIG_KEYS = ("translit", "options", "setup-ui", "disabled")
+CONFIG_KEYS = ("translit", "options", "setup-ui", "disabled", "kits")
 CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a line to get the built-in default back.
 # Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.
 
@@ -6738,6 +6738,161 @@ def installed_package_folder(package: str) -> Path | None:
             located = kpsewhich_locate([package + ".sty"], empty).get(package + ".sty")
         KPSEWHICH_FOLDERS[key] = located.resolve().parent if located else None
     return KPSEWHICH_FOLDERS[key]
+
+
+# -- Kits: find one (entry 3du, C1) ------------------------------------------------------------------------------------
+# A kit is a folder with a `.kit` file (pdfmd_kits has the format and the search). Search is not selection: nothing here
+# runs for a document that selects no kit, and a document that only says `\usepackage{nulabreport}` is not switched to the
+# kit. The places, in order: a kits/ folder beside the document or above it, the config's `kits:` (a folder that is a kit,
+# or one that holds kits; a mapping {path:, aliases: {MODE: [names]}} adds mode names without editing the kit), a kits/ folder
+# beside the config file, then the folder of `NAME.sty` that kpsewhich finds (the cached answer first: one stat). `--no-auto
+# kit` takes the searching off (the config's `kits:` stays: the user named those), `--no-auto kpsewhich` the TeX tree only.
+KIT_CACHE_FILE = "kits.json"
+
+
+def configured_kits() -> list[tuple[Path, dict]]:
+    """(folder, {mode: [aliases]}) of each `kits:` entry of the config; a relative path is read from the config's folder."""
+    raw = load_config().get("kits")
+    if raw is None:
+        return []
+    config = config_path()
+    found: list[tuple[Path, dict]] = []
+    for entry in (raw if isinstance(raw, list) else [raw]):
+        aliases: dict = {}
+        if isinstance(entry, dict):
+            aliases = entry.get("aliases") or {}
+            entry = entry.get("path")
+            if not isinstance(aliases, dict):
+                print(f"WARN  config {config}: `aliases:` of a kits: entry must be a mapping of mode -> names; ignored",
+                      file=sys.stderr)
+                aliases = {}
+        if not isinstance(entry, str) or not entry.strip():
+            print(f"WARN  config {config}: an entry of `kits:` is a path (or a mapping with `path:`); skipped", file=sys.stderr)
+            continue
+        path = Path(os.path.expandvars(entry)).expanduser()
+        if not path.is_absolute() and config is not None:
+            path = config.parent / path
+        found.append((path, aliases))
+    return found
+
+
+def kit_locations(base: Path | None = None, no_auto: list[str] | None = None) -> list:
+    """The folders a kit is searched in (pdfmd_kits.Location), in order."""
+    from pdfmd_kits import Location
+    base = (base or Path.cwd()).resolve()
+    searching = not auto_disabled(no_auto, "kit")
+    places = []
+    if searching:
+        places += [Location("a kits/ folder above the document", folder / "kits")
+                   for folder in (base, *base.parents) if (folder / "kits").is_dir()]
+    places += [Location("kits: in the config", path, aliases) for path, aliases in configured_kits() if path.is_dir()]
+    config = config_path()
+    if searching and config is not None and (config.parent / "kits").is_dir():
+        places.append(Location("the kits/ folder beside the config file", config.parent / "kits"))
+    return places
+
+
+def kit_path_like(text: str) -> bool:
+    """A kit reference that is a path, not a name: it has a separator or starts with `~` or `.`."""
+    return "/" in text or "\\" in text or text.startswith(("~", "."))
+
+
+def find_kit(reference: str, base: Path | None = None, no_auto: list[str] | None = None):
+    """pdfmd_kits.Found for a kit named by ``reference`` (a name, or a path to its folder or `.kit` file); raises
+    pdfmd_kits.KitError when there is none, naming where it looked and the nearest names."""
+    from pdfmd_kits import Found, KitError, find, list_kits
+    from pdfmd_kits.discovery import kit_files
+    base = (base or Path.cwd()).resolve()
+    reference = str(reference).strip()
+    if kit_path_like(reference):
+        path = Path(os.path.expandvars(reference)).expanduser()
+        path = Path(os.path.normpath(path if path.is_absolute() else base / path))
+        files = [path] if path.is_file() else kit_files(path) if path.is_dir() else []
+        if len(files) != 1:
+            raise KitError(f"no kit at {display_path(path)}: a kit is a folder with a `.kit` file in it"
+                           + (f" (it holds {len(files)})" if len(files) > 1 else ""))
+        found = Found(files[0], "a path")
+    else:
+        searching = not auto_disabled(no_auto, "kit")
+        lookup = installed_package_folder if searching and not auto_disabled(no_auto, "kpsewhich") else None
+        locations = kit_locations(base, no_auto)
+        found = find(reference, locations, lookup, kit_cache() if lookup else None)
+        if found is None:
+            from difflib import get_close_matches
+            from pdfmd_kits import normalise
+            from pdfmd_kits.discovery import _declared_name
+            known = {normalise(_declared_name(item.path) or item.path.parent.name): _declared_name(item.path) or item.path.parent.name
+                     for item in list_kits(locations)}
+            near = [known[key] for key in get_close_matches(normalise(reference), list(known), n=3, cutoff=0.6)]
+            looked = [location.source for location in locations] + (["the TeX tree (kpsewhich)"] if lookup else [])
+            raise KitError(f"no kit called `{reference}` (looked in: {', '.join(looked) or 'nowhere: --no-auto kit'})"
+                           + (f"; did you mean {', '.join(near)}?" if near else "")
+                           + "; a kit is a folder with a `.kit` file: name its folder in `kits:` of the config, or give its path")
+    if VERBOSE_OUTPUT:
+        print(f"AUTO KIT  {reference}: {display_path(found.path)} ({found.source}{', cached' if found.cached else ''})")
+    return found
+
+
+def kit_cache():
+    from pdfmd_kits import Cache
+    return Cache(cache_root() / KIT_CACHE_FILE)
+
+
+def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
+    """`--kits [NAME|PATH ...]`: the kits there are (name, version, modes, where), or each named kit in full."""
+    from pdfmd_kits import KitError, list_kits, load_kit
+    base = Path.cwd().resolve()
+    ok = True
+    if names:
+        for reference in names:
+            try:
+                found = find_kit(reference, base, no_auto)
+                kit = load_kit(found.path, found.aliases)
+            except KitError as error:
+                print(f"ERROR  {error}", file=sys.stderr)
+                ok = False
+                continue
+            print(f"{kit.name} {kit.version}".rstrip() + (f"  {kit.description}" if kit.description else ""))
+            print(f"  kit file  {display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})")
+            if kit.package:
+                print(f"  package   {kit.package}")
+            for mode in kit.modes.values():
+                names_of = f"{mode.name}" + (f" ({', '.join(mode.aliases)})" if mode.aliases else "")
+                print(f"  mode      {names_of}" + ("  [default]" if mode.name == kit.default_mode else "")
+                      + (f"  options: {', '.join(mode.options)}" if mode.options else ""))
+            for label, value in (("lua", kit.lua), ("defaults", kit.defaults)):
+                if value:
+                    print(f"  {label:<9} {', '.join(item.name for item in value)}")
+            if kit.helper:
+                print(f"  helper    {', '.join(kit.helper)}")
+            if kit.carry:
+                print(f"  carries   {', '.join(kit.carry)}")
+            for warning in kit.warnings:
+                print(f"WARN  {warning}", file=sys.stderr)
+        return ok
+    locations = kit_locations(base, no_auto)
+    cache = kit_cache() if not (auto_disabled(no_auto, "kit") or auto_disabled(no_auto, "kpsewhich")) else None
+    rows = list_kits(locations, cache)
+    for path, _ in configured_kits():
+        if not path.is_dir():
+            print(f"WARN  kits: {display_path(path)} (in the config) is not a folder", file=sys.stderr)
+    for found in rows:
+        try:
+            kit = load_kit(found.path, found.aliases)
+        except KitError as error:
+            print(f"ERROR  {error.problems[0]}", file=sys.stderr)
+            ok = False
+            continue
+        modes = ", ".join(mode.name + (f" ({', '.join(mode.aliases)})" if mode.aliases else "") for mode in kit.modes.values())
+        print(f"{kit.name} {kit.version}".rstrip().ljust(24) + f"  {display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})"
+              + (f"\n{'':<26}modes: {modes}" if modes else ""))
+        for warning in kit.warnings:
+            print(f"WARN  {warning}", file=sys.stderr)
+    if not rows:
+        print("No kit found. A kit is a folder with a `.kit` file: put it in a kits/ folder beside your documents, or list its "
+              "folder under `kits:` in the config file (pdfmd --setup). A named kit that only the TeX tree knows is found "
+              "when a document selects it.")
+    return ok
 
 
 def package_helper(folder: Path, package: str, no_auto: list[str] | None = None) -> tuple[dict, Path] | None:
@@ -26601,6 +26756,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "or the config says. Also `options: {global-metadata: false}` in --setup")
     parser.add_argument("--presets", action="store_true",
                         help="list the presets (global metadata files, see --preset) and the one a build here would use")
+    parser.add_argument("--kits", nargs="*", default=None, metavar="NAME",
+                        help="list the kits there are (a kit is a folder with a `.kit` file: a document pipeline such as a "
+                             "house style), or show the named ones (a name or a path) in full and check them; where kits are "
+                             "looked for: a kits/ folder above the document, `kits:` in the config, the TeX tree")
     parser.add_argument("--metadata-precedence", choices=METADATA_PRECEDENCES, default=None,
                         help="which of two metadata files wins a key both set, pdfmd-options too: later (default, as "
                              "Pandoc takes them) or first. The document's own front matter beats both, the global "
@@ -27291,6 +27450,8 @@ def run_main() -> None:
         raise SystemExit(0 if config_report(init=args.init_config) else 1)
     if args.presets:
         raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
+    if args.kits is not None:
+        raise SystemExit(0 if kits_report(list(args.kits), args.no_auto) else 1)
     if args.check_source:
         raise SystemExit(0 if check_source_command(list(args.path or []), args.recursive) else 1)
     if args.doc is not None:
