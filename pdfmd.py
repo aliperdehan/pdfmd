@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.32"
+PDFMD_VERSION = "3.31.33"
 import argparse
 import atexit
 import csv
@@ -1855,8 +1855,10 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
         real_directory = metadata.resolve().parent
         if real_directory != metadata.parent.resolve() and real_directory not in extra:
             extra.append(real_directory)
-    for metadata in metadata_files or []:                      # a kit's own folder: its csl and bibliography are found by name
-        folder = KIT_METADATA.get(metadata)
+    for metadata in metadata_files or []:                      # a kit's own folder (its csl and bibliography are found by name),
+        folder = KIT_METADATA.get(metadata)                    # a folder layer's and the global metadata's: they do not move the cwd
+        if folder is None and (is_folder_metadata(metadata) or is_global_metadata(metadata)):
+            folder = metadata.parent
         if folder is not None and folder not in extra and folder != pandoc_cwd:
             extra.append(folder)
     extra += [directory for directory in EMBEDDED_RESOURCE_DIRS if directory not in extra]
@@ -20327,6 +20329,18 @@ def provide_writable_places() -> None:
                                   "folder instead, removed when it ends; the first build is slower and nothing else differs")
 
 
+def metadata_cwd(metadata_files: list[Path] | None, default: Path) -> Path:
+    """The folder Pandoc (and so the TeX engine) runs in: that of the first metadata file placed FOR the document -- beside it, in
+    its `metadata/` folder, or named with -y -- else ``default`` (the document's). A file a kit supplies, a folder's
+    `.pdfmd/metadata.yaml` and the global metadata of `pdfmd --setup` belong to no document's folder: a relative path in raw
+    LaTeX (a pgfplots table, `../ir/x.csv`) must stay relative to the document (v3.31.33). Their own folders go on the resource
+    path instead (resource_path_option), so a `bibliography:` or `csl:` written beside them is still found."""
+    for path in metadata_files or []:
+        if path not in KIT_METADATA and not is_folder_metadata(path) and not is_global_metadata(path):
+            return path.parent
+    return default
+
+
 def pandoc_working_directory(folder: Path) -> Path:
     """The folder Pandoc runs in: ``folder`` (the document's, so its relative paths resolve), or when that cannot be written
     a temporary one with the document's folder on --resource-path and TEXINPUTS (resource_path_option, tex_search_env)."""
@@ -21031,7 +21045,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
     exact = False
     if draft_engine is not None:
         metadata_list = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-        pandoc_cwd = pandoc_working_directory(metadata_list[0].parent if metadata_list else md_path.parent)
+        pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_list, md_path.parent))
         began = time.time()
         command = [draft_engine, DRAFT_FLAGS[draft_engine], "-interaction=nonstopmode", "-output-directory",
                    tex_argument(scratch), tex_argument(tex_path)]
@@ -21639,7 +21653,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
     try:
         odt = scratch / f"{md_path.stem}.docx"
-        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
+        pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
 
         def note(kind: str, detail: str) -> None:
             vprint(verbose, f"AUTO {kind}  {detail}")
@@ -22139,7 +22153,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["-f", effective_from]
             for metadata in prepared_metadata:
                 cmd += ["--metadata-file", str(metadata)]
-            pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
+            pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
@@ -22603,7 +22617,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if partial:
                     cmd += PARTIAL_METADATA
                 cmd += table_keep_metadata(md_path, metadata_files)
-                pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
+                pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
                 cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
@@ -22866,7 +22880,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if partial:
                         cmd += PARTIAL_METADATA
                     cmd += table_keep_metadata(md_path, metadata_files)
-                    pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
+                    pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
                     cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
                     if presentation:
                         cmd += ["-t", "beamer"]
@@ -26275,7 +26289,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
         BUILD["output"], BUILD["sources"] = stage_build[0], stage_build[1]   # the .tex stage recorded its own file
         if not built[1]:
             return built
-        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else md_path.parent)
+        pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
         tex_env = tex_search_env(md_path.parent, pandoc_cwd)
         plot_dir = None
         aliases: dict[str, list[str]] = {}
@@ -28150,7 +28164,7 @@ def run_main() -> None:
             if args.open:
                 open_file(output)
             return
-        pandoc_cwd = pandoc_working_directory(metadata_files[0].parent if metadata_files else files[0].parent)
+        pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, files[0].parent))
         report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
         with table_width_filter() as width_filter, csv_table_filter() as csv_filter:

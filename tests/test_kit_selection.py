@@ -198,7 +198,19 @@ class Builds(unittest.TestCase):
         self.assertIn("(Someone 2000)", tex)                                               # refs.bib found in the kit's folder
         self.assertIn("lab.lua", done.stdout)                                              # the filter is on the command line
         command = done.stdout + done.stderr
-        self.assertIn(f"(cwd={self.root / 'course' / 'kits' / 'lab'}", command)            # the first metadata file is the kit's: Pandoc runs there
+        self.assertIn(f"(cwd={self.folder}", command)                                     # a kit's file does not move Pandoc out of the document's folder
+        self.assertIn(str(self.root / "course" / "kits" / "lab"), command.split("--resource-path")[1].split()[0])   # its folder is searched instead
+
+    def test_pandoc_stays_in_the_documents_folder_with_a_kit_a_folder_layer_and_the_global_metadata(self):
+        """v3.31.33: a relative path in raw LaTeX (`../ir/x.csv`) is the document's, not the folder of the first metadata file."""
+        write(self.root / "course" / ".pdfmd" / "metadata.yaml", "fontsize: 11pt\n")
+        write(self.config.parent / "metadata.yaml", "colorlinks: true\n")               # the global metadata, beside the config file
+        done, _ = self.run_pdfmd()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(f"(cwd={self.folder}", done.stdout + done.stderr)
+        beside = write(self.folder / "metadata" / "mine.yaml", "lang: en-GB\n")           # a file placed for the document still decides
+        done, _ = self.run_pdfmd()
+        self.assertIn(f"(cwd={beside.parent}", done.stdout + done.stderr)
 
     def test_no_kit_chosen_changes_nothing(self):
         self.write_doc()

@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.33 — 2026-10-31
+
+Pre-edit state: commit `db18fa3`. Still under 3.31. `[kits]`, found by building a lean copy of a real pre-lab with the kit.
+
+Pandoc, and the TeX engine with it, no longer run in the folder of a metadata file that is not the document's.
+
+- Cause: the folder Pandoc runs in was that of the first metadata file in the list, so that a `bibliography:` or an `\input` written beside a `metadata/` file resolves there. A kit's defaults, a folder's `.pdfmd/metadata.yaml` and the global metadata of `pdfmd --setup` come first when the document has no file of its own, and a relative path in raw LaTeX (a pgfplots table at `../ir/x.csv`) then failed: `Could not read table file`. The same held for a document with only a folder layer since 3.29.10.
+- `metadata_cwd` takes the folder of the first metadata file placed for the document (beside it, in its `metadata/` folder, named with `-y`), else the document's own. The folders of the files it skipped go on `--resource-path`, so a relative `bibliography:` or `csl:` beside them is still found (a kit's folder already was). A document that has only the global metadata now runs Pandoc in its own folder, with the config folder on the resource path.
+- Checked on copies of real reports with real lualatex: a pre-lab built from the original `prelab-metadata.yaml` link and the same pre-lab built with `kit: nulabreport:prelab` and no link are pixel-identical on all 13 pages when the kit's Lua filter is left out (`--no-auto lua`); an LR3 (6 pages, parts, figures) and an LR6, each built with its `metadata/` folder and lean with `kit: nulabreport:qca` and a course `.pdfmd/`, are pixel-identical. Tests: `tests/test_kit_selection.py`.
+
 ## v3.31.32 — 2026-10-31
 
 Pre-edit state: commit `1ee4fb9`. Still under 3.31. `[kits]`, C3 of entry 3du.
