@@ -937,7 +937,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
 | check the source | `--check`, `--check-ignore`, `--strict`, `--max-asset-mb`, `--max-output-mb` |
 | a new document | `--init` |
-| crop a PDF to its ink, pictures | `--crop`, `--crop-pad`, `--crop-ignore-bottom`, `--crop-page`, `--to png`, `--to jpg`, `--to svg`, `--image-dpi`, `--image-quality` |
+| crop a PDF to its ink, pictures | `--crop`, `--crop-pad`, `--crop-ignore-bottom`, `--crop-page`, `--to png`, `--to jpg`, `--to tiff`, `--to eps`, `--to ps`, `--to svg`, `--image-dpi`, `--image-quality` |
 | tools | `--edit`, `--init-vscode`, `--completion`, `--setup`, `--init-config`, `--show-config`, `--install`, `--uninstall`, `--doctor` (`--deep`), `--check-dependencies`, `--trust-lua` |
 | debugging | `-v`, `--debug`, `--no-auto`, `--full-paths`, `--keep-aux` |
 

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.25 — 2026-10-31
+
+Pre-edit state: commit `cd59372`. Still under 3.31.
+
+`--to tiff` (also `tif`), `--to eps` and `--to ps`; `-o x.tif|x.tiff|x.eps|x.ps` choose them by suffix. The author's wish (3dv).
+
+- All three by Ghostscript: `tiff24nc` (LZW, white, at `--image-dpi`; **all pages in one multi-page file**), `eps2write` (vector; **one file per page**, so several pages go into the folder `NAME/` as `001.eps`...; its bounding box is the ink of the page, whether or not `--crop` is given) and `ps2write` (vector; all pages in one file).
+- Test: `tests/test_crop.py` (`test_tiff_and_postscript_hold_all_pages_in_one_file_and_eps_one_each`).
+
 ## v3.31.24 — 2026-10-31
 
 Pre-edit state: commit `36cd49e`. Still under 3.31.

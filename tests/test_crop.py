@@ -209,6 +209,19 @@ class Pictures(unittest.TestCase):
         self.assertEqual(self.run_pdfmd("formula.pdf", "--crop", "-o", "x.jpeg", "--crop-page", "1").returncode, 0)
         self.assertTrue((self.dir / "x.jpeg").is_file())
 
+    def test_tiff_and_postscript_hold_all_pages_in_one_file_and_eps_one_each(self):
+        for target, magic in (("tiff", (b"II*\x00", b"MM\x00*")), ("ps", (b"%!PS",))):
+            done = self.run_pdfmd("formula.pdf", "--to", target, "--image-dpi", "72")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            data = (self.dir / f"formula.{target}").read_bytes()
+            self.assertTrue(data.startswith(magic), target)
+        done = self.run_pdfmd("formula.pdf", "--crop", "--to", "eps")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(b"EPSF", (self.dir / "formula" / "001.eps").read_bytes()[:40])
+        self.assertTrue((self.dir / "formula" / "002.eps").is_file())
+        self.assertEqual(self.run_pdfmd("formula.pdf", "--crop", "--to", "tif", "-o", "x.tif", "--crop-page", "1").returncode, 0)
+        self.assertTrue((self.dir / "x.tif").is_file())
+
     def test_svg(self):
         if not (shutil.which("pdftocairo") or shutil.which("mutool")):
             self.skipTest("needs pdftocairo or mutool")
@@ -219,7 +232,7 @@ class Pictures(unittest.TestCase):
     def test_a_target_without_pages_is_refused_before_anything_is_built(self):
         done = self.run_pdfmd("formula.pdf", "--crop", "--to", "docx")
         self.assertEqual(done.returncode, 1)
-        self.assertIn("pdf, png or svg", done.stderr)
+        self.assertIn("pdf, png, jpg, tiff, eps, ps or svg", done.stderr)
         self.assertEqual(sorted(path.name for path in self.dir.iterdir() if path.suffix != ".ps"), ["formula.pdf"])
 
     def native_path(self) -> str:
