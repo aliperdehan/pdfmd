@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.39"
+PDFMD_VERSION = "3.31.40"
 import argparse
 import atexit
 import csv
@@ -3296,6 +3296,111 @@ def calc_digits_argument(value: str) -> str:
     if found is None:
         raise argparse.ArgumentTypeError(f"{value!r}: like 4sf (four significant figures) or 2dp (two decimal places)")
     return found
+
+
+# -- Appending to a metadata value (v3.31.40, entry 3du point 20) ---------------------------------------------------------
+# A key written `author+:` adds to the value the layers below hold; `pdfmd-options: {metadata-append: [author]}` makes the
+# document's own `author:` add to it as well. The layers, lowest first: the global metadata file, a kit's defaults, the
+# folders' `.pdfmd/metadata.yaml` (farthest first), the document folder's metadata files, the document's own front matter.
+# Pandoc cannot do it (the front matter beats every metadata file), so pdfmd merges, hands the finished values over under
+# `pdfmd-merged` and pdfmd_lua/metadata_append.lua, run before every other filter, puts them in place.
+METADATA_APPEND_KEY = "metadata-append"
+METADATA_APPEND_BLOCKED = ("header-includes", "pdfmd-options")          # lifted into header files by pdfmd itself
+
+
+def metadata_plus_key(key) -> bool:
+    return isinstance(key, str) and len(key) > 1 and key.endswith("+")
+
+
+def metadata_append_keys(md_path: Path | None, metadata_files: list[Path]) -> set[str]:
+    """The keys whose document value appends (`pdfmd-options.metadata-append`: a name or a list of names); empty: replace."""
+    value = first_pdfmd_option(md_path, list(metadata_files), METADATA_APPEND_KEY) if md_path is not None else None
+    if value is None or value is False:
+        return set()
+    where = display_path(md_path)
+    if not isinstance(value, (str, list, tuple)):
+        raise SystemExit(f"{where}: pdfmd-options.{METADATA_APPEND_KEY} must be a key name or a list of them, not {value!r}")
+    keys = {part.strip() for item in ([value] if isinstance(value, str) else value) for part in str(item).split(",") if part.strip()}
+    for key in sorted(keys & set(METADATA_APPEND_BLOCKED)):
+        raise SystemExit(f"{where}: pdfmd-options.{METADATA_APPEND_KEY} cannot name `{key}` (pdfmd lifts it into header files itself)")
+    return keys
+
+
+def metadata_joined(key: str, below, value, where: str) -> list:
+    """What ``key`` holds after ``value`` is appended to ``below``: a list (a single value counts as a one-item list)."""
+    for part in (below, value):
+        if isinstance(part, dict):
+            raise SystemExit(f"{where}: `{key}` holds a mapping, which cannot be appended to (only a value or a list can)")
+    return [*([] if below is None else below if isinstance(below, list) else [below]),
+            *([] if value is None else value if isinstance(value, list) else [value])]
+
+
+def merge_metadata_layers(layers: list[tuple[dict, bool]], append_keys: set[str], where: str) -> dict:
+    """The final value of every key an append touched, from ``layers`` (lowest first; the flag says the layer is the document's).
+    In one layer `key:` is taken first and `key+:` appended after it. {} when nothing appends."""
+    held: dict = {}
+    touched: list[str] = []
+    for mapping, is_document in layers:
+        for key, value in mapping.items():
+            if metadata_plus_key(key):
+                continue
+            if is_document and key in append_keys and key in held:
+                held[key] = metadata_joined(key, held[key], value, where)
+                touched.append(key)
+            else:
+                held[key] = value
+        for key, value in mapping.items():
+            if not metadata_plus_key(key):
+                continue
+            base = key[:-1]
+            if base in METADATA_APPEND_BLOCKED:
+                raise SystemExit(f"{where}: `{key}` is not supported (pdfmd lifts `{base}` into header files itself)")
+            held[base] = metadata_joined(base, held.get(base), value, where)
+            touched.append(base)
+    return {key: held[key] for key in dict.fromkeys(touched)}
+
+
+def metadata_layers(sources: list[Path], metadata_files: list[Path]) -> list[tuple[dict, bool]]:
+    """The metadata a build reads, as layers, lowest first (see the comment above): the files in the order Pandoc gets them, then
+    the front matter of each source."""
+    layers: list[tuple[dict, bool]] = []
+    for path in pandoc_metadata_order(list(metadata_files)):
+        data = metadata_file_yaml(path)
+        data.pop("pdfmd-options", None)
+        layers.append((data, False))
+    for source in sources:
+        layers.append((front_matter_dict(read_text_best_effort(source)), True))
+    return layers
+
+
+def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """The metadata file with the finished values and ``--lua-filter metadata_append.lua``, only when some key appends; [] otherwise
+    (every other build is untouched). Goes before every other filter."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or yaml is None:
+        return []
+    append = metadata_append_keys(files[0], metadata_files)
+    layers = metadata_layers(files, metadata_files)
+    merged = merge_metadata_layers(layers, append, display_path(files[0]))
+    if not merged:
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("metadata_append")
+    if shipped is None:
+        return []
+    text = yaml.safe_dump({"pdfmd-merged": merged}, allow_unicode=True, sort_keys=False, width=1_000_000)
+    target = cache_root() / "metadata" / f"{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.yaml"
+    try:
+        if not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    return ["--metadata-file", str(target), "--lua-filter", str(shipped)]
 
 
 def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
@@ -19476,6 +19581,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             history_text = None
     # ---- metadata: files lowest, the document over them
     merged: dict = {}
+    file_layers: list[tuple[dict, bool]] = []
     file_options: list[dict] = []
     # Which source each key finally came from ("document", or a metadata
     # file's name): written to `pdfmd-options.origin`, so --unpack can split
@@ -19498,6 +19604,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         for metadata_file in pandoc_metadata_order(list(plan.metadata_files)):
             data = metadata_file_yaml(metadata_file)
             data.pop("pdfmd-options", None)
+            file_layers.append((dict(data), False))
             for key in data:
                 owner[key] = label_of[metadata_file]
             merged.update(data)
@@ -19516,6 +19623,15 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     for key in document:
         owner[key] = "document"
     merged.update(document)
+    # `key+:` and `metadata-append` (v3.31.40): the source holds the finished values and no `key+`, so a rebuild, which has only
+    # this layer, neither loses what a metadata file held nor appends twice
+    append_names = metadata_append_keys(first, plan.metadata_files) if "metadata" in kinds else set()
+    for key in [key for key in merged if metadata_plus_key(key)]:
+        del merged[key]
+        owner.pop(key, None)
+    for key, value in merge_metadata_layers([*file_layers, (document, True)], append_names, display_path(first)).items():
+        merged[key] = value
+        owner[key] = "document"
     option_owner: dict[str, str] = {}
     for label, source in [("document", document_options if isinstance(document_options, dict) else {}),
                           *zip(option_labels, file_options)]:
@@ -19523,6 +19639,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             option_owner.setdefault(key, label)
     options = merge_option_dicts([document_options if isinstance(document_options, dict) else {},
                                   *file_options])
+    if append_names:
+        options[METADATA_APPEND_KEY] = []                 # resolved above: the rebuild must not append the document's own value again
+        option_owner[METADATA_APPEND_KEY] = "document"
     # ---- bibliography and CSL files the metadata names: data, embedded as blocks
     references: list[tuple[str, str]] = []
     for key in ("bibliography", "csl"):
@@ -21780,6 +21899,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
+            cmd += metadata_append_args(md_path, metadata_files)
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -22298,6 +22418,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             # docstring for the 2026-09-20 fix this is part of).
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
+            cmd += metadata_append_args(md_path, metadata_files)
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -22788,6 +22909,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # document_header_includes()'s own docstring.
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
+                cmd += metadata_append_args(all_inputs or md_path, metadata_files)
                 cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -23048,6 +23170,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
+                    cmd += metadata_append_args(all_inputs or md_path, metadata_files)
                     cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -28450,6 +28573,7 @@ def run_main() -> None:
                     if target_format in HTML_TARGETS:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
+                    cmd += metadata_append_args(files, metadata_files)
                     cmd += calc_filter_args(files, metadata_files)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
@@ -28578,6 +28702,7 @@ def run_main() -> None:
                             cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                         if report_header_file is not None:          # last, as in the branch above
                             cmd += ["--include-in-header", str(report_header_file)]
+                        cmd += metadata_append_args(files, metadata_files)
                         cmd += calc_filter_args(files, metadata_files)
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)

@@ -191,6 +191,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "reader": "options.reader",
     "seed-labels": "options.seed-labels", "seed-calc": "options.seed-calc",
     "metadata-precedence": "options.metadata-precedence",
+    "metadata-append": "options.metadata-append",
     "found-style": "options.found-style", "ok-delimiter": "options.ok-delimiter",
     "rewrite": "options.rewrite", "rewrite-name": "options.rewrite-name", "rewrite_name": "options.rewrite-name",
     "preset": "options.preset", "global-metadata": "options.global-metadata",

@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.31.40 — 2026-10-31
+
+Pre-edit state: commit `25ec92a`. Still under 3.31. `[kits]`, entry 3du, point 20 (the author's wish: a course whose lab partners rotate).
+
+A metadata value can add to the layers below instead of replacing them.
+
+- `author+: [B]` in any layer is the value the layers below hold, then `B` (a single value is a list of one; nothing below, just `B`); `author:` and `author+:` in one place are taken in that order. `pdfmd-options.metadata-append: [author]` (a name or a list; `--setup` row *Keys whose document value adds to the layers below*, folders may set it) makes the document's own value add too.
+- The layers, lowest first, are the global metadata, a kit's defaults, the folders' `.pdfmd/metadata.yaml` (the farthest first), the document folder's metadata files and the document's front matter; `tests/test_metadata_append.py` pins that order, which was already how a build behaved.
+- Pandoc cannot do it (the document's front matter beats every metadata file), so pdfmd merges the layers and hands the finished values over in a metadata file under `pdfmd-merged`; `pdfmd_lua/metadata_append.lua` runs before every other filter, sets them and removes the `key+` keys. A build with no plus key and no setting adds no argument at all.
+- A mapping cannot be added to and `header-includes` is not supported (pdfmd lifts it into header files itself): both stop with a message naming the file.
+- An assembled or attached source holds the finished value and no `key+`, and its `pdfmd-options` says `metadata-append: []` (the same reason as `kit: none`, 3.31.38): a restored report rebuilds elsewhere with each name once.
+- Not covered: the built-in renderer (no Pandoc) does not run Lua filters, so it takes the layers as before and does not add.
+- Setup: the `options.metadata-append` row, and the key in `pdfmd_setup/inventory.py`.
+- Tests: `tests/test_metadata_append.py` (11: the order, `+` in each layer, both keys in one place, the setting in the config and in the document, markup in a name, a mapping and `header-includes`, the source and a rebuild in another folder).
+
 ## v3.31.39 — 2026-10-31
 
 Pre-edit state: commit `6120d64`. Still under 3.31. `[tables]`, entry 3dz (reported by the author from a pK table).

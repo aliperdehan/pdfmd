@@ -66,7 +66,7 @@ UNSET = {
     "options.poppler-path": "PATH, then the usual install folders",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
-    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)",
+    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)", "options.metadata-append": "nothing appends (a document value replaces)",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -96,7 +96,7 @@ FOLDER_OPTIONS = frozenset({
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout",
-    "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack",
+    "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
 # `.pdfmd`, not the document's (the author has not decided that yet)
@@ -446,6 +446,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("later", "the later one, as Pandoc takes them"), ("first", "the first one")), "later",
                "pdfmd-options too. A document's own front matter beats both; the global metadata.yaml is below both. "
                "Per run: --metadata-precedence.", "Input"),
+        text("options.metadata-append", "Keys whose document value adds to the layers below",
+             "Names of front-matter keys (`author`, or `author, instructor`) whose value in a document is appended to the one the "
+             "metadata files hold, instead of replacing it. Any layer can also write `author+: [B]` to append. Off unless set.", "Input"),
         # -- universal markup: what is written in one syntax, carried into every output (off unless set)
         choice("options.raw", "Carry raw HTML, LaTeX and Typst pieces into every output", on_off, "",
                "Raw pieces in another syntax than the output's are converted (HTML and LaTeX read into native elements, "
