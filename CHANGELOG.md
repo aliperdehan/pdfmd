@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.31.39 — 2026-10-31
+
+Pre-edit state: commit `6120d64`. Still under 3.31. `[tables]`, entry 3dz (reported by the author from a pK table).
+
+CSV rows typed straight into a `::: {.csv}` block keep their inline markup.
+
+- Cause: Pandoc has parsed the lines of such a block as a paragraph before the filter sees them; `pdfmd_lua/csv_table.lua` rebuilt the text from the paragraph's inlines and flattened every one but words, quotes and code with `stringify`, so `p*K*~1~` reached the cell reader as `pK1`. A `file=` block and a fenced body never went through that, and neither did a pipe table; `\ce{..}` and `$..$` survived only because Pandoc keeps them as plain text.
+- Emphasis, strong, sub- and superscript, strikeout, links, citations, math and spans are written back as the Markdown that makes them (`pandoc.write` of that one inline, no wrapping), then read as the cell's Markdown as before (`reader`, `pdfmd-csv-reader`). Where that write fails the old flattening is the fallback.
+- Tests: `tests/test_csv_table.py` (`InlineData`): the markup reaches the cells, and the straight form and the fenced form of one table give the same document. Both fail without the change.
+
 ## v3.31.38 — 2026-10-31
 
 Pre-edit state: commit `e29cb08`. Still under 3.31. `[kits]`, C4 of entry 3du (a hole found by the review of 3.31.35 to 3.31.37).

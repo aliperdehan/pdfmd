@@ -219,6 +219,14 @@ local function caption_paragraph(block)
   return out
 end
 
+-- one inline (emphasis, a subscript, a link, a citation, math ...) written back as the Markdown that makes it, so the cell
+-- reader sees p*K*~1~ and not the bare "pK1" that stringify gives
+local function markdown_of(inline)
+  local ok, text = pcall(pandoc.write, pandoc.Pandoc({pandoc.Plain({inline})}), "markdown", {columns = 100000})
+  if not ok or type(text) ~= "string" then return pandoc.utils.stringify(inline) end
+  return (text:gsub("%s+$", ""))
+end
+
 -- what a paragraph inside the div says, as the author typed it as far as the AST allows (a code block inside the
 -- div is the faithful way to write data: nothing in it is read as Markdown)
 local function text_of(inlines)
@@ -231,7 +239,7 @@ local function text_of(inlines)
       local quote = inline.quotetype == "SingleQuote" and "'" or '"'
       out[#out + 1] = quote .. text_of(inline.content) .. quote
     elseif inline.t == "Code" then out[#out + 1] = inline.text
-    else out[#out + 1] = pandoc.utils.stringify(inline) end
+    else out[#out + 1] = markdown_of(inline) end
   end
   return table.concat(out)
 end

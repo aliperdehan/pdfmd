@@ -94,6 +94,25 @@ class InlineData(CsvTables):
         self.assertIn('Str "water"', out)
         self.assertIn('Str "acid"', out)
 
+    def test_markup_typed_straight_into_the_div_reaches_the_cells(self):
+        # v3.31.39: Pandoc has parsed the lines as a paragraph first; the markup used to be flattened to bare words ("pK1")
+        out = self.native('::: {.csv}\nname,value\np*K*~1~,2.15\n**bold**,x^2^\n~~gone~~,$a+b$\n[l](http://x.org),[@k]\n:::\n')
+        self.assertIn("Subscript", out)
+        self.assertIn('Emph [ Str "K" ]', out)
+        self.assertIn("Strong", out)
+        self.assertIn("Superscript", out)
+        self.assertIn("Strikeout", out)
+        self.assertIn("Math InlineMath", out)
+        self.assertIn('Link', out)
+        self.assertIn('Cite', out)
+        self.assertNotIn('Str "pK1"', out)
+
+    def test_the_paragraph_form_and_the_fenced_form_of_one_table_agree(self):
+        rows = "name,value\np*K*~1~,2.15\nH~2~O,**3**\n"
+        straight = self.native("::: {.csv}\n" + rows + ":::\n")
+        fenced = self.native("::: {.csv}\n```\n" + rows + "```\n:::\n")
+        self.assertEqual(straight, fenced)
+
     def test_a_quoted_field_may_hold_a_line_break(self):
         out = self.native('::: {.csv}\n```\nk,v\n"one\ntwo",3\n```\n:::\n')
         self.assertIn('Str "one"', out)
