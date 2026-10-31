@@ -66,7 +66,7 @@ UNSET = {
     "options.poppler-path": "PATH, then the usual install folders",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
-    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)", "options.metadata-append": "nothing appends (a document value replaces)",
+    "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)", "options.metadata-append": "nothing appends (a document value replaces)", "options.path-style": "auto", "options.path-up": "2",
     "disabled": "nothing switched off",
     "options.ok-delimiter": ">",
     "options.rewrite": "on (the old file is replaced)", "options.rewrite-name": "{stem} ({n}){ext}",
@@ -97,6 +97,7 @@ FOLDER_OPTIONS = frozenset({
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append",
+    "options.path-style", "options.path-up",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
 # `.pdfmd`, not the document's (the author has not decided that yet)
@@ -446,6 +447,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("later", "the later one, as Pandoc takes them"), ("first", "the first one")), "later",
                "pdfmd-options too. A document's own front matter beats both; the global metadata.yaml is below both. "
                "Per run: --metadata-precedence.", "Input"),
+        choice("options.path-style", "How a path is written in a message",
+               (("auto", "relative to the working folder, then ~/..., then absolute"), ("relative", "relative, never ~"),
+                ("home", "~/... under your home folder"), ("full", "always absolute")), "auto",
+               "Per run: --path-style (--full-paths is `full`). --verbose gives `full` unless --path-style is given.", "Messages"),
+        text("options.path-up", "How many `..` steps above the working folder are still written relative",
+             "A whole number (default 2). A folder further up is written ~/... or in full, per the style above. Per run: --path-up.", "Messages"),
         text("options.metadata-append", "Keys whose document value adds to the layers below",
              "Names of front-matter keys (`author`, or `author, instructor`) whose value in a document is appended to the one the "
              "metadata files hold, instead of replacing it. Any layer can also write `author+: [B]` to append. Off unless set.", "Input"),

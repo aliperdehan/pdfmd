@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.40"
+PDFMD_VERSION = "3.31.41"
 import argparse
 import atexit
 import csv
@@ -1699,6 +1699,13 @@ AUTO_METADATA_DISABLED = object()
 # read from a deep one (a real example that prompted this: a path under
 # .../Library/CloudStorage/OneDrive-.../Documents/Fall26/CHEM341/guides/M1).
 SHOW_FULL_PATHS = False
+# v3.31.41 (entry 3ea): how a path is written in a message. `auto`: relative to the working folder (up to PATH_UP `..` steps above
+# it), else `~/...` under the home folder, else absolute; `relative`: the same without `~`; `home`: `~/...` under the home
+# folder, else absolute; `full`: absolute. --path-style / --path-up, `options: {path-style, path-up}` of the config and of a folder's
+# settings (pdfmd --setup). -v/--verbose gives `full` unless --path-style is given.
+PATH_STYLES = ("auto", "relative", "home", "full")
+PATH_STYLE = "auto"
+PATH_UP = 2
 # Set from --no-citeproc in main(). A real pdfmd flag rather than a string
 # looked for in the passthrough Pandoc options: Pandoc itself has no
 # --no-citeproc, so leaving it in that list made Pandoc reject the whole
@@ -1709,7 +1716,26 @@ CITEPROC_DISABLED = False
 DISPLAY_ALIAS: dict[Path, Path] = {}
 
 
-def display_path(path: Path) -> str:
+def path_style_settings(requested: str | None, requested_up: int | None = None, document: Path | None = None,
+                        verbose: bool = False) -> tuple[str, int]:
+    """(style, steps up) of this run: --path-style / --path-up, else `options.path-style` / `options.path-up` (the config, then the
+    folder settings above ``document``, the nearest winning), else `auto` and 2. ``verbose`` (-v, --debug) makes the style `full`
+    unless --path-style was given: the detail asked for is the whole path."""
+    options = config_options(document)
+    style = requested or ("full" if verbose else str(options.get("path-style") or "auto").strip().casefold())
+    if style not in PATH_STYLES:
+        raise SystemExit(f"unknown path-style {style!r}. Valid: {', '.join(PATH_STYLES)}")
+    up = requested_up if requested_up is not None else options.get("path-up", PATH_UP)
+    try:
+        up = int(up)
+    except (TypeError, ValueError):
+        up = -1
+    if up < 0:
+        raise SystemExit(f"path-up must be a whole number of folders (0 or more), not {up if requested_up is not None else options.get('path-up')!r}")
+    return style, up
+
+
+def display_path(path: Path, up: int | None = None) -> str:
     """Format `path` for a user-facing AUTO/CMD message.
 
     Relative to the current working directory by default (SHOW_FULL_PATHS
@@ -1719,14 +1745,15 @@ def display_path(path: Path) -> str:
     temp file, e.g.) since a relative path can't reach it, or when
     SHOW_FULL_PATHS is True (--full-paths, for a copy-pasteable absolute
     path -- e.g. to hand to another tool, or when cwd itself is ambiguous
-    in a script's own log).
+    in a script's own log). Since v3.31.41 a folder above the working folder is written with `..` (up to PATH_UP steps, or ``up``)
+    and a path under the home folder as ``~/...``, per PATH_STYLE.
     """
     if DISPLAY_ALIAS:                             # an ebook's Markdown in a scratch folder is shown as the book (v3.29.1)
         try:
             path = DISPLAY_ALIAS.get(path) or DISPLAY_ALIAS.get(path.resolve()) or path
         except OSError:
             pass
-    if SHOW_FULL_PATHS:
+    if SHOW_FULL_PATHS or PATH_STYLE == "full":
         return str(path)
     # The folder is resolved, the file itself is not: a symlink (`metadata/metadata.yaml` pointing at
     # a shared house-style file) is shown where it sits, not where it leads. The working folder is resolved too:
@@ -1736,13 +1763,45 @@ def display_path(path: Path) -> str:
     except OSError:
         here = Path.cwd()
     try:
-        return str((path.parent.resolve() / path.name).relative_to(here))
-    except (OSError, ValueError):
-        pass
-    try:
-        return str(path.resolve().relative_to(here))
-    except (OSError, ValueError):
+        located = path.parent.resolve() / path.name
+    except OSError:
         return str(path)
+    candidates = [located]
+    try:
+        candidates.append(path.resolve())
+    except OSError:
+        pass
+    if PATH_STYLE != "home":
+        for candidate in candidates:
+            try:
+                return str(candidate.relative_to(here))
+            except ValueError:
+                pass
+        for candidate in candidates:
+            try:
+                relative = os.path.relpath(candidate, here)
+            except ValueError:                        # another drive on Windows
+                continue
+            ups = 0
+            for part in Path(relative).parts:
+                if part != "..":
+                    break
+                ups += 1
+            if ups <= (PATH_UP if up is None else up):
+                return relative
+    if PATH_STYLE != "relative":
+        try:
+            home = Path.home().resolve()
+        except (OSError, RuntimeError):
+            home = None
+        if home is not None:
+            for candidate in candidates:
+                try:
+                    return os.path.join("~", *candidate.relative_to(home).parts)
+                except ValueError:
+                    pass
+    return str(path)
+
 
 # Auto-discovered yaml/tex/lua files may live directly beside the document
 # (the original convention) or inside this subdirectory instead, so a
@@ -20037,6 +20096,20 @@ def open_file(path: Path) -> None:
         print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
 
 
+def cmd_part(text: str, quote: bool = True) -> str:
+    """One word of the CMD line. The line is a command to run again, so a path is never written with `..` (it would mean
+    something else from another folder): under the working folder it is relative, under the home folder ``~/...`` (v3.31.41,
+    entry 3ea; the shell expands the tilde, so it stays outside the quotes), else absolute, per `path-style`. Words that are
+    not absolute paths are untouched."""
+    if not os.path.isabs(text):
+        return shlex.quote(text) if quote else text
+    shown = display_path(Path(text), up=0)
+    if shown == "~" or shown.startswith(("~/", "~\\")):
+        rest = shown[2:].replace(os.sep, "/")
+        return "~" if shown == "~" else "~/" + (shlex.quote(rest) if quote else rest)
+    return shlex.quote(shown) if quote else shown
+
+
 def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     """Print the exact subprocess command about to run, under --verbose.
 
@@ -20051,8 +20124,7 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     re-runnable even when an argument has spaces (a metadata file path
     under a directory with one, for instance).
     """
-    line = ("CMD  " + " ".join(shlex.quote(display_path(Path(part))) for part in cmd)
-            + f"  (cwd={display_path(cwd)})")
+    line = "CMD  " + " ".join(cmd_part(str(part)) for part in cmd) + f"  (cwd={cmd_part(str(cwd), quote=False)})"
     if not verbose:
         record_note(line)             # the record has it whatever --verbose said
         return
@@ -27498,6 +27570,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "script's own log. -v/--verbose (or --debug) already implies this -- more "
                              "detail is the point of asking for it -- so --full-paths on its own is "
                              "only needed to get full paths WITHOUT the rest of --verbose's output")
+    parser.add_argument("--path-style", choices=PATH_STYLES, default=None,
+                        help="how a path is written in a message: auto (default: relative to the current folder, up to 2 "
+                             "`..` steps above it, else ~/... under your home folder, else absolute), relative (the same "
+                             "without ~), home (~/... under your home folder), full (absolute, as --full-paths). Also "
+                             "`options: {path-style: home, path-up: 2}` in the config and in a folder's settings (pdfmd --setup). "
+                             "-v/--verbose gives full unless this is given")
+    parser.add_argument("--path-up", type=int, default=None, metavar="N",
+                        help="how many `..` steps above the current folder a path may still be written relative (default 2); "
+                             "a folder further up is written ~/... or in full. Also `options: {path-up: N}` (pdfmd --setup)")
     parser.add_argument("--debug", action="store_true",
                         help="on ANY PDF-engine failure -- even one a later engine in the fallback "
                              "chain recovers from -- print the engine's full captured stderr inline, "
@@ -27716,7 +27797,7 @@ def run_watch(source: Path, argv: list[str]) -> None:
 # (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
 # --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
 # `global` main() sets is covered.
-WORKER_GLOBALS = ("SHOW_FULL_PATHS", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "VERBOSE_OUTPUT")
+WORKER_GLOBALS = ("SHOW_FULL_PATHS", "PATH_STYLE", "PATH_UP", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "VERBOSE_OUTPUT")
 
 
 def worker_state() -> dict:
@@ -27924,11 +28005,15 @@ def run_main() -> None:
         restorer = (restore_from_markdown if args.restore.suffix.lower() in (".md", ".markdown")
                     else restore_from_pdf)
         raise SystemExit(restorer(args.restore, args.out.resolve() if args.out else None, args.list_only))
-    # -v/--verbose already means "more detail than the quiet default," and a
-    # full path is exactly that kind of detail -- so --verbose (or --debug,
-    # which implies it just above) turns this on too, not just --full-paths
-    # on its own.
-    SHOW_FULL_PATHS = args.full_paths or args.verbose
+    # -v/--verbose (or --debug) writes full paths, as it always did; otherwise the style is a setting (entry 3ea): --path-style,
+    # then the folder settings above the first document, then the config (the folder settings are read at the first input only:
+    # the style is one for the whole run).
+    global PATH_STYLE, PATH_UP
+    SHOW_FULL_PATHS = args.full_paths
+    first_input = next(iter(args.path or []), None)
+    if first_input is not None and Path(first_input).is_dir():
+        first_input = Path(first_input) / "x.md"
+    PATH_STYLE, PATH_UP = path_style_settings(args.path_style, args.path_up, first_input, args.verbose)
     global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI
     global PRESET_CLI, GLOBAL_METADATA_CLI
     CITEPROC_DISABLED = args.no_citeproc

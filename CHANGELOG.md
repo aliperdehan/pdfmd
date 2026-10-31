@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.31.41 — 2026-10-31
+
+Pre-edit state: commit `437c3ef`. Still under 3.31 (no minor before the tables are done). Entry 3ea (the author's wish, from `FOUND /Users/.../220/.pdfmd` seen from `220/LR6`).
+
+A path in a message is written as short as it can be, by a setting.
+
+- Cause: `display_path` wrote a path relative to the working folder only when it was under it, so a folder above it (a course folder's `.pdfmd/`, a shared metadata file) fell back to the absolute path.
+- `path-style` (`auto`, `relative`, `home`, `full`; `--path-style`, `options.path-style`, a `--setup` row under Messages). `auto` (the default): relative to the working folder, up to `path-up` `..` steps above it (`--path-up N`, `options.path-up`, a `--setup` row, default 2: the author's number, a setting and not a constant), else `~/...` under the home folder (the same on every system, `~\` separators on Windows), else absolute. `relative` is that without `~`, `home` is `~/...` whenever the file is under the home folder, `full` is `--full-paths`.
+- Both settings work at every level: the command line, the config file (`--setup`) and a folder's own settings (`pdfmd --setup DIR`, `.pdfmd/config.yaml`; the nearest folder wins, read at the first document of the run, as the style is one for the whole run). They are not `pdfmd-options` keys of a document.
+- `--verbose` and `--debug` still write full paths, as before (the author asked to keep that); an explicit `--path-style` on the same command line wins. Only what is printed changes; the manifests, the caches and the commands' own arguments keep real paths.
+- A symlink is still written where it sits, as before.
+- The `CMD` line (`--verbose`, and the build record) is a command to run again, so it never uses `..`: a path under the working folder is relative, under the home folder `~/...` (outside the quotes, so a shell expands it), else absolute; `full` (so also `--verbose`) keeps every path absolute. The copy of the line in the build record, written whatever `--verbose` said, follows the style, so the account name stays out of it.
+- Setup: the two rows are in a folder's setup too (`FOLDER_OPTIONS`); the inventory has `--path-style`, `--path-up` and the keys.
+- Tests: `tests/test_path_display.py`.
+
 ## v3.31.40 — 2026-10-31
 
 Pre-edit state: commit `25ec92a`. Still under 3.31. `[kits]`, entry 3du, point 20 (the author's wish: a course whose lab partners rotate).

@@ -89,6 +89,12 @@ width of the terminal (110 characters when the output is piped): `+3 more (--ver
 decision with its reason. The closing line names the file the build made, `OK    lecture.md > lecture.pdf`; `--setup`
 sets what stands between the two.
 
+**How a path is written** (3.31.41). Relative to the folder you ran pdfmd from, also when the file sits above it
+(`../.pdfmd` for a course folder's settings, up to 2 steps: `path-up`); further away `~/...` under your home folder (any
+system), else in full. `--path-style auto|relative|home|full` and `--path-up N` for one run, `options: {path-style: home, path-up: 3}` in the
+config or in a folder's settings (`--setup`, under Messages); `--full-paths` is `full`. `--verbose` writes full paths too
+(unless `--path-style` is given).
+
 In a folder with a single Markdown file you do not even need the name: `cd` into the folder and run `pdfmd`. It finds
 the file, its metadata, preamble and filters, and writes the PDF beside it (with several Markdown files it asks for
 one, or for `-b` to convert all of them or `-r` to join them). `pdfmd --help` is one short page; `pdfmd --help all`

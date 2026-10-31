@@ -49,10 +49,15 @@ class DisplayPath(unittest.TestCase):
         finally:
             pdfmd.Path.cwd = original
 
-    def test_a_file_elsewhere_stays_absolute(self):
+    def test_a_file_elsewhere_stays_absolute_beyond_the_cap_and_is_written_with_dots_within_it(self):
         other = self.outside / "a.md"
         other.write_text("x", encoding="utf-8")
+        saved = pdfmd.PATH_UP
+        self.addCleanup(setattr, pdfmd, "PATH_UP", saved)
+        pdfmd.PATH_UP = 0
         self.assertEqual(pdfmd.display_path(other), str(other))
+        pdfmd.PATH_UP = 2                                       # v3.31.41: a sibling folder is `../name`
+        self.assertEqual(pdfmd.display_path(other), os.path.join("..", self.outside.name, "a.md"))
 
 
 if __name__ == "__main__":
