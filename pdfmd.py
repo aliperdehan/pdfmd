@@ -1049,6 +1049,14 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
     picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
 
+    A fenced ```smiles block, ```{.smiles caption="..."} or `::: smiles` div (v3.31.42) is a chemical structure written as text:
+    one SMILES per line (a name after it is written under it), or a molfile, SD file, Tripos mol2 or InChI, or `file="x.mol"`
+    beside the document. It is drawn with RDKit (pdfmd_smiles; one call per document, pictures kept by content, engine and
+    settings) as a PDF for LaTeX, an SVG for HTML and Typst, a PNG for Word and OpenDocument (`office-format: svg` for SVG), an
+    SVG beside flat Markdown, a figure when it has a caption (`{#fig:id}` works with pandoc-crossref). The settings are
+    `pdfmd-options.smiles` (engine, format, office-format, cell-width, cell-height, per-row, bond-length, dpi), each also an
+    attribute of the block; `--no-auto smiles` leaves the blocks as code. Chemfig and Indigo as engines are to follow.
+
     `pdfmd --init [TEMPLATE] [NAME]` (v3.26.17) starts a document from a template (pdfmd_templates: article, report, notes,
     slides, book, and your own in the config folder's templates/); nothing that exists is overwritten.
 
@@ -1155,7 +1163,7 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     also under "Input formats" -- disabling it on a .docx/.odt is an
     error in this version, not a route back through Pandoc; see that
     section for why), typstdirect and htmldirect (the same for a .typ and an
-    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), diagrams (fenced mermaid/d2/dot blocks drawn by mmdc/d2/dot), crossref (the auto-detected `--filter pandoc-
+    .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), diagrams (fenced mermaid/d2/dot blocks drawn by mmdc/d2/dot), smiles (smiles blocks drawn as chemical structures), crossref (the auto-detected `--filter pandoc-
     crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
     `{#fig:...}`-style attribute -- see crossref_filter_args()),
     citationengine (a document's own `pdfmd-options.citation-engine`
@@ -1434,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.41"
+PDFMD_VERSION = "3.31.42"
 import argparse
 import atexit
 import csv
@@ -1826,7 +1834,7 @@ NO_AUTO_KINDS = frozenset({
     "texdirect", "officedirect", "crossref", "citationengine", "csvtable",
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
-    "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
+    "smiles", "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -3593,7 +3601,10 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     diagram_filter = pdfmd_lua.path("diagram")
     diagrams = (diagram_filter is not None and not auto_disabled(no_auto, "diagrams")
                 and any(DIAGRAM_BLOCK_RE.search(read_text_best_effort(file)) for file in files))
-    if table is None and not pdf_images and not diagrams:
+    smiles_filter = pdfmd_lua.path("smiles")
+    smiles = (smiles_filter is not None and not auto_disabled(no_auto, "smiles")
+              and any(SMILES_BLOCK_RE.search(read_text_best_effort(file)) for file in files))
+    if table is None and not pdf_images and not diagrams and not smiles:
         return []
     folder = cache_root() / "raw"
     # Pandoc reads a string in a metadata file as Markdown, where a backslash escapes: a Windows path keeps forward slashes
@@ -3607,6 +3618,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         config["pdfmd-raw"] = table
     if diagrams:
         config["pdfmd-diagram-tools"] = [tool for tool, _, _ in DIAGRAM_TOOLS if which(tool)]
+    if smiles:
+        config.update(smiles_config(files[0], metadata_files))
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     map_file = folder / "maps" / f"{digest}.yaml"
     if not map_file.is_file():
@@ -3619,7 +3632,29 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         args += ["--lua-filter", str(pdf_filter)]
     if diagrams:
         args += ["--lua-filter", str(diagram_filter)]
+    if smiles:
+        args += ["--lua-filter", str(smiles_filter)]
     return args
+
+
+# A structure written as text (pdfmd_lua/smiles.lua finds it, pdfmd_smiles draws it): ```smiles, ```{.smiles caption="..."}, ::: smiles
+SMILES_BLOCK_RE = re.compile(r"(?mi)^[ \t]*(?:`{3,}|~{3,}|:{3,})[ \t]*\{?[ \t]*\.?smiles\b")
+
+
+def smiles_config(md_path: Path, metadata_files: list[Path]) -> dict:
+    """The metadata smiles.lua reads: the resolved `pdfmd-options.smiles` (document, metadata files, config; the first place to set
+    a field wins), the interpreter that has RDKit (pdfmd's own) and the folder of the drawing step."""
+    try:
+        import pdfmd_smiles
+    except ImportError:
+        return {}
+    try:
+        settings = pdfmd_smiles.resolve(cascaded_option(md_path, metadata_files, "smiles"))
+    except pdfmd_smiles.SmilesError as error:
+        raise SystemExit(f"{display_path(md_path)}: {error}")
+    return {"pdfmd-smiles": {key: str(value) for key, value in settings.items()},
+            "pdfmd-smiles-python": Path(sys.executable).as_posix(),
+            "pdfmd-smiles-dir": Path(pdfmd_smiles.__file__).resolve().parent.as_posix()}
 
 
 # A fenced block written in a diagram language (pdfmd_lua/diagram.lua draws it): ```mermaid, ```{.d2 caption="..."}, ```dot
@@ -6640,6 +6675,9 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
          + (", ".join(drawn_by) if drawn_by else "nothing installed ("
             + "; ".join(f"{name}: {hint.split('  |')[0]}" for _, name, hint in DIAGRAM_TOOLS) + ")"))
+    has_rdkit = importlib.util.find_spec("rdkit") is not None
+    line(None, "chemical structures (```smiles blocks) are drawn with: "
+         + ("RDKit" if has_rdkit else "nothing installed (pip install rdkit)"))
     for module in ("yaml", "pypdf"):
         found = importlib.util.find_spec(module) is not None
         line(found, f"python package {module}", "pip install pyyaml pypdf",
@@ -13164,11 +13202,19 @@ GFM_BLIND_SPOTS = (
 )
 
 
+# A fence that opens with attributes (```{.smiles caption="..."}, ```{.d2 ...}): gfm takes `{.smiles` for the language word.
+FENCE_ATTRIBUTES = ("fenced code attributes ({.class key=value})", re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{"))
+
+
 def gfm_blind_spots(text: str) -> list[str]:
-    """What ``text`` uses that Pandoc's Markdown reads and gfm would print as it is (code is not looked at)."""
+    """What ``text`` uses that Pandoc's Markdown reads and gfm would print as it is (code is not looked at, but the line that
+    opens a fence is)."""
     prose = re.sub(r"(?ms)^(`{3,}|~{3,}).*?^\1[ \t]*$", "", text)
     prose = re.sub(r"`[^`\n]*`", "", prose)
-    return [name for name, pattern in GFM_BLIND_SPOTS if pattern.search(prose)]
+    found = [name for name, pattern in GFM_BLIND_SPOTS if pattern.search(prose)]
+    if FENCE_ATTRIBUTES[1].search(text):
+        found.append(FENCE_ATTRIBUTES[0])
+    return found
 
 
 def reader_notice(md_path: Path, reason: str | None) -> None:
@@ -27532,7 +27578,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
-                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), mathjax (MathJax typesets the math of WeasyPrint PDFs; off, KaTeX or text does), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
+                             "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), smiles (```smiles / ::: smiles blocks drawn as chemical structures), mathjax (MathJax typesets the math of WeasyPrint PDFs; off, KaTeX or text does), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "

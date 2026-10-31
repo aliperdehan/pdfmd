@@ -156,6 +156,9 @@ OPTIONS: dict[str, str | Omitted] = {
     "engine": "options.pdf-engine", "pdf-engine": "options.pdf-engine",
     "fallback": "options.fallback", "missing": "options.missing",
     "header": "options.header", "footer": "options.footer",
+    "smiles.engine": "options.smiles.engine", "smiles.format": "options.smiles.format", "smiles.office-format": "options.smiles.office-format",
+    "smiles.cell-width": "options.smiles.cell-width", "smiles.cell-height": "options.smiles.cell-height", "smiles.per-row": "options.smiles.per-row",
+    "smiles.bond-length": "options.smiles.bond-length", "smiles.dpi": "options.smiles.dpi",
     "gfm.scripts": "options.gfm.scripts", "gfm.math": "options.gfm.math", "gfm.title": "options.gfm.title",
     "txt.scripts": "options.txt.scripts", "txt.title": "options.txt.title",
     "txt.math": Omitted("inert", "text has no math markup"),
@@ -223,7 +226,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
-    "options.csv.": "tables", "options.table-keep": "tables", "options.calc.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
+    "options.csv.": "tables", "options.table-keep": "tables", "options.calc.": "markdown", "options.smiles.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",
 }
 

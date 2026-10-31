@@ -46,6 +46,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
+    "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
     "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
@@ -93,6 +94,7 @@ FOLDER_OPTIONS = frozenset({
     "options.backup.enabled", "options.backup.format", "options.backup.keep",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
+    "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout",
@@ -498,6 +500,29 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A CSV, columns name,value,digits: the value of the last definition of each name after a build that evaluated names "
              "(the mirror of the constants file, which can read it back). Beside the document unless the path is absolute. "
              "Empty: none. Per run: --calc-export.", "Calculations"),
+        # -- chemical structures (a ```smiles block; every one of these is also an attribute of the block)
+        choice("options.smiles.engine", "What draws a ```smiles block",
+               (("auto", "the best one there is"), ("rdkit", "RDKit pictures (SVG, PNG, or PDF for LaTeX)")), "auto",
+               "A block of structures (SMILES, molfile) is drawn as a picture. Per block: engine=.", "Chemical structures"),
+        choice("options.smiles.format", "Picture format of a structure",
+               (("auto", "what the output reads best: PDF for LaTeX, SVG for HTML and Typst, PNG for Word"), ("svg", "SVG"),
+                ("png", "PNG"), ("pdf", "PDF (needs rsvg-convert)")), "auto", "Per block: format=.", "Chemical structures"),
+        choice("options.smiles.office-format", "Picture format of a structure in Word and OpenDocument",
+               (("png", "PNG (every Word, Google Docs, Pages)"), ("svg", "SVG (Word 365, LibreOffice)")), "png",
+               "Used when the format above is auto. Per block: office-format=.", "Chemical structures"),
+        text("options.smiles.cell-width", "Width of one structure, in pixels",
+             "A whole number (default 250); a block of several structures is as many cells wide as it has per row. Per block: cell-width=.",
+             "Chemical structures"),
+        text("options.smiles.cell-height", "Height of one structure, in pixels",
+             "A whole number (default 200). Per block: cell-height=.", "Chemical structures"),
+        text("options.smiles.per-row", "Structures in a row",
+             "A whole number (default 3): the line-per-structure block is wrapped after this many. Per block: columns=.",
+             "Chemical structures"),
+        text("options.smiles.bond-length", "Length of a bond, in pixels",
+             "A whole number (default 40): every structure has the same bond length, so a small molecule is not drawn large. "
+             "A structure that does not fit its cell is scaled down. Per block: bond-length=.", "Chemical structures"),
+        text("options.smiles.dpi", "Resolution of a PNG structure",
+             "A whole number (default 300). Per block: dpi=.", "Chemical structures"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
                 "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "

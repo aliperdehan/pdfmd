@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.31.42 — 2026-10-31
+
+Pre-edit state: commit `a609345`. Still under 3.31 (no minor before the tables are done). Entry 3ec (the author's wish: Obsidian draws SMILES through a plugin, pdfmd should draw the same notes). First slice of the `[smiles]` line.
+
+A chemical structure written as text is drawn as a picture.
+
+- `smiles` blocks, in the three spellings: a fenced ```` ```smiles ````, a fence with attributes ```` ```{.smiles caption="..." #fig:id} ````, and a `::: smiles` div (what Obsidian's chemistry plugins read, and what the calc blocks accept). A block is one structure per line, side by side (`per-row` to a row) under one caption; a name after the SMILES (`CCO ethanol`, the `.smi` convention) is written under that structure. `kind=` (`smiles`, `mol`, `mol2`, `inchi`, else read from the text or the file) and `file="x.mol"` (a file beside the document: `.mol`, `.sdf`, `.mol2`, `.smi`) are attributes of the block.
+- The div form reads the body back as it was typed: Pandoc takes the nitro group `[N+](=O)[O-]` for a link, and the filter puts the link back together (`pdfmd_lua/smiles.lua`).
+- Drawn by RDKit through `pdfmd_smiles`, one call of `python3 pdfmd_smiles` per document with pdfmd's own interpreter (RDKit is imported once; nothing is shelled to another Python). Every structure has the same bond length (`bond-length`), so a small molecule is not drawn large. Format by output: PDF for LaTeX (through `rsvg-convert`; PNG when there is none), SVG for HTML, EPUB and Typst, PNG for Word and OpenDocument (`office-format: svg` for SVG; Word 365 and LibreOffice read it, older Word, Google Docs and Pages do not), an SVG beside the output for flat Markdown (`--to gfm`, as diagrams are). A captioned block is a figure; `{#fig:id}` reaches pandoc-crossref.
+- The picture cache is keyed by everything that changes the picture: the engine and its version, the kind, the structures, the format, the cell size, the columns, the bond length, the dpi and the module's own version. The same block twice is drawn once; the same block with another engine, format or setting is a new picture, never a stale one. (The chemfig engine's compiled cache, `cache: {smiles}`, comes with that engine.)
+- A block that cannot be drawn (RDKit missing, a structure that does not read, a missing file, an unknown setting in the block) stays as code with one warning that says why; a wrong `pdfmd-options.smiles` stops the build and names the key.
+- Settings, all under one key, `pdfmd-options.smiles`, and every one also an attribute of a block (`columns=` for `per-row`): `engine` (`auto`, `rdkit`), `format` (`auto`, `svg`, `png`, `pdf`), `office-format` (`png`, `svg`), `cell-width` (250), `cell-height` (200), `per-row` (3), `bond-length` (40), `dpi` (300). The numbers are the author's to change, not constants: each is a `--setup` row (Chemical structures) and a folder setting.
+- `--no-auto smiles` leaves the blocks as code. `--doctor` says whether RDKit is installed.
+- A Markdown file with no front matter is read as gfm, which has neither the div nor code attributes: the note about what gfm leaves as plain text now also names a fence that opens with attributes (```` ```{.smiles caption=... } ````, ```` ```{.d2 ...} ````), as it names `:::` divs.
+- `CLAUDE.md` names the new `[smiles]` tag next to `[kits]` and `[tables]`.
+- `scripts/build_zipapp.py` lists `pdfmd_smiles` and, which it was missing since the kits line, `pdfmd_kits` (`tests/test_packaging.py` compares it with the wheel's list and was failing).
+- Tests: `tests/test_smiles.py` (settings, reading, drawing and the cache, no RDKit, builds through `pdfmd` itself).
+
 ## v3.31.41 — 2026-10-31
 
 Pre-edit state: commit `437c3ef`. Still under 3.31 (no minor before the tables are done). Entry 3ea (the author's wish, from `FOUND /Users/.../220/.pdfmd` seen from `220/LR6`).

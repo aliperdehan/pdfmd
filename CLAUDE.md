@@ -133,8 +133,9 @@ a setting or behaviour is a patch (`3.N.x`, +0.0.1) with a changelog entry of it
 the `PDFMD_VERSION` bump. One commit, one version, one entry: never grouped by feature, never folded into the previous
 entry, even while the minor is unreleased.
 
-**The kits and tables lines are the exception.** They get no minor of their own: every commit of either is a 3.31.x patch (the next
-free number) with its own changelog entry, tagged `[kits]` or `[tables]`, so the rules below apply to each of them unchanged.
+**The kits, tables and smiles lines are the exception.** They get no minor of their own: every commit of any of them is a 3.31.x patch
+(the next free number) with its own changelog entry, tagged `[kits]`, `[tables]` or `[smiles]`, so the rules below apply to each of them
+unchanged. (`[smiles]`, chemical structures, was approved by the author on 2026-10-31.)
 
 **No bump for a commit that changes no shipped code.**
 - A test, a workflow or a docs file (README, this file) that is the commit's whole change keeps a changelog entry under the
