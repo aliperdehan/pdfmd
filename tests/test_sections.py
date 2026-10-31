@@ -581,5 +581,40 @@ class PartRanges(unittest.TestCase):
         self.assertEqual(self.pick("2024-25"), ["2024-25.md"])
 
 
+class SameNameParts(unittest.TestCase):
+    """Top-level files that differ only in their numbers are one section in two files, and a name builds both (3.31.45)."""
+
+    def setUp(self):
+        self.directory = Path("/doc/parts")
+        names = ["05-introduction.md", "10-introduction.md", "20-materials.md", "30-introspection.md",
+                 "40-calculations/yield.md", "50-discussion/yield.md"]
+        self.parts = [self.directory / name for name in names]
+
+    def pick(self, request):
+        return [part.relative_to(self.directory).as_posix() for part in pdfmd.select_parts(self.parts, self.directory, [request])]
+
+    def test_the_name_builds_every_file_with_that_name(self):
+        self.assertEqual(self.pick("introduction"), ["05-introduction.md", "10-introduction.md"])
+        self.assertEqual(self.pick("Introduction.md"), ["05-introduction.md", "10-introduction.md"])
+
+    def test_one_file_is_still_named_by_its_number_or_its_full_name(self):
+        self.assertEqual(self.pick("05"), ["05-introduction.md"])
+        self.assertEqual(self.pick("10-introduction"), ["10-introduction.md"])
+
+    def test_a_prefix_that_also_fits_another_name_is_still_ambiguous(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.pick("intro")
+        self.assertIn("ambiguous", str(raised.exception))
+
+    def test_the_same_name_in_two_folders_is_still_ambiguous(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.pick("yield")
+        self.assertIn("ambiguous", str(raised.exception))
+
+    def test_a_prefix_of_only_the_one_name_builds_both(self):
+        self.parts.remove(self.directory / "30-introspection.md")
+        self.assertEqual(self.pick("intro"), ["05-introduction.md", "10-introduction.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

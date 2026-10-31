@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.44"
+PDFMD_VERSION = "3.31.45"
 import argparse
 import atexit
 import csv
@@ -16506,7 +16506,9 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
     a file name, its name without the numeric prefix, a folder (all parts
     inside), or a top-level number; failing an exact match, a unique prefix
     of a name. Unknown or ambiguous requests are an error that lists the
-    choices -- a typo must never silently build the wrong section.
+    choices -- a typo must never silently build the wrong section. Top-level
+    files with the same name apart from their numbers (`05-introduction`,
+    `10-introduction`) are one section in two files: the name builds both.
     """
     keyed = {part: part_keys(part.relative_to(directory)) for part in parts}
     chosen: set[Path] = set()
@@ -16529,7 +16531,11 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
         # both Calculations and Discussion): join them yourself with a+b, or
         # spell the folder out (`discussion/yield`).
         groups = {part.relative_to(directory).parts[0] for part in hits}
-        if len(groups) > 1 and not span:
+        # ...but `05-introduction.md` and `10-introduction.md` are the same section split in two files: top-level files that
+        # differ only in their numbers are all built (3.31.45). `intro` also takes `introduction` and `introspection`: error.
+        same_name = (len(groups) > 1 and not span and all(len(part.relative_to(directory).parts) == 1 for part in hits)
+                     and len({part_slug(part.stem).casefold() for part in hits}) == 1)
+        if len(groups) > 1 and not span and not same_name:
             raise SystemExit(f"--section '{request}' is ambiguous: it matches parts in "
                              + ", ".join(sorted(groups))
                              + ". Name the folder too (e.g. 'folder/name'), or join with +")

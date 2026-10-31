@@ -1590,6 +1590,7 @@ pdfmd-options:
 $ pdfmd report                  # the whole document, report.pdf
 $ pdfmd report#methods          # just that part, report.methods.pdf
 $ pdfmd report#discussion+appendix      # several: always in report order
+$ pdfmd report#introduction     # 05-introduction.md and 10-introduction.md both, if both exist
 $ pdfmd parts/20-methods.md     # same as report#methods
 $ pdfmd report --list-parts
 $ pdfmd old-report.md --split new-folder   # cut an existing single file into parts

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.45 — 2026-11-01
+
+Pre-edit state: commit `f4cd293`. Still under 3.31. Entry 3eh (the author: "i suggest making it build @05,10, since both of them are introductions"; "yes, i want it done as 3.31").
+
+A part name that fits several top-level files with the same name builds all of them.
+
+- `report#introduction` (or `#intro`) with both `parts/05-introduction.md` and `parts/10-introduction.md` stopped with "is ambiguous: it matches parts in 05-introduction.md, 10-introduction.md". Top-level files that differ only in their numbers are one section in two files, so the name builds both, in document order. The error stays for what is really ambiguous: the same name in two different folders (`yield` in Calculations and Discussion), and a prefix that fits different names (`intro` with an `introduction` and an `introspection`). A number (`05`) or the full file name (`10-introduction`) still names one file.
+- Tests: `tests/test_sections.py` (`SameNameParts`). README: the example in the parts section.
+
 ## v3.31.44 — 2026-11-01
 
 Pre-edit state: commit `c16091d`. Still under 3.31. Entry 3ef (the author's decision, with an example: the numbers of a part built alone are the numbers of the full build, names printing in the order they appear).
