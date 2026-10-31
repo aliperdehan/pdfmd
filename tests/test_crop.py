@@ -3,6 +3,7 @@ ink is known exactly."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -158,6 +159,75 @@ class CommandLine(unittest.TestCase):
         stray = self.run_pdfmd("--crop-pad", "1", "formula.pdf")
         self.assertNotEqual(stray.returncode, 0)
         self.assertIn("go with --crop", stray.stderr)
+
+
+def png_size(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+@unittest.skipUnless(GS and PYPDF, "needs Ghostscript and pypdf")
+class Pictures(unittest.TestCase):
+    """`--to png|svg`, with and without `--crop`, from a PDF and from a Markdown source."""
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory(prefix="pdfmd-test-crop-")
+        self.addCleanup(self.scratch.cleanup)
+        self.dir = Path(self.scratch.name)
+        self.source = self.dir / "formula.pdf"
+        draw(self.source, "50 30 60 20 rectfill showpage 10 10 20 20 rectfill showpage")
+
+    def run_pdfmd(self, *arguments: str, path: str | None = None):
+        env = None if path is None else {"PATH": path}
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, encoding="utf-8",
+                              cwd=self.dir, env=env)
+
+    def test_png_without_crop_is_the_whole_page_one_file_per_page(self):
+        done = self.run_pdfmd("formula.pdf", "--to", "png", "--image-dpi", "72")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(png_size(self.dir / "formula-1.png"), (200, 100))
+        self.assertTrue((self.dir / "formula-2.png").is_file())
+        self.assertIn("2 pages", done.stderr)
+
+    def test_png_with_crop_is_the_ink_and_one_page_gets_the_plain_name(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "1", "--crop-pad", "0", "--to", "png", "--image-dpi", "72")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(png_size(self.dir / "formula.png"), (60, 20))
+
+    def test_o_with_a_png_suffix_chooses_the_format(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "2", "-o", "tight.png", "--image-dpi", "72")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(png_size(self.dir / "tight.png"), (24, 24))   # 20 pt of ink and 2 pt of pad each side
+
+    def test_svg(self):
+        if not (shutil.which("pdftocairo") or shutil.which("mutool")):
+            self.skipTest("needs pdftocairo or mutool")
+        done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "1", "--to", "svg")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("<svg", (self.dir / "formula.svg").read_text())
+
+    def test_a_target_without_pages_is_refused_before_anything_is_built(self):
+        done = self.run_pdfmd("formula.pdf", "--crop", "--to", "docx")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("pdf, png or svg", done.stderr)
+        self.assertEqual(sorted(path.name for path in self.dir.iterdir() if path.suffix != ".ps"), ["formula.pdf"])
+
+    def test_batch_and_report_are_refused(self):
+        for option in ("-b", "-r"):
+            self.assertEqual(self.run_pdfmd(option, "--crop", "formula.pdf").returncode, 1, option)
+
+    def test_a_dpi_without_a_picture_is_refused(self):
+        self.assertNotEqual(self.run_pdfmd("formula.pdf", "--image-dpi", "100").returncode, 0)
+
+    def test_a_markdown_source_is_built_then_cropped(self):
+        # no Pandoc on the path: the built-in renderer makes the PDF, so the test needs no engine
+        (self.dir / "note.md").write_text("# Title\n\nA line of text.\n", encoding="utf-8")
+        path = str(Path(GS).parent) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
+        done = self.run_pdfmd("note.md", "--crop", "--crop-pad", "0", "--crop-ignore-bottom", "60", path=path)   # the page number is in the foot
+        self.assertEqual(done.returncode, 0, done.stderr)
+        box = media(self.dir / "note.pdf")
+        self.assertLess(box[3] - box[1], 100)   # two lines of text, not the page
+        self.assertEqual(sorted(path.name for path in self.dir.glob("note*")), ["note.md", "note.pdf"])
 
 
 if __name__ == "__main__":

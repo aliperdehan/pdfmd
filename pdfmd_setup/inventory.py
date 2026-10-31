@@ -74,6 +74,7 @@ FLAGS: dict[str, str | Omitted] = {
     "yes": Omitted("run", "answers the question of --user-path"),
     "check": CMD, "check_source": CMD, "check_ignore": "options.check-ignore", "check_docx": CMD, "edit": CMD,
     "crop": CMD, "crop_pad": Omitted("run", "the room left around the ink of one crop"), "crop_ignore_bottom": Omitted("run", "the strip a crop does not look at, for one crop"), "crop_page": Omitted("run", "which page one crop keeps"),
+    "image_dpi": Omitted("run", "the resolution of the pictures of one run"),
     "raw": "options.raw", "no_raw": "options.raw",
     "pagebreak": "options.pagebreak", "no_pagebreak": "options.pagebreak",
     "markup": "options.markup", "no_markup": "options.markup",

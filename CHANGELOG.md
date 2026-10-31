@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.31.21 — 2026-10-31
+
+Pre-edit state: commit `27c28e8`. Still under 3.31.
+
+`--crop` and the new targets `--to png` and `--to svg` work on a Markdown source as well as on a PDF.
+
+- **Targets.** `--to pdf` (the default), `png`, `svg`; `-o x.png` / `-o x.svg` choose by suffix. PNG is drawn by Ghostscript's `pngalpha` device (transparent) at `--image-dpi` (default 300, a flag with its default in `--help`, `--setup`-omitted); SVG by `pdftocairo`, else `mutool`, else an error naming the packages.
+- **A Markdown source** is built to a PDF first (pdfmd runs itself with the other options of the command line, and `--no-stamp --no-backup --rewrite`, into a scratch folder, as `--check-docx` does), then cropped and drawn. Its result is `NAME.pdf|png|svg` beside the source (`-d`: the current folder). A PDF source with `--to pdf` gives `NAME-crop.pdf`.
+- **`--to png|svg` without `--crop`** draws the whole page: a crop is asked for, never implied.
+- **More than one page.** A PDF keeps all of them, each cut to its own ink (`--crop-page N` keeps one). A picture format is one picture per page: `NAME.png` for one page, `NAME-1.png`, `NAME-2.png` ... for several, with a NOTE.
+- **`--crop` with a target that has no pages** (`--to docx`, `odt`, `html`, `epub` ...) is an error before anything is built, naming pdf, png and svg. `-b`, `-r`, `-p` with these are refused; `--image-dpi` without a picture target is an error.
+- `png` and `svg` are in `FORMAT_EXTENSION` and `EXTENSION_FORMAT`; new module `pdfmd_crop/images.py`.
+- Test: `tests/test_crop.py` (`Pictures`: whole page, cropped, `-o x.png`, svg, a docx target, batch/report, a dpi without a picture, a Markdown source through the built-in renderer with no Pandoc on the path).
+- The decisions are suggestions the author asked for; they are in the maintainer's notes (3dv) and can be changed.
+
 ## v3.31.20 — 2026-10-31
 
 Pre-edit state: commit `db904bd`. Still under 3.31.

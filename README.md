@@ -564,14 +564,29 @@ is for Markdown; the build's own `WARN` and `--strict` still catch what only a b
 pdfmd --crop formula.pdf                          # formula-crop.pdf: every page cut to its ink, 2 pt of room
 pdfmd --crop formula.pdf -o tight.pdf --crop-pad 0
 pdfmd --crop a.pdf b.pdf -o cropped/              # several: -o is a folder
-pdfmd --crop page.pdf --crop-ignore-bottom 40 --crop-page 1   # first page only, its bottom 40 pt (a page number) not counted
+pdfmd formula.md --crop --crop-ignore-bottom 40   # a Markdown source is built first: formula.pdf, cropped
+pdfmd formula.md --crop --to png --crop-page 1    # formula.png, the cropped first page, transparent, 300 dpi
+pdfmd formula.pdf --crop --to svg                 # formula.svg
+pdfmd report.pdf --to png                         # no --crop: the whole page(s) as pictures
 ```
 
 The ink is what Ghostscript's `bbox` device finds painted on the page; only the page's media and crop box change, so the page
 stays vector and nothing is redrawn. It is what [eqpop](https://github.com/aliperdehan/eqpop) does to a rendered formula, on any
-machine that has Ghostscript and pypdf (a rotated page is handled; a page that draws nothing is left as it is, with a NOTE).
-`--crop-pad PT` sets the room around the ink (default 2), `--crop-ignore-bottom PT` leaves the foot of each page out of the
-measurement, `--crop-page N` keeps that page alone. The source is never changed: the result is `NAME-crop.pdf` beside it, or `-o`.
+machine that has Ghostscript and pypdf. A rotated page is handled; a page that draws nothing is left as it is, with a NOTE.
+
+- `--crop-pad PT` sets the room around the ink (default 2); `--crop-ignore-bottom PT` leaves the foot of each page out of the
+  measurement (a page number: a pdfmd page carries one, so a formula built from Markdown wants `--crop-ignore-bottom`);
+  `--crop-page N` keeps page N alone.
+- **Targets.** `--to pdf` (the default), `png` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by Ghostscript on a
+  transparent background at `--image-dpi` (default 300); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
+  without `--crop` draws the whole page: a crop is asked for, never implied.
+- **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page: `NAME.png` for a
+  one-page result, `NAME-1.png`, `NAME-2.png` ... for several (with a NOTE); `--crop-page 1` gives the plain name.
+- **Names.** A Markdown source gives `NAME.pdf|png|svg` beside it (`-d`: in the current folder); a PDF source gives
+  `NAME-crop.pdf`, so the source is never overwritten unless `-o` names it. The intermediate PDF of a Markdown source is built
+  with your other options (`-e`, `-y` ...) but with no build stamp or backup.
+- `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut. `-b`, `-r` and `-p` are refused; build
+  the PDF, then crop it.
 
 ### A small editor
 

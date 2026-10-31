@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.20"
+PDFMD_VERSION = "3.31.21"
 import argparse
 import atexit
 import csv
@@ -7464,43 +7464,122 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
     return status
 
 
-def crop_command(args) -> int:
-    """`pdfmd --crop FILE.pdf...`: each page cut to its ink (pdfmd_crop). The result is NAME-crop.pdf beside the source;
-    `-o` names the file (one source) or the folder (several)."""
+PICTURE_FORMATS = ("pdf", "png", "svg")
+
+
+def picture_target(args) -> str | None:
+    """`--to`, else the format `-o` names by its suffix: png and svg are the ones that choose the picture command."""
+    return args.to or (format_from_output(args.out) if args.out else None)
+# the options of the command line that `pdfmd_picture_build` must not hand on to the build of the intermediate PDF, and how
+# many words each takes
+PICTURE_OPTIONS = {"--crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
+                   "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1}
+
+
+def picture_build(args, source: Path, scratch: Path) -> Path | None:
+    """The PDF pdfmd makes of the Markdown `source` (a run of pdfmd itself with every option of this command line but
+    the ones in PICTURE_OPTIONS, and without a build stamp, a backup or a renamed older result), in `scratch`; None when
+    the build failed (its messages are already on the screen)."""
+    typed = {str(path) for path in args.path}
+    kept, skip = [], 0
+    for word in sys.argv[1:]:
+        if skip:
+            skip -= 1
+        elif word.split("=", 1)[0] in PICTURE_OPTIONS:
+            skip = 0 if "=" in word else PICTURE_OPTIONS[word]
+        elif word in typed or str(Path(word)) in typed:
+            continue
+        else:
+            kept.append(word)
+    built = scratch / "built.pdf"
+    command = [sys.executable, str(Path(__file__).resolve()), *kept, str(source), "--to", "pdf", "-o", str(built),
+               "--no-stamp", "--no-backup", "--rewrite"]
+    done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
+    sys.stderr.write(done.stderr)
+    return built if done.returncode == 0 and built.is_file() else None
+
+
+def picture_command(args) -> int:
+    """`pdfmd --crop` and `--to png|svg`: a PDF (or the PDF pdfmd builds from a Markdown source) cut to its ink with
+    --crop, and drawn as pictures when the target is png or svg. See pdfmd_crop; the rules are in the changelog of 3.31.20/21."""
     from pdfmd_crop import DEFAULT_PAD, CropError, crop_pdf
+    from pdfmd_crop.images import DEFAULT_DPI, pictures
+    target = args.to or (format_from_output(args.out) if args.out else None) or "pdf"
+    if target not in PICTURE_FORMATS:
+        print(f"--crop cuts a PDF page: it goes with --to pdf, png or svg, not {target} "
+              f"(a {target} file has no page box to cut)", file=sys.stderr)
+        return 1
+    if args.batch or args.report or args.presentation:
+        print("--crop and --to png|svg take the files one by one: not with -b, -r or -p "
+              "(build the PDF, then `pdfmd --crop` it)", file=sys.stderr)
+        return 1
     sources = list(args.path)
     if not sources:
-        print("--crop takes the PDF files to crop: pdfmd --crop formula.pdf", file=sys.stderr)
+        print(f"--{'crop' if args.crop else 'to ' + target} takes the files to work on: pdfmd --crop formula.pdf", file=sys.stderr)
         return 1
     out = args.out
-    if out is not None and len(sources) > 1 and not (out.is_dir() or out.suffix.lower() != ".pdf"):
-        print(f"--crop of {len(sources)} files: -o names a folder, not a file ({out})", file=sys.stderr)
+    if out is not None:
+        named = format_from_output(out)
+        if named is not None and named != target and not out.is_dir():
+            print(f"-o {out} is a {named} file, but the target is {target}", file=sys.stderr)
+            return 1
+    many_outputs = out is not None and (len(sources) > 1 or out.is_dir() or not out.suffix)
+    if out is not None and len(sources) > 1 and out.suffix and not out.is_dir():
+        print(f"{len(sources)} files: -o names a folder, not a file ({out})", file=sys.stderr)
         return 1
     pad = DEFAULT_PAD if args.crop_pad is None else args.crop_pad
+    dpi = DEFAULT_DPI if args.image_dpi is None else args.image_dpi
     status = 0
     for source in sources:
-        if not source.is_file():
+        from_pdf = source.suffix.lower() == ".pdf"
+        if from_pdf and not source.is_file():
             print(f"ERROR  {display_path(source)}: no such file", file=sys.stderr)
             status = 1
             continue
-        if out is None:
-            target = source.with_name(source.stem + "-crop.pdf")
-        elif len(sources) > 1 or out.is_dir():
-            out.mkdir(parents=True, exist_ok=True)
-            target = out / (source.stem + "-crop.pdf")
-        else:
-            target = out
         try:
-            done = crop_pdf(source, target, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
-        except CropError as error:
-            print(f"ERROR  {display_path(source)}: {error}", file=sys.stderr)
+            markdown = source if from_pdf else find_markdown(source)
+        except FileNotFoundError as error:
+            print(str(error), file=sys.stderr)
             status = 1
             continue
-        first = 1 if args.crop_page is None else args.crop_page
-        empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
-        print(f"OK    {display_path(source)} > {display_path(target)}  ({len(done.boxes)} of {done.pages} page{'' if done.pages == 1 else 's'})")
-        if empty:
-            print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
+        extension = "." + target
+        name = markdown.stem + ("-crop" if from_pdf and target == "pdf" else "") + extension
+        if out is None:
+            destination = (Path.cwd() if args.destination_cwd else markdown.parent) / name
+        elif many_outputs:
+            out.mkdir(parents=True, exist_ok=True)
+            destination = out / name
+        else:
+            destination = out
+        with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
+            folder = Path(scratch)
+            pdf = markdown if from_pdf else picture_build(args, markdown, folder)
+            if pdf is None:
+                status = 1
+                continue
+            try:
+                if args.crop:
+                    cropped = destination if target == "pdf" else folder / "cropped.pdf"
+                    done = crop_pdf(pdf, cropped, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
+                    first = 1 if args.crop_page is None else args.crop_page
+                    empty = [str(number) for number, box in enumerate(done.boxes, first) if box is None]
+                    if empty:
+                        print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
+                    pdf, pages = cropped, len(done.boxes)
+                else:
+                    pages = None
+                if target == "pdf":
+                    written = [destination]
+                else:
+                    written = pictures(pdf, destination, target, dpi)
+                    if len(written) > 1:
+                        print(f"NOTE  {len(written)} pages: one {target} each ({written[0].name} ... {written[-1].name})", file=sys.stderr)
+            except CropError as error:
+                print(f"ERROR  {display_path(source)}: {error}", file=sys.stderr)
+                status = 1
+                continue
+        for path in written:
+            print(f"OK    {display_path(source)} > {display_path(path)}")
     return status
 
 
@@ -18917,7 +18996,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
 # missing here fall back to ".<format>" -- a reasonable guess, since Pandoc's
 # own format names are usually also their file extension.
 FORMAT_EXTENSION = {
-    "pdf": ".pdf",
+    "pdf": ".pdf", "png": ".png", "svg": ".svg",
     "html": ".html", "html4": ".html", "html5": ".html", "chunkedhtml": ".html",
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
@@ -18951,7 +19030,7 @@ EXTENSION_FORMAT = {
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
-    ".json": "json", ".pdf": "pdf",
+    ".json": "json", ".pdf": "pdf", ".png": "png", ".svg": "svg",
     **{"." + name: name for name in CALIBRE_ONLY_FORMATS},
     ".doc": "doc",                                                    # LibreOffice writes it (v3.29.1; see soffice_goal)
 }
@@ -26148,13 +26227,16 @@ def build_parser() -> argparse.ArgumentParser:
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
     parser.add_argument("--crop", action="store_true",
-                        help="cut each page of the PDF files you name to what it draws (the page stays vector; only its "
-                             "boxes change), writing NAME-crop.pdf beside each, or -o FILE (one PDF) / -o FOLDER. "
-                             "Needs Ghostscript and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page")
+                        help="cut each page to what it draws (the page stays vector; only its boxes change). FILE is a PDF "
+                             "(NAME-crop.pdf beside it) or a Markdown source (built first: NAME.pdf). With --to png or svg "
+                             "the cropped page is drawn as a picture. -o FILE (one source) or -o FOLDER. Needs Ghostscript "
+                             "and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page, --image-dpi")
     parser.add_argument("--crop-pad", type=float, default=None, metavar="PT",
                         help="with --crop: points of room left around the ink (default 2)")
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
                         help="with --crop: do not look at the bottom PT points of each page (a page number); default 0")
+    parser.add_argument("--image-dpi", type=float, default=None, metavar="DPI",
+                        help="with --to png: pixels per inch of the picture (default 300)")
     parser.add_argument("--crop-page", type=int, default=None, metavar="N",
                         help="with --crop: keep page N alone, cropped (default: every page, each to its own ink)")
     parser.add_argument("--editor", metavar="CMD", default=None,
@@ -26986,8 +27068,10 @@ def run_main() -> None:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
     if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
-    if args.crop:
-        raise SystemExit(crop_command(args))
+    if args.image_dpi is not None and not (args.crop or picture_target(args) in ("png", "svg")):
+        raise SystemExit("--image-dpi goes with --to png or --to svg")
+    if args.crop or picture_target(args) in ("png", "svg"):
+        raise SystemExit(picture_command(args))
     if args.check_docx:
         raise SystemExit(check_docx_command(args, pandoc_options))
     if args.init is not None:
