@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.34"
+PDFMD_VERSION = "3.31.35"
 import argparse
 import atexit
 import csv
@@ -7124,29 +7124,27 @@ def kit_header_insert(cmd: list[str], document: Path | None, metadata_files: lis
     return True
 
 
-def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path], pandoc_options: list[str]) -> None:
-    """Step 2: read the other header files, settle what they say twice with the kits' lines, write the kits' header file."""
-    from pdfmd_kits import preamble
-    kits = kit_preamble_kits(document, metadata_files)
-    pending = next((index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"
-                    and Path(cmd[index + 1]).name == KIT_HEADER_PREFIX + "pending.tex"), None)
-    if pending is None:
-        return
+def kit_explicit_sources(document: Path, paths: list[Path], pandoc_options: list[str]) -> list[bool]:
+    """For each of ``paths`` (header files of a build): whether it was asked for (`-H`, a named `preamble:`), not found by
+    discovery. A found one yields to the kit where they contradict; an explicit one stops the build."""
     auto = {path.resolve() for path in ([] if has_header_include_option(pandoc_options) else
                                         find_preambles(document.parent, document.stem, []))}
     named = {path.resolve() for path in frontmatter_extra_preambles(document)}
-    places = []                                          # (index, is the `=` form, path, name for messages, explicit)
-    for index, equals in header_argument_positions(cmd):
-        raw = cmd[index].split("=", 1)[1] if equals else cmd[index]
-        path = Path(raw)
-        if path.name.startswith(KIT_HEADER_PREFIX) or path.name == "code_wrap.tex" or not path.is_file():
-            continue
+    flags = []
+    for path in paths:
         try:
             resolved = path.resolve()
         except OSError:
             resolved = path
-        places.append((index, equals, path, display_path(path), resolved not in auto or resolved in named))
-    texts = [read_text_best_effort(path) for _, _, path, _, _ in places]
+        flags.append(resolved not in auto or resolved in named)
+    return flags
+
+
+def kit_header_settle(document: Path, kits: list, places: list[tuple[Path, str, bool]]) -> tuple[str, list[str], list]:
+    """(the text of the kits' header file, the text of each of ``places`` = (path, name for messages, explicit) once what a kit
+    writes is settled in it, the events). Raises SystemExit where a kit and an explicit source contradict."""
+    from pdfmd_kits import preamble
+    texts = [read_text_best_effort(path) for path, _, _ in places]
     blocks: list[str] = []
     events = []
     for item in kits:
@@ -7155,7 +7153,7 @@ def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path
         foreign = frozenset(option for other in kit.modes.values() if other is not mode for option in other.options) - frozenset(own)
         lines = [*kit.latex, *(mode.latex if mode else ())]
         label = f"{kit.name}" + (f" {kit.version}" if kit.version else "") + (f" (mode {mode.name})" if mode else "")
-        sources = [preamble.Source(name, text, explicit) for text, (_, _, _, name, explicit) in zip(texts, places)]
+        sources = [preamble.Source(name, text, explicit) for text, (_, name, explicit) in zip(texts, places)]
         try:
             result = preamble.resolve(label, kit.package, own, foreign, preamble.kit_inputs(lines), sources)
         except preamble.PreambleClash as error:
@@ -7164,30 +7162,106 @@ def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path
         events += result.events
         blocks.append("\n".join([f"% pdfmd: kit {label}; written by pdfmd, edit the kit, not this file",
                                 *([preamble.package_line(kit.package, result.options)] if kit.package else []), *lines]))
+    return "\n".join(blocks) + "\n", texts, events
+
+
+def kit_cache_tex(prefix: str, text: str, digits: int) -> Path:
+    """``text`` as a file of the cache folder named ``prefix`` and its content's hash (written once); SystemExit when the folder
+    cannot be written."""
+    path = cache_root() / "tex" / f"{prefix}{hashlib.sha1(text.encode('utf-8')).hexdigest()[:digits]}.tex"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.is_file():
+            path.write_text(text, encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"cannot write the kit's preamble to {path} ({error.strerror or error})")
+    return path
+
+
+def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path], pandoc_options: list[str]) -> None:
+    """Step 2: read the other header files, settle what they say twice with the kits' lines, write the kits' header file."""
+    kits = kit_preamble_kits(document, metadata_files)
+    pending = next((index for index, item in enumerate(cmd[:-1]) if item == "--include-in-header"
+                    and Path(cmd[index + 1]).name == KIT_HEADER_PREFIX + "pending.tex"), None)
+    if pending is None:
+        return
+    found = []                                           # (index, is the `=` form, path)
+    for index, equals in header_argument_positions(cmd):
+        raw = cmd[index].split("=", 1)[1] if equals else cmd[index]
+        path = Path(raw)
+        if not (path.name.startswith(KIT_HEADER_PREFIX) or path.name == "code_wrap.tex" or not path.is_file()):
+            found.append((index, equals, path))
+    explicit = kit_explicit_sources(document, [path for _, _, path in found], pandoc_options)
+    places = [(path, display_path(path), flag) for (_, _, path), flag in zip(found, explicit)]
+    body, texts, events = kit_header_settle(document, kits, places)
     for event in events:
         if event.warn:
             print(f"WARN  {event.id}  {event.message}", file=sys.stderr)
         elif VERBOSE_OUTPUT:
             print(f"AUTO {event.id}  {event.message}")
-    for (index, equals, path, _, _), text in zip(places, texts):
+    for (index, equals, path), text in zip(found, texts):
         if text != read_text_best_effort(path):
-            copy = cache_root() / "tex" / f"kit-{path.stem}-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]}.tex"
-            try:
-                copy.parent.mkdir(parents=True, exist_ok=True)
-                if not copy.is_file():
-                    copy.write_text(text, encoding="utf-8")
-            except OSError as error:
-                raise SystemExit(f"cannot write the build copy of {path.name} for the kit ({error.strerror or error})")
+            copy = kit_cache_tex(f"kit-{path.stem}-", text, 12)
             cmd[index] = f"--include-in-header={copy}" if equals else str(copy)
-    body = "\n".join(blocks) + "\n"
-    final = cache_root() / "tex" / f"{KIT_HEADER_PREFIX}{hashlib.sha1(body.encode('utf-8')).hexdigest()[:16]}.tex"
-    try:
-        final.parent.mkdir(parents=True, exist_ok=True)
-        if not final.is_file():
-            final.write_text(body, encoding="utf-8")
-    except OSError as error:
-        raise SystemExit(f"cannot write the kit's preamble ({error.strerror or error})")
-    cmd[pending + 1] = str(final)
+    cmd[pending + 1] = str(kit_cache_tex(KIT_HEADER_PREFIX, body, 16))
+
+
+def kit_embedded_preambles(document: Path, metadata_files: list[Path], preamble_files: list[Path] | None) -> list[Path]:
+    """The preamble files an assembled or attached source embeds: when a kit writes part of the preamble, the kit's header file
+    first and then the found preambles as the build read them (what the kit writes twice settled in them), so a rebuild that
+    has no kit gets the same LaTeX in the same order. ``preamble_files`` unchanged when no kit writes a preamble."""
+    files = list(preamble_files or [])
+    if any(path.name.startswith(KIT_HEADER_PREFIX) for path in files):
+        return files
+    kits = kit_preamble_kits(document, metadata_files)
+    if not kits:
+        return files
+    explicit = kit_explicit_sources(document, files, [])
+    body, texts, _ = kit_header_settle(document, kits, [(path, display_path(path), flag) for path, flag in zip(files, explicit)])
+    settled = [kit_cache_tex(f"kit-{path.stem}-", text, 12) if text != read_text_best_effort(path) else path
+               for path, text in zip(files, texts)]
+    return [kit_cache_tex(KIT_HEADER_PREFIX, body, 16), *settled]
+
+
+def kit_carried_files(kits: list, base: Path, limit: float) -> tuple[dict[str, Path], list[dict], list[str]]:
+    """The files the chosen ``kits`` take along (their `carry:` lists) as {name beside the document: path}, the manifest's record
+    of each kit ({name, version, mode, package, carried}) and the notes to print. A named file keeps its path from the kit's
+    folder; a named folder is carried by its files, which land beside the document (TeX and Pandoc look there first: a package
+    that finds its logo by a bare name finds it again). A name the document's folder already holds is left to the folder."""
+    files: dict[str, Path] = {}
+    record: list[dict] = []
+    notes: list[str] = []
+    for item in kits:
+        kit = item.kit
+        mine: dict[str, Path] = {}
+        for entry in kit.carry:
+            target = kit.folder / entry.rstrip("/")
+            if target.is_dir():
+                found = sorted(path for path in target.rglob("*") if path.is_file()
+                               and not any(part.startswith(".") or part in BUNDLE_SKIP_DIRS
+                                           for part in path.relative_to(target).parts))
+                pairs = [(path.name, path) for path in found]
+            elif target.is_file():
+                pairs = [(entry, target)]
+            else:
+                notes.append(f"NOTE  kit {kit.name}: `carry: {entry}` names nothing in {display_path(kit.folder)}; not carried")
+                continue
+            for name, path in pairs:
+                if name in mine:
+                    notes.append(f"NOTE  kit {kit.name}: {name} is named twice in `carry:`; the first is carried")
+                elif name in files:
+                    notes.append(f"NOTE  kit {kit.name}: {name} is also carried by another kit; the first is kept")
+                elif not (base / name).exists():
+                    mine[name] = path
+        size = sum(path.stat().st_size for path in mine.values())
+        if size > limit:
+            notes.append(f"WARN  kit {kit.name}: its {len(mine)} carried files are {size / 1048576:.0f} MB, over the "
+                         f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); not carried")
+            mine = {}
+        files.update(mine)
+        record.append({"name": kit.name, "version": kit.version or None, "mode": item.mode.name if item.mode else None,
+                       "package": kit.package or None, "carried": sorted(mine)})
+    return files, record, notes
 
 
 def package_helper(folder: Path, package: str, no_auto: list[str] | None = None, document: Path | None = None) -> tuple[dict, Path] | None:
@@ -23118,7 +23192,7 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
         for extra_filter in frontmatter_extra_lua_filters(md_path):
             if extra_filter not in discovered_lua:
                 discovered_lua.append(extra_filter)
-    plan = EmbedPlan(kinds, lua_mode, list(metadata_files), list(preamble_files or []), discovered_lua)
+    plan = EmbedPlan(kinds, lua_mode, list(metadata_files), kit_embedded_preambles(md_path, metadata_files, preamble_files), discovered_lua)
     if "hst" in kinds:
         found = history_file(md_path, metadata_files, existing=True)
         plan.hst_file = found if found.is_file() else None
@@ -23837,6 +23911,11 @@ def requirement_lines(manifest: dict) -> list[str]:
     for kind, names in missing.items():
         lines.append(f"NEEDS     {kind}{'s' if len(names) != 1 else ''} {', '.join(names)}: from the author's own TeX "
                      "tree, not stored (install it, or build with bundle-packages)")
+    for kit in manifest.get("kits") or []:
+        lines.append(f"KIT       {kit['name']}" + (f" {kit['version']}" if kit.get("version") else "")
+                     + (f" (mode {kit['mode']})" if kit.get("mode") else "")
+                     + (f": its {len(kit['carried'])} parts are stored" if kit.get("carried") else "")
+                     + "; what it wrote is in the source, so a rebuild needs no kit")
     if needs.get("fonts"):
         lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
     made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
@@ -23905,10 +23984,24 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                                            report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files))
     extras: dict[str, bytes] = {}
     origins: dict[str, str] = {}
+    # A chosen kit's parts (its package, the library it inputs, its logos: the `carry:` list) are stored whether or not the
+    # folder is bundled: the source holds the LaTeX the kit wrote, and a rebuild with no kit on the machine needs the files.
+    kits_here = active_kits(md_path, metadata_files, no_auto)
+    kit_record: list[dict] = []
+    if kits_here:
+        limit_mb = option_flag_number(first_pdfmd_option(md_path, metadata_files, "bundle-max-mb")) or BUNDLE_MAX_MB
+        carried, kit_record, kit_notes = kit_carried_files(kits_here, base, float(limit_mb) * 1024 * 1024)
+        for line in kit_notes:
+            print(line, file=sys.stderr)
+        for name, path in carried.items():
+            if name not in extras:
+                extras[name] = path.read_bytes()
+                origins[name] = "kit"
     mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
     header_text = header_includes_text(front_matter_dict(merged).get("header-includes"))
     packages = resolve_bundle_packages(md_path, metadata_files)
-    deps = tex_tree_dependencies(list(preamble_files or []), [header_text] if header_text else [], base, packages)
+    deps = tex_tree_dependencies(kit_embedded_preambles(md_path, metadata_files, preamble_files),
+                                 [header_text] if header_text else [], base, packages)
     if mode:
         represented = {Path(os.path.abspath(base / item["path"]))
                        for item in [*manifest["chunks"], *manifest["layout"]]}
@@ -23986,6 +24079,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     if is_pdf:
         match_images_to_pdf(output, [image for image in manifest["images"] if image["path"] not in extras], base)
     manifest["requirements"] = attachment_requirements(merged, deps, set(extras), output if is_pdf else None)
+    if kit_record:
+        manifest["kits"] = kit_record
     attachments = {
         ATTACH_SOURCE: merged.encode("utf-8"),
         ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
@@ -24977,7 +25072,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
               + (f" and {len(absent) - 3} more (--verbose)" if len(absent) > 3 else ""))
     for item in extras:
         if not compact:
-            print(f"FILE      {item['path']}  ({item['size']} bytes{', from a TeX tree' if item.get('from') else ''})")
+            print(f"FILE      {item['path']}  ({item['size']} bytes{', from ' + ('a kit' if item.get('from') == 'kit' else 'a TeX tree') if item.get('from') else ''})")
     if list_only:
         return status
     name = restore_target_name(manifest.get("name", "")) or PurePosixPath("document.md")

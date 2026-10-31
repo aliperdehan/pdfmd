@@ -2540,6 +2540,16 @@ mode of the same kit is a contradiction, where a `preamble.tex` found in the fol
 stays after the kit's lines. Only a whole line is rewritten: the package inside a list or behind a macro stops the build and names
 the line. `--verbose` shows the quiet outcomes (`KIT-SAME`, `KIT-MERGE`).
 
+**A kit travels with the source.** `--attach-source`, `--keep-source`, `--bundle` and `--embed-metadata` hold what the kit wrote: its
+preamble goes into the source first (with what your own LaTeX said twice settled in it, as in the build), its defaults and Lua
+filter go in as the metadata and filter files they already are, and the files its `carry:` list names are stored beside the
+document: a named file keeps its path, a named folder is carried by its files, which land beside the document (TeX looks there
+first, so a package that finds its logo by a bare name finds it again). A file the document's folder already holds is left to the
+folder, and a kit whose parts are over `bundle-max-mb` (100) is not carried, with a warning. The manifest records each kit (name,
+version, mode, package, the parts); `pdfmd --restore` says so and writes the parts back. A restored report needs no kit: the
+version a PDF was made with is the one in it. A kit's Lua filter is better not carried as a file: a `<package>.lua` beside a
+document is applied by name, and the filter the build ran is already in the source.
+
 ## Build stamps, history and snapshots
 
 All are off by default.

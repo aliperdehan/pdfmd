@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.35 — 2026-10-31
+
+Pre-edit state: commit `6ab64f0`. Still under 3.31. `[kits]`, C4 of entry 3du (the kit's part).
+
+An attached or assembled source holds what a chosen kit wrote and the kit's parts, so a restored report rebuilds on a machine with no kit.
+
+- **The preamble.** `--attach-source`, `--keep-source`, `--bundle` and `--embed-metadata` put the kit's header (`\usepackage[<options>]{package}`, its `latex:` lines) first among the embedded preambles, and the found preambles as the build read them: what the kit writes twice is settled in them (`KIT-SAME`, `KIT-MERGE`, `KIT-YIELD`), so a rebuild gets the same LaTeX in the same order and `Option clash` cannot come back. The settling is one function for the build and the source (`kit_header_settle`).
+- **The parts.** The files a kit's `carry:` names are stored beside the document whether or not the folder is bundled: a named file keeps its path, a named folder is carried by its files (flat), a name the document's folder holds is left to the folder, a name that is not in the kit is a NOTE, a kit over `bundle-max-mb` is not carried (WARN). They go in before the bundle's own TeX-tree files, so the kit's copy wins. The manifest gets `kits: [{name, version, mode, package, carried}]` (additive; `ATTACH_FORMAT` stays 2); `--restore` prints a `KIT` line and labels the files "from a kit".
+- Checked on a copy of a real report with real lualatex: the report built with `kit: nulabreport:qca` and a course `.pdfmd/`, attached, restored, and rebuilt in the restored folder with no config, no kit and an empty `TEXMFHOME`, is pixel-identical.
+- Tests: `tests/test_kit_carry.py`.
+
 ## v3.31.34 — 2026-10-31
 
 Pre-edit state: commit `5420849`. Still under 3.31. `[kits]`.
