@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.31.37b — 2026-10-31
+
+Pre-edit state: commit `48864de`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.37.
+
+### Docs
+- `CLAUDE.md`, "Version numbers": the kits and tables lines have no minor of their own; each of their commits is a 3.31.x patch with an entry tagged `[kits]` or `[tables]` (the author's decision of entry 3du, point 14).
+
 ## v3.31.37 — 2026-10-31
 
 Pre-edit state: commit `6a21c23`. Still under 3.31. `[kits]`, the spike of entry 3du (point 12).
