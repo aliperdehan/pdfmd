@@ -1434,7 +1434,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.37"
+PDFMD_VERSION = "3.31.38"
 import argparse
 import atexit
 import csv
@@ -18538,6 +18538,7 @@ class EmbedPlan:
         self.bib_prune = False                            # keep only the bibliography entries the text cites
         self.bib_report: list[str] = []                   # "name (kept of total)" for the summary
         self.csl_left: list[str] = []                     # styles the metadata names that were not embedded (the `csl` kind is off)
+        self.kit_none = False                             # a chosen kit's every part is embedded: the source says `kit: none`
 
 
 def sha256_text(text: str) -> str:
@@ -19629,6 +19630,8 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         options["embedded"] = embedded_now
     if applied:
         options["applied-lua"] = [item.name for item in applied]
+    if plan.kit_none:
+        options["kit"] = "none"
     if no_auto:
         existing = options.get("no-auto")
         if existing is True or (isinstance(existing, str) and existing.casefold() in {"true", "yes", "on", "all"}):
@@ -23226,6 +23229,12 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
             if extra_filter not in discovered_lua:
                 discovered_lua.append(extra_filter)
     plan = EmbedPlan(kinds, lua_mode, list(metadata_files), kit_embedded_preambles(md_path, metadata_files, preamble_files), discovered_lua)
+    kits_here = active_kits(md_path, metadata_files, no_auto)
+    # What a kit brought (defaults, preamble, Lua filter) is now in the source: a rebuild must not choose the kit again, where it
+    # would be found twice over (the stored copies and the kit's), or not found at all. `kit: none` in the source's own
+    # pdfmd-options replaces every `kit:` below it; only a part left out of the embedding keeps the kit chosen.
+    plan.kit_none = bool(kits_here) and {"metadata", "preamble"} <= kinds and (
+        not any(item.kit.lua for item in kits_here) or ("lua" in kinds and lua_mode in ("embed", "apply")))
     if "hst" in kinds:
         found = history_file(md_path, metadata_files, existing=True)
         plan.hst_file = found if found.is_file() else None
@@ -23952,7 +23961,7 @@ def requirement_lines(manifest: dict) -> list[str]:
         lines.append(f"KIT       {kit['name']}" + (f" {kit['version']}" if kit.get("version") else "")
                      + (f" (mode {kit['mode']})" if kit.get("mode") else "")
                      + (f": its {len(kit['carried'])} parts are stored" if kit.get("carried") else "")
-                     + "; what it wrote is in the source, so a rebuild needs no kit")
+                     + "; what it wrote is in the source (`kit: none` says so), so a rebuild needs no kit")
     layers = (manifest.get("layers") or {}).get("options")
     if layers:
         lines.append(f"FOLDER    settings the build used: {', '.join(str(key) for key in layers)}"

@@ -111,6 +111,14 @@ class Carry(unittest.TestCase):
         order = [merged.index(text) for text in ("\\usepackage[qca,draft]{labstyle}", "\\LabScheme{word}", "\\labsetup{mine=1}")]
         self.assertEqual(order, sorted(order))
 
+    def test_the_source_says_kit_none_so_a_rebuild_does_not_choose_the_kit_again(self):
+        _, merged, _ = self.attach(self.report())
+        self.assertEqual(pdfmd.front_matter_dict(merged)["pdfmd-options"]["kit"], "none")
+        _, merged, _ = self.attach(self.report(options="pdfmd-options: {kit: lab:qca, bundle-max-mb: 20}"))
+        self.assertEqual(pdfmd.front_matter_dict(merged)["pdfmd-options"]["bundle-max-mb"], 20)         # the rest stays
+        _, merged, _ = self.attach(self.report(options=""))
+        self.assertNotIn("kit", (pdfmd.front_matter_dict(merged).get("pdfmd-options") or {}))
+
     def test_nothing_changes_without_a_kit(self):
         _, merged, manifest = self.attach(self.report(options=""), "\\usepackage{xcolor}\n")
         self.assertNotIn("kits", manifest)

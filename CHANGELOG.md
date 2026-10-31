@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.38 — 2026-10-31
+
+Pre-edit state: commit `e29cb08`. Still under 3.31. `[kits]`, C4 of entry 3du (a hole found by the review of 3.31.35 to 3.31.37).
+
+An attached or assembled source whose kit is fully embedded says `kit: none`.
+
+- Cause: 3.31.35 embedded what a kit brings (its defaults as metadata files, its preamble, its Lua filter) and stored its parts, but a `kit:` chosen in the document's own front matter stayed in the source. A rebuild on a machine without the kit stopped with "no kit called ...", and on a machine with it (or under a folder whose `.pdfmd/` chooses it) the kit applied again on top of the stored copies: the source of the rebuild was 800 lines longer, with the defaults and the preamble twice.
+- The assembled source's `pdfmd-options` gets `kit: none`, which replaces every `kit:` below the document (the document layer drops what is under it), when metadata and preamble are embedded and so is the Lua filter if the kit has one (`lua` kind embedded or applied; a `ref` or `off` filter, or an embedding with fewer kinds, keeps the kit chosen). The command line's `--kit` still wins. `--restore` says so on its `KIT` line.
+- Checked on copies of a real report with real lualatex: a kit chosen in the report's own front matter, attached and restored, rebuilds pixel-identically (a) in a folder with no `kits/` above it, no config and an empty `TEXMFHOME`, and (b) under a course folder whose `.pdfmd/config.yaml` chooses the kit, where the kit's Lua filter runs once. The transition state (a course `.pdfmd/` with the report's old `metadata/` folder still there) builds pixel-identically to the original as well.
+- Tests: `tests/test_kit_carry.py`.
+
 ## v3.31.37b — 2026-10-31
 
 Pre-edit state: commit `48864de`. Documentation only (`CLAUDE.md`): `PDFMD_VERSION` stays 3.31.37.

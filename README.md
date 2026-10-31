@@ -2554,8 +2554,10 @@ filter go in as the metadata and filter files they already are, and the files it
 document: a named file keeps its path, a named folder is carried by its files, which land beside the document (TeX looks there
 first, so a package that finds its logo by a bare name finds it again). A file the document's folder already holds is left to the
 folder, and a kit whose parts are over `bundle-max-mb` (100) is not carried, with a warning. The manifest records each kit (name,
-version, mode, package, the parts); `pdfmd --restore` says so and writes the parts back. A restored report needs no kit: the
-version a PDF was made with is the one in it. A kit's Lua filter is better not carried as a file: a `<package>.lua` beside a
+version, mode, package, the parts); `pdfmd --restore` says so and writes the parts back. A restored report needs no kit:
+the source says `kit: none` in its own `pdfmd-options` (it replaces a `kit:` chosen anywhere below it, in the document, a folder or the
+config), so a rebuild uses the stored copies and neither fails on a machine without the kit nor applies the kit twice on one that has
+it; delete that line to choose a kit again. A kit's Lua filter is better not carried as a file: a `<package>.lua` beside a
 document is applied by name, and the filter the build ran is already in the source.
 
 ## Build stamps, history and snapshots
