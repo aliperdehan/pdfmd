@@ -66,6 +66,19 @@ wait for an answer before any code.
 - [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`pdfmd_office/fragments.py` has the pieces)
 - [ ] eqpop calls `pdfmd --crop`, its own AppKit crop stays as the fallback (eqpop repository)
 
+## Chemical structures, carried inside 3.31 [smiles] [3ec]
+
+- [ ] `smiles` blocks (fenced and `::: smiles`; SMILES or molfile, `file=`, one molecule per line, `name=`): RDKit pictures and chemfig (mol2chemfig, compiled once and cached), `engine=auto`, `cache: {smiles}` (off by default), settings under `pdfmd-options.smiles`; then inline `smiles`, `engine=indigo` [3ec]
+
+## Distribution inside this repository, carried inside 3.31 [3ed]
+
+- [ ] Homebrew tap moved here (`Formula/`, bump in publish.yml, `environment: homebrew`); the author deletes the tap repo after a real install works [3ed]
+- [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
+
+## Obsidian flavour, one feature line, next minor [3ee]
+
+- [ ] Wikilinks, `![[embeds]]` with sizes and a vault root, `%%comments%%`, tags, block ids, an `obsidian` preset for `markup`; note embeds and links between notes last; tested on a real vault [3ee]
+
 ## Other tools' command lines
 
 Answer the keys of the other `pdfmd`, `mdpdf` and `md2pdf` tools under their own command names, check their behaviour, take
@@ -103,3 +116,4 @@ is low priority. [3di]
 
 - [ ] inkmd: a quote right after a list is read as a paragraph; fix upstream, re-vendor [3ci]
 - [ ] nulabreport: grid tables cannot be kept whole (`labtabular`) [3cf]
+- [ ] nulabreport: `smiles: true` inside its `cache: {aux, plots}` in the three metadata files, +0.0.1, once the chemfig cache exists (approved) [3ec]
