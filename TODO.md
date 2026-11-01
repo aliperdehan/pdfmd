@@ -16,6 +16,7 @@ wait for an answer before any code.
 
 ## Features, agreed
 
+- [ ] BUG, silent wrong numbers: parts built together that are not next to each other (`report#20+40`) read what the parts between them define as defined above both (calc names); fix with a slot per gap or hidden gap blocks, first a WARN [3eg]
 - [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Metadata append: `author+: [B, C]` adds to what the layers below gave, and a `metadata-append: [author]` setting makes chosen keys append; a test and a docs line pin the order global < `.pdfmd/` < `metadata/` < document [3du]
@@ -72,7 +73,7 @@ wait for an answer before any code.
 
 ## Distribution inside this repository, carried inside 3.31 [3ed]
 
-- [ ] Homebrew tap moved here (`Formula/`, bump in publish.yml, `environment: homebrew`); the author deletes the tap repo after a real install works [3ed]
+- [ ] Homebrew tap moved here (built, not pushed). At the first push: check the `homebrew` job and a real `brew install` from GitHub, then delete `aliperdehan/homebrew-tap` (authorised; needs `gh auth refresh -s delete_repo` from the author first) [3ed]
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
 
 ## Obsidian flavour, one feature line, next minor [3ee]
@@ -108,6 +109,7 @@ is low priority. [3di]
 ## Investigate first, no commitment
 
 - [ ] pdfmd-gui: an Overleaf-like project view; one local web UI plus thin native wrappers, a client of the CLI, never obligatory; its foundation (emit, `--json`, the split, the generated reference) ships in 3.x before 4.0 [3do]
+- [ ] pdfmd-gui window shell, open: native wrapper vs an optional chromium window (`--install chromium`, a `--setup` row to toggle); no Node needed [3do]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
 - [ ] docx output and raw LaTeX multicols: nulabreport 1.29.1 writes tables between a raw `\begin{multicols}` and `\end{multicols}` as plain `tabular`; check what the docx (office) path does with those raw fences and the tables inside, since it parses raw LaTeX too
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
