@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.10 — 2026-11-03
+
+Pre-edit state: commit `5702fb0`. Entry 3eu UPDATE 2 (the author: "let's make it possible to define ranking.yaml somewhere globally ... living in .pdfmd per directory or in parent directory's .pdfmd" and "all depend on proximity to the file itself"). Kept in 3.32. Not pushed. Second of four commits of the line.
+
+The words of `priority`, and their order, are settings.
+
+- **`ranking`**: classes of words on a ladder (`classes: {fruit: {words: [cherry, banana], above: numbers}}`: banana beats cherry, every fruit beats every number, `final` still beats them all), `ladder:` (a nested list is one level), `names: family | folder | off` (whether an inferred `final` beats an unrelated document: the author's "let's make it adjustable"), `by:` (what settles equal priority: `newest`, `oldest`, `name`; `[priority]` makes a tie the error of 3.32.9 again, `[newest]` ignores priority). A class takes `ordered: false`, `degrees`, `exclude`, `names: false`, `above:` / `below:`; a word may hold `{n}`. YAML's `names: off` (read as `false`) works, and `by` may be a comma list (`priority, oldest`), which is what the setup row stores.
+- **Where it is read, nearest first**: the documents' own `pdfmd-options: {ranking: ...}` and a metadata file named after one (classes and ladder only; `by`, `names` and `inherit` are the folder's: a WARN), then folder by folder from theirs upward `.pdfmd/ranking.yaml` > the folder's `metadata.yaml` > the folder settings' `options.ranking`, then the global `ranking.yaml` (beside the config file) and the config's `options.ranking`. `inherit: false` stops the climb. A nearer `ladder`/`names`/`by` replaces a farther one, classes merge by name. Nothing is read, or parsed, until bare `pdfmd` has several documents to choose from, so a broken file never spoils another build.
+- **Two documents that define a class (or the ladder) differently**: a WARN naming both; the newer one's is used. **Mistakes** (a word in two classes, an unknown class on the ladder, a bad `above:`) stop the choice with the file that defined it; a class on no ladder is a WARN and its words are ignored.
+- **`--setup`**: two rows, *Equal priority, when bare pdfmd must choose a document* and *Names that rank versions of a document*, also in a folder's setup; `pdfmd_setup/inventory.py` lists `ranking.by` and `ranking.names` as rows and `ranking.ladder` / `ranking.classes` as left out on purpose (a file's lists). The tie WARN and error now name the `by` setting.
+- Tests: `tests/test_ranking_layers.py` (through pdfmd itself: every place, the order of the places, `inherit`, documents, strict ties, `names`, a custom ladder, mistakes, nothing read for one file), more in `tests/test_ranking_rules.py`. README (*Several documents in a folder*: the settings), module docstring.
+
 ## v3.32.9 — 2026-11-03
 
 Pre-edit state: commit `8c8293c`. Entry 3eu (the author's idea of 2026-11-03: "a small pdfmd-option called ignore or whatever that will exclude a document from autodiscovery ... actually, let's make it `priority` with different tiers"). Kept in 3.32. Not pushed. First of four commits of the line: the choice and the `priority` key (next: custom classes and the `ranking` settings, `--newest` and `--all`, `--which`).

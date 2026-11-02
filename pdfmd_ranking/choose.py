@@ -133,13 +133,14 @@ def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] 
             if tail:
                 lines.append("They were last changed at the same moment too, so there is nothing left to choose by.")
             else:
-                lines.append("Name one (`pdfmd NAME`) or give one a `priority:`.")
+                lines.append("Name one (`pdfmd NAME`), give one a `priority:`, or let the newest win "
+                             "(`ranking: {by: [priority, newest]}`).")
             choice.error = "\n".join(lines)
             return None
         reason = {"newest": f"the newest ({_stamp(winner.cand.mtime_ns)})", "oldest": f"the oldest ({_stamp(winner.cand.mtime_ns)})",
                   "name": "the last by name"}[how]
         choice.warnings.append(f"WARN  {len(pool)} Markdown files tie ({what}): {names}; using {show(winner.cand.path)}, {reason}. "
-                               "Give one a `priority:` to choose.")
+                               "Give one a `priority:`, or set `ranking: {by: [priority]}` to make a tie an error.")
         choice.settled_by = how
         for item in pool:
             if item is not winner:

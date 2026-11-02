@@ -600,6 +600,37 @@ modification times are identical too, the choice stops with that list. A value t
 counts as nothing. An exact name is always the override: `pdfmd report` builds `report.md` whatever else is there.
 `--no-auto priority` brings back the old list-and-stop.
 
+**Your own words, and their order: `ranking`.** The table is the default setting. A *class* is a named group of words; the *ladder*
+puts the classes in order, low to high, with two reserved members, `unset` (no priority written) and `numbers`. The default is
+`ladder: [never, draft, unset, revised, numbers, final]`, with `final: [final, last, max]`, `draft: [draft, wip, old, backup, copy, tmp,
+test, 0]` and so on. The same classes read a `priority:` value and a word in a file name (`report.banana.md` beats `report.md` once
+`banana` is above `unset`). To have `banana` beat `cherry`, every fruit beat every number, and still lose to `final`:
+
+```yaml
+# .pdfmd/ranking.yaml  (or pdfmd-options: {ranking: ...} anywhere below)
+classes:
+  fruit: {words: [cherry, banana], above: numbers}     # a list is low -> high; [apple, [banana, cherry]]: the last two are equal
+```
+
+A class is `[words]` or `{words: [...], ordered: false | degrees: true | exclude: true | names: false | above: CLASS | below: CLASS}`:
+`ordered: false` puts all its words on one level, `degrees` lets repeats and a glued number raise the rank (like `final`), `exclude`
+takes the documents out of the list (like `never`), `names: false` keeps its words out of file names, and `above`/`below` put the class
+next to another on the ladder without restating it (two classes with the same place share a level and do not beat each other). A word
+may hold `{n}` for a number (`v{n}`, `version {n}`: the higher wins). Or write the whole `ladder:` again, a nested list being one level.
+Other keys: `names: family | folder | off` (default `family`: names only rank versions of one document; `folder` lets `report.final`
+beat every document of the folder; `off` reads no names) and `by: [priority, newest]` (what settles equal priority, in order:
+`newest`, `oldest`, `name` (the last by natural order); `by: [priority]` makes a tie an error again; `by: [newest]` ignores
+priority). `names` and `by` are rows of `pdfmd --setup`.
+
+The settings are read **only when there is a choice to make**, from the nearest place to the documents: their own front matter
+(`pdfmd-options: {ranking: ...}`, classes and ladder only; a metadata file named after the document too), then, folder by folder
+from theirs upward, `.pdfmd/ranking.yaml`, the folder's `metadata.yaml` and the folder settings (`.pdfmd/config.yaml`, `options:
+{ranking: ...}`), then the global `ranking.yaml` beside the config file and the config's own `options: {ranking: ...}`. A nearer
+`ladder`, `names` or `by` replaces a farther one; classes merge by name. In one folder the order is `ranking.yaml`, then
+`metadata.yaml`, then the settings. `inherit: false` in a `ranking.yaml` (or the folder settings) stops the climb. Two documents that
+define a class differently are a warning, and the newer one's definition is used. A class that is on no ladder, or a word that is in
+two classes, is reported with the file that defined it.
+
 ### Keep the old file: `--no-rewrite`
 
 A build replaces an older `lecture.pdf`. With `--no-rewrite` it writes `lecture (1).pdf` instead (the first free number) and

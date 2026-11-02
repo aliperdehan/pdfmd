@@ -99,7 +99,7 @@ FOLDER_OPTIONS = frozenset({
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append",
-    "options.path-style", "options.path-up",
+    "options.path-style", "options.path-up", "options.ranking.by", "options.ranking.names",
 })
 # metadata rows whose value is a path: Pandoc takes it from the metadata file's own folder, which for a folder's setup is
 # `.pdfmd`, not the document's (the author has not decided that yet)
@@ -237,6 +237,16 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("translit", "Finding a document by a Latin spelling", "multi", TRANSLIT, "",
                 "Romanization packs for finding 命運.md when told `mingyun` (Cyrillic is always on).",
                 "Fonts and characters"),
+        # -- which document bare pdfmd builds
+        choice("options.ranking.by", "Equal priority, when bare pdfmd must choose a document",
+               (("priority, newest", "the newest file is built, with a warning"),
+                ("priority, oldest", "the oldest file is built, with a warning"),
+                ("priority", "an error naming the files")), "priority, newest",
+               "Documents rank by their priority: and by their names (report.final over report.md); this settles the rest.",
+               "Input"),
+        choice("options.ranking.names", "Names that rank versions of a document (report.final, report_draft)",
+               (("family", "only among a document's own versions"), ("folder", "against every document of the folder"),
+                ("off", "names are not read")), "family", "", "Input"),
         # -- citations
         choice("options.citation-engine", "Citation engine",
                (("citeproc", "Pandoc's citeproc (the default)"), ("natbib", "natbib / BibTeX"),

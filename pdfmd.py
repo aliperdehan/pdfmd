@@ -272,7 +272,11 @@ Finding a document by name:
     which DOCUMENT, and a `priority` written in any member of such a family switches the
     names off for it. Equal tops: the newest file is built, with a WARN naming them all.
     An exact name (`pdfmd report`) always wins; `--no-auto priority` brings the old list
-    back. The rules are pdfmd_ranking (pure).
+    back. The rules are pdfmd_ranking (pure). The words and their order are settings
+    (v3.32.10): classes of words on a ladder, `names: family|folder|off`, `by: [priority,
+    newest]`, in a `ranking.yaml` (`.pdfmd/` of the folder or any folder above it, or
+    beside the config file), in `pdfmd-options: {ranking: ...}` of a document, a metadata
+    file, the folder settings or the config; the nearest to the documents wins.
 
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
@@ -1468,7 +1472,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.9"
+PDFMD_VERSION = "3.32.10"
 import argparse
 import atexit
 import csv
@@ -12818,10 +12822,128 @@ def document_priority(path: Path):
     return MISSING, ""
 
 
+RANKING_FILE = "ranking.yaml"
+RANKING_DOCUMENT_KEYS = ("classes", "ladder")        # what a document may say about the rules; `by`, `names`, `inherit` are the folder's
+
+
+def ranking_inherit_off(mapping) -> bool:
+    return isinstance(mapping, dict) and str(mapping.get("inherit", True)).strip().casefold() in ("false", "no", "off", "0")
+
+
+def read_ranking_file(path: Path) -> dict | None:
+    """The `ranking.yaml` at ``path`` as the ranking mapping (a `ranking:` wrapped around it is accepted), None when there is none
+    or it cannot be used (folder_file_data says why, once)."""
+    data = folder_file_data(path)
+    if data is not None and set(data) == {"ranking"} and isinstance(data["ranking"], dict):
+        return data["ranking"]
+    return data
+
+
+def ranking_of_options(options) -> dict | None:
+    value = options.get("ranking") if isinstance(options, dict) else None
+    return value if isinstance(value, dict) else None
+
+
+def ranking_for_document(mapping: dict, where: str) -> dict:
+    """What a document's own `ranking` may say: its classes and ladder. The rest is the folder's to set (a WARN)."""
+    ignored = sorted(str(key) for key in mapping if key not in RANKING_DOCUMENT_KEYS)
+    if ignored:
+        print(f"WARN  ranking: {where}: {', '.join(ignored)} can be set by a folder or the config, not by a document; ignored",
+              file=sys.stderr)
+    return {key: value for key, value in mapping.items() if key in RANKING_DOCUMENT_KEYS}
+
+
+def ranking_layers(files: list[Path]) -> tuple[list[tuple[str, dict]], set[str]]:
+    """The `ranking` mappings in force for these documents, NEAREST FIRST (the order Ranking.from_layers takes): the documents' own
+    (front matter, then a metadata file named after the document; the newest document first), then, folder by folder from theirs
+    upward, `.pdfmd/ranking.yaml`, the folder's `metadata.yaml`, the folder settings' `options.ranking`; then the global
+    `ranking.yaml` and the config's `options.ranking`. A `ranking.yaml` or folder settings with `inherit: false` end the climb.
+    Also the names of the layers that are the documents' own (ranking_clashes). Nothing here is read until bare `pdfmd` has several
+    documents to choose from."""
+    directory = files[0].parent.resolve()
+    own: set[str] = set()
+    stems = {file.stem.casefold() for file in files}
+    layers: list[tuple[str, dict]] = []
+    seen: set[Path] = set()
+    shared: list[tuple[str, dict]] = []
+    newest_first = sorted(files, key=lambda file: (-file.stat().st_mtime_ns if file.exists() else 0, file.name.casefold()))
+    for file in newest_first:
+        mapping = ranking_of_options(frontmatter_pdfmd_options(file))
+        if mapping is not None:
+            where = f"{display_path(file)} pdfmd-options"
+            layers.append((where, ranking_for_document(mapping, where)))
+            own.add(where)
+        try:
+            found = find_local_metadata(directory, None, False, None, file.stem)
+        except (OSError, ValueError):
+            found = None
+        for path in (found if isinstance(found, list) else [found] if isinstance(found, Path) else []):
+            if path.resolve() in seen:
+                continue
+            seen.add(path.resolve())
+            mapping = ranking_of_options(metadata_file_yaml(path).get("pdfmd-options"))
+            if mapping is None:
+                continue
+            if path.stem.casefold() in stems:                       # named after one document: its own, like its front matter
+                layers.append((display_path(path), ranking_for_document(mapping, display_path(path))))
+                own.add(display_path(path))
+            else:
+                shared.append((display_path(path), mapping))
+    walk = {entry[0].parent: entry for entry in folder_walk(str(directory))}
+    stopped = False
+    for level in (directory, *directory.parents):
+        file_mapping = read_ranking_file(level / FOLDER_DIR / RANKING_FILE)
+        if file_mapping is not None:
+            layers.append((display_path(level / FOLDER_DIR / RANKING_FILE), file_mapping))
+        if level == directory:
+            layers += shared
+        entry = walk.get(level)
+        if entry is not None:
+            _, settings, metadata = entry
+            mapping = ranking_of_options(metadata_file_yaml(metadata).get("pdfmd-options")) if metadata is not None else None
+            if mapping is not None:
+                layers.append((display_path(metadata), mapping))
+            mapping = ranking_of_options(settings.get("options")) if settings is not None else None
+            if mapping is not None:
+                layers.append((display_path(level / FOLDER_SETTINGS), mapping))
+        if ranking_inherit_off(file_mapping) or (entry is not None and ranking_inherit_off(entry[1])):
+            stopped = True
+            break
+    path = config_path()
+    if not stopped and path is not None:
+        file_mapping = read_ranking_file(path.parent / RANKING_FILE)
+        if file_mapping is not None:
+            layers.append((display_path(path.parent / RANKING_FILE), file_mapping))
+        mapping = ranking_of_options(config_options())
+        if mapping is not None:
+            layers.append((f"config {display_path(path)}", mapping))
+    return layers, own
+
+
+def ranking_clashes(layers: list[tuple[str, dict]], own: set[str]) -> list[str]:
+    """Warnings for two documents that define the same class, or the ladder, differently (the newer document's wins, as it comes
+    first in the layers)."""
+    documents = [(where, mapping) for where, mapping in layers if where in own]
+    warnings, classes, ladder = [], {}, None
+    for where, mapping in documents:
+        for name, spec in (mapping.get("classes") or {}).items() if isinstance(mapping.get("classes"), dict) else []:
+            if name in classes and classes[name][1] != spec:
+                warnings.append(f"class {name} is defined differently in {classes[name][0]} and {where}; using the first")
+            classes.setdefault(name, (where, spec))
+        if "ladder" in mapping:
+            if ladder is not None and ladder[1] != mapping["ladder"]:
+                warnings.append(f"the ladder is defined differently in {ladder[0]} and {where}; using the first")
+            ladder = ladder or (where, mapping["ladder"])
+    return warnings
+
+
 def bare_ranking(files: list[Path]):
-    """The rules for choosing among ``files`` (built in; the layers come with the settings)."""
+    """The rules for choosing among ``files``: the built-in ranking under the layers ranking_layers() finds."""
     from pdfmd_ranking import Ranking
-    return Ranking.from_layers()
+    layers, own = ranking_layers(files)
+    ranking = Ranking.from_layers(layers)
+    ranking.warnings += ranking_clashes(layers, own)
+    return ranking
 
 
 def choose_markdown(files: list[Path]) -> Path:

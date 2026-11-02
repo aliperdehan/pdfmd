@@ -69,6 +69,7 @@ class WordClass:
     names: bool = True                        # whether its words count in file names
     above: str | None = None
     below: str | None = None
+    where: str = field(default="", compare=False)       # the layer that defined it, for the messages
 
 
 @dataclass(frozen=True)
@@ -210,7 +211,7 @@ def parse_class(name: str, spec: Any, where: str) -> WordClass:
         raise RankingError(f"{where}: class {name}: give `above` or `below`, not both")
     return WordClass(name, levels, flag("degrees", False), flag("exclude", False), flag("names", True),
                      _text(above, where, "`above`").casefold() if above is not None else None,
-                     _text(below, where, "`below`").casefold() if below is not None else None)
+                     _text(below, where, "`below`").casefold() if below is not None else None, where)
 
 
 def _ladder_levels(value: Any, where: str) -> list[list[str]]:
@@ -226,7 +227,8 @@ def _ladder_levels(value: Any, where: str) -> list[list[str]]:
 
 
 def parse_by(value: Any, where: str) -> tuple[str, ...]:
-    items = value if isinstance(value, list) else [value]
+    """The criteria that settle a tie, from a list or from words separated by commas (`priority, newest`)."""
+    items = value if isinstance(value, list) else str(value).split(",") if isinstance(value, str) else [value]
     chain = []
     for item in items:
         word = _text(item, where, "a `by` criterion").casefold()
@@ -281,7 +283,9 @@ class Ranking:
             if "ladder" in mapping:
                 ladder = _ladder_levels(mapping["ladder"], where)
             if "names" in mapping:
-                names = _text(mapping["names"], where, "`names`").casefold()
+                raw = mapping["names"]
+                names = ("off" if raw is False else "family" if raw is True      # YAML reads `off` as false
+                         else _text(raw, where, "`names`").casefold())
                 if names not in NAMES_MODES:
                     raise RankingError(f"{where}: `names` must be one of {', '.join(NAMES_MODES)}, not {names!r}")
             if "by" in mapping:
@@ -311,7 +315,7 @@ class Ranking:
             for wc in pending:
                 direction, target = ("above", wc.above) if wc.above else ("below", wc.below)
                 if target not in self.classes and target not in RESERVED:
-                    raise RankingError(f"class {wc.name}: `{direction}: {target}` names no class")
+                    raise RankingError(f"{wc.where}: class {wc.name}: `{direction}: {target}` names no class")
                 if any(target in members for members in levels):
                     groups.setdefault((direction, target), []).append(wc)
             for (direction, target), members in groups.items():
@@ -343,9 +347,10 @@ class Ranking:
                     if not parts:
                         raise RankingError(f"class {wc.name}: the word {text!r} has no letters or digits")
                     key = " ".join(parts)
-                    if key in seen and seen[key] != wc.name:
-                        raise RankingError(f"the word {text!r} is in two classes: {seen[key]} and {wc.name}")
-                    seen[key] = wc.name
+                    if key in seen and seen[key][0] != wc.name:
+                        raise RankingError(f"the word {text!r} is in two classes: {seen[key][0]} ({seen[key][1]}) and "
+                                           f"{wc.name} ({wc.where})")
+                    seen[key] = (wc.name, wc.where)
                     words.append(_Word(wc.name, class_level, text.casefold(), [_compile_part(part) for part in parts], wc.degrees))
         words.sort(key=lambda word: -len(word.parts))
         return words

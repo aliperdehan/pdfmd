@@ -155,6 +155,13 @@ class Customising(unittest.TestCase):
         flipped = Ranking.from_layers([("near", {"ladder": ["never", "final", "draft", "unset", "revised", "numbers"]})])
         self.assertTrue(higher(1, "final", flipped))
 
+    def test_names_off_is_read_though_yaml_calls_it_false(self):
+        self.assertEqual(Ranking.from_layers([("t", {"names": False})]).names, "off")
+        self.assertEqual(Ranking.from_layers([("t", {"names": "Folder"})]).names, "folder")
+
+    def test_by_as_words_separated_by_commas(self):
+        self.assertEqual(Ranking.from_layers([("t", {"by": "priority, oldest"})]).by, ("priority", "oldest"))
+
     def test_settings_names_and_by(self):
         ranking = Ranking.from_layers([("t", {"names": "folder", "by": ["priority"]})])
         self.assertEqual((ranking.names, ranking.by), ("folder", ("priority",)))
