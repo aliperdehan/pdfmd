@@ -1,6 +1,6 @@
-"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-48, entry 3el).
+"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-50, entry 3el).
 
-Four spellings, one result (a pipe table, with equal columns that pdfmd's own width filter balances):
+Six spellings, one result (a pipe table, with equal columns that pdfmd's own width filter balances):
 
 * ASCII tables with no inner ``+`` (what chat models write for "a plain-text table"; 3.31.47)::
 
@@ -18,6 +18,10 @@ Four spellings, one result (a pipe table, with equal columns that pdfmd's own wi
 * psql output: a header ``a | b``, a rule ``---+---``, rows, an optional ``(2 rows)``.
 * MySQL console output: a real grid table (inner ``+``) with no header rule and three rules only. Pandoc reads its body
   lines as ONE row. (A body line with an empty first cell is a wrapped line of a real grid table: then nothing is touched.)
+* Org-mode tables (3.31.50): ``| a | b |``, a rule ``|---+---|`` (or just ``|-``) under the header, more rules between row
+  groups. Only Pandoc's ``markdown`` reader reads the ``+`` rule as a table; ``gfm`` makes a paragraph of it.
+* A block of ``|`` lines with no separator row at all (an Org table without a rule, what some chat models write): Pandoc reads
+  it as a paragraph or a line block. The first row is the header.
 
 The repair is position-independent, because bars cannot be trusted to line up: a row is split on its bars. The lines
 between two borders are one row (the lines of a wrapped cell are joined with a space); when the body has no border between
@@ -44,13 +48,18 @@ BOX_VERTICAL = "│┃║"
 BOX_OTHER_VERTICAL = "╎╏┆┇┊┋"
 BOX_HORIZONTAL = "─━═┄┅┈┉╌╍"
 BOX_HEAVY = "═━"
-LOOKS_LIKE_ONE = re.compile(r"^ {0,3}(?:\+[-=]|[─-╿]|-+\+)", re.MULTILINE)
+LOOKS_LIKE_ONE = re.compile(r"^ {0,3}(?:\+[-=]|[─-╿]|-+\+|\|)", re.MULTILINE)
+ORG_ROW = re.compile(r"^ {0,3}\|")
+ORG_RULE = re.compile(r"^ {0,3}\|[-+]*-[-+]*\|?[ \t]*$")           # `|---+---|`, `|-`: an Org rule (no inner bar)
+SEPARATOR_CELL = re.compile(r":?-+:?$")                              # a cell of a pipe table's separator row
 
 KINDS = {
     "ascii": "an ASCII table without a `+` at its column boundaries",
     "box": "a box-drawing table",
     "psql": "a psql table",
     "mysql": "a console table whose body Pandoc reads as one row",
+    "org": "an Org-mode table (a `|---+---|` rule)",
+    "pipe": "a table of `|` lines with no separator row",
 }
 
 
@@ -192,6 +201,42 @@ def mysql_rows(items: list[Item]) -> list[list[str]] | None:
     return rows                                         # type: ignore[return-value]
 
 
+def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | None:
+    """The pipe table for a block of lines that all start with ``|`` when it is an Org table (it has a ``|---+---|`` rule)
+    or a table with no separator row at all; None for anything else, a valid pipe table first of all."""
+    cells = {number: split_cells(text) for number, text in enumerate(block) if not ORG_RULE.match(text)}
+    rules = [text for text in block if ORG_RULE.match(text)]
+    if len(cells) < 2 or any(all(SEPARATOR_CELL.match(cell) for cell in row) for row in cells.values()):
+        return None                  # a real pipe table's separator row is among the lines: Pandoc reads it
+    if rules:
+        # a lone `|---|` closes like a one-column pipe table's separator: not Org's spelling
+        if len(rules) < 2 and all("+" not in rule and rule.rstrip().endswith("|") for rule in rules):
+            return None
+    else:
+        if any(not text.rstrip().endswith("|") or text.rstrip().endswith("\\|") for text in block):
+            return None
+        if len({len(row) for row in cells.values()}) != 1 or len(next(iter(cells.values()))) < 2:
+            return None
+    sequence = [("rule", False) if ORG_RULE.match(text) else ("row", cells[number]) for number, text in enumerate(block)]
+    while sequence and sequence[0][0] == "rule":
+        sequence.pop(0)
+    while sequence and sequence[-1][0] == "rule":
+        sequence.pop()
+    first_rule = next((place for place, (what, _) in enumerate(sequence) if what == "rule"), None)
+    if first_rule is None:
+        items = one_row_each([value for _, value in sequence])           # type: ignore[misc]
+    else:                            # the rows above the first rule are the header, every later rule only groups rows
+        items = [("rule", False), *sequence[:first_rule], ("rule", True)]
+        for what, value in sequence[first_rule + 1:]:
+            if what == "row":
+                items += [("row", value), ("rule", False)]
+    built = assemble(items, first_line, "org" if rules else "pipe")
+    if built is None:
+        return None
+    indent = block[0][:len(block[0]) - len(block[0].lstrip())]
+    return [indent + line for line in built[0]], built[1]
+
+
 def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
     """``text`` with every table of the kinds in the module docstring turned into a pipe table, and one Repair for
     each. Not inside code (fenced or indented), HTML comments, YAML front matter or raw blocks."""
@@ -292,6 +337,15 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
                              else ("row", split_box_cells(item)))
             built = (assemble(items, index + 1, "box")
                      if items and items[0][0] == "rule" and items[-1][0] == "rule" else None)
+        elif ORG_ROW.match(bare):                                      # Org-mode, and `|` lines with no separator row
+            end = index
+            while end < len(lines) and ORG_ROW.match(lines[end].rstrip("\r")):
+                end += 1
+            built = org_table([item.rstrip("\r") for item in lines[index:end]], index + 1)
+            if built is None:                       # not one of those (a real pipe table): all of it stays, not to be read again from its second line
+                out.extend(lines[index:end])
+                index = end
+                continue
         elif PSQL_RULE.match(bare) and out and out[-1].strip() and not out[-1].lstrip().startswith("|"):
             plus = bare.count("+")
             if len(BAR.findall(out[-1])) == plus:

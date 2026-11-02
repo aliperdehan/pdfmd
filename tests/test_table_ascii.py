@@ -1,4 +1,4 @@
-"""v3.31.47-48: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
+"""v3.31.47-50: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
 boundaries (what chat models write for "a plain-text table"), its lazy forms, box-drawing tables, psql and MySQL console
 output. The pure function first, then real builds to LaTeX through pdfmd."""
 
@@ -153,6 +153,37 @@ class Forms(unittest.TestCase):
         for text in ("text\n\n---\n\nmore\n", "Title\n-----\n", "a | b\n--- | ---\n1 | 2\n", "+ a list\n+ item\n"):
             self.assertEqual(repair_ascii_tables(text), (text, []), text)
 
+    def test_an_org_table_has_its_header_above_the_first_rule(self):
+        text = "Text\n\n| Name | Qty |\n|------+-----|\n| a    |   1 |\n| b    |   2 |\n\nAfter\n"
+        lines, repairs = self.table(text)
+        self.assertEqual(lines, ["Text", "", "| Name | Qty |", "| --- | --- |", "| a | 1 |", "| b | 2 |", "", "After"])
+        self.assertEqual((repairs[0].kind, repairs[0].line, repairs[0].columns, repairs[0].rows), ("org", 3, 2, 2))
+
+    def test_org_rules_between_rows_only_group_them_and_a_bare_rule_is_one(self):
+        lines, repairs = self.table("|-\n| H1 | H2 |\n|-\n| a | 1 |\n|-\n| b | 2 |\n|-\n")
+        self.assertEqual(lines, ["| H1 | H2 |", "| --- | --- |", "| a | 1 |", "| b | 2 |"])
+        self.assertEqual(repairs[0].kind, "org")
+
+    def test_an_org_table_with_a_ragged_row_is_fitted_and_reported(self):
+        lines, repairs = self.table("| a | b |\n|---+---|\n| 1 | 2 | 3 |\n")
+        self.assertEqual(lines[-1], "| 1 | 2 |")
+        self.assertEqual(len(repairs[0].problems), 1)
+
+    def test_lines_with_no_separator_row_are_a_table_with_the_first_row_as_header(self):
+        lines, repairs = self.table("| a | b |\n| 1 | 2 |\n| 3 | 4 |\n")
+        self.assertEqual(lines, ["| a | b |", "| --- | --- |", "| 1 | 2 |", "| 3 | 4 |"])
+        self.assertEqual(repairs[0].kind, "pipe")
+
+    def test_an_org_table_inside_a_list_item_keeps_its_indent(self):
+        lines, _ = self.table("- item\n\n  | a | b |\n  |---+---|\n  | 1 | 2 |\n")
+        self.assertEqual(lines[2:], ["  | a | b |", "  | --- | --- |", "  | 1 | 2 |"])
+
+    def test_real_pipe_tables_and_line_blocks_are_never_touched(self):
+        for text in ("| a | b |\n|---|---|\n| 1 | 2 |\n", "| a | b |\n|:--|--:|\n| 1 | 2 |\n", "| a |\n|---|\n| 1 |\n",
+                     "| roses are red\n| violets are blue\n", "| a | b |\n", "| a | b |\n| 1 |\n", "| a | b |\n| 1 | 2\n",
+                     "| a | b |\n|---|---|\n| 1 | 2 |\n|---+---|\n"):
+            self.assertEqual(repair_ascii_tables(text), (text, []), text)
+
     def test_box_tables_in_code_are_left_alone(self):
         text = "```\n┌───┬───┐\n│ a │ b │\n└───┴───┘\n```\n"
         self.assertEqual(repair_ascii_tables(text), (text, []))
@@ -215,6 +246,13 @@ class Build(unittest.TestCase):
             self.assertIn("WARN  table-ascii: d.md, line", done.stdout, name)
             self.assertIn(kind, done.stdout, name)
             self.assertEqual(len(self.columns(tex)), 2, name)
+
+    def test_org_tables_build_as_tables_under_gfm_and_markdown(self):
+        for body in ("| Name | Qty |\n|------+-----|\n| a    |   1 |\n", "| Name | Qty |\n| a | 1 |\n| b | 2 |\n"):
+            done, tex = self.build(body=body)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("WARN  table-ascii: d.md, line", done.stdout)
+            self.assertEqual(len(self.columns(tex)), 2, body)
 
     def test_the_parts_of_a_document_are_repaired_too(self):
         (self.root / "parts").mkdir()

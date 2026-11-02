@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.50 — 2026-11-02
+
+Pre-edit state: commit `fe19049`. Still under 3.31. `[tables]`, entry 3el (the author, after the explanation of Org-mode: "do the orgmode then").
+
+Org-mode tables, and `|` lines with no separator row, are read as pipe tables, with the setting of 3.31.47 (`table-ascii`).
+
+- Org: `| a | b |` lines with a rule `|---+---|` or `|-` (a lone `|---|` is a one-column pipe table's separator and stays). Pandoc's `markdown` reader reads the `+` rule, `gfm` and `commonmark_x` make a paragraph of it, so pdfmd rewrites it for both. The rows above the first rule are the header (several are joined like a wrapped header), later rules only group rows and are dropped, leading and trailing rules too; one line is one row (Org has no wrapped cells). A row with another number of cells than the header is fitted, with a WARN of its own.
+- `|` lines with no separator row (an Org table without a rule, what some chat models write): Pandoc reads a paragraph (`gfm`) or a line block (`markdown`). Every line must start and end with an unescaped `|`, have two cells or more and the same number as the others, at least two lines, and none may be a separator row; the first row is the header. A real pipe table, a line block (`| roses`), a lone line and a table with a separator row are never touched.
+- The table keeps its indent (a table inside a list item). `pdfmd_tables/ascii.py` (`org_table`, kinds `org` and `pipe`), the `--setup` row text, README (two more bullets). Tests: `tests/test_table_ascii.py` (header above the first rule, group rules, a ragged row, no separator row, an indent, real pipe tables and line blocks untouched, a build under both readers).
+- Not done: Org's alignment-cookie rows and `#+CAPTION:` lines stay as written; the no-Pandoc native renderer does not do it.
+
 ## v3.31.49 — 2026-11-02
 
 Pre-edit state: commit `765ce9e`. Still under 3.31. `[tables]`, entry 3el (the author: "`<br>` ... `\par` destroys table, and `<br>` is ignored in latex route. let's do it"; "let's not limit it to `<br>` html only and make it interconvertable, like pagebreak syntax").

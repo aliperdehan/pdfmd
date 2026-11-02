@@ -294,11 +294,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.table-keep", "Rows a table keeps on one page",
              "A whole number, 0 to let every table break. For a Lua filter that reads tablekeep (nulabreport.lua). Per run: --table-keep.",
              "Tables", "config", "count"),
-        choice("options.table-ascii", "A text table Pandoc cannot read (ASCII without inner `+`, box-drawing, psql, MySQL), as a pipe table",
+        choice("options.table-ascii", "A text table Pandoc cannot read (ASCII without inner `+`, box-drawing, psql, MySQL, Org-mode), as a pipe table",
                (("repair", "rewrite it as a pipe table (a temporary copy, the file is not touched), with a WARN for each"),
                 ("note", "leave it, and say so"), ("off", "leave it, silently")), "repair",
                "What chat models write for a plain-text table (`+-----+` borders, no inner `+`; `+-+` and `1 | 2` rows work too), a "
-               "box-drawing table (`┌─┬─┐ │ ├─┼─┤`), psql output (`a | b`, `---+---`) and MySQL console output (no header rule). The first "
+               "box-drawing table (`┌─┬─┐ │ ├─┼─┤`), psql output (`a | b`, `---+---`) MySQL console output (no header rule), Org-mode tables (`|---+---|`) and `|` lines with no separator row. The first "
                "row is the header, wrapped cell lines are joined, bar positions are not trusted. A real grid table (`+---+---+`) is "
                "never touched.", "Tables"),
         choice("options.table-captions", "A bold line next to a table, `**Table 1: ...**`, as its caption",

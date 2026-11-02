@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.49"
+PDFMD_VERSION = "3.31.50"
 import argparse
 import atexit
 import csv
@@ -13420,8 +13420,9 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     return front_matter + remainder, True
 
 
-# Text tables Pandoc does not read as tables (v3.31.47-48, entry 3el): ASCII tables without the inner `+` of a grid table
-# (what chat models write for "a plain-text table", lazy forms too), box-drawing tables, psql and MySQL console output.
+# Text tables Pandoc does not read as tables (v3.31.47-50, entry 3el): ASCII tables without the inner `+` of a grid table
+# (what chat models write for "a plain-text table", lazy forms too), box-drawing tables, psql and MySQL console output,
+# Org-mode tables (`|---+---|`) and `|` lines with no separator row.
 # pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
 # it, say so) | off.
 TABLE_ASCII_MODES = ("repair", "note", "off")
