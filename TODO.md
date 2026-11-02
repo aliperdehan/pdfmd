@@ -12,6 +12,8 @@ wait for an answer before any code.
 
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
+- [ ] **decide** a Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`; default off or on, and the value [3en]
+- [ ] **decide** PlantUML as a diagram language next to mermaid, d2 and dot (needs Java; install story) [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
 ## Features, agreed
@@ -27,6 +29,9 @@ wait for an answer before any code.
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
+- [ ] Diagram time limit, on by default at 120 s: a setting (`pdfmd-options` key, `--setup` row); a hung `mmdc`, `dot` or `d2` stops the build with a message [3en]
+- [ ] Slide notes: `slide-notes: off|show|only` (Beamer `notes=`), a setting and a recipe; `off` stays the default [3en]
+- [ ] Check that `lof` / `lot` (lists of figures and tables) work through pdfmd; then a recipe [3en, 3dg]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
@@ -87,7 +92,7 @@ is low priority. [3di]
 
 - [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
 - [ ] `md2pdf` leftovers: `pdfmd --install math` installs `pymd2pdf`, whose own `md2pdf` script then replaces pdfmd's in the same folder (restore it after the install)
-- [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert)
+- [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert); with a wkhtmltopdf / untrusted-input warning in the docs and `--doctor` [3di, 3en]
 - [ ] Long keys of the other personas (approved) (`--stylesheet`, `--border`, `--orientation`, `--format`, `--as-html`...) accepted by plain `pdfmd` when no downstream program (Pandoc, Calibre, batchocr) has the key; short and clashing keys (`-h`, `-s`, `-c`, `-e`, `--css`, `--header`) stay persona-only; a test compares the table against `pandoc --help` [3di]
 - [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
 
