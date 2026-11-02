@@ -1447,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.3"
+PDFMD_VERSION = "3.32.4"
 import argparse
 import atexit
 import csv
@@ -13353,7 +13353,20 @@ def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
 
 
 def has_yaml_frontmatter(text: str) -> bool:
-    return bool(re.match(r"^---\s*\n", text))
+    """Whether Pandoc's Markdown reader finds a YAML metadata block at the top of ``text`` (v3.32.4: it used to be only
+    "the first line is ``---``", so a file that opens with a thematic break counted).
+
+    Pandoc's rule, measured with 3.13: blank lines may come first; then a line of three dashes (trailing spaces allowed)
+    followed by a NON-BLANK line, and a later line of ``---`` or ``...`` that closes it. ``---`` straight after ``---``
+    is an empty block, which counts (the documented way to ask for Pandoc's reader). ``---`` then a blank line is a
+    horizontal rule, and so is an opening line that nothing closes."""
+    lines = text.lstrip("﻿").splitlines()
+    start = 0
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    if start + 1 >= len(lines) or lines[start].rstrip() != "---" or not lines[start + 1].strip():
+        return False
+    return any(line.rstrip() in ("---", "...") for line in lines[start + 1:])
 
 
 PERCENT_TITLE_BLOCK_RE = re.compile(r"^%(?:[ \t]|$)")
@@ -13472,8 +13485,12 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
         # Embedded `{=pdfmd}` blocks need Pandoc's own markdown: gfm would
         # print them as code blocks.
         return None, None
-    if metadata_files:
-        names = ", ".join(metadata_file.name for metadata_file in metadata_files)
+    # The global metadata (`pdfmd --setup`, and its presets) is the machine's, not the document's: it says nothing about
+    # which dialect this file was written in, and on a machine that has one it made every file read as Pandoc's Markdown
+    # (v3.32.4). What it sets still applies: Pandoc reads a metadata file with its own Markdown, whatever the reader.
+    linked_files = [metadata_file for metadata_file in metadata_files if not is_global_metadata(metadata_file)]
+    if linked_files:
+        names = ", ".join(metadata_file.name for metadata_file in linked_files)
         return None, (f"{md_path}: no YAML front matter, but {names} is linked; "
                       "keeping the default markdown reader instead of gfm")
     if contains_citations(md_path):

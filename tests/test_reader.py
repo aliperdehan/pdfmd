@@ -69,5 +69,108 @@ class CommandLine(unittest.TestCase):
         self.assertIn("<sub>", (self.directory / "b.html").read_text(encoding="utf-8"))
 
 
+class FrontMatterCheck(unittest.TestCase):
+    """`has_yaml_frontmatter` says what Pandoc's own Markdown reader says (v3.32.4). The table was measured with Pandoc 3.13
+    (`pandoc -f markdown -t json`): a block opens with `---` and a non-blank line, closes with `---` or `...`."""
+
+    def test_what_pandoc_reads_as_a_metadata_block(self):
+        for text in ("---\ntitle: T\n---\n\nBody\n",
+                     "---\ntitle: T\n...\n\nBody\n",
+                     "---\n---\n\nBody\n",                                  # an empty block still is one (the documented escape hatch)
+                     "---\n...\n\nBody\n",
+                     "---\r\ntitle: T\r\n---\r\n\r\nBody\r\n",
+                     "---  \ntitle: T\n---\n\nBody\n",
+                     "﻿---\ntitle: T\n---\n\nBody\n",
+                     "\n---\ntitle: T\n---\n\nBody\n",                      # Pandoc allows blank lines before the block
+                     "---\ntitle: T\n\nauthor: A\n---\n\nBody\n"):
+            with self.subTest(text=text):
+                self.assertTrue(pdfmd.has_yaml_frontmatter(text))
+
+    def test_what_pandoc_reads_as_a_horizontal_rule(self):
+        for text in ("---\n\nBody\n",
+                     "---\n\nBody\n\n---\n\nMore\n",                        # a second rule does not close a block the first never opened
+                     "---\nBody text\n\nmore\n",                            # no closing line
+                     "---\ntitle: T\n\nBody\n",
+                     "---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+                     "----\ntitle: T\n---\n",                               # four dashes are a rule
+                     "Text first\n\n---\ntitle: T\n---\n",
+                     ""):
+            with self.subTest(text=text):
+                self.assertFalse(pdfmd.has_yaml_frontmatter(text))
+
+
+@needs_pandoc(3, 1, 3)
+class GlobalMetadataAndTheReader(unittest.TestCase):
+    """The global metadata (`pdfmd --setup`) is the machine's, not the document's: it no longer makes pdfmd keep Pandoc's reader
+    for a file with no front matter (v3.32.4), and everything it sets still applies."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-reader-global-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+        self.config = self.directory / "config" / "config.yaml"             # the global metadata is `metadata.yaml` beside it
+        self.config.parent.mkdir()
+        self.env = {**os.environ, "PDFMD_CONFIG": str(self.config), "XDG_CONFIG_HOME": str(self.directory / "xdg"),
+                    "APPDATA": str(self.directory / "xdg")}
+
+    def global_metadata(self, text):
+        (self.config.parent / "metadata.yaml").write_text(text, encoding="utf-8")
+
+    def write(self, name, text):
+        (self.directory / name).write_text(text, encoding="utf-8")
+
+    def run_pdfmd(self, *arguments):
+        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
+                              encoding="utf-8", cwd=self.directory, env=self.env)
+
+    def tex(self, name="a.md"):
+        done = self.run_pdfmd(name, "-v", "--stop-at", "tex")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return (self.directory / name).with_suffix(".tex").read_text(encoding="utf-8"), done.stdout
+
+    def test_a_file_without_front_matter_is_read_as_gfm_with_global_metadata_in_place(self):
+        self.global_metadata("title: Global title\n")
+        self.write("a.md", "Plain text.\n\nH~2~O\n")
+        tex, said = self.tex()
+        self.assertIn("no YAML front matter, so it is read as gfm", said)
+        self.assertIn("H\\textasciitilde2\\textasciitilde O", tex)               # gfm leaves it as text
+        self.assertIn("\\title{Global title}", tex)                              # ...and the global metadata still applies
+
+    def test_what_the_global_metadata_holds_still_applies_under_gfm(self):
+        self.global_metadata("title: Global title\nheader-includes:\n  - |\n    \\newcommand{\\fromglobal}{x}\nabstract: Water is H~2~O.\n")
+        self.write("a.md", "Plain text.\n")
+        tex, said = self.tex()
+        self.assertNotIn("keeping the default markdown reader", said)
+        self.assertIn("\\newcommand{\\fromglobal}{x}", tex)                      # raw LaTeX in a metadata string
+        self.assertIn("H\\textsubscript{2}O", tex)                               # Markdown in a metadata string
+
+    def test_the_global_reader_option_still_wins(self):
+        self.global_metadata("pdfmd-options:\n  reader: markdown\n")
+        self.write("a.md", "Plain text.\n\nH~2~O\n")
+        tex, said = self.tex()
+        self.assertNotIn("read as gfm", said)
+        self.assertIn("H\\textsubscript{2}O", tex)
+
+    def test_a_metadata_file_beside_the_document_still_means_pandoc_markdown(self):
+        self.global_metadata("title: Global title\n")
+        self.write("metadata.yaml", "author: Someone\n")
+        self.write("a.md", "Plain text.\n\nH~2~O\n")
+        tex, said = self.tex()
+        self.assertIn("metadata.yaml is linked; keeping the default markdown reader", said)
+        self.assertIn("H\\textsubscript{2}O", tex)
+
+    def test_a_leading_rule_is_not_front_matter(self):
+        self.write("a.md", "---\n\nPlain text.\n\nH~2~O\n")
+        tex, said = self.tex()
+        self.assertIn("no YAML front matter, so it is read as gfm", said)
+
+    def test_a_bare_title_is_still_left_alone_next_to_global_metadata(self):
+        """pinned, not changed: promote_bare_title() treats the global metadata as external, as before."""
+        self.global_metadata("title: Global title\n")
+        self.write("a.md", "# Water\n\nText\n")
+        tex, _ = self.tex()
+        self.assertIn("\\title{Global title}", tex)
+        self.assertIn("\\section{Water}", tex)                                   # the heading was not promoted to the title
+
+
 if __name__ == "__main__":
     unittest.main()

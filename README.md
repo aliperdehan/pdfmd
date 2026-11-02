@@ -117,7 +117,10 @@ Pandoc can do nearly anything, but its defaults assume you pass the right flags 
 copied from an old shell history, or a Makefile in every folder. `pdfmd` turns that knowledge into defaults.
 
 - **It decides per document.** A file with no YAML front matter is ordinary GitHub-flavoured Markdown; one with front
-  matter is written for Pandoc and is left alone.
+  matter is written for Pandoc and is left alone. Front matter is what Pandoc itself reads as a metadata block (`---`,
+  then a line that is not blank, then a closing `---` or `...`), so a file that opens with a horizontal rule is not
+  one. Your own global metadata (`pdfmd --setup`) is the machine's, not the document's: it changes nothing here,
+  while a `metadata.yaml` beside the document does mean Pandoc's Markdown.
 - **It finds your project files.** A `metadata.yaml`, `preamble.tex` or `<name>.lua` beside the document (or in a
   `metadata/` folder next to it) is used without a flag, so every document in a folder shares one house style.
 - **It does not give up on the first engine.** If `lualatex` fails or is missing it tries the next one, and says why
@@ -2353,7 +2356,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
-| `READER` | a Markdown file with no YAML front matter | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). If the file uses what only Pandoc's Markdown reads (`H~2~O`, `x^2^`, `{#id}` attributes, raw LaTeX, fenced divs), a `NOTE` says gfm leaves it as text; `--from markdown`, a front-matter block, or `reader:` below changes it |
+| `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). If the file uses what only Pandoc's Markdown reads (`H~2~O`, `x^2^`, `{#id}` attributes, raw LaTeX, fenced divs), a `NOTE` says gfm leaves it as text; `--from markdown`, a front-matter block, or `reader:` below changes it |
 | `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
