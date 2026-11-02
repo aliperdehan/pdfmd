@@ -298,7 +298,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("repair", "rewrite it as a pipe table (a temporary copy, the file is not touched), with a WARN for each"),
                 ("note", "leave it, and say so"), ("off", "leave it, silently")), "repair",
                "What chat models write for a plain-text table (`+-----+` borders, no inner `+`; `+-+` and `1 | 2` rows work too), a "
-               "box-drawing table (`┌─┬─┐ │ ├─┼─┤`), psql output (`a | b`, `---+---`) MySQL console output (no header rule), Org-mode tables (`|---+---|`) and `|` lines with no separator row. The first "
+               "box-drawing table (`┌─┬─┐ │ ├─┼─┤`), psql output (`a | b`, `---+---`) MySQL console output (no header rule), Org-mode tables (`|---+---|`, `<r>` cookies, `#+CAPTION:`) and `|` lines with no separator row. The first "
                "row is the header, wrapped cell lines are joined, bar positions are not trusted. A real grid table (`+---+---+`) is "
                "never touched.", "Tables"),
         choice("options.table-captions", "A bold line next to a table, `**Table 1: ...**`, as its caption",

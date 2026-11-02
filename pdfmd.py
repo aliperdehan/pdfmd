@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.50"
+PDFMD_VERSION = "3.31.51"
 import argparse
 import atexit
 import csv
@@ -13314,6 +13314,9 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     if contains_citations(md_path):
         return None, (f"{md_path}: no YAML front matter, but it uses @citation syntax "
                       "gfm can't parse; keeping the default markdown reader")
+    if ORG_CAPTION_RE.search(text) and table_ascii_mode(md_path, list(metadata_files)) == "repair":
+        return None, (f"{md_path}: no YAML front matter, but it has Org `#+CAPTION:` lines, which become table captions "
+                      "that only Pandoc's markdown reader reads; keeping the default markdown reader instead of gfm")
     reader = "gfm"
     if has_definition_list(text):
         reader += "+definition_lists"
@@ -13420,12 +13423,13 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     return front_matter + remainder, True
 
 
-# Text tables Pandoc does not read as tables (v3.31.47-50, entry 3el): ASCII tables without the inner `+` of a grid table
+# Text tables Pandoc does not read as tables (v3.31.47-51, entry 3el): ASCII tables without the inner `+` of a grid table
 # (what chat models write for "a plain-text table", lazy forms too), box-drawing tables, psql and MySQL console output,
 # Org-mode tables (`|---+---|`) and `|` lines with no separator row.
 # pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
 # it, say so) | off.
 TABLE_ASCII_MODES = ("repair", "note", "off")
+ORG_CAPTION_RE = re.compile(r"^ {0,3}#\+CAPTION(?:\[[^\]]*\])?:", re.MULTILINE | re.IGNORECASE)
 
 
 def table_ascii_mode(md_path: Path, metadata_files: list[Path]) -> str:

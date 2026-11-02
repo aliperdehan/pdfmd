@@ -1,4 +1,4 @@
-"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-50, entry 3el).
+"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-51, entry 3el).
 
 Six spellings, one result (a pipe table, with equal columns that pdfmd's own width filter balances):
 
@@ -22,6 +22,10 @@ Six spellings, one result (a pipe table, with equal columns that pdfmd's own wid
   groups. Only Pandoc's ``markdown`` reader reads the ``+`` rule as a table; ``gfm`` makes a paragraph of it.
 * A block of ``|`` lines with no separator row at all (an Org table without a rule, what some chat models write): Pandoc reads
   it as a paragraph or a line block. The first row is the header.
+
+An Org table also brings its own extras (3.31.51): a row of alignment cookies (``| <l> | <r> | <c> |``, a width ``<r10>`` or ``<10>``)
+is dropped and sets the alignment of the columns; ``#+CAPTION:`` directly above the table (and ``#+NAME: tbl:id``) become its
+caption, as a ``: caption {#tbl:id}`` line below it, which only Pandoc's ``markdown`` reader reads as a caption.
 
 The repair is position-independent, because bars cannot be trusted to line up: a row is split on its bars. The lines
 between two borders are one row (the lines of a wrapped cell are joined with a space); when the body has no border between
@@ -51,7 +55,9 @@ BOX_HEAVY = "═━"
 LOOKS_LIKE_ONE = re.compile(r"^ {0,3}(?:\+[-=]|[─-╿]|-+\+|\|)", re.MULTILINE)
 ORG_ROW = re.compile(r"^ {0,3}\|")
 ORG_RULE = re.compile(r"^ {0,3}\|[-+]*-[-+]*\|?[ \t]*$")           # `|---+---|`, `|-`: an Org rule (no inner bar)
-SEPARATOR_CELL = re.compile(r":?-+:?$")                              # a cell of a pipe table's separator row
+SEPARATOR_CELL = re.compile(r":?-+:?$")
+COOKIE = re.compile(r"<(?:([lrc])\d*|\d+)>$", re.IGNORECASE)                # an Org alignment cookie: <l> <r> <c>, <r10>, <10>
+ORG_KEYWORD = re.compile(r"^ {0,3}#\+([A-Za-z_]+)(?:\[[^\]]*\])?:[ \t]*(.*?)[ \t]*$")                              # a cell of a pipe table's separator row
 
 KINDS = {
     "ascii": "an ASCII table without a `+` at its column boundaries",
@@ -129,7 +135,7 @@ def split_rows(lines: list[list[str]]) -> list[list[list[str]]]:
     return rows
 
 
-def assemble(items: list[Item], first_line: int, kind: str) -> tuple[list[str], Repair] | None:
+def assemble(items: list[Item], first_line: int, kind: str, aligns: list[str] | None = None) -> tuple[list[str], Repair] | None:
     """The pipe-table lines for the items of one table (rules and rows, the first and the last a rule), or None."""
     groups: list[list[list[str]]] = [[]]      # each group = the lines between two rules, each line = its cells
     header_end: int | None = None             # the index of the last group of the header, when a header rule says so
@@ -175,7 +181,11 @@ def assemble(items: list[Item], first_line: int, kind: str) -> tuple[list[str], 
             problems.append(f"row {number} has {widest} cell{'s' if widest != 1 else ''}, the header {width}"
                             + (" (cut)" if widest > width else " (padded)"))
         rows.append(merge(group))
-    lines = ["| " + " | ".join(rows[0]) + " |", "| " + " | ".join("---" for _ in range(width)) + " |"]
+    # aligned columns: every separator cell as wide as the others (Pandoc's markdown reader takes unequal dashes for a choice of widths)
+    marks = {"l": ":----", "r": "----:", "c": ":---:"}
+    separator = ([marks.get(aligns[index] if index < len(aligns) else "", "-----") for index in range(width)]
+                 if aligns and any(aligns) else ["---"] * width)
+    lines = ["| " + " | ".join(rows[0]) + " |", "| " + " | ".join(separator) + " |"]
     lines += ["| " + " | ".join(row) + " |" for row in rows[1:]]
     return lines, Repair(first_line, width, len(rows) - 1, problems, kind)
 
@@ -205,7 +215,16 @@ def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | N
     """The pipe table for a block of lines that all start with ``|`` when it is an Org table (it has a ``|---+---|`` rule)
     or a table with no separator row at all; None for anything else, a valid pipe table first of all."""
     cells = {number: split_cells(text) for number, text in enumerate(block) if not ORG_RULE.match(text)}
-    rules = [text for text in block if ORG_RULE.match(text)]
+    aligns: list[str] = []
+    for number, row in list(cells.items()):          # a row of alignment cookies is not data: it says how the columns are set
+        if any(COOKIE.match(cell) for cell in row) and all(not cell or COOKIE.match(cell) for cell in row):
+            for column, cell in enumerate(row):
+                found = COOKIE.match(cell)
+                if found and found.group(1) and not (column < len(aligns) and aligns[column]):
+                    aligns += [""] * (column + 1 - len(aligns))
+                    aligns[column] = found.group(1).lower()
+            del cells[number]
+    rules = [text for number, text in enumerate(block) if ORG_RULE.match(text)]
     if len(cells) < 2 or any(all(SEPARATOR_CELL.match(cell) for cell in row) for row in cells.values()):
         return None                  # a real pipe table's separator row is among the lines: Pandoc reads it
     if rules:
@@ -217,7 +236,8 @@ def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | N
             return None
         if len({len(row) for row in cells.values()}) != 1 or len(next(iter(cells.values()))) < 2:
             return None
-    sequence = [("rule", False) if ORG_RULE.match(text) else ("row", cells[number]) for number, text in enumerate(block)]
+    sequence = [("rule", False) if ORG_RULE.match(text) else ("row", cells[number])
+                for number, text in enumerate(block) if number in cells or ORG_RULE.match(text)]
     while sequence and sequence[0][0] == "rule":
         sequence.pop(0)
     while sequence and sequence[-1][0] == "rule":
@@ -230,11 +250,38 @@ def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | N
         for what, value in sequence[first_rule + 1:]:
             if what == "row":
                 items += [("row", value), ("rule", False)]
-    built = assemble(items, first_line, "org" if rules else "pipe")
+    built = assemble(items, first_line, "org" if rules else "pipe", aligns)
     if built is None:
         return None
     indent = block[0][:len(block[0]) - len(block[0].lstrip())]
     return [indent + line for line in built[0]], built[1]
+
+
+def org_caption(out: list[str]) -> list[str]:
+    """The lines of a caption for the table that is about to be written, from the ``#+CAPTION:`` and ``#+NAME:`` lines right
+    above it in ``out`` (which loses them; any other ``#+`` line stays). ``["", ": caption {#tbl:id}"]``, or nothing."""
+    start = len(out)
+    while start and ORG_KEYWORD.match(out[start - 1]):
+        start -= 1
+    caption: list[str] = []
+    name = ""
+    kept: list[str] = []
+    for line in out[start:]:
+        found = ORG_KEYWORD.match(line)
+        word = found.group(1).upper() if found else ""
+        if word == "CAPTION" and found.group(2):
+            caption.append(found.group(2))
+        elif word in ("NAME", "TBLNAME"):
+            name = found.group(2) if name == "" else name
+        elif word == "CAPTION":
+            pass
+        else:
+            kept.append(line)
+    if not caption and not name:
+        return []
+    out[start:] = kept
+    ident = " {#" + name + "}" if re.match(r"tbl:[-\w]+$", name) else ""     # a plain Org name would show as words before Pandoc 3.8.2
+    return ["", ": " + " ".join(caption) + ident] if caption else []
 
 
 def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
@@ -346,6 +393,7 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
                 out.extend(lines[index:end])
                 index = end
                 continue
+            built = (built[0] + org_caption(out), built[1])
         elif PSQL_RULE.match(bare) and out and out[-1].strip() and not out[-1].lstrip().startswith("|"):
             plus = bare.count("+")
             if len(BAR.findall(out[-1])) == plus:

@@ -1851,7 +1851,11 @@ the page. pdfmd reads it as a pipe table instead. Six spellings are repaired:
   stops this, and the table is left alone.
 - **Org-mode tables** (Emacs's outliner markup): `| a | b |`, a rule `|---+---|` (or just `|-`) under the header, more rules between
   row groups. Pandoc's `markdown` reader reads the `+` rule, `gfm` does not; pdfmd rewrites it either way. The rows above the first rule
-  are the header, the later rules only group rows and are dropped. Org's alignment-cookie rows (`<r>`) and `#+CAPTION:` lines stay as written.
+  are the header, the later rules only group rows and are dropped. A row of alignment cookies (`| <l> | <r> | <c> |`, with a width
+  `<r10>` or `<10>`) is dropped and sets the alignment of the columns (a width alone sets none). `#+CAPTION: text` right above the
+  table becomes its caption (several lines are joined), and `#+NAME: tbl:id` its identifier; a plain name is dropped, and other
+  `#+` lines (`#+ATTR_LATEX:`, `#+TBLFM:`) stay as written. A caption needs Pandoc's `markdown` reader, so a file with no front
+  matter that has a `#+CAPTION:` line is read with it instead of `gfm`.
 - **`|` lines with no separator row**: every line starts and ends with `|`, has two cells or more, the same number on each line, and
   no line is a separator (`|---|---|`). Pandoc makes a paragraph or a line block of it; the first row becomes the header. A real pipe table
   is never touched.

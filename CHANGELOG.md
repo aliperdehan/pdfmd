@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.51 — 2026-11-02
+
+Pre-edit state: commit `70963c6`. Still under 3.31. `[tables]`, entry 3el (the author, asked whether Org's alignment cookies and `#+CAPTION:` would be useful: "let's do it").
+
+An Org table keeps its alignment and its caption.
+
+- A row of alignment cookies (`| <l> | <r> | <c> |`, with a width `<r10>`, or `<10>` alone) is dropped from the table and sets the separator row: `:----`, `----:`, `:---:`. Every separator cell has the same width when any column is aligned, because Pandoc's `markdown` reader takes unequal dashes for a choice of column widths. A width alone sets no alignment.
+- `#+CAPTION: text` (also `#+CAPTION[short]:`; several lines are joined) directly above a repaired Org or rule-less table becomes a `: text` line below it; `#+NAME: tbl:id` adds `{#tbl:id}`. A plain `#+NAME:` is dropped (before Pandoc 3.8.2 a plain `{#id}` would show as words in the caption). Other `#+` lines (`#+ATTR_LATEX:`, `#+TBLFM:`) stay as written, and a `#+CAPTION:` that is not directly above such a table stays.
+- A caption needs Pandoc's `markdown` reader (gfm has no table captions), so a file with no front matter that has a `#+CAPTION:` line is read with `markdown` instead of `gfm`, with the usual notice, unless `table-ascii` is `note` or `off`.
+- `pdfmd_tables/ascii.py` (`org_caption`, `COOKIE`, `assemble(aligns=)`), `pdfmd.py` (`ORG_CAPTION_RE`, the reader choice), the `--setup` row text, README. Tests: `tests/test_table_ascii.py` (cookies, caption and name lines, a build with no front matter).
+
 ## v3.31.50 — 2026-11-02
 
 Pre-edit state: commit `fe19049`. Still under 3.31. `[tables]`, entry 3el (the author, after the explanation of Org-mode: "do the orgmode then").

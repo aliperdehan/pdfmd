@@ -1,4 +1,4 @@
-"""v3.31.47-50: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
+"""v3.31.47-51: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
 boundaries (what chat models write for "a plain-text table"), its lazy forms, box-drawing tables, psql and MySQL console
 output. The pure function first, then real builds to LaTeX through pdfmd."""
 
@@ -178,6 +178,22 @@ class Forms(unittest.TestCase):
         lines, _ = self.table("- item\n\n  | a | b |\n  |---+---|\n  | 1 | 2 |\n")
         self.assertEqual(lines[2:], ["  | a | b |", "  | --- | --- |", "  | 1 | 2 |"])
 
+    def test_org_alignment_cookies_are_dropped_and_set_the_alignment(self):
+        lines, _ = self.table("| Name | Qty | Note |\n| <l> | <r10> | <c> |\n|---+---+---|\n| a | 1 | x |\n")
+        self.assertEqual(lines, ["| Name | Qty | Note |", "| :---- | ----: | :---: |", "| a | 1 | x |"])
+        lines, _ = self.table("| a | b |\n| <r> | <10> |\n| 1 | 2 |\n")          # a width alone sets no alignment
+        self.assertEqual(lines, ["| a | b |", "| ----: | ----- |", "| 1 | 2 |"])
+
+    def test_org_caption_and_name_lines_above_the_table_become_its_caption(self):
+        text = "#+NAME: tbl:fruit\n#+ATTR_LATEX: :align lr\n#+CAPTION: Fruit *prices*\n| a | b |\n|---+---|\n| 1 | 2 |\n\nAfter\n"
+        lines, _ = self.table(text)
+        self.assertEqual(lines, ["#+ATTR_LATEX: :align lr", "", "| a | b |", "| --- | --- |", "| 1 | 2 |", "",
+                                 ": Fruit *prices* {#tbl:fruit}", "", "After"])
+        lines, _ = self.table("#+CAPTION: Two\n#+CAPTION: lines\n#+NAME: plain\n| a | b |\n| 1 | 2 |\n")
+        self.assertEqual(lines[-1], ": Two lines")                   # a plain name would show as words in an old Pandoc: dropped
+        lines, _ = self.table("#+CAPTION: x\ntext\n\n| a | b |\n| 1 | 2 |\n")      # not directly above: stays
+        self.assertEqual(lines[0], "#+CAPTION: x")
+
     def test_real_pipe_tables_and_line_blocks_are_never_touched(self):
         for text in ("| a | b |\n|---|---|\n| 1 | 2 |\n", "| a | b |\n|:--|--:|\n| 1 | 2 |\n", "| a |\n|---|\n| 1 |\n",
                      "| roses are red\n| violets are blue\n", "| a | b |\n", "| a | b |\n| 1 |\n", "| a | b |\n| 1 | 2\n",
@@ -253,6 +269,13 @@ class Build(unittest.TestCase):
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("WARN  table-ascii: d.md, line", done.stdout)
             self.assertEqual(len(self.columns(tex)), 2, body)
+
+    def test_an_org_caption_is_the_tables_caption_even_in_a_file_with_no_front_matter(self):
+        (self.root / "bare.md").write_text("#+CAPTION: Fruit prices\n| a | b |\n|---+---|\n| 1 | 2 |\n", encoding="utf-8")
+        done, tex = self.build("bare.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("\\caption{Fruit prices}", tex)
+        self.assertNotIn("#+CAPTION", tex)
 
     def test_the_parts_of_a_document_are_repaired_too(self):
         (self.root / "parts").mkdir()
