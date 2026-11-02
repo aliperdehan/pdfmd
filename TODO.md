@@ -20,7 +20,6 @@ wait for an answer before any code.
 - [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Metadata append: `author+: [B, C]` adds to what the layers below gave, and a `metadata-append: [author]` setting makes chosen keys append; a test and a docs line pin the order global < `.pdfmd/` < `metadata/` < document [3du]
-- [ ] Table captions from bold text: a `**Table 1: ...**` paragraph next to a table becomes its caption (the label words, stripping the label and on/off are settings); gfm and Pandoc Markdown [3dy]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]

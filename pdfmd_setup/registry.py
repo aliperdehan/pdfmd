@@ -60,7 +60,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.pager": "on",
+    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
@@ -86,7 +86,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.pager", "options.pager_command",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -284,6 +284,24 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.table-keep", "Rows a table keeps on one page",
              "A whole number, 0 to let every table break. For a Lua filter that reads tablekeep (nulabreport.lua). Per run: --table-keep.",
              "Tables", "config", "count"),
+        choice("options.table-captions", "A bold line next to a table, `**Table 1: ...**`, as its caption",
+               (("note", "leave it, and say once how many lines would have been captions"), ("on", "make it the caption"),
+                ("off", "leave it, silently")), "note",
+               "The line must be one bold span that starts with a label word (Table, Tabelle, Таблица ... by `lang:`) and stand right above "
+               "a table without a caption, or right below one. A trailing {#tbl:id} becomes the table's id. Pipe tables, gfm and Pandoc "
+               "Markdown.", "Tables"),
+        choice("options.table-caption-label", "The typed label (`Table 1:`) of such a caption",
+               (("strip", "cut it off, the engine numbers the table"), ("keep", "keep it (the engine numbers the table as well)")),
+               "strip", "Only with table-captions: on.", "Tables"),
+        choice("options.table-caption-need-label", "A label word (Table ...) is needed for such a caption",
+               (("on", "yes: a bold line without one is left alone"), ("off", "no: any line that is one bold span next to a table")),
+               "on", "Off also takes a bold sub-heading above a table, so try it with table-captions: note first.", "Tables"),
+        text("options.table-caption-colon-words", "Also a short `: Results` line as a caption (words)",
+             "A whole number: a paragraph that starts with `: ` and has at most that many words, next to a table, is its caption "
+             "(gfm has no caption syntax; Pandoc Markdown reads it itself). 0 is off; 2 is a good start.", "Tables", "config", "count"),
+        text("options.table-caption-words", "More label words for such captions",
+             "Words separated by commas, added to the document language's own word and to Table (the list is in "
+             "pdfmd_tables/captions.py).", "Tables"),
         choice("options.csv.cut", "Where a long .csv table is cut",
                (("ends", "keep its first and last rows and columns, \u2026 between them"),
                 ("head", "keep the first rows and columns only")), "ends", "A div's cut= wins.", "Tables"),

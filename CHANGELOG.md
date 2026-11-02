@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.46 — 2026-11-02
+
+Pre-edit state: commit `2a63449`. Still under 3.31 [tables]. Entry 3dy (the author's wish, 2026-10-31, with the answers of 2026-11-01/02).
+
+A caption typed by hand next to a table can be the table's caption.
+
+- `pdfmd_lua/table_caption.lua` (new, a Pandoc filter, so gfm and Pandoc Markdown alike): a paragraph that is entirely one bold span starting with a label word (`**Table 1: Results**`), right above a table without a caption (or else right below one; above wins), becomes its caption. The label and number are cut off (the engine numbers the table), the rest keeps its markup, a trailing `{#tbl:id}` becomes the table's id when it has none. A paragraph or heading between them, a bold line that is not alone in its paragraph, or a table that already has a caption: left alone. The number of blank lines does not matter.
+- The label words come from `pdfmd_tables/captions.py` (English always, then the document's `lang:`: de, fr, es, it, pt, nl, pl, cs, sv, da, no, fi, ro, hu, el, bg, ru, uk, kk, tr, ar, zh, ja, ko), then `table-caption-words`: data, not code.
+- Four `pdfmd-options` keys, each a `--setup` row (config and folder levels) and in the inventory: `table-captions` (`note`, the default: change nothing and say once, `NOTE  table-captions: N lines next to a table read like captions`; `on`; `off`), `table-caption-label` (`strip`, `keep`), `table-caption-need-label` (`on`; `off` takes any line that is one bold span, the author's "skip the label word" toggle) and `table-caption-colon-words` (0 = off, the author's "<= 2 words" sketch as a number: a gfm `: Results` of at most that many words is a caption too; Pandoc Markdown reads it by itself).
+- The filter is added to the Pandoc command only for a document with a line that could be a caption, and after the CSV, markup and page-break filters.
+- Tests: `tests/test_table_captions.py`.
+
 ## v3.31.45 — 2026-11-01
 
 Pre-edit state: commit `f4cd293`. Still under 3.31. Entry 3eh (the author: "i suggest making it build @05,10, since both of them are introductions"; "yes, i want it done as 3.31").
@@ -79,7 +91,7 @@ A chemical structure written as text is drawn as a picture.
 
 ## v3.31.41 — 2026-10-31
 
-Pre-edit state: commit `437c3ef`. Still under 3.31 (no minor before the tables are done). Entry 3ea (the author's wish, from `FOUND /Users/.../220/.pdfmd` seen from `220/LR6`).
+Pre-edit state: commit `437c3ef`. Still under 3.31 (no minor before the tables are done). Entry 3ea (the author's wish, from a `FOUND` line that printed the long path of a course folder's `.pdfmd/`).
 
 A path in a message is written as short as it can be, by a setting.
 

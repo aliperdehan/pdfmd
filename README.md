@@ -1768,6 +1768,31 @@ attribute words are fine: `{#tbl:raw keep=4}`), and a `.csv` block can say it on
 
 This works for every output format.
 
+#### A caption typed by hand
+
+Many documents caption a table with a bold line next to it, `**Table 1: Results**`. gfm has no table caption at all, and in
+Pandoc Markdown only `: Results` (or `Table: Results`) is one, so the engine numbers the table itself and the typed label is lost
+or printed twice. pdfmd can read such a line as the table's caption. It does so for any reader (the filter works on the parsed
+document), and only for a paragraph that is *entirely one bold span*, that starts with a label word (`Table`, and the word of
+the document's `lang:`: `Tabelle`, `Таблица`, `Tablo` ... ; more in `table-caption-words`), and stands right above a table that
+has no caption, or else right below one. Blank lines between them do not matter; a paragraph or a heading between them does, and
+a pipe table must start its own block (Pandoc reads a table that touches the line above as text). The label and its number are
+cut off, because the engine numbers the table (`table-caption-label: keep` leaves them); the rest keeps its markup, and a
+trailing `{#tbl:id}` becomes the table's id, so `@tbl:id` finds it.
+
+It is off until you ask, because it changes documents that already have such lines: by default pdfmd changes nothing and says
+once `NOTE  table-captions: 2 lines next to a table read like captions (first: "Table 1: Results")`.
+
+```yaml
+pdfmd-options:
+  table-captions: on          # note (default: only say), on, off
+  table-caption-need-label: off   # on (default); off: ANY line that is one bold span next to a table is its caption
+  table-caption-colon-words: 2    # 0 (default, off); gfm: a paragraph `: Results` of at most 2 words is a caption too
+  table-caption-words: [Tbl.]     # more label words
+```
+
+Every key is also a `--setup` row, at the config and folder levels.
+
 #### Turning tables into CSV blocks, and back
 
 ```

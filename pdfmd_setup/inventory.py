@@ -144,6 +144,8 @@ OPTIONS: dict[str, str | Omitted] = {
     "line-number-step": "options.line-number-step",
     "csv": "options.csv.enabled", "csv.enabled": "options.csv.enabled",
     "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols", "table-keep": "options.table-keep",
+    "table-captions": "options.table-captions", "table-caption-label": "options.table-caption-label",
+    "table-caption-need-label": "options.table-caption-need-label", "table-caption-colon-words": "options.table-caption-colon-words", "table-caption-words": "options.table-caption-words",
     "pager": "options.pager", "pager_command": "options.pager_command", "pager-command": "options.pager_command",
     "csv.cut": "options.csv.cut", "csv.note": "options.csv.note", "csv.delimiter": "options.csv.delimiter",
     "csv.header": Omitted("document", "the shape of a project's data: per table (header=), or a folder's metadata.yaml"),
@@ -226,7 +228,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
-    "options.csv.": "tables", "options.table-keep": "tables", "options.calc.": "markdown", "options.smiles.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
+    "options.csv.": "tables", "options.table-keep": "tables", "options.table-caption": "tables", "options.calc.": "markdown", "options.smiles.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",
 }
 

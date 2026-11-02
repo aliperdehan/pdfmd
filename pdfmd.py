@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.45"
+PDFMD_VERSION = "3.31.46"
 import argparse
 import atexit
 import csv
@@ -3101,6 +3101,77 @@ def pagebreak_filter_args(sources: Path | list[Path], metadata_files: list[Path]
         return []
     shipped = pdfmd_lua.path("pagebreak")
     return ["-M", "pdfmd-pagebreak=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+
+
+# Table captions typed by hand (v3.31.46, entry 3dy): `**Table 1: Results**` next to a table becomes the table's caption.
+# pdfmd-options: table-captions: note (the default: nothing changes, one NOTE says how many lines would have been captions),
+# on, off; table-caption-label: strip (default) | keep; table-caption-words: extra label words (the dictionary of
+# pdfmd_tables/captions.py follows `lang:`); table-caption-need-label: on (default) | off (any bold line is a caption);
+# table-caption-colon-words: a number, 0 (default) off: a gfm `: Results` of at most
+# that many words is a caption too.
+TABLE_CAPTION_MODES = ("note", "on", "off")
+TABLE_CAPTION_LABELS = ("strip", "keep")
+TABLE_CAPTION_NEED = ("on", "off")
+
+
+def table_caption_settings(md_path: Path, metadata_files: list[Path]) -> dict:
+    """The table-caption options as they stand (documented above), checked: a word that is not one of the choices stops the build."""
+    def switch(value, name, choices, default):
+        if value is None:
+            return default
+        word = {True: "on", False: "off"}.get(value, str(value).strip().casefold())
+        if word not in choices:
+            raise SystemExit(f"pdfmd-options {name}: {value!r} is not one of {', '.join(choices)}")
+        return word
+    mode = switch(first_pdfmd_option(md_path, metadata_files, "table-captions"), "table-captions", TABLE_CAPTION_MODES, "note")
+    label = switch(first_pdfmd_option(md_path, metadata_files, "table-caption-label"), "table-caption-label", TABLE_CAPTION_LABELS, "strip")
+    need = switch(first_pdfmd_option(md_path, metadata_files, "table-caption-need-label"), "table-caption-need-label", TABLE_CAPTION_NEED, "on")
+    colon = first_pdfmd_option(md_path, metadata_files, "table-caption-colon-words")
+    try:
+        colon_words = 0 if colon in (None, False) else int(colon)
+    except (TypeError, ValueError):
+        colon_words = -1
+    if colon_words < 0:
+        raise SystemExit(f"pdfmd-options table-caption-colon-words: {colon!r} must be a whole number of words (0 is off)")
+    extra = first_pdfmd_option(md_path, metadata_files, "table-caption-words")
+    extra = [part for part in re.split(r"[,;]", extra)] if isinstance(extra, str) else list(extra or [])
+    return {"mode": mode, "label": label, "need": need, "colon": colon_words, "extra": [str(word) for word in extra]}
+
+
+def table_caption_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter table_caption.lua`` with its settings (`-M pdfmd-table-captions=...`), for a document that has a line
+    which could be a caption; nothing for `off`, and nothing for a document without such a line (the filter would only look)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files:
+        return []
+    settings = table_caption_settings(files[0], metadata_files)
+    if settings["mode"] == "off":
+        return []
+    try:
+        from pdfmd_tables.captions import label_words
+    except ImportError:
+        return []
+    words = label_words(document_font_setting("lang", files, metadata_files, []), settings["extra"])
+    start = r"^[ \t]*\*\*[ \t]*(?:" + "|".join(re.escape(word) for word in words) + ")"
+    if settings["need"] == "off":
+        start = r"^[ \t]*\*\*\S"
+    if settings["colon"] > 0:
+        start = "(?:" + start + r")|(?:^: \S)"
+    pattern = re.compile(start, re.MULTILINE | re.IGNORECASE)
+    if not any(pattern.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("table_caption")
+    if shipped is None:
+        return []
+    return ["-M", "pdfmd-table-captions=" + settings["mode"], "-M", "pdfmd-table-caption-label=" + settings["label"],
+            "-M", "pdfmd-table-caption-need-label=" + settings["need"],
+            "-M", f"pdfmd-table-caption-colon-words={settings['colon']}", "-M", "pdfmd-table-caption-words=" + ",".join(words),
+            "--lua-filter", str(shipped)]
 
 
 # A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
@@ -22080,6 +22151,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
+            cmd += table_caption_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -22599,6 +22671,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += pagebreak_filter_args(md_path, metadata_files)
             cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
+            cmd += table_caption_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -23090,6 +23163,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += pagebreak_filter_args(md_path, metadata_files)
                 cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                 cmd += markup_filter_args(md_path, metadata_files)
+                cmd += table_caption_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
                 cmd += cover_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
@@ -23351,6 +23425,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += pagebreak_filter_args(md_path, metadata_files)
                     cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                     cmd += markup_filter_args(md_path, metadata_files)
+                    cmd += table_caption_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
                     cmd += cover_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
@@ -28773,6 +28848,7 @@ def run_main() -> None:
                     cmd += pagebreak_filter_args(files, metadata_files)
                     cmd += indent_filter_args(files, metadata_files)
                     cmd += markup_filter_args(files, metadata_files)
+                    cmd += table_caption_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
                     cmd += cover_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
@@ -28902,6 +28978,7 @@ def run_main() -> None:
                         cmd += pagebreak_filter_args(files, metadata_files)
                         cmd += indent_filter_args(files, metadata_files)
                         cmd += markup_filter_args(files, metadata_files)
+                        cmd += table_caption_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
                         cmd += cover_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)
