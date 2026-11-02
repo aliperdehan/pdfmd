@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.46c — 2026-11-02
+
+Pre-edit state: commit `119003b`. No shipped code changes (tests only), so no version bump. The first push of the 3.31.4x commits showed what the CI saw and the machine of the author did not.
+
+Lint and Windows, which kept `Test and publish` from releasing.
+
+- `ruff check --select F` (the `lint` job) found five unused or redefined imports in `test_build_log`, `test_diagram_shim` and `test_kit_selection`; removed.
+- Windows: `test_display_path` expected the temporary folder to be written absolute, but there it lies below the home folder, where the `auto` style writes `~`: the test asks for the `relative` style. `test_kits`: `/one/place` has no drive on Windows (the test uses an absolute path of its own folder), and the cache of the kit lookup is in `LOCALAPPDATA` there, not `XDG_CACHE_HOME`.
+
 ## v3.31.46b — 2026-11-02
 
 Pre-edit state: commit `63d353d`. No shipped code changes (tests only), so no version bump.

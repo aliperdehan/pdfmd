@@ -52,8 +52,9 @@ class DisplayPath(unittest.TestCase):
     def test_a_file_elsewhere_stays_absolute_beyond_the_cap_and_is_written_with_dots_within_it(self):
         other = self.outside / "a.md"
         other.write_text("x", encoding="utf-8")
-        saved = pdfmd.PATH_UP
-        self.addCleanup(setattr, pdfmd, "PATH_UP", saved)
+        saved = pdfmd.PATH_UP, pdfmd.PATH_STYLE
+        self.addCleanup(lambda: (setattr(pdfmd, "PATH_UP", saved[0]), setattr(pdfmd, "PATH_STYLE", saved[1])))
+        pdfmd.PATH_STYLE = "relative"                           # on Windows the temporary folder is below the home folder: `auto` would write `~`
         pdfmd.PATH_UP = 0
         self.assertEqual(pdfmd.display_path(other), str(other))
         pdfmd.PATH_UP = 2                                       # v3.31.41: a sibling folder is `../name`

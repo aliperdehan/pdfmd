@@ -70,7 +70,6 @@ class VerbosePrint(unittest.TestCase):
     def test_shown_goes_to_the_console_and_hidden_to_the_record_only(self):
         import contextlib
         import io
-        import pdfmd
         lines: list[str] = []
         saved = pdfmd.BUILD["record"]
         pdfmd.BUILD["record"] = lines
@@ -86,7 +85,6 @@ class VerbosePrint(unittest.TestCase):
             pdfmd.BUILD["record"] = saved
 
     def test_no_record_running_nothing_happens(self):
-        import pdfmd
         saved = pdfmd.BUILD["record"]
         pdfmd.BUILD["record"] = None
         try:

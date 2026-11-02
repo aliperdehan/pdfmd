@@ -14,7 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import needs_pandoc  # noqa: E402
 
 # arguments of the call: -i in.mmd -o out.svg ...; the stand-in writes a picture to the fourth (they arrive in quotes: %~4)
 SHIM = ('@echo off\r\necho ran>> "%STUB_LOG%"\r\n'

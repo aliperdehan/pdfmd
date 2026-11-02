@@ -311,7 +311,8 @@ class Wiring(Scratch):
     def setUp(self):
         super().setUp()
         self.config = self.root / "cfg" / "config.yaml"
-        patcher = mock.patch.dict(os.environ, {"PDFMD_CONFIG": str(self.config), "XDG_CACHE_HOME": str(self.root / "cache")})
+        patcher = mock.patch.dict(os.environ, {"PDFMD_CONFIG": str(self.config), "XDG_CACHE_HOME": str(self.root / "cache"),
+                                                  "LOCALAPPDATA": str(self.root / "cache")})      # Windows keeps the cache there
         patcher.start()
         self.addCleanup(patcher.stop)
         pdfmd.load_config.cache_clear()
@@ -328,8 +329,9 @@ class Wiring(Scratch):
         self.assertEqual(found, [(Path("~/somewhere").expanduser(), {}), (self.config.parent / "rel" / "kit", {"qca": ["analytical"]})])
 
     def test_one_string_is_one_entry_and_no_kits_is_none(self):
-        self.set_config("kits: /one/place\n")
-        self.assertEqual(pdfmd.configured_kits(), [(Path("/one/place"), {})])
+        place = (self.root / "one" / "place").as_posix()                 # absolute on every system (`/one/place` has no drive on Windows)
+        self.set_config(f"kits: {place}\n")
+        self.assertEqual(pdfmd.configured_kits(), [(Path(place), {})])
         self.set_config("options: {}\n")
         self.assertEqual(pdfmd.configured_kits(), [])
 
