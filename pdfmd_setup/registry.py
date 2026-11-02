@@ -60,7 +60,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
+    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
@@ -86,7 +86,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -160,6 +160,16 @@ PAGEBREAK_CHOICES = (
     ("div", "an empty ::: pagebreak"),
     ("typst", "a raw Typst #pagebreak()"),
     ("word", "a raw Word page break"),
+)
+
+
+# the families of pdfmd.LINEBREAK_KINDS, in its order
+LINEBREAK_CHOICES = (
+    ("html", "<br>, <br/>, <br />"),
+    ("tex", "a raw \\newline, \\linebreak, \\linebreak[2]"),
+    ("typst", "a raw Typst #linebreak()"),
+    ("word", "a raw Word line break"),
+    ("context", "a raw ConTeXt \\crlf"),
 )
 
 
@@ -491,6 +501,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
                 "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
                 "--no-pagebreak.", "Universal markup"),
+        Setting("options.linebreak", "Line breaks (<br>, \\newline ...) carried into every format, everywhere", "multi", LINEBREAK_CHOICES, "",
+                "Each spelling of a chosen family becomes the output's own line break, in text as well as in table cells. Left unset, "
+                "every spelling is carried in table cells only (a cell cannot hold a blank line or \\par), and text outside a table "
+                "keeps what each format makes of it. Per run: --linebreak / --no-linebreak.", "Universal markup"),
         choice("options.show-comments", "Show the <!-- comments --> of the text in the output", on_off, "",
                "Each comment becomes a box labelled Comment (LaTeX, Typst, HTML), a real Word comment (docx). pdfmd's own "
                "markers stay invisible. Per run: --show-comments / --no-show-comments.", "Universal markup"),

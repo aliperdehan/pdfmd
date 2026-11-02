@@ -1867,6 +1867,41 @@ pdfmd-options:
 
 Also a `--setup` row, at the config and folder levels.
 
+#### A line break inside a table cell
+
+A cell cannot hold a blank line or `\par`, and a raw `<br>` is dropped by every writer but HTML (`one<br>two` printed `onetwo` in
+LaTeX, in a table or out of it). pdfmd reads every spelling of a line break and gives the target its own, as it does for page
+breaks:
+
+| written as | kind |
+|---|---|
+| `<br>`, `<br/>`, `<br />` (any case) | raw HTML |
+| `\newline`, `\linebreak`, `\linebreak[2]` | raw TeX (Pandoc Markdown, not gfm) |
+| `#linebreak()` | raw Typst (a ```` ```{=typst} ```` block or span) |
+| `<w:r><w:br/></w:r>` | raw Word (```` ```{=openxml} ````) |
+| `\crlf` | raw ConTeXt |
+
+Each becomes the writer's line break: LaTeX `\\` (in a table cell a box of lines), Typst `\`, Word a break run, HTML `<br />`. A
+spelling already in the target's own language stays exactly as written (`\newline` for LaTeX, `<br>` for HTML). The Markdown
+writers keep everything, except pdfmd's flat Markdown (`--to gfm`), which has no raw HTML and so gets a hard break. A paragraph
+or cell that is nothing but breaks is left alone (the `space` markup kind reads a lone `<br>`), and a break at the very start
+or end of a run of text is dropped. A backslash at the end of a line and two spaces at the end of a line are line breaks
+Pandoc reads itself.
+
+It differs from page breaks in one thing, the default. Page breaks are off until you ask; line breaks are `auto`: every
+spelling is carried **inside table cells**, where there was no other way to get a second line, and text outside a table keeps
+what each format makes of it (a `<br>` in a LaTeX paragraph is still dropped). Ask for more with the families:
+
+```yaml
+pdfmd-options:
+  linebreak: true             # auto (the default: every family, table cells only), true / all (every family, everywhere),
+                              # false, or a list of families, everywhere: [html, tex, typst, word, context]
+```
+
+`--linebreak [KIND ...]` (bare: all, everywhere) and `--no-linebreak` do the same for one run.
+
+Also a `--setup` row, at the config and folder levels.
+
 #### Turning tables into CSV blocks, and back
 
 ```

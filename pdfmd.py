@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.48"
+PDFMD_VERSION = "3.31.49"
 import argparse
 import atexit
 import csv
@@ -3172,6 +3172,70 @@ def table_caption_args(sources: Path | list[Path], metadata_files: list[Path]) -
             "-M", "pdfmd-table-caption-need-label=" + settings["need"],
             "-M", f"pdfmd-table-caption-colon-words={settings['colon']}", "-M", "pdfmd-table-caption-words=" + ",".join(words),
             "--lua-filter", str(shipped)]
+
+
+# One line break for every writer (v3.31.49, entry 3el; the idea of pagebreak.lua): each writer takes its own spelling of a line
+# break and drops the others ("one<br>two" printed "onetwo" in LaTeX), and a table cell cannot hold a `\\par`.
+# pdfmd_lua/linebreak.lua reads the spellings of a family and gives the target its own (one already in its language stays as
+# written). Families: html (`<br>`, `<br/>`, `<br />`), tex (a raw `\newline`, `\linebreak`), typst (`#linebreak()`), word (a raw
+# break run), context (`\crlf`). Like pagebreak, with a different default: `pdfmd-options.linebreak` (document, metadata files,
+# config) is `auto` when not set (every family, inside table cells only), `true` / `all` (every family, everywhere), a list of
+# families (those, everywhere) or `false`; `--linebreak [KIND ...]` (bare: all) and `--no-linebreak` for a run.
+LINEBREAK_KINDS = ("html", "tex", "typst", "word", "context")
+LINEBREAK_CLI: dict = {"kinds": None, "off": False}
+LINEBREAK_RE = re.compile(r"<br\s*/?>|\\(?:newline|linebreak|crlf)|#linebreak\(\)|<w:br\s*/>", re.IGNORECASE)
+
+
+def linebreak_value(value) -> tuple[str, list[str]]:
+    """What a `linebreak` value asks for, as (where, families): where is `cells` or `all`, families in LINEBREAK_KINDS order.
+    Not set or `auto`: every family in table cells; true or `all`: every family everywhere; false: none; a list (or a
+    comma-separated string): those families, everywhere."""
+    if value is None:
+        return "cells", list(LINEBREAK_KINDS)
+    if value is False:
+        return "cells", []
+    if value is True:
+        return "all", list(LINEBREAK_KINDS)
+    items = value if isinstance(value, list) else str(value).replace(",", " ").split()
+    words = [str(item).strip().casefold() for item in items if str(item).strip()]
+    if not words or words == ["auto"]:
+        return "cells", list(LINEBREAK_KINDS)
+    if any(word in ("all", "true", "yes", "on") for word in words):
+        return "all", list(LINEBREAK_KINDS)
+    unknown = [word for word in words if word not in LINEBREAK_KINDS and word not in ("auto", "false", "no", "off", "none")]
+    if unknown:
+        print(f"WARN  linebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a line-break family "
+              f"({', '.join(LINEBREAK_KINDS)}, all, or auto)", file=sys.stderr)
+    return "all", [kind for kind in LINEBREAK_KINDS if kind in words]
+
+
+def linebreak_settings(md_path: Path, metadata_files: list[Path]) -> tuple[str, list[str]]:
+    """(where, families) for this build: the command line's, else pdfmd-options' (see linebreak_value)."""
+    if LINEBREAK_CLI["off"]:
+        return "cells", []
+    if LINEBREAK_CLI["kinds"] is not None:
+        return linebreak_value(LINEBREAK_CLI["kinds"] or True)
+    return linebreak_value(first_pdfmd_option(md_path, metadata_files, "linebreak"))
+
+
+def linebreak_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter linebreak.lua`` (`-M pdfmd-linebreak=html,tex`, `-M pdfmd-linebreak-where=cells|all`) for a document that
+    has a line-break spelling in it; nothing when no family takes part, and nothing for a document without a spelling (the
+    filter would only look)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files:
+        return []
+    where, kinds = linebreak_settings(files[0], metadata_files)
+    if not kinds or not any(LINEBREAK_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("linebreak")
+    return (["-M", "pdfmd-linebreak=" + ",".join(kinds), "-M", "pdfmd-linebreak-where=" + where, "--lua-filter", str(shipped)]
+            if shipped is not None else [])
 
 
 # A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
@@ -22211,6 +22275,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += table_caption_args(md_path, metadata_files)
+            cmd += linebreak_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -22731,6 +22796,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += indent_filter_args(md_path, metadata_files)
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += table_caption_args(md_path, metadata_files)
+            cmd += linebreak_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -23224,6 +23290,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                 cmd += markup_filter_args(md_path, metadata_files)
                 cmd += table_caption_args(md_path, metadata_files)
+                cmd += linebreak_args(md_path, metadata_files)
                 cmd += title_filter_args(md_path, metadata_files)
                 cmd += cover_filter_args(md_path, metadata_files)
                 cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
@@ -23486,6 +23553,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += indent_filter_args(all_inputs or md_path, metadata_files)
                     cmd += markup_filter_args(md_path, metadata_files)
                     cmd += table_caption_args(md_path, metadata_files)
+                    cmd += linebreak_args(md_path, metadata_files)
                     cmd += title_filter_args(md_path, metadata_files)
                     cmd += cover_filter_args(md_path, metadata_files)
                     cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
@@ -27510,6 +27578,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.pagebreak (true or a list) and pdfmd --setup")
     parser.add_argument("--no-pagebreak", action="store_true",
                         help="no page-break carrying for this run, whatever pdfmd-options.pagebreak says")
+    parser.add_argument("--linebreak", nargs="*", default=None, metavar="KIND",
+                        help="carry line breaks into every output format, everywhere (without it: inside table cells only): each "
+                             "spelling of the named families becomes the format's own line break (LaTeX \\\\, Typst \\, a Word "
+                             "break, HTML <br />). Families: html (<br>, <br/>), tex (\\newline, \\linebreak), typst "
+                             "(#linebreak()), word (a raw Word break), context (\\crlf); bare: all. Also pdfmd-options.linebreak "
+                             "(auto, true, false or a list) and pdfmd --setup")
+    parser.add_argument("--no-linebreak", action="store_true",
+                        help="no line-break carrying for this run, whatever pdfmd-options.linebreak says")
     parser.add_argument("--markup", nargs="*", default=None, metavar="KIND",
                         help="carry spellings other Markdown dialects share into every output: callouts (> [!NOTE], "
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
@@ -28331,6 +28407,7 @@ def run_main() -> None:
     CACHE_LOCATION_CLI = args.cache_location
     RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
     PAGEBREAK_CLI.update({"kinds": args.pagebreak, "off": args.no_pagebreak})
+    LINEBREAK_CLI.update({"kinds": args.linebreak, "off": args.no_linebreak})
     MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
     SHOW_COMMENTS_CLI["on"] = args.show_comments
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
@@ -28909,6 +28986,7 @@ def run_main() -> None:
                     cmd += indent_filter_args(files, metadata_files)
                     cmd += markup_filter_args(files, metadata_files)
                     cmd += table_caption_args(files, metadata_files)
+                    cmd += linebreak_args(files, metadata_files)
                     cmd += title_filter_args(files, metadata_files)
                     cmd += cover_filter_args(files, metadata_files)
                     cmd += raw_filter_args(files, report_no_auto, metadata_files)
@@ -29039,6 +29117,7 @@ def run_main() -> None:
                         cmd += indent_filter_args(files, metadata_files)
                         cmd += markup_filter_args(files, metadata_files)
                         cmd += table_caption_args(files, metadata_files)
+                        cmd += linebreak_args(files, metadata_files)
                         cmd += title_filter_args(files, metadata_files)
                         cmd += cover_filter_args(files, metadata_files)
                         cmd += raw_filter_args(files, report_no_auto, metadata_files)

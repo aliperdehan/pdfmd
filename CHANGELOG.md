@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.49 — 2026-11-02
+
+Pre-edit state: commit `765ce9e`. Still under 3.31. `[tables]`, entry 3el (the author: "`<br>` ... `\par` destroys table, and `<br>` is ignored in latex route. let's do it"; "let's not limit it to `<br>` html only and make it interconvertable, like pagebreak syntax").
+
+One line break for every writer.
+
+- Pandoc reads `<br>` as raw HTML, which every writer but HTML drops: `one<br>two` printed `onetwo` in LaTeX, and a table cell, where a blank line or `\par` breaks the table, could not hold two lines. `pdfmd_lua/linebreak.lua` (new, in the manner of `pagebreak.lua`) reads `<br>`, `<br/>`, `<br />` (any case), a raw TeX `\newline`, `\linebreak`, `\linebreak[n]`, a raw Typst `#linebreak()`, a raw Word break run and a raw ConTeXt `\crlf`, and gives the target Pandoc's LineBreak (LaTeX `\\`, in a cell a box of lines; Typst `\`; Word a break run; HTML `<br />`).
+- A spelling already in the target's own language stays as written; the Markdown writers keep everything, except pdfmd's flat Markdown (`--to gfm`, raw HTML off), where `<br>` would be dropped and becomes a hard break. A paragraph or cell of nothing but breaks is left alone (the `space` markup kind reads a lone `<br>`); a break at the very start or end of a run of text is dropped.
+- Mirrors pagebreak, with another default (the author: "2. equivalent of auto ... everything else mirrors pagebreaks, with all and families"). Families: `html` (`<br>`, `<br/>`, `<br />`), `tex` (`\\newline`, `\\linebreak[n]`), `typst` (`#linebreak()`), `word` (a raw break run), `context` (`\\crlf`). `pdfmd-options: linebreak:` not set or `auto` carries every family inside table cells only; `true` / `all` every family everywhere; a list those families everywhere; `false` none. `--linebreak [KIND ...]` (bare: all, everywhere) and `--no-linebreak` for a run; a `--setup` row (a multi choice of the families, in Universal markup; unset is `auto`) and the inventory entries. pdfmd passes the families and where as `-M pdfmd-linebreak=html,tex` and `-M pdfmd-linebreak-where=cells|all`; the filter is added only for a document that has a spelling (`LINEBREAK_RE`). A word that is no family is said and ignored. Not done: the native (no-Pandoc) tier.
+- README: "A line break inside a table cell". Tests: `tests/test_linebreak.py` (the default in cells, `true`, the target's own spelling, Typst and Word, families, `false` and the command line, a bad word, the Markdown writers, lone and trailing breaks).
+
 ## v3.31.48 — 2026-11-02
 
 Pre-edit state: commit `6253c34`. Still under 3.31. `[tables]`, entry 3el (the author: "yes, build all of it as 3.31.48").
