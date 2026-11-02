@@ -71,7 +71,6 @@ wait for an answer before any code.
 
 ## Distribution inside this repository, carried inside 3.31 [3ed]
 
-- [ ] Homebrew tap moved here (built, not pushed). At the first push: check the `homebrew` job and a real `brew install` from GitHub, then delete `aliperdehan/homebrew-tap` (authorised; needs `gh auth refresh -s delete_repo` from the author first) [3ed]
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
 
 ## Obsidian flavour, one feature line, next minor [3ee]
@@ -104,7 +103,6 @@ is low priority. [3di]
 - [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
 - [ ] Bare `--install` prints the table of every kind (size, source, target, removal) instead of usage; bare `diagram` lists, `diagram:d2|dot` installs [3ei]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
-- [ ] No push until the tables line is reliable (3.31.0 is local) [3dl]
 - [ ] 4.0
 
 ## Investigate first, no commitment
