@@ -277,6 +277,9 @@ Finding a document by name:
     newest]`, in a `ranking.yaml` (`.pdfmd/` of the folder or any folder above it, or
     beside the config file), in `pdfmd-options: {ranking: ...}` of a document, a metadata
     file, the folder settings or the config; the nearest to the documents wins.
+    `--newest` builds the newest file of the folder; `--all` counts the `never`
+    documents too. A `priority: never` (v3.32.11) leaves a document out of what a
+    folder gives -b, -r and --view as well; a named document is always built.
 
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
@@ -1472,7 +1475,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.10"
+PDFMD_VERSION = "3.32.11"
 import argparse
 import atexit
 import csv
@@ -4327,7 +4330,8 @@ def view_sources(args, scratch: Path, made: list[Path]) -> list[Path]:
         if str(path) == "-":
             files.append(view_stdin_file(sys.stdin.buffer.read(), scratch, made))
         elif path.is_dir():
-            found = sorted(path.rglob("*.md") if args.recursive else path.glob("*.md"), key=lambda item: str(item).casefold())
+            found = skip_never(sorted(path.rglob("*.md") if args.recursive else path.glob("*.md"),
+                                      key=lambda item: str(item).casefold()), args.include_never)
             if not found:
                 raise SystemExit(f"{path}: no Markdown files in this folder")
             files += found
@@ -4342,7 +4346,7 @@ def view_sources(args, scratch: Path, made: list[Path]) -> list[Path]:
         text = sys.stdin.buffer.read()
         if text.strip():
             return [view_stdin_file(text, scratch, made)]
-    found = sorted(Path.cwd().glob("*.md"), key=lambda item: item.name.casefold())
+    found = skip_never(sorted(Path.cwd().glob("*.md"), key=lambda item: item.name.casefold()), args.include_never)
     if found:
         return found
     if sys.stdin.isatty():
@@ -12946,9 +12950,38 @@ def bare_ranking(files: list[Path]):
     return ranking
 
 
-def choose_markdown(files: list[Path]) -> Path:
+def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
+    """``files`` without the documents that say `priority: never` (or another word of a class with `exclude`), which are named in
+    one NOTE: what `-b`, `-r` and the viewer list from a folder. ``include_never`` (`--all`) keeps them, and so does
+    `--no-auto priority`. A document named on the command line is never dropped: the callers pass only what a folder gave them."""
+    if include_never or not PRIORITY_PICK:
+        return files
+    from pdfmd_ranking import MISSING
+    by_folder: dict[Path, list[Path]] = {}
+    for file in files:
+        by_folder.setdefault(file.parent, []).append(file)
+    dropped: list[Path] = []
+    for folder_files in by_folder.values():
+        values = {file: document_priority(file) for file in folder_files}
+        if all(value is MISSING for value, _ in values.values()):
+            continue
+        try:
+            ranking = bare_ranking(folder_files)
+        except Exception as error:
+            print(f"WARN  ranking: {error}; every document of {display_path(folder_files[0].parent)} is kept", file=sys.stderr)
+            continue
+        for file, (value, _) in values.items():
+            if value is not MISSING and ranking.read(value).kind == "excluded":
+                dropped.append(file)
+    if dropped:
+        print(f"NOTE  left out (priority: never): {', '.join(display_path(file) for file in dropped)}  (--all builds them too)")
+    return [file for file in files if file not in dropped]
+
+
+def choose_markdown(files: list[Path], newest: bool = False, include_never: bool = False) -> Path:
     """The one of several Markdown files of a folder that bare `pdfmd` builds; says so (an AUTO MD line, WARNs), or stops with
-    the reason (SystemExit) when equal documents cannot be told apart."""
+    the reason (SystemExit) when equal documents cannot be told apart. ``newest`` (`--newest`): by modification time alone;
+    ``include_never`` (`--all`): the documents that say `never` take part as if they had said nothing."""
     from pdfmd_ranking import Candidate, RankingError, choose
     candidates = []
     for file in files:
@@ -12962,7 +12995,7 @@ def choose_markdown(files: list[Path]) -> Path:
         ranking = bare_ranking(files)
     except RankingError as error:
         raise SystemExit(f"ranking: {error}")
-    choice = choose(candidates, ranking, show=display_path)
+    choice = choose(candidates, ranking, by=["newest"] if newest else None, show=display_path, include_excluded=include_never)
     for line in [f"WARN  ranking: {text}" for text in ranking.warnings] + choice.warnings:
         print(line, file=sys.stderr)
     if choice.error or choice.winner is None:
@@ -17117,15 +17150,15 @@ def excluded_by_cli(md_path: Path, exclusions: list[str]) -> bool:
 
 
 def report_sources(paths: list[Path], exclusions: list[str], exclude_unnumbered: bool = False,
-                   recursive: bool = False) -> tuple[list[Path], list[Path]]:
+                   recursive: bool = False, include_never: bool = False) -> tuple[list[Path], list[Path]]:
     # .resolve() for the same reason as find_markdown(): a relative directory
     # plus a file in a subdirectory would otherwise make Pandoc's cwd and its
     # source-file arguments both relative, and doubling up into a bad path.
     files = []
     for path in paths:
         if path.is_dir():
-            files.extend((file.resolve() for file in
-                         (path.rglob("*.md") if recursive else path.glob("*.md"))))
+            files.extend(skip_never([file.resolve() for file in
+                                     (path.rglob("*.md") if recursive else path.glob("*.md"))], include_never))
         elif path.is_file() and path.suffix.lower() == ".md":
             files.append(path.resolve())
     all_files = sorted(set(files))
@@ -28486,6 +28519,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "otherwise: the global metadata of --setup, margin, fonts, packages), and "
                              "'AUTO: KIND KIND' for the rest, each cut at the screen's width. AUTO ENGINE and "
                              "AUTO MD always print in full")
+    parser.add_argument("--newest", action="store_true",
+                        help="bare `pdfmd` in a folder with several Markdown files builds the most recently changed one, "
+                             "whatever their priorities and names say (documents marked `priority: never` stay out; "
+                             "see --all). The setting `ranking: {by: [priority, newest]}` (the default) uses the time "
+                             "only for documents of equal priority")
+    parser.add_argument("--all", "--include-never", dest="include_never", action="store_true",
+                        help="count the documents marked `priority: never` too: -b, -r and the viewer include them, and a "
+                             "bare `pdfmd` ranks them as if they had no priority")
     parser.add_argument("--no-citeproc", action="store_true",
                         help="don't add --citeproc automatically when the document uses @citation "
                              "syntax (by default pdfmd adds it, so citations and the bibliography "
@@ -29301,6 +29342,8 @@ def run_main() -> None:
             print(f"AUTO OUTPUT  {display_path(document)}: default-output {chosen} (pdfmd-options)")
         return chosen or target_format
 
+    newest_used: list[bool] = []
+
     def only_markdown_in(directory: Path) -> Path:
         """The one Markdown file of a folder (what `pdfmd` and `pdfmd '#section'` mean)."""
         markdown_files = sorted(directory.glob("*.md"), key=lambda path: path.name.casefold())
@@ -29313,8 +29356,9 @@ def run_main() -> None:
                 pass
             raise SystemExit("No Markdown files found in the current directory." + hint)
         if len(markdown_files) > 1:
-            if PRIORITY_PICK:
-                return choose_markdown(markdown_files)
+            if PRIORITY_PICK or args.newest:
+                newest_used.append(True)
+                return choose_markdown(markdown_files, args.newest, args.include_never)
             names = ", ".join(path.name for path in markdown_files)
             raise SystemExit(
                 f"Multiple Markdown files found: {names}\n"
@@ -29344,6 +29388,9 @@ def run_main() -> None:
             paths = [only_markdown_in(Path(base) if base else Path.cwd())]
         # `doc#name` asks for `name`; `doc##name` for `##name`, a level-2 heading.
         section_requests += split_section_requests(["#" + suffix.replace("@", "#", 1) if suffix.startswith(("#", "@")) else suffix])
+    if args.newest and not newest_used:
+        print("WARN  --newest picks among the Markdown files of a folder for a bare `pdfmd` (or `pdfmd '#section'`); "
+              "it does nothing with a named file, -b or -r", file=sys.stderr)
     scaffold_plan = None
     section_plan = None
     plan_source = None
@@ -29389,7 +29436,7 @@ def run_main() -> None:
         run_watch(watch_source, sys.argv[1:])
         return
     if args.report:
-        files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive)
+        files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive, args.include_never)
         if target_format == ASSEMBLED_FORMAT:
             files = [file for file in files if not is_assembled_document(file)]
         if not files:
@@ -29901,10 +29948,10 @@ def run_main() -> None:
         # .resolve() for the same reason as find_markdown(): a relative batch
         # directory plus a file in a subdirectory would otherwise make Pandoc's
         # cwd and its source-file argument both relative, and doubling up.
-        files = sorted(
+        files = skip_never(sorted(
             file.resolve() for file in
             (paths[0].rglob("*.md") if args.recursive else paths[0].glob("*.md"))
-        )
+        ), args.include_never)
         if target_format == ASSEMBLED_FORMAT:
             # Not an assembly of an assembly: a file written by an earlier run
             # (NAME.assembled.md) would otherwise come out as NAME.assembled.assembled.md.

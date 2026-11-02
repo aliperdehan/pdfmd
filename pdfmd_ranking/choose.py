@@ -84,7 +84,9 @@ def _settle(pool: Sequence[_Item], tail: Sequence[str]) -> tuple[_Item | None, s
 
 
 def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] | None = None,
-           show: Callable[[Path], str] = lambda path: path.name) -> Choice:
+           show: Callable[[Path], str] = lambda path: path.name, include_excluded: bool = False) -> Choice:
+    """Pick one of ``candidates``. ``include_excluded``: the documents that say `never` (by priority or by name) take part as if
+    they had said nothing."""
     chain = tuple(ranking.by if by is None else by)
     tail = [criterion for criterion in chain if criterion != "priority"]
     choice = Choice()
@@ -98,6 +100,9 @@ def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] 
                 choice.warnings.append(f"WARN  {show(candidate.path)}: {candidate.where}: {candidate.value!r} is not a priority "
                                        f"({value.why}); treated as if it were not set")
             elif value.kind == "excluded":
+                if include_excluded:
+                    live.append(item)
+                    continue
                 choice.skipped.append((candidate.path, f"{candidate.where}: {value.label or candidate.value}"))
                 continue
             elif value.rank.cls != "unset":
@@ -187,7 +192,7 @@ def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] 
 
             kept = []
             for item in group:
-                if item.parts.suffix and item.parts.value.kind == "excluded":
+                if item.parts.suffix and item.parts.value.kind == "excluded" and not include_excluded:
                     choice.skipped.append((item.cand.path, f"name: {item.parts.suffix}"))
                 else:
                     kept.append(item)

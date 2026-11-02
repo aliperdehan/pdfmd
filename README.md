@@ -600,6 +600,12 @@ modification times are identical too, the choice stops with that list. A value t
 counts as nothing. An exact name is always the override: `pdfmd report` builds `report.md` whatever else is there.
 `--no-auto priority` brings back the old list-and-stop.
 
+**`--newest`, `--all`, and the lists.** `pdfmd --newest` builds the most recently changed file of the folder, whatever priorities
+and names say (only `never` still keeps a document out). `pdfmd --all` (or `--include-never`) counts the `never` documents too:
+`-b`, `-r` and `--view` include them, and a bare `pdfmd` ranks them as if they had written nothing. The `never` words keep a
+document out of what a *folder* gives: `-b DIR`, `-r DIR`, `--view` and a bare `pdfmd`; a document you name (`pdfmd NAME`,
+`-r a.md b.md`) is always built. A `never` in a file name (`report_ignore.md` beside `report.md`) hides it from a bare `pdfmd` only.
+
 **Your own words, and their order: `ranking`.** The table is the default setting. A *class* is a named group of words; the *ladder*
 puts the classes in order, low to high, with two reserved members, `unset` (no priority written) and `numbers`. The default is
 `ladder: [never, draft, unset, revised, numbers, final]`, with `final: [final, last, max]`, `draft: [draft, wip, old, backup, copy, tmp,
@@ -1681,7 +1687,8 @@ OK    notes/week2.md > week2.pdf
 (`-j N` sets the number of workers). `--bopen SPEC` opens some of the finished files when
 the batch is done: `f5` the first five, `l5` the last five, `fl10` the first five and the last five, `e3` the third, sixth, ninth ... file, `s3` the first, fourth, seventh ... (Python's `[::3]`),
 `f2,l3` a mix, or none for all (any number works; the files open in the order the batch lists them). Add `--recursive` to include
-subfolders, and `-o DIR` to collect the PDFs somewhere else.
+subfolders, and `-o DIR` to collect the PDFs somewhere else. A document with `priority: never` is left out of the batch (one `NOTE`
+names it); `--all` includes it. `draft` and the numbers do not matter here: they only choose one document.
 
 ### A book or report from several files
 

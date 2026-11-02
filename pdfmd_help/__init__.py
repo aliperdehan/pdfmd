@@ -20,7 +20,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--bookmarks", "--header", "--footer", "--attach-links", "--no-citeproc", "--extract", "--text-to-markdown")),
     "modes": ("several files, one report, slides, a long document in parts", (
         "-p", "--slide-level", "-b", "-r", "--recursive", "-j", "-i", "--exclude-unnumbered", "--section",
-        "--split", "--split-depth", "--list-parts")),
+        "--split", "--split-depth", "--list-parts", "--newest", "--all", "--include-never")),
     "source": ("a PDF that carries its source, an assembled single file, comments", (
         "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
         "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-csl", "--attach-source",

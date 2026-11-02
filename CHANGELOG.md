@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.11 — 2026-11-03
+
+Pre-edit state: commit `fada070`. Entry 3eu (the author: "yes, but there should be a new key like `-b all` or smth that will override never keys" and "pdfmd --newest will look at the modification time and render the newest thing"). Kept in 3.32. Not pushed. Third of four commits of the line.
+
+`never` leaves the folder lists, and two flags.
+
+- **`priority: never` (or another word of a class with `exclude`, or a negative number) in `-b`, `-r` and the viewer**: the document is left out of what a folder gives, with one `NOTE` naming what was left out. `draft` and the numbers do not matter there (they only choose one document). A document named on the command line (`pdfmd NAME`, `-r a.md b.md`) is always built. `--no-auto priority` switches the leaving-out off with the rest.
+- **`--all`** (alias `--include-never`; `-b all` could not be the spelling: `-b` takes paths and would read `all` as a file): the `never` documents count again. `-b`, `-r` and `--view` include them; a bare `pdfmd` ranks them as if they had written nothing.
+- **`--newest`**: a bare `pdfmd` (or `pdfmd '#section'`) builds the most recently changed file of the folder, by modification time alone (priority and names are not consulted; `never` documents stay out unless `--all`), with no tie warning: it was asked for. It is honoured even with `--no-auto priority`. With a named file, `-b` or `-r` it does nothing, and says so (a WARN). The default `ranking: {by: [priority, newest]}` uses the time only for documents of equal priority.
+- A `never` in a file name (`report_ignore.md` beside `report.md`) hides it from a bare `pdfmd` only; the lists look at the `priority:` key (reading every name of a big `-b -r` tree for it was not worth it).
+- Both flags are `RUN` entries of `pdfmd_setup/inventory.py`. Tests: `tests/test_ranking_lists.py`. README (*Several documents in a folder*, *A whole folder*), module docstring, `--help`.
+
 ## v3.32.10 — 2026-11-03
 
 Pre-edit state: commit `5702fb0`. Entry 3eu UPDATE 2 (the author: "let's make it possible to define ranking.yaml somewhere globally ... living in .pdfmd per directory or in parent directory's .pdfmd" and "all depend on proximity to the file itself"). Kept in 3.32. Not pushed. Second of four commits of the line.
