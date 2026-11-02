@@ -1447,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.5"
+PDFMD_VERSION = "3.32.6"
 import argparse
 import atexit
 import csv
@@ -1955,6 +1955,25 @@ def kit_search_folders(document: Path | None) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+TECTONIC_SEARCH_ENV = "PDFMD_TECTONIC_SEARCH"        # tex_search_env -> run_tex_engine: the folders below, joined with os.pathsep
+
+
+def tectonic_search_folders(document: Path | None) -> list[str]:
+    """The folders of the chosen kits as Tectonic wants them. Tectonic reads no TEXINPUTS: a file is found in its own bundle unless
+    `-Z search-path=DIR` names the folder, and that option takes one folder, not a tree. Without it the class a kit ships is never
+    loaded: Tectonic builds, and says nothing, with the copy in its bundle. So the kit's folder and every folder under the entries
+    that kit_search_folders gives as a tree (`carry:`, the `//` ones) are listed one by one; a hidden folder is left out."""
+    folders: list[str] = []
+    for entry in kit_search_folders(document):
+        tree = entry.endswith("//")
+        top = Path(entry[:-2] if tree else entry)
+        folders.append(str(top))
+        if tree:
+            folders += [str(path) for path in sorted(top.rglob("*"))
+                        if path.is_dir() and not any(part.startswith(".") for part in path.relative_to(top).parts)]
+    return list(dict.fromkeys(folders))
+
+
 def tex_search_env(document_directory: Path, pandoc_cwd: Path, document: Path | None = None) -> dict[str, str] | None:
     """TEXINPUTS for the pdf-engine subprocess, so a raw LaTeX command with a
     relative path still resolves against the document's own directory even
@@ -1999,6 +2018,7 @@ def tex_search_env(document_directory: Path, pandoc_cwd: Path, document: Path | 
     if kit_dirs:                                              # a kit works from its folder, with no install into the TeX tree
         for name in ("TEXINPUTS", "BIBINPUTS"):
             env[name] = (((env.get(name) or ".").rstrip(os.pathsep)) + os.pathsep + os.pathsep.join(kit_dirs) + os.pathsep)
+        env[TECTONIC_SEARCH_ENV] = os.pathsep.join(tectonic_search_folders(document))
     return env
 
 
@@ -20875,7 +20895,7 @@ def tex_argument(path) -> str:
     return str(Path(path).resolve()) if os.name == "nt" else str(path)
 
 
-def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[str] | None:
+def latex_engine_command(engine: str, tex_path: Path, output_dir: Path, search_folders: list[str] | None = None) -> list[str] | None:
     """Build one direct-compile pass's command line for ``engine``.
 
     lualatex/xelatex/pdflatex share an identical CLI shape and are run
@@ -20892,7 +20912,8 @@ def latex_engine_command(engine: str, tex_path: Path, output_dir: Path) -> list[
         return ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error",
                 f"-output-directory={tex_argument(output_dir)}", tex_argument(tex_path)]
     if engine == "tectonic":
-        return ["tectonic", "-o", tex_argument(output_dir), tex_argument(tex_path)]
+        return ["tectonic", *[f"-Zsearch-path={folder}" for folder in search_folders or []],
+                "-o", tex_argument(output_dir), tex_argument(tex_path)]
     return None
 
 
@@ -20919,7 +20940,8 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
 
     engine_env = env
-    cmd = latex_engine_command(engine, tex_path, output_dir)
+    cmd = latex_engine_command(engine, tex_path, output_dir,
+                               [folder for folder in (engine_env or {}).get(TECTONIC_SEARCH_ENV, "").split(os.pathsep) if folder])
     if cmd is None:
         return False, f"{engine} is not supported for direct .tex compilation"
 
@@ -23694,6 +23716,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(output), "--pdf-engine=" + engine]
                     if engine == "typst" and managed_index() is not None and managed_index().faces:
                         cmd.append(f"--pdf-engine-opt=--font-path={fonts_directory()}")
+                    if engine == "tectonic":                      # it reads no TEXINPUTS: the kits' folders by its own option
+                        cmd += [f"--pdf-engine-opt=-Zsearch-path={folder}" for folder in tectonic_search_folders(md_path)]
                     if engine == "typst" and (0,) < pandoc_version() < (3, 2) and not any(
                             "--root" in option for option in pandoc_options):
                         # an older Pandoc runs typst with its root at the document, where an absolute picture path

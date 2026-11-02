@@ -30,7 +30,9 @@ class Search(unittest.TestCase):
         self.kit = self.root / "kits" / "lab"
         write(self.kit / ".kit", "kit-format: 1\nname: lab\npackage: labstyle\ncarry: [labstyle.sty, assets/, nothing/]\n")
         write(self.kit / "labstyle.sty", "\\ProvidesPackage{labstyle}\n")
-        (self.kit / "assets").mkdir()
+        (self.kit / "assets" / "sub").mkdir(parents=True)
+        (self.kit / "assets" / ".hidden").mkdir()
+        (self.kit / "other").mkdir()
         config = write(self.root / "cfg.yaml", f"kits: [{self.root / 'kits'}]\n")
         saved = {key: os.environ.get(key) for key in ("PDFMD_CONFIG", "XDG_CACHE_HOME", "TEXINPUTS", "BIBINPUTS")}
         os.environ.update({"PDFMD_CONFIG": str(config), "XDG_CACHE_HOME": str(self.root / "cache")})
@@ -73,6 +75,35 @@ class Search(unittest.TestCase):
         parts = pdfmd.tex_search_env(md.parent, md.parent, md)["TEXINPUTS"].split(os.pathsep)
         self.assertEqual(parts[0], "/elsewhere")
         self.assertIn(str(self.kit), parts)
+
+    def test_tectonic_gets_the_kits_folders_one_by_one(self):
+        """v3.32.6: Tectonic reads no TEXINPUTS; `-Z search-path` names one folder, so a carried tree is listed folder by folder."""
+        md = self.document("pdfmd-options: {kit: lab}")
+        folders = pdfmd.tectonic_search_folders(md)
+        self.assertEqual(folders[0], str(self.kit))
+        self.assertIn(str(self.kit / "assets"), folders)
+        self.assertIn(str(self.kit / "assets" / "sub"), folders)
+        self.assertNotIn(str(self.kit / "assets" / ".hidden"), folders)    # a hidden folder is not searched
+        self.assertNotIn(str(self.kit / "other"), folders)                # the kit's whole folder is not walked
+        self.assertEqual(len(folders), len(set(folders)))
+        self.assertEqual(pdfmd.tectonic_search_folders(None), [])
+
+    def test_no_kit_no_tectonic_folders(self):
+        md = self.document("")
+        self.assertEqual(pdfmd.tectonic_search_folders(md), [])
+        self.assertNotIn(pdfmd.TECTONIC_SEARCH_ENV, pdfmd.tex_search_env(md.parent, md.parent / "elsewhere", md) or {})
+
+    def test_the_direct_route_passes_them_to_tectonic_only(self):
+        md = self.document("pdfmd-options: {kit: lab}")
+        env = pdfmd.tex_search_env(md.parent, md.parent, md)
+        folders = env[pdfmd.TECTONIC_SEARCH_ENV].split(os.pathsep)
+        self.assertEqual(folders, pdfmd.tectonic_search_folders(md))
+        command = pdfmd.latex_engine_command("tectonic", Path("x.tex"), Path("out"), folders)
+        self.assertEqual([item for item in command if item.startswith("-Zsearch-path=")],
+                         [f"-Zsearch-path={folder}" for folder in folders])
+        self.assertEqual(pdfmd.latex_engine_command("tectonic", Path("x.tex"), Path("out"))[0:2], ["tectonic", "-o"])
+        for engine in ("xelatex", "lualatex", "latexmk"):
+            self.assertFalse(any("-Z" in item for item in pdfmd.latex_engine_command(engine, Path("x.tex"), Path("out"), folders)))
 
 
 if __name__ == "__main__":

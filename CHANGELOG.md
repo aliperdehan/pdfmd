@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.6 — 2026-11-03
+
+Pre-edit state: commit `f528e53`. `[kits]`, entry 3et (the author: "yes, follow pdfmd repo rules"). Kept in 3.32 as the author asked on 2026-11-02, though `CLAUDE.md` still names the kits line 3.31.x. Not pushed.
+
+A kit's folders reach Tectonic.
+
+- **The bug**: a kit puts its folder and its `carry:` folders on `TEXINPUTS`, which Tectonic does not read. With `-e tectonic` a kit that ships a LaTeX class (the apa7 kit of the kits repository, a class with its `config/` files) was never loaded: Tectonic built, without a word, with the copy of that class in its own bundle, or failed when its bundle had none. Found with a copy of the class that stops when it is loaded: xelatex stopped, Tectonic built.
+- **The fix**: for the engine `tectonic`, each chosen kit's folder and every folder under the `carry:` entries that are folders go to Tectonic as `-Zsearch-path=DIR` (`tectonic_search_folders()`; the option names one folder, not a tree, so a carried tree is listed folder by folder, hidden folders left out). The Pandoc route passes them as `--pdf-engine-opt=-Zsearch-path=DIR`; the direct route (`.tex` files, drawn fragments) gets them through the environment `tex_search_env()` already builds (`PDFMD_TECTONIC_SEARCH`) and `latex_engine_command()`. Other engines and a document with no kit are unchanged. Needs a Tectonic that has `-Z search-path` (0.17 has it).
+- Checked through pdfmd itself: the marker copy now stops under `-e tectonic` and the real apa7 kit builds; xelatex and lualatex were never affected.
+- Tests: `tests/test_kit_texinputs.py` (the folders one by one, no hidden folder, no walk of the kit's whole folder, nothing without a kit, the command line of the direct route for Tectonic only).
+- README: the paragraph "A kit needs no install" says it. No new setting.
+
 ## v3.32.5 — 2026-11-02
 
 Pre-edit state: commit `b5cd684`. Entry 3eo, step 2a of the Obsidian flavour line (the author: "any Pandoc or whatever detected syntax switches the reader, unless those are like examples in fenced code blocks"). Not pushed.

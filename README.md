@@ -2823,7 +2823,9 @@ the line. `--verbose` shows the quiet outcomes (`KIT-SAME`, `KIT-MERGE`).
 
 **A kit needs no install.** A chosen kit's folder is put on `TEXINPUTS` and `BIBINPUTS` of the LaTeX run (after the folder
 itself, before TeX's own path; the folders its `carry:` names too, searched recursively, so a logo is found by its bare name),
-so its `.sty` and the library it `\input`s are found without linking anything into the TeX tree. A kit is then one folder: clone it,
+so its `.sty` and the library it `\input`s are found without linking anything into the TeX tree. Tectonic reads no `TEXINPUTS`: with `-e tectonic`
+(v3.32.6) each of those folders, and every folder under a `carry:` one, goes to it as `--pdf-engine-opt=-Zsearch-path=DIR` (the option names one
+folder, not a tree), so the class a kit ships is the one that is loaded, not the copy in Tectonic's own bundle. A kit is then one folder: clone it,
 name it under `kits:` of the config (or `--kit PATH`), and select it.
 
 **A kit travels with the source.** `--attach-source`, `--keep-source` and `--bundle` hold what the kit wrote (`--embed-metadata`, its
