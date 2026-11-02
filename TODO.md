@@ -17,7 +17,7 @@ wait for an answer before any code.
 ## Features, agreed
 
 - [ ] BUG, silent wrong numbers: parts built together that are not next to each other (`report#20+40`) read what the parts between them define as defined above both (calc names); fix with a slot per gap or hidden gap blocks, first a WARN [3eg]
-- [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
+- [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
@@ -40,6 +40,7 @@ wait for an answer before any code.
 
 - [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine
 - [ ] Chatter ladder: `--chatter`, `-q`, `--mute ID`, `--log`, `--summary`; one `emit`; per document and in `--setup`
+- [ ] Revise the thin features of this line (table pre-pass kinds, line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]
 - [ ] Table pre-pass: dash look-alikes, `+` and `=` separators, `table-colons`, `table-repair` modes, "not a table" warning, `--fix-tables`
 - [ ] Character budget from paper, margins and font size, not 95
 - [ ] CSV `widths`: repair a wrong count, `*` for a free column, never drop data
