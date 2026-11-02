@@ -19,7 +19,6 @@ wait for an answer before any code.
 - [ ] BUG, silent wrong numbers: parts built together that are not next to each other (`report#20+40`) read what the parts between them define as defined above both (calc names); fix with a slot per gap or hidden gap blocks, first a WARN [3eg]
 - [ ] `\md{...}`: Markdown (citations, emphasis, math, cross-references) inside raw LaTeX; a pdfmd Lua pass plus an identity `.sty` [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]
-- [ ] Metadata append: `author+: [B, C]` adds to what the layers below gave, and a `metadata-append: [author]` setting makes chosen keys append; a test and a docs line pin the order global < `.pdfmd/` < `metadata/` < document [3du]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]
@@ -102,6 +101,9 @@ is low priority. [3di]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
 - [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
 - [ ] Lean install: a core distribution plus extras (`pdfmd-cli` stays the full default); optional packages survive their absence with one message; a CI leg for the core only [3dx]
+- [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
+- [ ] Bare `--install` prints the table of every kind (size, source, target, removal) instead of usage; bare `diagram` lists, `diagram:d2|dot` installs [3ei]
+- [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] No push until the tables line is reliable (3.31.0 is local) [3dl]
 - [ ] 4.0
 
