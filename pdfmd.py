@@ -1051,6 +1051,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `diagram-timeout` seconds (v3.32.1; default 120, 0 = draw nothing, negative = no limit): pdfmd_lua/limited_run.py stops a
     run that takes longer with the processes it started, and the diagram stays as code with a warning.
 
+    `pdfmd-options: {slide-notes: off | show | only}` (v3.32.2) makes a `-p` deck show its `::: notes` blocks (Beamer's
+    `show notes` / `show only notes`, as a header, so the deck's own `classoption` is kept; `off` is the default).
+
     A fenced ```smiles block, ```{.smiles caption="..."} or `::: smiles` div (v3.31.42) is a chemical structure written as text:
     one SMILES per line (a name after it is written under it), or a molfile, SD file, Tripos mol2 or InChI, or `file="x.mol"`
     beside the document. It is drawn with RDKit (pdfmd_smiles; one call per document, pictures kept by content, engine and
@@ -1444,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.1"
+PDFMD_VERSION = "3.32.2"
 import argparse
 import atexit
 import csv
@@ -3024,6 +3027,47 @@ def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -
     header = cache_root() / "tex" / f"packages-markup-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
     try:
         if not header.is_file():
+            header.parent.mkdir(parents=True, exist_ok=True)
+            header.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    return ["--include-in-header", str(header)]
+
+
+# Speaker notes in a Beamer deck (v3.32.2): `::: notes` blocks are dropped from the PDF unless Beamer is asked to show them.
+# `pdfmd-options: {slide-notes: off | show | only}`: `show` puts each slide's notes on a page after it, `only` makes the PDF
+# the notes pages alone. It is a header, not `-V classoption=notes=...`: that variable replaces the deck's own `classoption`
+# (an `aspectratio=169` was lost, measured on 3.32.0).
+SLIDE_NOTES_HEADERS = {"show": "\\setbeameroption{show notes}\n", "only": "\\setbeameroption{show only notes}\n"}
+
+
+def slide_notes_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """The `slide-notes` option as off, show or only (a bad word stops the build, like `md-macro`)."""
+    value = first_pdfmd_option(md_path, metadata_files, "slide-notes")
+    if value is None or value is False:
+        return "off"
+    word = str(value).strip().casefold()
+    if word in ("", "off", "no", "false", "0", "none"):
+        return "off"
+    if word in ("show", "only"):
+        return word
+    if value is True or word in ("on", "yes", "true", "1"):
+        return "show"
+    raise SystemExit(f"pdfmd-options slide-notes: {value!r} is not one of off, show, only")
+
+
+def slide_notes_args(sources: Path | list[Path], metadata_files: list[Path], beamer: bool) -> list[str]:
+    """`--include-in-header` that makes a Beamer deck show its speaker notes (`slide-notes`), or []: other builds ignore the setting."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not beamer or not files:
+        return []
+    mode = slide_notes_mode(files[0], metadata_files)
+    if mode == "off":
+        return []
+    text = "% pdfmd: speaker notes in the deck (pdfmd-options slide-notes)\n" + SLIDE_NOTES_HEADERS[mode]
+    header = cache_root() / "tex" / f"slide-notes-{mode}.tex"
+    try:
+        if not header.is_file() or header.read_text(encoding="utf-8") != text:
             header.parent.mkdir(parents=True, exist_ok=True)
             header.write_text(text, encoding="utf-8")
     except OSError:
@@ -23458,6 +23502,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                     cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                     cmd += markup_header_args([md_path, *parts_inputs], css_meta)
+                    cmd += slide_notes_args([md_path, *parts_inputs], metadata_files, target_format == "beamer")
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
@@ -23713,6 +23758,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                         cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                         cmd += markup_header_args([md_path, *parts_inputs], css_meta)
+                        cmd += slide_notes_args([md_path, *parts_inputs], metadata_files, bool(presentation))
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
                     # LaTeX needs the citations already resolved. csv-table has to

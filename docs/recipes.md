@@ -620,6 +620,9 @@ pdfmd lecture -t typst -o lecture.typ ; typst compile lecture.typ
 pdfmd slides -p --slide-level 2          # Beamer; level 2 headings start slides
 ```
 
+Speaker notes (`::: notes` under a slide) are left out of the PDF; `pdfmd-options: {slide-notes: show}` puts a notes page after
+each slide, `only` gives the notes pages alone for printing (a LaTeX engine, `-p` only; the README's "Slides" has an example).
+
 ### 7.5 Plain Markdown that any viewer shows
 
 ```sh

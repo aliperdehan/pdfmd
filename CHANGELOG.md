@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.2 — 2026-11-02
+
+Pre-edit state: commit `c9d0f0a`. Entry 3en (the author: "the setting --- yes, and document it" for a named slide-notes setting).
+
+Speaker notes in a Beamer deck. A `::: notes` block was dropped by `pdfmd -p` (0 note lines in the PDF); Pandoc has the feature, Beamer's `show notes`, but it was reachable only through a variable and undocumented.
+
+- `slide-notes: off | show | only` (`pdfmd-options` key, config key, `--setup` row "Speaker notes ..." under Output; default `off`, today's behaviour). `show`: a notes page after each slide. `only`: the notes pages alone, for printing. `true` and `on` mean `show`; a bad word stops the build and names the three, like `md-macro`.
+- Written as a header file (`\setbeameroption{show notes}` / `{show only notes}`, cached by mode under the cache's `tex/`), added next to the other pdfmd headers for a `-p` build with a LaTeX engine, NOT as `-V classoption=notes=show`: measured on 3.32.0, that variable replaces the deck's own `classoption`, and a 16:9 deck (`aspectratio=169`, 454 x 255 pt) came out 4:3 (363 x 272 pt). With the header the size stays.
+- Other builds (not `-p`, other writers, a non-LaTeX engine) ignore the setting without a message: a config-level `slide-notes: show` is meant for decks and would otherwise talk on every other document. Pandoc's own revealjs already shows notes.
+- `slide_notes_mode()` and `slide_notes_args()`; `tests/test_slide_notes.py` (7 tests: the default, `show` / `only` / `true`, a bad word, a header only for a deck; and, when `lualatex` and poppler are installed, a 16:9 deck built three ways: 3 pages and no notes by default, 5 pages with `show`, 2 with `only`, the page size 454 x 255 pt each time). README: "Speaker notes" under Slides, with an example; `docs/recipes.md` 7.4 has a line. The `--help` text has no new flag.
+- Not done: Beamer's `show notes on second screen=right` (notes beside the slide, for a presenter view), which would be a fourth value; the native tier and a Typst deck (pdfmd has none).
+
 ## v3.32.1 — 2026-11-02
 
 Pre-edit state: commit `c52dd09`. Entry 3en (the review of two research reports on Markdown-to-PDF pain points; the author: "diagram limit on at 120 s. the setting --- yes, and document it").

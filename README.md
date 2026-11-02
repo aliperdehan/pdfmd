@@ -1564,6 +1564,28 @@ original's keys.
 pdfmd slides -p                   # Beamer slides; each heading starts a slide
 ```
 
+**Speaker notes** (v3.32.2). A `::: notes` block under a slide is dropped from the PDF unless you ask for it with `slide-notes` in
+`pdfmd-options` (or the config and the `pdfmd --setup` row "Speaker notes"): `show` puts a notes page after each slide, `only` makes
+the PDF the notes pages alone (to print), `off` (the default) leaves them out. It adds Beamer's `show notes` / `show only notes`
+as a header, so the deck's own `classoption` (`aspectratio=169`) stays; `-V classoption=notes=show` would replace it. It acts on a
+`-p` deck built with a LaTeX engine and nothing else.
+
+```markdown
+---
+title: Talk
+pdfmd-options:
+  slide-notes: show
+---
+
+# Results
+
+The yield doubled.
+
+::: notes
+Mention the control run before the numbers.
+:::
+```
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/slides.png" width="380" alt="A Beamer slide from examples/slides.md">
 </p>

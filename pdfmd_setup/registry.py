@@ -306,6 +306,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "`| <c> total | <r> 12 |`: the tag and the space after it are cut off. A pipe table's separator row (`:--`, `:-:`, `--:`) "
                "sets whole columns; this sets one cell. HTML, Typst, Word and the rest use the cell's alignment; LaTeX gets raw TeX "
                "around the cell. The Markdown writers keep the text as written.", "Tables"),
+        choice("options.slide-notes", "Speaker notes (`::: notes`) in a Beamer deck (`-p`)",
+               (("off", "leave them out of the PDF"), ("show", "a notes page after each slide"),
+                ("only", "the notes pages alone, for printing")), "off",
+               "A `::: notes` block under a slide is dropped from the PDF unless asked for. It is Beamer's `show notes` / `show only "
+               "notes`, added as a header, so the deck's own `classoption` (an `aspectratio=169`) is kept. Only a `-p` deck with a "
+               "LaTeX engine; any other build ignores it. Per document: `slide-notes` in `pdfmd-options`.", "Output"),
         choice("options.md-macro", "Markdown inside raw LaTeX: \\md{...} and \\begin{md}",
                (("on", "read the argument as Markdown"), ("off", "leave \\md{...} for LaTeX")), "on",
                "`\\textbf{\\md{**bold** and [@smith2020]}}`, `\\begin{md} ... \\end{md}`: the text is read as Markdown, so citations, "
