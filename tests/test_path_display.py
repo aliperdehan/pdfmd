@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,7 @@ def run_pdfmd(folder: Path, root: Path, *extra: str) -> str:
     return (done.stdout + done.stderr).replace("\\", "/")
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Runs(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

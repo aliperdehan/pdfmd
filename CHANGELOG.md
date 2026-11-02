@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.31.46b — 2026-11-02
+
+Pre-edit state: commit `63d353d`. No shipped code changes (tests only), so no version bump.
+
+Five test modules no longer depend on the machine they run on.
+
+- Without Pandoc on the PATH, `test_build_log`, `test_build_time` and `test_path_display` ran real builds and failed (20 tests); they are skipped now, as the other modules that need Pandoc are. `test_table_widths` crashed when it was imported, reading Pandoc's version for a decorator; with no Pandoc it reads `(0,)` and its tests are skipped.
+- `test_diagrams` gives the pdfmd it starts an empty data folder (`XDG_DATA_HOME`, `LOCALAPPDATA`): the diagram tools that `pdfmd --install diagram` keeps there are on pdfmd's own PATH, and on a machine that had installed them two tests (a missing tool, the doctor's "nothing installed") found a `dot` that the test had taken away.
+
 ## v3.31.46 — 2026-11-02
 
 Pre-edit state: commit `2a63449`. Still under 3.31 [tables]. Entry 3dy (the author's wish, 2026-10-31, with the answers of 2026-11-01/02).

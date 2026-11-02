@@ -4,6 +4,7 @@ build itself (what is written, when, where, and how a failure points at it)."""
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -94,6 +95,7 @@ class VerbosePrint(unittest.TestCase):
             pdfmd.BUILD["record"] = saved
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Builds(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()

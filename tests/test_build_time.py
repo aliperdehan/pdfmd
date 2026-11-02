@@ -3,6 +3,7 @@ at every level, the step lines of --verbose, and `took=` in the history file."""
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -92,6 +93,7 @@ class Steps(unittest.TestCase):
         self.assertEqual(timer.steps[0].seconds, 1.5)
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class OnTheClosingLine(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()

@@ -132,7 +132,9 @@ class Diagrams(unittest.TestCase):
         path = os.pathsep.join([str(self.stubs)] * stubs + [str(self.bare), os.path.dirname(sys.executable)])
         environment = {**os.environ, "PATH": path, "STUB_LOG": str(self.log),
                        "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "XDG_CACHE_HOME": str(self.cache),
-                       "PDFMD_NO_PROMPT": "1"}
+                       "PDFMD_NO_PROMPT": "1",
+                       # the tools `pdfmd --install diagram` keeps are on pdfmd's own PATH: an empty data folder, or they answer for a missing dot
+                       "XDG_DATA_HOME": str(self.directory / "data"), "LOCALAPPDATA": str(self.directory / "data")}
         environment.pop("PDFMD_STRICT", None)
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
                               encoding="utf-8", cwd=self.directory, env=environment)

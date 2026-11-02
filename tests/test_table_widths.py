@@ -84,6 +84,8 @@ class Auto(unittest.TestCase):
 
 
 def pandoc_version() -> tuple:
+    if not shutil.which("pandoc"):
+        return (0,)                                   # read when the decorators run, before any skip
     out = subprocess.run(["pandoc", "--version"], capture_output=True, text=True).stdout.split()[1]
     return tuple(int(part) for part in out.split(".")[:3])
 
