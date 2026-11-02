@@ -5,6 +5,7 @@ line, the WARNs, the file that gets built and what an exact name still does."""
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PDFMD = ROOT / "pdfmd.py"
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "a build, even one that stops at Markdown, needs Pandoc")
 class Bare(unittest.TestCase):
     def setUp(self):
         self._folder = tempfile.TemporaryDirectory()

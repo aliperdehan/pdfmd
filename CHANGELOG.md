@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.12b — 2026-11-03
+
+Tests and lint only; `PDFMD_VERSION` stays 3.32.12. The first CI run of the pushed 3.31.47-3.32.12 commits (run 41540900210) failed in the `native` jobs (no Pandoc), the Windows `which` test and `lint`:
+
+- The end-to-end ranking tests (`test_ranking_bare`, `_layers`, `_lists`, `_generated`) run `pdfmd --stop-at markdown`, which still needs Pandoc: they are skipped where there is none (the `native` jobs). `--which`, the watch pin and the engine tests need none and still run there.
+- `test_ranking_which` compared `.pdfmd/ranking.yaml` where Windows prints `.pdfmd\ranking.yaml`: it builds the path with `Path`.
+- `ruff --select F` (the `lint` job): three unused imports from the kits commits (`io` and `dataclasses.field` in `pdfmd_kits/install.py`, `Source` in `tests/test_kit_install.py`) removed.
+
 ## v3.32.12 — 2026-11-03
 
 Pre-edit state: commit `1bb68be`. Entry 3eu (the author: "isn't which already taken? if not, let's use it. whatever. it can just become multi-purpose if needed at some point in future"). Kept in 3.32. Not pushed. Last of the four commits of the line.

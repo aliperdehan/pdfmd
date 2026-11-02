@@ -24,7 +24,6 @@ caps; they are settings). This module imports nothing from pdfmd: the caller han
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
@@ -34,7 +33,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable
 

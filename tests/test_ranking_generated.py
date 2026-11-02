@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ class Folder(unittest.TestCase):
         return sorted(path.name for path in self.dir.glob("*.md"))
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "a build, even one that stops at Markdown, needs Pandoc")
 class OwnOutput(Folder):
     def test_a_second_bare_run_builds_the_same_source_not_the_first_runs_output(self):
         self.doc("alpha.md")
@@ -96,15 +98,7 @@ class OwnOutput(Folder):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("AUTO MD    a.md\n", done.stdout)
 
-    def test_which_names_what_it_left_out(self):
-        self.doc("report.md")
-        self.doc("report.gfm.md")
-        done = self.run_pdfmd("--which")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("not candidates", done.stdout)
-        self.assertIn("report.gfm.md", done.stdout)
-
-
+@unittest.skipUnless(shutil.which("pandoc"), "a build, even one that stops at Markdown, needs Pandoc")
 class SwitchedOff(Folder):
     def two(self):
         self.doc("a.md")
@@ -152,8 +146,20 @@ class SwitchedOff(Folder):
         done = self.run_pdfmd("-b", ".")
         self.assertNotIn("left out (priority: never)", done.stdout)
 
-    def test_which_says_so(self):
-        self.two()
+class Which(Folder):
+    """--which reads no document through Pandoc, so these run without it."""
+
+    def test_which_names_what_it_left_out(self):
+        self.doc("report.md")
+        self.doc("report.gfm.md")
+        done = self.run_pdfmd("--which")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("not candidates", done.stdout)
+        self.assertIn("report.gfm.md", done.stdout)
+
+    def test_which_says_the_list_comes_back_where_priority_is_off(self):
+        self.doc("a.md")
+        self.doc("b.md", "---\npriority: 3\n---\n# B\n")
         self.doc(".pdfmd/config.yaml", "options:\n  no-auto: [priority]\n")
         done = self.run_pdfmd("--which")
         self.assertIn("stops with the list", done.stdout)

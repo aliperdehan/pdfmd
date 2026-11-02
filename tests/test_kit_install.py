@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from pdfmd_kits import install as kits_install  # noqa: E402
-from pdfmd_kits.install import InstallError, Source, parse_source  # noqa: E402
+from pdfmd_kits.install import InstallError, parse_source  # noqa: E402
 
 MB = 1048576
 

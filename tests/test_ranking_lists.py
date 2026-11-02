@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ PDFMD = ROOT / "pdfmd.py"
 import pdfmd  # noqa: E402
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "a build, even one that stops at Markdown, needs Pandoc")
 class Lists(unittest.TestCase):
     def setUp(self):
         self._folder = tempfile.TemporaryDirectory()

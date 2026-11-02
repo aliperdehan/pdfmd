@@ -51,7 +51,7 @@ class Which(unittest.TestCase):
         folder.mkdir()
         (folder / "ranking.yaml").write_text("classes:\n  fruit: {words: [cherry, banana], above: numbers}\n", encoding="utf-8")
         out = self.which().stdout
-        self.assertIn("RULES  from .pdfmd/ranking.yaml, the built-in default", out)
+        self.assertIn(f"RULES  from {Path('.pdfmd') / 'ranking.yaml'}, the built-in default", out)
         self.assertIn("names: family   by: priority, newest", out)
         self.assertIn("fruit    cherry < banana", out)
         self.assertLess(out.index("numbers "), out.index("fruit "))

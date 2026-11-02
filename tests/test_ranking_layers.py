@@ -5,6 +5,7 @@ file) and what they can change. The runs go through pdfmd itself (`--stop-at mar
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ PDFMD = ROOT / "pdfmd.py"
 FRUIT = "classes:\n  fruit: {words: [cherry, banana], above: numbers}\n"
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "a build, even one that stops at Markdown, needs Pandoc")
 class Layers(unittest.TestCase):
     def setUp(self):
         self._folder = tempfile.TemporaryDirectory()
