@@ -47,6 +47,42 @@ class Setting(unittest.TestCase):
                 self.assertEqual(pdfmd.diagram_timeout_for(other, []), 120)
 
 
+class Metadata(unittest.TestCase):
+    """What the filter is told: the limit and the runner, or nothing when the runner cannot be used."""
+
+    def map_for(self, text: str) -> dict:
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "d.md"
+            document.write_text(text, encoding="utf-8")
+            arguments = pdfmd.raw_filter_args(document, None, [])
+            map_file = Path(arguments[arguments.index("--metadata-file") + 1])
+            return json.loads(map_file.read_text(encoding="utf-8"))
+
+    DOCUMENT = "---\npdfmd-options:\n  diagram-timeout: {value}\n---\n\n```dot\ndigraph { a -> b }\n```\n"
+
+    def test_the_limit_and_the_runner_are_passed(self):
+        config = self.map_for(self.DOCUMENT.replace("{value}", str(7)))
+        self.assertEqual(config["pdfmd-diagram-timeout"], 7)
+        self.assertTrue(Path(config["pdfmd-diagram-runner"]).is_file())
+        self.assertTrue(config["pdfmd-diagram-python"])
+
+    def test_zero_turns_the_diagrams_off_and_a_negative_number_passes_no_limit(self):
+        self.assertTrue(self.map_for(self.DOCUMENT.replace("{value}", str(0)))["pdfmd-diagram-off"])
+        config = self.map_for(self.DOCUMENT.replace("{value}", str(-1)))
+        self.assertNotIn("pdfmd-diagram-timeout", config)
+        self.assertNotIn("pdfmd-diagram-runner", config)
+
+    def test_without_an_interpreter_the_tools_run_unlimited_and_pdfmd_says_so(self):
+        import io
+        from contextlib import redirect_stderr
+        error = io.StringIO()
+        with mock.patch.object(pdfmd.sys, "executable", ""), redirect_stderr(error):
+            config = self.map_for(self.DOCUMENT.replace("{value}", str(7)))
+        self.assertNotIn("pdfmd-diagram-timeout", config)
+        self.assertIn("diagram-timeout is not applied", error.getvalue())
+
+
 class Runner(unittest.TestCase):
     def test_the_output_comes_back_byte_for_byte(self):
         payload = bytes(range(256)) + b"\r\n\x00\xff\r\n"

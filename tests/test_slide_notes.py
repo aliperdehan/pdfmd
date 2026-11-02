@@ -86,6 +86,38 @@ def has(program: str) -> bool:
     return shutil.which(program) is not None
 
 
+@unittest.skipUnless(has("pandoc"), "needs pandoc")
+class Source(unittest.TestCase):
+    """The header reaches the .tex of a deck (`--stop-at tex`, no LaTeX needed), from the front matter or a metadata file, and the
+    deck's own classoption and header-includes stay."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-notes-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+
+    def tex(self, text: str, *extra: str) -> str:
+        (self.directory / "deck.md").write_text(text, encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "PDFMD_NO_PROMPT": "1"}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "deck.md", "-p", "--stop-at", "tex", *extra],
+                              capture_output=True, text=True, encoding="utf-8", cwd=self.directory, env=environment)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return (self.directory / "deck.tex").read_text(encoding="utf-8")
+
+    def test_the_header_is_in_the_tex_and_the_decks_own_settings_stay(self):
+        text = DECK.format(options="header-includes:\n  - '\\newcommand{\\mymark}{MYMARKOK}'\npdfmd-options:\n  slide-notes: show\n")
+        tex = self.tex(text)
+        self.assertIn("\\setbeameroption{show notes}", tex)
+        self.assertIn("aspectratio=169", tex)
+        self.assertIn("MYMARKOK", tex)                              # --include-in-header did not replace header-includes
+
+    def test_off_leaves_the_tex_alone(self):
+        self.assertNotIn("setbeameroption", self.tex(DECK.format(options="")))
+
+    def test_the_setting_may_come_from_a_metadata_file(self):
+        (self.directory / "notes.yaml").write_text("pdfmd-options:\n  slide-notes: only\n", encoding="utf-8")
+        self.assertIn("\\setbeameroption{show only notes}", self.tex(DECK.format(options=""), "-y", "notes.yaml"))
+
+
 @unittest.skipUnless(has("pandoc") and has("lualatex") and has("pdfinfo") and has("pdftotext"),
                      "needs pandoc, lualatex and poppler to build and read a deck")
 class Deck(unittest.TestCase):

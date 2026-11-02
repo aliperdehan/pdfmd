@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.3 — 2026-11-02
+
+Pre-edit state: commit `4613a5a`. Entry 3en, the second look at 3.32.1 and 3.32.2.
+
+- `diagram-timeout` without a runner: a copy of pdfmd with no `pdfmd_lua/limited_run.py`, or a Python that does not know its own path (`sys.executable` empty), made every diagram fail with "does the source parse?". Now the filter is told nothing about a limit, the tools run as before, and pdfmd prints one NOTE saying the setting is not applied. (A wheel and the zipapp both carry the file: a wheel ships a package's `.py` files, the zipapp unpacks to real files.)
+- `limited_run.py` waits at most 5 s after it has stopped a tool for the pipes to close (a grandchild in a session of its own can hold one open). It is a constant, not a setting: a safety stop in a helper that decides nothing about the output, and nothing a user would tune.
+- `tests/test_slide_notes.py`: the header reaches the `.tex` of a deck (`--stop-at tex`, no LaTeX needed) with the deck's own `aspectratio=169` and `header-includes` macro still there (3 tests: the header and the deck's own settings, `off`, the setting in a `-y` metadata file). Also checked by hand: a `metadata.yaml` found beside the deck. `tests/test_diagram_timeout.py` (+3): the limit and runner reach the filter, `0` turns diagrams off, a negative number passes no limit, no interpreter means no limit and a NOTE.
+
 ## v3.32.2 — 2026-11-02
 
 Pre-edit state: commit `c9d0f0a`. Entry 3en (the author: "the setting --- yes, and document it" for a named slide-notes setting).

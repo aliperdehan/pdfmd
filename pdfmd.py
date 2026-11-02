@@ -1447,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.2"
+PDFMD_VERSION = "3.32.3"
 import argparse
 import atexit
 import csv
@@ -3889,9 +3889,14 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         if seconds == 0:
             config["pdfmd-diagram-off"] = True
         elif seconds > 0:       # a negative number: no limit, so no runner either
-            config["pdfmd-diagram-timeout"] = seconds
-            config["pdfmd-diagram-python"] = Path(sys.executable).as_posix()
-            config["pdfmd-diagram-runner"] = (Path(pdfmd_lua.FILTERS) / "limited_run.py").as_posix()
+            runner = Path(pdfmd_lua.FILTERS) / "limited_run.py"
+            if sys.executable and runner.is_file():
+                config["pdfmd-diagram-timeout"] = seconds
+                config["pdfmd-diagram-python"] = Path(sys.executable).as_posix()
+                config["pdfmd-diagram-runner"] = runner.as_posix()
+            else:       # a copy of pdfmd without its runner, or a Python that cannot say where it is: the tools run as before
+                print("NOTE  diagram-timeout is not applied: pdfmd_lua/limited_run.py or the Python interpreter was not found",
+                      file=sys.stderr)
     if smiles:
         config.update(smiles_config(files[0], metadata_files))
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
