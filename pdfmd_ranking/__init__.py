@@ -5,8 +5,8 @@
 `priority` values, the settings and the modification times, and prints what `choose` returns.
 """
 
-from .choose import MISSING, Candidate, Choice, choose
+from .choose import MISSING, Candidate, Choice, choose, explain
 from .rules import DEFAULT_RANKING, NameParts, Rank, Ranking, RankingError, Value, compare, name_key, tokenize
 
 __all__ = ["Candidate", "Choice", "DEFAULT_RANKING", "MISSING", "NameParts", "Rank", "Ranking", "RankingError", "Value",
-           "choose", "compare", "name_key", "tokenize"]
+           "choose", "compare", "explain", "name_key", "tokenize"]

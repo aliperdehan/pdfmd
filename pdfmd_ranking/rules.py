@@ -355,6 +355,26 @@ class Ranking:
         words.sort(key=lambda word: -len(word.parts))
         return words
 
+    def describe(self) -> list[str]:
+        """The rules as lines, low to high (`pdfmd --which`): one per class or reserved member, words low < high, equal ones joined by =."""
+        lines = []
+        for members in self.ladder:
+            for member in members:
+                if member == "numbers":
+                    lines.append("numbers  0, 1, 2 ... by value; a negative number is the same as never")
+                elif member == "unset":
+                    words = " = ".join(word for level in self.classes["unset"].levels for word in level) if "unset" in self.classes else ""
+                    lines.append(f"unset    no priority written ({words})")
+                else:
+                    wc = self.classes[member]
+                    words = " < ".join(" = ".join(level) for level in wc.levels)
+                    flags = [text for flag, text in ((wc.exclude, "leaves the list"), (wc.degrees, "degrees: repeats and a glued number count"),
+                                                    (not wc.names, "not read in file names")) if flag]
+                    lines.append(f"{member:<8} {words}" + (f"  ({'; '.join(flags)})" if flags else ""))
+            if len(members) > 1:
+                lines.append(f"         (the {len(members)} classes above share one level)")
+        return lines
+
     # -- reading --------------------------------------------------------------------------------------------------
 
     def _segment(self, tokens: Sequence[str], words: Sequence[_Word]) -> list[_Hit] | None:

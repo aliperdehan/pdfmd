@@ -83,6 +83,29 @@ def _settle(pool: Sequence[_Item], tail: Sequence[str]) -> tuple[_Item | None, s
     return None, None
 
 
+def explain(candidates: Sequence[Candidate], ranking: Ranking, choice: Choice,
+            show: Callable[[Path], str] = lambda path: path.name) -> list[tuple[str, str, str, str]]:
+    """One row per candidate for `pdfmd --which`: (document, verdict, what it says, when it was last changed)."""
+    skipped = dict(choice.skipped)
+    rows = []
+    for candidate in candidates:
+        says = []
+        if candidate.value is not MISSING:
+            value = ranking.read(candidate.value)
+            says.append(f"{candidate.where}: {candidate.value}" if value.kind != "invalid" else f"{candidate.where}: {candidate.value!r} (not a priority)")
+        parts = ranking.name_parts(candidate.path.stem)
+        if parts.suffix:
+            says.append(f"name: {parts.suffix}")
+        if candidate.path == choice.winner:
+            verdict = "BUILT"
+        elif choice.winner is None:
+            verdict = "tied"
+        else:
+            verdict = "left: " + skipped.get(candidate.path, "ranks lower")
+        rows.append((show(candidate.path), verdict, "; ".join(says) or "nothing set", _stamp(candidate.mtime_ns)))
+    return rows
+
+
 def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] | None = None,
            show: Callable[[Path], str] = lambda path: path.name, include_excluded: bool = False) -> Choice:
     """Pick one of ``candidates``. ``include_excluded``: the documents that say `never` (by priority or by name) take part as if

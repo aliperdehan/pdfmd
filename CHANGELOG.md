@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.12 — 2026-11-03
+
+Pre-edit state: commit `1bb68be`. Entry 3eu (the author: "isn't which already taken? if not, let's use it. whatever. it can just become multi-purpose if needed at some point in future"). Kept in 3.32. Not pushed. Last of the four commits of the line.
+
+`pdfmd --which` explains a choice and builds nothing.
+
+- **`pdfmd --which`** in a folder: `WHICH  bare pdfmd in . builds report.final.md`, one row per Markdown file (what it says: its `priority`, its name's suffix; what happened to it: `BUILT`, `left: name: draft`, `left: priority: never`, `left: older`, `tied`; when it last changed), then `RULES`: the files the settings came from (nearest first, ending in the built-in default), `names`, `by`, and the classes low to high (`pdfmd_ranking.Ranking.describe()`). The tie WARN is printed as in a build; a choice that would stop says so (`would stop: ...`, exit 1). `--newest`, `--all` and `--no-auto priority` act in it as they do in a build.
+- **`pdfmd --which NAME ...`**: which file each name finds, by the same lookup a build uses (`report  ->  report.md`), and the lookup's own error for one it cannot find. Meant to grow: the author wants `--which` to be the one place that says what pdfmd would decide.
+- `--which` is a command in `pdfmd_setup/inventory.py` and in the `modes` topic of `--help`. Tests: `tests/test_ranking_which.py` (rows, rules and their origin, a tie, a stop, `--newest` / `--all`, one file, names, a mistake in the ranking). README, module docstring.
+
 ## v3.32.11 — 2026-11-03
 
 Pre-edit state: commit `fada070`. Entry 3eu (the author: "yes, but there should be a new key like `-b all` or smth that will override never keys" and "pdfmd --newest will look at the modification time and render the newest thing"). Kept in 3.32. Not pushed. Third of four commits of the line.

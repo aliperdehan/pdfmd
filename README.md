@@ -606,6 +606,23 @@ and names say (only `never` still keeps a document out). `pdfmd --all` (or `--in
 document out of what a *folder* gives: `-b DIR`, `-r DIR`, `--view` and a bare `pdfmd`; a document you name (`pdfmd NAME`,
 `-r a.md b.md`) is always built. A `never` in a file name (`report_ignore.md` beside `report.md`) hides it from a bare `pdfmd` only.
 
+**Why this one?** `pdfmd --which` shows it without building anything: every Markdown file of the folder with what it says (its
+priority, its name's suffix), what happened to it (`BUILT`, `left: name: draft`, `left: priority: never`, `tied`) and when it last
+changed, then the rules in force with the files they came from. `--newest`, `--all` and `--no-auto priority` act in it as they
+would in a build. `pdfmd --which NAME ...` says which file each name finds (`report  ->  report.md`).
+
+```console
+$ pdfmd --which
+WHICH  bare pdfmd in . builds report.final.md
+       report.final.md  BUILT                  name: final          2026-11-02 09:00
+       report.md        left: name: bare name  nothing set          2026-11-01 09:00
+       notes.md         left: priority: never  priority: never      2026-11-03 08:00
+RULES  from the built-in default
+       names: family   by: priority, newest
+       never    never = ignore = skip = exclude  (leaves the list)
+       ...
+```
+
 **Your own words, and their order: `ranking`.** The table is the default setting. A *class* is a named group of words; the *ladder*
 puts the classes in order, low to high, with two reserved members, `unset` (no priority written) and `numbers`. The default is
 `ladder: [never, draft, unset, revised, numbers, final]`, with `final: [final, last, max]`, `draft: [draft, wip, old, backup, copy, tmp,

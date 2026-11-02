@@ -280,6 +280,9 @@ Finding a document by name:
     `--newest` builds the newest file of the folder; `--all` counts the `never`
     documents too. A `priority: never` (v3.32.11) leaves a document out of what a
     folder gives -b, -r and --view as well; a named document is always built.
+    `pdfmd --which` (v3.32.12) says what a bare `pdfmd` would build and why, with the
+    rules and the files they came from, and builds nothing; `--which NAME` says which
+    file a name finds.
 
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
@@ -1475,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.11"
+PDFMD_VERSION = "3.32.12"
 import argparse
 import atexit
 import csv
@@ -12950,6 +12953,72 @@ def bare_ranking(files: list[Path]):
     return ranking
 
 
+def priority_candidates(files: list[Path]):
+    """pdfmd_ranking.Candidate for each file: its priority value and where it was written, and its modification time."""
+    from pdfmd_ranking import Candidate
+    candidates = []
+    for file in files:
+        value, where = document_priority(file)
+        try:
+            modified = file.stat().st_mtime_ns
+        except OSError:
+            modified = 0
+        candidates.append(Candidate(file, value, where or "priority", modified))
+    return candidates
+
+
+def which_command(names: list[str], args) -> bool:
+    """`pdfmd --which [NAME ...]`: say what a bare `pdfmd` would build and why, or which file each NAME finds, and build nothing.
+    Every Markdown file of the folder gets a row (built, left out and why, tied), then the rules in force and where they came from."""
+    from pdfmd_ranking import RankingError, choose, explain
+    ok = True
+    if names:
+        for name in names:
+            try:
+                print(f"{name}  ->  {display_path(find_markdown(Path(name)))}")
+            except (FileNotFoundError, LookupAmbiguous) as error:
+                print(f"{name}: {error}", file=sys.stderr)
+                ok = False
+        return ok
+    folder = Path.cwd()
+    files = sorted(folder.glob("*.md"), key=lambda path: path.name.casefold())
+    if not files:
+        print(f"WHICH  no Markdown files in {display_path(folder)}")
+        return False
+    if len(files) == 1:
+        print(f"WHICH  bare pdfmd builds {display_path(files[0])}, the only Markdown file in this folder")
+        return True
+    try:
+        layers, own = ranking_layers(files)
+        from pdfmd_ranking import Ranking
+        ranking = Ranking.from_layers(layers)
+    except RankingError as error:
+        print(f"ranking: {error}", file=sys.stderr)
+        return False
+    ranking.warnings += ranking_clashes(layers, own)
+    candidates = priority_candidates(files)
+    newest, include_never = args.newest, args.include_never
+    if not PRIORITY_PICK and not newest:
+        print("WHICH  --no-auto priority: bare pdfmd stops with the list of Markdown files and builds none of them")
+        return True
+    choice = choose(candidates, ranking, by=["newest"] if newest else None, show=display_path, include_excluded=include_never)
+    for line in [f"WARN  ranking: {text}" for text in ranking.warnings] + choice.warnings:
+        print(line, file=sys.stderr)
+    if choice.winner is not None:
+        print(f"WHICH  bare pdfmd{' --newest' if newest else ''} in {display_path(folder)} builds {display_path(choice.winner)}")
+    else:
+        print(f"WHICH  bare pdfmd in {display_path(folder)} would stop: {choice.error}")
+    rows = explain(candidates, ranking, choice, display_path)
+    width = [max(len(row[column]) for row in rows) for column in range(3)]
+    for document, verdict, says, stamp in rows:
+        print(f"       {document:<{width[0]}}  {verdict:<{width[1]}}  {says:<{width[2]}}  {stamp}")
+    print(f"RULES  from {', '.join([where for where, _ in layers] + ['the built-in default'])}")
+    print(f"       names: {ranking.names}   by: {', '.join(ranking.by) or 'nothing'}")
+    for line in ranking.describe():
+        print(f"       {line}")
+    return choice.winner is not None
+
+
 def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
     """``files`` without the documents that say `priority: never` (or another word of a class with `exclude`), which are named in
     one NOTE: what `-b`, `-r` and the viewer list from a folder. ``include_never`` (`--all`) keeps them, and so does
@@ -12982,15 +13051,8 @@ def choose_markdown(files: list[Path], newest: bool = False, include_never: bool
     """The one of several Markdown files of a folder that bare `pdfmd` builds; says so (an AUTO MD line, WARNs), or stops with
     the reason (SystemExit) when equal documents cannot be told apart. ``newest`` (`--newest`): by modification time alone;
     ``include_never`` (`--all`): the documents that say `never` take part as if they had said nothing."""
-    from pdfmd_ranking import Candidate, RankingError, choose
-    candidates = []
-    for file in files:
-        value, where = document_priority(file)
-        try:
-            modified = file.stat().st_mtime_ns
-        except OSError:
-            modified = 0
-        candidates.append(Candidate(file, value, where or "priority", modified))
+    from pdfmd_ranking import RankingError, choose
+    candidates = priority_candidates(files)
     try:
         ranking = bare_ranking(files)
     except RankingError as error:
@@ -28519,6 +28581,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "otherwise: the global metadata of --setup, margin, fonts, packages), and "
                              "'AUTO: KIND KIND' for the rest, each cut at the screen's width. AUTO ENGINE and "
                              "AUTO MD always print in full")
+    parser.add_argument("--which", nargs="*", default=None, metavar="NAME",
+                        help="say what a bare `pdfmd` would build and why (every Markdown file of the folder, its priority and "
+                             "name, what happened to it, and the rules in force with the files they came from), or which file "
+                             "each NAME finds, and build nothing. With --newest, --all or --no-auto priority: as they would act")
     parser.add_argument("--newest", action="store_true",
                         help="bare `pdfmd` in a folder with several Markdown files builds the most recently changed one, "
                              "whatever their priorities and names say (documents marked `priority: never` stay out; "
@@ -29130,6 +29196,8 @@ def run_main() -> None:
         raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
     if args.kits is not None:
         raise SystemExit(0 if kits_report(list(args.kits), args.no_auto) else 1)
+    if args.which is not None:
+        raise SystemExit(0 if which_command(list(args.which), args) else 1)
     if args.check_source:
         raise SystemExit(0 if check_source_command(list(args.path or []), args.recursive) else 1)
     if args.doc is not None:
