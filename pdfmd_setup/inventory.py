@@ -123,6 +123,7 @@ FLAGS: dict[str, str | Omitted] = {
 # both ways.
 OPTIONS: dict[str, str | Omitted] = {
     "alias": Omitted("document", "other names one document answers to (pdfmd NAME)"),
+    "priority": Omitted("document", "one document's rank when bare pdfmd must choose: a number or a word (draft, final, never)"),
     "aliases": Omitted("document", "other names one document answers to (pdfmd NAME)"),
     "apply-defaults": "options.apply-defaults",
     "ascii.missing": "options.ascii.missing",

@@ -24,6 +24,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [No Pandoc? The built-in fallback](#no-pandoc-the-built-in-fallback)
 - [Usage](#usage)
   - [One document](#one-document)
+  - [Several documents in a folder: `priority`](#several-documents-in-a-folder-priority)
   - [Keep the old file: `--no-rewrite`](#keep-the-old-file---no-rewrite)
   - [Check a document before you build it](#check-a-document-before-you-build-it)
   - [Crop a PDF to what it draws](#crop-a-pdf-to-what-it-draws)
@@ -559,6 +560,45 @@ they use [pypinyin](https://pypi.org/project/pypinyin/) (MIT) and
 letters, no tones, vowels left out where the script leaves them out. Names that
 romanize alike (homophones) are listed as ambiguous, never picked between. The
 same spelling rules find a section by its heading (`doc#tyche`).
+
+### Several documents in a folder: `priority`
+
+Bare `pdfmd` builds *the* document of the folder. With more than one Markdown file there it used to stop with the list; now it
+chooses, and the `AUTO MD` line says what it beat and why:
+
+```console
+$ ls
+report.md  report.final.md  report_draft.md
+$ pdfmd
+AUTO MD    report.final.md  (over report.md [name: bare name], report_draft.md [name: draft])
+```
+
+Two things decide, in this order. **Names** settle which *version* of a document: a name that is another name plus words like
+`final`, `rewritten`, `v3` (`report.final`, `report_v3`) beats the bare one, and one with `draft`, `wip`, `old`, `backup`, `copy`
+(`report_draft`) loses to it. They only count when both are there: `report_draft.md` beside `notes.md` is just another document, and
+`lab2` is never a version of `lab`. **Priority** settles which *document*, and is written by the document itself, at the root of its
+front matter or in `pdfmd-options`:
+
+```yaml
+---
+title: Report
+priority: 2            # or pdfmd-options: {priority: 2}
+---
+```
+
+| `priority:` | means |
+|---|---|
+| `final`, `last`, `max` | above every number. Degrees count: `final final`, `FINAL!!!` and `final67` each beat the one before |
+| `1`, `2`, `3`, `0.5` | higher wins |
+| nothing (`none`, `null`, `nil`, `nill`, empty) | normal: above `draft`, below `1` |
+| `draft`, `wip`, `0` | loses to every other document, builds when it is alone |
+| `never`, `ignore`, `skip`, a negative number | not in the list (bare `pdfmd` skips it; `pdfmd NAME` still builds it) |
+
+A `priority` written in any member of a family (`report`, `report.final`...) switches the names off for that family: you said what
+you meant. Equal tops are settled by the **newest file**, with a warning that names them all and what raised each; if their
+modification times are identical too, the choice stops with that list. A value that is neither a number nor a word is a warning and
+counts as nothing. An exact name is always the override: `pdfmd report` builds `report.md` whatever else is there.
+`--no-auto priority` brings back the old list-and-stop.
 
 ### Keep the old file: `--no-rewrite`
 
@@ -2376,6 +2416,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `papersize` | `pagesize: a4` (a common typo) | converts it to Pandoc's real `papersize:` |
 | `texpackages` | `\ce{H2O}` (mhchem) or `\SI{25}{\celsius}`, `\num`, `\qty` (siunitx) in a LaTeX build whose preamble does not load the package | loads it, last in the preamble, unless it is loaded already (your options win), the command is defined some other way, or the package is not installed |
 | `draftpictures` | a part (or section) built alone with `seed-labels: draft` | the draft pass over the whole document does not draw TikZ pictures (pgfplots too), `\chemfig`, chemfig schemes or images: they step no counter. A page reference into what was left out prints `??`; a picture that ends inside a macro makes pdfmd run the pass again with the pictures |
+| `priority` | bare `pdfmd` in a folder with several Markdown files | picks one (see *Several documents in a folder*) instead of stopping with the list; `--no-auto priority` brings the list back |
 | `kit`, `kpsewhich` | a package's `.sty` beside the document (or in a kit) with no `<package>-pdfmd.yaml` next to it | the helper file is read from the next place that has it: a selected kit that ships the package, then the installed copy TeX finds; `--no-auto kit` / `--no-auto kpsewhich` take one place off, a bare `--no-auto` both (a lone copy of the `.sty` then loses the package's front-matter keys, such as the experiment number) |
 
 `-v` explains each decision and prints the exact command it runs:

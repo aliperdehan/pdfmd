@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.9 — 2026-11-03
+
+Pre-edit state: commit `8c8293c`. Entry 3eu (the author's idea of 2026-11-03: "a small pdfmd-option called ignore or whatever that will exclude a document from autodiscovery ... actually, let's make it `priority` with different tiers"). Kept in 3.32. Not pushed. First of four commits of the line: the choice and the `priority` key (next: custom classes and the `ranking` settings, `--newest` and `--all`, `--which`).
+
+Bare `pdfmd` in a folder with several Markdown files chooses one instead of stopping with the list.
+
+- **`priority:`** at the root of a document's front matter or in its `pdfmd-options` (the second wins, with a WARN when both are set and differ). A number (higher wins, floats too), `final` / `last` / `max` (above every number; degrees of lastness: `final final`, `FINAL FINAL!!!`, `final2` and `final67` each beat the one before), `draft` or `0` (loses to every other document, builds when alone), `never` / `ignore` / `skip` / `exclude` or a negative number (not in the list), and nothing at all (`none`, `null`, `nil`, `nill`, `~`, blank: normal, between `draft` and `1`). A value that is neither a number nor a word is a WARN and counts as unset.
+- **Names**: `report.final.md`, `report.rewritten.md`, `report_v3.md` beat `report.md`; `report_draft.md`, `report.old.md` lose to it. They act only inside a family (a base name plus trailing known words, compared ignoring case and separators), so `report_draft.md` beside an unrelated `notes.md` is just another document and `lab2.md` is never a version of `lab.md`; `final_draft` counts as final. A `priority` written in any member of a family switches the names off for it.
+- **Equal tops**: the newest file (modification time) is built, with a WARN that names them all; identical times stop the run with the list and what raised each. The `AUTO MD` line now says what the chosen document beat and why (`over report.md [name: bare name], notes.md [priority: draft]`).
+- **Unchanged**: one Markdown file in the folder; an exact name (`pdfmd report`, still the override); `-b`, `-r` and the viewer. **New kind** `--no-auto priority` brings the old "Multiple Markdown files found" list back.
+- **The rules are pure and in their own package**, `pdfmd_ranking` (words and classes in `rules.py`, the choice in `choose.py`), written as a ladder of word classes from the start: the built-in behaviour is its default setting (`DEFAULT_RANKING`), so the customisation of the next commits adds layers, not new logic.
+- `priority` is a document-only `pdfmd-options` key (`pdfmd_setup/inventory.py`: Omitted, "document"); the `--no-auto` kind has its `--setup` text.
+- Tests: `tests/test_ranking_rules.py` (the engine alone: values, names, classes, ladders, errors, the choice) and `tests/test_ranking_bare.py` (through pdfmd itself, `--stop-at markdown`). README section *Several documents in a folder*, the module docstring and the `--no-auto` help.
+
 ## v3.32.8 — 2026-11-03
 
 Pre-edit state: commit `1d992bd`. `[kits]`, entry 3et UPDATE 2 (the author: "let's do it. no-auto geometry"). Kept in 3.32. Not pushed.

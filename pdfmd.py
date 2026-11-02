@@ -260,6 +260,20 @@ Finding a document by name:
     own `pdfmd-options` could say so). Single-file lookup only: -b and -r are
     unaffected.
 
+    Bare `pdfmd` (no name) in a folder with several Markdown files used to stop with a
+    list; since v3.32.9 it chooses (an `AUTO MD` line says what it beat and why). A
+    document's own `priority:` (at the root of the front matter or in `pdfmd-options`)
+    is a number (higher wins), `draft` or `0` (loses to every other document), `final`
+    (above every number; `final final`, `FINAL!!!` and `final67` are further degrees),
+    `never` or a negative number (not in the list), or nothing (`none`, `null`, `nil`).
+    A file name says the same when its siblings are there: `report.final.md`,
+    `report.rewritten.md` and `report_v3.md` beat `report.md`, `report_draft.md` and
+    `report.old.md` lose to it; names settle which VERSION of a document, `priority`
+    which DOCUMENT, and a `priority` written in any member of such a family switches the
+    names off for it. Equal tops: the newest file is built, with a WARN naming them all.
+    An exact name (`pdfmd report`) always wins; `--no-auto priority` brings the old list
+    back. The rules are pdfmd_ranking (pure).
+
 Output formats:
     Default is PDF. Ask for something else with --to FORMAT (any Pandoc
     writer name: html, latex/tex, typst, plain/txt, docx, ...), or just give
@@ -1454,7 +1468,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.8"
+PDFMD_VERSION = "3.32.9"
 import argparse
 import atexit
 import csv
@@ -1847,6 +1861,7 @@ NO_AUTO_KINDS = frozenset({
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
     "smiles", "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
+    "priority",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -12759,6 +12774,80 @@ def announce_lookup(query: str, shown: str, tier: tuple, field: str, text: str,
         return
     print(f"WARN  '{query}' is not a {subject}; using {shown} ({wording}: {what}). "
           "Name it exactly, or pass --no-auto lookup, to stop pdfmd guessing.", file=sys.stderr)
+
+
+# --- Which document bare `pdfmd` builds (v3.32.9, entry 3eu) ---------------------------------------------------------------
+#
+# Bare `pdfmd` (and `pdfmd '#section'`) in a folder with several Markdown files used to stop with a list. Now the documents are
+# ranked (pdfmd_ranking has the rules, pure): a document's own `priority:` (a number, or a word such as `draft`, `final`, `never`),
+# the names of its siblings (`report.final.md` over `report.md` over `report_draft.md`) and, for equal tops, the newest file. An
+# exact name (`pdfmd report`) is untouched: it is the override. `--no-auto priority` brings the old list-and-stop back.
+
+PRIORITY_PICK = True       # main() clears it for --no-auto priority
+
+
+def document_priority(path: Path):
+    """(value, where) of the priority a document's front matter sets: `pdfmd-options: {priority: ...}` or a root `priority:`
+    (the first wins, with a WARN when they differ); (MISSING, "") when it sets none. Only the head of the file is read."""
+    from pdfmd_ranking import MISSING
+    if yaml is None:
+        return MISSING, ""
+    try:
+        with path.open(encoding="utf-8-sig", errors="replace") as handle:
+            head = handle.read(LOOKUP_HEAD_BYTES)
+    except OSError:
+        return MISSING, ""
+    front = re.match(r"^---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", head, re.DOTALL)
+    if not front:
+        return MISSING, ""
+    try:
+        data = yaml.safe_load(front.group(1))
+    except yaml.YAMLError:
+        return MISSING, ""
+    if not isinstance(data, dict):
+        return MISSING, ""
+    options = data.get("pdfmd-options")
+    options = options if isinstance(options, dict) else {}
+    if "priority" in options:
+        if "priority" in data and str(data["priority"]) != str(options["priority"]):
+            print(f"WARN  {display_path(path)}: priority is set twice ({data['priority']!r} and pdfmd-options "
+                  f"{options['priority']!r}); using the one in pdfmd-options", file=sys.stderr)
+        return options["priority"], "pdfmd-options priority"
+    if "priority" in data:
+        return data["priority"], "priority"
+    return MISSING, ""
+
+
+def bare_ranking(files: list[Path]):
+    """The rules for choosing among ``files`` (built in; the layers come with the settings)."""
+    from pdfmd_ranking import Ranking
+    return Ranking.from_layers()
+
+
+def choose_markdown(files: list[Path]) -> Path:
+    """The one of several Markdown files of a folder that bare `pdfmd` builds; says so (an AUTO MD line, WARNs), or stops with
+    the reason (SystemExit) when equal documents cannot be told apart."""
+    from pdfmd_ranking import Candidate, RankingError, choose
+    candidates = []
+    for file in files:
+        value, where = document_priority(file)
+        try:
+            modified = file.stat().st_mtime_ns
+        except OSError:
+            modified = 0
+        candidates.append(Candidate(file, value, where or "priority", modified))
+    try:
+        ranking = bare_ranking(files)
+    except RankingError as error:
+        raise SystemExit(f"ranking: {error}")
+    choice = choose(candidates, ranking, show=display_path)
+    for line in [f"WARN  ranking: {text}" for text in ranking.warnings] + choice.warnings:
+        print(line, file=sys.stderr)
+    if choice.error or choice.winner is None:
+        raise SystemExit(choice.error or "No Markdown file could be chosen.")
+    beaten = choice.beaten(display_path)
+    print(f"AUTO MD    {display_path(choice.winner)}" + (f"  (over {beaten})" if beaten else ""))
+    return choice.winner
 
 
 def find_markdown(value: Path, recursive: bool = False) -> Path:
@@ -28242,6 +28331,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
                              "unicode (fonts for text in other scripts, and the main font chosen for the "
                              "document's own script), "
+                             "priority (choosing one of several Markdown files for a bare `pdfmd` by priority, name and age; off, "
+                             "it stops with the list), "
                              "files (metadata+preamble+lua together), lookup (finding a document by "
                              "its title, alias, the start of its name or a looser spelling), texdirect (the direct-.tex-"
                              "compile path -- see 'Input formats' in the module docstring; disabling "
@@ -28731,12 +28822,13 @@ def run_main() -> None:
     if first_input is not None and Path(first_input).is_dir():
         first_input = Path(first_input) / "x.md"
     PATH_STYLE, PATH_UP = path_style_settings(args.path_style, args.path_up, first_input, args.verbose)
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI, PRIORITY_PICK
     global PRESET_CLI, GLOBAL_METADATA_CLI
     CITEPROC_DISABLED = args.no_citeproc
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
+    PRIORITY_PICK = not auto_disabled(args.no_auto, "priority")
     global FALLBACK_CLI, MISSING_CLI, STRICT_CLI
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
@@ -29099,6 +29191,8 @@ def run_main() -> None:
                 pass
             raise SystemExit("No Markdown files found in the current directory." + hint)
         if len(markdown_files) > 1:
+            if PRIORITY_PICK:
+                return choose_markdown(markdown_files)
             names = ", ".join(path.name for path in markdown_files)
             raise SystemExit(
                 f"Multiple Markdown files found: {names}\n"

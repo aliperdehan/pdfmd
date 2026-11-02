@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = ("pdfmd_ansi", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_help", "pdfmd_history",
-            "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_raw",
+            "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_office", "pdfmd_ranking", "pdfmd_raw",
             "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode")      # = pyproject.toml's packages (test_packaging)
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's pdfmd_docs/ holds no .md
 # file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
