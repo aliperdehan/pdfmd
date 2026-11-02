@@ -13,6 +13,12 @@
 --
 -- Configuration arrives as metadata written by pdfmd, the same keys raw.lua reads: `pdfmd-raw-cache` (where pictures are
 -- kept), `pdfmd-raw-rel` (flat Markdown: the folder's name beside the output), `pdfmd-flat` (flat Markdown is on).
+--
+-- Time limit (v3.32.1): `pdfmd-diagram-timeout` (seconds; absent = no limit), `pdfmd-diagram-python` and `pdfmd-diagram-runner`
+-- (pdfmd_lua/limited_run.py) run every tool, Pandoc's `pandoc.pipe` having no limit of its own. A tool that does not finish in time
+-- is stopped with what it started, the diagram stays as code with a warning that names the setting, and the tool is not tried again
+-- in this build (a browser that cannot start would otherwise cost the limit for every diagram). `pdfmd-diagram-off` (the limit 0):
+-- no tool is run.
 
 local FAMILY = {
   latex = "tex", beamer = "tex", context = "tex",
@@ -38,6 +44,10 @@ local cache_dir, cache_rel = nil, nil
 local flat = false
 local warned = {}
 local present = {}
+local limit, python, runner, off = nil, nil, nil, false     -- the time limit (see above)
+local TIMEOUT_MARK = "PDFMD-DIAGRAM-TIMEOUT"
+local timed_out = {}                                         -- a tool, or a helper of it, that ran past the limit in this build
+local current_tool, stopped_command = nil, nil
 
 local function warn(key, message)
   if not warned[key] then
@@ -106,17 +116,45 @@ end
 local POSIX = package.config:sub(1, 1) == "/"
 local last_error = ""
 
+-- pandoc.pipe under the time limit (what raises is what pandoc.pipe raises). A stopped run marks the tool as timed out.
+local function guarded(command, args, input)
+  if timed_out[command] then error("not run: " .. command .. " already ran past the time limit", 0) end
+  if not (limit and python and runner) then return pandoc.pipe(command, args, input) end
+  local wrapped = {runner, tostring(limit), command}
+  for _, value in ipairs(args) do wrapped[#wrapped + 1] = value end
+  local ok, result = pcall(pandoc.pipe, python, wrapped, input)
+  if ok then return result end
+  if tostring(result):find(TIMEOUT_MARK, 1, true) then
+    timed_out[command] = true
+    if current_tool then timed_out[current_tool] = true end
+    stopped_command = command
+  end
+  error(result, 0)
+end
+
 local function run_in(folder, command, args)
+  if timed_out[command] then return false end
   local run, run_args = command, args
-  if POSIX then
-    run, run_args = "/bin/sh", {"-c", 'exec "$@" 2>pdfmd-tool.err', "sh", command}
+  if limit and python and runner then       -- the runner starts the tool and stops it, with what it started, when the time is up
+    run, run_args = python, {runner, tostring(limit), command}
     for _, value in ipairs(args) do run_args[#run_args + 1] = value end
-  elseif command == "mmdc" then
+  elseif not POSIX and command == "mmdc" then
     -- on Windows npm writes mmdc.cmd, a command script: a program started by its bare name has to be an .exe, so cmd starts it
     run, run_args = "cmd", {"/c", command}
     for _, value in ipairs(args) do run_args[#run_args + 1] = value end
   end
-  local ok = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(run, run_args, "") end)
+  if POSIX then
+    local inner = {run}
+    for _, value in ipairs(run_args) do inner[#inner + 1] = value end
+    run, run_args = "/bin/sh", {"-c", 'exec "$@" 2>pdfmd-tool.err', "sh"}
+    for _, value in ipairs(inner) do run_args[#run_args + 1] = value end
+  end
+  local ok, result = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(run, run_args, "") end)
+  if not ok and tostring(result):find(TIMEOUT_MARK, 1, true) then
+    timed_out[command] = true
+    if current_tool then timed_out[current_tool] = true end
+    stopped_command = command
+  end
   if POSIX then
     local handle = io.open(folder .. "/pdfmd-tool.err", "rb")
     last_error = handle and handle:read("a") or ""
@@ -135,12 +173,13 @@ local function convert_svg(svg, out, format)
     attempts = {{"rsvg-convert", {"-z", "2", "-f", "png", "-o", out, svg}}, {"inkscape", {svg, "--export-type=png", "--export-dpi=192", "--export-filename=" .. out}}}
   end
   for _, attempt in ipairs(attempts) do
-    if pcall(pandoc.pipe, attempt[1], attempt[2], "") and file_exists(out) then return true end
+    if pcall(guarded, attempt[1], attempt[2], "") and file_exists(out) then return true end
   end
   return false
 end
 
 local function draw(tool, source, attributes, format)
+  current_tool = tool
   local key = pandoc.sha1(table.concat({tool, format, attributes.engine or "", attributes.theme or "", attributes.layout or "", source}, "\0"))
   local target = cache_dir .. "/" .. key .. "." .. format
   if file_exists(target) and #(read_file(target) or "") > 0 then return target end
@@ -150,12 +189,12 @@ local function draw(tool, source, attributes, format)
       local engine = GRAPHVIZ_ENGINES[attributes.engine or "dot"] and (attributes.engine or "dot") or "dot"
       local args = {"-T" .. format}
       if format == "png" then args[#args + 1] = "-Gdpi=192" end
-      local ok, data = pcall(pandoc.pipe, engine, args, source)
+      local ok, data = pcall(guarded, engine, args, source)
       if ok and data and #data > 0 then
         made = write_file(target, data)
-      elseif format ~= "svg" then
+      elseif format ~= "svg" and not timed_out[engine] then
         -- a Graphviz without Cairo (pdfmd --install diagram:dot) writes only SVG: take that and convert it, as for D2
-        local svg_ok, svg = pcall(pandoc.pipe, engine, {"-Tsvg"}, source)
+        local svg_ok, svg = pcall(guarded, engine, {"-Tsvg"}, source)
         if svg_ok and svg and #svg > 0 and write_file(folder .. "/out.svg", svg)
             and convert_svg(folder .. "/out.svg", folder .. "/out." .. format, format) then
           made = write_file(target, read_file(folder .. "/out." .. format))
@@ -210,13 +249,28 @@ local function diagram(block)
   if not tool or not family then return nil end
   local format = wanted_format(tool)
   if not format then return nil end
+  if off then
+    warn("off", "diagrams were left as code: the setting `diagram-timeout` is 0 (never draw them)")
+    return nil
+  end
   if not installed(tool) then
     warn(tool, "a " .. tool .. " diagram was left as code: `" .. tool .. "` is not installed (" .. HINT[tool] .. ")")
     return nil
   end
+  if timed_out[tool] then
+    warn(tool .. "skip", "a " .. tool .. " diagram was left as code: " .. tool .. " already ran past the time limit in this build")
+    return nil
+  end
   local attributes = {}
   for _, pair in ipairs(block.attributes) do attributes[pair[1]] = pair[2] end
+  stopped_command = nil
   local file = draw(tool, block.text, attributes, format)
+  if not file and stopped_command then
+    warn(tool .. block.text, "a " .. tool .. " diagram could not be drawn: `" .. stopped_command .. "` did not finish in " .. limit
+      .. " s and was stopped (the setting `diagram-timeout`: seconds, 0 = never draw diagrams, -1 = no limit); it was left as code,"
+      .. " as are the later diagrams that need `" .. stopped_command .. "` in this build")
+    return nil
+  end
   if not file then
     warn(tool .. block.text, "a " .. tool .. " diagram could not be drawn ("
       .. (last_error ~= "" and last_error or "does the source parse? run `" .. tool .. "` on it to see")
@@ -241,6 +295,13 @@ function Pandoc(doc)
   if not cache_dir then return nil end
   if doc.meta["pdfmd-raw-rel"] then cache_rel = pandoc.utils.stringify(doc.meta["pdfmd-raw-rel"]) end
   flat = doc.meta["pdfmd-flat"] ~= nil
+  local seconds = doc.meta["pdfmd-diagram-timeout"]
+  if seconds then limit = tonumber(pandoc.utils.stringify(seconds)) end
+  if doc.meta["pdfmd-diagram-python"] and doc.meta["pdfmd-diagram-runner"] then
+    python = pandoc.utils.stringify(doc.meta["pdfmd-diagram-python"])
+    runner = pandoc.utils.stringify(doc.meta["pdfmd-diagram-runner"])
+  end
+  off = doc.meta["pdfmd-diagram-off"] ~= nil
   local tools = doc.meta["pdfmd-diagram-tools"]
   if tools then
     for _, name in ipairs(tools) do present[pandoc.utils.stringify(name)] = true end

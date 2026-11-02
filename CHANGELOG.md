@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.1 — 2026-11-02
+
+Pre-edit state: commit `c52dd09`. Entry 3en (the review of two research reports on Markdown-to-PDF pain points; the author: "diagram limit on at 120 s. the setting --- yes, and document it").
+
+A diagram tool that never answered hung the build with no message: a stub `mmdc` that sleeps was still being waited for after 60 s. `pandoc.pipe`, which `pdfmd_lua/diagram.lua` ran the tools with, has no time limit.
+
+- `diagram-timeout` (`pdfmd-options` key, config key, `--setup` row "Time limit of one diagram tool run" under Checks and limits): seconds one run of `mmdc`, `dot`, `d2`, or of the `rsvg-convert` / `inkscape` that converts their SVG, may take. Default 120, ON. `0`: no diagram is drawn (the fences stay as code, one WARN naming the setting; it overlaps `--no-auto diagrams`, kept so the value means what `soffice-timeout: 0` means). A negative number: no limit, and no runner.
+- New `pdfmd_lua/limited_run.py`, started by the filter under the limit with the interpreter pdfmd runs on (so no `timeout` command is needed, which macOS and Windows lack): it passes standard input and output through as bytes (a picture written to standard output stays intact), leaves the tool's error output where it was, and when the time is up stops the tool with every process it started (a process group; `taskkill /T` on Windows), prints a marker and exits 124. 127 for a missing program.
+- The filter: a stopped tool leaves its diagram as code with a WARN that says which program did not finish in how many seconds and names the setting (`--strict` makes it an error, like any undrawable diagram), and the tool is not tried again in the build, with one WARN for the first skipped fence: a browser that cannot start would otherwise cost the limit once per diagram. A stopped `dot` is not asked a second time for an SVG to convert. Nothing from a stopped run reaches the cache.
+- Known cost, not fixed: the Word and OpenDocument route runs Pandoc twice, so there a hung tool costs the limit twice (each run remembers on its own).
+- `diagram_timeout_from()` and `diagram_timeout_for()` (the document's key, its metadata files', the config's); the filter gets `pdfmd-diagram-timeout`, `-python` and `-runner`, or `pdfmd-diagram-off`, in the metadata map it already had.
+- `tests/test_diagram_timeout.py` (6 tests: the value as seconds, a document's own limit, bytes through the runner, exit code and error output through the runner, a run stopped with its child, a missing program) and four in `tests/test_diagrams.py` (a hanging `dot` is stopped and the second fence does not start it again, nothing in the cache, `--strict` fails; a hung Graphviz is not asked for an SVG next; `0` runs nothing; `-1` lets a slow tool finish). Not tested on Windows: the runner uses `taskkill /T` and `shutil.which` for `mmdc.cmd`; the end-to-end tests there use shell-script stand-ins and are skipped, as the others in that file.
+- README: "Diagram time limit" beside the LibreOffice one, and a sentence in the diagrams section. The `--help` text has no new flag.
+
 ## v3.32.0 — 2026-11-02
 
 Pre-edit state: commit `394e482`. Opens the `\md{}` feature line, entry 3dc (queued 2026-10-26; the author, 2026-11-02: "i guess it is a good time to create that \md{} feature we were thinking of").

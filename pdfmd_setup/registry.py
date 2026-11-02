@@ -52,7 +52,7 @@ UNSET = {
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.reader": "gfm without front matter, markdown with it",
-    "options.page-folder": "on", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds",
+    "options.page-folder": "on", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds", "options.diagram-timeout": "120 seconds",
     "options.check-ignore": "none",
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
     "options.office.reference-doc": "one beside the document, else Pandoc's",
@@ -97,7 +97,7 @@ FOLDER_OPTIONS = frozenset({
     "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.palette", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
     "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
-    "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout",
+    "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append",
     "options.path-style", "options.path-up",
 })
@@ -621,6 +621,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A run that takes longer is stopped, with the process it started, and its file fails with this setting named; the "
              "other files go on. Default 300. 0: LibreOffice is never run (it counts as not installed). A negative number "
              "(-1): no limit. Per document: `soffice-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
+        text("options.diagram-timeout", "Time limit of one diagram tool run (seconds)",
+             "mmdc, dot, d2 and the converters behind them: a run that takes longer is stopped, with the process it started, "
+             "and the diagram stays as code with a warning that names this setting; that tool is not tried again in the build. "
+             "Default 120. 0: no diagram is drawn (the code stays). A negative number (-1): no limit. Per document: "
+             "`diagram-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
         text("options.check-ignore", "Codes `pdfmd --check` leaves out", "Comma-separated, e.g. heading-skip, link-anchor.",
              "Checks and limits", "config", "list"),
         Setting("options.no-auto", "Automatic behaviour to switch off", "multi",

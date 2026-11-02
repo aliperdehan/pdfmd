@@ -217,6 +217,12 @@ folders; the system installers below do the same job:
   default; a run that takes longer is stopped together with the process it started, its file fails with the setting named, and a batch
   goes on. `0` never runs LibreOffice (it counts as not installed), a negative number (`-1`) removes the limit. It is a `pdfmd-options` key
   (one document), a config key and a row of `pdfmd --setup` ("Checks and limits").
+  **Diagram time limit:** every run of `mmdc`, `dot` or `d2` (and of the `rsvg-convert` or `inkscape` that turns their SVG into a PDF or
+  PNG) may take `diagram-timeout` seconds, 120 by default. A run that takes longer is stopped together with the processes it started
+  (Mermaid starts a browser), the diagram stays as code with a warning that names the setting (`--strict` makes it an error), and that
+  tool is not tried again in the build, so a browser that cannot start costs the limit once and not once per diagram (the Word and
+  OpenDocument route runs Pandoc twice, so there it costs it twice). `0` draws no diagram, a negative number (`-1`) removes the limit.
+  It is a `pdfmd-options` key (one document), a config key and a row of `pdfmd --setup` ("Checks and limits").
 
 ```sh
 brew install pipx pandoc typst              # macOS, the quick start
@@ -2065,7 +2071,8 @@ Drawings are kept in the cache by their content, so a rebuild does not draw them
 (`{#fig:id}` with pandoc-crossref numbers it), `width=` sizes it, `engine=` picks the Graphviz layout (`dot`, `neato`,
 `fdp`, `sfdp`, `circo`, `twopi`), `theme=` the Mermaid theme, `layout=` the D2 layout (`dagre`, `elk`). A tool that is
 not installed leaves the block as code with one warning (`--strict` makes it an error) and says how to install it;
-a diagram the tool cannot parse stays as code too, and the warning gives the tool's own words. `pdfmd --install diagram:d2`
+a diagram the tool cannot parse stays as code too, and the warning gives the tool's own words, and so does one whose tool does not
+finish in `diagram-timeout` seconds (120 by default; see "Diagram time limit" above). `pdfmd --install diagram:d2`
 puts D2's release binary (17 MB, checked against the SHA-256 GitHub lists) in pdfmd's tools folder, and `--install
 diagram:dot` Graphviz built to WebAssembly (2 MB, run by node, which pdfmd fetches when there is none): it writes only SVG,
 which pdfmd converts for a PDF or Word picture with `rsvg-convert` or `inkscape` (D2 needs the same), and it sizes labels

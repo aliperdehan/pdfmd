@@ -1047,7 +1047,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
     A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
-    picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
+    picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code. A tool run may take
+    `diagram-timeout` seconds (v3.32.1; default 120, 0 = draw nothing, negative = no limit): pdfmd_lua/limited_run.py stops a
+    run that takes longer with the processes it started, and the diagram stays as code with a warning.
 
     A fenced ```smiles block, ```{.smiles caption="..."} or `::: smiles` div (v3.31.42) is a chemical structure written as text:
     one SMILES per line (a name after it is written under it), or a molfile, SD file, Tripos mol2 or InChI, or `file="x.mol"`
@@ -1442,7 +1444,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.0"
+PDFMD_VERSION = "3.32.1"
 import argparse
 import atexit
 import csv
@@ -3839,6 +3841,13 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         config["pdfmd-raw"] = table
     if diagrams:
         config["pdfmd-diagram-tools"] = [tool for tool, _, _ in DIAGRAM_TOOLS if which(tool)]
+        seconds = diagram_timeout_for(files[0], metadata_files)
+        if seconds == 0:
+            config["pdfmd-diagram-off"] = True
+        elif seconds > 0:       # a negative number: no limit, so no runner either
+            config["pdfmd-diagram-timeout"] = seconds
+            config["pdfmd-diagram-python"] = Path(sys.executable).as_posix()
+            config["pdfmd-diagram-runner"] = (Path(pdfmd_lua.FILTERS) / "limited_run.py").as_posix()
     if smiles:
         config.update(smiles_config(files[0], metadata_files))
     digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
@@ -3880,6 +3889,23 @@ def smiles_config(md_path: Path, metadata_files: list[Path]) -> dict:
 
 # A fenced block written in a diagram language (pdfmd_lua/diagram.lua draws it): ```mermaid, ```{.d2 caption="..."}, ```dot
 DIAGRAM_BLOCK_RE = re.compile(r"(?mi)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{?[ \t]*\.?(?:mermaid|d2|dot|graphviz)\b")
+DIAGRAM_TIMEOUT = 120.0         # seconds one diagram tool run may take when nothing says otherwise: the `diagram-timeout` setting's default
+
+
+def diagram_timeout_from(value) -> float:
+    """The `diagram-timeout` setting as seconds: 0 = no diagram is drawn, a negative number = no limit, not set or not a
+    number = DIAGRAM_TIMEOUT."""
+    number = option_flag_number(value)
+    return DIAGRAM_TIMEOUT if number is None else number
+
+
+def diagram_timeout_for(md_path: Path, metadata_files: list[Path]) -> float:
+    """The `diagram-timeout` of the document about to be built: its `pdfmd-options`, its metadata files', the config's."""
+    value = (first_pdfmd_option(md_path, metadata_files, "diagram-timeout") if md_path.suffix.lower() in (".md", ".markdown")
+             else config_options().get("diagram-timeout"))
+    return diagram_timeout_from(value)
+
+
 DIAGRAM_TOOLS = (("dot", "Graphviz", "brew install graphviz  |  apt install graphviz  |  pdfmd --install diagram:dot"),
                  ("d2", "D2", "brew install d2  |  pdfmd --install diagram:d2  |  https://d2lang.com/tour/install"),
                  ("mmdc", "Mermaid", "npm install -g @mermaid-js/mermaid-cli"))

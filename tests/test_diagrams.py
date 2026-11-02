@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -45,6 +46,11 @@ case "$1" in
   -Tpdf) printf '%s' '@PDF@' ;;
   *) exit 1 ;;
 esac
+"""
+SLEEP = f'"{sys.executable}" -c "import time; time.sleep(%d)"'          # the test PATH has no `sleep`
+HANGING = f"""#!/bin/sh
+echo "$0 $*" >> "$STUB_LOG"
+exec {SLEEP % 60}
 """
 FAILING = """#!/bin/sh
 echo "$0 $*" >> "$STUB_LOG"
@@ -161,6 +167,49 @@ class Diagrams(unittest.TestCase):
         self.assertNotIn("<pre", html)
         self.assertEqual(self.ran(), ["dot -Tsvg"])
         self.assertNotIn("WARN", done.stdout + done.stderr)
+
+    def test_a_tool_that_never_answers_is_stopped_and_not_tried_again(self):
+        self.install(dot=HANGING)
+        self.write("---\ntitle: T\npdfmd-options:\n  diagram-timeout: 2\n---\n\n```dot\ndigraph { a -> b }\n```\n\n"
+                   "```dot\ndigraph { c -> d }\n```\n")
+        started = time.monotonic()
+        done = self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html")
+        self.assertLess(time.monotonic() - started, 40)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = done.stdout + done.stderr
+        self.assertIn("diagram-timeout", text)
+        self.assertIn("did not finish in 2 s", text)
+        self.assertEqual(self.ran(), ["dot -Tsvg"])                              # the second fence did not start it again
+        html = (self.directory / "doc.html").read_text(encoding="utf-8")
+        self.assertEqual(html.count("<pre"), 2)                                  # both stay as code
+        self.assertFalse(list(self.cache.rglob("*.svg")))                        # a stopped run leaves nothing in the cache
+        strict = self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html", "--strict")
+        self.assertEqual(strict.returncode, 1)
+
+    def test_a_hung_graphviz_is_not_asked_a_second_time_for_an_svg(self):
+        self.install(dot=HANGING)
+        self.write("---\ntitle: T\npdfmd-options:\n  diagram-timeout: 2\n---\n\n```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "-t", "docx", "-o", "doc.docx")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("diagram-timeout", done.stdout + done.stderr)
+        calls = self.ran()           # Word wants a PNG, and the Word route runs Pandoc twice (so up to two calls); never the SVG fallback
+        self.assertTrue(1 <= len(calls) <= 2 and all(call.startswith("dot -Tpng") for call in calls), calls)
+
+    def test_zero_draws_no_diagram(self):
+        self.install(dot=GRAPHVIZ)
+        self.write("---\ntitle: T\npdfmd-options:\n  diagram-timeout: 0\n---\n\n```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("diagram-timeout", done.stdout + done.stderr)
+        self.assertEqual(self.ran(), [])
+        self.assertIn("<pre", (self.directory / "doc.html").read_text(encoding="utf-8"))
+
+    def test_a_negative_number_is_no_limit_and_a_slow_tool_finishes(self):
+        self.install(dot=GRAPHVIZ.replace("while read", SLEEP % 3 + "\nwhile read", 1))
+        self.write("---\ntitle: T\npdfmd-options:\n  diagram-timeout: -1\n---\n\n```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("data:image/svg+xml;base64,", (self.directory / "doc.html").read_text(encoding="utf-8"))
 
     def test_a_drawing_is_kept_by_its_content(self):
         self.install(dot=GRAPHVIZ)
