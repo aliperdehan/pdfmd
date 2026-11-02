@@ -101,6 +101,11 @@ changelog commit, pushed. A push without a version bump publishes nothing.
 Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
 publisher is registered to exactly those names.
 
+**After a release, pull before the next push.** The `homebrew` job of `publish.yml` commits the formula bump
+(`Formula/pdfmd.rb`) to `main` as `github-actions[bot]`, so GitHub's `main` is one commit ahead of the local one. Run
+`git pull --ff-only` (`--rebase` when local commits exist) before every push, or the push is rejected. The bot touches only
+that file, so there is never a conflict. The formula lives in this repository; there is no separate tap repository.
+
 ## Decisions are recorded first
 
 Every decision the author makes in chat (a choice between options, a wish, a design answer, a refusal) is written into the

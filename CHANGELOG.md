@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.31.46d — 2026-11-02
+
+Pre-edit state: commit `50e7ed1`. No shipped code changes (a docs file only), so no version bump.
+
+- `CLAUDE.md` (Releasing): after a release the `homebrew` job has committed the formula bump to `main`, so the local `main` must be pulled (`git pull --ff-only`) before the next push.
+
 ## v3.31.46c — 2026-11-02
 
 Pre-edit state: commit `119003b`. No shipped code changes (tests only), so no version bump. The first push of the 3.31.4x commits showed what the CI saw and the machine of the author did not.
