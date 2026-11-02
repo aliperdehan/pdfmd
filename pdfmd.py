@@ -1447,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.6"
+PDFMD_VERSION = "3.32.7"
 import argparse
 import atexit
 import csv
@@ -5113,8 +5113,8 @@ INSTALL_SPECS = {
     "tui": ["prompt_toolkit>=3"],
 }
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui")
-INSTALL_SIZES = {"tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui", "kit")
+INSTALL_SIZES = {"kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": "about 50 MB download",
                  "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
                  "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
@@ -7408,6 +7408,12 @@ def kit_cache():
     return Cache(cache_root() / KIT_CACHE_FILE)
 
 
+def kit_install_record(folder: Path) -> dict | None:
+    """What `--install kit` recorded about the kit in ``folder`` (where it came from), or None."""
+    from pdfmd_kits.install import read_record
+    return read_record(folder)
+
+
 def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
     """`--kits [NAME|PATH ...]`: the kits there are (name, version, modes, where), or each named kit in full."""
     from pdfmd_kits import KitError, list_kits, load_kit
@@ -7424,6 +7430,10 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
                 continue
             print(f"{kit.name} {kit.version}".rstrip() + (f"  {kit.description}" if kit.description else ""))
             print(f"  kit file  {display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})")
+            record = kit_install_record(found.folder)
+            if record:
+                print(f"  from      {record.get('source', '?')}" + (f"@{record['ref']}" if record.get("ref") else "")
+                      + (f" {record['commit'][:10]}" if record.get("commit") else "") + f"  (installed {record.get('installed', '?')[:10]})")
             if kit.package:
                 print(f"  package   {kit.package}")
             for mode in kit.modes.values():
@@ -7454,8 +7464,10 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
             ok = False
             continue
         modes = ", ".join(mode.name + (f" ({', '.join(mode.aliases)})" if mode.aliases else "") for mode in kit.modes.values())
+        record = kit_install_record(found.folder)
+        origin = (f"\n{'':<26}from: {record.get('source', '?')}" + (f"@{record['ref']}" if record.get("ref") else "")) if record else ""
         print(f"{kit.name} {kit.version}".rstrip().ljust(24) + f"  {display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})"
-              + (f"\n{'':<26}modes: {modes}" if modes else ""))
+              + (f"\n{'':<26}modes: {modes}" if modes else "") + origin)
         for warning in kit.warnings:
             print(f"WARN  {warning}", file=sys.stderr)
     if not rows:
@@ -10303,22 +10315,124 @@ def translit_report() -> bool:
 def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
     kind = value.partition(":")[0]
-    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core"))
+    if (kind not in INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core", "kit"))
             or (kind == "core" and ":" in value and value not in ("core:tex", "core:typst"))
             or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax"))
             or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
-                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex is Pandoc and Tectonic, core:typst Pandoc and Typst)")
+                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex is Pandoc and Tectonic, core:typst Pandoc and Typst; "
+                                         "kit:SOURCE installs the kits of a repository: kit:owner/repo, kit:owner/repo@v1#name, kit:apa7)")
     return value
 
 
 def uninstall_kind(value: str) -> str:
-    if value.partition(":")[0] not in ("fonts", "ocr"):
-        raise argparse.ArgumentTypeError("only fonts and OCR languages can be uninstalled: "
-                                         "--uninstall fonts:NAME[,NAME...] or ocr:LANG[,LANG...]")
+    if value.partition(":")[0] not in ("fonts", "ocr", "kit") or (value.startswith("kit") and not value.partition(":")[2]):
+        raise argparse.ArgumentTypeError("only fonts, OCR languages and kits that pdfmd installed can be uninstalled: "
+                                         "--uninstall fonts:NAME[,NAME...], ocr:LANG[,LANG...] or kit:NAME")
     return value
+
+
+KIT_SOURCES_DEFAULT = ["aliperdehan/pdfmd-kits"]       # where a bare name (`--install kit:apa7`) is looked for: `kit-sources` of the config
+
+
+def kit_install_settings() -> dict:
+    """The install-time settings, from `options:` of the config file (they are not per document): `kit-search-depth` (levels below
+    a repository's root that are searched for kits, 3), `kit-install-max-mb` (200), `kit-install-max-files` (5000) and
+    `kit-sources` (the repositories a bare kit name is looked for in, a list of `owner/repo` or URLs)."""
+    options = config_options()
+
+    def number(key: str, default: int) -> int:
+        value = options.get(key, default)
+        try:
+            return max(int(value), 0)
+        except (TypeError, ValueError):
+            print(f"WARN  config: {key} must be a whole number (got {value!r}); using {default}", file=sys.stderr)
+            return default
+
+    sources = options.get("kit-sources", KIT_SOURCES_DEFAULT)
+    sources = [str(item) for item in sources] if isinstance(sources, (list, tuple)) else [str(sources)]
+    return {"depth": number("kit-search-depth", 3), "max_bytes": number("kit-install-max-mb", 200) * 1048576,
+            "max_files": number("kit-install-max-files", 5000), "sources": sources}
+
+
+def kits_install_directory() -> Path | None:
+    """The folder pdfmd installs kits into: `kits/` beside the config file, which kit discovery reads already."""
+    config = config_path()
+    return None if config is None else config.parent / "kits"
+
+
+def install_kits(value: str, assume_yes: bool = False) -> bool:
+    """`pdfmd --install kit[:SOURCE]`: the kits of a repository (see pdfmd_kits/install.py), or the list of the installed ones."""
+    from pdfmd_kits import install as kit_installer
+    target = kits_install_directory()
+    if target is None:
+        print("ERROR  PDFMD_CONFIG is empty: there is no config folder to install kits beside", file=sys.stderr)
+        return False
+    if not value.strip():
+        installed = kit_installer.installed_kits(target)
+        if not installed:
+            print("No kit installed by pdfmd. Install the kits of a repository: pdfmd --install kit:owner/repo "
+                  "(or kit:apa7 for a kit of the repositories in `kit-sources`)")
+        for folder, record in installed:
+            where = record.get("source", "?") + (f"@{record['ref']}" if record.get("ref") else "")
+            commit = f" {record['commit'][:10]}" if record.get("commit") else ""
+            print(f"{record.get('kit', folder.name)} {record.get('version', '')}".rstrip().ljust(24) + f"  {where}{commit}  {display_path(folder)}")
+        return True
+    settings = kit_install_settings()
+    try:
+        source = kit_installer.parse_source(value)
+        attempts = [source]
+        if source.kind == "name":
+            import dataclasses
+            attempts = [dataclasses.replace(kit_installer.parse_source(item), name=source.location) for item in settings["sources"]]
+            if not attempts:
+                raise kit_installer.InstallError(f"{value!r} is a kit's name, and `kit-sources` in the config names no repository: "
+                                                 "pdfmd --install kit:owner/repo")
+        problems: list[str] = []
+        for attempt in attempts:
+            try:
+                done = kit_installer.install(attempt, target, depth=settings["depth"], max_bytes=settings["max_bytes"],
+                                             max_files=settings["max_files"], download=download_file, assume_yes=assume_yes,
+                                             say=lambda text: print(text), run=subprocess.run)
+            except kit_installer.InstallError as error:
+                if len(attempts) == 1:
+                    raise
+                problems.append(f"{attempt.location}: {error}")
+                continue
+            for item in done:
+                modes = ", ".join(item.modes)
+                print(f"INSTALLED  {item.name} {item.version}".rstrip() + f"  {display_path(item.folder)}"
+                      + ("  (replaced the one installed before)" if item.replaced else "") + (f"\n           modes: {modes}" if modes else ""))
+                for warning in item.warnings:
+                    print(f"WARN  {warning}", file=sys.stderr)
+            code = [item for item in done if item.lua]
+            if code:
+                print("NOTE  " + ", ".join(f"{item.name} ({', '.join(item.lua)})" for item in code) + " ships a Lua filter: pdfmd "
+                      "runs it, and a Lua filter can run any command, so read it (pdfmd --kits NAME shows where it is) before you "
+                      "use a kit from a source you do not know. Choose a kit with --kit NAME[:MODE].")
+            return True
+        raise kit_installer.InstallError(f"no kit {value!r} in the repositories of `kit-sources`: " + "; ".join(problems))
+    except kit_installer.InstallError as error:
+        print(f"ERROR  {error}", file=sys.stderr)
+        return False
+
+
+def uninstall_kit(name: str) -> bool:
+    """`pdfmd --uninstall kit:NAME`: remove a kit that `--install kit` put in the kits folder (never one placed there by hand)."""
+    from pdfmd_kits import install as kit_installer
+    target = kits_install_directory()
+    if target is None:
+        print("ERROR  PDFMD_CONFIG is empty: there is no config folder", file=sys.stderr)
+        return False
+    try:
+        folder = kit_installer.uninstall(name, target)
+    except kit_installer.InstallError as error:
+        print(f"ERROR  {error}", file=sys.stderr)
+        return False
+    print(f"REMOVED  {display_path(folder)}")
+    return True
 
 
 def install_fonts(names: str) -> bool:
@@ -10427,9 +10541,11 @@ def reset_font_caches() -> None:
             clear()
 
 
-def install_extra(kind: str) -> bool:
+def install_extra(kind: str, assume_yes: bool = False) -> bool:
     """Install an optional piece: pip packages into the Python environment pdfmd runs
     from (math, emoji, pandoc), or Typst's own binary into pdfmd's tools folder."""
+    if kind == "kit" or kind.startswith("kit:"):
+        return install_kits(kind.partition(":")[2], assume_yes)
     if kind == "full":
         return install_extra("pandoc") and install_extra("typst")
     if kind == "typst":
@@ -27689,7 +27805,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "renderer) or 'fonts' (alone: lists the fonts pdfmd can fetch; "
                              "fonts:NAME[,NAME...] installs some, e.g. fonts:arabic,cjk-sc or fonts:core, "
                              "into pdfmd's own folder with no admin rights) or 'ocr' (alone: lists the Tesseract "
-                             "languages pdfmd can fetch; ocr:rus,kaz installs some into its own folder). "
+                             "languages pdfmd can fetch; ocr:rus,kaz installs some into its own folder) or 'kit' (alone: lists the kits pdfmd "
+                             "installed; kit:owner/repo installs the kits of a GitHub repository, kit:owner/repo@v1#name one of them at a "
+                             "tag, kit:https://host/x.git any git URL, kit:./folder a folder, kit:apa7 a kit by name from the "
+                             "repositories of `kit-sources`; a kit is a folder with a .kit file, at the repository's root or in its "
+                             "folders; --uninstall kit:NAME removes it). "
                              "pandoc/math equal `pip install \"pdfmd-cli[KIND]\"`. "
                              "A Pandoc or Typst already on PATH always wins over the installed ones")
     parser.add_argument("--translit", metavar="PACKS",
@@ -27737,8 +27857,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "for this run, and show them in --help")
     parser.add_argument("--init-config", action="store_true",
                         help="write a commented config file (~/.config/pdfmd/config.yaml) if there is none")
-    parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG", type=uninstall_kind,
-                        help="remove fonts or OCR languages installed by --install, e.g. --uninstall fonts:arabic,cjk or ocr:rus")
+    parser.add_argument("--uninstall", metavar="fonts:NAME|ocr:LANG|kit:NAME", type=uninstall_kind,
+                        help="remove fonts, OCR languages or kits installed by --install, e.g. --uninstall fonts:arabic,cjk, "
+                             "ocr:rus or kit:apa7")
     parser.add_argument("--init-reference", nargs="?", const="docx", metavar="FORMAT",
                         help="write reference.docx (or odt, pptx) into this folder: Pandoc's own reference document "
                              "with pdfmd's look, to restyle in Word; pdfmd then uses it for every .docx/.odt/.pptx "
@@ -28732,8 +28853,10 @@ def run_main() -> None:
     if args.setup is not None:
         raise SystemExit(0 if setup_command(args.setup) else 1)
     if args.install:
-        raise SystemExit(0 if install_extra(args.install) else 1)
+        raise SystemExit(0 if install_extra(args.install, bool(getattr(args, "yes", False))) else 1)
     if args.uninstall:
+        if args.uninstall.startswith("kit"):
+            raise SystemExit(0 if uninstall_kit(args.uninstall.partition(":")[2]) else 1)
         if args.uninstall.startswith("ocr"):
             raise SystemExit(0 if install_ocr_languages(args.uninstall.partition(":")[2], remove=True) else 1)
         raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)

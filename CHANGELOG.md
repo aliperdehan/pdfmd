@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.32.7 — 2026-11-03
+
+Pre-edit state: commit `d14c00a`. `[kits]`, entry 3et UPDATE 1 (the author: "make it possible for `pdfmd --install kit` to fetch an arbitrary git repo ... it'll look at all folders of it so nulabreport, which has `.kit` at root, and this one, pdfmd-kits, which has kits in child dirs, would work"). Kept in 3.32. Not pushed.
+
+`pdfmd --install kit:SOURCE` installs the kits of any repository.
+
+- **Sources**: `owner/repo` (GitHub, its default branch; the tarball over https, no git needed), `owner/repo@REF` (a tag, branch or commit), `#NAME` after either picks one kit, any git URL (https, ssh, scp-like; `git clone --depth 1` with only the https, ssh and file transports, `ext::` refused), `file:///path` (a local git repository, committed state), `./x` `~/x` `/x` (a folder, copied as it is), and a bare `NAME` (a kit of that name in the repositories of `kit-sources`). Plain `http://` and `git://` are refused. `pdfmd --install kit` alone lists the installed kits; `pdfmd --uninstall kit:NAME` removes one.
+- **What it finds**: a folder with `.kit` or `NAME.kit` is a kit; the repository root first, then every folder below it down to `kit-search-depth` (3) levels, hidden folders skipped, and a kit's own sub-folders are the kit's, never searched. So a repository that is one kit (the root shape of a package like nulabreport) and one with a kit per folder (a collection) both work. Each kit is checked with the kit loader; a faulty one is skipped with a WARN and the rest installed.
+- **Where it goes**: `kits/NAME/` beside the config file (kit discovery already reads it), the whole kit folder, with `.pdfmd-install.json` (source, ref, commit, SHA-256 of the archive, path in the repository, date). `pdfmd --kits` shows where an installed kit came from. Installing again updates it (a staged copy, then a swap); a folder there that pdfmd did not install is never replaced; a kit of another source needs `--yes`.
+- **Safe by construction**: nothing of the repository is run (no script, no hook, no kit Lua filter). The archive is read as data: a name that leaves the folder stops the install, links, devices and fifos are dropped, and the files and bytes are capped by `kit-install-max-files` (5000) and `kit-install-max-mb` (200). The install lists the kits that carry a Lua filter and says to read it: pdfmd runs it when a document selects the kit.
+- **Settings** (`options:` of the config file, read at install time, no `--setup` row; the inventory lists them as omitted): `kit-search-depth`, `kit-install-max-mb`, `kit-install-max-files`, `kit-sources` (the repositories a bare name is looked for in).
+- New module `pdfmd_kits/install.py` (pure; the downloader is handed in), `install_kits()` and `uninstall_kit()` in `pdfmd.py`, `kit` in `INSTALL_KINDS`.
+- Tests: `tests/test_kit_install.py` (the forms of a source, both repository shapes, depth and `#NAME`, a faulty kit, the commit from the tarball's folder, update and refusals, uninstall, hostile tarballs, caps, a folder with links, a real local git repository with a tag). Checked through pdfmd itself with a throw-away config: the author's kits repository (ten kits in child folders) and the real nulabreport repository (one kit at the root) were installed, listed, used for a build and uninstalled.
+- README: "Getting a kit" in the Kits section; `--help` and `--install`'s error text name `kit:SOURCE`.
+
 ## v3.32.6 — 2026-11-03
 
 Pre-edit state: commit `f528e53`. `[kits]`, entry 3et (the author: "yes, follow pdfmd repo rules"). Kept in 3.32 as the author asked on 2026-11-02, though `CLAUDE.md` still names the kits line 3.31.x. Not pushed.

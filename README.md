@@ -2828,6 +2828,32 @@ so its `.sty` and the library it `\input`s are found without linking anything in
 folder, not a tree), so the class a kit ships is the one that is loaded, not the copy in Tectonic's own bundle. A kit is then one folder: clone it,
 name it under `kits:` of the config (or `--kit PATH`), and select it.
 
+**Getting a kit.** A kit is a folder, so a repository that holds one (a `.kit` or `NAME.kit` file in its root, like a package's
+own repository) or many (one per folder, like a collection) is a source of kits, and `pdfmd --install kit:SOURCE` takes them from any
+of them (v3.32.7):
+
+```sh
+pdfmd --install kit:owner/repo                 # every kit of a GitHub repository (its default branch)
+pdfmd --install kit:owner/repo@v1.2#apa7       # one kit of it, at a tag, a branch or a commit
+pdfmd --install kit:https://host/x/y.git       # any git URL (https or ssh); @REF and #NAME work the same
+pdfmd --install kit:~/work/kits                # a folder on this machine (copied as it is)
+pdfmd --install kit:apa7                       # no slash: a kit of that name in the repositories of `kit-sources`
+pdfmd --install kit                            # lists what is installed; pdfmd --uninstall kit:apa7 removes one
+```
+
+The repository is fetched as a snapshot (a GitHub repository as its tarball over https, so no git is needed; any other URL with
+`git clone --depth 1`, https, ssh and local transports only) into a temporary folder and searched: a folder with a kit file is a
+kit, the root first, then every folder below it down to `kit-search-depth` levels (hidden folders are skipped), and what is inside a
+kit belongs to it. Each kit found is checked, then copied whole to `kits/NAME/` beside the config file (the folder kit discovery
+already reads) with `.pdfmd-install.json` saying where it came from (`pdfmd --kits NAME` shows it); installing it again updates it.
+A kit that is there and was not installed by pdfmd is never replaced, and one from another source needs `--yes`. **Nothing is run
+at install**, not a script of the repository nor a kit's Lua filter; the archive is data (no name may leave the folder, links and
+special files are dropped) and capped by `kit-install-max-mb` (200) and `kit-install-max-files` (5000). A kit's Lua filter and its
+`latex:` lines are code that runs when a document selects the kit, so the install says which kits carry one: read it first, as with
+any filter. These settings go under `options:` in the config file: `kit-search-depth` (3), `kit-install-max-mb`,
+`kit-install-max-files` and `kit-sources` (a list of `owner/repo` or URLs, the repositories a bare name is looked for in; the author's
+collection by default).
+
 **A kit travels with the source.** `--attach-source`, `--keep-source` and `--bundle` hold what the kit wrote (`--embed-metadata`, its
 preamble only): its preamble goes into the source first (with what your own LaTeX said twice settled in it, as in the build), its defaults and Lua
 filter go in as the metadata and filter files they already are, and the files its `carry:` list names are stored beside the
