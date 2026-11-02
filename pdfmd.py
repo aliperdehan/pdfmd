@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.47"
+PDFMD_VERSION = "3.31.48"
 import argparse
 import atexit
 import csv
@@ -13356,9 +13356,9 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     return front_matter + remainder, True
 
 
-# ASCII tables without the inner `+` of a grid table (v3.31.47, entry 3el): what chat models write for "a plain-text table".
-# Pandoc reads them as one column with no header; pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary
-# copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
+# Text tables Pandoc does not read as tables (v3.31.47-48, entry 3el): ASCII tables without the inner `+` of a grid table
+# (what chat models write for "a plain-text table", lazy forms too), box-drawing tables, psql and MySQL console output.
+# pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
 # it, say so) | off.
 TABLE_ASCII_MODES = ("repair", "note", "off")
 
@@ -13387,11 +13387,11 @@ def repair_ascii_text(text: str, mode: str, label: str) -> str:
     for repair in repairs:
         shape = f"{repair.columns} columns, {repair.rows} row{'s' if repair.rows != 1 else ''}"
         if mode == "note":
-            print(f"NOTE  table-ascii: {label}, line {repair.line}: an ASCII table ({shape}) that Pandoc reads as one column; "
-                  "pdfmd-options: table-ascii: repair rewrites it as a pipe table, off ends this note")
+            print(f"NOTE  table-ascii: {label}, line {repair.line}: {repair.what} ({shape}) that Pandoc does not read as a "
+                  "table; pdfmd-options: table-ascii: repair rewrites it as a pipe table, off ends this note")
             continue
-        print(f"WARN  table-ascii: {label}, line {repair.line}: an ASCII table without a `+` at its column boundaries was "
-              f"read as a pipe table ({shape}); pdfmd-options: table-ascii: off keeps it as written")
+        print(f"WARN  table-ascii: {label}, line {repair.line}: {repair.what} was read as a pipe table ({shape}); "
+              "pdfmd-options: table-ascii: off keeps it as written")
         for problem in repair.problems:
             print(f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
     return text if mode == "note" else fixed

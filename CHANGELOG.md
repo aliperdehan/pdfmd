@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.31.48 — 2026-11-02
+
+Pre-edit state: commit `6253c34`. Still under 3.31. `[tables]`, entry 3el (the author: "yes, build all of it as 3.31.48").
+
+More text tables are read as pipe tables, with the setting of 3.31.47 (`table-ascii`).
+
+- Lazy ASCII forms: a border as short as `+-+` (no inner `+`), rows without outer bars (`1 | 2`), middle borders left out. The table must be bordered at both ends and have a line with two cells. With no border between the body lines, a line whose first cell is empty continues the row above and any other line starts a row; with a border between rows, the lines between two borders are one row, as before.
+- Box-drawing tables (`┌─┬─┐ │ ├─┼─┤ └─┴─┘`, double, rounded and heavy): cells split on `│ ┃ ║`, a `|` inside a cell escaped; the first rule that contains `═` or `━` and is not the first or last is the header rule.
+- psql output: the header line (no outer bars) above `----+----`, rows with as many bars, the `(N rows)` line dropped with the table.
+- MySQL console output: a real grid table, no `=` rule, exactly three rules, a one-line header and two or more body lines, which Pandoc read as one joined row; each line is a row now. A body line with an empty first cell leaves the table alone, so a real grid table with a wrapped row is not touched; any other real grid table is never touched.
+- The WARN names the form (`a box-drawing table was read as a pipe table (2 columns, 2 rows)`); the `--setup` row and the README section ("Text tables Pandoc cannot read") list the four spellings. Not done: the native tier, `<br>` in cells, org `|---+---|` and a pipe table without a separator row (queue items).
+- Tests: `tests/test_table_ascii.py` (`Forms`, and a build for each of box, psql and lazy).
+
 ## v3.31.47 — 2026-11-02
 
 Pre-edit state: commit `4761d60`. Still under 3.31. `[tables]`, entry 3el (the author pasted a table that NotebookLM wrote; "just implement it now under 3.31").

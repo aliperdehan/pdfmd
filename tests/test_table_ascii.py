@@ -1,5 +1,6 @@
-"""v3.31.47: an ASCII table with no `+` at its column boundaries (what chat models write for "a plain-text table")
-is read as a pipe table (entry 3el). The pure function first, then real builds to LaTeX through pdfmd."""
+"""v3.31.47-48: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
+boundaries (what chat models write for "a plain-text table"), its lazy forms, box-drawing tables, psql and MySQL console
+output. The pure function first, then real builds to LaTeX through pdfmd."""
 
 from __future__ import annotations
 
@@ -97,6 +98,66 @@ class Repair(unittest.TestCase):
         self.assertTrue(text.startswith("```\ncode\n```\n\n| Model Name"))
 
 
+class Forms(unittest.TestCase):
+    def table(self, text: str):
+        fixed, repairs = repair_ascii_tables(text)
+        return fixed.splitlines(), repairs
+
+    def test_the_lazy_ascii_forms(self):
+        for text in ("+-+\n1 | 2\n+-+\n3 | 4\n+-+\n", "+-+\n1 | 2\n3 | 4\n+-+\n"):
+            lines, repairs = self.table(text)
+            self.assertEqual(lines, ["| 1 | 2 |", "| --- | --- |", "| 3 | 4 |"], text)
+            self.assertEqual(repairs[0].kind, "ascii")
+
+    def test_without_borders_between_the_rows_an_empty_first_cell_continues_the_row(self):
+        text = f"{RULE}\n| h1 | h2 |\n+{'=' * 40}+\n| a | b |\n|   | more |\n| c | d |\n{RULE}\n"
+        self.assertEqual(self.table(text)[0], ["| h1 | h2 |", "| --- | --- |", "| a | b more |", "| c | d |"])
+
+    def test_a_lazy_table_must_be_closed_by_a_border(self):
+        for text in ("+-+\n1 | 2\n3 | 4\n", "text\n1 | 2\n+-+\n"):
+            self.assertEqual(repair_ascii_tables(text), (text, []), text)
+
+    def test_box_drawing_tables(self):
+        thin = "┌────┬────┐\n│ id │ nm │\n├────┼────┤\n│ 1  │ a  │\n├────┼────┤\n│ 2  │ b  │\n└────┴────┘\n"
+        rich = "┏━━━━┳━━━━┓\n┃ id ┃ nm ┃\n┡━━━━╇━━━━┩\n│ 1  │ a  │\n│ 2  │ b  │\n└────┴────┘\n"
+        double = "╔════╦════╗\n║ id ║ nm ║\n╠════╬════╣\n║ 1  ║ a  ║\n╠════╬════╣\n║ 2  ║ b  ║\n╚════╩════╝\n"
+        for text in (thin, rich, double):
+            lines, repairs = self.table(text)
+            self.assertEqual(lines, ["| id | nm |", "| --- | --- |", "| 1 | a |", "| 2 | b |"], text)
+            self.assertEqual(repairs[0].kind, "box")
+
+    def test_a_bar_inside_a_box_cell_is_escaped(self):
+        text = "┌───┬───┐\n│ a │ b │\n├───┼───┤\n│ x|y │ z │\n└───┴───┘\n"
+        self.assertEqual(self.table(text)[0][-1], "| x\\|y | z |")
+
+    def test_psql_output_with_its_row_count(self):
+        text = "before\n id | name\n----+------\n  1 | a\n  2 |\n(2 rows)\n\nafter\n"
+        lines, repairs = self.table(text)
+        self.assertEqual(lines, ["before", "", "| id | name |", "| --- | --- |", "| 1 | a |", "| 2 |  |", "", "after"])
+        self.assertEqual((repairs[0].kind, repairs[0].line), ("psql", 2))
+
+    def test_mysql_output_has_a_header_and_a_row_for_each_line(self):
+        text = "+----+------+\n| id | name |\n+----+------+\n|  1 | a    |\n|  2 | b    |\n+----+------+\n"
+        lines, repairs = self.table(text)
+        self.assertEqual(lines, ["| id | name |", "| --- | --- |", "| 1 | a |", "| 2 | b |"])
+        self.assertEqual(repairs[0].kind, "mysql")
+
+    def test_real_grid_tables_stay_even_when_they_have_the_shape_of_mysql_output(self):
+        two_bodies = "+---+---+\n| a | b |\n+===+===+\n| 1 | 2 |\n+---+---+\n| 3 | 4 |\n+---+---+\n"
+        wrapped = "+---+---+\n| a | b |\n+---+---+\n| 1 | 2 |\n|   | x |\n+---+---+\n"
+        header_rule = "+---+---+\n| a | b |\n+===+===+\n| 1 | 2 |\n| 3 | 4 |\n+---+---+\n"
+        for text in (two_bodies, wrapped, header_rule):
+            self.assertEqual(repair_ascii_tables(text), (text, []), text)
+
+    def test_rules_and_underlines_are_not_tables(self):
+        for text in ("text\n\n---\n\nmore\n", "Title\n-----\n", "a | b\n--- | ---\n1 | 2\n", "+ a list\n+ item\n"):
+            self.assertEqual(repair_ascii_tables(text), (text, []), text)
+
+    def test_box_tables_in_code_are_left_alone(self):
+        text = "```\n┌───┬───┐\n│ a │ b │\n└───┴───┘\n```\n"
+        self.assertEqual(repair_ascii_tables(text), (text, []))
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Build(unittest.TestCase):
     def setUp(self):
@@ -144,6 +205,16 @@ class Build(unittest.TestCase):
         done, tex = self.build(body="+------+------+\n| a    | b    |\n+======+======+\n| 1    | 2    |\n+------+------+\n")
         self.assertNotIn("table-ascii", done.stdout)
         self.assertEqual(len(self.columns(tex)), 2)
+
+    def test_box_psql_and_mysql_tables_build_as_tables(self):
+        for name, body, kind in (("box", "┌────┬────┐\n│ id │ nm │\n├────┼────┤\n│ 1  │ a  │\n└────┴────┘\n", "box-drawing"),
+                                 ("psql", " id | nm\n----+----\n  1 | a\n(1 row)\n", "psql"),
+                                 ("lazy", "+-+\n1 | 2\n+-+\n3 | 4\n+-+\n", "ASCII")):
+            done, tex = self.build(body=body)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("WARN  table-ascii: d.md, line", done.stdout, name)
+            self.assertIn(kind, done.stdout, name)
+            self.assertEqual(len(self.columns(tex)), 2, name)
 
     def test_the_parts_of_a_document_are_repaired_too(self):
         (self.root / "parts").mkdir()

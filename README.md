@@ -1824,7 +1824,7 @@ pdfmd-options:
 
 Every key is also a `--setup` row, at the config and folder levels.
 
-#### A plain-text table from a chat model
+#### Text tables Pandoc cannot read
 
 Asked for "a table in plain text", chat models (NotebookLM, among others) write something like this:
 
@@ -1839,14 +1839,26 @@ Asked for "a table in plain text", chat models (NotebookLM, among others) write 
 
 It is not a Pandoc grid table: the borders have no `+` where the columns meet, the header has no `+===+` line under it, and the
 `|` bars drift by a character here and there. Pandoc reads it as a table of one column without a header, and the text runs off
-the page. pdfmd reads it as a pipe table instead: the bars are not trusted to line up, a row is split on `|`, the lines between
-two borders are one row (the lines of a wrapped cell are joined with a space), and the first row is the header (every row above a
-`+===+` line, when there is one). It works on a temporary copy, so the file is never changed, and says
+the page. pdfmd reads it as a pipe table instead. Four spellings are repaired:
+
+- **ASCII tables without the inner `+`**, the lazy forms too: a border as short as `+-+`, rows without outer bars (`1 | 2`), middle
+  borders left out. The table must be bordered at both ends and have a line with two cells, so a one-column grid table is not touched.
+- **Box-drawing tables** (`┌─┬─┐ │ ├─┼─┤ └─┴─┘`; double, rounded and heavy lines): what a terminal, Rich, pandas or tabulate prints.
+  A rule with `═` or `━` under the first row is the header rule.
+- **psql output**: `id | name`, a rule `----+------`, the rows, and the `(2 rows)` line, which goes with the table.
+- **MySQL console output**: a real grid table (`+----+------+`) with no header rule and three rules only. Pandoc reads its body
+  lines as one row, so pdfmd takes each line as a row. A body line with an empty first cell (a wrapped line of a real grid table)
+  stops this, and the table is left alone.
+
+The bars are not trusted to line up: a row is split on its bars, and the first row is the header (every row above a header rule,
+when there is one). The lines between two borders are one row (the lines of a wrapped cell are joined with a space). When the body
+has no border between its lines, a line whose first cell is empty continues the row above, and any other line starts a row.
+pdfmd works on a temporary copy, so the file is never changed, and says
 `WARN  table-ascii: report.md, line 12: an ASCII table without a `+` at its column boundaries was read as a pipe table (4 columns, 4 rows)`
 for each table. A row with another number of cells than the header is padded or cut, with a WARN of its own. A real grid table
-(`+---+---+`), a grid table of one column, and anything inside code, a comment or the front matter are left alone. A literal `|`
-inside a cell must be written `\|`; a cell with several paragraphs or a list needs a real grid table. The parts of a document in
-parts are read the same way; the no-Pandoc native renderer does not do it (yet).
+(`+---+---+`) and anything inside code, a comment or the front matter are left alone. A literal `|` inside a cell must be written
+`\|`; a cell with several paragraphs or a list needs a real grid table. The parts of a document in parts are read the same way;
+the no-Pandoc native renderer does not do it (yet).
 
 ```yaml
 pdfmd-options:
