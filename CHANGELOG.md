@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.5 — 2026-11-02
+
+Pre-edit state: commit `b5cd684`. Entry 3eo, step 2a of the Obsidian flavour line (the author: "any Pandoc or whatever detected syntax switches the reader, unless those are like examples in fenced code blocks"). Not pushed.
+
+- **No more "gfm leaves X as text" NOTE: pdfmd acts on what it finds.** A file with no front matter was read as gfm and, when it used `H~2~O`, `x^2^`, `{#id}` attributes, raw LaTeX or `:::` divs, a NOTE said gfm printed them as text. Now a table of detectors (`READER_NEEDS`, `reader_needs()`) decides, and each syntax needs one of two things: an extension Pandoc accepts on gfm, which is added to the reader (`gfm+subscript`, `+superscript`, `+attributes+bracketed_spans`, `+fenced_divs`, `+definition_lists`, `+fancy_lists`, `+raw_attribute`; the definition-list and `.csv` div cases were added on need before), or Pandoc's own Markdown reader, which the file is switched to (`^[inline footnotes]`, raw LaTeX, grid tables, simple tables, `(@)` example lists, as `@citations`, Org captions and `\md{}` already did). `--verbose` says which syntax decided: `reading as gfm+subscript (it uses subscripts (H~2~O))`, or `it uses raw LaTeX (...), which gfm cannot read; keeping the default markdown reader`.
+- **Only prose is looked at**: fenced code, inline code, math (`$..$`, `$$..$$`; `$5 or $10` is not math) and HTML comments are taken out first, so an example of the syntax in a code block changes nothing. The line that opens a fence is the one exception (a fence with attributes, ```` ```{.smiles} ````, needs `+attributes`). Lettered and Roman-numeral lists count only as two items in a row (`a.` `b.`, `(i)` `(ii)`): `I. Introduction` alone stays text, as in GFM. Not looked for: indented code blocks, line blocks, multiline tables, inline `^x^` inside words (listed in the notes).
+- **Cost, accepted by the author**: Pandoc's Markdown reader sizes pipe-table columns differently from gfm (the reason gfm was chosen); a file with raw LaTeX or an inline footnote and no front matter now gets that reader, so its tables size as they do in a file with front matter.
+- Removed with it: `reader_notice()`, `gfm_blind_spots()`, `GFM_BLIND_SPOTS`, `FENCE_ATTRIBUTES`, `has_definition_list()` (the table replaces them); the NOTE is gone from the output.
+- Tests: `tests/test_reader.py`: the old blind-spot tests became `ReaderNeeds` (the extension each syntax needs, what only Pandoc's reader reads, code and math and comments not counting, a fence's attributes, lettered lists) and the command-line tests (nothing said but under `-v`, the extension added and `<sub>` in the output, a switch to Pandoc's reader for an inline footnote and for raw LaTeX, the same syntax in a code block changes nothing). Checked through the whole `pdfmd` on the three notes of the Obsidian test vault (all read as plain gfm, nothing to add) and on small files.
+- README: the "It decides per document" paragraph and the `READER` row say what is added and what switches.
+
 ## v3.32.4 — 2026-11-02
 
 Pre-edit state: commit `834e135`. Entry 3eo, step 1 of the Obsidian flavour line: the gfm-or-Pandoc choice made reliable. Not pushed on its own (see the last bullet).

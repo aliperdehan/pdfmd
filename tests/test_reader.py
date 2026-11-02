@@ -22,14 +22,42 @@ import pdfmd  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
 
 
-class BlindSpots(unittest.TestCase):
-    def test_what_gfm_would_print(self):
-        found = pdfmd.gfm_blind_spots("# T\n\nH~2~O, x^2^ and a note^[inline].\n\n## S {#sec}\n\n\\begin{equation} a \\end{equation}\n")
-        self.assertEqual(found, ["subscripts (H~2~O)", "superscripts (x^2^)", "inline footnotes (^[...])",
-                                 "{#id .class} attributes", "raw LaTeX (\\begin{...}, \\newcommand, \\ce{...})"])
+class ReaderNeeds(unittest.TestCase):
+    """What a file with no front matter uses that gfm does not read (v3.32.5): an extension gfm takes, or Pandoc's own reader."""
 
-    def test_code_and_plain_markdown_are_left_alone(self):
-        self.assertEqual(pdfmd.gfm_blind_spots("# T\n\n~~struck~~ and `H~2~O` and a | table |\n\n```\nx^2^ \\begin{a}\n```\n"), [])
+    def needs(self, text):
+        return dict(pdfmd.reader_needs(text))
+
+    def test_what_gfm_takes_as_an_extension(self):
+        found = self.needs("# T\n\nH~2~O, x^2^.\n\n## S {#sec}\n\nTerm\n: definition\n\n::: note\nText\n:::\n")
+        self.assertEqual(found, {"subscripts (H~2~O)": "subscript", "superscripts (x^2^)": "superscript",
+                                 "{#id .class} attributes": "attributes+bracketed_spans", "fenced divs (:::)": "fenced_divs",
+                                 "definition lists": "definition_lists"})
+
+    def test_what_only_pandocs_own_reader_reads(self):
+        for text, name in (("A note^[inline].\n", "inline footnotes (^[...])"),
+                           ("\\begin{equation} a \\end{equation}\n", "raw LaTeX (\\begin{...}, \\newcommand{...}, \\ce{...})"),
+                           ("Text \\textbf{bold} and \\ref{x}\n", "raw LaTeX (\\begin{...}, \\newcommand{...}, \\ce{...})"),
+                           ("+---+---+\n| a | b |\n+===+===+\n", "grid tables"),
+                           ("  A    B\n ---- ----\n  1    2\n", "simple tables"),
+                           ("(@) First\n(@) Second\n", "example lists ((@))")):
+            with self.subTest(text=text):
+                self.assertIsNone(self.needs(text).get(name, "missing"), text)
+
+    def test_code_math_and_comments_are_not_syntax_the_document_uses(self):
+        text = ("# T\n\n~~struck~~ and `H~2~O` and `\\begin{a}` and a | table |\n\n```\nx^2^ \\begin{a} ^[n]\n```\n\n"
+                "Math $\\frac{a}{b}$ and $$\\ce{H2O}$$ and a price of $5 or $10.\n\n<!-- \\newcommand{x}{y} H~2~O -->\n")
+        self.assertEqual(pdfmd.reader_needs(text), [])
+
+    def test_a_fence_that_opens_with_attributes_is_looked_at(self):
+        self.assertEqual(self.needs("```{.smiles caption=\"x\"}\nCCO\n```\n"),
+                         {"fenced code attributes ({.class key=value})": "attributes"})
+
+    def test_lettered_lists_need_two_items_in_a_row(self):
+        self.assertEqual(self.needs("a. one\nb. two\n"), {"lettered or Roman-numeral lists": "fancy_lists"})
+        self.assertEqual(self.needs("(i) one\n(ii) two\n"), {"lettered or Roman-numeral lists": "fancy_lists"})
+        self.assertEqual(self.needs("I. Introduction\n\nSome text.\n"), {})
+        self.assertEqual(self.needs("A. one\n\nlater text\n\nc. unrelated\n"), {})
 
 
 @needs_pandoc(3, 1, 3)
@@ -47,16 +75,29 @@ class CommandLine(unittest.TestCase):
     def write(self, name, text):
         (self.directory / name).write_text(text, encoding="utf-8")
 
-    def test_the_notice_is_said_once_and_only_when_it_matters(self):
+    def test_what_gfm_can_take_is_added_to_it_and_nothing_is_said_but_in_verbose(self):
         self.write("a.md", "# Water\n\nH~2~O\n")
         self.write("b.md", "# Plain\n\nNothing special.\n")
-        said = self.run_pdfmd("a.md", "-t", "html")
-        self.assertIn("NOTE  a.md: no YAML front matter, so it is read as gfm, which leaves subscripts (H~2~O)", said.stdout)
-        self.assertNotIn("<sub>", (self.directory / "a.html").read_text(encoding="utf-8"))
-        self.assertNotIn("read as gfm", self.run_pdfmd("b.md", "-t", "html").stdout)
-        again = self.run_pdfmd("a.md", "-t", "html", "--from", "markdown")        # asked for: no notice
-        self.assertNotIn("read as gfm", again.stdout)
-        self.assertIn("<sub>", (self.directory / "a.html").read_text(encoding="utf-8"))
+        done = self.run_pdfmd("a.md", "-t", "html")
+        self.assertNotIn("NOTE", done.stdout)
+        self.assertIn("<sub>2</sub>", (self.directory / "a.html").read_text(encoding="utf-8"))
+        said = self.run_pdfmd("a.md", "-t", "html", "-v").stdout
+        self.assertIn("reading as gfm+subscript (it uses subscripts (H~2~O))", said)
+        self.assertIn("reading as gfm\n", self.run_pdfmd("b.md", "-t", "html", "-v").stdout)
+
+    def test_what_gfm_cannot_read_switches_the_reader(self):
+        self.write("a.md", "# Note\n\nText with a note^[the inline note].\n")
+        said = self.run_pdfmd("a.md", "-t", "html", "-v").stdout
+        self.assertIn("it uses inline footnotes (^[...]), which gfm cannot read; keeping the default markdown reader", said)
+        self.assertIn("the inline note", (self.directory / "a.html").read_text(encoding="utf-8"))
+        self.assertIn("footnote", (self.directory / "a.html").read_text(encoding="utf-8"))
+        self.write("b.md", "# Raw\n\n\\textbf{bold} here and ```` ``` ```` no.\n")
+        self.assertIn("raw LaTeX", self.run_pdfmd("b.md", "-t", "html", "-v").stdout)
+
+    def test_the_same_syntax_in_a_code_block_changes_nothing(self):
+        self.write("a.md", "# Example\n\n```\nH~2~O ^[note] \\begin{x}\n```\n")
+        said = self.run_pdfmd("a.md", "-t", "html", "-v").stdout
+        self.assertIn("reading as gfm\n", said)
 
     def test_the_reader_option_picks_the_dialect_for_one_document_or_a_folder(self):
         self.write("a.md", "---\ntitle: T\npdfmd-options:\n  reader: gfm\n---\n\nH~2~O\n")
@@ -131,8 +172,9 @@ class GlobalMetadataAndTheReader(unittest.TestCase):
         self.global_metadata("title: Global title\n")
         self.write("a.md", "Plain text.\n\nH~2~O\n")
         tex, said = self.tex()
-        self.assertIn("no YAML front matter, so it is read as gfm", said)
-        self.assertIn("H\\textasciitilde2\\textasciitilde O", tex)               # gfm leaves it as text
+        self.assertIn("no YAML front matter; reading as gfm", said)
+        self.assertIn("reading as gfm+subscript", said)
+        self.assertIn("H\\textsubscript{2}O", tex)                               # gfm with the subscript extension
         self.assertIn("\\title{Global title}", tex)                              # ...and the global metadata still applies
 
     def test_what_the_global_metadata_holds_still_applies_under_gfm(self):
@@ -161,7 +203,7 @@ class GlobalMetadataAndTheReader(unittest.TestCase):
     def test_a_leading_rule_is_not_front_matter(self):
         self.write("a.md", "---\n\nPlain text.\n\nH~2~O\n")
         tex, said = self.tex()
-        self.assertIn("no YAML front matter, so it is read as gfm", said)
+        self.assertIn("no YAML front matter; reading as gfm", said)
 
     def test_a_bare_title_is_still_left_alone_next_to_global_metadata(self):
         """pinned, not changed: promote_bare_title() treats the global metadata as external, as before."""

@@ -1447,7 +1447,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.4"
+PDFMD_VERSION = "3.32.5"
 import argparse
 import atexit
 import csv
@@ -13387,16 +13387,6 @@ def has_percent_title_block(text: str) -> bool:
     return bool(PERCENT_TITLE_BLOCK_RE.match(first_line))
 
 
-def has_definition_list(text: str) -> bool:
-    """Detect Pandoc's ``Term\\n: definition`` syntax.
-
-    GFM's reader can't parse this at all -- it has to be added back on top
-    as ``+definition_lists`` (Pandoc accepts that combination even though it
-    rejects e.g. ``gfm+citations``; see resolve_from_format()).
-    """
-    return bool(re.search(r"(?m)^:[ \t]", EMBED_BLOCK_RE.sub("", text)))
-
-
 # The readers Pandoc would not pick (or would pick wrongly) from the file's extension alone.
 SUFFIX_READERS = {".typ": "typst", ".typst": "typst"}
 PANDOC_KNOWN_SUFFIXES = frozenset({".typ"})
@@ -13502,9 +13492,13 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     if md_macro_in(text) and md_macro_on(md_path, list(metadata_files)):
         return None, (f"{md_path}: no YAML front matter, but it has `\\md{{...}}` (Markdown inside raw LaTeX), which only Pandoc's "
                       "markdown reader keeps as raw LaTeX for pdfmd to read; keeping the default markdown reader instead of gfm")
-    reader = "gfm"
-    if has_definition_list(text):
-        reader += "+definition_lists"
+    needs = reader_needs(text)
+    pandoc_only = [name for name, extension in needs if extension is None]
+    if pandoc_only:
+        return None, (f"{md_path}: no YAML front matter, but it uses {', '.join(pandoc_only)}, which gfm cannot read; "
+                      "keeping the default markdown reader")
+    names = [name for name, _ in needs]
+    extensions = [extension for _, extension in needs]
     if contains_csv_table(md_path):
         # A `.csv` div is Pandoc's fenced_divs syntax (`::: {.csv ...} :::`),
         # which -- unlike Pandoc's own default `markdown` reader, where it's
@@ -13513,49 +13507,72 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
         # instead of a real Div (caught directly: a first real test of this
         # feature rendered the div's own source text verbatim in the PDF,
         # smart-quoted, instead of a table at all).
-        reader += "+fenced_divs"
-    return reader, f"{md_path}: no YAML front matter; reading as {reader}"
+        names.append("a .csv table")
+        extensions.append("fenced_divs")
+    reader = "gfm" + "".join(f"+{extension}" for extension in dict.fromkeys(
+        part for extension in extensions for part in extension.split("+")))
+    return reader, f"{md_path}: no YAML front matter; reading as {reader}" + (f" (it uses {', '.join(names)})" if names else "")
 
 
-# What Pandoc's own Markdown reads that gfm (the reader a front-matter-less file gets) leaves as literal text.
-GFM_BLIND_SPOTS = (
-    ("subscripts (H~2~O)", re.compile(r"(?<![~\\])~(?!~)[^\s~]+~(?!~)")),
-    ("superscripts (x^2^)", re.compile(r"(?<![\^\\])\^[^\s^\[]+\^")),
-    ("inline footnotes (^[...])", re.compile(r"\^\[")),
-    ("{#id .class} attributes", re.compile(r"(?m)^#{1,6} .*\{[#.][^}]*\}[ \t]*$|\]\{[#.][^}]*\}|!\[[^\]]*\]\([^)]*\)\{[^}]*\}")),
-    ("raw LaTeX (\\begin{...}, \\newcommand, \\ce{...})", re.compile(r"\\(?:begin|newcommand|usepackage|ce|cite)\b")),
-    ("fenced divs (:::)", re.compile(r"(?m)^:{3,}[ \t]*\{?[.\w#]")),
+# What a Markdown file with no front matter may use that gfm does not read, and what each needs (v3.32.5; before, a NOTE said
+# gfm left it as text). The third column is an extension Pandoc accepts on gfm (added to the reader), or None when only Pandoc's
+# own Markdown reader reads it (the reader is then switched). The last column is the text the pattern looks at: "prose" is the
+# document without fenced code, inline code, math and HTML comments (an example in a code block is not syntax the document
+# uses), "fences" keeps inline code, "text" is the whole file (the line that opens a fence carries its attributes).
+READER_NEEDS = (
+    ("subscripts (H~2~O)", re.compile(r"(?<![~\\])~(?!~)[^\s~]+~(?!~)"), "subscript", "prose"),
+    ("superscripts (x^2^)", re.compile(r"(?<![\^\\])\^[^\s^\[]+\^"), "superscript", "prose"),
+    ("{#id .class} attributes", re.compile(r"(?m)^#{1,6} .*\{[#.][^}]*\}[ \t]*$|\]\{[#.][^}]*\}|!\[[^\]]*\]\([^)]*\)\{[^}]*\}"),
+     "attributes+bracketed_spans", "prose"),
+    ("attributes on inline code", re.compile(r"`[^`\n]+`\{[#.][^}\n]*\}"), "attributes", "fences"),
+    ("fenced code attributes ({.class key=value})", re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{"), "attributes", "text"),
+    ("raw attributes (`x`{=html})", re.compile(r"`[^`\n]+`\{=[A-Za-z]+\}"), "raw_attribute", "fences"),
+    ("fenced divs (:::)", re.compile(r"(?m)^:{3,}[ \t]*\{?[.\w#]"), "fenced_divs", "prose"),
+    ("definition lists", re.compile(r"(?m)^:[ \t]"), "definition_lists", "prose"),
+    ("inline footnotes (^[...])", re.compile(r"\^\["), None, "prose"),
+    ("raw LaTeX (\\begin{...}, \\newcommand{...}, \\ce{...})", re.compile(r"\\[A-Za-z]+\*?(?:\[[^\]\n]*\])?\{"), None, "prose"),
+    ("grid tables", re.compile(r"(?m)^\+[-=:]+(?:\+[-=:]+)*\+[ \t]*$"), None, "prose"),
+    ("simple tables", re.compile(r"(?m)^ {0,3}(?:-{2,}[ \t]+)+-{2,}[ \t]*$"), None, "prose"),
+    ("example lists ((@))", re.compile(r"(?m)^ {0,3}\(@[\w-]*\)[ \t]"), None, "prose"),
 )
 
+LIST_MARKER_RE = re.compile(r"(?m)^ {0,3}\(?([A-Za-z]|[ivxIVX]{1,4})[.)][ \t]+\S")
+ROMAN_NUMERALS = ("i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x")
 
-# A fence that opens with attributes (```{.smiles caption="..."}, ```{.d2 ...}): gfm takes `{.smiles` for the language word.
-FENCE_ATTRIBUTES = ("fenced code attributes ({.class key=value})", re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{"))
+
+def has_fancy_list(prose: str) -> bool:
+    """Two list items in a row that are lettered or numbered in Roman (``a.`` ``b.``, ``(i)`` ``(ii)``, ``A)`` ``B)``): Pandoc's
+    ``fancy_lists``. One such line alone ("I. Introduction") is text, as it is in GFM."""
+    markers = [(prose.count("\n", 0, match.start()), match.group(1)) for match in LIST_MARKER_RE.finditer(prose)]
+    for (line, first), (next_line, second) in zip(markers, markers[1:]):
+        if next_line - line > 8 or first.isupper() != second.isupper():
+            continue
+        low_first, low_second = first.lower(), second.lower()
+        if len(low_first) == len(low_second) == 1 and ord(low_second) == ord(low_first) + 1:
+            return True
+        if low_first in ROMAN_NUMERALS and low_second in ROMAN_NUMERALS \
+                and ROMAN_NUMERALS.index(low_second) == ROMAN_NUMERALS.index(low_first) + 1:
+            return True
+    return False
 
 
-def gfm_blind_spots(text: str) -> list[str]:
-    """What ``text`` uses that Pandoc's Markdown reads and gfm would print as it is (code is not looked at, but the line that
-    opens a fence is)."""
-    prose = re.sub(r"(?ms)^(`{3,}|~{3,}).*?^\1[ \t]*$", "", text)
-    prose = re.sub(r"`[^`\n]*`", "", prose)
-    found = [name for name, pattern in GFM_BLIND_SPOTS if pattern.search(prose)]
-    if FENCE_ATTRIBUTES[1].search(text):
-        found.append(FENCE_ATTRIBUTES[0])
+def reader_texts(text: str) -> dict[str, str]:
+    """The three views of a document the detectors of READER_NEEDS look at."""
+    without_fences = re.sub(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", "", text)
+    prose = re.sub(r"`[^`\n]*`", "", without_fences)
+    prose = re.sub(r"(?s)<!--.*?-->", "", prose)
+    prose = re.sub(r"(?s)\$\$.*?\$\$", "", prose)
+    prose = re.sub(r"(?<![\\$])\$(?!\s)[^$\n]*?(?<!\s)\$(?!\d)", "", prose)
+    return {"text": text, "fences": without_fences, "prose": prose}
+
+
+def reader_needs(text: str) -> list[tuple[str, str | None]]:
+    """(what the document uses, the gfm extension it needs or None for Pandoc's own reader) for each syntax found."""
+    views = reader_texts(text)
+    found = [(name, extension) for name, pattern, extension, view in READER_NEEDS if pattern.search(views[view])]
+    if has_fancy_list(views["prose"]):
+        found.append(("lettered or Roman-numeral lists", "fancy_lists"))
     return found
-
-
-def reader_notice(md_path: Path, reason: str | None) -> None:
-    """Said outright (not only under -v): a file with no front matter is read as gfm, and it uses something gfm does
-    not know. The same text with a front-matter block (even an empty one) is read as Pandoc's Markdown."""
-    if not reason or "reading as gfm" not in reason:
-        return
-    try:
-        found = gfm_blind_spots(md_path.read_text(encoding="utf-8-sig"))
-    except (OSError, UnicodeDecodeError):
-        return
-    if found:
-        print(f"NOTE  {display_path(md_path)}: no YAML front matter, so it is read as gfm, which leaves "
-              f"{', '.join(found)} as plain text. Pandoc's Markdown reads them: add a front-matter block, "
-              "or --from markdown, or `pdfmd-options: {reader: markdown}` in metadata.yaml")
 
 
 ATX_H1_RE = re.compile(r"^#[ \t]+(?P<title>.+?)[ \t]*#*[ \t]*$")
@@ -23245,7 +23262,6 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     )
     if reader_reason:
         note("READER", reader_reason)
-        reader_notice(md_path, reader_reason)
     lua_filters = [] if discovery_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files, no_auto)
     if not auto_disabled(no_auto, "lua"):
         for extra_filter in frontmatter_extra_lua_filters(md_path):
@@ -29024,7 +29040,6 @@ def run_main() -> None:
         )
         if report_reader_reason:
             report_note("READER", report_reader_reason)
-            reader_notice(files[0], report_reader_reason)
         output_extension = output_extension_for(target_format)
         if args.out:
             # Check is-a-directory BEFORE adding a default suffix -- a dot-less

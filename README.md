@@ -120,7 +120,9 @@ copied from an old shell history, or a Makefile in every folder. `pdfmd` turns t
   matter is written for Pandoc and is left alone. Front matter is what Pandoc itself reads as a metadata block (`---`,
   then a line that is not blank, then a closing `---` or `...`), so a file that opens with a horizontal rule is not
   one. Your own global metadata (`pdfmd --setup`) is the machine's, not the document's: it changes nothing here,
-  while a `metadata.yaml` beside the document does mean Pandoc's Markdown.
+  while a `metadata.yaml` beside the document does mean Pandoc's Markdown. A file that uses Pandoc syntax gfm cannot read
+  (raw LaTeX, `^[inline footnotes]`, grid tables, `@citations`) is read as Pandoc's Markdown too, and one that uses
+  syntax gfm can take (`H~2~O`, `x^2^`, `{#id}`, `:::` divs, definition lists) gets it added to gfm.
 - **It finds your project files.** A `metadata.yaml`, `preamble.tex` or `<name>.lua` beside the document (or in a
   `metadata/` folder next to it) is used without a flag, so every document in a folder shares one house style.
 - **It does not give up on the first engine.** If `lualatex` fails or is missing it tries the next one, and says why
@@ -2356,7 +2358,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
-| `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). If the file uses what only Pandoc's Markdown reads (`H~2~O`, `x^2^`, `{#id}` attributes, raw LaTeX, fenced divs), a `NOTE` says gfm leaves it as text; `--from markdown`, a front-matter block, or `reader:` below changes it |
+| `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). What gfm can take as an extension is added to it when the file uses it (`+subscript` for `H~2~O`, `+superscript`, `+attributes` and `+bracketed_spans` for `{#id .class}`, `+fenced_divs`, `+definition_lists`, `+fancy_lists` for `a.` `b.` lists, `+raw_attribute`). What gfm cannot read at all (`^[inline footnotes]`, raw LaTeX such as `\textbf{..}` or `\begin{..}`, grid and simple tables, `(@)` example lists, `@citations`) switches the file to Pandoc's Markdown. Code blocks, inline code, math and HTML comments are not looked at, so an example of the syntax in one changes nothing. `--verbose` says which syntax decided; `--from markdown`, a front-matter block, or `reader:` below changes it |
 | `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
