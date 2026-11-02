@@ -160,6 +160,17 @@ brew install aliperdehan/pdfmd/pdfmd
 (The formula, `Formula/pdfmd.rb`, lives in this repository; the first command is needed because the repository is not
 named `homebrew-...`. The release workflow keeps it on the newest PyPI release.)
 
+On Windows, Scoop installs it together with Python, Pandoc and Typst:
+
+```powershell
+scoop bucket add pdfmd https://github.com/aliperdehan/pdfmd
+scoop install pdfmd/pdfmd
+```
+
+(The manifest, `bucket/pdfmd.json`, lives in this repository; pdfmd sits in its own virtual environment, which `scoop reinstall
+pdfmd` rebuilds after Scoop updates Python. The release workflow keeps the manifest on the newest PyPI release and installs
+it with Scoop on a Windows runner first. For a LaTeX engine: `scoop install tectonic`.)
+
 In a container, with nothing installed on the host but Docker (Pandoc, Typst, Tectonic and pdfmd's default fonts are inside):
 
 ```sh

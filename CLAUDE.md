@@ -106,9 +106,11 @@ variants, two architectures, smoke-tested before they are pushed to `ghcr.io/ali
 running `docker.yml` by hand with the push off (or locally with Docker: `docker/smoke.sh IMAGE`).
 
 **After a release, pull before the next push.** The `homebrew` job of `publish.yml` commits the formula bump
-(`Formula/pdfmd.rb`) to `main` as `github-actions[bot]`, so GitHub's `main` is one commit ahead of the local one. Run
+(`Formula/pdfmd.rb`) to `main` as `github-actions[bot]`, and so does the `scoop` job, so GitHub's `main` is then one or two commits
+ahead of the local one. Run
 `git pull --ff-only` (`--rebase` when local commits exist) before every push, or the push is rejected. The bot touches only
-that file, so there is never a conflict. The formula lives in this repository; there is no separate tap repository.
+that file (and the `scoop` job `bucket/pdfmd.json`), so there is never a conflict. The formula and the Scoop manifest live in this
+repository; there is no separate tap or bucket repository.
 
 ## Decisions are recorded first
 

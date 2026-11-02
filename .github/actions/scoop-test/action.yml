@@ -1,0 +1,30 @@
+name: Scoop install test
+description: Install Scoop on a Windows runner, install pdfmd from bucket/pdfmd.json, build a document, uninstall.
+runs:
+  using: composite
+  steps:
+    - name: Install Scoop
+      shell: pwsh
+      run: |
+        Invoke-RestMethod -Uri https://get.scoop.sh -OutFile "$env:RUNNER_TEMP\install-scoop.ps1"
+        & "$env:RUNNER_TEMP\install-scoop.ps1" -RunAsAdmin
+        Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\scoop\shims"
+    - name: Install pdfmd from the manifest
+      shell: pwsh
+      run: |
+        scoop install "$PWD\bucket\pdfmd.json"
+        if ($LASTEXITCODE -ne 0) { throw "scoop install failed" }
+    - name: Build a document
+      shell: pwsh
+      run: |
+        pdfmd --version
+        $dir = Join-Path $env:RUNNER_TEMP "scoop-test"
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content -Path "$dir\s.md" -Value "# Smoke`n`nText with `$x^2`$ and a table.`n`n| a | b |`n|---|---|`n| 1 | 2 |`n"
+        pdfmd "$dir\s.md" -e typst --no-stamp --no-backup
+        if (-not (Test-Path "$dir\s.pdf") -or (Get-Item "$dir\s.pdf").Length -eq 0) { throw "no PDF was made" }
+    - name: Uninstall
+      shell: pwsh
+      run: |
+        scoop uninstall pdfmd
+        if (Get-Command pdfmd -ErrorAction SilentlyContinue) { throw "pdfmd is still on the PATH" }

@@ -1,0 +1,16 @@
+# Does `scoop install` of bucket/pdfmd.json work on Windows? Run by hand (the manifest's version must be on PyPI), or
+# from publish.yml after a release, which does the same steps after pointing the manifest at the release.
+name: Scoop manifest
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/scoop-test

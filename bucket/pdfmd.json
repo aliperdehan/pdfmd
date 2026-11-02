@@ -1,0 +1,30 @@
+{
+    "version": "3.31.46",
+    "description": "Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults",
+    "homepage": "https://github.com/aliperdehan/pdfmd",
+    "license": "MIT",
+    "depends": [
+        "python",
+        "pandoc",
+        "typst"
+    ],
+    "suggest": {
+        "A LaTeX engine, for documents that need one": [
+            "tectonic"
+        ]
+    },
+    "installer": {
+        "script": [
+            "& python -m venv \"$dir\\venv\"",
+            "if ($LASTEXITCODE -ne 0) { throw 'python -m venv failed' }",
+            "& \"$dir\\venv\\Scripts\\python.exe\" -m pip install --disable-pip-version-check --quiet \"pdfmd-cli==$version\"",
+            "if ($LASTEXITCODE -ne 0) { throw 'pip install pdfmd-cli failed' }"
+        ]
+    },
+    "bin": "venv\\Scripts\\pdfmd.exe",
+    "checkver": {
+        "url": "https://pypi.org/pypi/pdfmd-cli/json",
+        "jsonpath": "$.info.version"
+    },
+    "notes": "pdfmd lives in its own virtual environment under the app folder; after Scoop updates Python, `scoop reinstall pdfmd` rebuilds it."
+}

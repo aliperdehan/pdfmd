@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.46f — 2026-11-02
+
+Pre-edit state: commit `f47c019`. No shipped code changes (a manifest, a script, a workflow and docs; none of it is in the PyPI package), so no version bump. Entry 3ej.
+
+A Scoop bucket for Windows, in this repository.
+
+- `bucket/pdfmd.json`: depends on Python, Pandoc and Typst (suggests Tectonic); its install script makes a virtual environment in the app folder and has pip install `pdfmd-cli==<version>` into it; `pdfmd.exe` is the shim. `scoop bucket add pdfmd https://github.com/aliperdehan/pdfmd`, then `scoop install pdfmd/pdfmd`.
+- `scripts/bump_scoop.py` (shares the PyPI lookup with `bump_formula.py`): changes the manifest's `version` and nothing else; `tests/test_scoop_bucket.py` checks the manifest and the script.
+- `.github/actions/scoop-test` installs Scoop on a Windows runner, installs pdfmd from the manifest, builds a document with Typst and uninstalls it. `scoop.yml` runs it by hand; the new `scoop` job of `publish.yml` points the manifest at the release, runs it, and commits the manifest to `main` as the bot, next to the Homebrew job (both pushes now pull and try again, since they can meet).
+- README: the Scoop install in the install section.
+
 ## v3.31.46e — 2026-11-02
 
 Pre-edit state: commit `418ac50`. No shipped code changes (a Dockerfile, a workflow and docs; none of it is in the PyPI package), so no version bump. Entry 3ej, the author's wish: "let's try docker and scoop", with Tectonic and Typst instead of a full TeX Live and Calibre and LibreOffice optional.
