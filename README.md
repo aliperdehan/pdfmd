@@ -1853,9 +1853,12 @@ the page. pdfmd reads it as a pipe table instead. Six spellings are repaired:
   row groups. Pandoc's `markdown` reader reads the `+` rule, `gfm` does not; pdfmd rewrites it either way. The rows above the first rule
   are the header, the later rules only group rows and are dropped. A row of alignment cookies (`| <l> | <r> | <c> |`, with a width
   `<r10>` or `<10>`) is dropped and sets the alignment of the columns (a width alone sets none). `#+CAPTION: text` right above the
-  table becomes its caption (several lines are joined), and `#+NAME: tbl:id` its identifier; a plain name is dropped, and other
-  `#+` lines (`#+ATTR_LATEX:`, `#+TBLFM:`) stay as written. A caption needs Pandoc's `markdown` reader, so a file with no front
-  matter that has a `#+CAPTION:` line is read with it instead of `gfm`.
+  table becomes its caption (several lines are joined; any case), and `#+NAME: tbl:id` its identifier; a plain name is dropped.
+  This works above any pipe table, one that needed no repair too (`| a | b |` or `a | b` with its `:-|-:` row). `#+ATTR_*:` lines
+  above are taken: `:align lcr` sets the alignment (a cookie row wins; a pipe table's own separator row wins over it), every
+  other option is dropped with a WARN. `#+TBLFM:` lines below (Emacs's spreadsheet formulas, the cells already hold the result) are
+  dropped with a WARN, and never calculated. Other `#+` lines stay as written. A caption needs Pandoc's `markdown` reader, so a
+  file with no front matter that has a `#+CAPTION:` line is read with it instead of `gfm`.
 - **`|` lines with no separator row**: every line starts and ends with `|`, has two cells or more, the same number on each line, and
   no line is a separator (`|---|---|`). Pandoc makes a paragraph or a line block of it; the first row becomes the header. A real pipe table
   is never touched.
@@ -1876,6 +1879,31 @@ pdfmd-options:
 ```
 
 Also a `--setup` row, at the config and folder levels.
+
+#### A table cell with its own alignment
+
+A pipe table sets the alignment of a whole column in its separator row. A cell that starts with `<l>`, `<c>` or `<r>` overrides it
+for that cell alone:
+
+```markdown
+| Name   | Qty |
+|:-------|----:|
+| apples |   3 |
+| <c> total | <l> 12 |
+```
+
+The tag and the space after it are cut off (`<c>mid` works too, and a cell of only the tag is an empty cell). HTML, Typst, Word
+and the other writers use the alignment the cell carries; Pandoc's LaTeX writer ignores it, so for LaTeX and Beamer pdfmd wraps
+the cell in raw TeX: `\multicolumn{1}{c}{...}` in a column of its natural width, `{\centering ...\par}` in a column that has a width
+(`\raggedleft`, `\raggedright` for the others). A cell with more than one paragraph or a list is left as written, and so is
+everything for the Markdown writers. It is not Org's syntax (Org's cookies are a row that sets whole columns, see above).
+
+```yaml
+pdfmd-options:
+  cell-align: on              # on (default), off
+```
+
+Also a `--setup` row. The native (no-Pandoc) renderer does not do it.
 
 #### A line break inside a table cell
 

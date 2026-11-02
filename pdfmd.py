@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.51"
+PDFMD_VERSION = "3.31.52"
 import argparse
 import atexit
 import csv
@@ -3236,6 +3236,40 @@ def linebreak_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
     shipped = pdfmd_lua.path("linebreak")
     return (["-M", "pdfmd-linebreak=" + ",".join(kinds), "-M", "pdfmd-linebreak-where=" + where, "--lua-filter", str(shipped)]
             if shipped is not None else [])
+
+
+# One table cell with its own alignment (v3.31.52, entry 3el): a cell that starts with `<l>`, `<c>` or `<r>` overrides the column's
+# alignment. pdfmd_lua/cellalign.lua cuts the tag off and sets the cell's alignment (LaTeX gets raw TeX around the cell, which is why
+# the filter goes in after the table-width filter). pdfmd-options: cell-align: on (the default) | off. Only for a document that has a cell
+# like that.
+CELL_ALIGN_RE = re.compile(r"(?:^|\|)[ \t]*<[lcr]>(?:[ \t]|\||$)", re.MULTILINE | re.IGNORECASE)
+
+
+def cell_align_on(md_path: Path, metadata_files: list[Path]) -> bool:
+    """The `cell-align` option: on unless the document, a metadata file or the config says off (anything else stops the build)."""
+    value = first_pdfmd_option(md_path, metadata_files, "cell-align")
+    if value is None:
+        return True
+    word = {True: "on", False: "off"}.get(value, str(value).strip().casefold())
+    if word not in ("on", "off"):
+        raise SystemExit(f"pdfmd-options cell-align: {value!r} is not one of on, off")
+    return word == "on"
+
+
+def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter cellalign.lua`` for a document with a `<l>`, `<c>` or `<r>` cell, unless `cell-align` is off."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or not cell_align_on(files[0], metadata_files):
+        return []
+    if not any(CELL_ALIGN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("cellalign")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 # A fenced div that sets the paragraph indent for its stretch of text (v3.30.0): `::: {indent=false}`, `{indent=2em}`,
@@ -13423,7 +13457,7 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     return front_matter + remainder, True
 
 
-# Text tables Pandoc does not read as tables (v3.31.47-51, entry 3el): ASCII tables without the inner `+` of a grid table
+# Text tables Pandoc does not read as tables (v3.31.47-52, entry 3el): ASCII tables without the inner `+` of a grid table
 # (what chat models write for "a plain-text table", lazy forms too), box-drawing tables, psql and MySQL console output,
 # Org-mode tables (`|---+---|`) and `|` lines with no separator row.
 # pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
@@ -13454,6 +13488,11 @@ def repair_ascii_text(text: str, mode: str, label: str) -> str:
         return text
     fixed, repairs = repair_ascii_tables(text)
     for repair in repairs:
+        if repair.kind == "extras":          # a pipe table that was fine: only the `#+` lines around it were dealt with
+            if mode != "note":
+                for problem in repair.problems:
+                    print(f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
+            continue
         shape = f"{repair.columns} columns, {repair.rows} row{'s' if repair.rows != 1 else ''}"
         if mode == "note":
             print(f"NOTE  table-ascii: {label}, line {repair.line}: {repair.what} ({shape}) that Pandoc does not read as a "
@@ -22281,6 +22320,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += markup_filter_args(md_path, metadata_files)
             cmd += table_caption_args(md_path, metadata_files)
             cmd += linebreak_args(md_path, metadata_files)
+            cmd += cellalign_args(md_path, metadata_files)
             cmd += title_filter_args(md_path, metadata_files)
             cmd += cover_filter_args(md_path, metadata_files)
             cmd += raw_filter_args(md_path, no_auto, metadata_files)
@@ -22812,6 +22852,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
+            cmd += cellalign_args(md_path, metadata_files)
             cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
             hoist_code_header(cmd)
             keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
@@ -23333,6 +23374,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
                     cmd += width_filter_args(width_filter)
+                cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                 if is_tex_target:
                     cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                     hoist_code_header(cmd)
@@ -23591,6 +23633,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += width_filter_args(width_filter)
+                    cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                         hoist_code_header(cmd)
@@ -29010,6 +29053,7 @@ def run_main() -> None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
                         cmd += width_filter_args(width_filter)
+                    cmd += cellalign_args(files, metadata_files)
                     if is_tex_target:
                         cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                         hoist_code_header(cmd)
@@ -29145,6 +29189,7 @@ def run_main() -> None:
                             cmd += ["--lua-filter", str(report_fonts_filter)]
                         if report_tablewidth_auto and engine in LATEX_ENGINES:
                             cmd += width_filter_args(width_filter)
+                        cmd += cellalign_args(files, metadata_files)
                         if engine in LATEX_ENGINES:
                             cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                             hoist_code_header(cmd)

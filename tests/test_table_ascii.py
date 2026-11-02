@@ -1,4 +1,4 @@
-"""v3.31.47-51: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
+"""v3.31.47-52: a text table Pandoc cannot read is read as a pipe table (entry 3el): an ASCII table with no `+` at its column
 boundaries (what chat models write for "a plain-text table"), its lazy forms, box-drawing tables, psql and MySQL console
 output. The pure function first, then real builds to LaTeX through pdfmd."""
 
@@ -187,12 +187,35 @@ class Forms(unittest.TestCase):
     def test_org_caption_and_name_lines_above_the_table_become_its_caption(self):
         text = "#+NAME: tbl:fruit\n#+ATTR_LATEX: :align lr\n#+CAPTION: Fruit *prices*\n| a | b |\n|---+---|\n| 1 | 2 |\n\nAfter\n"
         lines, _ = self.table(text)
-        self.assertEqual(lines, ["#+ATTR_LATEX: :align lr", "", "| a | b |", "| --- | --- |", "| 1 | 2 |", "",
+        self.assertEqual(lines, ["| a | b |", "| :---- | ----: |", "| 1 | 2 |", "",         # `:align lr` of the ATTR line
                                  ": Fruit *prices* {#tbl:fruit}", "", "After"])
         lines, _ = self.table("#+CAPTION: Two\n#+CAPTION: lines\n#+NAME: plain\n| a | b |\n| 1 | 2 |\n")
         self.assertEqual(lines[-1], ": Two lines")                   # a plain name would show as words in an old Pandoc: dropped
         lines, _ = self.table("#+CAPTION: x\ntext\n\n| a | b |\n| 1 | 2 |\n")      # not directly above: stays
         self.assertEqual(lines[0], "#+CAPTION: x")
+
+    def test_a_caption_above_a_pipe_table_that_needs_no_repair_is_taken_too(self):
+        lines, repairs = self.table("#+caption: Demo\n#+NAME: tbl:d\n1 | 2 | 3\n:-|:-:|-:\n<c> a | <r> b | <l> c\n\nAfter\n")
+        self.assertEqual(lines, ["1 | 2 | 3", ":-|:-:|-:", "<c> a | <r> b | <l> c", "", ": Demo {#tbl:d}", "", "After"])
+        self.assertEqual(repairs, [])                          # silent: nothing was repaired
+        lines, _ = self.table("#+CAPTION: Valid\n| a | b |\n|---|---|\n| 1 | 2 |\n\nNext\n")
+        self.assertEqual(lines[-3:], [": Valid", "", "Next"])
+
+    def test_attr_and_tblfm_lines_are_consumed_with_a_warning_for_what_is_not_used(self):
+        lines, repairs = self.table("#+ATTR_LATEX: :align |l|r| :width 5cm\n| a | b |\n|---+---|\n| 1 | 2 |\n#+TBLFM: $2=$1*2\n")
+        self.assertEqual(lines, ["| a | b |", "| :---- | ----: |", "| 1 | 2 |"])
+        self.assertEqual(len(repairs[0].problems), 2)
+        self.assertIn(":width 5cm", repairs[0].problems[0])
+        self.assertIn("#+TBLFM", repairs[0].problems[1])
+        lines, repairs = self.table("#+ATTR_HTML: :align lr\n| a | b |\n|---|---|\n| 1 | 2 |\n#+TBLFM: x\n\ntext\n")
+        self.assertEqual(lines, ["| a | b |", "|---|---|", "| 1 | 2 |", "", "text"])       # a valid table: its separator row decides
+        self.assertEqual((repairs[0].kind, len(repairs[0].problems)), ("extras", 2))
+
+    def test_other_org_lines_and_a_caption_in_code_stay(self):
+        text = "#+TITLE: x\n\n```\n#+CAPTION: c\n| a | b |\n|--|--|\n```\n"
+        self.assertEqual(repair_ascii_tables(text), (text, []))
+        lines, _ = self.table("#+RESULTS:\n#+CAPTION: c\n| a | b |\n| 1 | 2 |\n")
+        self.assertEqual(lines[:2], ["#+RESULTS:", ""])
 
     def test_real_pipe_tables_and_line_blocks_are_never_touched(self):
         for text in ("| a | b |\n|---|---|\n| 1 | 2 |\n", "| a | b |\n|:--|--:|\n| 1 | 2 |\n", "| a |\n|---|\n| 1 |\n",

@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.52 — 2026-11-02
+
+Pre-edit state: commit `bd497d7`. Still under 3.31. `[tables]`, entry 3el (the author: "it shows that some features we've added are thin ... record it and add todo line to revise the full functionality ... and start with all those three").
+
+Three things the author's own example showed missing: a caption above a table that needs no repair, the `#+` lines of Org, and a cell's own alignment.
+
+- `#+CAPTION:` (any case) and `#+NAME: tbl:id` above ANY pipe table become its caption, one that needed no repair included (with or without outer bars: `1 | 2 | 3` and `:-|:-:|-:`). That table is otherwise not touched, and nothing is printed for it unless a `#+` line was dropped.
+- `#+ATTR_*:` lines directly above an Org or rule-less table are consumed: `:align lcr` (letters l, c, r; `|` and other characters ignored) sets the alignment when no cookie row does; every other option is dropped with a WARN. Above a valid pipe table its separator row decides and `:align` is reported as not used. `#+TBLFM:` lines directly below are dropped with a WARN naming them (the cells hold the result; nothing is calculated).
+- A cell that starts with `<l>`, `<c>` or `<r>` keeps that alignment: `pdfmd_lua/cellalign.lua` cuts the tag (and the space after it) off. HTML, Typst, Word and the rest use the cell's alignment; Pandoc's LaTeX writer ignores it, so LaTeX and Beamer get raw TeX, `\multicolumn{1}{c}{...}` in a column of natural width and `{\centering ...\par}` in a column with a width, which is why the filter goes in after the table-width filter (a new `cellalign_args()` after every `width_filter_args` call). The Markdown writers keep the text; a cell with more than one block is left alone. `pdfmd-options: cell-align: on|off` (default on, a `--setup` row), loaded only for a document that has such a cell.
+- `tests/test_cellalign.py` (9 tests: detection, natural and wrapped LaTeX columns, Typst, HTML, `off`, a bad word, the Markdown writers, no filter without a tag, the author's example whole); `tests/test_table_ascii.py` (40 tests: captions above valid tables, ATTR and TBLFM, `#+` lines in code, others kept). README: the cell-alignment section and the Org bullet.
+- Not done: the native tier; `#+TBLFM:` is never evaluated. TODO: a line to revise the thin features of this line (the pre-pass kinds, line breaks, table captions, `<c>` cells, Org extras) against unusual input during the documentation programme.
+
 ## v3.31.51 — 2026-11-02
 
 Pre-edit state: commit `70963c6`. Still under 3.31. `[tables]`, entry 3el (the author, asked whether Org's alignment cookies and `#+CAPTION:` would be useful: "let's do it").

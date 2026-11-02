@@ -1,4 +1,4 @@
-"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-51, entry 3el).
+"""Text tables that Pandoc does not read as the table they are, repaired into pipe tables (3.31.47-52, entry 3el).
 
 Six spellings, one result (a pipe table, with equal columns that pdfmd's own width filter balances):
 
@@ -23,9 +23,12 @@ Six spellings, one result (a pipe table, with equal columns that pdfmd's own wid
 * A block of ``|`` lines with no separator row at all (an Org table without a rule, what some chat models write): Pandoc reads
   it as a paragraph or a line block. The first row is the header.
 
-An Org table also brings its own extras (3.31.51): a row of alignment cookies (``| <l> | <r> | <c> |``, a width ``<r10>`` or ``<10>``)
+An Org table also brings its own extras (3.31.51-52): a row of alignment cookies (``| <l> | <r> | <c> |``, a width ``<r10>`` or ``<10>``)
 is dropped and sets the alignment of the columns; ``#+CAPTION:`` directly above the table (and ``#+NAME: tbl:id``) become its
-caption, as a ``: caption {#tbl:id}`` line below it, which only Pandoc's ``markdown`` reader reads as a caption.
+caption, as a ``: caption {#tbl:id}`` line below it, which only Pandoc's ``markdown`` reader reads as a caption. These lines are
+taken above ANY table, a valid pipe table too (``extras``: nothing else of it is touched). ``#+ATTR_*:`` lines above are consumed
+(``:align lcr`` sets the columns when no cookie row does; every other option is dropped with a warning) and ``#+TBLFM:`` lines below
+are dropped with a warning (the cells already hold what the formula calculated).
 
 The repair is position-independent, because bars cannot be trusted to line up: a row is split on its bars. The lines
 between two borders are one row (the lines of a wrapped cell are joined with a space); when the body has no border between
@@ -52,7 +55,7 @@ BOX_VERTICAL = "│┃║"
 BOX_OTHER_VERTICAL = "╎╏┆┇┊┋"
 BOX_HORIZONTAL = "─━═┄┅┈┉╌╍"
 BOX_HEAVY = "═━"
-LOOKS_LIKE_ONE = re.compile(r"^ {0,3}(?:\+[-=]|[─-╿]|-+\+|\|)", re.MULTILINE)
+LOOKS_LIKE_ONE = re.compile(r"^ {0,3}(?:\+[-=]|[─-╿]|-+\+|\||#\+)|:?-+:?\|", re.MULTILINE)
 ORG_ROW = re.compile(r"^ {0,3}\|")
 ORG_RULE = re.compile(r"^ {0,3}\|[-+]*-[-+]*\|?[ \t]*$")           # `|---+---|`, `|-`: an Org rule (no inner bar)
 SEPARATOR_CELL = re.compile(r":?-+:?$")
@@ -66,6 +69,7 @@ KINDS = {
     "mysql": "a console table whose body Pandoc reads as one row",
     "org": "an Org-mode table (a `|---+---|` rule)",
     "pipe": "a table of `|` lines with no separator row",
+    "extras": "",                 # a pipe table that was fine: only its `#+` lines were taken
 }
 
 
@@ -211,7 +215,7 @@ def mysql_rows(items: list[Item]) -> list[list[str]] | None:
     return rows                                         # type: ignore[return-value]
 
 
-def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | None:
+def org_table(block: list[str], first_line: int, default_aligns: list[str] = ()) -> tuple[list[str], Repair] | None:
     """The pipe table for a block of lines that all start with ``|`` when it is an Org table (it has a ``|---+---|`` rule)
     or a table with no separator row at all; None for anything else, a valid pipe table first of all."""
     cells = {number: split_cells(text) for number, text in enumerate(block) if not ORG_RULE.match(text)}
@@ -250,38 +254,84 @@ def org_table(block: list[str], first_line: int) -> tuple[list[str], Repair] | N
         for what, value in sequence[first_rule + 1:]:
             if what == "row":
                 items += [("row", value), ("rule", False)]
-    built = assemble(items, first_line, "org" if rules else "pipe", aligns)
+    built = assemble(items, first_line, "org" if rules else "pipe", aligns if any(aligns) else list(default_aligns))
     if built is None:
         return None
     indent = block[0][:len(block[0]) - len(block[0].lstrip())]
     return [indent + line for line in built[0]], built[1]
 
 
-def org_caption(out: list[str]) -> list[str]:
-    """The lines of a caption for the table that is about to be written, from the ``#+CAPTION:`` and ``#+NAME:`` lines right
-    above it in ``out`` (which loses them; any other ``#+`` line stays). ``["", ": caption {#tbl:id}"]``, or nothing."""
+@dataclass
+class Keywords:
+    """The Org ``#+`` lines right above a table: where they start in ``out``, what they say, what is left of them."""
+    start: int
+    kept: list[str]                    # the lines that are not ours (`#+OTHER:`), in order
+    caption: list[str]
+    name: str
+    aligns: list[str]                  # from `:align lcr` of an `#+ATTR_*:` line
+    problems: list[str]                # what was dropped
+
+    @property
+    def found(self) -> bool:
+        return bool(self.caption or self.name or self.aligns or self.problems)
+
+    def caption_lines(self) -> list[str]:
+        """``["", ": caption {#tbl:id}"]``, or nothing."""
+        ident = " {#" + self.name + "}" if re.match(r"tbl:[-\w]+$", self.name) else ""    # a plain Org name would show as words before Pandoc 3.8.2
+        return ["", ": " + " ".join(self.caption) + ident] if self.caption else []
+
+
+def peek_keywords(out: list[str]) -> Keywords:
+    """The ``#+CAPTION:``, ``#+NAME:`` and ``#+ATTR_*:`` lines right above the table about to be written (the run of ``#+`` lines
+    at the end of ``out``). ``out`` is not changed: the caller puts ``out[start:] = kept`` when it uses them."""
     start = len(out)
     while start and ORG_KEYWORD.match(out[start - 1]):
         start -= 1
-    caption: list[str] = []
-    name = ""
-    kept: list[str] = []
+    found = Keywords(start, [], [], "", [], [])
     for line in out[start:]:
-        found = ORG_KEYWORD.match(line)
-        word = found.group(1).upper() if found else ""
-        if word == "CAPTION" and found.group(2):
-            caption.append(found.group(2))
+        match = ORG_KEYWORD.match(line)
+        word = match.group(1).upper() if match else ""
+        value = match.group(2) if match else ""
+        if word == "CAPTION":
+            if value:
+                found.caption.append(value)
         elif word in ("NAME", "TBLNAME"):
-            name = found.group(2) if name == "" else name
-        elif word == "CAPTION":
-            pass
+            found.name = found.name or value
+        elif word.startswith("ATTR_"):
+            wanted = re.search(r":align[ \t]+(\S+)", value)
+            if wanted and not found.aligns:
+                found.aligns = [letter for letter in wanted.group(1).lower() if letter in "lrc"]
+            rest = re.sub(r":align[ \t]+\S+", "", value).strip()
+            if rest:
+                found.problems.append(f"`#+{word}:` options are not used ({rest[:40]}); only :align is")
         else:
-            kept.append(line)
-    if not caption and not name:
-        return []
-    out[start:] = kept
-    ident = " {#" + name + "}" if re.match(r"tbl:[-\w]+$", name) else ""     # a plain Org name would show as words before Pandoc 3.8.2
-    return ["", ": " + " ".join(caption) + ident] if caption else []
+            found.kept.append(line)
+    return found
+
+
+def tblfm_lines(lines: list[str], end: int) -> list[str]:
+    """The ``#+TBLFM:`` lines that start at ``lines[end]`` (a spreadsheet formula under an Org table)."""
+    found = []
+    while end + len(found) < len(lines):
+        match = ORG_KEYWORD.match(lines[end + len(found)].rstrip("\r"))
+        if not match or match.group(1).upper() != "TBLFM":
+            break
+        found.append(lines[end + len(found)])
+    return found
+
+
+def pipe_table_end(lines: list[str], index: int) -> int | None:
+    """The end (exclusive) of a pipe table that Pandoc reads as one, a header line and a separator row (``:-|:-:|-:``) and its
+    rows up to a blank line or a ``#+`` line, when it starts at ``lines[index]``; else None."""
+    if index + 1 >= len(lines) or not BAR.search(lines[index]) or lines[index].startswith(("    ", "\t")):
+        return None
+    separator = lines[index + 1]
+    if not BAR.search(separator) or not all(SEPARATOR_CELL.match(cell) for cell in split_cells(separator)):
+        return None
+    end = index + 2
+    while end < len(lines) and lines[end].strip() and not ORG_KEYWORD.match(lines[end].rstrip("\r")):
+        end += 1
+    return end
 
 
 def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
@@ -293,6 +343,7 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
         return text, []
     out: list[str] = []
     repairs: list[Repair] = []
+    changed = False                       # a caption or a `#+` line was taken from a table that needed no repair
     index = 0
     fence: str | None = None
     in_comment = False
@@ -384,16 +435,43 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
                              else ("row", split_box_cells(item)))
             built = (assemble(items, index + 1, "box")
                      if items and items[0][0] == "rule" and items[-1][0] == "rule" else None)
+        elif pipe_table_end(lines, index) is not None:                 # a pipe table as Pandoc reads it: only its `#+` lines are taken
+            end = pipe_table_end(lines, index)
+            keys = peek_keywords(out)
+            formulas = tblfm_lines(lines, end)
+            problems = keys.problems + [f"dropped `{line.strip()[:50]}` (a spreadsheet formula; the cells hold its result)" for line in formulas]
+            if keys.aligns:
+                problems.append("an `#+ATTR_*: :align` is not used: the separator row of the table sets the alignment")
+            if keys.found or formulas:
+                out[keys.start:] = keys.kept
+                changed = True
+                out.extend(lines[index:end])
+                out.extend(keys.caption_lines())
+                if keys.caption and end + len(formulas) < len(lines) and lines[end + len(formulas)].strip():
+                    out.append("")
+                if problems:
+                    repairs.append(Repair(index + 1, 0, 0, problems, "extras"))
+                index = end + len(formulas)
+            else:
+                out.extend(lines[index:end])
+                index = end
+            continue
         elif ORG_ROW.match(bare):                                      # Org-mode, and `|` lines with no separator row
             end = index
             while end < len(lines) and ORG_ROW.match(lines[end].rstrip("\r")):
                 end += 1
-            built = org_table([item.rstrip("\r") for item in lines[index:end]], index + 1)
+            keys = peek_keywords(out)
+            built = org_table([item.rstrip("\r") for item in lines[index:end]], index + 1, keys.aligns)
             if built is None:                       # not one of those (a real pipe table): all of it stays, not to be read again from its second line
                 out.extend(lines[index:end])
                 index = end
                 continue
-            built = (built[0] + org_caption(out), built[1])
+            formulas = tblfm_lines(lines, end)
+            out[keys.start:] = keys.kept
+            built[1].problems.extend(keys.problems)
+            built[1].problems.extend(f"dropped `{line.strip()[:50]}` (a spreadsheet formula; the cells hold its result)" for line in formulas)
+            built = (built[0] + keys.caption_lines(), built[1])
+            end += len(formulas)
         elif PSQL_RULE.match(bare) and out and out[-1].strip() and not out[-1].lstrip().startswith("|"):
             plus = bare.count("+")
             if len(BAR.findall(out[-1])) == plus:
@@ -414,6 +492,6 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
             continue
         out.append(line)
         index += 1
-    if not repairs:
+    if not repairs and not changed:
         return text, []
     return newline.join(out), repairs
