@@ -144,7 +144,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "line-number-step": "options.line-number-step",
     "csv": "options.csv.enabled", "csv.enabled": "options.csv.enabled",
     "csv.rows": "options.csv.rows", "csv.cols": "options.csv.cols", "table-keep": "options.table-keep",
-    "table-captions": "options.table-captions", "table-caption-label": "options.table-caption-label",
+    "table-ascii": "options.table-ascii", "table-captions": "options.table-captions", "table-caption-label": "options.table-caption-label",
     "table-caption-need-label": "options.table-caption-need-label", "table-caption-colon-words": "options.table-caption-colon-words", "table-caption-words": "options.table-caption-words",
     "pager": "options.pager", "pager_command": "options.pager_command", "pager-command": "options.pager_command",
     "csv.cut": "options.csv.cut", "csv.note": "options.csv.note", "csv.delimiter": "options.csv.delimiter",

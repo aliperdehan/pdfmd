@@ -1824,6 +1824,37 @@ pdfmd-options:
 
 Every key is also a `--setup` row, at the config and folder levels.
 
+#### A plain-text table from a chat model
+
+Asked for "a table in plain text", chat models (NotebookLM, among others) write something like this:
+
+```
++----------------------------------------------+
+| Model Name          | Origin                 |
++----------------------------------------------+
+| Replacement Model   | Africa;                |
+| (Out of Africa II)  | ~200-100 ka            |
++----------------------------------------------+
+```
+
+It is not a Pandoc grid table: the borders have no `+` where the columns meet, the header has no `+===+` line under it, and the
+`|` bars drift by a character here and there. Pandoc reads it as a table of one column without a header, and the text runs off
+the page. pdfmd reads it as a pipe table instead: the bars are not trusted to line up, a row is split on `|`, the lines between
+two borders are one row (the lines of a wrapped cell are joined with a space), and the first row is the header (every row above a
+`+===+` line, when there is one). It works on a temporary copy, so the file is never changed, and says
+`WARN  table-ascii: report.md, line 12: an ASCII table without a `+` at its column boundaries was read as a pipe table (4 columns, 4 rows)`
+for each table. A row with another number of cells than the header is padded or cut, with a WARN of its own. A real grid table
+(`+---+---+`), a grid table of one column, and anything inside code, a comment or the front matter are left alone. A literal `|`
+inside a cell must be written `\|`; a cell with several paragraphs or a list needs a real grid table. The parts of a document in
+parts are read the same way; the no-Pandoc native renderer does not do it (yet).
+
+```yaml
+pdfmd-options:
+  table-ascii: repair         # repair (default), note (leave it, say so), off
+```
+
+Also a `--setup` row, at the config and folder levels.
+
 #### Turning tables into CSV blocks, and back
 
 ```

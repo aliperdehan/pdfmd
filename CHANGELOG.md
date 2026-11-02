@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.31.47 — 2026-11-02
+
+Pre-edit state: commit `4761d60`. Still under 3.31. `[tables]`, entry 3el (the author pasted a table that NotebookLM wrote; "just implement it now under 3.31").
+
+An ASCII table with no `+` at its column boundaries is read as a pipe table.
+
+- Chat models write a "plain-text table" with `+-----+` borders that have no inner `+`, no `+===+` under the header, and `|` bars that drift by a character. Pandoc read it as one column without a header (every line a cell, the text off the page), and `table_width.lua` had nothing to balance. `pdfmd_tables/ascii.py` (new) repairs it before Pandoc sees it: a row is split on `|` (the bars' positions are not trusted), the lines between two borders are one row (wrapped cell lines joined with a space), the first row is the header (every row above a `+===+` line, if there is one), and the result is a pipe table with equal columns, which pdfmd's own width filter balances as it does any other. Rows with another number of cells than the header are padded or cut, each with a WARN.
+- A real grid table (an inner `+`), a grid table of one column (no line with two cells), and anything inside a fenced or indented code block, an HTML comment or the YAML front matter are left alone. A literal `|` in a cell must be written `\|`.
+- The text is changed in memory: `prepared_title_source()` (the document and a section built alone) and `scaffold_inputs()` (every part; the new `transform` argument) hand Pandoc a temporary copy, the file is never touched. One `WARN  table-ascii: FILE, line N: ...` for each table. Not done: the native (no-Pandoc) tier.
+- `pdfmd-options: table-ascii: repair` (the default) | `note` (leave it, say so once for each table) | `off`; a `--setup` row (`pdfmd_setup/registry.py`) and its inventory entry. A word that is none of them stops the build. No number is a threshold.
+- README: "A plain-text table from a chat model". Tests: `tests/test_table_ascii.py` (the function, then real builds: the default, `note`, `off`, a bad word, a real grid table, a part).
+
 ## v3.31.46f — 2026-11-02
 
 Pre-edit state: commit `f47c019`. No shipped code changes (a manifest, a script, a workflow and docs; none of it is in the PyPI package), so no version bump. Entry 3ej.

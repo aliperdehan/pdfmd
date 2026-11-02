@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.46"
+PDFMD_VERSION = "3.31.47"
 import argparse
 import atexit
 import csv
@@ -1499,7 +1499,7 @@ from shutil import which
 import tempfile
 from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
 from textwrap import dedent
-from typing import Iterator
+from typing import Callable, Iterator
 
 
 # -- Writing a file in place: through a temporary file in the same folder and os.replace() -------------------------
@@ -13356,6 +13356,47 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
     return front_matter + remainder, True
 
 
+# ASCII tables without the inner `+` of a grid table (v3.31.47, entry 3el): what chat models write for "a plain-text table".
+# Pandoc reads them as one column with no header; pdfmd_tables/ascii.py turns them into pipe tables, in memory (a temporary
+# copy, the file is never touched). pdfmd-options: table-ascii: repair (the default, one WARN per table) | note (leave
+# it, say so) | off.
+TABLE_ASCII_MODES = ("repair", "note", "off")
+
+
+def table_ascii_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """The `table-ascii` option (documented above), checked: a word that is not one of the choices stops the build."""
+    value = first_pdfmd_option(md_path, metadata_files, "table-ascii")
+    if value is None:
+        return "repair"
+    word = {True: "repair", False: "off"}.get(value, str(value).strip().casefold())
+    if word not in TABLE_ASCII_MODES:
+        raise SystemExit(f"pdfmd-options table-ascii: {value!r} is not one of {', '.join(TABLE_ASCII_MODES)}")
+    return word
+
+
+def repair_ascii_text(text: str, mode: str, label: str) -> str:
+    """``text`` with its ASCII tables turned into pipe tables (mode `repair`), or unchanged with a NOTE for each (`note`);
+    ``label`` names the file in the messages. Nothing to say, and nothing done, when there is no such table."""
+    if mode == "off":
+        return text
+    try:
+        from pdfmd_tables.ascii import repair_ascii_tables
+    except ImportError:
+        return text
+    fixed, repairs = repair_ascii_tables(text)
+    for repair in repairs:
+        shape = f"{repair.columns} columns, {repair.rows} row{'s' if repair.rows != 1 else ''}"
+        if mode == "note":
+            print(f"NOTE  table-ascii: {label}, line {repair.line}: an ASCII table ({shape}) that Pandoc reads as one column; "
+                  "pdfmd-options: table-ascii: repair rewrites it as a pipe table, off ends this note")
+            continue
+        print(f"WARN  table-ascii: {label}, line {repair.line}: an ASCII table without a `+` at its column boundaries was "
+              f"read as a pipe table ({shape}); pdfmd-options: table-ascii: off keeps it as written")
+        for problem in repair.problems:
+            print(f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
+    return text if mode == "note" else fixed
+
+
 @contextmanager
 def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
                           disabled: bool = False,
@@ -13374,6 +13415,8 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     """
     if override is not None:
         text, shifted = override
+        if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
+            text = repair_ascii_text(text, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
         with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
                                 prefix=f".{md_path.stem}.pdfmd-section-", dir=md_path.parent,
                                 delete=False) as temporary:
@@ -13384,21 +13427,24 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         finally:
             temporary_path.unlink(missing_ok=True)
         return
-    if disabled or md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
+    if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         yield md_path, False
         return
     text = md_path.read_text(encoding="utf-8-sig")
-    corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
-    if not shifted:
+    corrected, shifted = text, False
+    if not disabled:
+        corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
+    repaired = repair_ascii_text(corrected, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
+    if not shifted and repaired == corrected:
         yield md_path, False
         return
     with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
                             prefix=f".{md_path.stem}.pdfmd-title-", dir=md_path.parent,
                             delete=False) as temporary:
-        temporary.write(corrected)
+        temporary.write(repaired)
         temporary_path = Path(temporary.name)
     try:
-        yield temporary_path, True
+        yield temporary_path, shifted
     finally:
         temporary_path.unlink(missing_ok=True)
 
@@ -16994,7 +17040,8 @@ def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str 
 @contextmanager
 def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
-                    select: "set[Path] | None" = None) -> Iterator[list[Path]]:
+                    select: "set[Path] | None" = None,
+                    transform: "Callable[[str, Path], str] | None" = None) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
     a part with nothing to remove is passed through untouched). ``markers``
@@ -17011,6 +17058,8 @@ def scaffold_inputs(files: list[Path], active: bool,
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             cleaned = strip_part_front_matter(text)
+            if transform is not None:
+                cleaned = transform(cleaned, part)     # a rewrite of the part's text (ASCII tables), before it is cut or wrapped
             if select is not None:
                 # every part goes in, wrapped; select.lua drops the ones (or the sections) not asked for
                 if part in select and part in PART_CUTS:
@@ -17039,6 +17088,16 @@ def scaffold_inputs(files: list[Path], active: bool,
     finally:
         for path in temporary:
             path.unlink(missing_ok=True)
+
+
+def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list[Path]) -> "Callable[[str, Path], str] | None":
+    """The ``transform`` of scaffold_inputs() that repairs the ASCII tables of a part (the document's own setting), or None."""
+    if not parts:
+        return None
+    mode = table_ascii_mode(md_path, list(metadata_files))
+    if mode == "off":
+        return None
+    return lambda text, part: repair_ascii_text(text, mode, display_path(part))
 
 
 def print_parts(plan: ScaffoldPlan) -> None:
@@ -22985,7 +23044,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             scaffold_inputs([md_path, *parts_inputs], bool(parts_inputs),
                             {part: part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None,
-                            selection if isinstance(selection, (set, frozenset)) else None) as scaffold_files:
+                            selection if isinstance(selection, (set, frozenset)) else None,
+                            ascii_table_transform(md_path, metadata_files, parts_inputs)) as scaffold_files:
         part_files = scaffold_files[1:]
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
