@@ -12794,7 +12794,42 @@ def announce_lookup(query: str, shown: str, tier: tuple, field: str, text: str,
 # the names of its siblings (`report.final.md` over `report.md` over `report_draft.md`) and, for equal tops, the newest file. An
 # exact name (`pdfmd report`) is untouched: it is the override. `--no-auto priority` brings the old list-and-stop back.
 
-PRIORITY_PICK = True       # main() clears it for --no-auto priority
+NO_AUTO_CLI: list[str] | None = None    # --no-auto as given (set in main): the command line's layer of priority_enabled()
+
+# What pdfmd itself writes beside a source when it stops at Markdown or writes flat Markdown: `report.assembled.md`
+# (--stop-at markdown), `report.gfm.md` (--to gfm), `report.ascii.md`, `report.ascii.gfm.md`. They are named like documents
+# but are the output of one, so bare pdfmd never chooses among them (the newest of a folder would be the last build's output).
+GENERATED_MARKDOWN_ENDINGS = (".ascii.gfm", ".assembled", ".gfm", ".ascii")
+
+
+def priority_enabled(folder: Path) -> bool:
+    """Whether bare pdfmd in ``folder`` chooses by priority: `priority` is not switched off by `--no-auto` or by the folder's
+    layers (`.pdfmd/config.yaml`, `.pdfmd/metadata.yaml`, the config file): `options: {no-auto: [priority]}`, `auto: {priority: off}`.
+    A document's own front matter has no say: no document is chosen yet."""
+    # the layers of effective_no_auto(), for no document: the command line, an empty document, the folders, the config
+    stand_in = folder / ".pdfmd-folder.md"
+    above = [(where, folder_auto_safe(options, where)) for where, options in folder_layers(stand_in)]
+    layers: list[tuple[object, dict]] = [(stand_in, {"no-auto": NO_AUTO_CLI or True} if NO_AUTO_CLI is not None else {}), (stand_in, {}),
+                                         *above, ("config", config_options())]
+    return not auto_disabled(resolve_auto(layers, len(above)), "priority")
+
+
+def source_markdown(files: list[Path]) -> list[Path]:
+    """``files`` without what pdfmd wrote itself (GENERATED_MARKDOWN_ENDINGS beside their source, any assembled file, any
+    hidden file such as the temporary `.name.pdfmd-*.md`). All of them are kept if that leaves none."""
+    names = {file.name.casefold() for file in files}
+    kept = []
+    for file in files:
+        if file.name.startswith("."):
+            continue
+        lowered = file.stem.casefold()
+        if any(lowered.endswith(ending) and len(lowered) > len(ending) and lowered[:-len(ending)] + ".md" in names
+               for ending in GENERATED_MARKDOWN_ENDINGS):
+            continue
+        if is_assembled_document(file):
+            continue
+        kept.append(file)
+    return kept or files
 
 
 def document_priority(path: Path):
@@ -12996,9 +13031,14 @@ def which_command(names: list[str], args) -> bool:
         print(f"ranking: {error}", file=sys.stderr)
         return False
     ranking.warnings += ranking_clashes(layers, own)
-    candidates = priority_candidates(files)
     newest, include_never = args.newest, args.include_never
-    if not PRIORITY_PICK and not newest:
+    if priority_enabled(folder) or newest:
+        sources = source_markdown(files)
+        if len(sources) != len(files):
+            print(f"NOTE  not candidates (pdfmd's own output): {', '.join(display_path(file) for file in files if file not in sources)}")
+            files = sources
+    candidates = priority_candidates(files)
+    if not priority_enabled(folder) and not newest:
         print("WHICH  --no-auto priority: bare pdfmd stops with the list of Markdown files and builds none of them")
         return True
     choice = choose(candidates, ranking, by=["newest"] if newest else None, show=display_path, include_excluded=include_never)
@@ -13023,7 +13063,7 @@ def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
     """``files`` without the documents that say `priority: never` (or another word of a class with `exclude`), which are named in
     one NOTE: what `-b`, `-r` and the viewer list from a folder. ``include_never`` (`--all`) keeps them, and so does
     `--no-auto priority`. A document named on the command line is never dropped: the callers pass only what a folder gave them."""
-    if include_never or not PRIORITY_PICK:
+    if include_never:
         return files
     from pdfmd_ranking import MISSING
     by_folder: dict[Path, list[Path]] = {}
@@ -13031,6 +13071,8 @@ def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
         by_folder.setdefault(file.parent, []).append(file)
     dropped: list[Path] = []
     for folder_files in by_folder.values():
+        if not priority_enabled(folder_files[0].parent):
+            continue
         values = {file: document_priority(file) for file in folder_files}
         if all(value is MISSING for value, _ in values.values()):
             continue
@@ -28801,6 +28843,20 @@ def watch_signature(source: Path) -> float:
     return latest
 
 
+def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list[str]:
+    """The command line a watch re-runs, with the document it chose pinned (v3.32.13): `pdfmd -w` in a folder of several
+    Markdown files chose one by priority or age, and a later run must not choose again (the choice would move to whichever file
+    was saved last). ``given`` is the paths the command line named: none, or only a `#section`/`@section` request, which the
+    chosen document is put in front of. `--newest` is dropped, since the pinned path names the file."""
+    argv = [arg for arg in argv if arg != "--newest"]
+    if not given:
+        return [*argv, "--", str(chosen)]
+    token = str(given[0])
+    if len(given) == 1 and token[:1] in ("#", "@") and token in argv:
+        argv[argv.index(token)] = f"{chosen}{token}"
+    return argv
+
+
 def run_watch(source: Path, argv: list[str]) -> None:
     """Recompile ``source`` immediately, then again on each later change.
 
@@ -29051,13 +29107,13 @@ def run_main() -> None:
     if first_input is not None and Path(first_input).is_dir():
         first_input = Path(first_input) / "x.md"
     PATH_STYLE, PATH_UP = path_style_settings(args.path_style, args.path_up, first_input, args.verbose)
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI, PRIORITY_PICK
+    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI, NO_AUTO_CLI
     global PRESET_CLI, GLOBAL_METADATA_CLI
     CITEPROC_DISABLED = args.no_citeproc
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
-    PRIORITY_PICK = not auto_disabled(args.no_auto, "priority")
+    NO_AUTO_CLI = args.no_auto
     global FALLBACK_CLI, MISSING_CLI, STRICT_CLI
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
     if args.strict is not None:
@@ -29423,8 +29479,11 @@ def run_main() -> None:
             except (AttributeError, ValueError, OSError):
                 pass
             raise SystemExit("No Markdown files found in the current directory." + hint)
+        picking = len(markdown_files) > 1 and (args.newest or priority_enabled(directory))
+        if picking:
+            markdown_files = source_markdown(markdown_files)
         if len(markdown_files) > 1:
-            if PRIORITY_PICK or args.newest:
+            if picking:
                 newest_used.append(True)
                 return choose_markdown(markdown_files, args.newest, args.include_never)
             names = ", ".join(path.name for path in markdown_files)
@@ -29501,7 +29560,7 @@ def run_main() -> None:
                 watch_source = find_markdown(paths[0])
             except FileNotFoundError as error:
                 raise SystemExit(str(error))
-        run_watch(watch_source, sys.argv[1:])
+        run_watch(watch_source, pinned_watch_argv(sys.argv[1:], args.path, paths[0]))
         return
     if args.report:
         files, excluded = report_sources(paths, args.ignore, args.exclude_unnumbered, args.recursive, args.include_never)

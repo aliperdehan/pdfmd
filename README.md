@@ -598,7 +598,11 @@ A `priority` written in any member of a family (`report`, `report.final`...) swi
 you meant. Equal tops are settled by the **newest file**, with a warning that names them all and what raised each; if their
 modification times are identical too, the choice stops with that list. A value that is neither a number nor a word is a warning and
 counts as nothing. An exact name is always the override: `pdfmd report` builds `report.md` whatever else is there.
-`--no-auto priority` brings back the old list-and-stop.
+`--no-auto priority` brings back the old list-and-stop; so does `no-auto: [priority]` (or `auto: {priority: off}`) under
+`options` in a folder's `.pdfmd/config.yaml` or `metadata.yaml` or in the config file. What pdfmd wrote itself is never a candidate:
+`report.assembled.md`, `report.gfm.md`, `report.ascii.md`, `report.ascii.gfm.md` beside `report.md`, any file that carries the
+`pdfmd-assembled` mark, and hidden files, so a second bare `pdfmd` builds the same source as the first. `pdfmd -w` keeps the
+document it chose: a rebuild never chooses again.
 
 **`--newest`, `--all`, and the lists.** `pdfmd --newest` builds the most recently changed file of the folder, whatever priorities
 and names say (only `never` still keeps a document out). `pdfmd --all` (or `--include-never`) counts the `never` documents too:
