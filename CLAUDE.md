@@ -101,6 +101,10 @@ changelog commit, pushed. A push without a version bump publishes nothing.
 Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
 publisher is registered to exactly those names.
 
+The same push builds the container images (`.github/workflows/docker.yml`, called from `publish.yml` after the upload): four
+variants, two architectures, smoke-tested before they are pushed to `ghcr.io/aliperdehan/pdfmd`. A change to `docker/` is tested by
+running `docker.yml` by hand with the push off (or locally with Docker: `docker/smoke.sh IMAGE`).
+
 **After a release, pull before the next push.** The `homebrew` job of `publish.yml` commits the formula bump
 (`Formula/pdfmd.rb`) to `main` as `github-actions[bot]`, so GitHub's `main` is one commit ahead of the local one. Run
 `git pull --ff-only` (`--rebase` when local commits exist) before every push, or the push is rejected. The bot touches only

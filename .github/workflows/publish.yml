@@ -73,6 +73,18 @@ jobs:
           git tag "v${{ needs.version.outputs.version }}"
           git push origin "v${{ needs.version.outputs.version }}"
 
+  # The container image, built from the release that is now on PyPI (docker.yml: four variants, two architectures, smoke-tested
+  # before anything is pushed). It does not hold up the release: PyPI and the tag are already done when it starts.
+  docker:
+    needs: [version, publish]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      push: true
+
   # After the upload (or, when this version is already on PyPI, on its own: a manual run repairs a formula that fell behind):
   # the Homebrew formula in this repository is pointed at the release, checked by brew on a Mac, and committed. A push made
   # with GITHUB_TOKEN starts no workflow, so this does not run the tests again.

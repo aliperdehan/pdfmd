@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.31.46e — 2026-11-02
+
+Pre-edit state: commit `418ac50`. No shipped code changes (a Dockerfile, a workflow and docs; none of it is in the PyPI package), so no version bump. Entry 3ej, the author's wish: "let's try docker and scoop", with Tectonic and Typst instead of a full TeX Live and Calibre and LibreOffice optional.
+
+A container image, `ghcr.io/aliperdehan/pdfmd`.
+
+- `docker/Dockerfile`: one file, four variants by build argument. `latest` is Python, pdfmd from PyPI, Pandoc and Typst (`--install full`), Tectonic (`--install core:tex`), the default fonts, and one warm-up build so Tectonic's own files are in the image and a run needs no network (0.8 GB). `TEX=1` adds TeX Live's LuaTeX and XeTeX for documents that set `engine: lualatex`; `OFFICE=1` adds Calibre (`--install calibre`, with the Qt libraries it needs) and LibreOffice (3.4 GB); both are `full` (4.4 GB). The tools and caches are in `/opt/pdfmd`, open to every user, so `docker run --user` works. The default fonts come from a CTAN mirror that sometimes stalls, so the build gives that step a time limit and tries again.
+- `docker/smoke.sh`: what CI runs on every image before it is pushed, as another user than root and with no network: the default engine, Typst, Tectonic (and lualatex for TeX Live); Word, EPUB and ODT output, Calibre and LibreOffice for the office variants. It caught a missing Qt library of Calibre in the first office image.
+- `.github/workflows/docker.yml`: the four variants for amd64 and arm64 (on the native runners, no emulation), the smoke test, a push by digest and one multi-platform tag per variant (`latest`, `tex`, `office`, `full`, and `X.Y.Z[-variant]`). `publish.yml` calls it after the PyPI upload; run by hand from the Actions tab it builds and tests without pushing, or publishes the images of a release that is already on PyPI.
+- README: the container in the install section. `CLAUDE.md`: the release also builds the images.
+
 ## v3.31.46d — 2026-11-02
 
 Pre-edit state: commit `50e7ed1`. No shipped code changes (a docs file only), so no version bump.

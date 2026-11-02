@@ -160,6 +160,26 @@ brew install aliperdehan/pdfmd/pdfmd
 (The formula, `Formula/pdfmd.rb`, lives in this repository; the first command is needed because the repository is not
 named `homebrew-...`. The release workflow keeps it on the newest PyPI release.)
 
+In a container, with nothing installed on the host but Docker (Pandoc, Typst, Tectonic and pdfmd's default fonts are inside):
+
+```sh
+docker run --rm -v "$PWD":/work ghcr.io/aliperdehan/pdfmd report.md
+```
+
+The PDF is written next to the source. On Linux add `--user "$(id -u):$(id -g)"`, so the files belong to you and not to root.
+The tags, for both amd64 and arm64, each as `latest`/`tex`/`office`/`full` and as `X.Y.Z`/`X.Y.Z-tex`/`X.Y.Z-office`/`X.Y.Z-full`
+for one release (sizes unpacked, measured on arm64):
+
+| tag | adds | size |
+|---|---|---|
+| `latest` | Pandoc, Typst, Tectonic (its files are fetched at build time, so a run needs no network), the default fonts | 0.8 GB |
+| `tex` | TeX Live's LuaTeX and XeTeX: for documents that set `engine: lualatex` | about 1.7 GB |
+| `office` | Calibre and LibreOffice: Word, ODT and EPUB output, Office files and SVG pictures | 3.4 GB |
+| `full` | both | 4.4 GB |
+
+TeX Live is optional everywhere: without it pdfmd uses Tectonic (XeTeX) or Typst, which cover most documents.
+`docker/Dockerfile` is one file for all four (`--build-arg TEX=1 OFFICE=1`).
+
 To update later, run `pipx upgrade pdfmd-cli`. (The package is named
 `pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.
 The command is still `pdfmd`. For the latest unreleased code, use `pipx
