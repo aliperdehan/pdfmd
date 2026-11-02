@@ -2243,6 +2243,46 @@ an SVG with poppler's `pdftocairo` (or `mutool`, `pdf2svg`, `inkscape`) and stay
 SVG is kept by the PDF's content. It is on by default, since it only changes what would not have shown; `--no-auto
 pdfimages` turns it off. LaTeX and Typst read PDFs themselves, and Word has its own route.
 
+#### Markdown inside raw LaTeX: `\md{...}`
+
+Raw LaTeX in a Markdown file is passed to LaTeX untouched, so `*emphasis*`, `$x^2$` and `[@smith2020]` inside a `\textbf{...}`,
+a `\caption{...}` or a hand-written `tabular` stay as typed. Wrap them in `\md{...}` and pdfmd reads them as Markdown:
+
+```latex
+See \textbf{\md{**bold**, $x^2$ and a citation [@smith2020]}}.
+
+\begin{tabular}{ll}
+one & \md{*it*, 50\% and [@smith2020]} \\
+\end{tabular}
+
+\begin{md}
+A block with a list, a table, a citation [@smith2020]:
+
+- first *item*
+- second item
+\end{md}
+```
+
+What the argument holds is part of the one document: citations are resolved by `--citeproc` (and listed in the bibliography),
+`@fig:x` by pandoc-crossref, math is typeset. `\md{...}` works in a paragraph, a heading, a list, a table cell and inside another
+raw command (`\textbf{\md{x}}`), and in a raw block such as a `tabular` or a `figure` for LaTeX, Beamer and ConTeXt (the other
+writers drop that raw block, as they always did). `\begin{md}...\end{md}` holds blocks (paragraphs, lists, tables) and works for
+every writer. The braces of the argument must balance: write a literal one as `\{` or `\}` (a backslash escapes the next
+character); `%` and `#` are Markdown there, not a TeX comment or parameter; a `|` inside a pipe-table cell is written `\|`; a
+code span with a lone brace goes into `\begin{md}`, which counts no braces. Several paragraphs in `\md{...}` are joined with a line break. A command
+that merely starts with the letters (`\mdseries`) is not touched. A document that defines `\md` itself (`\newcommand{\md}`,
+`\def\md`, `\newenvironment{md}`) keeps its definition, and pdfmd says so once. An unbalanced `\md{` is left as it was, with a
+WARN.
+
+```yaml
+pdfmd-options:
+  md-macro: on                # on (default), off
+```
+
+Also a `--setup` row. Only Markdown sources read by Pandoc: the native (no-Pandoc) renderer and a `.tex` source compiled
+directly do not read it. A file with no front matter that uses `\md{...}` is read with Pandoc's `markdown` reader instead of
+`gfm` (which has no raw LaTeX), the same way `@citations` already switch it.
+
 ### Not just Markdown
 
 ```sh

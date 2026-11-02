@@ -1442,7 +1442,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.31.52"
+PDFMD_VERSION = "3.32.0"
 import argparse
 import atexit
 import csv
@@ -3269,6 +3269,55 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
         pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("cellalign")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
+# Markdown inside raw LaTeX (v3.32.0, entry 3dc): `\md{...}` and `\begin{md}...\end{md}`. pdfmd_lua/md_macro.lua reads the argument as
+# Markdown, so citations, cross-references and math stay in the one document; the filter goes in before every other one (before
+# pandoc-crossref and --citeproc). pdfmd-options: md-macro: on (the default) | off. Only for a document that has a macro, and not
+# one that defines `\md` itself.
+MD_MACRO_RE = re.compile(r"\\md(?![A-Za-z])[ \t]*\{|\\begin\{md\}")
+MD_MACRO_OWN_RE = re.compile(
+    r"\\(?:re|provide)?newcommand\*?[ \t]*\{?[ \t]*\\md(?![A-Za-z])|\\(?:def|let|gdef|edef)[ \t]*\\md(?![A-Za-z])"
+    r"|\\Declare(?:Robust)?Command\*?[ \t]*\{?[ \t]*\\md(?![A-Za-z])|\\(?:re)?newenvironment\*?[ \t]*\{md\}")
+MD_MACRO_CODE_RE = re.compile(r"^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$|`[^`\n]*`", re.MULTILINE | re.DOTALL)
+
+
+def md_macro_in(text: str) -> bool:
+    """Whether the text uses `\\md{...}` or `\\begin{md}` outside code, and does not define `\\md` itself."""
+    bare = MD_MACRO_CODE_RE.sub("", text)
+    return bool(MD_MACRO_RE.search(bare)) and not MD_MACRO_OWN_RE.search(bare)
+
+
+def md_macro_on(md_path: Path, metadata_files: list[Path]) -> bool:
+    """The `md-macro` option: on unless the document, a metadata file or the config says off (anything else stops the build)."""
+    value = first_pdfmd_option(md_path, metadata_files, "md-macro")
+    if value is None:
+        return True
+    word = {True: "on", False: "off"}.get(value, str(value).strip().casefold())
+    if word not in ("on", "off"):
+        raise SystemExit(f"pdfmd-options md-macro: {value!r} is not one of on, off")
+    return word == "on"
+
+
+def md_macro_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter md_macro.lua`` for a document with an `\\md{...}` or `\\begin{md}`, unless `md-macro` is off or the document
+    defines `\\md` itself (then its own definition stands)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or not md_macro_on(files[0], metadata_files):
+        return []
+    if not any(MD_MACRO_RE.search(MD_MACRO_CODE_RE.sub("", read_text_best_effort(file))) for file in files):
+        return []
+    if not any(md_macro_in(read_text_best_effort(file)) for file in files):
+        print(f"NOTE  {files[0]}: \\md is defined by the document itself, so pdfmd does not read Markdown inside it "
+              "(`md-macro: off` silences this)", file=sys.stderr)
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("md_macro")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
@@ -13086,7 +13135,14 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
     if pandoc:
         try:
             text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
-            done = subprocess.run([pandoc, "-f", "markdown", "-t", "json"], input=text, capture_output=True,
+            command = [pandoc, "-f", "markdown", "-t", "json"]
+            if md_macro_in(text):
+                # the Markdown inside `\md{...}` is part of the document: a citation there needs --citeproc
+                import pdfmd_lua
+                shipped = pdfmd_lua.path("md_macro")
+                if shipped is not None:
+                    command += ["--lua-filter", str(shipped)]
+            done = subprocess.run(command, input=text, capture_output=True,
                                   text=True, encoding="utf-8", timeout=120)
             if done.returncode == 0:
                 found = ast_features(json.loads(done.stdout))
@@ -13351,6 +13407,9 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     if ORG_CAPTION_RE.search(text) and table_ascii_mode(md_path, list(metadata_files)) == "repair":
         return None, (f"{md_path}: no YAML front matter, but it has Org `#+CAPTION:` lines, which become table captions "
                       "that only Pandoc's markdown reader reads; keeping the default markdown reader instead of gfm")
+    if md_macro_in(text) and md_macro_on(md_path, list(metadata_files)):
+        return None, (f"{md_path}: no YAML front matter, but it has `\\md{{...}}` (Markdown inside raw LaTeX), which only Pandoc's "
+                      "markdown reader keeps as raw LaTeX for pdfmd to read; keeping the default markdown reader instead of gfm")
     reader = "gfm"
     if has_definition_list(text):
         reader += "+definition_lists"
@@ -22313,6 +22372,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             for variable in variables:
                 cmd += ["-V", variable]
             cmd += metadata_append_args(md_path, metadata_files)
+            cmd += md_macro_args(md_path, metadata_files)
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -22835,6 +22895,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += metadata_append_args(md_path, metadata_files)
+            cmd += md_macro_args(md_path, metadata_files)
             cmd += calc_filter_args(md_path, metadata_files)
             cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
             cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -23330,6 +23391,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
                 cmd += metadata_append_args(all_inputs or md_path, metadata_files)
+                cmd += md_macro_args(all_inputs or md_path, metadata_files)
                 cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                 cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                 cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -23594,6 +23656,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += metadata_append_args(all_inputs or md_path, metadata_files)
+                    cmd += md_macro_args(all_inputs or md_path, metadata_files)
                     cmd += calc_filter_args(all_inputs or md_path, metadata_files)
                     cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(md_path, metadata_files)
@@ -29028,6 +29091,7 @@ def run_main() -> None:
                         cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                                 args.self_contained, report_note)
                     cmd += metadata_append_args(files, metadata_files)
+                    cmd += md_macro_args(files, metadata_files)
                     cmd += calc_filter_args(files, metadata_files)
                     cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                     cmd += pagebreak_filter_args(files, metadata_files)
@@ -29160,6 +29224,7 @@ def run_main() -> None:
                         if report_header_file is not None:          # last, as in the branch above
                             cmd += ["--include-in-header", str(report_header_file)]
                         cmd += metadata_append_args(files, metadata_files)
+                        cmd += md_macro_args(files, metadata_files)
                         cmd += calc_filter_args(files, metadata_files)
                         cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
                         cmd += pagebreak_filter_args(files, metadata_files)

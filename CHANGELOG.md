@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.0 — 2026-11-02
+
+Pre-edit state: commit `394e482`. Opens the `\md{}` feature line, entry 3dc (queued 2026-10-26; the author, 2026-11-02: "i guess it is a good time to create that \md{} feature we were thinking of").
+
+Markdown inside raw LaTeX. Raw LaTeX in a Markdown file reaches LaTeX untouched, so `*emphasis*`, `$x^2$` or `[@key]` inside a `\textbf{...}`, a `\caption{...}` or a hand-written `tabular` stayed as typed.
+
+- `\md{...}` (one line or several) and `\begin{md}...\end{md}` hold Markdown: new `pdfmd_lua/md_macro.lua` splits the raw TeX Pandoc hands over into [raw TeX, the argument read as Markdown, raw TeX] with `pandoc.read`. It is the first of pdfmd's Lua filters, before pandoc-crossref and `--citeproc`, so a citation, an `@fig:x` reference, math or a footnote in the argument belongs to the one document.
+- Where: a raw inline (`\textbf{\md{x}}`, a paragraph, heading, list item, table cell, caption) for every writer; a raw block such as a whole `tabular` or `figure` as one Plain block for LaTeX, Beamer and ConTeXt (the other writers drop that raw block as before); `\begin{md}` as real blocks (paragraphs, lists, tables) for every writer, also inside another raw environment. Several paragraphs in an inline `\md{}` are joined with a line break.
+- The argument's braces must balance; a backslash escapes the next character (`\{`, `\}`), `%` and `#` are Markdown, not a TeX comment or parameter. A `\md` followed by a letter (`\mdseries`) is another command. An unbalanced `\md{` is read by Pandoc as plain text; the filter says so once with a WARN. `\begin{md}` has no brace counting, which is the way to write a code span with a lone brace.
+- `md-macro: on` (the default) | `off` in `pdfmd-options`, with a `--setup` row (Input). The filter is loaded only for a document that has a macro outside code; a document that defines `\md` itself (`\newcommand`, `\def`, `\newenvironment{md}`) keeps its own and gets one NOTE.
+- `contains_citations()` asks Pandoc with the filter on, so `--citeproc` is added for a document whose only citations are inside `\md{}`. A file with no front matter that uses the macro is read with Pandoc's `markdown` reader, not `gfm` (no raw LaTeX there), with the usual notice.
+- Not done: the native (no-Pandoc) tier, a `.tex` source compiled directly, and the identity `.sty` for `~/dev/tex` (so the same `.tex` compiles without pdfmd), which is a step in the other repository.
+- `tests/test_md_macro.py` (14 tests: detection outside code and own definitions, a macro inside `\textbf`, in a heading / bare line / list / table cell, in a raw `tabular` for LaTeX and HTML, the environment for tex / html / typst / md and inside `center`, citations resolved and listed, no front matter, `off`, a bad word, an own definition, an unbalanced brace, `\mdseries`). README: "Markdown inside raw LaTeX".
+
 ## v3.31.52 — 2026-11-02
 
 Pre-edit state: commit `bd497d7`. Still under 3.31. `[tables]`, entry 3el (the author: "it shows that some features we've added are thin ... record it and add todo line to revise the full functionality ... and start with all those three").
