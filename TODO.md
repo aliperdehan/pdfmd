@@ -13,7 +13,7 @@ wait for an answer before any code.
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
 - [ ] **decide** a Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`; default off or on, and the value [3en]
-- [ ] **decide** PlantUML as a diagram language next to mermaid, d2 and dot (needs Java; install story) [3en]
+- [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
 ## Features, agreed
@@ -29,8 +29,6 @@ wait for an answer before any code.
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
-- [ ] Diagram time limit, on by default at 120 s: a setting (`pdfmd-options` key, `--setup` row); a hung `mmdc`, `dot` or `d2` stops the build with a message [3en]
-- [ ] Slide notes: `slide-notes: off|show|only` (Beamer `notes=`), a setting and a recipe; `off` stays the default [3en]
 - [ ] Check that `lof` / `lot` (lists of figures and tables) work through pdfmd; then a recipe [3en, 3dg]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
@@ -79,9 +77,17 @@ wait for an answer before any code.
 
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
 
-## Obsidian flavour, one feature line, next minor [3ee]
+## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
-- [ ] Wikilinks, `![[embeds]]` with sizes and a vault root, `%%comments%%`, tags, block ids, an `obsidian` preset for `markup`; note embeds and links between notes last; tested on a real vault [3ee]
+- [ ] First slice, the `obsidian` preset: image embeds with `|width` and `|WxH` found by name in the vault, wikilinks as text, `%%comments%%`, `==highlight==`, `<u>` in every writer, a single newline as a hard break; tested on the real notes [3ee]
+- [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
+- [ ] `flavour` / `flavor` setting, the same setting as `reader:` (`auto` by default: `pdfmd` or, inside a vault with `.obsidian/`, `obsidian`; `pandoc` is strict Pandoc, `gfm`, `commonmark`...), at every level; the gfm-or-Pandoc rules made reliable first: the global metadata no longer counts as linked (its parameters still apply), a leading `---` rule and Obsidian Properties no longer mean Pandoc [3eo]
+- [ ] pdfmd's own syntax on by default as the `pdfmd` flavour (`markup` kinds: callouts, toc, center, highlight; spans later), off with `flavour: pandoc` or `markup: false`; check nulabreport and the author's folders for literal `==`, `[!x]`, `[TOC]` first [3eo]
+- [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
+- [ ] British and American spellings of every key, flag and value (colour/color, centre/center, grey/gray, flavour/flavor...): scan, one alias table, a completeness test; docs and help print British, commands British first (`--colour`, `centre`), American accepted as naturally [3ep]
+- [ ] Spans `.caps`, `.wavy`, `.dotted`... in every writer, then the shorthand (`++x++`, `!!x!!`, `??x??`) as opt-in `markup` kinds; CriticMarkup and abbreviations later [3eq]
+- [ ] **decide** A control character in a source (U+0000-U+001F): one note naming the line and skip the engines that cannot read it, instead of three failed engines and Typst after 1.5 min; look at the Typst route's inline-math warnings [3es]
+- [ ] Community plugins: a vault report from `.obsidian/community-plugins.json`, adapters for plain-text plugin formats, rendering through Obsidian for the rest (never headless: the CLI needs the running app); unknown stays as code with one note; **decide** the other tiers [3er]
 
 ## Other tools' command lines
 
