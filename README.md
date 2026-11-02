@@ -2778,10 +2778,19 @@ lua: [nulabreport.lua]         # Lua filters the kit adds to the build
 defaults: metadata.yaml        # metadata file(s) every mode gets
 latex-keys: {experiment: LabExperiment}   # the blocks of `<package>-pdfmd.yaml`, same meaning
 carry: [nulabreport.sty, assets/]         # what an attached source or a bundle takes along
+no-auto: [margin]              # pdfmd defaults the kit takes over (v3.32.8), see below
 ```
 
 Every path stays inside the kit's folder. `settings:`, `requires:` and `options:` are reserved for later; any other unknown
 key is a warning, not a stop. Several faults are listed together.
+
+**A kit that sets its own page** (v3.32.8). A class has its own margins, and pdfmd's automatic margin (`geometry:margin=...`) would
+clash with them. `no-auto: [margin]` in the `.kit` switches that default off for documents that use the kit, where a kit
+that only wanted this had to write `geometry: " "` into its metadata. It may name `margin`, `mainfont`, `monofont`, `mathfont`,
+`font` (the three fonts) and `tablewidth`; any other kind is a warning, because a kit is chosen after pdfmd has looked
+for files, so it cannot take that search over. The kit's switch is weaker than the command line, the document and the folders'
+files, which can turn a kind back on (`pdfmd-options: {auto: {margin: on}}`), and stronger than the config file's. An older pdfmd
+ignores the key with a warning. `pdfmd --kits NAME` shows it.
 
 **Finding a kit.** By name, ignoring case and `- _ .` and spaces (`Nu-Lab-Report` is `nulabreport`): the folder's name, the
 `NAME.kit` file's name or the `name:` it declares. The places, in order: a `kits/` folder beside the document and above it; the

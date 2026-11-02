@@ -1417,6 +1417,13 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     extra label) is a deliberate milestone and is never deleted. A .qmd
     only reads its own front matter (no metadata.yaml, same as the rest
     of the Quarto path).
+
+Kits (--kit, --kits, --install kit:SOURCE; v3.31.34 on):
+    A kit is a folder with a `.kit` (or `NAME.kit`) file that packs a pipeline: a LaTeX class or package, its Lua filter,
+    default metadata, a citation style. `--kit NAME[:MODE]` or `pdfmd-options: {kit: ...}` chooses one; its folder is on
+    TEXINPUTS (for Tectonic, -Zsearch-path, v3.32.6), so nothing is installed into TeX. `pdfmd --install kit:owner/repo`
+    fetches the kits of any repository (v3.32.7; nothing in it is run), `--kits` lists them. A kit may switch off pdfmd's own
+    margin, font or table-width defaults with `no-auto:` (v3.32.8). The README's Kits section is the full description.
 """
 from __future__ import annotations
 
@@ -1447,7 +1454,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.7"
+PDFMD_VERSION = "3.32.8"
 import argparse
 import atexit
 import csv
@@ -2235,10 +2242,12 @@ def resolve_auto(layers: list[tuple[object, dict]], folders: int = 0) -> list[st
     return [*off, *explicit] or None
 
 
-def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str] | None:
+def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None, kit_kinds: list[str] | None = None) -> list[str] | None:
     """What is switched off for a document, from the layers described above. The one place this logic lives -- both
     convert_one and main()'s pre-discovery gating (metadata/preamble auto-discovery happens before convert_one is even
-    called) need the same answer for the same file."""
+    called) need the same answer for the same file. ``kit_kinds`` (v3.32.8) are what the chosen kits' `no-auto:` switch off: a
+    layer under the command line, the document and the folders and above the config, where a kit's own metadata sits. Only
+    the callers that know the kit pass it (the kit is chosen from these very layers, so the first answer cannot include it)."""
     own = dict(frontmatter_pdfmd_options(md_path))
     if "no-auto" not in own:
         assembled = frontmatter_no_auto(md_path)             # an assembled file keeps its kinds in the comment form of its marker
@@ -2252,8 +2261,22 @@ def effective_no_auto(md_path: Path, cli_no_auto: list[str] | None) -> list[str]
         layers.insert(0, (md_path, {}))                  # the command line's place is always the first
     above = [(folder, folder_auto_safe(options, folder)) for folder, options in folder_layers(md_path)]
     layers.extend(above)
+    if kit_kinds:
+        layers.append(("kit", {"no-auto": list(kit_kinds)}))
     layers.append(("config", config_options()))
     return resolve_auto(layers, len(above))
+
+
+def kit_no_auto_kinds(md_path: Path, metadata_files: list[Path] | None, no_auto: list[str] | None) -> list[str]:
+    """The pdfmd defaults the chosen kits switch off with `no-auto:` (v3.32.8), for effective_no_auto's ``kit_kinds``."""
+    kinds: list[str] = []
+    for item in active_kits(md_path, metadata_files, no_auto):
+        for kind in item.kit.no_auto:
+            if kind not in kinds:
+                kinds.append(kind)
+    if kinds and VERBOSE_OUTPUT:
+        print(f"AUTO KIT  switches off {', '.join(kinds)} (no-auto in the kit)")
+    return kinds
 
 
 # Auto-applied on every LaTeX-family render (see table_width_filter() below).
@@ -7447,6 +7470,8 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
                 print(f"  helper    {', '.join(kit.helper)}")
             if kit.carry:
                 print(f"  carries   {', '.join(kit.carry)}")
+            if kit.no_auto:
+                print(f"  no-auto   {', '.join(kit.no_auto)}")
             for warning in kit.warnings:
                 print(f"WARN  {warning}", file=sys.stderr)
         return ok
@@ -7557,7 +7582,10 @@ def active_kits(md_path: Path | None, metadata_files: list[Path] | None = None, 
     a document that merely loads a kit's package gets none. Costs nothing for a document no layer gives a `kit:`."""
     if md_path is None or yaml is None:
         return []
-    key = (str(md_path.resolve()), None if no_auto is None else tuple(no_auto), len(KIT_CLI) if KIT_CLI is not None else -1)
+    # of --no-auto only the searching of kits matters here (find_kit): a kit's own `no-auto:` changes the list a build uses
+    # afterwards, and must not make the same choice be made, and warned about, twice
+    key = (str(md_path.resolve()), (auto_disabled(no_auto, "kit"), auto_disabled(no_auto, "kpsewhich")),
+           len(KIT_CLI) if KIT_CLI is not None else -1)
     if key in ACTIVE_KITS:
         return ACTIVE_KITS[key]
     ACTIVE_KITS[key] = []
@@ -23264,6 +23292,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     cli_no_auto = no_auto
     no_auto = effective_no_auto(md_path, no_auto)
+    kit_kinds = kit_no_auto_kinds(md_path, metadata_files, no_auto)
+    if kit_kinds:
+        no_auto = effective_no_auto(md_path, cli_no_auto, kit_kinds)
     output_extension = output_extension_for(target_format, md_path)
     output = output_file or (
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
@@ -29174,6 +29205,9 @@ def run_main() -> None:
             raise SystemExit(str(error))
         metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                           (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+        report_kit_kinds = kit_no_auto_kinds(files[0], metadata_files, report_no_auto)
+        if report_kit_kinds:
+            report_no_auto = effective_no_auto(files[0], args.no_auto, report_kit_kinds)
         target_format = default_target(files[0], metadata_files)
         need_engines(target_format)
         engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)

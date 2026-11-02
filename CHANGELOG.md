@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.8 — 2026-11-03
+
+Pre-edit state: commit `1d992bd`. `[kits]`, entry 3et UPDATE 2 (the author: "let's do it. no-auto geometry"). Kept in 3.32. Not pushed.
+
+A kit can take pdfmd's own margin, font and table-width defaults over with `no-auto:` in its `.kit` file.
+
+- **The key**: `no-auto: [margin]` (a word or a list of `margin`, `mainfont`, `monofont`, `mathfont`, `font`, `tablewidth`). Before, a class kit had to write `geometry: " "` into its metadata to stop the automatic `geometry:margin=...` from clashing with the class's own page; now the kit says what it means, and the metadata can stay about the document.
+- **Where it ranks**: under the command line, the document and the folders' files, over the config file (the same place a kit's metadata has). So a document can turn the default back on with `pdfmd-options: {auto: {margin: on}}`, and `--no-auto` and `-y` still mean what they meant. Applied to a single document and to a report or book (`-r`).
+- **What a kit cannot name**: a kit is chosen from the layers and from the files pdfmd found, so it cannot switch off the finding of metadata, Lua filters, preambles or kits themselves; those kinds, and `true` for everything, are a WARN naming the kind and are ignored.
+- **Not before**: an older pdfmd reads the key as an unknown one (a WARN) and goes on, so a kit that has it still builds there.
+- The kits' own `active_kits` cache is keyed on the two `--no-auto` kinds that decide the kit search (`kit`, `kpsewhich`) instead of the whole list, so one run makes one choice of kits, and prints a kit's warnings once, whatever else is switched off.
+- `pdfmd --kits NAME` shows the kit's `no-auto`. The module docstring now has a short Kits paragraph (it had none), the README's Kits section the key and its ranking.
+- Tests: `tests/test_kit_no_auto.py`, through pdfmd itself (a real build with a kit that has no `geometry:`).
+
 ## v3.32.7 — 2026-11-03
 
 Pre-edit state: commit `d14c00a`. `[kits]`, entry 3et UPDATE 1 (the author: "make it possible for `pdfmd --install kit` to fetch an arbitrary git repo ... it'll look at all folders of it so nulabreport, which has `.kit` at root, and this one, pdfmd-kits, which has kits in child dirs, would work"). Kept in 3.32. Not pushed.
