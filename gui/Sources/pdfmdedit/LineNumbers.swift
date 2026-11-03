@@ -29,6 +29,13 @@ final class LineNumberRuler: NSRulerView {
             center.addObserver(self, selector: #selector(edited(_:)), name: NSTextStorage.didProcessEditingNotification, object: storage)
         }
         center.addObserver(self, selector: #selector(redraw), name: NSTextView.didChangeSelectionNotification, object: textView)
+        // A scroll is drawn by copying what was on screen and drawing only the strip that appeared; the numbers must not be
+        // copied (they would be stale and cut), so every scroll, and every change of the text view's size (TextKit 2 settles
+        // its estimated line heights while the text is drawn), invalidates the whole margin.
+        scroll.contentView.postsBoundsChangedNotifications = true
+        center.addObserver(self, selector: #selector(redraw), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        textView.postsFrameChangedNotifications = true
+        center.addObserver(self, selector: #selector(redraw), name: NSView.frameDidChangeNotification, object: textView)
         stats.listen { [weak self] in self?.fitLater() }
         applySettings()
     }
@@ -37,7 +44,7 @@ final class LineNumberRuler: NSRulerView {
 
     deinit { NotificationCenter.default.removeObserver(self) }
 
-    @objc private func redraw() { needsDisplay = true }
+    @objc private func redraw() { setNeedsDisplay(bounds) }
 
     @objc private func edited(_ note: Notification) {
         guard let storage = note.object as? NSTextStorage, storage.editedMask.contains(.editedCharacters) else { return }
