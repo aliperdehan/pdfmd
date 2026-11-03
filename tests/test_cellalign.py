@@ -13,8 +13,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
+from pandoc_support import needs_pandoc  # noqa: E402
 
 TABLE = "| Name | Qty |\n|:-----|----:|\n| apples | 3 |\n| <c> total | <l> 12 |\n| <R> right | <c>mid |\n"
 LONG = ("| Name | Note |\n|:--|:--|\n| a | " + "a long sentence that needs wrapping " * 6 + " |\n"
@@ -60,10 +62,13 @@ class Build(unittest.TestCase):
         self.assertIn("{\\raggedleft another long", tex)
         self.assertNotIn("<r>", tex)
 
-    def test_typst_and_html_use_the_cells_own_alignment(self):
+    @needs_pandoc(3, 1, 13, why="the Typst writer gained cell alignment overrides then")
+    def test_typst_uses_the_cells_own_alignment(self):
         done, typst = self.build(TABLE, "typ")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("table.cell(align: center)[total], table.cell(align: left)[12]", typst)
+
+    def test_html_uses_the_cells_own_alignment(self):
         done, html = self.build(TABLE, "html")
         self.assertIn('<td style="text-align: center;">total</td>', html)
         self.assertIn('<td style="text-align: left;">12</td>', html)

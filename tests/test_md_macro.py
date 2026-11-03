@@ -58,7 +58,8 @@ class Build(unittest.TestCase):
         body = ("# Head \\md{with *em*}\n\n\\md{Alone *on* a line.}\n\n- item \\md{in *list*}\n\n| a | b |\n|---|---|\n| \\md{*cell*} | x |\n")
         done, tex = self.build(body)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        for expected in ("{Head with \\emph{em}}", "Alone \\emph{on} a line.", "item in \\emph{list}", "\\emph{cell} & x"):
+        self.assertRegex(tex, r"Head with\s+\\emph\{em\}")           # Pandoc before 3.1.7 wraps the line inside \texorpdfstring
+        for expected in ("Alone \\emph{on} a line.", "item in \\emph{list}", "\\emph{cell} & x"):
             self.assertIn(expected, tex)
         self.assertNotIn("\\md", tex)
 

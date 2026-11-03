@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.12c — 2026-11-03
+
+Tests only; `PDFMD_VERSION` stays 3.32.12. The second CI run (41546953982) failed in three tests of the 3.31.x-3.32.8 commits, which had never run on CI before; none is a bug in pdfmd:
+
+- `test_tables`: a document with no front matter used to be read as gfm, so its grid and simple tables were "left as they are" with a NOTE. Since 3.32.5 such a table switches the reader to Pandoc's Markdown, and the tables are read (and skipped, if they cannot be CSV) like any other. The gfm test now asks for `--from gfm+fenced_divs` explicitly, and a new test pins the switch (no NOTE, the two `SKIP` lines).
+- `test_cellalign`: Pandoc's Typst writer gives a cell its own alignment (`table.cell(align: ...)`) only from 3.1.13, so the Typst half of the test is its own test and is skipped on older Pandoc (`needs_pandoc(3, 1, 13)`); the HTML half runs everywhere.
+- `test_md_macro`: Pandoc before 3.1.7 wraps a heading as `\texorpdfstring{Head with\n\emph{em}}{...}`; the test looks for `Head with` followed by white space and `\emph{em}`, which both forms satisfy.
+
 ## v3.32.12b — 2026-11-03
 
 Tests and lint only; `PDFMD_VERSION` stays 3.32.12. The first CI run of the pushed 3.31.47-3.32.12 commits (run 41540900210) failed in the `native` jobs (no Pandoc), the Windows `which` test and `lint`:

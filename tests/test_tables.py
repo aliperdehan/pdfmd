@@ -493,15 +493,25 @@ class MixedDocument(unittest.TestCase):
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_a_document_read_as_gfm_has_pipe_tables_only(self):
-        gfm = MIXED.replace("---\ntitle: Mixed\n---\n\n", "", 1)          # no front matter: pdfmd reads it as gfm
+        gfm = MIXED.replace("---\ntitle: Mixed\n---\n\n", "", 1)
         (self.directory / "doc.md").write_text(gfm, encoding="utf-8")
-        done = self.run_pdfmd("--extract-tables", "doc.md")
+        done = self.run_pdfmd("--extract-tables", "--from", "gfm+fenced_divs", "doc.md")     # gfm asked for: since 3.32.5 a grid table would switch the reader
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("NOTE  2 grid/simple tables left as they are", done.stdout)
         after = (self.directory / "doc.md").read_text(encoding="utf-8")
         self.assertIn("| a    | - item 1 |", after)
         self.assertIn(" 1        2", after)
         self.assertEqual(after.count("::: {.csv"), 4)                         # 2 existing + the 2 pipe tables
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_grid_and_simple_tables_without_front_matter_switch_to_the_markdown_reader(self):
+        gfm = MIXED.replace("---\ntitle: Mixed\n---\n\n", "", 1)
+        (self.directory / "doc.md").write_text(gfm, encoding="utf-8")
+        done = self.run_pdfmd("--extract-tables", "doc.md")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("left as they are", done.stdout)                         # read as Pandoc's Markdown: they are tables
+        self.assertIn("SKIP  table 2: its cells hold more than one line", done.stdout)
+        self.assertIn("SKIP  table 3: it has no header row", done.stdout)
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_a_failed_check_stops_the_document_and_writes_nothing(self):
