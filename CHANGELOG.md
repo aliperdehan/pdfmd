@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.25b — 2026-11-03
+
+Pre-edit state: commit `7720630`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit's build output moves to `gui/build.noindex/`**, which Spotlight and LaunchServices skip, so the editor no longer shows up twice (once from the build folder, once from `~/Applications`). `build.sh --install` is the way to get the copy that is launched; the README paths, the `.gitignore` and the smoke-test paths follow. The runtime `NSApp.applicationIconImage` call is removed: it changed nothing. (The bare Stage Manager tile was a stale per-bundle-id icon cache in the system icon store, cleared by hand; nothing in the app was wrong.)
+
 ## v3.32.25 — 2026-11-03
 
 Pre-edit state: commit `835d4d3`. Entry 3ee, step 4(b). **`![[picture.png|300]]` is read as an image embed**, in the `obsidian` and `pdfmd` flavours (a new `embeds` column of the preset table), so Obsidian's own spelling also works outside a vault. The new `pdfmd_obsidian/embeds.py` is the text transform (pure: it takes a `find` function), `find_embedded_image` in `pdfmd.py` looks a name up, and `embed_source` is hooked into `obsidian_source` after the comments.

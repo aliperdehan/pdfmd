@@ -1,13 +1,14 @@
 #!/bin/zsh
-# Build pdfmdedit.app (needs only the Command Line Tools). Output: build/pdfmdedit.app
+# Build pdfmdedit.app (needs only the Command Line Tools). Output: build.noindex/pdfmdedit.app
+# (build.noindex: Spotlight and LaunchServices skip a folder with that suffix, so the build output is not a second "pdfmd Edit" next to the installed copy.)
 #   ./build.sh            build only (nothing is launched)
 #   ./build.sh --install  also copies the app to ~/Applications
-# Test headless first:  .build/release/pdfmdedit --bench --mb 10   and   build/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md
+# Test headless first:  .build/release/pdfmdedit --bench --mb 10   and   build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md
 set -e
 cd "$(dirname "$0")"
 VERSION=$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/pdfmdedit/Settings.swift)
 swift build -c release
-APP=build/pdfmdedit.app
+APP=build.noindex/pdfmdedit.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/pdfmdedit "$APP/Contents/MacOS/pdfmdedit"

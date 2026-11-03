@@ -4,6 +4,7 @@ __pycache__/
 examples/**/*.pdf
 examples/*.html
 build/
+build.noindex/
 dist/
 *.egg-info/
 *.vsix

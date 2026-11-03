@@ -11,9 +11,9 @@ GUI is worth pursuing. There is no preview pane and no Quick Look extension yet.
 ## Build and try
 
     cd gui
-    ./build.sh              # swift build + build/pdfmdedit.app (ad-hoc signed); nothing is launched
+    ./build.sh              # swift build + build.noindex/pdfmdedit.app (ad-hoc signed); nothing is launched
     ./build.sh --install    # also copies the app to ~/Applications
-    build/pdfmdedit.app/Contents/MacOS/pdfmdedit FILE.md   # blocks until its windows are closed
+    build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit FILE.md   # blocks until its windows are closed
 
 `pdfmd --editor` should be able to point at that last command (the process lives until its windows close);
 this is **not tested yet** in this alpha.
@@ -81,7 +81,7 @@ editor did; `--png` also draws each tab into DIR.
 ## Benchmark and smoke test (no window is ever shown: the smoke tests assert it)
 
     .build/release/pdfmdedit --bench --mb 50 --paste-mb 20 [--tk 1|2] [--no-highlight]
-    build/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md [--set textKit=1]
+    build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md [--set textKit=1]
 
 `--bench` prints open, jump, typing, paste and scrolling times for a generated (or `--file`) document. "Paint"
 means `cacheDisplay` into a bitmap; typing repaints the caret line only, like a screen refresh after a key press.
