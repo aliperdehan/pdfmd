@@ -81,7 +81,7 @@ wait for an answer before any code.
 
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
-- [ ] First slice of Obsidian, the rest: image embeds with `|width` and `|WxH` found by name in the vault (0.75 pt per px, approved), wikilinks as text, `==highlight==`, `<u>` in every writer, a single newline as a hard break (`strictLineBreaks`); tested on the real notes [3ee]
+- [ ] First slice of Obsidian, the rest: wikilinks as text, `==highlight==`, `<u>` in every writer, a single newline as a hard break (`strictLineBreaks`); tested on the real notes [3ee]
 - [ ] Gaps of `%%comments%%` (3.32.20): report/book chapters, split-document parts, the section and heading scanners, indented code blocks, a `flavour` set only in a metadata file for the citation scan [3ee]
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
 - [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") [3ex]
