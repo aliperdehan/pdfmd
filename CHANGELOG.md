@@ -28,6 +28,10 @@ Pre-edit state: commit `e800a7b`. Entry 3ew: **the pdfmd logo and app icon** (th
 - `gui/Resources/`: `pdfmd.icns` (full artwork from 48 px up, the `#` only below), and the menu-bar template images (black on transparent, 18 pt high and @2x). `gui/build.sh` copies the icon into the app and sets `CFBundleIconFile`. Nothing uses the menu-bar images yet.
 - Still to do before the next push: the README header and uploading the social preview in the repository settings (TODO.md).
 
+## v3.32.19e — 2026-11-03
+
+Pre-edit state: commit `8a79918`. Brand only: the social preview's one-line tagline is set on two lines and larger, so that it stays readable when the link is unfurled at about 500 px (`scripts/build_brand.py`, then `--render`). `PDFMD_VERSION` stays 3.32.19. Not pushed.
+
 ## v3.32.19d — 2026-11-03
 
 Pre-edit state: commit `dfa8fa8`. Entry 3do (the author: "let's do settings, before M2 then", "native preferences, it is natural, of course we'll build it"). `gui/` only; `PDFMD_VERSION` stays 3.32.19, nothing is released. Not pushed.

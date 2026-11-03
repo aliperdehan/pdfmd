@@ -172,7 +172,8 @@ def social() -> str:
     """1280 x 640 social preview: the mark, the wordmark (large) and one line."""
     d1, x = text_path(ITALIC, "pdf", 190, 480, 360)
     d2, x2 = text_path(MONO_BOLD, "md", 172, x + 8, 360, track=-6)
-    tag, _ = text_path(MONO_REG, "One command from Markdown to a good-looking PDF.", 24, 484, 436)
+    tag = " ".join(text_path(MONO_REG, line, 38, 484, y)[0]      # two lines, big enough for a 500 px unfurl
+                   for line, y in (("One command from Markdown", 448), ("to a good-looking PDF.", 496)))
     body = (f'<rect width="1280" height="640" fill="{NAVY}"/><g transform="translate(110 150) scale(1.4)">'
             f'{tile_body(False)}</g>'
             f'<path d="{d1}" fill="{CREAM}"/><path d="{d2}" fill="{BLUE_ON_DARK}"/>'
