@@ -27,11 +27,14 @@ this is **not tested yet** in this alpha.
 - Colours Markdown (headings, lists, quotes, emphasis, links, code spans and fences, `$math$`, comments) and a
   YAML front matter. The colours cover the visible lines plus a margin and are kept out of the text storage,
   so colouring never delays a key press.
-- No line numbers yet (counting lines in a 50 MB file is not free); no preview; no pdfmd build.
+- A status bar like CotEditor's (Lines, Characters, Location, Line; file size, encoding, line ending), every element a setting. The
+  counts of a big text are made in slices between key presses (a 50 MB file: nothing waits), the caret's line from an anchor that
+  typing does not invalidate. "Characters" counts UTF-16 units (an emoji is two); the encoding and line ending are shown, not yet
+  changeable. No line numbers in the margin yet; no preview; no pdfmd build.
 
 ## Settings
 
-**The Settings window (⌘,)** has three tabs: Editor (font, size, wrapping, spelling, text engine), Colours (the two themes,
+**The Settings window (⌘,)** has four tabs (the window is sized to the tab shown): Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), Colours (the two themes,
 whether the theme sets the background, and for each colouring role the category it takes its colour from plus its light and
 dark colour, with a Reset) and Performance (the colouring delays and limits). It is generated from the tables in
 `Settings.swift` and `Palette.swift`, so it cannot drift from the shell: a change is stored at once, applied to the open

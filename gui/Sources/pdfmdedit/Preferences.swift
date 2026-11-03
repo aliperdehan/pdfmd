@@ -4,24 +4,29 @@ import Cocoa
 /// colour rows are generated from the tables in `Settings` and `Palette`, so a setting added there appears here and the
 /// shell (`defaults write`, `--settings`) and the window cannot drift apart. A change is written at once (no OK button)
 /// and applied to the open windows.
-final class PreferencesController: NSWindowController {
+final class PreferencesController: NSWindowController, NSTabViewDelegate {
     static let shared = PreferencesController()
 
-    static let tabs = ["Editor", "Colours", "Performance"]
+    static let tabs = ["Editor", "Status bar", "Colours", "Performance"]
 
     /// Every control by name, for refreshing it and for the smoke test: a setting's key, `category.<role>`,
     /// `color.<role>.light`, `color.<role>.dark`, `reset.<role>`, `restore.<tab>`.
     private(set) var controls: [String: NSControl] = [:]
 
+    /// The size each tab needs, so the window follows the tab that is shown (CotEditor's Settings window does the same).
+    private var stacks: [String: NSStackView] = [:]
+    private let margin: CGFloat = 18
+    private let tabView = NSTabView()
+
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 620),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Settings"
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("pdfmdedit.settings")
         super.init(window: window)
-        let tabView = NSTabView(frame: window.contentLayoutRect)
+        tabView.frame = window.contentLayoutRect
         tabView.autoresizingMask = [.width, .height]
+        tabView.delegate = self
         for name in PreferencesController.tabs {
             let item = NSTabViewItem(identifier: name)
             item.label = name
@@ -30,6 +35,21 @@ final class PreferencesController: NSWindowController {
         }
         window.contentView = tabView
         refresh()
+        fit(tabView.selectedTabViewItem)
+    }
+
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) { fit(tabViewItem) }
+
+    /// Sizes the window to the shown tab, keeping its top-left corner.
+    private func fit(_ item: NSTabViewItem?) {
+        guard let window, let id = item?.identifier as? String, let stack = stacks[id] else { return }
+        // measured now, not when the page was built: the popups only have their widths once they are filled
+        let need = stack.fittingSize
+        let size = NSSize(width: need.width + 2 * margin, height: need.height + 2 * margin)
+        let chrome = NSSize(width: tabView.frame.width - tabView.contentRect.width, height: tabView.frame.height - tabView.contentRect.height)
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: NSSize(width: size.width + chrome.width, height: size.height + chrome.height)))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        window.setFrame(frame, display: true, animate: window.isVisible)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -44,11 +64,20 @@ final class PreferencesController: NSWindowController {
 
     private func name(_ s: String) -> NSUserInterfaceItemIdentifier { NSUserInterfaceItemIdentifier(s) }
 
-    private func note(_ text: String) -> NSTextField {
+    /// A small grey wrapping label of a fixed width (a fixed width, so that the window can be sized to its content).
+    private func note(_ text: String, width: CGFloat = 250) -> NSTextField {
         let l = NSTextField(wrappingLabelWithString: text)
         l.font = .systemFont(ofSize: 11)
         l.textColor = .secondaryLabelColor
-        l.preferredMaxLayoutWidth = 330
+        l.preferredMaxLayoutWidth = width
+        l.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return l
+    }
+
+    private func heading(_ text: String) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 11)
+        l.textColor = .secondaryLabelColor
         return l
     }
 
@@ -74,19 +103,19 @@ final class PreferencesController: NSWindowController {
         let restore = NSButton(title: "Restore defaults", target: self, action: #selector(controlChanged(_:)))
         register(restore, "restore." + tab)
         let shell = note("Every setting is also a command: defaults write io.github.aliperdehan.pdfmdedit <key> <value>. "
-                       + "`pdfmdedit --settings` lists the keys; a change here applies to the open windows at once.")
-        shell.preferredMaxLayoutWidth = 700
+                       + "`pdfmdedit --settings` lists the keys; a change here applies to the open windows at once.", width: 520)
 
         let stack = NSStackView(views: tab == "Colours" ? [grid, rolesGrid(), shell, restore] : [grid, shell, restore])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 16
+        stacks[tab] = stack
         let view = NSView()
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
-            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
+            stack.topAnchor.constraint(equalTo: view.topAnchor, constant: margin),
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: margin),
         ])
         return view
     }
@@ -125,7 +154,7 @@ final class PreferencesController: NSWindowController {
     }
 
     private func rolesGrid() -> NSView {
-        var rows: [[NSView]] = [[note("Role"), note("Takes the colour of"), note("Light"), note("Dark"), NSTextField(labelWithString: "")]]
+        var rows: [[NSView]] = [[heading("Role"), heading("Takes the colour of"), heading("Light"), heading("Dark"), NSTextField(labelWithString: "")]]
         for role in Palette.roles {
             let category = NSPopUpButton(frame: .zero, pullsDown: false)
             category.addItems(withTitles: Theme.categoryNames + ["text"])
@@ -136,9 +165,11 @@ final class PreferencesController: NSWindowController {
             register(light, "color.\(role.key).light", tip: "this role's colour in a light appearance  [color.\(role.key)]")
             register(dark, "color.\(role.key).dark", tip: "this role's colour in a dark appearance  [color.\(role.key)]")
             let reset = NSButton(title: "Reset", target: nil, action: nil)
-            register(reset, "reset." + role.key)
+            register(reset, "reset." + role.key, tip: "back to the theme's colour for \(role.key)")
             reset.controlSize = .small
-            rows.append([NSTextField(labelWithString: "\(role.key)  —  \(role.help)"), category, light, dark, reset])
+            let label = NSTextField(labelWithString: role.key)
+            label.toolTip = role.help
+            rows.append([label, category, light, dark, reset])
         }
         let grid = NSGridView(views: rows)
         grid.columnSpacing = 12

@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.1.3"
+let appVersion = "0.1.4"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -31,6 +31,16 @@ enum Settings {
     }
 
     static let items: [Item] = [
+        Item(key: "statusBar", value: 1, label: "Show status bar", help: "1 = show the status bar at the bottom of the window", tab: "Status bar", kind: .flag),
+        Item(key: "statusLines", value: 1, label: "Lines", help: "1 = show the number of lines", tab: "Status bar", kind: .flag),
+        Item(key: "statusCharacters", value: 1, label: "Characters", help: "1 = show the number of characters (UTF-16 units: an emoji counts as two)", tab: "Status bar", kind: .flag),
+        Item(key: "statusLocation", value: 1, label: "Location", help: "1 = show the caret's offset from the start of the text", tab: "Status bar", kind: .flag),
+        Item(key: "statusLine", value: 1, label: "Line", help: "1 = show the caret's line number", tab: "Status bar", kind: .flag),
+        Item(key: "statusSize", value: 1, label: "File size", help: "1 = show the size of the file on disk", tab: "Status bar", kind: .flag),
+        Item(key: "statusEncoding", value: 1, label: "Encoding", help: "1 = show the text encoding the file was read in", tab: "Status bar", kind: .flag),
+        Item(key: "statusLineEnding", value: 1, label: "Line ending", help: "1 = show the line ending of the file (LF, CRLF or CR)", tab: "Status bar", kind: .flag),
+        Item(key: "statusDelayMs", value: 250, label: "Pause before counting (ms)", help: "pause after an edit before the lines of a big text are counted again", tab: "Performance"),
+        Item(key: "statusSliceChars", value: 1000000, label: "Counting slice (characters)", help: "characters counted per step; a text up to this size is counted at once, a bigger one in steps between key presses", tab: "Performance"),
         Item(key: "fontSize", value: 13, label: "Font size", help: "editor font size in points", tab: "Editor"),
         Item(key: "wrapLines", value: 1, label: "Wrap long lines", help: "1 = wrap long lines, 0 = scroll sideways", tab: "Editor", kind: .flag),
         Item(key: "spellCheck", value: 0, label: "Check spelling while typing", help: "1 = check spelling while typing", tab: "Editor", kind: .flag),

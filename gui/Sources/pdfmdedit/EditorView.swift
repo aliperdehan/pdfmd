@@ -112,6 +112,7 @@ func setWrap(_ wrap: Bool, _ tv: NSTextView, _ scroll: NSScrollView) {
 final class EditorDocument: NSDocument {
     var text = ""
     var encoding: String.Encoding = .utf8
+    var lineEnding: (name: String, unit: unichar) = ("LF", 10)
     var controller: EditorWindowController?
 
     override class var autosavesInPlace: Bool { true }
@@ -126,6 +127,7 @@ final class EditorDocument: NSDocument {
     }
 
     override func read(from data: Data, ofType typeName: String) throws {
+        lineEnding = detectLineEnding(data)
         if let s = String(data: data, encoding: .utf8) {
             text = s; encoding = .utf8
         } else if let s = String(data: data, encoding: .isoLatin1) {
@@ -133,7 +135,14 @@ final class EditorDocument: NSDocument {
         } else {
             throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadInapplicableStringEncodingError)
         }
-        controller?.load(text)   // a revert: the window exists already
+        controller?.load(text, document: self)   // a revert: the window exists already
+    }
+
+    override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType, completionHandler: @escaping (Error?) -> Void) {
+        super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
+            completionHandler(error)
+            self?.controller?.statusBar.refresh()   // the size on disk changed
+        }
     }
 
     override func data(ofType typeName: String) throws -> Data {
@@ -147,8 +156,28 @@ final class EditorDocument: NSDocument {
     }
 }
 
-final class EditorWindowController: NSWindowController {
+/// The window's content: the editor above, the status bar below (a height of 0 when it is hidden).
+final class EditorContent: NSView {
+    var editor: NSView!
+    var bar: StatusBar!
+
+    func place() {
+        let h = bar.isHidden ? 0 : StatusBar.height
+        bar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
+        editor.frame = NSRect(x: 0, y: h, width: bounds.width, height: max(0, bounds.height - h))
+    }
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        super.resizeSubviews(withOldSize: oldSize)
+        place()
+    }
+}
+
+final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     private(set) var parts: EditorParts!
+    private(set) var statusBar: StatusBar!
+    private(set) var stats: TextStats!
+    private(set) var content: EditorContent!
 
     init(document: EditorDocument) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
@@ -158,10 +187,20 @@ final class EditorWindowController: NSWindowController {
         window.setFrameAutosaveName("pdfmdedit.window")
         super.init(window: window)
         shouldCascadeWindows = true
-        parts = makeEditor(frame: window.contentLayoutRect, highlight: true)
-        window.contentView = parts.scroll
+        content = EditorContent(frame: window.contentLayoutRect)
+        parts = makeEditor(frame: content.bounds, highlight: true)
+        statusBar = StatusBar(frame: .zero)
+        stats = TextStats(parts.textView)
+        statusBar.attach(stats)
+        statusBar.fileURL = document.fileURL
+        content.editor = parts.scroll
+        content.bar = statusBar
+        content.addSubview(parts.scroll)
+        content.addSubview(statusBar)
+        window.contentView = content
         window.initialFirstResponder = parts.textView
-        load(document.text)
+        showStatusBar()
+        load(document.text, document: document)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
     }
 
@@ -175,14 +214,27 @@ final class EditorWindowController: NSWindowController {
         applyCanvas(tv, parts.scroll)
         setWrap(Settings.flag("wrapLines"), tv, parts.scroll)
         tv.isContinuousSpellCheckingEnabled = Settings.flag("spellCheck")
+        statusBar.applyColours()
+        showStatusBar()
         parts.highlighter?.highlightNow()
         tv.needsDisplay = true
     }
 
+    private func showStatusBar() {
+        statusBar.isHidden = !Settings.flag("statusBar")
+        statusBar.refresh()
+        content.place()
+    }
+
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func load(_ text: String) {
+    func load(_ text: String, document: EditorDocument) {
+        statusBar.encodingName = encodingDisplayName(document.encoding)
+        statusBar.lineEndingName = document.lineEnding.name
+        statusBar.fileURL = document.fileURL
+        stats.lineBreak = document.lineEnding.unit
         parts.textView.string = text
+        stats.reset()
         parts.textView.setSelectedRange(NSRange(location: 0, length: 0))
         parts.textView.undoManager?.removeAllActions()
         parts.highlighter?.highlightNow()
@@ -193,6 +245,15 @@ final class EditorWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         window?.makeFirstResponder(parts.textView)
+    }
+
+    @objc func toggleStatusBar(_ sender: Any?) {
+        Settings.set("statusBar", Settings.flag("statusBar") ? 0 : 1)
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(toggleStatusBar(_:)) { item.title = Settings.flag("statusBar") ? "Hide Status Bar" : "Show Status Bar" }
+        return true
     }
 
     @objc func toggleWrap(_ sender: Any?) {

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.19f — 2026-11-03
+
+Pre-edit state: commit `fb4167d`. Entry 3do: **pdfmd Edit 0.1.4: a status bar, a Settings window that fits its tab.** Changes only `gui/`; pdfmd itself is unchanged, so no version bump.
+
+- A status bar at the bottom of every editor window, after CotEditor's: `Lines`, `Characters`, `Location`, `Line` on the left; file size, encoding and line ending on the right. Each element and the bar itself is a setting (`statusBar`, `statusLines`, `statusCharacters`, `statusLocation`, `statusLine`, `statusSize`, `statusEncoding`, `statusLineEnding`; a new Status bar tab; View menu, option-command-/). The counts of a big text never wait a key press: the lines are counted in slices of `statusSliceChars` (1 000 000) characters, one slice per run-loop turn, after `statusDelayMs` (250); the caret's line is counted from an anchor that stays valid while edits happen at or after it. Known differences from CotEditor: "Characters" counts UTF-16 units (an emoji counts two), the encoding and line ending are shown but cannot be changed yet, a file with CR-only line endings counts CRs.
+- The Settings window is sized to the tab that is shown (it was a fixed 780 x 620 and looked big next to CotEditor's); the role names lose their long help (a tooltip now), the notes have a fixed width.
+- The app sets its bundled icon explicitly (Stage Manager's small badge showed the generic icon). The Dock needed `lsregister -f` after the first rebuild.
+- `--smoke-prefs` has 12 new checks (status counts against the file's own bytes, an edit before and after the caret, hiding, elements off, window size per tab); run on the 50 MB benchmark file too.
+
 ## v3.32.19c — 2026-11-03
 
 Pre-edit state: commit `e800a7b`. Entry 3ew: **the pdfmd logo and app icon** (the author chose among drawn options over four rounds: the mark is three tilted sheets on a tile, the front sheet carrying a `#` heading, a bar and text lines; the wordmark pairs an italic `pdf` with a bold monospace `md`, the same pairing as `$\mathit{pdf}$`md``, which is what the default math and code fonts make of it). No shipped code changes: `pdfmd.py` and `PDFMD_VERSION` (3.32.19) stay as they are, nothing is released. Not pushed.

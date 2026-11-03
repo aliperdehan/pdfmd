@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMenus()
+        // Stage Manager's small badge kept a generic icon while the Dock had the right one: name the bundled icon outright
+        if let url = Bundle.main.url(forResource: "pdfmd", withExtension: "icns"), let icon = NSImage(contentsOf: url) { NSApp.applicationIconImage = icon }
         let paths = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0) }
         launchedWithFiles = !paths.isEmpty
         for p in paths {
@@ -80,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let view = menu("View")
         add(view, "Wrap Lines", "toggleWrap:", "l", [.command, .option])
+        add(view, "Hide Status Bar", "toggleStatusBar:", "/", [.command, .option])
 
         let window = menu("Window")
         add(window, "Minimize", "performMiniaturize:", "m")

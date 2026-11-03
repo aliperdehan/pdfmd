@@ -422,6 +422,45 @@ enum PrefsSmoke {
             check("the window renders", rep.pixelsWide > 100 && rep.pixelsHigh > 100, "(\(rep.pixelsWide)x\(rep.pixelsHigh) px)")
         }
         // `--png DIR`: a picture of every tab (drawn into a bitmap, never shown), to look at the layout
+        // the settings window follows the tab that is shown, and stays smaller than the old fixed 780 x 620
+        if let tabs = prefs.window?.contentView as? NSTabView, let window = prefs.window {
+            var sizes: [String] = []
+            for item in tabs.tabViewItems { tabs.selectTabViewItem(item); sizes.append("\(item.label) \(Int(window.frame.width))x\(Int(window.frame.height))") }
+            check("settings window fits each tab", window.frame.width < 780 && window.frame.height < 620 && Set(sizes.map { $0.split(separator: " ").last! }).count > 1, "(\(sizes.joined(separator: ", ")))")
+            tabs.selectTabViewItem(at: 0)
+        }
+
+        // the status bar: counts worked out independently from the file's own bytes
+        let data = try! Data(contentsOf: URL(fileURLWithPath: path))
+        let source = String(decoding: data, as: UTF8.self)
+        let stats = editor.stats!, bar = editor.statusBar!
+        func settle(_ done: () -> Bool) { let t = Bench.now(); while !done() && Bench.ms(since: t) < 20000 { Smoke.spin(0.02) } }
+        settle { stats.lines != nil && stats.caretLine != nil }
+        let expectLines = source.utf8.reduce(1) { $0 + ($1 == 10 ? 1 : 0) }
+        check("status: lines counted", stats.lines == expectLines, "(\(stats.lines.map(String.init) ?? "nil") of \(expectLines))")
+        check("status: characters are UTF-16 units", stats.length == source.utf16.count)
+        check("status: caret at the top is line 1, location 0", stats.caretLine == 1 && stats.location == 0)
+        check("status text", bar.texts.left.hasPrefix("Lines:") && bar.texts.right.contains("UTF-8") && bar.texts.right.contains("LF"), "(\(bar.texts.left) | \(bar.texts.right))")
+        tv.textStorage?.replaceCharacters(in: NSRange(location: 0, length: 0), with: "x\ny\n")
+        settle { stats.lines == expectLines + 2 }
+        check("status: an edit at the top is counted", stats.lines == expectLines + 2, "(\(stats.lines.map(String.init) ?? "nil"))")
+        tv.setSelectedRange(NSRange(location: (tv.string as NSString).length, length: 0))
+        settle { stats.caretLine == expectLines + 2 }
+        check("status: caret at the end is on the last line", stats.caretLine == expectLines + 2, "(\(stats.caretLine.map(String.init) ?? "nil"))")
+        tv.setSelectedRange(NSRange(location: 2, length: 0))
+        settle { stats.caretLine == 2 }
+        check("status: caret moved back counts backwards", stats.caretLine == 2, "(\(stats.caretLine.map(String.init) ?? "nil"))")
+        tv.textStorage?.replaceCharacters(in: NSRange(location: 0, length: 2), with: "")   // an edit before the anchor
+        settle { stats.lines == expectLines + 1 && stats.caretLine == 1 }
+        check("status: an edit before the caret recounts", stats.lines == expectLines + 1 && stats.caretLine == 1, "(\(stats.lines.map(String.init) ?? "nil"), line \(stats.caretLine.map(String.init) ?? "nil"))")
+        Settings.set("statusBar", 0)
+        check("status bar hidden by its setting", bar.isHidden && editor.content.editor.frame.height == editor.content.bounds.height)
+        Settings.set("statusBar", 1)
+        check("status bar back", !bar.isHidden && bar.frame.height == StatusBar.height && editor.content.editor.frame.minY == StatusBar.height)
+        Settings.set("statusLines", 0); Settings.set("statusEncoding", 0)
+        check("status elements switch off one by one", !bar.texts.left.contains("Lines:") && !bar.texts.right.contains("UTF-8") && bar.texts.left.contains("Characters:"))
+        Settings.remove(["statusLines", "statusEncoding"])
+
         if let i = CommandLine.arguments.firstIndex(of: "--png"), i + 1 < CommandLine.arguments.count, let tabs = prefs.window?.contentView as? NSTabView {
             let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
