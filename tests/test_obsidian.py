@@ -63,11 +63,21 @@ class HideComments(unittest.TestCase):
         unclosed_fence = "```\n%% never closed\n"
         self.assertEqual(self.hidden(unclosed_fence), unclosed_fence)
 
-    def test_a_percent_pair_with_no_mate_stays_and_its_line_is_reported(self):
-        result = hide_comments("one\n%% oops\ntwo\n")
+    def test_a_percent_pair_with_no_mate_hides_the_rest_as_obsidian_does(self):
+        # checked in Obsidian's reading view: the rest of the note is the comment, and a later `%%` closes an earlier one
+        result = hide_comments("one\n%% oops\ntwo\nthree\n")
+        self.assertEqual(result.text, "one\n")
+        self.assertEqual((result.count, result.unclosed), (1, [2]))
+        self.assertEqual(hide_comments("a %%b%% c %%d\n").text, "a  c")
+        self.assertEqual(hide_comments("a %%b").text, "a")
+        self.assertEqual(hide_comments("a %%b\nlast\n", show=True).text, "a <!-- b\nlast -->")
+        closed = hide_comments("fd\n\n%%x\ny\n%%\nfdgf\n%% whatever\n\n#\n%%\nfd\n")
+        self.assertEqual((closed.text, closed.unclosed), ("fd\n\nfdgf\nfd\n", []))
+
+    def test_unclosed_keep_leaves_it_as_text_and_still_reports_the_line(self):
+        result = hide_comments("one\n%% oops\ntwo\n", unclosed="keep")
         self.assertEqual(result.text, "one\n%% oops\ntwo\n")
         self.assertEqual((result.count, result.unclosed), (0, [2]))
-        self.assertEqual(hide_comments("a %%b%% c %%d\n").unclosed, [1])
 
     def test_nothing_to_do_without_a_percent_pair(self):
         self.assertEqual(hide_comments("50% and 100%\n").text, "50% and 100%\n")
@@ -173,10 +183,17 @@ class CommandLine(unittest.TestCase):
         self.assertNotIn("hidden", html)
         self.assertIn("One", html)
 
-    def test_a_percent_pair_with_no_mate_is_a_warning_and_stays(self):
-        html, said = self.build("vault", "# N\n\nOne\n\n%% oops\nrest\n")
-        self.assertIn("a `%%` with no closing `%%`", said)
+    def test_a_percent_pair_with_no_mate_hides_the_rest_and_says_so_unless_told_to_keep_it(self):
+        note = "# N\n\nOne\n\n%% oops\nrest\n"
+        html, said = self.build("vault", note)
+        self.assertIn("a `%%` with no closing `%%`: the rest of the note (2 lines) is hidden", said)
+        self.assertIn("One", html)
+        self.assertNotIn("rest", html)
+        html, said = self.build("vault", note, "--unclosed-comment", "keep")
+        self.assertIn("it is kept as text", said)
         self.assertIn("%% oops", html)
+        html, _ = self.build("vault", "---\npdfmd-options:\n  unclosed-comment: keep\n---\n\nOne\n\n%% oops\nrest\n")
+        self.assertIn("rest", html)
 
     def test_other_writers_agree(self):
         (self.directory / "vault" / "n.md").write_text("# N\n\nA %%gone%% B\n", encoding="utf-8")

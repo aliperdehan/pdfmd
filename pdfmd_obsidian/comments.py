@@ -2,7 +2,8 @@
 
 A comment opens at one ``%%`` and closes at the next, on the same line or many lines later. Fenced code, inline code, math,
 front matter and HTML comments are not looked into (a ``%%`` there is the text it looks like). A ``%%`` with no closing mate
-stays as it is, and its line is reported.
+hides the rest of the note, as in Obsidian (checked in its reading view, v3.32.21), and its line is reported: it is usually a typo.
+``unclosed="keep"`` keeps it as text instead (still reported).
 
 ``hide_comments`` returns the note without its comments (what Obsidian shows), or, with ``show``, with each comment turned into
 an HTML comment, which pdfmd's ``show-comments`` then draws as a Comment box and every writer otherwise drops.
@@ -29,15 +30,20 @@ _SCAN = re.compile(_PROTECTED + r"|(?P<percent>%%)", re.DOTALL | re.MULTILINE)
 class Comments(NamedTuple):
     text: str                       # the note, comments hidden or turned into HTML comments
     count: int                      # how many comments were found
-    unclosed: list[int]             # the lines (from 1) of a `%%` with no closing `%%`
+    unclosed: list[int]             # the lines (from 1) of a `%%` with no closing `%%` (its comment runs to the end)
 
 
-def _pairs(text: str) -> tuple[list[tuple[int, int]], list[int]]:
-    """The (opening, closing) positions of each comment, and the lines of a `%%` left without a mate."""
+def _pairs(text: str, unclosed: str) -> tuple[list[tuple[int, int, bool]], list[int]]:
+    """The (opening, closing, closed) positions of each comment, and the lines of a `%%` left without a mate. With
+    ``unclosed="hide"`` that one is a comment too, to the end of the text (closed False, closing = the length of the text)."""
     marks = [match.start() for match in _SCAN.finditer(text) if match.lastgroup == "percent"]
-    pairs = [(marks[index], marks[index + 1]) for index in range(0, len(marks) - 1, 2)]
-    unclosed = [text.count("\n", 0, marks[-1]) + 1] if len(marks) % 2 else []
-    return pairs, unclosed
+    pairs = [(marks[index], marks[index + 1], True) for index in range(0, len(marks) - 1, 2)]
+    lines: list[int] = []
+    if len(marks) % 2:
+        lines = [text.count("\n", 0, marks[-1]) + 1]
+        if unclosed != "keep":
+            pairs.append((marks[-1], len(text), False))
+    return pairs, lines
 
 
 def _shown(body: str) -> str:
@@ -46,15 +52,16 @@ def _shown(body: str) -> str:
     return "<!-- " + body.replace("-->", "-- >").strip() + " -->"
 
 
-def hide_comments(text: str, show: bool = False) -> Comments:
-    """``text`` with its ``%%comments%%`` hidden, or (``show``) kept as HTML comments."""
+def hide_comments(text: str, show: bool = False, unclosed: str = "hide") -> Comments:
+    """``text`` with its ``%%comments%%`` hidden, or (``show``) kept as HTML comments. A ``%%`` with no closing ``%%`` hides the
+    rest of the text (``unclosed="hide"``, Obsidian's way) or is kept as text (``"keep"``); its line is in ``Comments.unclosed``."""
     if "%%" not in text:
         return Comments(text, 0, [])
-    pairs, unclosed = _pairs(text)
+    pairs, unclosed_lines = _pairs(text, unclosed)
     pieces: list[str] = []
     cursor = 0
-    for opening, closing in pairs:
-        end = closing + 2
+    for opening, closing, closed in pairs:
+        end = closing + 2 if closed else len(text)
         start_of_line = text.rfind("\n", 0, opening) + 1
         next_newline = text.find("\n", end)
         end_of_line = len(text) if next_newline == -1 else next_newline
@@ -85,4 +92,4 @@ def hide_comments(text: str, show: bool = False) -> Comments:
             pieces += [before, _shown(body)]
         cursor = end
     pieces.append(text[cursor:])
-    return Comments("".join(pieces), len(pairs), unclosed)
+    return Comments("".join(pieces), len(pairs), unclosed_lines)

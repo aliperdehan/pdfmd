@@ -2505,7 +2505,7 @@ What the `obsidian` flavour reads so far (the rest of Obsidian's syntax arrives 
 - **`%%comments%%`** (v3.32.20). Obsidian hides them in its reading view, and so does pdfmd, in every output: `A %%a note%% b`
   prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and lists included) up to the
   next `%%`. A comment is not looked into inside fenced code, inline code, math, the front matter or an HTML comment, so
-  `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` is a warning and stays as text. With `show-comments` (`--show-comments`)
+  `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` hides the rest of the note, as it does in Obsidian's reading view (checked there), and is a warning naming the line, since it is usually a forgotten closer; `pdfmd-options: {unclosed-comment: keep}` (`--unclosed-comment keep`, also a row in `pdfmd --setup`) leaves it as text instead, still with the warning. A later `%%` closes the earlier one, and an `<!-- HTML comment -->` hides the same way. With `show-comments` (`--show-comments`)
   they are drawn like HTML comments, as a box labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key`
   inside one does not switch the reader or turn on citations.
 

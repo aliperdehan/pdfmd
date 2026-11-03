@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.20"
+PDFMD_VERSION = "3.32.21"
 import argparse
 import atexit
 import csv
@@ -3012,6 +3012,23 @@ FLAVOUR_WORDS = ("auto", "obsidian", "pdfmd", "pandoc")
 FLAVOUR_CLI: dict = {"name": None}
 _VAULT_ROOTS: dict[Path, Path | None] = {}
 _FLAVOUR_TOLD: set[str] = set()
+UNCLOSED_WORDS = ("hide", "keep")
+UNCLOSED_CLI: dict = {"mode": None}
+
+
+def unclosed_comment_mode(md_path: Path, metadata_files=()) -> str:
+    """What a `%%` with no closing `%%` does (v3.32.21): `hide` (the default, Obsidian's way: the rest of the note is the comment)
+    or `keep` (it stays text). `--unclosed-comment`, else `pdfmd-options.unclosed-comment`. Another word is told once; `hide`."""
+    value = UNCLOSED_CLI["mode"]
+    if value is None:
+        value = first_pdfmd_option(md_path, list(metadata_files), "unclosed-comment")
+    name = "hide" if value is None else str(value).strip().casefold()
+    if name in UNCLOSED_WORDS:
+        return name
+    if name and name not in _FLAVOUR_TOLD:
+        _FLAVOUR_TOLD.add(name)
+        print(f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using hide", file=sys.stderr)
+    return "hide"
 
 
 def vault_root(path: Path) -> Path | None:
@@ -3064,13 +3081,17 @@ def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | No
     except ImportError:
         print("WARN  the pdfmd_obsidian package is missing; %%comments%% are left as they are", file=sys.stderr)
         return text
-    result = hide_comments(text, show_comments_on(md_path, list(metadata_files)) if show is None else show)
+    mode = unclosed_comment_mode(md_path, metadata_files)
+    result = hide_comments(text, show_comments_on(md_path, list(metadata_files)) if show is None else show, mode)
     for line in result.unclosed:
         told = f"{md_path}:{line}"
         if told not in _FLAVOUR_TOLD:
             _FLAVOUR_TOLD.add(told)
-            print(f"WARN  {display_path(md_path)}, line {line}: a `%%` with no closing `%%`; it is kept as text "
-                  "(Obsidian's comments end at the next `%%`)", file=sys.stderr)
+            rest = len(text.splitlines()) - line + 1
+            what = (f"the rest of the note ({rest} line{'s' if rest != 1 else ''}) is hidden, as Obsidian hides it; "
+                    "pdfmd-options: unclosed-comment: keep leaves it as text" if mode == "hide"
+                    else "it is kept as text; pdfmd-options: unclosed-comment: hide hides the rest, as Obsidian does")
+            print(f"WARN  {display_path(md_path)}, line {line}: a `%%` with no closing `%%`: {what}", file=sys.stderr)
     return result.text
 
 
@@ -28505,6 +28526,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "are hidden, more of its syntax in each release), pdfmd, pandoc, or auto (the default: obsidian inside a "
                              "vault, a folder with .obsidian/ above the document, pdfmd elsewhere); also pdfmd-options.flavour and "
                              "pdfmd --setup")
+    parser.add_argument("--unclosed-comment", dest="unclosed_comment", metavar="WORD", type=str.casefold, choices=UNCLOSED_WORDS,
+                        help="what a %%%% with no closing %%%% does in an Obsidian note: hide (the default, as Obsidian does: the rest "
+                             "of the note is the comment) or keep (it stays text); both warn; also pdfmd-options.unclosed-comment "
+                             "and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
@@ -29365,6 +29390,7 @@ def run_main() -> None:
     MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
     SHOW_COMMENTS_CLI["on"] = args.show_comments
     FLAVOUR_CLI["name"] = args.flavour
+    UNCLOSED_CLI["mode"] = args.unclosed_comment
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:

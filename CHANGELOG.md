@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.21 — 2026-11-03
+
+Pre-edit state: commit `e931c0d`. Entry 3ee. **An unclosed `%%` hides the rest of the note, as Obsidian does, and what it does is a setting.** The author checked Obsidian's reading view with four screenshots: a `%%` with no closing `%%` hides everything after it to the end of the note, a later `%%` closes it, and an `<!-- HTML comment -->` hides the same way. 3.32.20 had guessed otherwise (a warning, the `%%` kept as text). Not pushed.
+
+- `pdfmd-options.unclosed-comment` (document, metadata files, folders, config), `--unclosed-comment WORD` and a row in `pdfmd --setup`: `hide` (the default, Obsidian's way) or `keep` (the `%%` stays as text). Both warn, naming the line; `hide` also says how many lines went, and how to keep them. Any other word is a NOTE and counts as `hide`. With `show-comments` the hidden rest becomes one Comment.
+- Fixed while at it (3.32.20, unreleased): a shown comment that ran to the end of the text lost its last character or came out empty.
+
 ## v3.32.20 — 2026-11-03
 
 Pre-edit state: commit `1e24acd`. Entry 3ee, step 4 begins (the author, "2b 2c and 3 i'd like to push down the queue, and let's implement step 4 now since i need %% comment syntax right now"): **Obsidian's `%%comments%%`, and the `flavour` setting that turns Obsidian's syntax on.** Not pushed.
