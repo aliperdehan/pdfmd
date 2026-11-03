@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.19c — 2026-11-03
+
+Pre-edit state: commit `e800a7b`. Entry 3ew: **the pdfmd logo and app icon** (the author chose among drawn options over four rounds: the mark is three tilted sheets on a tile, the front sheet carrying a `#` heading, a bar and text lines; the wordmark pairs an italic `pdf` with a bold monospace `md`, the same pairing as `$\mathit{pdf}$`md``, which is what the default math and code fonts make of it). No shipped code changes: `pdfmd.py` and `PDFMD_VERSION` (3.32.19) stay as they are, nothing is released. Not pushed.
+
+- `scripts/build_brand.py` draws every file from one set of geometry; `--render` also makes the macOS icon and the PNGs (needs fontTools, rsvg-convert, iconutil). All lettering is outlined from STIX Two Text Italic and JetBrains Mono (both under the SIL Open Font License), so no file depends on an installed font.
+- `docs/brand/`: the mark (full, and `#` only for the smallest sizes), a one-colour mark in dark and light ink, a tightly cropped one-colour mark for the menu bar, the wordmark in light and dark, and a 1280 x 640 social preview (SVG and PNG).
+- `gui/Resources/`: `pdfmd.icns` (full artwork from 48 px up, the `#` only below), and the menu-bar template images (black on transparent, 18 pt high and @2x). `gui/build.sh` copies the icon into the app and sets `CFBundleIconFile`. Nothing uses the menu-bar images yet.
+- Still to do before the next push: the README header and uploading the social preview in the repository settings (TODO.md).
+
 ## v3.32.19b — 2026-11-03
 
 Pre-edit state: commit `2c51907`. Entry 3do (the author: "can we create compatibility with coteditor themes", "it is just plain json, let's create compatibility with them"; math stays coloured). `gui/` only; `PDFMD_VERSION` stays 3.32.19, nothing is released. Not pushed.
