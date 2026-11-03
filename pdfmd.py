@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.18"
+PDFMD_VERSION = "3.32.19"
 import argparse
 import atexit
 import csv
@@ -10822,6 +10822,22 @@ def document_file(name: str) -> Path | None:
     return found if found.is_file() else None
 
 
+FENCE_LINE_RE = re.compile(r"\s*(`{3,}|~{3,})(.*)$")
+
+
+def fence_after(fence: str, line: str) -> str:
+    """The code fence that is open after `line` (its run of backticks or tildes, "" for none), given `fence` open before it. As
+    in CommonMark: a backtick fence does not open on a line whose text after the run holds a backtick (``` ```` ```{=calc} ```` line``
+    is a paragraph), and a fence closes only on a run of the same character, at least as long, with nothing after it."""
+    found = FENCE_LINE_RE.match(line)
+    if not found:
+        return fence
+    run, rest = found.groups()
+    if not fence:
+        return "" if run[0] == "`" and "`" in rest else run
+    return "" if run[0] == fence[0] and len(run) >= len(fence) and not rest.strip() else fence
+
+
 def document_headings(text: str) -> list[tuple[int, int, str]]:
     """(line index, level, title) of each Markdown heading outside fenced code and HTML comments, in order."""
     found: list[tuple[int, int, str]] = []
@@ -10838,9 +10854,8 @@ def document_headings(text: str) -> list[tuple[int, int, str]]:
             start = line.find("<!--")
             if start >= 0:
                 in_comment, line = True, line[:start]
-        marker = re.match(r"^\s*(`{3,}|~{3,})", line)
-        if marker:
-            fence = "" if fence and marker.group(1)[0] == fence[0] else (fence or marker.group(1))
+        before, fence = fence, fence_after(fence, line)
+        if before or fence:                              # a fence line, or a line of the code inside one
             continue
         if not fence:
             heading = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
@@ -18043,18 +18058,14 @@ def scan_headings(lines: list[str]) -> list[Heading]:
     a setext heading needs a blank line (or the start) before its text, so a
     paragraph's last line, a table rule and a ``---`` rule are left alone."""
     found: list[tuple[int, int, str]] = []
-    fence: str | None = None
+    fence = ""
     comment = False
     for index, line in enumerate(lines):
         stripped = line.strip()
         was_comment = comment
         if not comment:
-            marker = re.match(r"(`{3,}|~{3,})", stripped)
-            if fence is None and marker:
-                fence = marker.group(1)[0] * 3
-            elif fence is not None and stripped.startswith(fence):
-                fence = None
-        if fence is None and not was_comment:
+            fence = fence_after(fence, stripped)
+        if not fence and not was_comment:
             atx = ATX_HEADING_RE.match(line)
             if atx:
                 found.append((index, len(atx.group(1)), atx.group(2)))
@@ -18063,7 +18074,7 @@ def scan_headings(lines: list[str]) -> list[Heading]:
                   and not SETEXT_UNDERLINE_RE.match(line) and "<!--" not in line
                   and not line.startswith(("    ", "\t", ">", "- ", "* ", "+ ", "|"))):
                 found.append((index, 1 if lines[index + 1].lstrip().startswith("=") else 2, line))
-        if fence is None:
+        if not fence:
             position = 0
             while True:
                 if not comment:
@@ -18129,11 +18140,11 @@ def scan_labelled_blocks(lines: list[str], headings: list[Heading]) -> list[Head
             close_run(index)
             index += 1
             continue
-        fence = re.match(r"(`{3,}|~{3,})", stripped)
+        fence = fence_after("", stripped)
         if fence:
             close_run(index)
             end = next((later + 1 for later in range(index + 1, len(lines))
-                        if lines[later].strip().startswith(fence.group(1)[0] * 3)), len(lines))
+                        if not fence_after(fence, lines[later].strip())), len(lines))
             ids = block_ids(line)
             if ids:
                 found.append(Heading(index, 0, "code block", tuple(ids), end))
@@ -26830,13 +26841,8 @@ def markdown_headings(texts: list[str]) -> list[tuple[int, str]]:
         fence = ""
         for index, line in enumerate(lines):
             stripped = line.strip()
-            opener = re.match(r"(`{3,}|~{3,})", stripped)
-            if fence:
-                if opener and opener.group(1)[0] == fence[0] and len(opener.group(1)) >= len(fence):
-                    fence = ""
-                continue
-            if opener:
-                fence = opener.group(1)
+            before, fence = fence, fence_after(fence, stripped)
+            if before or fence:
                 continue
             level, title = 0, ""
             atx = re.match(r"\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$", line)

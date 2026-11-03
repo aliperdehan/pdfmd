@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.19 — 2026-11-03
+
+Pre-edit state: commit `b1e2b98`. **A code fence is read as CommonMark reads it** (the author: "can you fix this bug?", about the README line that hid every later heading from the contents test, v3.32.18b). The heading scanners (`scan_headings`, `document_headings`, `markdown_headings`) and the block scanner for `{#id}` targets took any line that began with three backticks or tildes as a fence, and any line that began with three of the same character as its end. So a paragraph line that began with inline code of four backticks opened a fence that never closed, and every heading after it (section builds, `--doc`, the labels of a part build, a report's headings) was lost; a four-backtick fence holding a three-backtick one closed early; and a closing line with text (```` ```python ````) closed a fence. One rule now, `fence_after()`: a backtick fence does not open on a line with another backtick after the run, and a fence closes only on a run of the same character, at least as long, with nothing after it. Tests: `tests/test_sections.py` `FenceTests` (five cases through the three scanners; they fail on 3.32.18). Other fence readers (the table, image and lint scanners, the raw-block regexes) are unchanged.
+
 ## v3.32.18b — 2026-11-03
 
 Pre-edit state: commit `84de43c`. README only: a soft-wrapped line of the calc section began with a four-backtick inline code, which `scan_headings` reads as a code fence that never closes, so `document_headings` lost every heading from there to the next real fence and `tests/test_docs_consistency.py` (the README contents list) failed since v3.32.17. The line is reflowed so it no longer starts with backticks. (The scanner itself, which CommonMark would not treat that line as a fence, is unchanged.)

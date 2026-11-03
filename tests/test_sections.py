@@ -616,5 +616,36 @@ class SameNameParts(unittest.TestCase):
         self.assertEqual(self.pick("intro"), ["05-introduction.md", "10-introduction.md"])
 
 
+class FenceTests(unittest.TestCase):
+    """v3.32.19: a code fence is read as CommonMark does, by every scanner that looks for headings."""
+
+    LINE = "A paragraph that runs on, a\n```` ```{=calc} ```` line or a span.\n\n"
+    SCANNERS = {
+        "scan_headings": lambda text: [h.text for h in pdfmd.scan_headings(text.split("\n"))],
+        "document_headings": lambda text: [title for _, _, title in pdfmd.document_headings(text)],
+        "markdown_headings": lambda text: [title for _, title in pdfmd.markdown_headings([text])],
+    }
+
+    def check(self, text: str, expected: list[str]):
+        for name, scan in self.SCANNERS.items():
+            with self.subTest(scanner=name):
+                self.assertEqual(scan(text), expected)
+
+    def test_a_line_that_starts_with_inline_code_opens_no_fence(self):
+        self.check("# One\n\n" + self.LINE + "## Two\n\ntext\n", ["One", "Two"])
+
+    def test_a_longer_fence_is_not_closed_by_a_shorter_one(self):
+        self.check("# One\n\n````markdown\n```{=calc}\n# not a heading\n```\n# nor this\n````\n\n## Two\n", ["One", "Two"])
+
+    def test_a_closing_fence_carries_no_text(self):
+        self.check("# One\n\n```\ncode\n```python\n# still code\n```\n\n## Two\n", ["One", "Two"])
+
+    def test_tilde_and_backtick_fences_do_not_close_each_other(self):
+        self.check("# One\n\n~~~\n```\n# code\n~~~\n\n## Two\n", ["One", "Two"])
+
+    def test_a_tilde_fence_may_have_backticks_in_its_text(self):
+        self.check("# One\n\n~~~ a `b`\n# code\n~~~\n\n## Two\n", ["One", "Two"])
+
+
 if __name__ == "__main__":
     unittest.main()
