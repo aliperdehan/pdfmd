@@ -219,6 +219,7 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   instead of adding to it, so two calc divs in a row are not twice as far apart.
 - `calc: {typeset: true}` (`--calc-typeset`) prints the calculation lines as formulas: `c_s` becomes c with a subscript s, `*` a centred dot, the
   label before the first name and the unit after the value stay text. LaTeX, Typst, HTML, Word and OpenDocument; the plain-text writers keep the text.
+  `calc: {typeset: display}` (`--calc-typeset display`) makes each `::: calc` line a centred display formula with the label and unit inside it (no wrapping).
 - `--no-calc` turns it off for a run, `pdfmd-options: {calc: off}` for a document or a folder, `pdfmd --setup` for everything.
   A span it cannot calculate keeps its text and prints one `WARN  calc:` with the reason.
 

@@ -547,11 +547,16 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Before the result of `C = n / V = {ans}` print `n / V` with n and V replaced by their values, in the digits each was "
                "defined with (the computation keeps the full values). {subs} forces it on one line, {nosubs} stops it. "
                "Per run: --calc-subs / --no-calc-subs.", "Calculations"),
-        choice("options.calc.typeset", "Print a calculation as typeset maths", on_off, "",
+        choice("options.calc.typeset", "Print a calculation as typeset maths",
+               (("inline", "a line of inline maths, the label and the unit stay text"),
+                ("display", "a centred display formula per line, the label and the unit inside it (it does not wrap)"),
+                ("off", "the plain text it was written in")), "",
                "`m = c_s * V_el = 28.07 * 75 = 2105.25 ng` becomes a formula: c with an s subscript, V with an el subscript, a centred "
-               "dot for *, Greek names as letters, the unit left as text. Needs a writer with maths (LaTeX, Typst, HTML, Word, "
-               "OpenDocument); Markdown and the plain-text writers keep the text. Off unless set to on. "
-               "Per run: --calc-typeset / --no-calc-typeset.", "Calculations"),
+               "dot for *, Greek names as letters. inline (`true`) keeps the label and the unit as text in the line and breaks a long "
+               "line before an =; display makes each `::: calc` or fenced line one centred formula, the label and unit set as \\text "
+               "inside it; a `{=}` span stays inline. Needs a writer with maths (LaTeX, Typst, HTML, Word, OpenDocument); Markdown and "
+               "the plain-text writers keep the text. Off unless set. Per run: --calc-typeset [inline|display] / --no-calc-typeset.",
+               "Calculations"),
         choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div", on_off, "",
                "A block of calculation lines reads better flush left, so a `::: calc` div has no paragraph indent even when the "
                "document has one. Off gives it the document's own. An `indent=` on the div wins. On unless set to off. "

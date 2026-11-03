@@ -1032,6 +1032,14 @@ long line breaks in front of an `=`. It is the document's own maths (LaTeX, Typs
 Markdown and the plain-text writers have no maths and keep the text as typed. A formula that cannot be typeset prints as text, with one `WARN  calc:`.
 Only what the document shows changes: the values, `calc: {export: ...}` and `--check` are the same either way.
 
+**Display mode: `calc: {typeset: display}`** (3.32.15). The line above keeps its label and unit as ordinary text around the maths. With
+`display` each line of a `::: calc` div or a `{=calc}` block is one centred display formula instead, `\[ ... \]` (`$$ ... $$` in Markdown
+terms), and the label and the unit go inside it as `\text{...}`: *Total DNA: m = c<sub>s</sub> · V<sub>el</sub> = 2105.25 ng*, centred, set in
+the maths font. A unit that is itself maths (`ng/$\mu$L`) is taken in too. A `{=}` span inside a sentence stays inline: a display formula
+would split the sentence. The price: a display formula does not wrap, so a very long line runs past the margin where inline mode would
+break it in front of an `=`; use `{subs}` sparingly there, or keep `typeset: true`. A line with anything but text and maths after its last
+`{ans}` (emphasis, a link) is typeset inline instead. `--calc-typeset display` and `PDFMD_CALC_TYPESET=display` do the same for one run.
+
 **6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
 a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
 prints, blank lines are skipped, and a `#` starts a comment, a whole line or the end of one):
@@ -1113,7 +1121,7 @@ pdfmd-options:
     digits: 4sf       # the default format: 4sf, 2dp; empty = as R prints
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
-    typeset: false    # true prints each calculation as typeset maths (names with subscripts, a centred dot)
+    typeset: false    # true: each calculation as inline maths (names with subscripts, a centred dot); display: a centred formula per line
     noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
     align: left       # or center: the lines of a ::: calc div centred
@@ -1121,7 +1129,7 @@ pdfmd-options:
     export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset` / `--no-calc-typeset`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset [inline|display]` / `--no-calc-typeset`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a

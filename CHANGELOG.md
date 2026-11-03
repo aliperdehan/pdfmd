@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.15 — 2026-11-03
+
+Pre-edit state: commit `b57a5c9`. Entry 3cw (the author, on the inline typeset mode: "it is crude, let's force others into \text; yes, it will be another mode"). Kept in 3.32. Not pushed.
+
+- **`calc: {typeset: display}`, the second typeset mode.** `typeset` is now `off` (the default, `false`), `inline` (`true`, 3.32.14) or `display`. `--calc-typeset` takes an optional `inline|display` (bare `--calc-typeset` is inline; `--no-calc-typeset` turns it off), `PDFMD_CALC_TYPESET` and the `--setup` row take the same words, a bad value is an error naming the three. In display mode each line of a `::: calc` div and of a `{=calc}` block is one `DisplayMath` node: the formula in one piece (`m = c_s \cdot V_{\mathrm{el}} = ...`), the label before it and the unit after it as `\text{...}` (escaped: `% & _ # $ { } ~ ^ \`), and a unit that is inline maths itself (`ng/$\mu$L`) taken in as maths, so the line is one centred formula. A `{=}` span stays inline, as does a line with anything but text and inline maths after its last `{ans}`. A display formula does not wrap (inline mode breaks in front of an `=`); said in the README.
+- Checked through `pdfmd`: the screenshot's lines and a `ng/$\mu$L` unit in LaTeX (centred, STIX Two Math) and Typst PDFs, the Lab 4 report; HTML (`<math display="block">`); markdown and plain output the same with and without the option. Typst puts a small gap around a `\mu` that sits in the middle of a `\text` unit (texmath's conversion). `tests/test_calc.py`: `test_typeset_display_makes_each_line_a_centred_formula_with_its_text_inside`; `test_a_bad_typeset_value_is_an_error` also names `display`.
+
 ## v3.32.14 — 2026-11-03
 
 Pre-edit state: commit `e308bde`. Entry 3cw (the author: "typesetting mode for calc which can be toggled on and turn the calc blocks and all that stuff into good-looking typeset latex"). Kept in 3.32. Not pushed.

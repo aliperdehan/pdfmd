@@ -932,7 +932,7 @@ end
 -- digits after the letters are a subscript too: A260_s is A with 260, s below), Greek names are letters, other words upright.
 -- `*` is a centred dot, `^` a superscript, sqrt/abs/floor/ln/sin the usual signs, e-notation `1.2e-5` is 1.2 x 10^-5.
 
-local TYPESET = false
+local TYPESET = false            -- false, "inline" or "display"
 local NBSP = "\u{00A0}"
 
 local MATH_WRITERS = {latex = true, beamer = true, typst = true, html = true, html4 = true, html5 = true, epub = true,
@@ -1122,8 +1122,8 @@ local function tex_of(text)
   return tex
 end
 
--- the formula `m = c_s * V_el = 28.07 * 75 = 2105.25` as Math nodes, one per =
-local function typeset_formula(formula)
+-- the formula `m = c_s * V_el = 28.07 * 75 = 2105.25` as TeX, one string per =
+local function formula_chunks(formula)
   local parts, relation, start, from = {}, nil, 1, 1
   while true do
     local at = formula:find("[=<]", from)
@@ -1136,12 +1136,18 @@ local function typeset_formula(formula)
       from = at + 1
     end
   end
-  local nodes = {}
+  local chunks = {}
   for _, part in ipairs(parts) do
     local tex = tex_of(part[2])
-    nodes[#nodes + 1] = pandoc.Math("InlineMath", part[1] and (part[1] .. " " .. tex) or tex)
+    chunks[#chunks + 1] = part[1] and (part[1] .. " " .. tex) or tex
   end
-  return nodes
+  return chunks
+end
+
+-- text for \text{...} (display mode)
+local TEXT_ESCAPES = {["\\"] = "\\textbackslash{}", ["~"] = "\\textasciitilde{}", ["^"] = "\\textasciicircum{}"}
+local function text_tex(text)
+  return (text:gsub("[\\&%%$#_{}~^]", function(c) return TEXT_ESCAPES[c] or ("\\" .. c) end))
 end
 
 -- the text of text:sub(a, b) with the edits inside it put in
@@ -1177,37 +1183,75 @@ end
 -- a record's text as inlines: its prose and its typeset formulas. Returns the inlines and whether they end with a formula
 -- (a space that follows then has to be a no-break space); nil when there is nothing to typeset (no statement of the text
 -- calculates something) or the formulas' places are not known (a {nosubs} in front). Raises when a formula cannot be typeset.
-local function typeset_record(record, default)
+-- `atoms` (display mode, 3.32.15): what follows the text on its line, {text = "..."} and {math = "tex"}; the result is then one
+-- DisplayMath holding everything, the prose as \text{...}, and nothing after it is left to the caller.
+local function typeset_record(record, default, atoms)
   local formulas = 0
   for _, statement in ipairs(record.statements) do
     if statement.from then formulas = formulas + 1 elseif not statement.repeat_of then return nil end
   end
   if formulas == 0 then return nil end
   local text, edits = record.text, edits_of(record, default)
-  local out, position = pandoc.Inlines({}), 1
+  local out, parts, position = pandoc.Inlines({}), {}, 1
+  local function prose(s)
+    if atoms then
+      if s ~= "" then parts[#parts + 1] = "\\text{" .. text_tex(s) .. "}" end
+    else
+      add_text(out, s)
+    end
+  end
   for _, statement in ipairs(record.statements) do
     if statement.from then
-      add_text(out, splice_range(text, edits, position, statement.from - 1))
-      local nodes = typeset_formula(splice_range(text, edits, statement.from, statement.stop))
-      for index, node in ipairs(nodes) do
-        if index > 1 then out:insert(pandoc.Space()) end
-        out:insert(node)
+      prose(splice_range(text, edits, position, statement.from - 1))
+      local chunks = formula_chunks(splice_range(text, edits, statement.from, statement.stop))
+      if atoms then
+        parts[#parts + 1] = table.concat(chunks, " ")
+      else
+        for index, chunk in ipairs(chunks) do
+          if index > 1 then out:insert(pandoc.Space()) end
+          out:insert(pandoc.Math("InlineMath", chunk))
+        end
       end
       position = statement.stop + 1
     end
   end
   local tail = splice_range(text, edits, position, #text)
+  if atoms then
+    local pending = tail
+    local function flush() if pending ~= "" then parts[#parts + 1] = "\\text{" .. text_tex(pending) .. "}"; pending = "" end end
+    for _, atom in ipairs(atoms) do
+      if atom.math then flush(); parts[#parts + 1] = atom.math else pending = pending .. atom.text end
+    end
+    flush()
+    return pandoc.Inlines({pandoc.Math("DisplayMath", table.concat(parts, " "))}), false
+  end
   add_text(out, tail, true)
   while #out > 0 and out[1].t == "Space" do out:remove(1) end
   while #out > 0 and out[#out].t == "Space" do out:remove(#out) end
   return out, tail == ""
 end
 
--- typeset_record, or nil with a WARN (the text is printed as before) when a formula cannot be typeset
-local function typeset_or_warn(record, shown)
+-- the inlines after a line's last marker as atoms for a display formula, or nil when one of them is not text or inline maths
+local function after_atoms(items, from, to)
+  local atoms = {}
+  for index = from, to do
+    local item = items[index]
+    if item.t == "Str" then atoms[#atoms + 1] = {text = item.text}
+    elseif item.t == "Space" then atoms[#atoms + 1] = {text = " "}
+    elseif item.t == "Math" and item.mathtype == "InlineMath" then atoms[#atoms + 1] = {math = item.text}
+    else return nil end
+  end
+  return atoms
+end
+
+-- typeset_record, or nil with a WARN (the text is printed as before) when a formula cannot be typeset. `atoms`: see above; it
+-- counts only when the mode is display. Returns the inlines, whether a space after them has to be a no-break one, and whether
+-- the inlines took in everything that followed (display).
+local function typeset_or_warn(record, shown, atoms)
   if not TYPESET or not record.found then return nil end
-  local ok, pieces, glue = pcall(typeset_record, record, DEFAULT_FMT)
-  if ok then return pieces, glue end
+  if TYPESET ~= "display" then atoms = nil end
+  local ok, pieces, glue = pcall(typeset_record, record, DEFAULT_FMT, atoms)
+  if ok then return pieces, glue, atoms ~= nil and pieces ~= nil end
   warn(shown, "it cannot be typeset: " .. reason_of(pieces), "it is printed as text")
   return nil
 end
@@ -1319,17 +1363,20 @@ local function process_line(items, a, b)
         warn("line `" .. trim(text) .. "`", reason_of(edits), "the line is left as written")
       else
         local per_item = {}
-        local pieces, glue
+        local pieces, glue, absorbed
         if TYPESET and record.found then              -- typeset: the whole text up to the last marker is replaced
           local flat = true
           for index = a, last do if items[index].t == "Code" then flat = false end end
-          if flat then pieces, glue = typeset_or_warn(record, "line `" .. trim(text) .. "`") end
+          if flat then
+            local atoms = TYPESET == "display" and after_atoms(items, last + 1, b) or nil
+            pieces, glue, absorbed = typeset_or_warn(record, "line `" .. trim(text) .. "`", atoms)
+          end
         end
         if pieces then
           per_item = nil
           line = pandoc.Inlines({})
           for _, piece in ipairs(pieces) do line:insert(piece) end
-          local index = last + 1
+          local index = absorbed and b + 1 or last + 1
           if glue and items[index] and items[index].t == "Space" then line:insert(pandoc.Str(NBSP)); index = index + 1 end
           for position = index, b do line:insert(items[position]) end
           changed = true
@@ -1420,7 +1467,7 @@ local function statement_block(lines, hidden)
       if record then ok, result = pcall(render, record, DEFAULT_FMT) else ok, result = false, problem end
       if ok then
         if result ~= "" and not hidden then
-          local pieces = record.found and typeset_or_warn(record, "`" .. line .. "`") or nil
+          local pieces = record.found and typeset_or_warn(record, "`" .. line .. "`", {}) or nil
           out:insert(pandoc.Para(pieces or {pandoc.Str(result)}))
         end
       else
@@ -1954,7 +2001,8 @@ return {{Pandoc = function(doc)
   AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
   local typeset = doc.meta["pdfmd-calc-typeset"]
   local writer = FORMAT:lower():gsub("[+-].*$", "")
-  TYPESET = typeset ~= nil and pandoc.utils.stringify(typeset):lower() == "true" and MATH_WRITERS[writer] == true
+  typeset = typeset ~= nil and pandoc.utils.stringify(typeset):lower() or ""
+  TYPESET = MATH_WRITERS[writer] == true and ((typeset == "display" and "display") or ((typeset == "true" or typeset == "inline") and "inline")) or false
   local noindent = doc.meta["pdfmd-calc-noindent"]
   NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
   local space = doc.meta["pdfmd-calc-space"]

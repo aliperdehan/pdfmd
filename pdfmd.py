@@ -136,8 +136,8 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     unless they carry an {ans}; `code`{=calc} is `code`{=}. A `::: calc` div has no first-line
     indent (`calc: {noindent: true}`, the default; false gives it the document's own; an `indent=` on the div wins). Added by
     `calc_filter_args()` only for a document that has such a span or div. The settings are
-    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, typeset, noindent, space, align}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset / --no-calc-typeset, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
+    `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, typeset: true|display, noindent, space, align}}` (`calc: off` is the short form), --calc /
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
     even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.14"
+PDFMD_VERSION = "3.32.15"
 import argparse
 import atexit
 import csv
@@ -3494,6 +3494,7 @@ CALC_ALIGN_ENV = "PDFMD_CALC_ALIGN"
 CALC_SPACE_DEFAULT = "0.75em"
 CALC_SPACE_RE = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:pt|mm|cm|in|em)$")
 CALC_ALIGNS = ("left", "center")
+CALC_TYPESETS = ("off", "inline", "display")
 CALC_CONSTANTS_ENV = "PDFMD_CALC_CONSTANTS"
 CALC_EXPORT_ENV = "PDFMD_CALC_EXPORT"
 CALC_DUMP: Path | None = None               # where this build's calc.lua writes its names, when the document exports them (set around one build)
@@ -3546,18 +3547,22 @@ def calc_subs_on(md_path: Path, metadata_files: list[Path]) -> bool:
     return flag
 
 
-def calc_typeset_on(md_path: Path, metadata_files: list[Path]) -> bool:
-    """`calc: {typeset: true}`: the calculator prints each calculation as typeset maths (names with subscripts, a centred dot for
-    the product) in the writers that have maths; off (the default) prints it as the plain text it was written in."""
+def calc_typeset_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """`calc: {typeset: ...}`: "off" (the default; the calculator prints the plain text it was written in), "inline" (true; each
+    calculation a line of inline maths, its label and unit text) or "display" (a centred display formula per `::: calc` line,
+    the label and the unit inside it as \\text)."""
     value = os.environ.get(CALC_TYPESET_ENV)
     if value is None:
         value = calc_option(md_path, metadata_files, "typeset")
     if value is None:
-        return False
+        return "off"
+    word = str(value).strip().lower()
+    if word in CALC_TYPESETS:
+        return word
     flag = option_flag(value)
     if flag is None:
-        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.typeset must be true or false, not {value!r}")
-    return flag
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.typeset must be true, false or display, not {value!r}")
+    return "inline" if flag else "off"
 
 
 def calc_noindent_on(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -3839,8 +3844,9 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
         arguments += ["-M", "pdfmd-calc-digits=" + digits]
     if calc_subs_on(files[0], metadata_files):
         arguments += ["-M", "pdfmd-calc-subs=true"]
-    if calc_typeset_on(files[0], metadata_files):
-        arguments += ["-M", "pdfmd-calc-typeset=true"]
+    typeset = calc_typeset_mode(files[0], metadata_files)
+    if typeset != "off":
+        arguments += ["-M", "pdfmd-calc-typeset=" + typeset]
     if calc_noindent_on(files[0], metadata_files):
         arguments += ["-M", "pdfmd-calc-noindent=true"]
     space = calc_space(files[0], metadata_files)
@@ -28441,11 +28447,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a calculation shows its expression with the names replaced by their values in front of the result "
                              "(`ppm = C * V = 0.002 * 34.41 = 28.12`); the computation keeps the full values. {subs} on a line "
                              "forces it, {nosubs} stops it. Also `pdfmd-options: {calc: {subs: true}}`, or --setup")
-    parser.add_argument("--calc-typeset", action=argparse.BooleanOptionalAction, default=None,
+    parser.add_argument("--calc-typeset", nargs="?", const="inline", choices=("inline", "display"), default=None, metavar="inline|display",
                         help="print each calculation as typeset maths instead of plain text: names with subscripts (C_EDTA becomes C with an "
-                             "EDTA subscript), a centred dot for *, Greek letters, the unit kept as text. Works in the writers that have "
-                             "maths (LaTeX, Typst, HTML, Word...); the others keep the text. Off by default. Also "
-                             "`pdfmd-options: {calc: {typeset: true}}`, or --setup")
+                             "EDTA subscript), a centred dot for *, Greek letters. `--calc-typeset` (inline) keeps the label and the unit as "
+                             "text in the line; `--calc-typeset display` makes each `::: calc` line a centred display formula with the label "
+                             "and the unit inside it (it does not wrap). Works in the writers that have maths (LaTeX, Typst, HTML, Word...); "
+                             "the others keep the text. Off by default; --no-calc-typeset turns it off. Also "
+                             "`pdfmd-options: {calc: {typeset: true|display}}`, or --setup")
+    parser.add_argument("--no-calc-typeset", dest="calc_typeset", action="store_const", const="off",
+                        help="print calculations as plain text (the default); turns --calc-typeset, or the document's typeset setting, off")
     parser.add_argument("--calc-noindent", action=argparse.BooleanOptionalAction, default=None,
                         help="a `::: calc` div has no first-line indent, whatever the document does (the default; --no-calc-noindent "
                              "gives it the document's own). An `indent=` on the div wins. Also "
@@ -29167,7 +29177,7 @@ def run_main() -> None:
     if args.calc_subs is not None:
         os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
     if args.calc_typeset is not None:
-        os.environ[CALC_TYPESET_ENV] = "true" if args.calc_typeset else "false"
+        os.environ[CALC_TYPESET_ENV] = args.calc_typeset
     if args.calc_noindent is not None:
         os.environ[CALC_NOINDENT_ENV] = "true" if args.calc_noindent else "false"
     if args.calc_space is not None:
