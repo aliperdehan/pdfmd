@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.1.4"
+let appVersion = "0.1.5"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -31,6 +31,11 @@ enum Settings {
     }
 
     static let items: [Item] = [
+        Item(key: "lineNumbers", value: 1, label: "Show line numbers", help: "1 = show the line numbers in the margin", tab: "Editor", kind: .flag),
+        Item(key: "lineNumberMinDigits", value: 3, label: "Line numbers: least digits", help: "the margin is at least this many digits wide (it grows with the number of lines)", tab: "Editor"),
+        Item(key: "lineNumberSizeDelta", value: 2, label: "Line numbers: points smaller", help: "how many points smaller than the text the line numbers are", tab: "Editor"),
+        Item(key: "lineNumberOpacity", value: 45, label: "Line numbers: opacity (%)", help: "how strongly the line numbers show (the caret's line is always at full strength)", tab: "Editor"),
+        Item(key: "lineNumberPadding", value: 8, label: "Line numbers: padding (pt)", help: "space left and right of the line numbers", tab: "Editor"),
         Item(key: "statusBar", value: 1, label: "Show status bar", help: "1 = show the status bar at the bottom of the window", tab: "Status bar", kind: .flag),
         Item(key: "statusLines", value: 1, label: "Lines", help: "1 = show the number of lines", tab: "Status bar", kind: .flag),
         Item(key: "statusCharacters", value: 1, label: "Characters", help: "1 = show the number of characters (UTF-16 units: an emoji counts as two)", tab: "Status bar", kind: .flag),

@@ -23,6 +23,17 @@ same commit as the change.
 
 Pre-edit state: commit `7720630`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit's build output moves to `gui/build.noindex/`**, which Spotlight and LaunchServices skip, so the editor no longer shows up twice (once from the build folder, once from `~/Applications`). `build.sh --install` is the way to get the copy that is launched; the README paths, the `.gitignore` and the smoke-test paths follow. The runtime `NSApp.applicationIconImage` call is removed: it changed nothing. (The bare Stage Manager tile was a stale per-bundle-id icon cache in the system icon store, cleared by hand; nothing in the app was wrong.)
 
+## v3.32.26b — 2026-11-03
+
+Pre-edit state: commit `77af86d`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.1.5: line numbers in the margin** (the author: their absence is why pdfmd Edit felt "alien" next to CotEditor).
+
+- A vertical ruler (`gui/Sources/pdfmdedit/LineNumbers.swift`) numbers only the visible lines, a wrapped line once, and shows the caret's line at full strength. The first visible line's number is counted from an anchor kept between draws, so scrolling or typing never counts from the top again (an edit above the anchor resets it); the margin's width follows the digits of the last line. Both text engines are supported (TextKit 2 asked of the scroll position, like the highlighter; TextKit 1 by line fragments), including the empty last line after a final line break.
+- Settings (Editor tab, and `defaults write`): `lineNumbers` (default 1), `lineNumberMinDigits` (3), `lineNumberSizeDelta` (2 pt smaller than the text), `lineNumberOpacity` (45 %), `lineNumberPadding` (8 pt). View menu: Hide/Show Line Numbers, ⌥⌘N. `TextStats` now has several listeners instead of one.
+- Fixed on the way: changing the margin's width inside the text storage's edit notification made TextKit 1 raise "glyph generation while textStorage is editing", so the width is changed a moment later, once per burst.
+- Tests: `--smoke-prefs` has 20 new checks on both engines (first row, width, every number against an independent count of the line breaks, a jump to the middle, an edit above the screen, the empty last line one line below, an empty text, hiding and showing); PREFS OK on the README and on a 50 MB file (about 170 s, most of it the test's own independent counting).
+
+Not pushed.
+
 ## v3.32.26 — 2026-11-03
 
 Pre-edit state: commit `7720630`. Entry 3ee, step 4(c). **Obsidian's links between notes are written as the text they show, and `<u>` is underlined in every writer.**

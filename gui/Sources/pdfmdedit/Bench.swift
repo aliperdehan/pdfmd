@@ -461,6 +461,67 @@ enum PrefsSmoke {
         check("status elements switch off one by one", !bar.texts.left.contains("Lines:") && !bar.texts.right.contains("UTF-8") && bar.texts.left.contains("Characters:"))
         Settings.remove(["statusLines", "statusEncoding"])
 
+        // the line numbers: the margin's rows, worked out independently from the text, on both text engines
+        func rulerChecks(_ engine: Int) {
+            let parts = makeEditor(frame: NSRect(x: 0, y: 0, width: 900, height: 700), highlight: false, textKit2: engine == 2)
+            let own = parts.textView
+            own.string = source
+            let st = TextStats(own)
+            let ruler = LineNumberRuler(scroll: parts.scroll, textView: own, stats: st)
+            parts.scroll.verticalRulerView = ruler
+            parts.scroll.hasVerticalRuler = true
+            parts.scroll.rulersVisible = true
+            parts.scroll.layoutSubtreeIfNeeded()
+            Smoke.spin(0.1)
+            let units = Array(source.utf16)
+            let name = "line numbers (TextKit \(engine))"
+            let top = ruler.visibleRows()
+            check("\(name): the first row is line 1 at the top", top.first?.line == 1 && top.first?.location == 0 && top.count > 5, "(\(top.count) rows)")
+            check("\(name): the margin has a width", ruler.ruleThickness > 10, "(\(Int(ruler.ruleThickness)) pt)")
+            func consistent(_ rows: [LineNumberRuler.Row]) -> Bool {
+                guard let first = rows.first else { return false }
+                var expect = 1 + units[..<first.location].reduce(0) { $0 + ($1 == 10 ? 1 : 0) }
+                if first.line != expect { return false }
+                for (a, b) in zip(rows, rows.dropFirst()) {
+                    expect += units[a.location..<b.location].reduce(0) { $0 + ($1 == 10 ? 1 : 0) }
+                    if b.line != expect || b.baseline <= a.baseline { return false }
+                }
+                return true
+            }
+            check("\(name): consecutive rows are consecutive lines, top to bottom", consistent(top))
+            let middle = units.count / 2
+            own.scrollRangeToVisible(NSRange(location: middle, length: 0))
+            Smoke.spin(0.2)
+            let mid = ruler.visibleRows()
+            check("\(name): after a jump to the middle every number is the true line", consistent(mid) && (mid.first?.location ?? 0) > 0, "(first row line \(mid.first?.line ?? 0))")
+            own.setSelectedRange(NSRange(location: middle, length: 0))
+            own.textStorage?.replaceCharacters(in: NSRange(location: 0, length: 0), with: "x\ny\nz\n")   // an edit above the screen
+            Smoke.spin(0.2)
+            let units2 = Array((own.string as String).utf16)
+            let after = ruler.visibleRows()
+            var truth = 1
+            if let f = after.first { truth += units2[..<f.location].reduce(0) { $0 + ($1 == 10 ? 1 : 0) } }
+            check("\(name): an edit above the screen renumbers", after.first?.line == truth, "(\(after.first?.line ?? 0) of \(truth))")
+            own.string = "a\nb\n"
+            parts.scroll.contentView.scroll(to: .zero)   // nothing displays here, so the old scroll position would stay
+            parts.scroll.reflectScrolledClipView(parts.scroll.contentView)
+            Smoke.spin(0.1)
+            let tiny = ruler.visibleRows()
+            check("\(name): a text ending in a line break has its empty last line numbered", tiny.map(\.line) == [1, 2, 3], "(\(tiny.map(\.line)))")
+            let gaps = zip(tiny, tiny.dropFirst()).map { $1.baseline - $0.baseline }
+            check("\(name): the empty last line sits one line below the one above it", gaps.count == 2 && abs(gaps[0] - gaps[1]) < 1.5, "(gaps \(gaps))")
+            own.string = ""
+            Smoke.spin(0.1)
+            check("\(name): an empty text has line 1", ruler.visibleRows().map(\.line) == [1], "(\(ruler.visibleRows().map(\.line)))")
+        }
+        rulerChecks(2)
+        rulerChecks(1)
+        let rulerOn = editor.parts.scroll.rulersVisible
+        Settings.set("lineNumbers", 0)
+        check("line numbers hidden by their setting, shown by default", rulerOn && !editor.parts.scroll.rulersVisible)
+        Settings.set("lineNumbers", 1)
+        check("line numbers back", editor.parts.scroll.rulersVisible)
+
         if let i = CommandLine.arguments.firstIndex(of: "--png"), i + 1 < CommandLine.arguments.count, let tabs = prefs.window?.contentView as? NSTabView {
             let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

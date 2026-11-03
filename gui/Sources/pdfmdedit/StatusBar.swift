@@ -10,7 +10,11 @@ final class TextStats {
     private(set) var caretLine: Int?
     private(set) var length = 0
     private(set) var location = 0
-    var onChange: (() -> Void)?
+    private var listeners: [() -> Void] = []
+
+    /// `f` is called whenever a number changed (the status bar and the line numbers' width listen).
+    func listen(_ f: @escaping () -> Void) { listeners.append(f) }
+    private func changed() { listeners.forEach { $0() } }
 
     private weak var tv: NSTextView?
     private var anchor = (loc: 0, line: 1)
@@ -51,7 +55,7 @@ final class TextStats {
         pending?.cancel()
         length = storage.length
         location = tv.selectedRange().location
-        onChange?()
+        changed()
         let slice = max(1000, Settings.int("statusSliceChars"))
         if length <= slice {
             count()
@@ -76,11 +80,11 @@ final class TextStats {
             guard let self else { return }
             self.anchor = (caret, caret >= from ? self.anchor.line + n : self.anchor.line - n)
             self.caretLine = self.anchor.line
-            self.onChange?()
+            self.changed()
             guard self.lines == nil else { return }
             self.newlines(in: NSRange(location: caret, length: ns.length - caret), of: ns, generation: gen) { rest in
                 self.lines = self.anchor.line + rest
-                self.onChange?()
+                self.changed()
             }
         }
     }
@@ -139,7 +143,7 @@ final class StatusBar: NSView {
 
     func attach(_ stats: TextStats) {
         self.stats = stats
-        stats.onChange = { [weak self] in self?.refresh() }
+        stats.listen { [weak self] in self?.refresh() }
         refresh()
     }
 

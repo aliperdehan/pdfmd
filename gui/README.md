@@ -30,7 +30,10 @@ this is **not tested yet** in this alpha.
 - A status bar like CotEditor's (Lines, Characters, Location, Line; file size, encoding, line ending), every element a setting. The
   counts of a big text are made in slices between key presses (a 50 MB file: nothing waits), the caret's line from an anchor that
   typing does not invalidate. "Characters" counts UTF-16 units (an emoji is two); the encoding and line ending are shown, not yet
-  changeable. No line numbers in the margin yet; no preview; no pdfmd build.
+  changeable. No preview; no pdfmd build.
+- Line numbers in the margin (View > Hide/Show Line Numbers, ⌥⌘N; setting `lineNumbers`): only the visible lines are numbered, a wrapped line once,
+  the caret's line at full strength. The number of the first visible line is counted from an anchor kept between draws, so
+  scrolling and typing never count from the top again. Width, size, opacity and padding are settings (`lineNumber*`).
 
 ## Settings
 

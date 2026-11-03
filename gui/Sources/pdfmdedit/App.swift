@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let view = menu("View")
         add(view, "Wrap Lines", "toggleWrap:", "l", [.command, .option])
+        add(view, "Hide Line Numbers", "toggleLineNumbers:", "n", [.command, .option])
         add(view, "Hide Status Bar", "toggleStatusBar:", "/", [.command, .option])
 
         let window = menu("Window")

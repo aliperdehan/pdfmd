@@ -178,6 +178,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     private(set) var statusBar: StatusBar!
     private(set) var stats: TextStats!
     private(set) var content: EditorContent!
+    private(set) var ruler: LineNumberRuler!
 
     init(document: EditorDocument) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
@@ -192,6 +193,9 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         statusBar = StatusBar(frame: .zero)
         stats = TextStats(parts.textView)
         statusBar.attach(stats)
+        ruler = LineNumberRuler(scroll: parts.scroll, textView: parts.textView, stats: stats)
+        parts.scroll.verticalRulerView = ruler
+        parts.scroll.hasVerticalRuler = true
         statusBar.fileURL = document.fileURL
         content.editor = parts.scroll
         content.bar = statusBar
@@ -200,6 +204,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         window.contentView = content
         window.initialFirstResponder = parts.textView
         showStatusBar()
+        showLineNumbers()
         load(document.text, document: document)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
     }
@@ -216,8 +221,14 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         tv.isContinuousSpellCheckingEnabled = Settings.flag("spellCheck")
         statusBar.applyColours()
         showStatusBar()
+        showLineNumbers()
         parts.highlighter?.highlightNow()
         tv.needsDisplay = true
+    }
+
+    private func showLineNumbers() {
+        parts.scroll.rulersVisible = Settings.flag("lineNumbers")
+        ruler.applySettings()
     }
 
     private func showStatusBar() {
@@ -235,6 +246,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         stats.lineBreak = document.lineEnding.unit
         parts.textView.string = text
         stats.reset()
+        ruler.reset()
         parts.textView.setSelectedRange(NSRange(location: 0, length: 0))
         parts.textView.undoManager?.removeAllActions()
         parts.highlighter?.highlightNow()
@@ -247,11 +259,16 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         window?.makeFirstResponder(parts.textView)
     }
 
+    @objc func toggleLineNumbers(_ sender: Any?) {
+        Settings.set("lineNumbers", Settings.flag("lineNumbers") ? 0 : 1)
+    }
+
     @objc func toggleStatusBar(_ sender: Any?) {
         Settings.set("statusBar", Settings.flag("statusBar") ? 0 : 1)
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(toggleLineNumbers(_:)) { item.title = Settings.flag("lineNumbers") ? "Hide Line Numbers" : "Show Line Numbers" }
         if item.action == #selector(toggleStatusBar(_:)) { item.title = Settings.flag("statusBar") ? "Hide Status Bar" : "Show Status Bar" }
         return true
     }
