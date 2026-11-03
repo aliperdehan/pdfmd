@@ -11,6 +11,9 @@ The columns of a row:
 ``comments``  Obsidian's ``%%comments%%`` are hidden.
 ``gfm_plus``  extensions added to the gfm reader pdfmd picks (``reader = "auto"`` only), as ``+name`` text.
 ``markdown_plus``  the same for Pandoc's Markdown reader when pdfmd picks it (a file with front matter, a Pandoc-only syntax...).
+``markup``    the kinds of universal markup that are on without a ``markup`` setting (``pdfmd-options.markup``, ``--markup``), as a
+              space-separated list; ``pagebreak`` likewise for the page-break families (``all``). Only for a Markdown file; a
+              ``markup`` / ``pagebreak`` setting of any kind, ``false`` included, replaces the row's.
 ``unclosed``  what a ``%%`` with no closing ``%%`` does: ``hide`` (the rest of the note, as Obsidian does) or ``keep`` (it
               stays text, with a warning). Outside a vault a stray ``%%`` is as likely TeX or plain text as a forgotten close, so
               ``pdfmd`` keeps it.
@@ -26,14 +29,18 @@ class Preset(NamedTuple):
     unclosed: str
     gfm_plus: str = ""
     markdown_plus: str = ""
+    markup: str = ""
+    pagebreak: str = ""
 
+
+OWN_SYNTAX = "callouts toc center highlight keep landscape appendix"      # `space` stays off: a lone <br> is often just a blank line
 
 PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),
     "gfm": Preset("gfm", False, "keep"),
     "commonmark": Preset("commonmark", False, "keep"),
-    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji"),
-    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji"),
+    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all"),
+    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all"),
 }
 WORDS = ("auto", *PRESETS)
 

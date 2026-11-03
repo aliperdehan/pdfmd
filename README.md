@@ -2354,8 +2354,9 @@ pdfmd-options:
 | `typst` | a raw `` ```{=typst} `` `#pagebreak()` |
 | `word` | a raw `` ```{=openxml} `` page-break paragraph |
 
-It is off unless asked (the document, a metadata file, or `pdfmd --setup` under *Universal markup*); `--pagebreak
-[KIND ...]` and `--no-pagebreak` decide for one run. A spelling already in the output's own language stays as written,
+It is on, every family, in the `pdfmd` and `obsidian` flavours (v3.32.24; before, off unless asked) and off with `flavour: pandoc`, `gfm`
+or `commonmark`; `pagebreak:` in the document, a metadata file, or `pdfmd --setup` under *Universal markup* names the families (or
+`false`) instead; `--pagebreak [KIND ...]` and `--no-pagebreak` decide for one run. A spelling already in the output's own language stays as written,
 and slides leave a break out with a note. The built-in renderer (no Pandoc) reads the comment and TeX spellings anyway.
 
 **Callouts in every format** (v3.29, the first kind of *universal markup* after page breaks). GitHub's and Obsidian's
@@ -2381,8 +2382,9 @@ A fenced div takes `note`, `tip`, `important`, `warning` or `caution` as its cla
 The five kinds are GitHub's (`note`, `tip`, `important`, `warning`, `caution`); Obsidian's others map to them (`info`, `todo`,
 `example`, `abstract` to note; `success`, `check`, `hint` to tip; `question`, `help`, `faq` to important; `failure`, `danger`,
 `error`, `bug` to caution; `attention` to warning), and an unknown name is a note titled with it. A fold marker (`[!tip]-`) is
-dropped. Off unless asked (the document, a metadata file, or `pdfmd --setup` under *Universal markup*); `--markup [KIND ...]` and
-`--no-markup` decide for one run. The built-in renderer (no Pandoc) does not read it yet, and there is no Word shaded box yet.
+dropped. On, every kind but `space`, in the `pdfmd` and `obsidian` flavours (v3.32.24; before, off unless asked), and off with `flavour: pandoc`,
+`gfm` or `commonmark`; `markup:` in the document, a metadata file, or `pdfmd --setup` under *Universal markup* names the kinds (or
+`false`) instead; `--markup [KIND ...]` and `--no-markup` decide for one run. The built-in renderer (no Pandoc) does not read it yet, and there is no Word shaded box yet.
 
 **A table of contents where you put it** (v3.29, `markup: toc`). `[TOC]`, `[[_TOC_]]` and `<!-- toc -->` alone in a paragraph, or
 a raw `\tableofcontents` for a writer that is not LaTeX, become the contents at that place: LaTeX's `\tableofcontents` (filled in
@@ -2529,7 +2531,13 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   or a Pandoc-only syntax, also reads `+autolink_bare_uris` (`https://example.org` is a link) and `+emoji` (`:smile:`). Since 3.32.4
   a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
 
-`flavour: pandoc` (or `gfm`, `commonmark`) turns `%%` back into the text it looks like. Not covered yet: the chapters of a report or
+- **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `center`,
+  `highlight`, `keep`, `landscape` and `appendix` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `::: keep`, `::: landscape`,
+  `\appendix`), and `pagebreak` for every family, with no setting. `space` stays off (a lone `<br>` is often just a blank line), and
+  so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
+  `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
+
+`flavour: pandoc` (or `gfm`, `commonmark`) turns all of this off: `%%` is the text it looks like, and the markup and page-break spellings are left to Pandoc. Not covered yet: the chapters of a report or
 book build (`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the
 main one.
 

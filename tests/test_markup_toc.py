@@ -94,9 +94,9 @@ class Build(unittest.TestCase):
             self.assertIn("Contents", text)
             self.assertRegex(text, r"Sub emph \. \. \.")                              # a leader and a page number: it is filled
 
-    def test_the_markup_is_off_without_the_option(self):
+    def test_the_markup_is_off_with_flavour_pandoc(self):
         root = Path(self._tmp.name)
-        (root / "d.md").write_text("---\ntitle: T\n---\n\n[TOC]\n\n" + SOURCE, encoding="utf-8")
+        (root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n---\n\n[TOC]\n\n" + SOURCE, encoding="utf-8")
         env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "html", "-s", "-o", "d.html", "--no-stamp"],
                               cwd=root, env=env, capture_output=True, text=True, timeout=300)

@@ -47,7 +47,7 @@ UNSET = {
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
     "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "color", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -532,8 +532,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Typst drawn as a vector picture) instead of dropped. Per family: pdfmd-options.raw in a document.",
                "Universal markup"),
         Setting("options.pagebreak", "Page breaks carried into every format", "multi", PAGEBREAK_CHOICES, "",
-                "Each spelling of a chosen family becomes the output's own page break. Per run: --pagebreak / "
-                "--no-pagebreak.", "Universal markup"),
+                "Each spelling of a chosen family becomes the output's own page break. Left unset: every family, in the pdfmd "
+                "and obsidian flavours (none with flavour: pandoc, gfm or commonmark). Per run: --pagebreak / --no-pagebreak.", "Universal markup"),
         Setting("options.linebreak", "Line breaks (<br>, \\newline ...) carried into every format, everywhere", "multi", LINEBREAK_CHOICES, "",
                 "Each spelling of a chosen family becomes the output's own line break, in text as well as in table cells. Left unset, "
                 "every spelling is carried in table cells only (a cell cannot hold a blank line or \\par), and text outside a table "
@@ -617,8 +617,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A whole number (default 300). Per block: dpi=.", "Chemical structures"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
-                "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Per run: --markup / "
-                "--no-markup.", "Universal markup"),
+                "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Left unset: all but space, in the pdfmd and obsidian "
+                "flavours (none with flavour: pandoc, gfm or commonmark). Per run: --markup / --no-markup.", "Universal markup"),
         choice("options.rewrite", "Replace an older output of the same name", on_off, "",
                "Off: a build that finds report.pdf already there writes report (1).pdf and leaves the old one. "
                "Per run: --rewrite / --no-rewrite. A watch (-w) always rewrites.", "Output"),

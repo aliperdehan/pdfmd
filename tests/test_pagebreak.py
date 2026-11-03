@@ -164,7 +164,13 @@ class NativeTier(unittest.TestCase):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-pagebreak-option-"))
         self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
         plain = directory / "plain.md"
-        plain.write_text("A\n\n<!-- pagebreak -->\n\nB\n", encoding="utf-8")
+        plain.write_text("---\npdfmd-options:\n  flavour: pandoc\n---\n\nA\n\n<!-- pagebreak -->\n\nB\n", encoding="utf-8")
+        flavoured = directory / "flavoured.md"                  # the pdfmd flavour: every family, unasked
+        flavoured.write_text("A\n\n<!-- pagebreak -->\n\nB\n", encoding="utf-8")
+        self.assertEqual(pdfmd.pagebreak_kinds(flavoured, []), list(pdfmd.PAGEBREAK_KINDS))
+        off = directory / "off.md"
+        off.write_text("---\npdfmd-options:\n  pagebreak: false\n---\n\nA\n", encoding="utf-8")
+        self.assertEqual(pdfmd.pagebreak_filter_args(off, []), [])
         asked = directory / "asked.md"
         asked.write_text("---\npdfmd-options:\n  pagebreak: [comment, tex]\n---\n\nA\n", encoding="utf-8")
         self.assertEqual(pdfmd.pagebreak_filter_args(plain, []), [])

@@ -146,12 +146,22 @@ class Options(unittest.TestCase):
             self.assertEqual(args[:2], ["-M", "pdfmd-markup=callouts"])
             self.assertTrue(args[-1].endswith("markup.lua"))
 
-    def test_off_by_default(self):
+    def test_on_in_the_pdfmd_flavour_off_with_flavour_pandoc_or_markup_false(self):
         with tempfile.TemporaryDirectory() as folder:
             doc = Path(folder) / "d.md"
             doc.write_text("---\ntitle: T\n---\n\n> [!NOTE]\n> x\n", encoding="utf-8")
-            self.assertEqual(pdfmd.markup_filter_args(doc, []), [])
-            self.assertEqual(pdfmd.markup_header_args(doc, []), [])
+            self.assertIn("pdfmd-markup=callouts,toc,center,highlight,keep,landscape,appendix", pdfmd.markup_filter_args(doc, [])[1])
+            self.assertNotIn("space", pdfmd.markup_kinds(doc, []))          # space stays off
+            for front in ("flavour: pandoc", "flavour: gfm", "markup: false", "markup: []"):
+                with self.subTest(front=front):
+                    doc.write_text(f"---\ntitle: T\npdfmd-options:\n  {front}\n---\n\n> [!NOTE]\n> x\n", encoding="utf-8")
+                    self.assertEqual(pdfmd.markup_filter_args(doc, []), [])
+                    self.assertEqual(pdfmd.markup_header_args(doc, []), [])
+            doc.write_text("---\ntitle: T\npdfmd-options:\n  markup: callouts\n---\n\ntext\n", encoding="utf-8")
+            self.assertEqual(pdfmd.markup_kinds(doc, []), ["callouts"])      # a setting replaces the flavour's list
+            other = Path(folder) / "d.rst"
+            other.write_text("text\n", encoding="utf-8")
+            self.assertEqual(pdfmd.markup_kinds(other, []), [])              # only a Markdown file
 
     def test_the_latex_header_is_a_file_of_pdfmd_s_own(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -193,6 +203,11 @@ class Build(unittest.TestCase):
             done = subprocess.run([*command, "--markup"], cwd=root, env=env, capture_output=True, text=True, timeout=300)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("\\begin{pdfmdcallout}", (root / "d.tex").read_text(encoding="utf-8"))
+            done = subprocess.run([*command, "--no-markup"], cwd=root, env=env, capture_output=True, text=True, timeout=300)
+            self.assertNotIn("pdfmdcallout", (root / "d.tex").read_text(encoding="utf-8"))
+            done = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=300)      # the pdfmd flavour: on
+            self.assertIn("\\begin{pdfmdcallout}", (root / "d.tex").read_text(encoding="utf-8"))
+            (root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n---\n\n> [!NOTE]\n> Hello.\n", encoding="utf-8")
             done = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=300)
             self.assertNotIn("pdfmdcallout", (root / "d.tex").read_text(encoding="utf-8"))
 

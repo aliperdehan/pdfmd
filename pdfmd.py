@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.23"
+PDFMD_VERSION = "3.32.24"
 import argparse
 import atexit
 import csv
@@ -2964,7 +2964,8 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
         return []
     if PAGEBREAK_CLI["kinds"] is not None:
         return pagebreak_value(PAGEBREAK_CLI["kinds"] or True)
-    return pagebreak_value(first_pdfmd_option(md_path, metadata_files, "pagebreak"))
+    value = first_pdfmd_option(md_path, metadata_files, "pagebreak")
+    return pagebreak_value(flavour_default(md_path, metadata_files, "pagebreak") if value is None else value)
 
 
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
@@ -3079,6 +3080,15 @@ def flavour_of(md_path: Path, metadata_files=()) -> str:
     return flavour_setting(md_path, metadata_files)[0]
 
 
+def flavour_default(md_path: Path, metadata_files, column: str) -> str:
+    """What the flavour switches on without a setting (v3.32.24): its `markup` or `pagebreak` column (see pdfmd_flavours), for a
+    Markdown file only; empty for any other input and for `pandoc`, `gfm` and `commonmark`."""
+    if md_path.suffix.lower() not in (".md", ".markdown"):
+        return ""
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files))
+    return getattr(preset, column, "") if preset else ""
+
+
 def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
     """``text`` as Pandoc should read it when the flavour has %%comments%% (obsidian, pdfmd): them hidden, or (``show``, by default
     `show-comments`) turned into HTML comments the writers draw as Comment boxes. Unchanged when the flavour is not obsidian or
@@ -3113,7 +3123,8 @@ def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
         if MARKUP_CLI["kinds"] is not None:
             kinds = markup_value(MARKUP_CLI["kinds"] or True)
         else:
-            kinds = markup_value(first_pdfmd_option(md_path, metadata_files, "markup"))
+            value = first_pdfmd_option(md_path, metadata_files, "markup")
+            kinds = markup_value(flavour_default(md_path, metadata_files, "markup") if value is None else value)
     if show_comments_on(md_path, metadata_files):
         kinds.append("comments")
     return kinds
@@ -28519,8 +28530,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "the format's own (LaTeX \\newpage, Typst #pagebreak, a CSS break, a Word break ...). "
                              "Families: comment (<!-- pagebreak -->, <!-- pdfmd: pagebreak -->), tex (\\newpage, "
                              "\\clearpage ...), html (a CSS-break or class=pagebreak div), div (::: pagebreak), typst "
-                             "(#pagebreak()), word (a raw Word break); bare: all. Off by default; also "
-                             "pdfmd-options.pagebreak (true or a list) and pdfmd --setup")
+                             "(#pagebreak()), word (a raw Word break); bare: all. On, every family, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
+                             "pdfmd-options.pagebreak (true, false or a list) and pdfmd --setup")
     parser.add_argument("--no-pagebreak", action="store_true",
                         help="no page-break carrying for this run, whatever pdfmd-options.pagebreak says")
     parser.add_argument("--linebreak", nargs="*", default=None, metavar="KIND",
@@ -28537,8 +28548,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
                              "text; highlight (==text==) marks it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
-                             "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. Off by default; also "
-                             "pdfmd-options.markup (true or a list) and pdfmd --setup")
+                             "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
+                             "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
     parser.add_argument("--show-comments", action="store_true", default=None,
                         help="show the <!-- comments --> of the text in the output instead of dropping them: a box labelled "
                              "Comment (LaTeX, Typst, HTML, EPUB), a real Word comment (docx); the Markdown family keeps them as "

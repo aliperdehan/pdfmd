@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.24 — 2026-11-03
+
+Pre-edit state: commit `f83780a`. Entry 3eo. **pdfmd's own syntax is on in the `pdfmd` and `obsidian` flavours.** Two more columns of the preset table (`markup`, `pagebreak` in `pdfmd_flavours`) say what is on when nothing is set: `markup` for callouts, toc, center, highlight, keep, landscape and appendix, and `pagebreak` for every family, in a Markdown file (`.md`, `.markdown`) only. `space` stays off (a lone `<br>` is often a blank line), and so do `linebreak` and `raw` (`linebreak` changes how ordinary paragraphs break, `raw` runs HTML/LaTeX/Typst conversions that can need extra tools). A `markup` or `pagebreak` setting of any kind, `false` and `[]` included, `--markup`, `--pagebreak` and `--no-markup` / `--no-pagebreak` replace the flavour's list; `flavour: pandoc|gfm|commonmark` turns it all off.
+
+- **Behaviour change:** `> [!note]`, `[TOC]`, `[[_TOC_]]`, `<center>`, `==text==`, `::: keep`, `::: landscape`, `\appendix` and the page-break spellings (`\newpage`, `<!-- pagebreak -->`, `::: pagebreak` ...) now do their job in every output of a Markdown file, where before they printed as text or worked in some writers only. None of the 178 Markdown files in the author's own folders uses them as literal text.
+- Tests: `tests/test_markup_callouts.py`, `test_markup_toc.py`, `test_pagebreak.py`, `test_show_comments.py` say what is on and what turns it off (their "off by default" cases now use `flavour: pandoc`, `markup: false` or `--no-markup`); one document through the whole `pdfmd` as HTML, Word and PDF gave the box, the contents, the highlight and the page break.
+
+Not pushed.
+
 ## v3.32.23 — 2026-11-03
 
 Pre-edit state: commit `9dbb108`. Entry 3eo. **The `pdfmd` and `obsidian` flavours read a little more.** The gfm reader pdfmd picks for a file with no front matter gets `+smart +implicit_figures`, and Pandoc's Markdown, when pdfmd picks it, gets `+autolink_bare_uris +emoji`. Both lists are columns of the preset table (`gfm_plus`, `markdown_plus` in `pdfmd_flavours`). From 3.32.4 on a file without front matter had been read as plain gfm: straight quotes, `--` printed as `-\/-`, and no figure captions. `lists_without_preceding_blankline` is not added: it turns "J. Smith in" followed by "2020. It was good" into an ordered list. `flavour: pandoc|gfm|commonmark` and `--from` give the strict readers back, and a file with a reader named in `flavour:` is left as named.

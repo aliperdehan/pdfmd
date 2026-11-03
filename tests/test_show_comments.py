@@ -105,12 +105,12 @@ class Option(unittest.TestCase):
     def test_the_option_the_flag_and_the_off_switch(self):
         with tempfile.TemporaryDirectory() as folder:
             doc = Path(folder) / "d.md"
-            doc.write_text("---\ntitle: T\npdfmd-options:\n  show-comments: true\n---\n\ntext\n", encoding="utf-8")
+            doc.write_text("---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n  show-comments: true\n---\n\ntext\n", encoding="utf-8")
             try:
                 self.assertEqual(pdfmd.markup_kinds(doc, []), ["comments"])
                 pdfmd.SHOW_COMMENTS_CLI["on"] = False
                 self.assertEqual(pdfmd.markup_kinds(doc, []), [])
-                doc.write_text("---\ntitle: T\n---\n\ntext\n", encoding="utf-8")
+                doc.write_text("---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n---\n\ntext\n", encoding="utf-8")
                 pdfmd.SHOW_COMMENTS_CLI["on"] = True
                 self.assertEqual(pdfmd.markup_kinds(doc, []), ["comments"])
             finally:
