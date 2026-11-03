@@ -215,6 +215,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "stamp.pdf-metadata": "options.stamp.pdf-metadata", "stamp.pdf_metadata": "options.stamp.pdf-metadata",
     "strict": "options.strict", "build-time": "options.build-time", "time-format": "options.time-format",
     "page-folder": "options.page-folder",
+    "report-build": "options.report-build", "report-titles": "options.report-titles",
     "build-log": "options.build-log", "build-log-keep": "options.build-log-keep", "build-log-max-size": "options.build-log-max-size",
     "strip-comments": "options.strip-comments",
     "column-widths": "options.column-widths", "table-widths": "options.column-widths",

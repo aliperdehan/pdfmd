@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.17"
+PDFMD_VERSION = "3.32.18"
 import argparse
 import atexit
 import csv
@@ -11301,8 +11301,8 @@ class AutoLog:
     def classify(kind: str, detail: str) -> tuple[str, str] | None:
         """(heading, short text) of a decision that has a short form, from the words it was announced with."""
         if kind == "PARTS":
-            found = re.search(r"(\d+) parts?\b", detail)
-            return ("FOUND", f"{found.group(1)} part{'s' if found.group(1) != '1' else ''}") if found else None
+            found = re.search(r"(\d+) (more file|part)s?\b", detail)
+            return (("FOUND", f"{found.group(1)} {found.group(2)}{'s' if found.group(1) != '1' else ''}") if found else None)
         if kind == "LUA":
             return "FOUND", Path(detail).name or detail
         if kind == "MARGIN":
@@ -14278,6 +14278,11 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     if not disabled:
         corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
     repaired = repair_ascii_text(corrected, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
+    chapter = (REPORT_BUILD.get("chapters") or {}).get(md_path)
+    if chapter is not None:
+        # a report's first file: its title leaves the front matter and becomes a chapter heading (pdfmd_report.titles)
+        import pdfmd_report.titles as report_titles
+        repaired = report_titles.apply(sys.modules[__name__], repaired, chapter)
     if not shifted and repaired == corrected:
         yield md_path, False
         return
@@ -16301,6 +16306,11 @@ def stamp_build(partial: bool, skip: bool, md_path: Path, *args, **kwargs) -> No
     .tex), which the final stage stamps."""
     if skip:
         return
+    if REPORT_BUILD.get("files"):
+        # a report built through convert_one(): every chapter is stamped as a chapter of the report, as the report's own loop did
+        for chapter in REPORT_BUILD["files"]:
+            stamp_after_success(chapter, *args, **kwargs, pdf_only=partial, report_output=args[3])
+        return
     stamp_after_success(md_path, *args, **kwargs, pdf_only=partial)
     if partial and BUILD.get("partial") is not None and len(args) >= 5:
         # `stamp: {partial: true}`: a "partial" entry in the NAME.hst (the source is not stamped, the history says what was built)
@@ -17565,6 +17575,11 @@ def select_parts_and_sections(parts: list[Path], directory: Path,
 # route calls the build again, and this is what lets both see the same cuts.
 PART_CUTS: dict[Path, list[Heading]] = {}
 
+# A report built through convert_one() (pdfmd_report, v3.32.14): the files it is made of, what is done to each one's title
+# (`chapters`: pdfmd_report.titles.Chapter), and the folder its attached source is named from. Set by the report for the
+# length of the build; scaffold_inputs() reads the chapters, stamp_build() the files, convert_one() the folder.
+REPORT_BUILD: dict = {}
+
 
 class ScaffoldPlan:
     """What a parts-mode build consists of."""
@@ -17897,12 +17912,16 @@ def scaffold_inputs(files: list[Path], active: bool,
         return
     temporary: list[Path] = []
     prepared = [files[0]]
+    chapters = REPORT_BUILD.get("chapters") or {}
     try:
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             cleaned = strip_part_front_matter(text)
             if transform is not None:
                 cleaned = transform(cleaned, part)     # a rewrite of the part's text (ASCII tables), before it is cut or wrapped
+            if part in chapters:
+                import pdfmd_report.titles as report_titles
+                cleaned = report_titles.apply(sys.modules[__name__], cleaned, chapters[part])
             if select is not None:
                 # every part goes in, wrapped; select.lua drops the ones (or the sections) not asked for
                 if part in select and part in PART_CUTS:
@@ -23907,7 +23926,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
             shown = len(selection) if isinstance(selection, (set, frozenset)) else len(parts_inputs)
-            note("PARTS", f"{md_path}: {shown} part{'s' if shown != 1 else ''} "
+            unit = "more file" if REPORT_BUILD.get("files") else "part"
+            note("PARTS", f"{md_path}: {shown} {unit}{'s' if shown != 1 else ''} "
                           f"joined after it" + (" (partial build; numbered with the whole document)"
                                                 if isinstance(selection, (set, frozenset)) else
                                                 " (partial build)" if partial else ""))
@@ -27550,7 +27570,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             produced = output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir
                                        else md_path.with_suffix(".pdf"))
             attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
-                                        preamble_files, effective_no_auto(md_path, no_auto), verbose)
+                                        preamble_files, effective_no_auto(md_path, no_auto), verbose,
+                                        report=bool(REPORT_BUILD), base=REPORT_BUILD.get("base"))
         if (target_format in MARKDOWN_TARGETS and source_override is None and not partial
                 and md_path.suffix.lower() in (".md", ".markdown")):
             keep_mode = resolve_keep_source(md_path, metadata_files)

@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pdfmd_report import route, titles
+
 
 def run(core, *,
         args, default_target, embed_request, engines,
@@ -112,6 +114,21 @@ def run(core, *,
     target_format = default_target(files[0], metadata_files)
     need_engines(target_format)
     engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
+    report_build = route.resolve_build(core, files[0], metadata_files)
+    report_chapters, title_notes = titles.plan(core, files, metadata_files, titles.resolve_policy(core, files[0], metadata_files))
+    if target_format in {"pdf", *TEX_STANDALONE_FORMATS}:
+        class_variables, class_options, class_note = titles.chapter_arguments(core, files, metadata_files, list(variables))
+        variables = [*variables, *class_variables]
+        pandoc_options = [*pandoc_options, *class_options]
+        title_notes = [*title_notes, *([class_note] if class_note else [])]
+    for note in (title_notes if report_build == "patch" else []):
+        print(f"NOTE  {note}")
+    if report_build == "route" and target_format != ASSEMBLED_FORMAT:
+        route.build(core, args=args, files=files, excluded=excluded, metadata=metadata, metadata_files=metadata_files,
+                    target_format=target_format, engines=engines, variables=variables, pandoc_options=pandoc_options,
+                    stamp_overrides=stamp_overrides, embed_request=embed_request, no_auto=report_no_auto,
+                    chapters=report_chapters, notes=title_notes)
+        return
     BUILD["engine"], BUILD["failed"] = None, []
     begin_timer()
     report_capture = warning_capture()
@@ -122,15 +139,7 @@ def run(core, *,
     )
     if report_reader_reason:
         report_note("READER", report_reader_reason)
-    output_extension = output_extension_for(target_format)
-    if args.out:
-        # Check is-a-directory BEFORE adding a default suffix -- a dot-less
-        # directory name (e.g. "out/") would otherwise get ".pdf" appended
-        # to the directory's own name instead of being used as a directory.
-        output = args.out / f"book{output_extension}" if args.out.is_dir() else default_output_path(args.out, target_format)
-    else:
-        output = Path.cwd() / f"book{output_extension}"
-    output = output.resolve()
+    output = route.output_path(core, args, target_format)
     if target_format == ASSEMBLED_FORMAT:
         # --stop-at markdown: the chapters, as one Markdown text, in the
         # order Pandoc would read them. Nothing else of the build runs.
@@ -161,7 +170,7 @@ def run(core, *,
     pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, files[0].parent))
     report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
-    with table_width_filter() as width_filter, csv_table_filter() as csv_filter:
+    with table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
             # writer here still gets --standalone plus the same
@@ -229,7 +238,7 @@ def run(core, *,
                     as (report_fonts_header, report_fonts_filter), \
                     office_reference(files[0], metadata_files, variables, target_format, output,
                                      pandoc_options, report_no_auto, report_note) as report_office_arguments:
-                prepared_files = prepared[:len(files)]
+                prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters)
                 prepared_metadata = prepared[len(files):]
                 cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and report_standalone_auto:
@@ -355,6 +364,10 @@ def run(core, *,
             if monofont_needed:
                 report_note("MONOFONT", "REPORT: has code but no monofont set; "
                                        f"using {default_monofont()} on LaTeX-family engines")
+            # the document font and the math font, chosen as for one document (v3.32.14; `report-build: route` gets the rest)
+            pdf_font = mainfont_choice(list(files), metadata_files, variables, args.font,
+                                       has_mainfont(files[0], variables, metadata_files),
+                                       not auto_disabled(report_no_auto, "mainfont"), report_no_auto, report_note)
             # Reports need one Pandoc invocation, so retry each usable engine here.
             #
             # Like its is_tex_target sibling above, it adds document_header_file()
@@ -377,14 +390,14 @@ def run(core, *,
                         pdf_metadata_header_file(
                             report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
                         ) as report_pdf_meta_file, \
-                        script_fallback(list(files), metadata_files, variables, preambles, None, engine,
+                        script_fallback(list(files), metadata_files, variables, preambles, pdf_font, engine,
                                         report_no_auto, report_note) as (report_fonts_header,
                                                                          report_fonts_filter), \
                         managed_fonts_css(engine) as report_fonts_css, \
                         document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
                                                         or bool(report_pdf_meta_snippet_text))
                                              and engine in LATEX_ENGINES, metadata_files, report_no_auto) as report_header_file:
-                    prepared_files = prepared[:len(files)]
+                    prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters)
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
                     if report_from:
@@ -401,7 +414,12 @@ def run(core, *,
                     if monofont_needed and engine in LATEX_ENGINES:
                         cmd += font_args("monofont", default_monofont())
                     if engine in LATEX_ENGINES:
-                        cmd += document_font_args(list(files), metadata_files, variables)
+                        if pdf_font:
+                            cmd += font_args("mainfont", pdf_font)
+                            cmd += mathfont_args(pdf_font, files[0], metadata_files, variables, args.font or None,
+                                                 report_no_auto, None, report_note)
+                        else:
+                            cmd += document_font_args(list(files), metadata_files, variables)
                     for variable in paper_variables(files[0], metadata_files, variables, None,
                                                     paper_kind(engine, report_no_auto))[0]:
                         cmd += ["-V", variable]

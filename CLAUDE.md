@@ -116,7 +116,7 @@ repository; there is no separate tap or bucket repository.
 
 Every decision the author makes in chat (a choice between options, a wish, a design answer, a refusal) is written into the
 maintainer's working notes (the master queue) at full context, in the same turn and before any code: the question, the
-options, the answer, the reason, what it touches. It also gets a short line in `TODO.md` with the entry id. Chat is lost at
+options, the answer, the reason, what it touches. It also gets a short line in `TODO.md` with the entry id, when the work is put off. Chat is lost at
 the next compaction; a decision that exists only there gets re-asked, re-derived or never built. Code follows the record,
 never the other way round, and a decision changed later is edited in the notes, not only in the code.
 
@@ -129,7 +129,8 @@ the author is told in the same reply and the constant is recorded in the maintai
 
 ## TODO.md
 
-`TODO.md` lists the open work, one line per item. When a commit finishes an item, delete its line in
+`TODO.md` lists the open work that is postponed, one line per item; work done in the same session as its decision gets no line
+(the author, 2026-11-03: a line written for work in progress is stale within the hour). When a commit finishes an item, delete its line in
 that same commit (the changelog is the record of what shipped); when a plan adds or changes an item,
 edit the line. Keep it free of personal paths and names, like every file here.
 

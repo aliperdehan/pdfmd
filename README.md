@@ -1780,6 +1780,26 @@ into a single PDF, in the order of each file's `chapter:` front-matter
 field. See [`examples/book/`](https://github.com/aliperdehan/pdfmd/tree/main/examples/book/). `-i FILE` leaves one file
 out, and `--exclude-unnumbered` skips files without a `chapter:`.
 
+**How it is built.** A report is built by the build of one document: the first file is the document and the others are
+joined after it, so a report gets everything a single document gets (the document and math fonts, `-f/--font`, the retry
+with another font when a glyph is missing, the engine chain, `citation-engine`, the cache, the style sheets, the budgets
+and `--strict`), and prints the same `DEFAULTS` line. The first file's front matter is the book's; the front matter of
+the later files is not merged (a `NOTE` names the keys one of them sets that the report does not use). Set
+`pdfmd-options: {report-build: patch}` (or the `--setup` row) for the older build, one Pandoc command over the list of
+files; it has the document and math fonts and the titles below, and not the font retry, the cache route or the other
+single-document steps.
+
+**Chapters.** A report is chapters: unless the files or a metadata file name a `documentclass:`, a PDF or LaTeX report uses the
+`report` class and each level-1 heading is a `\chapter` (a new page, a large title). `documentclass: book` is kept, and so is
+`article`, where a level-1 heading stays a section (a `NOTE` says so).
+
+**Titles.** Pandoc merges the front matter of several files and the later `title:` replaces the earlier, so a report of
+ten chapters was titled by its last chapter. With two or more files that have a `title:`, each title is now a chapter
+heading (level 1), the file's own headings go one level down, its `subtitle:` is a line under the heading, and so are its
+`author:` and `date:` when they differ from the book's (the first file's, else a metadata file's). The book then has
+no title page of its own unless a metadata file sets a `title:`. A single title is the book's, as before.
+`pdfmd-options: {report-titles: first|last}` keeps the first or the last title as the book's instead (no headings are added).
+
 ### One long document in several files
 
 For an article-style document that has grown too long to edit as one file
