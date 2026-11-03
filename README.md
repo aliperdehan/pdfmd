@@ -2523,6 +2523,12 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key` inside one does not switch the reader or turn
   on citations.
 
+- **Typography, figures, bare links and emoji** (v3.32.23, in `obsidian` and `pdfmd`). The gfm that pdfmd picks for a file with no
+  front matter also reads `+smart` (curly quotes, `--` and `---` as dashes, `...` as an ellipsis) and `+implicit_figures` (a picture
+  alone in its paragraph is a figure, its alt text the caption). Pandoc's Markdown, which pdfmd picks for a file with front matter
+  or a Pandoc-only syntax, also reads `+autolink_bare_uris` (`https://example.org` is a link) and `+emoji` (`:smile:`). Since 3.32.4
+  a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
+
 `flavour: pandoc` (or `gfm`, `commonmark`) turns `%%` back into the text it looks like. Not covered yet: the chapters of a report or
 book build (`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the
 main one.

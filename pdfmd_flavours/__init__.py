@@ -9,6 +9,8 @@ The columns of a row:
               that has some, and so on); ``"default"`` is Pandoc's own default for the file (no ``-f``); anything else is a
               reader spec, handed to Pandoc as it stands (``gfm``, ``commonmark``).
 ``comments``  Obsidian's ``%%comments%%`` are hidden.
+``gfm_plus``  extensions added to the gfm reader pdfmd picks (``reader = "auto"`` only), as ``+name`` text.
+``markdown_plus``  the same for Pandoc's Markdown reader when pdfmd picks it (a file with front matter, a Pandoc-only syntax...).
 ``unclosed``  what a ``%%`` with no closing ``%%`` does: ``hide`` (the rest of the note, as Obsidian does) or ``keep`` (it
               stays text, with a warning). Outside a vault a stray ``%%`` is as likely TeX or plain text as a forgotten close, so
               ``pdfmd`` keeps it.
@@ -22,14 +24,16 @@ class Preset(NamedTuple):
     reader: str
     comments: bool
     unclosed: str
+    gfm_plus: str = ""
+    markdown_plus: str = ""
 
 
 PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),
     "gfm": Preset("gfm", False, "keep"),
     "commonmark": Preset("commonmark", False, "keep"),
-    "pdfmd": Preset("auto", True, "keep"),
-    "obsidian": Preset("auto", True, "hide"),
+    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji"),
+    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji"),
 }
 WORDS = ("auto", *PRESETS)
 

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.23 — 2026-11-03
+
+Pre-edit state: commit `9dbb108`. Entry 3eo. **The `pdfmd` and `obsidian` flavours read a little more.** The gfm reader pdfmd picks for a file with no front matter gets `+smart +implicit_figures`, and Pandoc's Markdown, when pdfmd picks it, gets `+autolink_bare_uris +emoji`. Both lists are columns of the preset table (`gfm_plus`, `markdown_plus` in `pdfmd_flavours`). From 3.32.4 on a file without front matter had been read as plain gfm: straight quotes, `--` printed as `-\/-`, and no figure captions. `lists_without_preceding_blankline` is not added: it turns "J. Smith in" followed by "2020. It was good" into an ordered list. `flavour: pandoc|gfm|commonmark` and `--from` give the strict readers back, and a file with a reader named in `flavour:` is left as named.
+
+- Behaviour change: curly quotes, dashes and figure captions in files read as gfm; bare URLs become links and `:name:` emoji become emoji in files read as Pandoc's Markdown.
+- Tests: `tests/test_obsidian.py` (the reader each preset gives; typography, figure, link and emoji on both readers; strict gfm without them).
+
+Not pushed.
+
 ## v3.32.22 — 2026-11-03
 
 Pre-edit state: commit `e1e20c4`. Entries 3ee, 3eo, 3ex. **Flavours are presets in a table, and `flavour` is the same setting as `reader:`.** The new `pdfmd_flavours` package holds one row per flavour (`pandoc`, `gfm`, `commonmark`, `pdfmd`, `obsidian`): the Pandoc reader it uses, whether `%%comments%%` are hidden, and what a `%%` with no closing `%%` does. pdfmd reads the row; a flavour of its own, and the adjustment of every part of a preset, are the next step.

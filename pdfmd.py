@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.22"
+PDFMD_VERSION = "3.32.23"
 import argparse
 import atexit
 import csv
@@ -14154,6 +14154,18 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     preset = FLAVOUR_PRESETS.get(name)
     if preset is not None and preset.reader != "auto":
         return (None if preset.reader == "default" else preset.reader), None      # `flavour: pandoc|gfm|commonmark`: that reader, as it is
+    reader, note = pdfmd_reader(md_path, metadata_files)
+    if preset is None:
+        return reader, note
+    if reader is None:                                   # Pandoc's Markdown, with what the flavour adds to it (v3.32.23)
+        return ("markdown" + preset.markdown_plus if preset.markdown_plus else None), note
+    return (reader + "".join(f"+{extension}" for extension in preset.gfm_plus.split("+") if extension and extension not in reader)
+            if reader.startswith("gfm") else reader), note
+
+
+def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
+    """pdfmd's own pick of reader for a Markdown file, from what the file says and uses (resolve_from_format has the reasons): gfm with
+    the extensions it needs, or None for Pandoc's own Markdown."""
     text = obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False)   # hidden text decides nothing
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None

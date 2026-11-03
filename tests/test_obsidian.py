@@ -134,8 +134,12 @@ class Flavour(unittest.TestCase):
                 path = self.note("plain", f"---\npdfmd-options:\n  flavour: {word.upper()}\n---\n\nText\n")
                 self.assertEqual(pdfmd.flavour_of(path), word)
                 self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], reader)
-        path = self.note("plain", "Text\n")           # no front matter: pdfmd's own pick, gfm
-        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm")
+        path = self.note("plain", "Text\n")           # no front matter: pdfmd's own pick, gfm, with what the flavour adds
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart+implicit_figures")
+        path = self.note("plain", "---\ntitle: T\n---\n\nText\n")      # front matter: Pandoc's Markdown, with what the flavour adds
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "markdown+autolink_bare_uris+emoji")
+        path = self.note("plain", "---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n---\n\nText\n")
+        self.assertIsNone(pdfmd.resolve_from_format(path, None, [])[0])        # strict Pandoc adds nothing
 
     def test_an_unclosed_percent_pair_is_hidden_in_a_vault_and_kept_outside_it(self):
         self.assertEqual(pdfmd.unclosed_comment_mode(self.note("vault")), "hide")
@@ -202,6 +206,19 @@ class CommandLine(unittest.TestCase):
                 self.assertIn("%%kept%%", html)
         html, _ = self.build("plain", "# N\n\nA %%gone%% B\n", "--flavour", "Obsidian")      # the word's case does not matter
         self.assertNotIn("gone", html)
+
+    def test_the_pdfmd_flavour_reads_typography_figures_bare_links_and_emoji_on_both_readers(self):
+        body = '"Quoted" -- and ---\n\n![The caption](pic.png)\n\nSee https://example.org/a now :smile:\n'
+        for front, label in (("", "gfm"), ("---\ntitle: T\n---\n\n", "markdown")):
+            with self.subTest(reader=label):
+                html, _ = self.build("plain", front + body)
+                self.assertIn("\u201cQuoted\u201d \u2013 and \u2014", html)
+                self.assertIn("<figcaption", html)
+                self.assertIn('<a href="https://example.org/a"', html)
+                self.assertIn("\U0001f604", html)
+        html, _ = self.build("plain", body, "--flavour", "gfm")
+        self.assertIn("-- and ---", html)               # strict gfm: no smart typography, no figures
+        self.assertNotIn("<figcaption", html)
 
     def test_a_note_with_properties_is_cleaned_too(self):
         html, _ = self.build("vault", "---\ntags: [a]\n---\n\nOne %%hidden%% two\n")
