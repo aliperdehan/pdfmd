@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.17 — 2026-11-03
+
+Pre-edit state: commit `1775c08`. Entry 3cw (the author: "what about inside the text? ... not only in metadata so, inline for one time too"). Kept in 3.32. Not pushed.
+
+- **`{upright:s,V}` and `{italic:el,DNA}` in a calculation's text** set those pieces of names upright or italic in that line only, over the default and the document's `typeset-upright` / `typeset-italic` lists. They work in a `::: calc` line, a `{=calc}` line and a `{=}` span, in every typeset mode; the marker is taken out of the output (with one neighbouring space), also when typeset is off. Pieces are letters, comma separated, no spaces (Markdown splits a `::: calc` line at a space and a marker must stay one word); an entry that is not letters, an empty list, or one piece in both markers of a line gives a `WARN  calc:` and the line is left as written. No mark inside a name was built (see the master queue: the three name lexers, two spellings of one variable, Markdown rewriting punctuation).
+- `calc.lua`: `strip_styles()` takes the markers out in `register()`, so the statements and the typeset `from` offsets see the clean text (`record.text`; `record.original` is what pass 2 matches and `--check` reports); `to_original()` moves the edits back for a `::: calc` line, whose items still hold the marker.
+- Test: `test_a_marker_in_the_text_sets_pieces_upright_or_italic_for_that_line`.
+
 ## v3.32.16 — 2026-11-03
 
 Pre-edit state: commit `9c6112b`. Entry 3cw (the author, on the typeset modes' length rule for italic and upright: "good defaults. make it overridable tho so the user may specify that smth is italic or upright, some analogue of mathrm"). Kept in 3.32. Not pushed.

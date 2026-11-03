@@ -803,11 +803,69 @@ local function value_of(statement)
   return result
 end
 
+-- {upright:s,V} and {italic:el,DNA} (3.32.17): the pieces of names that one text's typeset formulas set upright or italic against
+-- the default and the document's lists. They are taken out of the text before it is read, with the one space next to them
+-- when that leaves two (or none at the end). Returns the clean text, {piece = style}, and the ranges removed (in the original).
+local function strip_styles(text)
+  local styles, removed, out, position, from = {}, {}, {}, 1, 1
+  while true do
+    local s, e, word, list = text:find("{(%a+):([^}]*)}", from)
+    if not s then break end
+    from = e + 1
+    if word == "upright" or word == "italic" then
+      local count = 0
+      for piece in (list .. ","):gmatch("([^,]*),") do
+        if not piece:match("^%a+$") then
+          fail("'{" .. word .. ":" .. list .. "}' takes pieces of names that are letters, comma separated without spaces, as {" .. word .. ":V,el}")
+        end
+        if styles[piece] and styles[piece] ~= word then fail("'" .. piece .. "' is both {upright:...} and {italic:...} in one text") end
+        styles[piece] = word
+        count = count + 1
+      end
+      local first = s
+      if text:sub(s - 1, s - 1):match("%s") and (e == #text or text:sub(e + 1, e + 1):match("%s")) then first = s - 1 end
+      out[#out + 1] = text:sub(position, first - 1)
+      removed[#removed + 1] = {s = first, e = e, marker = s}
+      position = e + 1
+    end
+  end
+  out[#out + 1] = text:sub(position)
+  return table.concat(out), styles, removed
+end
+
+-- edits over a record's clean text as edits over the text it came from: each edit moved past the ranges removed in front of it,
+-- and the removals themselves (except those an edit already covers)
+local function to_original(record, edits)
+  local moved = {}
+  local function at(position)
+    local shift, taken = 0, 0
+    for _, range in ipairs(record.removed) do
+      if position >= range.s - taken then shift = shift + (range.e - range.s + 1) end
+      taken = taken + (range.e - range.s + 1)
+    end
+    return position + shift
+  end
+  for _, edit in ipairs(edits) do moved[#moved + 1] = {s = at(edit.s), e = at(edit.e), text = edit.text, swallow = edit.swallow} end
+  local covered = #moved
+  for _, range in ipairs(record.removed) do
+    local inside = false
+    for index = 1, covered do if moved[index].s <= range.s and range.e <= moved[index].e then inside = true end end
+    if not inside then moved[#moved + 1] = {s = range.marker, e = range.e, text = "", marker = true} end
+  end
+  table.sort(moved, function(a, b) return a.s < b.s end)
+  return moved
+end
+
 -- pass 1: record the statements of a text; returns the occurrence
 local function register(text, default)
   occurrence = occurrence + 1
-  local ok, statements, found, edits, nosubs = pcall(read_statements, text, default)
-  local record = {text = text, found = found}
+  local clean, styles, removed = text, {}, {}
+  local ok, statements, found, edits, nosubs = pcall(strip_styles, text)
+  if ok then
+    clean, styles, removed = statements, found, edits
+    ok, statements, found, edits, nosubs = pcall(read_statements, clean, default)
+  end
+  local record = {text = clean, original = text, styles = styles, removed = removed, found = found}
   if ok then
     record.statements, record.edits, record.nosubs = statements, edits, nosubs
     for _, statement in ipairs(statements) do
@@ -831,7 +889,7 @@ end
 local function fetch(text)
   occurrence = occurrence + 1
   local record = OCCURRENCES[occurrence]
-  if not record or record.text ~= text then return nil, "internal: the passes disagree about this place" end
+  if not record or record.original ~= text then return nil, "internal: the passes disagree about this place" end
   if record.error then return nil, record.error end
   return record
 end
@@ -949,9 +1007,10 @@ end
 -- `calc: {typeset-upright: [...], typeset-italic: [...]}` (STYLE: piece -> "upright"|"italic") names the exceptions. An upright
 -- piece is \mathrm{...}; an italic word of several letters is \mathit{...} (one word, not the letters as separate variables).
 local STYLE = {}
+local LINE_STYLE = nil      -- the same for the line being typeset ({upright:s} and {italic:el} in its text; wins over STYLE)
 
 local function tex_word(word)
-  local style = STYLE[word] or (#word == 1 and "italic" or "upright")
+  local style = (LINE_STYLE and LINE_STYLE[word]) or STYLE[word] or (#word == 1 and "italic" or "upright")
   if style == "upright" then return "\\mathrm{" .. word .. "}" end
   return #word == 1 and word or "\\mathit{" .. word .. "}"
 end
@@ -1259,7 +1318,9 @@ end
 local function typeset_or_warn(record, shown, atoms)
   if not TYPESET or not record.found then return nil end
   if TYPESET ~= "display" then atoms = nil end
+  LINE_STYLE = record.styles
   local ok, pieces, glue = pcall(typeset_record, record, DEFAULT_FMT, atoms)
+  LINE_STYLE = nil
   if ok then return pieces, glue, atoms ~= nil and pieces ~= nil end
   warn(shown, "it cannot be typeset: " .. reason_of(pieces), "it is printed as text")
   return nil
@@ -1332,7 +1393,7 @@ end
 
 local function has_marker(item)
   return item.t == "Str" and (item.text:find("{ans", 1, true) or item.text:find("{subs", 1, true)
-    or item.text:find("{nosubs", 1, true)) and true or false
+    or item.text:find("{nosubs", 1, true) or item.text:find("{upright:", 1, true) or item.text:find("{italic:", 1, true)) and true or false
 end
 
 -- one line (items a..b) of a ::: calc paragraph. The line's own {ans} come first (the text up to the last marker has to be
@@ -1368,10 +1429,11 @@ local function process_line(items, a, b)
       local record, problem = fetch(text)
       local ok, edits = false, problem
       if record then ok, edits = pcall(edits_of, record, DEFAULT_FMT) end
+      if ok and record.removed[1] then edits = to_original(record, edits) end            -- {upright:..} / {italic:..} were taken out
       if not ok then
         warn("line `" .. trim(text) .. "`", reason_of(edits), "the line is left as written")
       else
-        local per_item = {}
+        local per_item, marker_items = {}, {}
         local pieces, glue, absorbed
         if TYPESET and record.found then              -- typeset: the whole text up to the last marker is replaced
           local flat = true
@@ -1402,6 +1464,7 @@ local function process_line(items, a, b)
             end
             per_item[home] = per_item[home] or {}
             table.insert(per_item[home], {s = edit.s - offsets[home][1] + 1, e = edit.e - offsets[home][1] + 1, text = edit.text})
+            if edit.marker then marker_items[home] = true end
           end
         end
         if per_item then
@@ -1409,6 +1472,13 @@ local function process_line(items, a, b)
           for index = a, b do line:insert(items[index]) end
           for index, list in pairs(per_item) do
             line[index - a + 1] = pandoc.Str(splice(items[index].text, list))
+          end
+          for position = #line, 1, -1 do                 -- a {upright:..} taken out leaves no empty word and no doubled space
+            if marker_items[position + a - 1] and line[position].text == "" then
+              local other = line[position - 1] and line[position - 1].t == "Space" and position - 1 or (line[position + 1] and line[position + 1].t == "Space" and position + 1)
+              line:remove(position)
+              if other then line:remove(other < position and other or other - 1) end
+            end
           end
           changed = true
         end

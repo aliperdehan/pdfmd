@@ -604,6 +604,38 @@ class Switches(unittest.TestCase):
                 self.assertNotEqual(done.returncode, 0)
                 self.assertIn(word, done.stdout + done.stderr)
 
+    def test_a_marker_in_the_text_sets_pieces_upright_or_italic_for_that_line(self):
+        source = ("---\ntitle: T\n---\n\n```{=calc}\nc_s = 28.07\nV_el = 75\nk_DNA = 50\n```\n\n"
+                  "::: calc\nMid: m = c_s {upright:s} * V_el = {ans:2dp} ng\n"
+                  "End: m = c_s * V_el * k_DNA = {ans:2dp} ng {italic:el,DNA} {upright:V}\n"
+                  "Plain: m = c_s * V_el = {ans:2dp} ng\n:::\n\n"
+                  "```{=calc}\nFenced: m = c_s * V_el {upright:V} = {ans}\n```\n")
+
+        def convert(*arguments, text=source):
+            (self.directory / "doc.md").write_text(text, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", "-o", "out.tex",
+                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+            return done, " ".join((self.directory / "out.tex").read_text(encoding="utf-8").split()) if done.returncode == 0 else ""
+        done, display = convert("--calc-typeset", "display", "--calc-typeset-upright", "k")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("WARN", done.stdout + done.stderr)
+        self.assertIn("\\text{Mid: } m = c_{\\mathrm{s}}\\cdot V_{\\mathrm{el}} = 2105.25", display)             # one piece, in its own line only
+        self.assertIn("\\text{End: } m = c_{s}\\cdot \\mathrm{V}_{\\mathit{el}}\\cdot \\mathrm{k}_{\\mathit{DNA}} = 105262.50 \\text{ ng}\\]", display)           # k upright from the list, el and DNA italic from the line
+        self.assertIn("\\text{Plain: } m = c_{s}\\cdot V_{\\mathrm{el}} = 2105.25", display)
+        self.assertIn("\\text{Fenced: } m = c_{s}\\cdot \\mathrm{V}_{\\mathrm{el}} = 2105.25", display)
+        self.assertNotIn("{upright", display)
+        inline = convert("--calc-typeset")[1]
+        self.assertIn("\\(= c_{s}\\cdot \\mathrm{V}_{\\mathit{el}}\\cdot k_{\\mathit{DNA}}\\)", inline)
+        off = convert()[1]                                    # typeset off: the markers are still taken out, with their space
+        self.assertNotIn("upright", off)
+        self.assertNotIn("italic", off)
+        self.assertIn("Mid: m = c\\_s * V\\_el = 2105.25 ng End: m = c\\_s * V\\_el * k\\_DNA = 105262.50 ng Plain:", off)
+        for marker, word in (("{upright:V_el}", "letters"), ("{italic:s,V}{upright:V}", "both"), ("{upright:}", "letters")):
+            with self.subTest(marker=marker):
+                done, _ = convert("--calc-typeset", text=source.replace("{upright:V}", marker, 1))
+                self.assertIn(word, done.stdout + done.stderr)
+                self.assertIn("WARN", done.stdout + done.stderr)
+
     def test_a_bad_typeset_value_is_an_error(self):
         (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  calc:\n    typeset: maybe\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n",
                                                encoding="utf-8")
