@@ -81,9 +81,10 @@ wait for an answer before any code.
 
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
-- [ ] First slice, the `obsidian` preset: image embeds with `|width` and `|WxH` found by name in the vault, wikilinks as text, `%%comments%%`, `==highlight==`, `<u>` in every writer, a single newline as a hard break; tested on the real notes [3ee]
+- [ ] First slice of Obsidian, the rest: image embeds with `|width` and `|WxH` found by name in the vault (0.75 pt per px, approved), wikilinks as text, `==highlight==`, `<u>` in every writer, a single newline as a hard break (`strictLineBreaks`); tested on the real notes [3ee]
+- [ ] Gaps of `%%comments%%` (3.32.20): report/book chapters, split-document parts, the section and heading scanners, indented code blocks, a `flavour` set only in a metadata file for the citation scan [3ee]
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
-- [ ] `flavour` / `flavor` setting, the same setting as `reader:` (`auto` by default: `pdfmd` or, inside a vault with `.obsidian/`, `obsidian`; `pandoc` is strict Pandoc, `gfm`, `commonmark`...), at every level; Obsidian Properties no longer mean Pandoc's reader (the global metadata and a leading `---` rule were fixed in 3.32.4) [3eo]
+- [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") [3ex]
 - [ ] pdfmd's own syntax on by default as the `pdfmd` flavour (`markup` kinds: callouts, toc, center, highlight; spans later), off with `flavour: pandoc` or `markup: false`; check nulabreport and the author's folders for literal `==`, `[!x]`, `[TOC]` first [3eo]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] British and American spellings of every key, flag and value (colour/color, centre/center, grey/gray, flavour/flavor...): scan, one alias table, a completeness test; docs and help print British, commands British first (`--colour`, `centre`), American accepted as naturally [3ep]
