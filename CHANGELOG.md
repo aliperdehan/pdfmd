@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.32.17b — 2026-11-03
+
+Pre-edit state: commit `e8a3fd9`. Entry 3cw (the author: "write those as known limitations and a note in todo; we'll fix those later"). Docs only; `PDFMD_VERSION` stays 3.32.17. Not pushed.
+
+- README: a "Known limitations" paragraph under the line markers: Greek names cannot be styled, a marker styles every occurrence of its piece in the line, no spaces inside the braces.
+
 ## v3.32.17 — 2026-11-03
 
 Pre-edit state: commit `1775c08`. Entry 3cw (the author: "what about inside the text? ... not only in metadata so, inline for one time too"). Kept in 3.32. Not pushed.

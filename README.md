@@ -1064,6 +1064,10 @@ For one line only, write the same thing in its text (3.32.17): `{upright:s,V}` o
 piece in both markers of a line is an error. There is no mark inside a name (`V_[x]s`): `V_s` has to stay one variable for the calculator, and
 Markdown rewrites most punctuation in a `::: calc` line. No spaces inside the braces (Markdown splits a line at a space and the marker would break).
 
+*Known limitations of the styling (open, listed in `TODO.md`):* Greek names (`\alpha`, `V_\mu`) cannot be set upright or italic, because `\mathrm` does not
+reach Greek letters in LaTeX (the glyph is missing) and the upright Greek commands of unicode-math are not shared by texmath and pdflatex; a marker styles every
+occurrence of its piece in the line, with no way to pick one; and a marker takes no spaces inside its braces.
+
 **6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
 a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
 prints, blank lines are skipped, and a `#` starts a comment, a whole line or the end of one):

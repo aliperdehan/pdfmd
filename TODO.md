@@ -26,6 +26,7 @@ wait for an answer before any code.
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]
 - [ ] CSS: headings in Word and Typst; MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu]
+- [ ] Calculator typeset styling: Greek names (upright/italic), styling one occurrence of a piece in a line (the in-name `V_[x]s`), spaces inside the `{upright:..}` marker [3cw]
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
