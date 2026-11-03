@@ -30,13 +30,27 @@ class Manifest(unittest.TestCase):
         self.assertIn("pdfmd-cli==$version", script)
         self.assertTrue(self.manifest["bin"].endswith("pdfmd.exe"))
 
-    def test_only_the_version_changes_and_the_file_keeps_its_form(self):
-        after = bump.rewrite(self.text, "9.9.9")
+    def test_scoop_gets_a_url_with_a_hash_or_it_refuses_the_manifest(self):
+        self.assertRegex(self.manifest["url"], r"^https://files\.pythonhosted\.org/.*pdfmd_cli-[\d.]+-py3-none-any\.whl$")
+        self.assertRegex(self.manifest["hash"], r"^[0-9a-f]{64}$")
+        self.assertIn(self.manifest["version"], self.manifest["url"])
+
+    def test_the_version_the_wheel_and_its_hash_change_and_the_file_keeps_its_form(self):
+        after = bump.rewrite(self.text, "9.9.9", "https://files.pythonhosted.org/x/pdfmd_cli-9.9.9-py3-none-any.whl", "ab" * 32)
         changed = json.loads(after)
-        self.assertEqual(changed["version"], "9.9.9")
-        self.assertEqual({k: v for k, v in changed.items() if k != "version"},
-                         {k: v for k, v in self.manifest.items() if k != "version"})
-        self.assertEqual(bump.rewrite(self.text, self.manifest["version"]), self.text)     # the file is what the script writes
+        self.assertEqual((changed["version"], changed["hash"]), ("9.9.9", "ab" * 32))
+        self.assertTrue(changed["url"].endswith("pdfmd_cli-9.9.9-py3-none-any.whl"))
+        moving = ("version", "url", "hash")
+        self.assertEqual({k: v for k, v in changed.items() if k not in moving}, {k: v for k, v in self.manifest.items() if k not in moving})
+        self.assertEqual(list(changed), list(self.manifest))                                   # the keys keep their order
+        again = bump.rewrite(self.text, self.manifest["version"], self.manifest["url"], self.manifest["hash"])
+        self.assertEqual(again, self.text)                                                     # the file is what the script writes
+
+    def test_the_wheel_is_picked_out_of_pypis_answer(self):
+        data = {"urls": [{"packagetype": "sdist", "url": "s"}, {"packagetype": "bdist_wheel", "url": "w"}]}
+        self.assertEqual(bump.wheel_of(data)["url"], "w")
+        with self.assertRaises(SystemExit):
+            bump.wheel_of({"urls": [{"packagetype": "sdist"}]})
 
 
 if __name__ == "__main__":

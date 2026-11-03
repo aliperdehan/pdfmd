@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.12d — 2026-11-03
+
+No shipped code (a manifest, a release script and a test); `PDFMD_VERSION` stays 3.32.12. The `scoop` job of the third CI run (41567808472) failed at `scoop install`: `'pdfmd' doesn't support current architecture!`. It was the first time the job really installed the manifest (the run before it found the version unchanged and skipped the test), and Scoop's `Get-SupportedArchitecture` returns nothing for a manifest without a `url`, which `bucket/pdfmd.json` did not have (its install script does the work).
+
+- `bucket/pdfmd.json` now has a `url` (the release's wheel on PyPI, a small file that Scoop downloads and keeps in the app folder) and its `hash`; pip still installs `pdfmd-cli==$version` from PyPI.
+- `scripts/bump_scoop.py` writes the version, the wheel's `url` and its `sha256` (new `wheel_of()`), so the `scoop` job of `publish.yml` keeps all three in step. The manifest was pointed at 3.32.12 with the script.
+- `tests/test_scoop_bucket.py`: the manifest has a wheel `url` of its own version and a 64-digit `hash`; the rewrite changes those three and keeps the key order; `wheel_of()`.
+
 ## v3.32.12c — 2026-11-03
 
 Tests only; `PDFMD_VERSION` stays 3.32.12. The second CI run (41546953982) failed in three tests of the 3.31.x-3.32.8 commits, which had never run on CI before; none is a bug in pdfmd:
