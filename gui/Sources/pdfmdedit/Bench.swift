@@ -340,3 +340,103 @@ enum Smoke {
         exit(failures == 0 ? 0 : 1)
     }
 }
+
+/// `pdfmdedit --smoke-prefs FILE`: builds the Settings window WITHOUT showing it (asserted), changes every kind of control
+/// through its action like a click would, and checks what was stored and what the open editor window did with it. It uses a
+/// scratch settings domain, never the app's real one, which is removed at the end.
+enum PrefsSmoke {
+    static func run(_ path: String) {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let domain = "io.github.aliperdehan.pdfmdedit.smoke"
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        Settings.store = UserDefaults(suiteName: domain)!
+        Palette.reload()
+        defer { UserDefaults.standard.removePersistentDomain(forName: domain) }
+
+        guard let doc = Smoke.open(URL(fileURLWithPath: path)), let editor = doc.controller else { print("FAIL open"); exit(1) }
+        let tv = editor.parts.textView
+        let prefs = PreferencesController()
+        var failures = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            print("\(ok ? "ok  " : "FAIL") \(name) \(detail)")
+            if !ok { failures += 1 }
+        }
+        func control(_ key: String) -> NSControl { prefs.controls[key]! }
+        func fire(_ c: NSControl) { _ = c.sendAction(c.action, to: c.target) }
+        func stored(_ key: String) -> Any? { Settings.store.object(forKey: key) }
+        func choose(_ key: String, title: String) { let p = control(key) as! NSPopUpButton; p.selectItem(withTitle: title); fire(p) }
+
+        check("settings window not shown", prefs.window?.isVisible == false)
+        check("controls generated from the tables", prefs.controls.count >= Settings.items.count + Settings.texts.count + Palette.roles.count * 4 + PreferencesController.tabs.count,
+              "(\(prefs.controls.count) controls)")
+        check("every tab has a page", prefs.window?.contentView is NSTabView && (prefs.window!.contentView as! NSTabView).numberOfTabViewItems == PreferencesController.tabs.count)
+
+        // a flag: wrap lines
+        let wrap = control("wrapLines") as! NSButton
+        wrap.state = .off; fire(wrap)
+        check("flag stored", (stored("wrapLines") as? NSNumber)?.intValue == 0)
+        check("flag applied to the open window", tv.textContainer?.widthTracksTextView == false)
+        wrap.state = .on; fire(wrap)
+        check("flag back on", tv.textContainer?.widthTracksTextView == true)
+
+        // a number: the font size
+        let size = control("fontSize") as! NSTextField
+        size.stringValue = "19"; fire(size)
+        check("number stored", (stored("fontSize") as? NSNumber)?.doubleValue == 19)
+        check("font size applied to the open window", tv.font?.pointSize == 19, "(\(tv.font?.pointSize ?? 0))")
+        size.stringValue = "not a number"; fire(size)
+        check("a wrong entry is refused and shown as it was", size.stringValue == "19" && (stored("fontSize") as? NSNumber)?.doubleValue == 19)
+
+        // popups: the font, the theme, the text engine
+        choose("fontName", title: "Menlo")
+        check("font stored and applied", stored("fontName") as? String == "Menlo" && tv.font?.familyName == "Menlo", "(\(tv.font?.familyName ?? "?"))")
+        choose("themeDark", title: "Lakritz")
+        check("dark theme stored and loaded", stored("themeDark") as? String == "Lakritz" && Palette.darkTheme?.name == "Lakritz")
+        let bg = Palette.resolved("heading", dark: true)
+        check("a role takes the new theme's colour", Palette.hex(bg) == Palette.hex(Palette.darkTheme!.categories["types"]!), "(\(Palette.hex(bg)))")
+        let engine = tv.textLayoutManager != nil ? 2 : 1
+        choose("textKit", title: "1")
+        check("text engine stored, the open window keeps its engine", (stored("textKit") as? NSNumber)?.intValue == 1 && (tv.textLayoutManager != nil ? 2 : 1) == engine)
+
+        // a role's colour, its category, its reset
+        let well = control("color.heading.light") as! NSColorWell
+        well.color = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1); fire(well)
+        let spec = stored("color.heading") as? String ?? ""
+        check("colour stored as light,dark", spec.hasPrefix("#FF0000,#"), "(\(spec))")
+        check("colour applied", Palette.hex(Palette.resolved("heading", dark: false)) == "#FF0000")
+        choose("category.math", title: "text")
+        check("category `text` stored and the role follows the plain text", stored("category.math") as? String == "text"
+              && Palette.hex(Palette.resolved("math", dark: true)) == Palette.hex(Palette.darkTheme!.text))
+        fire(control("reset.heading"))
+        check("reset removes the colour", stored("color.heading") == nil)
+
+        // restore defaults per tab
+        fire(control("restore.Editor"))
+        check("restore defaults on the Editor tab", stored("fontSize") == nil && stored("fontName") == nil && tv.font?.pointSize == 13 && size.stringValue == "13", "(font \(tv.font?.fontName ?? "?") \(tv.font?.pointSize ?? 0))")
+        fire(control("restore.Colours"))
+        check("restore defaults on the Colours tab", stored("themeDark") == nil && stored("category.math") == nil && Palette.darkTheme?.name == "Anura (Dark)")
+
+        // what the window really draws, once, to be sure it is not empty
+        if let content = prefs.window?.contentView, let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
+            content.cacheDisplay(in: content.bounds, to: rep)
+            check("the window renders", rep.pixelsWide > 100 && rep.pixelsHigh > 100, "(\(rep.pixelsWide)x\(rep.pixelsHigh) px)")
+        }
+        // `--png DIR`: a picture of every tab (drawn into a bitmap, never shown), to look at the layout
+        if let i = CommandLine.arguments.firstIndex(of: "--png"), i + 1 < CommandLine.arguments.count, let tabs = prefs.window?.contentView as? NSTabView {
+            let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            prefs.window?.appearance = NSAppearance(named: .aqua)   // an undisplayed window has no background: light text would vanish
+            for (n, item) in tabs.tabViewItems.enumerated() {
+                tabs.selectTabViewItem(item)
+                tabs.layoutSubtreeIfNeeded()
+                if let rep = tabs.bitmapImageRepForCachingDisplay(in: tabs.bounds) {
+                    tabs.cacheDisplay(in: tabs.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("tab\(n + 1)-\(item.label).png"))
+                }
+            }
+        }
+        check("settings window still not shown", prefs.window?.isVisible == false)
+        print(failures == 0 ? "PREFS OK" : "PREFS FAILED (\(failures))")
+        exit(failures == 0 ? 0 : 1)
+    }
+}

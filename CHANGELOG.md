@@ -28,6 +28,14 @@ Pre-edit state: commit `e800a7b`. Entry 3ew: **the pdfmd logo and app icon** (th
 - `gui/Resources/`: `pdfmd.icns` (full artwork from 48 px up, the `#` only below), and the menu-bar template images (black on transparent, 18 pt high and @2x). `gui/build.sh` copies the icon into the app and sets `CFBundleIconFile`. Nothing uses the menu-bar images yet.
 - Still to do before the next push: the README header and uploading the social preview in the repository settings (TODO.md).
 
+## v3.32.19d — 2026-11-03
+
+Pre-edit state: commit `dfa8fa8`. Entry 3do (the author: "let's do settings, before M2 then", "native preferences, it is natural, of course we'll build it"). `gui/` only; `PDFMD_VERSION` stays 3.32.19, nothing is released. Not pushed.
+
+- pdfmd Edit 0.1.3: a native Settings window (⌘,) with Editor, Colours and Performance tabs, generated from the settings tables (`Settings.swift` now carries a label, a tab and live/new-windows for every item), so the window and the `defaults write` commands cannot drift apart. A change is stored at once and applied to every open window (font, size, wrapping, spelling, theme, role colours, the colouring itself); the text engine applies to windows opened afterwards. Per-role category popup, light and dark colour wells and Reset; "Restore defaults" per tab.
+- `Settings.set`/`remove` write through `Settings.store` (the app's defaults; a scratch domain in the tests) and post `Settings.changed`; `Palette.reload()` re-reads the themes. Wrap Lines (⌘⌥L) now goes through the same path, so it also follows in every open window.
+- `pdfmdedit --smoke-prefs FILE [--png DIR]`: builds the window without showing it (asserted), drives a flag, a number (and a wrong entry), the font, theme and text-engine popups, a colour well, a category and the resets through their actions, and checks the stored values and what the open editor did, in a scratch settings domain. `--png` draws each tab into DIR.
+
 ## v3.32.19b — 2026-11-03
 
 Pre-edit state: commit `2c51907`. Entry 3do (the author: "can we create compatibility with coteditor themes", "it is just plain json, let's create compatibility with them"; math stays coloured). `gui/` only; `PDFMD_VERSION` stays 3.32.19, nothing is released. Not pushed.

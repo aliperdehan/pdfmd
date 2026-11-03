@@ -38,8 +38,29 @@ enum Palette {
 
     static func parse(_ hex: String) -> NSColor? { Theme.parseHex(hex) }
 
-    static let lightTheme = Theme.load(named: Settings.string("theme"))
-    static let darkTheme = Theme.load(named: Settings.string("themeDark")) ?? lightTheme
+    private(set) static var lightTheme = Theme.load(named: Settings.string("theme"))
+    private(set) static var darkTheme = Theme.load(named: Settings.string("themeDark")) ?? lightTheme
+
+    /// Reads the theme settings again and forgets the colours worked out from them (after a setting changed).
+    static func reload() {
+        cache = [:]
+        lightTheme = Theme.load(named: Settings.string("theme"))
+        darkTheme = Theme.load(named: Settings.string("themeDark")) ?? lightTheme
+    }
+
+    /// The colour a role has in one appearance, for the Preferences window.
+    static func resolved(_ key: String, dark: Bool) -> NSColor {
+        var out = NSColor.textColor
+        NSAppearance(named: dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance {
+            out = color(key).usingColorSpace(.sRGB) ?? .textColor
+        }
+        return out
+    }
+
+    static func hex(_ c: NSColor) -> String {
+        let d = c.usingColorSpace(.sRGB) ?? c
+        return String(format: "#%02X%02X%02X", Int(round(d.redComponent * 255)), Int(round(d.greenComponent * 255)), Int(round(d.blueComponent * 255)))
+    }
 
     private static func dynamic(_ light: NSColor, _ dark: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light }
@@ -50,11 +71,11 @@ enum Palette {
         return (light == nil && dark == nil) ? fallback : dynamic(light ?? dark ?? fallback, dark ?? light ?? fallback)
     }
 
-    private static var cache: [String: NSColor] = [:]
+    fileprivate static var cache: [String: NSColor] = [:]
 
     /// What colours the role is taken from after the user's `category.<role>` setting.
     static func category(of role: Role) -> String {
-        if let c = UserDefaults.standard.string(forKey: "category." + role.key), c == "text" || Theme.categoryNames.contains(c) { return c }
+        if let c = Settings.store.string(forKey: "category." + role.key), c == "text" || Theme.categoryNames.contains(c) { return c }
         return role.category
     }
 
@@ -64,7 +85,7 @@ enum Palette {
         let builtIn = dynamic(parse(role.light)!, parse(role.dark)!)
         var result = themed({ $0.categories[category(of: role)] ?? ($0.text) }, fallback: builtIn)
         if category(of: role) == "text" { result = text }
-        if let spec = UserDefaults.standard.string(forKey: "color." + key) {
+        if let spec = Settings.store.string(forKey: "color." + key) {
             let parts = spec.split(separator: ",").map(String.init)
             if let first = parts.first.flatMap(parse) { result = dynamic(first, parts.count > 1 ? (parse(parts[1]) ?? first) : first) }
         }
@@ -86,7 +107,7 @@ enum Palette {
         var lines = ["theme files found: " + (Theme.available().joined(separator: ", ")),
                      "theme in use: light \(lightTheme?.name ?? "none (built-in soft colours)"), dark \(darkTheme?.name ?? "none (built-in soft colours)")"]
         for r in roles {
-            let own = UserDefaults.standard.string(forKey: "color." + r.key)
+            let own = Settings.store.string(forKey: "color." + r.key)
             let cat = category(of: r)
             lines.append("color.\(r.key.padding(toLength: 9, withPad: " ", startingAt: 0)) from \(cat.padding(toLength: 10, withPad: " ", startingAt: 0))" +
                          " built-in \(r.light),\(r.dark)\(own.map { "  (now \($0))" } ?? "")  \(r.help)")

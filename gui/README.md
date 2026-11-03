@@ -31,6 +31,14 @@ this is **not tested yet** in this alpha.
 
 ## Settings
 
+**The Settings window (⌘,)** has three tabs: Editor (font, size, wrapping, spelling, text engine), Colours (the two themes,
+whether the theme sets the background, and for each colouring role the category it takes its colour from plus its light and
+dark colour, with a Reset) and Performance (the colouring delays and limits). It is generated from the tables in
+`Settings.swift` and `Palette.swift`, so it cannot drift from the shell: a change is stored at once, applied to the open
+windows (all but the text engine), and every setting stays a `defaults write` command for scripts and agents. "Restore
+defaults" clears one tab's keys.
+
+
 Every number that changes behaviour is a setting (UserDefaults), none is a constant in the code:
 
     pdfmdedit --settings
@@ -62,6 +70,10 @@ category, listed by `pdfmdedit --settings` (the choice follows CotEditor's own M
 
 `"#RRGGBB"` alone is used in both appearances; a wrong value is ignored. Read at start-up. With no theme file found
 the soft built-in colours are used. `--set key=value` on the command line applies to that run only.
+
+`pdfmdedit --smoke-prefs FILE [--png DIR]` builds the window without showing it (asserted), drives every kind of control
+through its action in a scratch settings domain (never the real one) and checks what was stored and what the open
+editor did; `--png` also draws each tab into DIR.
 
 ## Benchmark and smoke test (no window is ever shown: the smoke tests assert it)
 

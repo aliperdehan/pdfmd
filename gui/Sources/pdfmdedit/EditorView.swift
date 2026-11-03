@@ -59,13 +59,7 @@ func makeEditor(frame: NSRect, highlight: Bool, textKit2: Bool = Settings.int("t
     tv.usesFindBar = true
     tv.isIncrementalSearchingEnabled = true
     tv.font = font
-    tv.textColor = Palette.text
-    tv.backgroundColor = Palette.background
-    tv.drawsBackground = true
-    tv.insertionPointColor = Palette.insertionPoint
-    if let selection = Palette.selection { tv.selectedTextAttributes = [.backgroundColor: selection] }
-    scroll.backgroundColor = Palette.background
-    scroll.drawsBackground = true
+    applyCanvas(tv, scroll)
     tv.textContainerInset = NSSize(width: 10, height: 8)
     tv.isAutomaticQuoteSubstitutionEnabled = false
     tv.isAutomaticDashSubstitutionEnabled = false
@@ -85,6 +79,17 @@ func makeEditor(frame: NSRect, highlight: Bool, textKit2: Bool = Settings.int("t
     }
     let highlighter = highlight ? Highlighter(tv) : nil
     return EditorParts(scroll: scroll, textView: tv, highlighter: highlighter)
+}
+
+/// The theme's text, background, caret and selection colours (the system's when `themeCanvas` is 0 or no theme is found).
+func applyCanvas(_ tv: NSTextView, _ scroll: NSScrollView) {
+    tv.textColor = Palette.text
+    tv.backgroundColor = Palette.background
+    tv.drawsBackground = true
+    tv.insertionPointColor = Palette.insertionPoint
+    tv.selectedTextAttributes = [.backgroundColor: Palette.selection ?? .selectedTextBackgroundColor]
+    scroll.backgroundColor = Palette.background
+    scroll.drawsBackground = true
 }
 
 func setWrap(_ wrap: Bool, _ tv: NSTextView, _ scroll: NSScrollView) {
@@ -157,6 +162,21 @@ final class EditorWindowController: NSWindowController {
         window.contentView = parts.scroll
         window.initialFirstResponder = parts.textView
         load(document.text)
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// A setting was changed in the Preferences window: apply what can be applied to this open window (the text engine cannot).
+    @objc func settingsChanged() {
+        let tv = parts.textView
+        let font = editorFont()
+        if tv.font != font { tv.font = font }
+        applyCanvas(tv, parts.scroll)
+        setWrap(Settings.flag("wrapLines"), tv, parts.scroll)
+        tv.isContinuousSpellCheckingEnabled = Settings.flag("spellCheck")
+        parts.highlighter?.highlightNow()
+        tv.needsDisplay = true
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -176,9 +196,7 @@ final class EditorWindowController: NSWindowController {
     }
 
     @objc func toggleWrap(_ sender: Any?) {
-        let now = Settings.flag("wrapLines")
-        UserDefaults.standard.set(now ? 0 : 1, forKey: "wrapLines")
-        setWrap(!now, parts.textView, parts.scroll)
+        Settings.set("wrapLines", Settings.flag("wrapLines") ? 0 : 1)   // every open window follows (settingsChanged)
     }
 }
 

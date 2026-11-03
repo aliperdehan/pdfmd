@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
     func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool { !launchedWithFiles && CommandLine.arguments.count < 2 }
 
+    @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
+
     private func buildMenus() {
         let main = NSMenu()
         NSApp.mainMenu = main
@@ -39,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let app = menu("pdfmdedit")
         add(app, "About pdfmd Edit", "orderFrontStandardAboutPanel:")
+        app.addItem(.separator())
+        add(app, "Settings…", "showPreferences:", ",")
         app.addItem(.separator())
         add(app, "Hide pdfmd Edit", "hide:", "h")
         add(app, "Hide Others", "hideOtherApplications:", "h", [.command, .option])
