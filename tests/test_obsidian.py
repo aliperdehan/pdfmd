@@ -118,15 +118,31 @@ class Flavour(unittest.TestCase):
         pdfmd.FLAVOUR_CLI["name"] = "obsidian"
         self.assertEqual(pdfmd.flavour_of(outside), "obsidian")
 
-    def test_an_unknown_word_is_told_once_and_taken_as_auto(self):
-        path = self.note("vault", "---\npdfmd-options:\n  flavour: marp\n---\n\nText\n")
-        import contextlib
-        import io
-        said = io.StringIO()
-        with contextlib.redirect_stderr(said):
-            self.assertEqual(pdfmd.flavour_of(path), "obsidian")
-            self.assertEqual(pdfmd.flavour_of(path), "obsidian")
-        self.assertEqual(said.getvalue().count("flavour: marp is not a flavour pdfmd knows"), 1)
+    def test_another_word_is_a_pandoc_reader_and_the_flavour_stays_auto(self):
+        for key in ("flavour", "flavor", "reader"):
+            with self.subTest(key=key):
+                path = self.note("vault", f"---\npdfmd-options:\n  {key}: gfm+smart\n---\n\nText\n")
+                self.assertEqual(pdfmd.flavour_setting(path), ("obsidian", "gfm+smart"))
+                self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart")
+        outside = self.note("plain", "---\npdfmd-options:\n  reader: markdown\n---\n\nText\n")
+        self.assertEqual(pdfmd.flavour_setting(outside), ("pdfmd", "markdown"))
+        self.assertEqual(pdfmd.resolve_from_format(outside, "commonmark", [])[0], "commonmark")      # --from still wins
+
+    def test_the_presets_say_what_reader_they_read_with(self):
+        for word, reader in (("pandoc", None), ("gfm", "gfm"), ("commonmark", "commonmark")):
+            with self.subTest(word=word):
+                path = self.note("plain", f"---\npdfmd-options:\n  flavour: {word.upper()}\n---\n\nText\n")
+                self.assertEqual(pdfmd.flavour_of(path), word)
+                self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], reader)
+        path = self.note("plain", "Text\n")           # no front matter: pdfmd's own pick, gfm
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm")
+
+    def test_an_unclosed_percent_pair_is_hidden_in_a_vault_and_kept_outside_it(self):
+        self.assertEqual(pdfmd.unclosed_comment_mode(self.note("vault")), "hide")
+        self.assertEqual(pdfmd.unclosed_comment_mode(self.note("plain")), "keep")
+        pdfmd.UNCLOSED_CLI["mode"] = "hide"
+        self.addCleanup(pdfmd.UNCLOSED_CLI.update, {"mode": None})
+        self.assertEqual(pdfmd.unclosed_comment_mode(self.note("plain")), "hide")
 
 
 @needs_pandoc(3, 1, 3)
@@ -164,17 +180,26 @@ class CommandLine(unittest.TestCase):
         self.assertIn("A block comment", html)
         self.assertNotIn("<h1 id=\"not-a-heading\"", html)
 
-    def test_outside_a_vault_the_percent_signs_are_text(self):
-        html, _ = self.build("plain", "# N\n\nA %%kept%% B\n")
-        self.assertIn("%%kept%%", html)
+    def test_outside_a_vault_the_pdfmd_flavour_hides_them_too(self):
+        html, _ = self.build("plain", "# N\n\nA %%gone%% B\n")
+        self.assertNotIn("gone", html)
+
+    def test_an_unclosed_percent_pair_outside_a_vault_stays_text_and_says_so(self):
+        html, said = self.build("plain", "# N\n\nA %% b\n\nThe end.\n")
+        self.assertIn("The end.", html)
+        self.assertIn("with no closing", said)
 
     def test_the_flavour_turns_it_on_outside_a_vault_and_off_inside_one(self):
         html, _ = self.build("plain", "# N\n\nA %%gone%% B\n", "--flavour", "obsidian")
         self.assertNotIn("gone", html)
         html, _ = self.build("plain", "---\npdfmd-options:\n  flavor: obsidian\n---\n\nA %%gone%% B\n")
         self.assertNotIn("gone", html)
-        html, _ = self.build("vault", "# N\n\nA %%kept%% B\n", "--flavor", "pandoc")
-        self.assertIn("%%kept%%", html)
+        for word in ("pandoc", "gfm", "commonmark"):
+            with self.subTest(word=word):
+                html, _ = self.build("vault", "# N\n\nA %%kept%% B\n", "--flavor", word)
+                self.assertIn("%%kept%%", html)
+                html, _ = self.build("plain", f"---\npdfmd-options:\n  flavour: {word}\n---\n\nA %%kept%% B\n")
+                self.assertIn("%%kept%%", html)
         html, _ = self.build("plain", "# N\n\nA %%gone%% B\n", "--flavour", "Obsidian")      # the word's case does not matter
         self.assertNotIn("gone", html)
 

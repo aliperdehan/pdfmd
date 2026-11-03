@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.22 — 2026-11-03
+
+Pre-edit state: commit `e1e20c4`. Entries 3ee, 3eo, 3ex. **Flavours are presets in a table, and `flavour` is the same setting as `reader:`.** The new `pdfmd_flavours` package holds one row per flavour (`pandoc`, `gfm`, `commonmark`, `pdfmd`, `obsidian`): the Pandoc reader it uses, whether `%%comments%%` are hidden, and what a `%%` with no closing `%%` does. pdfmd reads the row; a flavour of its own, and the adjustment of every part of a preset, are the next step.
+
+- **`flavour`, `flavor` and `reader` are one setting** (document, metadata files, folders, config, `--setup`, `--flavour`). A flavour word sets the row; `auto` is `obsidian` inside a vault and `pdfmd` elsewhere; any other value is a Pandoc reader (`gfm+smart`, `markdown`, `commonmark_x`), used for that file, with the flavour left on `auto`. `--from` still wins. `--flavour` no longer refuses a word it does not know: Pandoc reports an unknown reader by name, as it does for `--from`. The two `--setup` rows ("Markdown reader" and "Flavour of Markdown") are one row.
+- **`flavour: pandoc`** reads the file with Pandoc's own default reader (no `-f`: pdfmd's gfm/markdown pick is off), **`gfm`** and **`commonmark`** with exactly that reader; none of them hides `%%`.
+- **Behaviour change: the `pdfmd` flavour, which is what every file outside a vault gets, hides `%%comments%%` too** (3.32.20 left them as text outside a vault). `flavour: pandoc|gfm|commonmark` turns it off per document. A `%%` with no closing `%%` is a warning and stays text in the `pdfmd` flavour (a lone `%%` can be TeX), and hides the rest of the note in `obsidian`, as Obsidian does; `unclosed-comment: hide|keep` still overrides either. Of the 182 Markdown files in the author's own folders none changed.
+- Tests: `tests/test_obsidian.py` (the presets, a reader as the setting, unclosed by flavour); README's *Flavours* section; `pdfmd_flavours` in the package lists.
+
+Not pushed.
+
 ## v3.32.21 — 2026-11-03
 
 Pre-edit state: commit `e931c0d`. Entry 3ee. **An unclosed `%%` hides the rest of the note, as Obsidian does, and what it does is a setting.** The author checked Obsidian's reading view with four screenshots: a `%%` with no closing `%%` hides everything after it to the end of the note, a later `%%` closes it, and an `<!-- HTML comment -->` hides the same way. 3.32.20 had guessed otherwise (a warning, the `%%` kept as text). Not pushed.

@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.21"
+PDFMD_VERSION = "3.32.22"
 import argparse
 import atexit
 import csv
@@ -3004,11 +3004,15 @@ def show_comments_on(md_path: Path, metadata_files: list[Path]) -> bool:
     return value is True or str(value).strip().casefold() in ("true", "yes", "on", "1")
 
 
-# The flavour of a Markdown file (v3.32.20, entry 3ee): `pdfmd-options.flavour` (also spelt `flavor`; document, metadata files, folders,
-# config) or `--flavour`. `auto` (the default) is `obsidian` inside an Obsidian vault, a folder with `.obsidian/` above the document,
-# and `pdfmd` elsewhere. `pdfmd` and `pandoc` add nothing yet (the next releases give them the markup defaults and make the setting
-# the same one as `reader:`); `obsidian` reads Obsidian's own syntax, one piece per release, from %%comments%% on.
-FLAVOUR_WORDS = ("auto", "obsidian", "pdfmd", "pandoc")
+# The flavour of a Markdown file (v3.32.20, entry 3ee; one setting with `reader:` since v3.32.22): `pdfmd-options.flavour` (also spelt
+# `flavor` or `reader`; document, metadata files, folders, config) or `--flavour`. A preset word (`pdfmd_flavours.PRESETS`: obsidian,
+# pdfmd, pandoc, gfm, commonmark) names a row of reading choices; `auto` (the default) is `obsidian` inside an Obsidian vault, a
+# folder with `.obsidian/` above the document, and `pdfmd` elsewhere. Any other value is a Pandoc reader spec (`markdown`,
+# `gfm+smart`), which is `--from` for that document with the flavour left on `auto`.
+try:
+    from pdfmd_flavours import PRESETS as FLAVOUR_PRESETS, WORDS as FLAVOUR_WORDS
+except ImportError:      # a copy of pdfmd.py without its packages: strict Pandoc and nothing else
+    FLAVOUR_PRESETS, FLAVOUR_WORDS = {}, ("auto",)
 FLAVOUR_CLI: dict = {"name": None}
 _VAULT_ROOTS: dict[Path, Path | None] = {}
 _FLAVOUR_TOLD: set[str] = set()
@@ -3017,18 +3021,21 @@ UNCLOSED_CLI: dict = {"mode": None}
 
 
 def unclosed_comment_mode(md_path: Path, metadata_files=()) -> str:
-    """What a `%%` with no closing `%%` does (v3.32.21): `hide` (the default, Obsidian's way: the rest of the note is the comment)
-    or `keep` (it stays text). `--unclosed-comment`, else `pdfmd-options.unclosed-comment`. Another word is told once; `hide`."""
+    """What a `%%` with no closing `%%` does (v3.32.21): `hide` (Obsidian's way: the rest of the note is the comment) or `keep` (it
+    stays text). `--unclosed-comment`, else `pdfmd-options.unclosed-comment`, else the flavour's own (`hide` for obsidian, `keep`
+    for pdfmd: outside a vault a lone `%%` may be TeX). Another word is told once and the flavour's is used."""
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files))
+    default = preset.unclosed if preset else "keep"
     value = UNCLOSED_CLI["mode"]
     if value is None:
         value = first_pdfmd_option(md_path, list(metadata_files), "unclosed-comment")
-    name = "hide" if value is None else str(value).strip().casefold()
+    name = default if value is None else str(value).strip().casefold()
     if name in UNCLOSED_WORDS:
         return name
     if name and name not in _FLAVOUR_TOLD:
         _FLAVOUR_TOLD.add(name)
-        print(f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using hide", file=sys.stderr)
-    return "hide"
+        print(f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using {default}", file=sys.stderr)
+    return default
 
 
 def vault_root(path: Path) -> Path | None:
@@ -3052,29 +3059,32 @@ def vault_root(path: Path) -> Path | None:
     return found
 
 
-def flavour_of(md_path: Path, metadata_files=()) -> str:
-    """The flavour this file is read in: `obsidian`, `pdfmd` or `pandoc`. The command line, else `pdfmd-options.flavour` / `flavor`,
-    else `auto`: obsidian inside a vault (see vault_root), pdfmd elsewhere. A word that is none of FLAVOUR_WORDS is told once and
-    taken as `auto`."""
+def flavour_setting(md_path: Path, metadata_files=()) -> tuple[str, str | None]:
+    """The flavour setting of a file, as (preset, reader spec): the command line, else `pdfmd-options.flavour` / `flavor` / `reader`.
+    A preset word (any case) is the preset, with no spec; `auto` or nothing is obsidian inside a vault and pdfmd elsewhere; any
+    other value is a Pandoc reader spec (`gfm+smart`): the flavour is auto's and the spec is the reader."""
     value = FLAVOUR_CLI["name"]
     if value is None:
-        value = first_pdfmd_option(md_path, list(metadata_files), "flavour", "flavor")
-    name = "auto" if value is None else str(value).strip().casefold()
-    if name in ("", "auto"):
-        return "obsidian" if vault_root(md_path) is not None else "pdfmd"
-    if name in FLAVOUR_WORDS:
-        return name
-    if name not in _FLAVOUR_TOLD:
-        _FLAVOUR_TOLD.add(name)
-        print(f"NOTE  flavour: {name} is not a flavour pdfmd knows ({', '.join(FLAVOUR_WORDS)}); using auto", file=sys.stderr)
-    return "obsidian" if vault_root(md_path) is not None else "pdfmd"
+        value = first_pdfmd_option(md_path, list(metadata_files), "flavour", "flavor", "reader")
+    text = "" if value is None else str(value).strip()
+    word = text.casefold()
+    if word in FLAVOUR_PRESETS:
+        return word, None
+    auto = "obsidian" if vault_root(md_path) is not None else "pdfmd"
+    return auto, (None if word in ("", "auto") else text)
+
+
+def flavour_of(md_path: Path, metadata_files=()) -> str:
+    """The flavour this file is read in: `obsidian`, `pdfmd`, `pandoc`, `gfm` or `commonmark` (see flavour_setting)."""
+    return flavour_setting(md_path, metadata_files)[0]
 
 
 def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
-    """``text`` as Pandoc should read it when the note is Obsidian's: its %%comments%% hidden, or (``show``, by default
+    """``text`` as Pandoc should read it when the flavour has %%comments%% (obsidian, pdfmd): them hidden, or (``show``, by default
     `show-comments`) turned into HTML comments the writers draw as Comment boxes. Unchanged when the flavour is not obsidian or
-    the text has no `%%`. A `%%` that never closes is told once, and kept."""
-    if "%%" not in text or flavour_of(md_path, metadata_files) != "obsidian":
+    the text has no `%%`. A `%%` that never closes is told once (see unclosed_comment_mode for what becomes of it)."""
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if "%%" in text else None
+    if preset is None or not preset.comments:
         return text
     try:
         from pdfmd_obsidian import hide_comments
@@ -14138,9 +14148,12 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
                         else f"{md_path}: Pandoc does not know the {suffix} extension; reading as {reader}")
     if suffix not in (".md", ".markdown"):
         return None, None
-    chosen = first_pdfmd_option(md_path, list(metadata_files), "reader")
-    if isinstance(chosen, str) and chosen.strip().casefold() not in ("", "auto"):
-        return chosen.strip(), None       # `pdfmd-options: {reader: markdown}` (document, metadata file or config): --from, per document
+    name, spec = flavour_setting(md_path, metadata_files)
+    if spec:
+        return spec, None                 # `pdfmd-options: {flavour: gfm+smart}` (or `reader:`; document, metadata file, config): --from, per document
+    preset = FLAVOUR_PRESETS.get(name)
+    if preset is not None and preset.reader != "auto":
+        return (None if preset.reader == "default" else preset.reader), None      # `flavour: pandoc|gfm|commonmark`: that reader, as it is
     text = obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False)   # hidden text decides nothing
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
@@ -28521,14 +28534,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "default; also pdfmd-options.show-comments and pdfmd --setup")
     parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
                         help="do not show comments in this run, whatever pdfmd-options.show-comments says")
-    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", type=str.casefold, choices=FLAVOUR_WORDS,
-                        help="the flavour of Markdown the files are written in: obsidian (a note of an Obsidian vault: %%%%comments%%%% "
-                             "are hidden, more of its syntax in each release), pdfmd, pandoc, or auto (the default: obsidian inside a "
-                             "vault, a folder with .obsidian/ above the document, pdfmd elsewhere); also pdfmd-options.flavour and "
-                             "pdfmd --setup")
+    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", type=str.casefold,
+                        help="the flavour of Markdown the files are written in: obsidian (%%%%comments%%%% hidden, more of its syntax in "
+                             "each release), pdfmd (%%%%comments%%%% hidden; the rest of pdfmd's own syntax follows), pandoc (strict "
+                             "Pandoc: nothing added), gfm, commonmark, or auto (the default: obsidian inside a vault, a folder with "
+                             ".obsidian/ above the document, pdfmd elsewhere). A Pandoc reader such as gfm+smart is taken as the reader "
+                             "with the flavour on auto, like --from. Also pdfmd-options.flavour (or reader) and pdfmd --setup")
     parser.add_argument("--unclosed-comment", dest="unclosed_comment", metavar="WORD", type=str.casefold, choices=UNCLOSED_WORDS,
-                        help="what a %%%% with no closing %%%% does in an Obsidian note: hide (the default, as Obsidian does: the rest "
-                             "of the note is the comment) or keep (it stays text); both warn; also pdfmd-options.unclosed-comment "
+                        help="what a %%%% with no closing %%%% does: hide (the default in an Obsidian vault, as Obsidian does: the rest "
+                             "of the note is the comment) or keep (the default elsewhere: it stays text); both warn; also pdfmd-options.unclosed-comment "
                              "and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")

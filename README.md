@@ -58,7 +58,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [Diagrams written as code](#diagrams-written-as-code)
   - [Editable in LibreOffice, and one file that carries its data](#editable-in-libreoffice-and-one-file-that-carries-its-data)
   - [HTML, LaTeX, Typst and Word pieces inside Markdown](#html-latex-typst-and-word-pieces-inside-markdown)
-  - [Obsidian notes: `flavour`](#obsidian-notes-flavour)
+  - [Flavours: `flavour`](#flavours-flavour)
   - [Not just Markdown](#not-just-markdown)
 - [What it does automatically](#what-it-does-automatically)
   - [Other scripts](#other-scripts)
@@ -2491,26 +2491,41 @@ Also a `--setup` row. Only Markdown sources read by Pandoc: the native (no-Pando
 directly do not read it. A file with no front matter that uses `\md{...}` is read with Pandoc's `markdown` reader instead of
 `gfm` (which has no raw LaTeX), the same way `@citations` already switch it.
 
-### Obsidian notes: `flavour`
+### Flavours: `flavour`
 
-A note of an [Obsidian](https://obsidian.md) vault is Markdown with a few spellings of its own. pdfmd reads them when the note is
-Obsidian's: `pdfmd-options: {flavour: obsidian}` (in a document, a metadata file, a folder's settings or the config file;
-`flavor` is the same key), or `--flavour obsidian` (`--flavor`) for one run. The default is `flavour: auto`: **obsidian inside a
-vault** (a folder with `.obsidian/` in it, the document's own or any above it) and `pdfmd` everywhere else, so a note built from
-its vault needs nothing said. `pandoc` and `pdfmd` read the note as pdfmd always has; they add nothing yet (the flavour will
-become the same setting as `reader:` and give pdfmd's own syntax a name). Also a row in `pdfmd --setup`.
+A flavour is a name for a set of reading choices: which Pandoc reader the file gets and which syntax of its own pdfmd reads. It is
+one setting, `flavour` (spelt `flavor` or `reader` as well): `pdfmd-options: {flavour: obsidian}` in a document, a metadata file, a
+folder's settings or the config file, `--flavour obsidian` (`--flavor`) for one run, or a row in `pdfmd --setup`.
 
-What the `obsidian` flavour reads so far (the rest of Obsidian's syntax arrives piece by piece):
+| Flavour | Reads the file as | pdfmd's own syntax |
+|---|---|---|
+| `auto` (the default) | `obsidian` inside an Obsidian vault (a folder with `.obsidian/` in it, the document's own or any above it), `pdfmd` everywhere else | |
+| `obsidian` | pdfmd's own pick of reader (see *What it does automatically*) | `%%comments%%` hidden, more of Obsidian's syntax in each release |
+| `pdfmd` | pdfmd's own pick of reader | `%%comments%%` hidden |
+| `pandoc` | Pandoc's own default reader for the file, as `pandoc` would | none: strict Pandoc |
+| `gfm`, `commonmark` | that reader, as it stands | none |
 
-- **`%%comments%%`** (v3.32.20). Obsidian hides them in its reading view, and so does pdfmd, in every output: `A %%a note%% b`
-  prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and lists included) up to the
-  next `%%`. A comment is not looked into inside fenced code, inline code, math, the front matter or an HTML comment, so
-  `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` hides the rest of the note, as it does in Obsidian's reading view (checked there), and is a warning naming the line, since it is usually a forgotten closer; `pdfmd-options: {unclosed-comment: keep}` (`--unclosed-comment keep`, also a row in `pdfmd --setup`) leaves it as text instead, still with the warning. A later `%%` closes the earlier one, and an `<!-- HTML comment -->` hides the same way. With `show-comments` (`--show-comments`)
-  they are drawn like HTML comments, as a box labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key`
-  inside one does not switch the reader or turn on citations.
+Any other value is a Pandoc reader, with `+`/`-` extensions (`markdown`, `gfm+smart`, `commonmark_x`): that reader is used for the
+file (it is `--from` for one document) and the flavour stays `auto`. `--from` on the command line wins over the setting. The
+presets are a table in the `pdfmd_flavours` package; later releases make every part of a preset adjustable, so that a flavour of
+your own is a few lines.
 
-Outside a vault, and with `flavour: pandoc`, `%%` is the text it looks like. Not covered yet: the chapters of a report or book build
-(`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the main one.
+What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, arrives piece by piece):
+
+- **`%%comments%%`** (v3.32.20, in `obsidian` and `pdfmd`). Obsidian hides them in its reading view, and so does pdfmd, in every
+  output: `A %%a note%% b` prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and
+  lists included) up to the next `%%`. A comment is not looked into inside fenced code, inline code, math, the front matter or an
+  HTML comment, so `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` is a warning naming the line, since it is usually a
+  forgotten closer. In an Obsidian vault it hides the rest of the note, as it does in Obsidian's reading view (checked there); in the
+  `pdfmd` flavour, outside a vault, it stays text (a lone `%%` can be TeX or plain text). `pdfmd-options: {unclosed-comment: hide}`
+  or `keep` (`--unclosed-comment`, also a row in `pdfmd --setup`) chooses either way. A later `%%` closes the earlier one, and an
+  `<!-- HTML comment -->` hides the same way. With `show-comments` (`--show-comments`) they are drawn like HTML comments, as a box
+  labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key` inside one does not switch the reader or turn
+  on citations.
+
+`flavour: pandoc` (or `gfm`, `commonmark`) turns `%%` back into the text it looks like. Not covered yet: the chapters of a report or
+book build (`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the
+main one.
 
 ### Not just Markdown
 
@@ -2553,7 +2568,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 
 | `AUTO` kind | When | What happens |
 |---|---|---|
-| `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). What gfm can take as an extension is added to it when the file uses it (`+subscript` for `H~2~O`, `+superscript`, `+attributes` and `+bracketed_spans` for `{#id .class}`, `+fenced_divs`, `+definition_lists`, `+fancy_lists` for `a.` `b.` lists, `+raw_attribute`). What gfm cannot read at all (`^[inline footnotes]`, raw LaTeX such as `\textbf{..}` or `\begin{..}`, grid and simple tables, `(@)` example lists, `@citations`) switches the file to Pandoc's Markdown. Code blocks, inline code, math and HTML comments are not looked at, so an example of the syntax in one changes nothing. `--verbose` says which syntax decided; `--from markdown`, a front-matter block, or `reader:` below changes it |
+| `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). What gfm can take as an extension is added to it when the file uses it (`+subscript` for `H~2~O`, `+superscript`, `+attributes` and `+bracketed_spans` for `{#id .class}`, `+fenced_divs`, `+definition_lists`, `+fancy_lists` for `a.` `b.` lists, `+raw_attribute`). What gfm cannot read at all (`^[inline footnotes]`, raw LaTeX such as `\textbf{..}` or `\begin{..}`, grid and simple tables, `(@)` example lists, `@citations`) switches the file to Pandoc's Markdown. Code blocks, inline code, math and HTML comments are not looked at, so an example of the syntax in one changes nothing. `--verbose` says which syntax decided; `--from markdown`, a front-matter block, or `flavour:` (alias `reader:`) below changes it |
 | `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
 | `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
@@ -2783,9 +2798,10 @@ pdfmd-options:
 ---
 ```
 
-`reader:` fixes the Pandoc reader of a Markdown file (`markdown`, `gfm`, `commonmark_x`, ...; `auto` is the default
-choice described under *What it does automatically*). It is `--from` for one document, or for a whole folder or all your
-documents when it sits in `metadata.yaml` or the config file's `options:`.
+`flavour:` (also spelt `flavor:` or `reader:`: one setting) fixes the reader of a Markdown file: a flavour word (`pandoc`, `gfm`,
+`commonmark`; see *Flavours*) or a Pandoc reader (`markdown`, `gfm+smart`, `commonmark_x`, ...); `auto` is the default choice
+described under *What it does automatically*. It is `--from` for one document, or for a whole folder or all your documents when it
+sits in `metadata.yaml` or the config file's `options:`.
 
 `pdf-engine:` takes an engine name (`lualatex`, `typst`, ...) or a family:
 `tex`, `typst`, `html` or `office`. A family limits the fallback chain to

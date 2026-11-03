@@ -352,7 +352,7 @@ class NewRows(unittest.TestCase):
         self.assertEqual(pdfmd.first_pdfmd_option(document, [], "check-ignore"), ["heading-skip"])
 
     def test_the_reader(self):
-        document = self.use({"options.reader": "commonmark_x"})
+        document = self.use({"options.flavour": "commonmark_x"})
         self.assertEqual(pdfmd.resolve_from_format(document, None, [])[0], "commonmark_x")
 
     def test_stamp_and_backup_details(self):
