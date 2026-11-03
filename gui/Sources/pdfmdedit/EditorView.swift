@@ -6,12 +6,28 @@ struct EditorParts {
     let highlighter: Highlighter?
 }
 
+/// The editor font: the `fontName` family at `fontSize`; the system monospaced font when that family is not installed.
+func editorFont() -> NSFont {
+    let size = CGFloat(Settings.number("fontSize"))
+    let name = Settings.string("fontName")
+    if let f = NSFontManager.shared.font(withFamily: name, traits: [], weight: 5, size: size), f.familyName == name { return f }
+    if let f = NSFont(name: name, size: size) { return f }
+    return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+}
+
+/// Installed font families that are monospaced, for `--fonts`.
+func monospacedFamilies() -> [String] {
+    NSFontManager.shared.availableFontFamilies.filter { family in
+        NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: 13)?.isFixedPitch ?? false
+    }
+}
+
 /// One editor: an NSTextView on an explicit TextKit 1 stack (storage, layout manager, container), because
 /// TextKit 1 has non-contiguous layout (only the lines near the screen are laid out) and layout-manager
 /// temporary attributes; TextKit 2 (the system default, setting `textKit`) lays out only the viewport and
 /// takes the colours as rendering attributes. The colouring supports both; the benchmark compares them.
 func makeEditor(frame: NSRect, highlight: Bool, textKit2: Bool = Settings.int("textKit") == 2) -> EditorParts {
-    let font = NSFont.monospacedSystemFont(ofSize: CGFloat(Settings.number("fontSize")), weight: .regular)
+    let font = editorFont()
     let scroll: NSScrollView
     let tv: NSTextView
     if textKit2 {

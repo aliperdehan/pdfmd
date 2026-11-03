@@ -3,9 +3,6 @@ import Cocoa
 let args = Array(CommandLine.arguments.dropFirst())
 
 if args.contains("--version") { print("pdfmdedit \(appVersion)"); exit(0) }
-if args.contains("--themes") { print(Theme.available().joined(separator: "\n")); exit(0) }
-if args.contains("--settings") { print(Settings.listing()); print(); print(Palette.listing()); exit(0) }
-
 // `--set key=value` overrides a setting for this run (benchmark and smoke test).
 for (i, a) in args.enumerated() where a == "--set" && i + 1 < args.count {
     let kv = args[i + 1].split(separator: "=", maxSplits: 1).map(String.init)
@@ -16,6 +13,10 @@ for (i, a) in args.enumerated() where a == "--set" && i + 1 < args.count {
         UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
     }
 }
+
+if args.contains("--fonts") { print(monospacedFamilies().joined(separator: "\n")); exit(0) }
+if args.contains("--themes") { print(Theme.available().joined(separator: "\n")); exit(0) }
+if args.contains("--settings") { print(Settings.listing()); print("font in use: \(editorFont().fontName) \(editorFont().pointSize) pt"); print(); print(Palette.listing()); exit(0) }
 
 // `--gen MB PATH` writes the benchmark's generated document, to open it by hand.
 if let i = args.firstIndex(of: "--gen"), i + 2 < args.count {

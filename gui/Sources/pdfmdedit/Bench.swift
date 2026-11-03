@@ -256,6 +256,21 @@ enum Smoke {
             if !ok { failures += 1 }
         }
 
+        // what is really painted: a pixel in the empty margin of the text view, against the theme's background
+        if let rep = parts.scroll.bitmapImageRepForCachingDisplay(in: parts.scroll.bounds) {
+            parts.scroll.cacheDisplay(in: parts.scroll.bounds, to: rep)
+            func hex(_ c: NSColor?) -> String {
+                guard let d = c?.usingColorSpace(.sRGB) else { return "?" }
+                return String(format: "#%02x%02x%02x", Int(round(d.redComponent * 255)), Int(round(d.greenComponent * 255)), Int(round(d.blueComponent * 255)))
+            }
+            var expected = "?"
+            parts.scroll.effectiveAppearance.performAsCurrentDrawingAppearance { expected = hex(Palette.background) }
+            let painted = [hex(rep.colorAt(x: 3, y: rep.pixelsHigh - 3)), hex(rep.colorAt(x: rep.pixelsWide - 30, y: rep.pixelsHigh - 3)), hex(rep.colorAt(x: 3, y: 3))]
+            // information only: a bitmap taken of a view inside a (hidden) window reads lighter than the colour, also for the system's
+            // own colours (30 reads as 40 in dark mode), so it cannot be compared with the theme's hex
+            print("info background: theme \(expected), read back \(painted.first ?? "?") (a read-back inside a window is not exact)")
+        }
+
         let original = try! Data(contentsOf: url)
         let first = colouredPixels(parts.scroll)
         check("colours on screen after load", first > 0, "(\(first) px)")

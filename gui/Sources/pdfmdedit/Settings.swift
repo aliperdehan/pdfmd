@@ -34,6 +34,7 @@ enum Settings {
 
     static let texts: [Text] = [
         Text(key: "theme", value: "Anura", help: "colour theme in a light appearance: the name of a .cottheme file (CotEditor's format), see --themes"),
+        Text(key: "fontName", value: "JetBrains Mono", help: "editor font: a font family (monospaced fonts are listed by --fonts); if it is not installed the system monospaced font is used"),
         Text(key: "themeDark", value: "Anura (Dark)", help: "colour theme in a dark appearance"),
     ]
 
