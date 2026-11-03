@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.20 — 2026-11-03
+
+Pre-edit state: commit `1e24acd`. Entry 3ee, step 4 begins (the author, "2b 2c and 3 i'd like to push down the queue, and let's implement step 4 now since i need %% comment syntax right now"): **Obsidian's `%%comments%%`, and the `flavour` setting that turns Obsidian's syntax on.** Not pushed.
+
+- **`%%comments%%` are hidden** as Obsidian's reading view hides them: `A %%a note%% b` prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and lists inside it) up to the next `%%`. Done on the text before Pandoc reads it (a filter cannot: Pandoc has parsed the inside by then), at every place the single-document build reads the file: the title promotion (a commented-out heading is no title), the section builds, the reader choice, the citation check, and the native renderers. Not looked into: fenced code (an unclosed fence runs to the end), inline code, `$...$` and `$$...$$` math, the front matter and HTML comments. A comment at the end of a line takes the spaces before it (two would be a line break); a comment on lines of its own takes the lines. A `%%` that never closes is a WARN naming the line and stays as text (Obsidian's behaviour for it is not verified yet). With `show-comments` the comments become HTML comments, which the writers draw as Comment boxes; a `-->` in the body is defused, a comment that opens a line with text after it gets an empty `<span></span>` first (an HTML block would swallow the text), and an inline comment holding a blank line moves to a block of its own.
+- **What is in a comment decides nothing**: a `\ref{x}` or `^[note]` inside one no longer switches the reader to Pandoc's, and an `@key` inside one no longer turns on `--citeproc`.
+- **`pdfmd-options.flavour`** (also spelt `flavor`; document, metadata files, folders, config), **`--flavour`** (`--flavor`) and a row in `pdfmd --setup`: `auto` (the default) is `obsidian` inside a vault (a `.obsidian/` folder in the document's folder or any above it; remembered per folder) and `pdfmd` elsewhere; `obsidian`, `pdfmd`, `pandoc` are named; any other word is a NOTE and counts as `auto`. `pdfmd` and `pandoc` add nothing yet: the next steps make `flavour` the same setting as `reader:` and give `pdfmd` its own syntax. Outside a vault, `%%` stays text.
+- New package `pdfmd_obsidian` (pure functions; listed in `pyproject.toml` and the zipapp). `tests/test_obsidian.py`: the transform on its edge cases, the flavour at every level, and through the whole `pdfmd` on a temporary vault (HTML, LaTeX and Typst; both readers; show-comments; outside a vault).
+- Not covered yet (listed in TODO.md): the chapters of a report or book build, the parts of a split document, the heading scanners of `parts`/sections (a `%%`-hidden heading), indented code blocks. The rest of step 4 follows as patches: image embeds with a width, `==highlight==` and `<u>`, hard line breaks.
+
 ## v3.32.19f — 2026-11-03
 
 Pre-edit state: commit `fb4167d`. Entry 3do: **pdfmd Edit 0.1.4: a status bar, a Settings window that fits its tab.** Changes only `gui/`; pdfmd itself is unchanged, so no version bump.

@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.19"
+PDFMD_VERSION = "3.32.20"
 import argparse
 import atexit
 import csv
@@ -3002,6 +3002,76 @@ def show_comments_on(md_path: Path, metadata_files: list[Path]) -> bool:
         return bool(SHOW_COMMENTS_CLI["on"])
     value = first_pdfmd_option(md_path, metadata_files, "show-comments")
     return value is True or str(value).strip().casefold() in ("true", "yes", "on", "1")
+
+
+# The flavour of a Markdown file (v3.32.20, entry 3ee): `pdfmd-options.flavour` (also spelt `flavor`; document, metadata files, folders,
+# config) or `--flavour`. `auto` (the default) is `obsidian` inside an Obsidian vault, a folder with `.obsidian/` above the document,
+# and `pdfmd` elsewhere. `pdfmd` and `pandoc` add nothing yet (the next releases give them the markup defaults and make the setting
+# the same one as `reader:`); `obsidian` reads Obsidian's own syntax, one piece per release, from %%comments%% on.
+FLAVOUR_WORDS = ("auto", "obsidian", "pdfmd", "pandoc")
+FLAVOUR_CLI: dict = {"name": None}
+_VAULT_ROOTS: dict[Path, Path | None] = {}
+_FLAVOUR_TOLD: set[str] = set()
+
+
+def vault_root(path: Path) -> Path | None:
+    """The folder that holds `.obsidian/`: the one of ``path`` or the nearest above it (None outside a vault). Remembered per folder."""
+    try:
+        folder = path.resolve().parent
+    except OSError:
+        return None
+    walked: list[Path] = []
+    found: Path | None = None
+    for candidate in (folder, *folder.parents):
+        if candidate in _VAULT_ROOTS:
+            found = _VAULT_ROOTS[candidate]
+            break
+        walked.append(candidate)
+        if (candidate / ".obsidian").is_dir():
+            found = candidate
+            break
+    for candidate in walked:
+        _VAULT_ROOTS[candidate] = found
+    return found
+
+
+def flavour_of(md_path: Path, metadata_files=()) -> str:
+    """The flavour this file is read in: `obsidian`, `pdfmd` or `pandoc`. The command line, else `pdfmd-options.flavour` / `flavor`,
+    else `auto`: obsidian inside a vault (see vault_root), pdfmd elsewhere. A word that is none of FLAVOUR_WORDS is told once and
+    taken as `auto`."""
+    value = FLAVOUR_CLI["name"]
+    if value is None:
+        value = first_pdfmd_option(md_path, list(metadata_files), "flavour", "flavor")
+    name = "auto" if value is None else str(value).strip().casefold()
+    if name in ("", "auto"):
+        return "obsidian" if vault_root(md_path) is not None else "pdfmd"
+    if name in FLAVOUR_WORDS:
+        return name
+    if name not in _FLAVOUR_TOLD:
+        _FLAVOUR_TOLD.add(name)
+        print(f"NOTE  flavour: {name} is not a flavour pdfmd knows ({', '.join(FLAVOUR_WORDS)}); using auto", file=sys.stderr)
+    return "obsidian" if vault_root(md_path) is not None else "pdfmd"
+
+
+def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
+    """``text`` as Pandoc should read it when the note is Obsidian's: its %%comments%% hidden, or (``show``, by default
+    `show-comments`) turned into HTML comments the writers draw as Comment boxes. Unchanged when the flavour is not obsidian or
+    the text has no `%%`. A `%%` that never closes is told once, and kept."""
+    if "%%" not in text or flavour_of(md_path, metadata_files) != "obsidian":
+        return text
+    try:
+        from pdfmd_obsidian import hide_comments
+    except ImportError:
+        print("WARN  the pdfmd_obsidian package is missing; %%comments%% are left as they are", file=sys.stderr)
+        return text
+    result = hide_comments(text, show_comments_on(md_path, list(metadata_files)) if show is None else show)
+    for line in result.unclosed:
+        told = f"{md_path}:{line}"
+        if told not in _FLAVOUR_TOLD:
+            _FLAVOUR_TOLD.add(told)
+            print(f"WARN  {display_path(md_path)}, line {line}: a `%%` with no closing `%%`; it is kept as text "
+                  "(Obsidian's comments end at the next `%%`)", file=sys.stderr)
+    return result.text
 
 
 def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
@@ -6708,7 +6778,7 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
             from_format is not None and from_format.casefold().split("+")[0] not in NATIVE_READERS):
         raise SystemExit(f"{md_path}: the native renderers read Markdown only; this input needs Pandoc "
                          "(and a LaTeX/Typst/HTML engine, or soffice) -- see `pdfmd --check-dependencies`.")
-    text = md_path.read_text(encoding="utf-8-sig")
+    text = obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files)
     attempts: list[str] = []
     prepared: dict[str, tuple[NativeSource, dict[str, int]]] = {}
     for engine in engines:
@@ -13791,7 +13861,7 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
     pandoc = which("pandoc")
     if pandoc:
         try:
-            text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
+            text = EMBED_BLOCK_RE.sub("", obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, show=False))
             command = [pandoc, "-f", "markdown", "-t", "json"]
             if md_macro_in(text):
                 # the Markdown inside `\md{...}` is part of the document: a citation there needs --citeproc
@@ -13848,7 +13918,7 @@ def contains_citations(md_path: Path) -> bool:
     features = markdown_features(md_path)
     if features is not None:
         return features[0]
-    text = EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
+    text = EMBED_BLOCK_RE.sub("", obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, show=False))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
 
@@ -14050,7 +14120,7 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     chosen = first_pdfmd_option(md_path, list(metadata_files), "reader")
     if isinstance(chosen, str) and chosen.strip().casefold() not in ("", "auto"):
         return chosen.strip(), None       # `pdfmd-options: {reader: markdown}` (document, metadata file or config): --from, per document
-    text = md_path.read_text(encoding="utf-8-sig")
+    text = obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False)   # hidden text decides nothing
     if has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
     if EMBED_BLOCK_RE.search(text) and is_assembled_text(text):
@@ -14274,6 +14344,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     if override is not None:
         text, shifted = override
         if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
+            text = obsidian_source(text, md_path, metadata_files)
             text = repair_ascii_text(text, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
         with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
                                 prefix=f".{md_path.stem}.pdfmd-section-", dir=md_path.parent,
@@ -14288,7 +14359,8 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         yield md_path, False
         return
-    text = md_path.read_text(encoding="utf-8-sig")
+    original = md_path.read_text(encoding="utf-8-sig")
+    text = obsidian_source(original, md_path, metadata_files)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
     corrected, shifted = text, False
     if not disabled:
         corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
@@ -14298,7 +14370,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         # a report's first file: its title leaves the front matter and becomes a chapter heading (pdfmd_report.titles)
         import pdfmd_report.titles as report_titles
         repaired = report_titles.apply(sys.modules[__name__], repaired, chapter)
-    if not shifted and repaired == corrected:
+    if not shifted and repaired == original:
         yield md_path, False
         return
     with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
@@ -28428,6 +28500,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "default; also pdfmd-options.show-comments and pdfmd --setup")
     parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
                         help="do not show comments in this run, whatever pdfmd-options.show-comments says")
+    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", choices=FLAVOUR_WORDS,
+                        help="the flavour of Markdown the files are written in: obsidian (a note of an Obsidian vault: %%%%comments%%%% "
+                             "are hidden, more of its syntax in each release), pdfmd, pandoc, or auto (the default: obsidian inside a "
+                             "vault, a folder with .obsidian/ above the document, pdfmd elsewhere); also pdfmd-options.flavour and "
+                             "pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
                         help="no universal markup for this run, whatever pdfmd-options.markup says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
@@ -29287,6 +29364,7 @@ def run_main() -> None:
     LINEBREAK_CLI.update({"kinds": args.linebreak, "off": args.no_linebreak})
     MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
     SHOW_COMMENTS_CLI["on"] = args.show_comments
+    FLAVOUR_CLI["name"] = args.flavour
     GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
     ASCII_CLI["missing"] = args.ascii_missing
     if args.init_reference:

@@ -58,6 +58,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [Diagrams written as code](#diagrams-written-as-code)
   - [Editable in LibreOffice, and one file that carries its data](#editable-in-libreoffice-and-one-file-that-carries-its-data)
   - [HTML, LaTeX, Typst and Word pieces inside Markdown](#html-latex-typst-and-word-pieces-inside-markdown)
+  - [Obsidian notes: `flavour`](#obsidian-notes-flavour)
   - [Not just Markdown](#not-just-markdown)
 - [What it does automatically](#what-it-does-automatically)
   - [Other scripts](#other-scripts)
@@ -2489,6 +2490,27 @@ pdfmd-options:
 Also a `--setup` row. Only Markdown sources read by Pandoc: the native (no-Pandoc) renderer and a `.tex` source compiled
 directly do not read it. A file with no front matter that uses `\md{...}` is read with Pandoc's `markdown` reader instead of
 `gfm` (which has no raw LaTeX), the same way `@citations` already switch it.
+
+### Obsidian notes: `flavour`
+
+A note of an [Obsidian](https://obsidian.md) vault is Markdown with a few spellings of its own. pdfmd reads them when the note is
+Obsidian's: `pdfmd-options: {flavour: obsidian}` (in a document, a metadata file, a folder's settings or the config file;
+`flavor` is the same key), or `--flavour obsidian` (`--flavor`) for one run. The default is `flavour: auto`: **obsidian inside a
+vault** (a folder with `.obsidian/` in it, the document's own or any above it) and `pdfmd` everywhere else, so a note built from
+its vault needs nothing said. `pandoc` and `pdfmd` read the note as pdfmd always has; they add nothing yet (the flavour will
+become the same setting as `reader:` and give pdfmd's own syntax a name). Also a row in `pdfmd --setup`.
+
+What the `obsidian` flavour reads so far (the rest of Obsidian's syntax arrives piece by piece):
+
+- **`%%comments%%`** (v3.32.20). Obsidian hides them in its reading view, and so does pdfmd, in every output: `A %%a note%% b`
+  prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and lists included) up to the
+  next `%%`. A comment is not looked into inside fenced code, inline code, math, the front matter or an HTML comment, so
+  `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` is a warning and stays as text. With `show-comments` (`--show-comments`)
+  they are drawn like HTML comments, as a box labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key`
+  inside one does not switch the reader or turn on citations.
+
+Outside a vault, and with `flavour: pandoc`, `%%` is the text it looks like. Not covered yet: the chapters of a report or book build
+(`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the main one.
 
 ### Not just Markdown
 
