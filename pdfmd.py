@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.26"
+PDFMD_VERSION = "3.32.27"
 import argparse
 import atexit
 import csv
@@ -3018,6 +3018,7 @@ FLAVOUR_CLI: dict = {"name": None}
 _VAULT_ROOTS: dict[Path, Path | None] = {}
 _FLAVOUR_TOLD: set[str] = set()
 UNCLOSED_WORDS = ("hide", "keep")
+NEWLINE_WORDS = ("hard", "soft")
 UNCLOSED_CLI: dict = {"mode": None}
 
 
@@ -3036,6 +3037,37 @@ def unclosed_comment_mode(md_path: Path, metadata_files=()) -> str:
     if name and name not in _FLAVOUR_TOLD:
         _FLAVOUR_TOLD.add(name)
         print(f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using {default}", file=sys.stderr)
+    return default
+
+
+def vault_app_setting(md_path: Path, key: str):
+    """The value of ``key`` in the vault's ``.obsidian/app.json`` (None outside a vault, or when the file or the key is missing:
+    an untouched vault writes only what its user changed)."""
+    vault = vault_root(md_path)
+    if vault is None:
+        return None
+    try:
+        return json.loads((vault / ".obsidian" / "app.json").read_text(encoding="utf-8")).get(key)
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def single_newline_mode(md_path: Path, metadata_files=()) -> str:
+    """What a single newline inside a paragraph does (v3.32.27): `hard` (a line break) or `soft` (a space). `pdfmd-options.single-newline`,
+    else, in the obsidian flavour inside a vault, the vault's own `strictLineBreaks` (true: soft; false: hard; absent: the
+    flavour's), else the flavour's column (`hard` for obsidian, `soft` for the rest). Another word is told once."""
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files))
+    default = preset.newline if preset else "soft"
+    value = first_pdfmd_option(md_path, list(metadata_files), "single-newline")
+    if value is None:
+        strict = vault_app_setting(md_path, "strictLineBreaks") if flavour_of(md_path, metadata_files) == "obsidian" else None
+        return default if not isinstance(strict, bool) else ("soft" if strict else "hard")
+    name = str(value).strip().casefold()
+    if name in NEWLINE_WORDS:
+        return name
+    if f"newline:{name}" not in _FLAVOUR_TOLD:
+        _FLAVOUR_TOLD.add(f"newline:{name}")
+        print(f"NOTE  single-newline: {name} is not one of {', '.join(NEWLINE_WORDS)}; using {default}", file=sys.stderr)
     return default
 
 
@@ -3191,10 +3223,7 @@ def find_embedded_image(name: str, md_path: Path, search: str = "vault") -> Path
         if base is not None and (base / name).is_file():
             return base / name
     if vault is not None:
-        try:
-            attachments = json.loads((vault / ".obsidian" / "app.json").read_text(encoding="utf-8")).get("attachmentFolderPath", "")
-        except (OSError, ValueError, AttributeError):
-            attachments = ""
+        attachments = vault_app_setting(md_path, "attachmentFolderPath") or ""
         if isinstance(attachments, str) and attachments.strip() not in ("", "/"):
             folder = here / attachments if attachments.startswith("./") else vault / attachments.strip("/")
             if (folder / name).is_file():
@@ -14317,6 +14346,14 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
                         else f"{md_path}: Pandoc does not know the {suffix} extension; reading as {reader}")
     if suffix not in (".md", ".markdown"):
         return None, None
+    reader, note = flavour_reader(md_path, metadata_files)
+    if FLAVOUR_PRESETS and single_newline_mode(md_path, metadata_files) == "hard" and "hard_line_breaks" not in (reader or ""):
+        reader = f"{reader or 'markdown'}+hard_line_breaks"          # a single newline is a line break (v3.32.27)
+    return reader, note
+
+
+def flavour_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
+    """The reader a Markdown file's flavour gives (resolve_from_format adds the single newline): (reader or None for Pandoc's own, note)."""
     name, spec = flavour_setting(md_path, metadata_files)
     if spec:
         return spec, None                 # `pdfmd-options: {flavour: gfm+smart}` (or `reader:`; document, metadata file, config): --from, per document

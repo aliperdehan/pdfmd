@@ -123,7 +123,7 @@ class Flavour(unittest.TestCase):
             with self.subTest(key=key):
                 path = self.note("vault", f"---\npdfmd-options:\n  {key}: gfm+smart\n---\n\nText\n")
                 self.assertEqual(pdfmd.flavour_setting(path), ("obsidian", "gfm+smart"))
-                self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart")
+                self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart+hard_line_breaks")      # a vault: Obsidian's newlines
         outside = self.note("plain", "---\npdfmd-options:\n  reader: markdown\n---\n\nText\n")
         self.assertEqual(pdfmd.flavour_setting(outside), ("pdfmd", "markdown"))
         self.assertEqual(pdfmd.resolve_from_format(outside, "commonmark", [])[0], "commonmark")      # --from still wins

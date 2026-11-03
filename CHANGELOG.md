@@ -23,6 +23,18 @@ same commit as the change.
 
 Pre-edit state: commit `7720630`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit's build output moves to `gui/build.noindex/`**, which Spotlight and LaunchServices skip, so the editor no longer shows up twice (once from the build folder, once from `~/Applications`). `build.sh --install` is the way to get the copy that is launched; the README paths, the `.gitignore` and the smoke-test paths follow. The runtime `NSApp.applicationIconImage` call is removed: it changed nothing. (The bare Stage Manager tile was a stale per-bundle-id icon cache in the system icon store, cleared by hand; nothing in the app was wrong.)
 
+## v3.32.27 — 2026-11-03
+
+Pre-edit state: commit `6346326`. Entry 3ee, step 4(d). **A single newline inside a paragraph is a line break in the `obsidian` flavour**, as Obsidian shows it, and the vault's own "Strict line breaks" is obeyed.
+
+- **`single-newline: hard|soft`**, a new setting (`pdfmd-options`, metadata file, folder or config; a `--setup` row; no flag of its own, `--flavour gfm+hard_line_breaks` does it for a run). It is decided in layers: the setting; else, in the `obsidian` flavour inside a vault, the vault's `.obsidian/app.json` `strictLineBreaks` (`true` is soft, `false` is hard, no key means Obsidian's default, hard); else the flavour's new preset column `newline` (`hard` for `obsidian`, `soft` for `pdfmd`, `pandoc`, `gfm` and `commonmark`). The `pdfmd` flavour stays soft on purpose: a source wrapped at 80 columns (a lab report, a README) must not break at every line, and a blank line (or two spaces, or a backslash, at the end of a line) is a break everywhere.
+- Done with Pandoc's own `+hard_line_breaks` reader extension (markdown, gfm and commonmark take it), added to the reader the flavour picked, so code, math and tables are untouched; a reader spec of the setting gets it too; `--from` wins. A callout keeps its title on its own line, and every writer (HTML, LaTeX, Word, Typst, PDF) draws the break.
+- `vault_app_setting()` reads any key of the vault's `app.json` (the picture lookup uses it for `attachmentFolderPath`); `resolve_from_format` is split into the flavour's own pick (`flavour_reader`) and the newline extension.
+- Changed behaviour inside an Obsidian vault only: a note whose lines are wrapped now breaks at each line, unless the vault says strict or the note says `single-newline: soft`.
+- Tests: `tests/test_newline.py` (11: modes, the vault file, the reader, whole builds in HTML, LaTeX and Typst); `test_obsidian.py` expects the extension for a reader spec inside a vault.
+
+Not pushed.
+
 ## v3.32.26b — 2026-11-03
 
 Pre-edit state: commit `77af86d`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.1.5: line numbers in the margin** (the author: their absence is why pdfmd Edit felt "alien" next to CotEditor).

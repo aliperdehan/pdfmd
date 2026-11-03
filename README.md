@@ -2541,6 +2541,14 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
 
+- **A single newline: `single-newline`** (v3.32.27). Markdown's rule is that one newline inside a paragraph is a space; Obsidian shows it as
+  a line break unless its "Strict line breaks" option is on. In the `obsidian` flavour inside a vault pdfmd does what that vault does: it
+  reads `strictLineBreaks` from `.obsidian/app.json` (no key: Obsidian's default, a break). Every other flavour, `pdfmd` included, keeps
+  the Markdown rule, so a source wrapped at 80 columns stays one paragraph. `pdfmd-options: {single-newline: hard}` (or `soft`;
+  also a row in `pdfmd --setup`) decides for a document, a folder or every document, and beats the vault. A blank line is always a new
+  paragraph, and two spaces or a backslash at the end of a line is a break whatever the setting. For one run
+  `--flavour gfm+hard_line_breaks` does it.
+
 - **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). A printed document has no other notes to open, so a wikilink is
   written as the text Obsidian shows for it: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
   and `[[#Heading]]`, a link inside the note, is `Heading`; `[[Note\|alias]]` works in a table. A name with `_` or `*` in it is kept as text.
