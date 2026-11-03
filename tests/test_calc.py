@@ -579,6 +579,31 @@ class Switches(unittest.TestCase):
             with self.subTest(target=target):
                 self.assertEqual(convert(target, "--calc-typeset", "display"), convert(target))
 
+    def test_typeset_pieces_can_be_set_upright_or_italic(self):
+        source = ("---\ntitle: T\n---\n\n```{=calc}\nc_s = 28.07\nV_el = 75\nk_DNA = 50\n```\n\n"
+                  "::: calc\nm = c_s * V_el * k_DNA = {ans:2dp}\n:::\n")
+
+        def convert(*arguments, env=None, header=""):
+            (self.directory / "doc.md").write_text(source.replace("---\ntitle: T\n", "---\ntitle: T\n" + header, 1), encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", "-o", "out.tex",
+                                   "--calc-typeset", "display", *arguments], cwd=self.directory, capture_output=True, text=True,
+                                  encoding="utf-8", env={**os.environ, **(env or {})})
+            return done, " ".join((self.directory / "out.tex").read_text(encoding="utf-8").split()) if done.returncode == 0 else ""
+        done, plain = convert()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("c_{s}\\cdot V_{\\mathrm{el}}\\cdot k_{\\mathrm{DNA}}", plain)           # the default: one letter italic, a word upright
+        done, styled = convert("--calc-typeset-upright", "s,V", "--calc-typeset-italic", "el, DNA")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("c_{\\mathrm{s}}\\cdot \\mathrm{V}_{\\mathit{el}}\\cdot k_{\\mathit{DNA}}", styled)
+        self.assertEqual(convert(header="pdfmd-options:\n  calc:\n    typeset-upright: [s, V]\n    typeset-italic: el DNA\n")[1], styled)
+        self.assertEqual(convert(env={"PDFMD_CALC_TYPESET_UPRIGHT": "s,V", "PDFMD_CALC_TYPESET_ITALIC": "el,DNA"})[1], styled)
+        for arguments, word in ((("--calc-typeset-upright", "V_el"), "not a piece"), (("--calc-typeset-italic", "A260"), "not a piece"),
+                                (("--calc-typeset-upright", "V", "--calc-typeset-italic", "V"), "both list V")):
+            with self.subTest(arguments=arguments):
+                done, _ = convert(*arguments)
+                self.assertNotEqual(done.returncode, 0)
+                self.assertIn(word, done.stdout + done.stderr)
+
     def test_a_bad_typeset_value_is_an_error(self):
         (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  calc:\n    typeset: maybe\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n",
                                                encoding="utf-8")

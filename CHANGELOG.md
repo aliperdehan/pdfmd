@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.16 — 2026-11-03
+
+Pre-edit state: commit `9c6112b`. Entry 3cw (the author, on the typeset modes' length rule for italic and upright: "good defaults. make it overridable tho so the user may specify that smth is italic or upright, some analogue of mathrm"). Kept in 3.32. Not pushed.
+
+- **`calc: {typeset-upright: [...], typeset-italic: [...]}`** name the pieces of a name (the base's letters, or one word after an underscore) that a typeset calculation sets against the default (one letter italic, a longer piece upright). Upright is `\mathrm{piece}`, italic of several letters `\mathit{piece}` (one word, not the letters as separate variables). A list or a comma/space separated string; `--calc-typeset-upright` / `--calc-typeset-italic`, `PDFMD_CALC_TYPESET_UPRIGHT` / `_ITALIC`, two `pdfmd --setup` rows, `-M pdfmd-calc-typeset-upright/-italic` from `calc_filter_args()`. A piece in both lists or one that is not letters (`V_el`, `A260`) stops the build with a message. Greek names are not styled (verified: with LuaLaTeX and STIX Two Math, `\mathrm{\alpha}` falls into the text font and prints a missing-glyph warning).
+- `calc.lua`: `tex_word()` is the one place the style is decided; the README's "splits at its first `_`" now says what the code does (every `_`, the pieces after the base share one subscript).
+- Test: `test_typeset_pieces_can_be_set_upright_or_italic` (default, flag, metadata list and string, environment, the three errors).
+
 ## v3.32.15 — 2026-11-03
 
 Pre-edit state: commit `b57a5c9`. Entry 3cw (the author, on the inline typeset mode: "it is crude, let's force others into \text; yes, it will be another mode"). Kept in 3.32. Not pushed.

@@ -945,11 +945,21 @@ for word in ([[alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta
   GREEK[word] = "\\" .. word
 end
 
--- a subscript word: an index (a digit run or one letter) as it is, a word upright, a Greek name as its letter
+-- A piece of a name (the base's letters, or a word after an _) is set italic when it is one letter and upright when it is longer;
+-- `calc: {typeset-upright: [...], typeset-italic: [...]}` (STYLE: piece -> "upright"|"italic") names the exceptions. An upright
+-- piece is \mathrm{...}; an italic word of several letters is \mathit{...} (one word, not the letters as separate variables).
+local STYLE = {}
+
+local function tex_word(word)
+  local style = STYLE[word] or (#word == 1 and "italic" or "upright")
+  if style == "upright" then return "\\mathrm{" .. word .. "}" end
+  return #word == 1 and word or "\\mathit{" .. word .. "}"
+end
+
 local function tex_label(word)
   if GREEK[word] then return GREEK[word] end
-  if word:match("^%d+$") or #word == 1 then return word end
-  return "\\mathrm{" .. word .. "}"
+  if word:match("^%d+$") then return word end
+  return tex_word(word)
 end
 
 local function tex_name(name)
@@ -961,8 +971,7 @@ local function tex_name(name)
   local head
   if not letters then head = "\\mathrm{" .. pieces[1] .. "}"
   elseif GREEK[letters] then head = GREEK[letters]
-  elseif #letters == 1 then head = letters
-  else head = "\\mathrm{" .. letters .. "}" end
+  else head = tex_word(letters) end
   local subs = {}
   if digits and digits ~= "" then subs[1] = digits end
   for index = 2, #pieces do subs[#subs + 1] = tex_label(pieces[index]) end
@@ -2002,6 +2011,12 @@ return {{Pandoc = function(doc)
   local typeset = doc.meta["pdfmd-calc-typeset"]
   local writer = FORMAT:lower():gsub("[+-].*$", "")
   typeset = typeset ~= nil and pandoc.utils.stringify(typeset):lower() or ""
+  for _, style in ipairs({"upright", "italic"}) do
+    local list = doc.meta["pdfmd-calc-typeset-" .. style]
+    if list ~= nil then
+      for word in pandoc.utils.stringify(list):gmatch("[^,%s]+") do STYLE[word] = style end
+    end
+  end
   TYPESET = MATH_WRITERS[writer] == true and ((typeset == "display" and "display") or ((typeset == "true" or typeset == "inline") and "inline")) or false
   local noindent = doc.meta["pdfmd-calc-noindent"]
   NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"

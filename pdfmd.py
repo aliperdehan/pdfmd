@@ -137,7 +137,7 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     indent (`calc: {noindent: true}`, the default; false gives it the document's own; an `indent=` on the div wins). Added by
     `calc_filter_args()` only for a document that has such a span or div. The settings are
     `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, typeset: true|display, noindent, space, align}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-typeset-upright, --calc-typeset-italic, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
     even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.15"
+PDFMD_VERSION = "3.32.16"
 import argparse
 import atexit
 import csv
@@ -3488,6 +3488,8 @@ CALC_DIGITS_ENV = "PDFMD_CALC_DIGITS"
 CALC_ROUND_ENV = "PDFMD_CALC_ROUND"
 CALC_SUBS_ENV = "PDFMD_CALC_SUBS"
 CALC_TYPESET_ENV = "PDFMD_CALC_TYPESET"
+CALC_TYPESET_STYLE_ENVS = {"upright": "PDFMD_CALC_TYPESET_UPRIGHT", "italic": "PDFMD_CALC_TYPESET_ITALIC"}
+CALC_TYPESET_PIECE_RE = re.compile(r"^[A-Za-z]+$")
 CALC_NOINDENT_ENV = "PDFMD_CALC_NOINDENT"
 CALC_SPACE_ENV = "PDFMD_CALC_SPACE"
 CALC_ALIGN_ENV = "PDFMD_CALC_ALIGN"
@@ -3563,6 +3565,33 @@ def calc_typeset_mode(md_path: Path, metadata_files: list[Path]) -> str:
     if flag is None:
         raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.typeset must be true, false or display, not {value!r}")
     return "inline" if flag else "off"
+
+
+def calc_typeset_styles(md_path: Path, metadata_files: list[Path]) -> dict[str, list[str]]:
+    """`calc: {typeset-upright: [V, k], typeset-italic: [el, DNA]}`: pieces of a name that a typeset calculation sets upright or italic
+    against the default (a one-letter piece italic, a longer one upright). A piece is the letters of a name's base or one word after an
+    underscore (`V_el` has V and el); a list or a comma/space separated string. Returns {"upright": [...], "italic": [...]}."""
+    found: dict[str, list[str]] = {}
+    for style, env in CALC_TYPESET_STYLE_ENVS.items():
+        value = os.environ.get(env)
+        if value is None:
+            value = calc_option(md_path, metadata_files, "typeset-" + style)
+        if value is None or value is False:
+            found[style] = []
+            continue
+        words = [str(item) for item in value] if isinstance(value, list) else [value if isinstance(value, str) else str(value)]
+        pieces = [piece for word in words for piece in re.split(r"[,\s]+", word.strip()) if piece]
+        if [piece.casefold() for piece in pieces] == ["none"] or [piece.casefold() for piece in pieces] == ["off"]:
+            pieces = []
+        for piece in pieces:
+            if not CALC_TYPESET_PIECE_RE.match(piece):
+                raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.typeset-{style}: {piece!r} is not a piece of a name. "
+                                 f"Give the letters of a base or of one word after an underscore (V, el, DNA), not V_el or A260")
+        found[style] = list(dict.fromkeys(pieces))
+    both = [piece for piece in found["upright"] if piece in found["italic"]]
+    if both:
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.typeset-upright and typeset-italic both list {', '.join(both)}")
+    return found
 
 
 def calc_noindent_on(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -3847,6 +3876,9 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     typeset = calc_typeset_mode(files[0], metadata_files)
     if typeset != "off":
         arguments += ["-M", "pdfmd-calc-typeset=" + typeset]
+        for style, pieces in calc_typeset_styles(files[0], metadata_files).items():
+            if pieces:
+                arguments += ["-M", f"pdfmd-calc-typeset-{style}=" + ",".join(pieces)]
     if calc_noindent_on(files[0], metadata_files):
         arguments += ["-M", "pdfmd-calc-noindent=true"]
     space = calc_space(files[0], metadata_files)
@@ -28456,6 +28488,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "`pdfmd-options: {calc: {typeset: true|display}}`, or --setup")
     parser.add_argument("--no-calc-typeset", dest="calc_typeset", action="store_const", const="off",
                         help="print calculations as plain text (the default); turns --calc-typeset, or the document's typeset setting, off")
+    parser.add_argument("--calc-typeset-upright", metavar="PIECES", default=None,
+                        help="pieces of a name a typeset calculation sets upright (\\mathrm), comma separated: V for V_el, e for c_e. The "
+                             "default is a one-letter piece italic and a longer one upright. A piece is the letters of a name's base or "
+                             "one word after an underscore. Also `pdfmd-options: {calc: {typeset-upright: [V]}}`, or --setup")
+    parser.add_argument("--calc-typeset-italic", metavar="PIECES", default=None,
+                        help="pieces of a name a typeset calculation sets italic, comma separated: el for V_el, DNA for k_DNA (a word of "
+                             "several letters is one italic word, \\mathit). Also `pdfmd-options: {calc: {typeset-italic: [el]}}`, or --setup")
     parser.add_argument("--calc-noindent", action=argparse.BooleanOptionalAction, default=None,
                         help="a `::: calc` div has no first-line indent, whatever the document does (the default; --no-calc-noindent "
                              "gives it the document's own). An `indent=` on the div wins. Also "
@@ -29178,6 +29217,9 @@ def run_main() -> None:
         os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
     if args.calc_typeset is not None:
         os.environ[CALC_TYPESET_ENV] = args.calc_typeset
+    for style, env in CALC_TYPESET_STYLE_ENVS.items():
+        if getattr(args, "calc_typeset_" + style) is not None:
+            os.environ[env] = getattr(args, "calc_typeset_" + style)
     if args.calc_noindent is not None:
         os.environ[CALC_NOINDENT_ENV] = "true" if args.calc_noindent else "false"
     if args.calc_space is not None:

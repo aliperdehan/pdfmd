@@ -1023,8 +1023,8 @@ real subscripts and a centred dot, in the maths font of the document. The line i
 `Run 1:`) stays text, the formula (from the first name to the value) becomes maths, and what follows (the unit) stays text, tied to the value by a
 no-break space. It applies to `{=}` spans that print a calculation, the lines of a `::: calc` div and the lines of a ```` ```{=calc} ```` block; a
 value on its own (`` `c_s`{=} ``, `` `2 + 2`{=} ``) stays a plain number in the sentence, and a table's cells are not touched.
-The rules: a name splits at its first `_`: `V_el` is V with an upright *el* below, `c_s` is c with an italic *s* (one letter is an index, a longer
-word a label), and digits after the letters are a subscript too: `A260_s` is A with *260, s*; `C_EDTA` is C<sub>EDTA</sub>; a name that is a Greek word
+The rules: a name splits at its `_`: `V_el` is V with an upright *el* below, `c_s` is c with an italic *s* (one letter is an index, a longer
+word a label; several words after the base share one subscript, `k_DNA_x`), and digits after the letters are a subscript too: `A260_s` is A with *260, s*; `C_EDTA` is C<sub>EDTA</sub>; a name that is a Greek word
 (`rho`, `mu`, `Delta`, `pi`) is the letter; any other word (`ppm`) is upright. `*` is a centred dot, `^` a superscript (`x^(n+1)` loses its
 brackets), `|a - b|` bars, `sqrt` `cbrt` `abs` `floor` `ceil` `factorial` their signs, `sin` `ln` `log` `exp` the usual operator names, other functions
 (`round`, `mean`, `qt`) upright, `1.2e-5` is 1.2 × 10<sup>-5</sup>, `Inf` is ∞. Each `=` starts its own piece of maths with a space before it, so a
@@ -1039,6 +1039,24 @@ the maths font. A unit that is itself maths (`ng/$\mu$L`) is taken in too. A `{=
 would split the sentence. The price: a display formula does not wrap, so a very long line runs past the margin where inline mode would
 break it in front of an `=`; use `{subs}` sparingly there, or keep `typeset: true`. A line with anything but text and maths after its last
 `{ans}` (emphasis, a link) is typeset inline instead. `--calc-typeset display` and `PDFMD_CALC_TYPESET=display` do the same for one run.
+
+**Upright or italic, your choice: `typeset-upright` and `typeset-italic`** (3.32.16). The default is by length: a one-letter piece of a name is a
+variable (italic), a longer one is a word (upright). A *piece* is the letters of a name's base or one word after an underscore: `V_el` has the pieces
+`V` and `el`, `A260_s` has `A` and `s` (digits are never styled). To go against the default, list the pieces:
+
+```yaml
+pdfmd-options:
+  calc:
+    typeset: display
+    typeset-upright: [V, s]    # V_el: an upright V; c_s: an upright s
+    typeset-italic: [el, DNA]  # V_el, k_DNA: the word in italic
+```
+
+An upright piece is `\mathrm{...}`, which sets the letters in the roman face of the maths font, as one word and without the spaces TeX puts
+between variables (spaces inside the braces are ignored); an italic word of several letters is `\mathit{...}`, a real italic word (the bare letters
+`DNA` would be three variables, D N A). It applies wherever the piece stands, in every name and every line of the document. A list or a
+comma-separated string; `--calc-typeset-upright V,s` / `--calc-typeset-italic el,DNA` and `PDFMD_CALC_TYPESET_UPRIGHT` / `_ITALIC` do the same for a run. A piece in both
+lists, or one that is not letters (`V_el`, `A260`), is an error. Greek names are not styled: LaTeX's `\mathrm` does not make a Greek letter upright.
 
 **6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
 a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
@@ -1122,6 +1140,8 @@ pdfmd-options:
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
     typeset: false    # true: each calculation as inline maths (names with subscripts, a centred dot); display: a centred formula per line
+    typeset-upright: []   # pieces of names a typeset calculation sets upright, e.g. [V, s]
+    typeset-italic: []    # pieces it sets italic, e.g. [el, DNA]
     noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
     align: left       # or center: the lines of a ::: calc div centred
@@ -1129,7 +1149,7 @@ pdfmd-options:
     export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset [inline|display]` / `--no-calc-typeset`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset [inline|display]` / `--no-calc-typeset`, `--calc-typeset-upright V,s`, `--calc-typeset-italic el,DNA`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
