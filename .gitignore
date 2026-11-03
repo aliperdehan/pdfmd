@@ -11,3 +11,6 @@ node_modules/
 
 # outside reviewers raw logs, kept for the TeX failure classifier (not shipped)
 pdfmd-reviews/
+
+# Swift build output (gui/)
+.build/

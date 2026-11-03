@@ -41,6 +41,13 @@ Pre-edit state: commit `cfd403f` (the split of the report and batch modes into `
 - Checked on the two files that showed the bug (a quiz cheat sheet and a hooks sheet): the report builds in STIX Two Text and STIX Two Math with no `Missing character`; `-r --attach-source` carries both sources and `--restore` writes back both (the body byte for byte; the front matter without the quotes around two values, as `--attach-source` has always written it), and `pdfmd -r` on the restored folder gives the same text. An image path relative to a chapter in a subfolder is still not found, as before.
 - Tests: `tests/test_report_build.py` (the title pieces; chapters, a subtitle and a differing author, one title unchanged, `first`, `last`, the patch build, the ignored-keys note, bad settings, `--font` in both builds).
 
+## v3.32.17c — 2026-11-03
+
+Pre-edit state: commit `cfd403f`. Entry 3do (the author: a native, instant editor as the first GUI piece, "i'd like to see an alpha version of gui still under 3.32"). A new `gui/` folder; no shipped code changes, so `PDFMD_VERSION` stays 3.32.17 and nothing is released. Not pushed.
+
+- `gui/`: pdfmd Edit 0.1.0, a native macOS editor in Swift/AppKit built with `gui/build.sh` (Command Line Tools only). Document-based (autosave, versions, Open Recent, Find bar), Markdown colouring limited to the visible lines, a headless `--bench` and `--smoke`, every tunable number a UserDefaults setting (`pdfmdedit --settings`). The text engine is a setting (`textKit`, default 2): the benchmark showed TextKit 2 pasting 20 MB in about 230 ms against about 810 ms and jumping to the middle of 50 MB in about 9 ms against about 480 ms, with the same typing times.
+- `.gitignore`: `.build/` (Swift build output). The folder is in neither `pyproject.toml`'s packages nor `MANIFEST.in`, so the wheel and the sdist do not contain it.
+
 ## v3.32.17b — 2026-11-03
 
 Pre-edit state: commit `e8a3fd9`. Entry 3cw (the author: "write those as known limitations and a note in todo; we'll fix those later"). Docs only; `PDFMD_VERSION` stays 3.32.17. Not pushed.
