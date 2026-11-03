@@ -43,7 +43,13 @@ func makeEditor(frame: NSRect, highlight: Bool, textKit2: Bool = Settings.int("t
     tv.usesFindBar = true
     tv.isIncrementalSearchingEnabled = true
     tv.font = font
-    tv.textColor = .textColor
+    tv.textColor = Palette.text
+    tv.backgroundColor = Palette.background
+    tv.drawsBackground = true
+    tv.insertionPointColor = Palette.insertionPoint
+    if let selection = Palette.selection { tv.selectedTextAttributes = [.backgroundColor: selection] }
+    scroll.backgroundColor = Palette.background
+    scroll.drawsBackground = true
     tv.textContainerInset = NSSize(width: 10, height: 8)
     tv.isAutomaticQuoteSubstitutionEnabled = false
     tv.isAutomaticDashSubstitutionEnabled = false

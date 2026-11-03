@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.1.1"
+let appVersion = "0.1.2"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They are read from the app's UserDefaults:
@@ -23,7 +23,24 @@ enum Settings {
         Item(key: "fontSize", value: 13, help: "editor font size in points"),
         Item(key: "wrapLines", value: 1, help: "1 = wrap long lines, 0 = scroll sideways"),
         Item(key: "spellCheck", value: 0, help: "1 = check spelling while typing"),
+        Item(key: "themeCanvas", value: 1, help: "1 = the theme also sets the text, background, caret and selection colours; 0 = only the syntax colours"),
     ]
+
+    struct Text {
+        let key: String
+        let value: String
+        let help: String
+    }
+
+    static let texts: [Text] = [
+        Text(key: "theme", value: "Anura", help: "colour theme in a light appearance: the name of a .cottheme file (CotEditor's format), see --themes"),
+        Text(key: "themeDark", value: "Anura (Dark)", help: "colour theme in a dark appearance"),
+    ]
+
+    static func string(_ key: String) -> String {
+        if let s = UserDefaults.standard.string(forKey: key), !s.isEmpty { return s }
+        return texts.first { $0.key == key }!.value
+    }
 
     static func number(_ key: String) -> Double {
         if let n = UserDefaults.standard.object(forKey: key) as? NSNumber { return n.doubleValue }
@@ -34,10 +51,14 @@ enum Settings {
     static func flag(_ key: String) -> Bool { number(key) != 0 }
 
     static func listing() -> String {
-        items.map { item in
+        let words = texts.map { t -> String in
+            let now = string(t.key)
+            return "\(t.key.padding(toLength: 22, withPad: " ", startingAt: 0)) \(t.value)\(now == t.value ? "" : "  (now \(now))")  \(t.help)"
+        }
+        return (items.map { item in
             let now = number(item.key)
             let mark = now == item.value ? "" : "  (now \(now))"
             return "\(item.key.padding(toLength: 22, withPad: " ", startingAt: 0)) \(Int(item.value))\(mark)  \(item.help)"
-        }.joined(separator: "\n")
+        } + words).joined(separator: "\n")
     }
 }

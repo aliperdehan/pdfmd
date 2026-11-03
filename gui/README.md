@@ -39,14 +39,29 @@ Every number that changes behaviour is a setting (UserDefaults), none is a const
 They are app settings, not `pdfmd --setup` rows yet. `textKit` chooses the text engine (2 = system default,
 1 = older); `wrapLines`, `fontSize`, `spellCheck`, the colouring delays and margin are the others.
 
-## Colours
+## Colours and themes
 
-The colours are named roles with a soft built-in pair for the light and the dark appearance; `pdfmdedit --settings`
-lists them. Replace one in the same way as a setting (read at start-up):
+Themes are CotEditor's `.cottheme` files (plain JSON): the editor reads them as they are, so CotEditor's themes and any
+theme made for it work here. `Themes/` holds copies of CotEditor's thirteen built-in themes (Apache 2.0, see
+`Themes/NOTICE.md`); the editor also looks in `~/Library/Application Support/pdfmdedit/Themes`, in CotEditor's own
+folder and in CotEditor.app, so nothing needs CotEditor installed. `pdfmdedit --themes` lists them.
 
+    defaults write io.github.aliperdehan.pdfmdedit theme -string Dendrobates
+    defaults write io.github.aliperdehan.pdfmdedit themeDark -string "Dendrobates (Dark)"
+
+`theme` is used in a light appearance, `themeDark` in a dark one (default Anura and Anura (Dark)). A theme also sets the
+text, background, caret and selection colours (`themeCanvas` = 0 keeps the system's).
+
+A theme colours ten categories; the editor's colouring works in named ROLES, and each role takes the colour of one
+category, listed by `pdfmdedit --settings` (the choice follows CotEditor's own Markdown and YAML syntaxes: headings
+`types`, bold `commands`, list markers and quotes `keywords`, link text `values`, link targets `characters`, code
+`strings`). **Math has no CotEditor colour; here it takes `numbers`.** Change one role without touching the theme:
+
+    defaults write io.github.aliperdehan.pdfmdedit category.math -string text      # `text` = no colour for math
     defaults write io.github.aliperdehan.pdfmdedit color.heading -string "#3B5F99,#8AA9D6"
 
-`"#RRGGBB"` alone is used in both appearances; a wrong value is ignored. A whole-theme file is not built yet.
+`"#RRGGBB"` alone is used in both appearances; a wrong value is ignored. Read at start-up. With no theme file found
+the soft built-in colours are used. `--set key=value` on the command line applies to that run only.
 
 ## Benchmark and smoke test (no window is ever shown: the smoke tests assert it)
 

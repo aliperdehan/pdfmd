@@ -197,13 +197,32 @@ enum Smoke {
         return result
     }
 
-    /// Pixels with a strong hue in the editor's bitmap (the plain text is grey).
+    /// Pixels that are neither the background, nor the plain text, nor an anti-aliased blend of the two: the syntax colours.
+    /// (A saturation threshold cannot do it: a light theme has dark, nearly grey syntax colours on a pale background.)
+    /// The distance is measured from the straight line in RGB between the background and the text colour, in 0...255 units.
+    static let notTextDistance = 28.0
+
     static func colouredPixels(_ scroll: NSScrollView) -> Int {
         guard let rep = scroll.bitmapImageRepForCachingDisplay(in: scroll.bounds) else { return -1 }
         scroll.cacheDisplay(in: scroll.bounds, to: rep)
+        func rgb(_ c: NSColor) -> [Double] {
+            var out: [Double] = [0, 0, 0]
+            scroll.effectiveAppearance.performAsCurrentDrawingAppearance {
+                if let d = c.usingColorSpace(.deviceRGB) { out = [d.redComponent * 255, d.greenComponent * 255, d.blueComponent * 255] }
+            }
+            return out
+        }
+        let bg = rgb(Palette.background), fg = rgb(Palette.text)
+        let axis = zip(fg, bg).map { $0 - $1 }
+        let axisLen2 = axis.reduce(0) { $0 + $1 * $1 }
         var n = 0
         for y in 0..<rep.pixelsHigh { for x in 0..<rep.pixelsWide {
-            if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.saturationComponent > 0.2, c.brightnessComponent > 0.3 { n += 1 }
+            guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+            let p = [c.redComponent * 255, c.greenComponent * 255, c.blueComponent * 255]
+            let rel = zip(p, bg).map { $0 - $1 }
+            let t = axisLen2 > 0 ? max(0, min(1, zip(rel, axis).reduce(0) { $0 + $1.0 * $1.1 } / axisLen2)) : 0
+            let dist = (0..<3).reduce(0.0) { $0 + pow(rel[$1] - t * axis[$1], 2) }.squareRoot()
+            if dist > notTextDistance { n += 1 }
         } }
         return n
     }
@@ -216,12 +235,16 @@ enum Smoke {
 
     static func run(_ path: String) {
         NSApplication.shared.setActivationPolicy(.prohibited)
+        if let i = CommandLine.arguments.firstIndex(of: "--appearance"), i + 1 < CommandLine.arguments.count {
+            NSApplication.shared.appearance = NSAppearance(named: CommandLine.arguments[i + 1] == "dark" ? .darkAqua : .aqua)
+        }
         let started = Bench.now()
         let url = URL(fileURLWithPath: path)
         guard let doc = open(url), let controller = doc.controller else { print("FAIL open"); exit(1) }
         let parts = controller.parts!
         let engine = parts.textView.textLayoutManager != nil ? 2 : 1
         print(String(format: "open document + window + first colours: %.0f ms (after the app object exists; process start not included)", Bench.ms(since: started)))
+        print("appearance \(NSApplication.shared.effectiveAppearance.name.rawValue), theme \(Palette.lightTheme?.name ?? "none") / \(Palette.darkTheme?.name ?? "none")")
         print("window visible: \(controller.window?.isVisible ?? false)  (must be false: a smoke test never shows a window)")
         if controller.window?.isVisible == true { print("FAIL a window was shown"); exit(1) }
         print("text engine \(engine), window controllers \(doc.windowControllers.count), title \(controller.window?.title ?? "-")")

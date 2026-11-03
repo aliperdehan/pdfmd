@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.19b — 2026-11-03
+
+Pre-edit state: commit `2c51907`. Entry 3do (the author: "can we create compatibility with coteditor themes", "it is just plain json, let's create compatibility with them"; math stays coloured). `gui/` only; `PDFMD_VERSION` stays 3.32.19, nothing is released. Not pushed.
+
+- pdfmd Edit 0.1.2: CotEditor `.cottheme` files are read as they are (`Theme.swift`): ten syntax categories, text, background, caret, selection, `#RRGGBBAA` colours, `usesSystemSetting`. The thirteen built-in themes are bundled in `gui/Themes/` with the Apache 2.0 licence and a notice, and the folders `~/Library/Application Support/pdfmdedit/Themes`, CotEditor's own and CotEditor.app are searched too. New string settings `theme` (light, default Anura) and `themeDark` (default Anura (Dark)), a flag `themeCanvas`, `pdfmdedit --themes`.
+- Each role takes the colour of one category (a table in `Palette.swift`, replaceable per role with `category.<role>`; `text` switches a role's colour off); `color.<role>` still wins; the soft built-in pairs remain as the last fallback. New roles: `url` (link target) and `fence` (code blocks) split from `link` and `code`. Math takes `numbers`. The Markdown rules name roles and the colour is looked up when painting, so a theme is never baked into them.
+- Fixed: `--set key=value` wrote into the app's real settings for good, so an earlier `--set textKit=1` left the app on TextKit 1; it now lasts for one run (the argument domain), and the stray value was removed.
+- The smoke test counts pixels away from the line between the theme's background and text colour (a saturation threshold cannot see a light theme's dark colours) and takes `--appearance light|dark`.
+
 ## v3.32.19 — 2026-11-03
 
 Pre-edit state: commit `b1e2b98`. **A code fence is read as CommonMark reads it** (the author: "can you fix this bug?", about the README line that hid every later heading from the contents test, v3.32.18b). The heading scanners (`scan_headings`, `document_headings`, `markdown_headings`) and the block scanner for `{#id}` targets took any line that began with three backticks or tildes as a fence, and any line that began with three of the same character as its end. So a paragraph line that began with inline code of four backticks opened a fence that never closed, and every heading after it (section builds, `--doc`, the labels of a part build, a report's headings) was lost; a four-backtick fence holding a three-backtick one closed early; and a closing line with text (```` ```python ````) closed a fence. One rule now, `fence_after()`: a backtick fence does not open on a line with another backtick after the run, and a fence closes only on a run of the same character, at least as long, with nothing after it. Tests: `tests/test_sections.py` `FenceTests` (five cases through the three scanners; they fail on 3.32.18). Other fence readers (the table, image and lint scanners, the raw-block regexes) are unchanged.

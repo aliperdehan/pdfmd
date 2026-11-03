@@ -3,12 +3,18 @@ import Cocoa
 let args = Array(CommandLine.arguments.dropFirst())
 
 if args.contains("--version") { print("pdfmdedit \(appVersion)"); exit(0) }
+if args.contains("--themes") { print(Theme.available().joined(separator: "\n")); exit(0) }
 if args.contains("--settings") { print(Settings.listing()); print(); print(Palette.listing()); exit(0) }
 
 // `--set key=value` overrides a setting for this run (benchmark and smoke test).
 for (i, a) in args.enumerated() where a == "--set" && i + 1 < args.count {
     let kv = args[i + 1].split(separator: "=", maxSplits: 1).map(String.init)
-    if kv.count == 2, let v = Double(kv[1]) { UserDefaults.standard.set(v, forKey: kv[0]) }
+    // the argument domain: lasts for this run only (UserDefaults.set wrote into the app's real settings for good)
+    if kv.count == 2 {
+        var domain = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        domain[kv[0]] = Double(kv[1]) ?? kv[1]
+        UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
+    }
 }
 
 // `--gen MB PATH` writes the benchmark's generated document, to open it by hand.

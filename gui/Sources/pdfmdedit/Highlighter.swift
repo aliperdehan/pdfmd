@@ -9,25 +9,27 @@ import Cocoa
 /// Known limits (alpha): a fence is closed by any fence line (parity), not by a matching one; inline rules are
 /// line-local; the colour pass runs on the main thread, bounded by the margin, not on a background queue.
 final class Highlighter: NSObject, NSTextStorageDelegate {
-    private static func rules(_ list: [(String, NSColor)]) -> [(NSRegularExpression, NSColor)] {
+    /// Each rule names a ROLE; the colour is looked up when the pass paints, so the theme is never baked into the rules.
+    private static func rules(_ list: [(String, String)]) -> [(NSRegularExpression, String)] {
         list.map { (try! NSRegularExpression(pattern: $0.0, options: [.anchorsMatchLines]), $0.1) }
     }
 
     /// Later rules win over earlier ones where they overlap.
     private static let markdownRules = rules([
-        (#"^>+"#, Palette.color("quote")),
-        (#"^[ \t]*(?:[-*+]|\d+[.)])[ \t]"#, Palette.color("list")),
-        (#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, Palette.color("emphasis")),
-        (#"\[[^\]\n]*\]\([^)\n]*\)"#, Palette.color("link")),
-        (#"\$[^$\n]+\$"#, Palette.color("math")),
-        (#"`[^`\n]+`"#, Palette.color("code")),
-        (#"^#{1,6}[ \t].*$"#, Palette.color("heading")),
-        (#"<!--.*?-->"#, Palette.color("comment")),
+        (#"^>+"#, "quote"),
+        (#"^[ \t]*(?:[-*+]|\d+[.)])[ \t]"#, "list"),
+        (#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, "emphasis"),
+        (#"\[[^\]\n]*\](?=[(\[])"#, "link"),
+        (#"(?<=\])\([^)\n]*\)"#, "url"),
+        (#"\$[^$\n]+\$"#, "math"),
+        (#"`[^`\n]+`"#, "code"),
+        (#"^#{1,6}[ \t].*$"#, "heading"),
+        (#"<!--.*?-->"#, "comment"),
     ])
 
     private static let yamlRules = rules([
-        (#"^[ \t]*-?[ \t]*[A-Za-z0-9_.-]+(?=:)"#, Palette.color("key")),
-        (#"#[^\n]*"#, Palette.color("comment")),
+        (#"^[ \t]*-?[ \t]*[A-Za-z0-9_.-]+(?=:)"#, "key"),
+        (#"#[^\n]*"#, "comment"),
     ])
 
     private weak var textView: NSTextView?
@@ -177,7 +179,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
             let f = fences[i]
             emit(NSRange(location: cursor, length: f - cursor), code: inCode, frontEnd: frontEnd, ns)
             let lineEnd = min(hi, NSMaxRange(ns.lineRange(for: NSRange(location: f, length: 0))))
-            color(Palette.color("code"), NSRange(location: f, length: lineEnd - f))
+            color(Palette.color("fence"), NSRange(location: f, length: lineEnd - f))
             inCode.toggle()
             cursor = lineEnd
             i += 1
@@ -233,7 +235,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
     private func emit(_ r: NSRange, code: Bool, frontEnd: Int, _ ns: NSString) {
         guard r.length > 0 else { return }
         if code {
-            color(Palette.color("code"), r)
+            color(Palette.color("fence"), r)
             return
         }
         let front = NSIntersectionRange(r, NSRange(location: 0, length: frontEnd))
@@ -242,13 +244,14 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         if NSMaxRange(r) > restStart { apply(Highlighter.markdownRules, to: NSRange(location: restStart, length: NSMaxRange(r) - restStart), ns) }
     }
 
-    private func apply(_ rules: [(NSRegularExpression, NSColor)], to seg: NSRange, _ ns: NSString) {
+    private func apply(_ rules: [(NSRegularExpression, String)], to seg: NSRange, _ ns: NSString) {
         let sub = ns.substring(with: seg)   // a few tens of KB, whatever the document's size
         let whole = NSRange(location: 0, length: (sub as NSString).length)
-        for (re, color) in rules {
+        for (re, role) in rules {
+            let colour = Palette.color(role)
             re.enumerateMatches(in: sub, options: [], range: whole) { match, _, _ in
                 guard let m = match?.range else { return }
-                self.color(color, NSRange(location: seg.location + m.location, length: m.length))
+                self.color(colour, NSRange(location: seg.location + m.location, length: m.length))
             }
         }
     }

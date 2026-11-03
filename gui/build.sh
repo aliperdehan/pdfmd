@@ -11,6 +11,7 @@ APP=build/pdfmdedit.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/pdfmdedit "$APP/Contents/MacOS/pdfmdedit"
+cp -R Themes "$APP/Contents/Resources/Themes"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
