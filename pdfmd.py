@@ -28500,7 +28500,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "default; also pdfmd-options.show-comments and pdfmd --setup")
     parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
                         help="do not show comments in this run, whatever pdfmd-options.show-comments says")
-    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", choices=FLAVOUR_WORDS,
+    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", type=str.casefold, choices=FLAVOUR_WORDS,
                         help="the flavour of Markdown the files are written in: obsidian (a note of an Obsidian vault: %%%%comments%%%% "
                              "are hidden, more of its syntax in each release), pdfmd, pandoc, or auto (the default: obsidian inside a "
                              "vault, a folder with .obsidian/ above the document, pdfmd elsewhere); also pdfmd-options.flavour and "

@@ -165,6 +165,8 @@ class CommandLine(unittest.TestCase):
         self.assertNotIn("gone", html)
         html, _ = self.build("vault", "# N\n\nA %%kept%% B\n", "--flavor", "pandoc")
         self.assertIn("%%kept%%", html)
+        html, _ = self.build("plain", "# N\n\nA %%gone%% B\n", "--flavour", "Obsidian")      # the word's case does not matter
+        self.assertNotIn("gone", html)
 
     def test_a_note_with_properties_is_cleaned_too(self):
         html, _ = self.build("vault", "---\ntags: [a]\n---\n\nOne %%hidden%% two\n")
