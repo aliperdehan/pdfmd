@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.18b — 2026-11-03
+
+Pre-edit state: commit `84de43c`. README only: a soft-wrapped line of the calc section began with a four-backtick inline code, which `scan_headings` reads as a code fence that never closes, so `document_headings` lost every heading from there to the next real fence and `tests/test_docs_consistency.py` (the README contents list) failed since v3.32.17. The line is reflowed so it no longer starts with backticks. (The scanner itself, which CommonMark would not treat that line as a fence, is unchanged.)
+
 ## v3.32.18 — 2026-11-03
 
 Pre-edit state: commit `cfd403f` (the split of the report and batch modes into `pdfmd_report` and `pdfmd_batch` is `e308bde`, v3.32.13). Entry 3ek (the author, on the first `-r`: "it literally ignores everything, like no default is applied to it ... it just concats, ignoring yaml, and just runs pandoc several times"; on the titles: "title: are demoted into \chapter"; on the structure: "make it adjustable through setup ... route is default, patch is for people who want that behaviour"). Kept in 3.32. Not pushed.

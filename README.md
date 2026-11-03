@@ -1058,8 +1058,8 @@ between variables (spaces inside the braces are ignored); an italic word of seve
 comma-separated string; `--calc-typeset-upright V,s` / `--calc-typeset-italic el,DNA` and `PDFMD_CALC_TYPESET_UPRIGHT` / `_ITALIC` do the same for a run. A piece in both
 lists, or one that is not letters (`V_el`, `A260`), is an error. Greek names are not styled: LaTeX's `\mathrm` does not make a Greek letter upright.
 
-For one line only, write the same thing in its text (3.32.17): `{upright:s,V}` or `{italic:el,DNA}` anywhere in a `::: calc` line, a
-```` ```{=calc} ```` line or a `{=}` span: `Total: m = c_s * V_el = {ans} ng {upright:s}` sets the *s* of `c_s` upright in that line and nowhere else (every
+For one line only, write the same thing in its text (3.32.17): `{upright:s,V}` or `{italic:el,DNA}` anywhere in a `::: calc` line, a ```` ```{=calc} ````
+line or a `{=}` span: `Total: m = c_s * V_el = {ans} ng {upright:s}` sets the *s* of `c_s` upright in that line and nowhere else (every
 `s` of the line, not one of them: a piece looks one way in a line). The marker is taken out of the output with its space. It beats the document's lists; the same
 piece in both markers of a line is an error. There is no mark inside a name (`V_[x]s`): `V_s` has to stay one variable for the calculator, and
 Markdown rewrites most punctuation in a `::: calc` line. No spaces inside the braces (Markdown splits a line at a space and the marker would break).
