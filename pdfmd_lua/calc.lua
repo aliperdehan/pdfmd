@@ -625,19 +625,19 @@ local function reason_of(err) return type(err) == "table" and err.calc or tostri
 
 -- the pieces of a text between = and <- signs
 local function split_equals(text)
-  local parts, start, from = {}, 1, 1
+  local parts, starts, start, from = {}, {}, 1, 1
   while true do
     local at = text:find("[=<]", from)
-    if not at then parts[#parts + 1] = text:sub(start); break end
+    if not at then parts[#parts + 1] = text:sub(start); starts[#starts + 1] = start; break end
     if text:sub(at, at) == "=" then
-      parts[#parts + 1] = text:sub(start, at - 1); start = at + 1; from = start
+      parts[#parts + 1] = text:sub(start, at - 1); starts[#starts + 1] = start; start = at + 1; from = start
     elseif text:sub(at, at + 1) == "<-" then
-      parts[#parts + 1] = text:sub(start, at - 1); start = at + 2; from = start
+      parts[#parts + 1] = text:sub(start, at - 1); starts[#starts + 1] = start; start = at + 2; from = start
     else
       from = at + 1
     end
   end
-  return parts
+  return parts, starts
 end
 
 local function trim(text) return (text:gsub("^%s+", ""):gsub("%s+$", "")) end
@@ -692,9 +692,10 @@ end
 -- an {ans}, the edits that remove {nosubs}, and whether {nosubs} was there.
 local function read_statements(text, default)
   local statements, edits, nosubs = {}, {}, false
-  local function add(piece, kind, fmt)           -- kind: "plain" (no {ans}), "first" or "later" {ans} of the text
-    local parts = split_equals(piece)
+  local function add(piece, kind, fmt, base)     -- kind: "plain" (no {ans}), "first" or "later" {ans} of the text
+    local parts, starts = split_equals(piece)    -- base: where the piece starts in the text (nil: not known, see statement.from)
     local statement = {fmt = fmt or default, names = {}, placeholder = kind ~= "plain"}
+    local named_at                                -- where the first name stands in the piece
     for index = 1, #parts - 1 do
       local part = trim(parts[index])
       if kind == "plain" then
@@ -708,11 +709,20 @@ local function read_statements(text, default)
           local word = part:match("(%S+)$")                                          -- `, so n2` names n2
           name = word and is_identifier(word) and word or nil
         end
-        if name then statement.names[#statement.names + 1] = name end
+        if name then
+          statement.names[#statement.names + 1] = name
+          named_at = named_at or (starts[index] + #parts[index] - #parts[index]:match("%s*$") - #name)   -- a name ends its part
+        end
       end
     end
     statement.expr = kind == "later" and tail_expression(parts[#parts]) or trim(parts[#parts])
     if statement.expr == "" then fail("there is nothing to calculate before the =") end
+    if base then          -- statement.from: the byte of the text where the typeset formula of this statement starts (3.32.14)
+      local last = parts[#parts]
+      local expression_at = kind == "later" and (starts[#parts] + #last - #last:match("%s*$") - #statement.expr)
+        or (starts[#parts] + #last:match("^%s*"))
+      statement.from = base + (named_at or expression_at) - 1
+    end
     for _, name in ipairs(statement.names) do
       if (FUNCTIONS[name] and not SOFT[name]) or CONSTANTS[name] then fail("'" .. name .. "' is built in; choose another name") end
     end
@@ -722,13 +732,17 @@ local function read_statements(text, default)
   local markers = find_markers(text)
   local found, previous, pending = false, nil, nil
   local position, segment = 1, ""
+  local segment_at, shifted = 1, false                 -- where the segment starts in the text; a {nosubs} inside moves what follows
   for _, marker in ipairs(markers) do
+    if segment == "" then segment_at, shifted = position, false end
     segment = segment .. text:sub(position, marker.s - 1)
     position = marker.e + 1
     if marker.kind == "nosubs" then
+      shifted = true
       nosubs = true
       edits[#edits + 1] = {s = marker.s, e = marker.e, text = "", swallow = true}
     elseif marker.kind == "subs" then
+      segment_at = segment_at + #segment:match("^%s*")
       segment = trim(segment)
       if segment:sub(-1) ~= "=" then segment = segment .. " =" end
       local _, stop = text:find("^%s*=", position)                  -- the = after {subs} is the one before {ans}: already there
@@ -739,6 +753,7 @@ local function read_statements(text, default)
       local fmt = nil
       if marker.spec ~= "" then fmt = parse_fmt(marker.spec:sub(2)) end
       local piece = trim(segment)
+      local piece_at = not shifted and segment_at + #segment:match("^%s*") or nil
       segment = ""
       local statement
       if previous and piece:sub(-1) ~= "=" then                      -- the value just printed, in another format
@@ -748,7 +763,8 @@ local function read_statements(text, default)
         if pending then fail("{subs} has to stand in front of an {ans} that follows its own expression") end
       else
         if piece:sub(-1) ~= "=" then fail("{ans} has to come right after an =, as in `2 + 2 = {ans}`") end
-        statement = add(piece:sub(1, -2), previous and "later" or "first", fmt)
+        statement = add(piece:sub(1, -2), previous and "later" or "first", fmt,
+          piece_at)
       end
       statement.start, statement.stop = marker.s, marker.e
       if pending then statement.subs_start, statement.subs_stop = pending.s, pending.e; pending = nil end
@@ -905,6 +921,298 @@ local function warn(shown, reason, kept)
 end
 
 -- ---------------------------------------------------------------------------------------------------------------------
+-- Typeset output (3.32.14; `calc: {typeset: true}`, off by default)
+--
+-- A line that prints a calculation (`Total DNA: m = c_s * V_el = {ans} ng`) is split in three: the label in front of the first
+-- name stays text, the formula (the names through the value) becomes maths, and what follows (the unit) stays text, joined to
+-- the value by a no-break space. The formula is one Math node per `=`, with a space between them, so that a long line can break
+-- in front of an = (TeX breaks inline maths only after a relation): `m`, `= c_s \cdot V_{\mathrm{el}}`, `= 28.07 \cdot 75`, `= 2105.25`.
+-- Math nodes (not raw LaTeX) so that every writer with maths typesets them: LaTeX, Typst, HTML, Word, OpenDocument. The other
+-- writers (Markdown, plain text, ...) keep the text. Names: a subscript after the first _ (one letter italic, a word upright;
+-- digits after the letters are a subscript too: A260_s is A with 260, s below), Greek names are letters, other words upright.
+-- `*` is a centred dot, `^` a superscript, sqrt/abs/floor/ln/sin the usual signs, e-notation `1.2e-5` is 1.2 x 10^-5.
+
+local TYPESET = false
+local NBSP = "\u{00A0}"
+
+local MATH_WRITERS = {latex = true, beamer = true, typst = true, html = true, html4 = true, html5 = true, epub = true,
+  epub2 = true, epub3 = true, revealjs = true, slidy = true, slideous = true, s5 = true, dzslides = true,
+  chunkedhtml = true, docx = true, odt = true, opendocument = true}
+
+local GREEK = {}
+for word in ([[alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa lambda mu nu xi pi rho sigma
+  tau upsilon phi varphi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega]]):gmatch("%a+") do
+  GREEK[word] = "\\" .. word
+end
+
+-- a subscript word: an index (a digit run or one letter) as it is, a word upright, a Greek name as its letter
+local function tex_label(word)
+  if GREEK[word] then return GREEK[word] end
+  if word:match("^%d+$") or #word == 1 then return word end
+  return "\\mathrm{" .. word .. "}"
+end
+
+local function tex_name(name)
+  if name == "Inf" then return "\\infty" end
+  local pieces = {}
+  for piece in name:gmatch("[^_]+") do pieces[#pieces + 1] = piece end
+  if #pieces == 0 then return "\\mathrm{" .. name:gsub("_", "\\_") .. "}" end
+  local letters, digits = pieces[1]:match("^(%a+)(%d*)$")
+  local head
+  if not letters then head = "\\mathrm{" .. pieces[1] .. "}"
+  elseif GREEK[letters] then head = GREEK[letters]
+  elseif #letters == 1 then head = letters
+  else head = "\\mathrm{" .. letters .. "}" end
+  local subs = {}
+  if digits and digits ~= "" then subs[1] = digits end
+  for index = 2, #pieces do subs[#subs + 1] = tex_label(pieces[index]) end
+  if #subs > 0 then head = head .. "_{" .. table.concat(subs, ",") .. "}" end
+  return head
+end
+
+local function tex_number(text)
+  local mantissa, exponent = text:match("^(.-)[eE]([+-]?%d+)$")
+  if not mantissa then return text end
+  local power = tostring(math.tointeger(tonumber(exponent)) or exponent)
+  if mantissa == "1" then return "10^{" .. power .. "}" end
+  return "{" .. mantissa .. "\\times 10^{" .. power .. "}}"
+end
+
+-- tokens of a formula: {k = "num"|"name"|"op"|"pct", v = text}
+local function lex(text)
+  local tokens, i, n = {}, 1, #text
+  local function add(kind, value) tokens[#tokens + 1] = {k = kind, v = value} end
+  while i <= n do
+    local c = text:sub(i, i)
+    local unicode
+    if c:byte() >= 0x80 then
+      for symbol, operator in pairs(UNICODE_OPERATORS) do
+        if text:sub(i, i + #symbol - 1) == symbol then unicode = {symbol, operator}; break end
+      end
+    end
+    if unicode then
+      add("op", unicode[2]); i = i + #unicode[1]
+    elseif c:match("%s") then
+      i = i + 1
+    elseif c:match("%d") or (c == "." and text:sub(i + 1, i + 1):match("%d")) then
+      local s, e = text:find("^%d*%.?%d*", i)
+      local _, exp_e = text:find("^[eE][+-]?%d+", e + 1)
+      if exp_e then e = exp_e end
+      add("num", text:sub(s, e)); i = e + 1
+    elseif c:match("[%a_]") then
+      local s, e = text:find("^[%a_][%w_]*", i)
+      add("name", text:sub(s, e)); i = e + 1
+    else
+      local three, two = text:sub(i, i + 2), text:sub(i, i + 1)
+      if three == "%/%" then add("op", "//"); i = i + 3
+      elseif two == "%%" then add("op", "%"); i = i + 2
+      elseif two == "//" then add("op", "//"); i = i + 2
+      elseif two == "**" then add("op", "^"); i = i + 2
+      elseif c == "%" then
+        local nextchar = text:match("^%s*(.)", i + 1)
+        add(nextchar and nextchar:match("[%w_%.%(|]") and "op" or "pct", "%"); i = i + 1
+      elseif c:match("[%+%-%*/%^%(%),|]") then add("op", c); i = i + 1
+      else fail("'" .. c .. "' is not arithmetic") end
+    end
+  end
+  return tokens
+end
+
+local TEX_FUNCTIONS = {sin = "\\sin", cos = "\\cos", tan = "\\tan", cot = "\\cot", sec = "\\sec", csc = "\\csc",
+  asin = "\\arcsin", acos = "\\arccos", atan = "\\arctan", sinh = "\\sinh", cosh = "\\cosh", tanh = "\\tanh",
+  exp = "\\exp", ln = "\\ln", log = "\\log", log10 = "\\log_{10}", log2 = "\\log_{2}"}
+local TEX_OPERATORS = {["+"] = "+", ["-"] = "-", ["*"] = "\\cdot ", ["/"] = "/", ["%"] = "\\mathbin{\\%}",
+  ["//"] = "\\mathbin{/\\!/}"}
+
+local function tex_call(name, args)
+  local first = args[1] or ""
+  if name == "sqrt" and #args == 1 then return "\\sqrt{" .. first .. "}" end
+  if name == "cbrt" and #args == 1 then return "\\sqrt[3]{" .. first .. "}" end
+  if name == "abs" and #args == 1 then return "\\lvert " .. first .. "\\rvert " end
+  if name == "floor" and #args == 1 then return "\\lfloor " .. first .. "\\rfloor " end
+  if name == "ceil" and #args == 1 then return "\\lceil " .. first .. "\\rceil " end
+  if name == "factorial" and #args == 1 then
+    return (first:match("^[%w%.]+$") and first or ("(" .. first .. ")")) .. "!"
+  end
+  return (TEX_FUNCTIONS[name] or ("\\operatorname{" .. name:gsub("_", "\\_") .. "}")) .. "(" .. table.concat(args, ",\\,") .. ")"
+end
+
+local tex_expr
+
+local function tex_group(tokens, i)             -- tokens[i] is "(": the TeX inside the brackets and the index after ")"
+  local inner, j = tex_expr(tokens, i + 1, ")")
+  if not (tokens[j] and tokens[j].v == ")") then fail("a bracket is not closed") end
+  return inner, j + 1
+end
+
+local function tex_operand(tokens, i)           -- a number, a name, a call, a group or |bars|, without a power
+  local t = tokens[i]
+  if not t then fail("the expression ends too soon") end
+  if t.k == "num" then return tex_number(t.v), i + 1 end
+  if t.k == "name" then
+    local following = tokens[i + 1]
+    if following and following.k == "op" and following.v == "(" then
+      local args, j = {}, i + 2
+      while true do
+        local text
+        text, j = tex_expr(tokens, j, ")")
+        args[#args + 1] = text
+        if not tokens[j] then fail("a bracket is not closed") end
+        if tokens[j].v == ")" then return tex_call(t.v, args), j + 1 end
+        j = j + 1                                -- the comma
+      end
+    end
+    return tex_name(t.v), i + 1
+  end
+  if t.k == "op" and t.v == "(" then
+    local inner, j = tex_group(tokens, i)
+    return "(" .. inner .. ")", j
+  end
+  if t.k == "op" and t.v == "|" then
+    local inner, j = tex_expr(tokens, i + 1, "|")
+    if not (tokens[j] and tokens[j].v == "|") then fail("a | is not closed") end
+    return "\\lvert " .. inner .. "\\rvert ", j + 1
+  end
+  fail("'" .. tostring(t.v) .. "' is not where a number or a name belongs")
+end
+
+local function tex_exponent(tokens, i)           -- after ^: the TeX of the exponent (brackets dropped) and the index after it
+  local sign = ""
+  if tokens[i] and tokens[i].k == "op" and (tokens[i].v == "-" or tokens[i].v == "+") then sign = tokens[i].v; i = i + 1 end
+  local text, j
+  if tokens[i] and tokens[i].k == "op" and tokens[i].v == "(" then text, j = tex_group(tokens, i) else text, j = tex_operand(tokens, i) end
+  if tokens[j] and tokens[j].k == "op" and tokens[j].v == "^" then
+    local higher
+    higher, j = tex_exponent(tokens, j + 1)
+    text = text .. "^{" .. higher .. "}"
+  end
+  return sign .. text, j
+end
+
+local function tex_term(tokens, i)
+  local t = tokens[i]
+  if t.k == "pct" then return "\\%", i + 1 end
+  if t.k == "op" and TEX_OPERATORS[t.v] then return TEX_OPERATORS[t.v], i + 1 end
+  local operand, j = tex_operand(tokens, i)
+  if tokens[j] and tokens[j].k == "op" and tokens[j].v == "^" then
+    local exponent
+    exponent, j = tex_exponent(tokens, j + 1)
+    return "{" .. operand .. "}^{" .. exponent .. "}", j
+  end
+  return operand, j
+end
+
+tex_expr = function(tokens, i, closer)
+  local out = {}
+  while tokens[i] do
+    local t = tokens[i]
+    if t.k == "op" and (t.v == ")" or t.v == "," or (t.v == "|" and closer == "|")) then break end
+    local piece
+    piece, i = tex_term(tokens, i)
+    out[#out + 1] = piece
+  end
+  if #out == 0 then fail("there is nothing to typeset") end
+  return table.concat(out), i
+end
+
+local function tex_of(text)
+  local tokens = lex(text)
+  local tex, j = tex_expr(tokens, 1, nil)
+  if tokens[j] then fail("a stray '" .. tostring(tokens[j].v) .. "'") end
+  return tex
+end
+
+-- the formula `m = c_s * V_el = 28.07 * 75 = 2105.25` as Math nodes, one per =
+local function typeset_formula(formula)
+  local parts, relation, start, from = {}, nil, 1, 1
+  while true do
+    local at = formula:find("[=<]", from)
+    if not at then parts[#parts + 1] = {relation, formula:sub(start)}; break end
+    if formula:sub(at, at) == "=" then
+      parts[#parts + 1] = {relation, formula:sub(start, at - 1)}; relation = "="; start = at + 1; from = start
+    elseif formula:sub(at, at + 1) == "<-" then
+      parts[#parts + 1] = {relation, formula:sub(start, at - 1)}; relation = "\\leftarrow"; start = at + 2; from = start
+    else
+      from = at + 1
+    end
+  end
+  local nodes = {}
+  for _, part in ipairs(parts) do
+    local tex = tex_of(part[2])
+    nodes[#nodes + 1] = pandoc.Math("InlineMath", part[1] and (part[1] .. " " .. tex) or tex)
+  end
+  return nodes
+end
+
+-- the text of text:sub(a, b) with the edits inside it put in
+local function splice_range(text, edits, a, b)
+  local inside = {}
+  for _, edit in ipairs(edits) do
+    if edit.s >= a and edit.e <= b then
+      inside[#inside + 1] = {s = edit.s - a + 1, e = edit.e - a + 1, text = edit.text, swallow = edit.swallow}
+    end
+  end
+  return splice(text:sub(a, b), inside)
+end
+
+-- prose as inlines; `glue`: the space before the first word becomes a no-break space (a value and its unit stay together)
+local function add_text(out, s, glue)
+  local i = 1
+  while i <= #s do
+    local a, b = s:find("^%s+", i)
+    if a then
+      if glue and i == 1 and b < #s then
+        local _, e = s:find("^%S+", b + 1)
+        out:insert(pandoc.Str(NBSP .. s:sub(b + 1, e))); i = e + 1
+      else
+        out:insert(pandoc.Space()); i = b + 1
+      end
+    else
+      local _, e = s:find("^%S+", i)
+      out:insert(pandoc.Str(s:sub(i, e))); i = e + 1
+    end
+  end
+end
+
+-- a record's text as inlines: its prose and its typeset formulas. Returns the inlines and whether they end with a formula
+-- (a space that follows then has to be a no-break space); nil when there is nothing to typeset (no statement of the text
+-- calculates something) or the formulas' places are not known (a {nosubs} in front). Raises when a formula cannot be typeset.
+local function typeset_record(record, default)
+  local formulas = 0
+  for _, statement in ipairs(record.statements) do
+    if statement.from then formulas = formulas + 1 elseif not statement.repeat_of then return nil end
+  end
+  if formulas == 0 then return nil end
+  local text, edits = record.text, edits_of(record, default)
+  local out, position = pandoc.Inlines({}), 1
+  for _, statement in ipairs(record.statements) do
+    if statement.from then
+      add_text(out, splice_range(text, edits, position, statement.from - 1))
+      local nodes = typeset_formula(splice_range(text, edits, statement.from, statement.stop))
+      for index, node in ipairs(nodes) do
+        if index > 1 then out:insert(pandoc.Space()) end
+        out:insert(node)
+      end
+      position = statement.stop + 1
+    end
+  end
+  local tail = splice_range(text, edits, position, #text)
+  add_text(out, tail, true)
+  while #out > 0 and out[1].t == "Space" do out:remove(1) end
+  while #out > 0 and out[#out].t == "Space" do out:remove(#out) end
+  return out, tail == ""
+end
+
+-- typeset_record, or nil with a WARN (the text is printed as before) when a formula cannot be typeset
+local function typeset_or_warn(record, shown)
+  if not TYPESET or not record.found then return nil end
+  local ok, pieces, glue = pcall(typeset_record, record, DEFAULT_FMT)
+  if ok then return pieces, glue end
+  warn(shown, "it cannot be typeset: " .. reason_of(pieces), "it is printed as text")
+  return nil
+end
+
+-- ---------------------------------------------------------------------------------------------------------------------
 -- Finding the places in the document
 
 local function raw_format(item)
@@ -943,7 +1251,16 @@ local function process_inlines(inlines)
         local record, problem = fetch(text)
         local ok, result
         if record then ok, result = pcall(render, record, DEFAULT_FMT) else ok, result = false, problem end
-        if ok then
+        local pieces, glue
+        if ok and record.found then pieces, glue = typeset_or_warn(record, "`" .. text .. "`{=}") end
+        if ok and pieces then
+          for _, piece in ipairs(pieces) do out:insert(piece) end
+          if rest ~= "" then
+            out:insert(pandoc.Str(rest))
+          elseif glue and inlines[i + used] and inlines[i + used].t == "Space" then
+            out:insert(pandoc.Str(NBSP)); used = used + 1                    -- a value and its unit stay on one line
+          end
+        elseif ok then
           if result ~= "" then out:insert(pandoc.Str(result .. rest)) elseif rest ~= "" then out:insert(pandoc.Str(rest)) end
         else
           warn("`" .. text .. "`{=" .. (fmt and (fmt.n .. fmt.kind) or "") .. "}", reason_of(result), "the code is kept")
@@ -1002,18 +1319,34 @@ local function process_line(items, a, b)
         warn("line `" .. trim(text) .. "`", reason_of(edits), "the line is left as written")
       else
         local per_item = {}
-        for _, edit in ipairs(edits) do
-          local home
-          for index, offset in pairs(offsets) do
-            if items[index].t == "Str" and offset[1] <= edit.s and edit.e <= offset[2] then home = index end
+        local pieces, glue
+        if TYPESET and record.found then              -- typeset: the whole text up to the last marker is replaced
+          local flat = true
+          for index = a, last do if items[index].t == "Code" then flat = false end end
+          if flat then pieces, glue = typeset_or_warn(record, "line `" .. trim(text) .. "`") end
+        end
+        if pieces then
+          per_item = nil
+          line = pandoc.Inlines({})
+          for _, piece in ipairs(pieces) do line:insert(piece) end
+          local index = last + 1
+          if glue and items[index] and items[index].t == "Space" then line:insert(pandoc.Str(NBSP)); index = index + 1 end
+          for position = index, b do line:insert(items[position]) end
+          changed = true
+        else
+          for _, edit in ipairs(edits) do
+            local home
+            for index, offset in pairs(offsets) do
+              if items[index].t == "Str" and offset[1] <= edit.s and edit.e <= offset[2] then home = index end
+            end
+            if not home then
+              warn("line `" .. trim(text) .. "`", "a {...} marker is split by formatting", "the line is left as written")
+              per_item = nil
+              break
+            end
+            per_item[home] = per_item[home] or {}
+            table.insert(per_item[home], {s = edit.s - offsets[home][1] + 1, e = edit.e - offsets[home][1] + 1, text = edit.text})
           end
-          if not home then
-            warn("line `" .. trim(text) .. "`", "a {...} marker is split by formatting", "the line is left as written")
-            per_item = nil
-            break
-          end
-          per_item[home] = per_item[home] or {}
-          table.insert(per_item[home], {s = edit.s - offsets[home][1] + 1, e = edit.e - offsets[home][1] + 1, text = edit.text})
         end
         if per_item then
           line = pandoc.Inlines({})
@@ -1086,7 +1419,10 @@ local function statement_block(lines, hidden)
       local ok, result
       if record then ok, result = pcall(render, record, DEFAULT_FMT) else ok, result = false, problem end
       if ok then
-        if result ~= "" and not hidden then out:insert(pandoc.Para({pandoc.Str(result)})) end
+        if result ~= "" and not hidden then
+          local pieces = record.found and typeset_or_warn(record, "`" .. line .. "`") or nil
+          out:insert(pandoc.Para(pieces or {pandoc.Str(result)}))
+        end
       else
         warn("`" .. line .. "`", reason_of(result), hidden and "the line is ignored" or "the line is kept")
         if not hidden then out:insert(pandoc.Para({pandoc.Code(line)})) end
@@ -1616,6 +1952,9 @@ return {{Pandoc = function(doc)
   end
   local subs = doc.meta["pdfmd-calc-subs"]
   AUTO_SUBS = subs ~= nil and pandoc.utils.stringify(subs):lower() == "true"
+  local typeset = doc.meta["pdfmd-calc-typeset"]
+  local writer = FORMAT:lower():gsub("[+-].*$", "")
+  TYPESET = typeset ~= nil and pandoc.utils.stringify(typeset):lower() == "true" and MATH_WRITERS[writer] == true
   local noindent = doc.meta["pdfmd-calc-noindent"]
   NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
   local space = doc.meta["pdfmd-calc-space"]

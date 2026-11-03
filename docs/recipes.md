@@ -217,6 +217,8 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
 - A `::: calc` div has `0.75em` of room above and below it (LaTeX, Typst and HTML; `calc: {space: 6pt}`, `--calc-space off` for none) and
   its lines flush left (`calc: {align: center}` or `--calc-align center` centres them). The room joins the paragraph spacing around it
   instead of adding to it, so two calc divs in a row are not twice as far apart.
+- `calc: {typeset: true}` (`--calc-typeset`) prints the calculation lines as formulas: `c_s` becomes c with a subscript s, `*` a centred dot, the
+  label before the first name and the unit after the value stay text. LaTeX, Typst, HTML, Word and OpenDocument; the plain-text writers keep the text.
 - `--no-calc` turns it off for a run, `pdfmd-options: {calc: off}` for a document or a folder, `pdfmd --setup` for everything.
   A span it cannot calculate keeps its text and prints one `WARN  calc:` with the reason.
 

@@ -1017,6 +1017,21 @@ To have it everywhere, set `calc: {subs: true}`: every `{ans}` that follows an e
 in front of it, without typing `{subs}`. An expression with no names (nothing to put in), a lone name, and a second `{ans}` that
 only repeats a value get no copy. For one line, `{subs}` forces it and `{nosubs}` (or `{subs:off}`) stops it.
 
+**Typeset, not typed: `calc: {typeset: true}`** (3.32.14, off by default). A calculation line prints as a formula instead of the text it was
+typed as: `Total DNA: m = c_s * V_el = {subs} = {ans:2dp} ng` becomes *Total DNA:* m = c<sub>s</sub> · V<sub>el</sub> = 28.07 · 75 = 2105.25 ng, with
+real subscripts and a centred dot, in the maths font of the document. The line is split in three: the label before the first name (`Total DNA:`,
+`Run 1:`) stays text, the formula (from the first name to the value) becomes maths, and what follows (the unit) stays text, tied to the value by a
+no-break space. It applies to `{=}` spans that print a calculation, the lines of a `::: calc` div and the lines of a ```` ```{=calc} ```` block; a
+value on its own (`` `c_s`{=} ``, `` `2 + 2`{=} ``) stays a plain number in the sentence, and a table's cells are not touched.
+The rules: a name splits at its first `_`: `V_el` is V with an upright *el* below, `c_s` is c with an italic *s* (one letter is an index, a longer
+word a label), and digits after the letters are a subscript too: `A260_s` is A with *260, s*; `C_EDTA` is C<sub>EDTA</sub>; a name that is a Greek word
+(`rho`, `mu`, `Delta`, `pi`) is the letter; any other word (`ppm`) is upright. `*` is a centred dot, `^` a superscript (`x^(n+1)` loses its
+brackets), `|a - b|` bars, `sqrt` `cbrt` `abs` `floor` `ceil` `factorial` their signs, `sin` `ln` `log` `exp` the usual operator names, other functions
+(`round`, `mean`, `qt`) upright, `1.2e-5` is 1.2 × 10<sup>-5</sup>, `Inf` is ∞. Each `=` starts its own piece of maths with a space before it, so a
+long line breaks in front of an `=`. It is the document's own maths (LaTeX, Typst, HTML, Word and OpenDocument typeset it); Markdown, GitHub
+Markdown and the plain-text writers have no maths and keep the text as typed. A formula that cannot be typeset prints as text, with one `WARN  calc:`.
+Only what the document shows changes: the values, `calc: {export: ...}` and `--check` are the same either way.
+
 **6. Many definitions at once, and constants from a file** (3.30.11). Hidden `` `name = value`{=} `` spans work for a few values; for
 a dozen use a block of statements, one per line, each as the text of a span (`=` or `<-` stores and prints nothing, a line with `{ans}`
 prints, blank lines are skipped, and a `#` starts a comment, a whole line or the end of one):
@@ -1098,6 +1113,7 @@ pdfmd-options:
     digits: 4sf       # the default format: 4sf, 2dp; empty = as R prints
     round: even       # or away
     subs: false       # true puts the numbers into every calculation, see 5
+    typeset: false    # true prints each calculation as typeset maths (names with subscripts, a centred dot)
     noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
     align: left       # or center: the lines of a ::: calc div centred
@@ -1105,7 +1121,7 @@ pdfmd-options:
     export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset` / `--no-calc-typeset`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a

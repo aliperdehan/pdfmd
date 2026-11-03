@@ -511,6 +511,52 @@ class Switches(unittest.TestCase):
         self.assertIn('style="padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;"', html)
         self.assertNotIn("padding", convert("html", "--calc-space", "off"))
 
+    def test_typeset_prints_a_calculation_as_maths_where_the_writer_has_maths(self):
+        source = ("---\ntitle: T\n---\n\n```{=calc}\nc_s = 28.07\nV_el = 75\nA260_s = 0.561\nk_DNA = 50\nrho = 1.2\n```\n\n"
+                  "::: calc\nTotal DNA: m = c_s * V_el = {subs} = {ans:2dp} ng/mL\n:::\n\n"
+                  "::: calc\nCheck: c_check = A260_s * k_DNA = {ans} ng\n:::\n\n"
+                  "Inline `x = rho * 2 = {ans}`{=} here, `r = sqrt(rho)^2 / 3e-5 = {ans:3sf}`{=}. Plain `c_s`{=}.\n\n"
+                  "```{=calc}\nRate: v = |c_s - V_el| = {ans}%\n```\n")
+
+        def convert(target, *arguments, env=None, header=None):
+            text = source if header is None else source.replace("---\ntitle: T\n", "---\ntitle: T\n" + header, 1)
+            (self.directory / "doc.md").write_text(text, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", target, "--no-backup", "-o", "out." + target,
+                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                                  env={**os.environ, **(env or {})})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertNotIn("WARN", done.stdout + done.stderr)
+            return (self.directory / ("out." + target)).read_text(encoding="utf-8")
+        off = convert("latex")
+        self.assertIn("Total DNA: m = c\\_s * V\\_el = 28.07 * 75 = 2105.25 ng/mL", off)         # off is the text, as before
+        self.assertNotIn("\\mathrm{el}", off)
+        on = convert("latex", "--calc-typeset")
+        flat = " ".join(on.split())                                                                    # Pandoc wraps its lines
+        self.assertIn("Total DNA: \\(m\\) \\(= c_{s}\\cdot V_{\\mathrm{el}}\\) \\(= 28.07\\cdot 75\\) \\(= 2105.25\\)~ng/mL", flat)
+        self.assertIn("Check: \\(c_{\\mathrm{check}}\\) \\(= A_{260,s}\\cdot k_{\\mathrm{DNA}}\\) \\(= 28.05\\)~ng", flat)
+        self.assertIn("\\(x\\) \\(= \\rho\\cdot 2\\) \\(= 2.4\\)", flat)                           # a span, a Greek name
+        self.assertIn("\\sqrt{\\rho}", flat)
+        self.assertIn("{3\\times 10^{-5}}", flat)                                                   # e-notation
+        self.assertIn("\\(= \\lvert c_{s}-V_{\\mathrm{el}}\\rvert \\) \\(= 46.93\\)\\%", flat)   # bars, and a % after the value stays text
+        self.assertIn("Plain 28.07.", flat)                                                            # a value alone is not maths
+        self.assertEqual(convert("latex", header="pdfmd-options:\n  calc:\n    typeset: true\n"), on)
+        self.assertEqual(convert("latex", env={"PDFMD_CALC_TYPESET": "true"}), on)
+        self.assertEqual(convert("latex", "--calc-typeset", "--no-calc-typeset"), off)
+        self.assertEqual(convert("latex", "--no-calc-typeset", header="pdfmd-options:\n  calc:\n    typeset: true\n"), off)
+        self.assertIn("V_(upright(e l))", convert("typst", "--calc-typeset"))
+        self.assertIn("<math", convert("html", "--calc-typeset"))
+        for target in ("markdown", "gfm", "plain"):                                                 # no maths there: the text stays
+            with self.subTest(target=target):
+                self.assertEqual(convert(target, "--calc-typeset"), convert(target))
+
+    def test_a_bad_typeset_value_is_an_error(self):
+        (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  calc:\n    typeset: maybe\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n",
+                                               encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("calc.typeset", done.stdout + done.stderr)
+
     def test_a_bad_space_or_align_is_an_error_and_the_other_writers_get_nothing(self):
         (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n", encoding="utf-8")
         for arguments in (("--calc-space", "big"), ("--calc-space", "3"), ("--calc-space", "2furlongs")):

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.14 — 2026-11-03
+
+Pre-edit state: commit `e308bde`. Entry 3cw (the author: "typesetting mode for calc which can be toggled on and turn the calc blocks and all that stuff into good-looking typeset latex"). Kept in 3.32. Not pushed.
+
+- **`calc: {typeset: true}` prints a calculation as typeset maths.** `--calc-typeset` / `--no-calc-typeset`, `PDFMD_CALC_TYPESET` (reaches `-j` workers), a `pdfmd --setup` row (`options.calc.typeset`), `-M pdfmd-calc-typeset=true` from `calc_filter_args()`. Off by default: it changes how every calc document prints. `calc.lua` splits a printing line into the label before the first name (text), the formula from the first name to the value (maths) and the unit after it (text, joined to the value by a no-break space); each `=` is a Math node of its own, with a space before it, so a long line breaks in front of an `=` (TeX breaks inline maths only after a relation). The output is `Math` nodes, not raw LaTeX, so LaTeX, Typst, HTML, Word and OpenDocument all typeset it; Markdown, GFM and the plain writers keep the text. Covers the `{=}` spans, the `::: calc` lines and the `{=calc}` blocks that print; a lone value (`` `c_s`{=} ``) stays a number in the text; calc tables, the export, the dump and `--check` are untouched (the change is pass-2 output only).
+- Style rules, all fixed (no numeric thresholds): a name splits at the first `_` (one-letter subscript italic, a word upright; digits after the base letters are a subscript, `A260_s` is A with 260, s); Greek names are letters; other multi-letter names upright; `*` is `\cdot`; `^` takes braces and drops the exponent's brackets; `|x|`, `sqrt`, `cbrt`, `abs`, `floor`, `ceil`, `factorial`, the trig and log names, `\operatorname` for the rest; `1.2e-5` is `1.2\times 10^{-5}`. A formula that cannot be typeset prints as the text with one `WARN  calc:`. A `{nosubs}` in front of a formula (its place in the text is then unknown) keeps the text.
+- `read_statements()` records `statement.from`, where each printing statement's formula starts, which the split needs.
+- Checked through `pdfmd` itself (not only Pandoc): the two lines of the author's Lab 4 report (the screenshot) in a real build with the kit and Times New Roman: typeset, STIX Two Math, no WARN, the extracted text of the 4-page PDF differs from the untypeset build only in those two lines; LaTeX and Typst PDFs, a very long line (breaks before `=`), a centred block (`--calc-align center`); HTML (MathML), docx and odt contain the maths; markdown, gfm and plain output are identical with and without the option. `tests/test_calc.py`: `test_typeset_prints_a_calculation_as_maths_where_the_writer_has_maths`, `test_a_bad_typeset_value_is_an_error`.
+
 ## v3.32.13 — 2026-11-03
 
 Pre-edit state: commit `0a1b4f2`. Entry 3ev (the author: "let's start split then by separating those two into modules to reduce pdfmd's own huge source code"). Kept in 3.32. Not pushed. A move, nothing else: no behaviour changes, so the report bug of entry 3ek is still there and is the next patch.

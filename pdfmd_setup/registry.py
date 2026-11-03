@@ -47,7 +47,7 @@ UNSET = {
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
     "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "color", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
-    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "each format keeps only its own spelling", "options.markup": "each format keeps only its own spelling", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -95,7 +95,7 @@ FOLDER_OPTIONS = frozenset({
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
     "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.palette", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
-    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
+    "options.reader", "options.raw", "options.pagebreak", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.typeset", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
     "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append",
@@ -547,6 +547,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Before the result of `C = n / V = {ans}` print `n / V` with n and V replaced by their values, in the digits each was "
                "defined with (the computation keeps the full values). {subs} forces it on one line, {nosubs} stops it. "
                "Per run: --calc-subs / --no-calc-subs.", "Calculations"),
+        choice("options.calc.typeset", "Print a calculation as typeset maths", on_off, "",
+               "`m = c_s * V_el = 28.07 * 75 = 2105.25 ng` becomes a formula: c with an s subscript, V with an el subscript, a centred "
+               "dot for *, Greek names as letters, the unit left as text. Needs a writer with maths (LaTeX, Typst, HTML, Word, "
+               "OpenDocument); Markdown and the plain-text writers keep the text. Off unless set to on. "
+               "Per run: --calc-typeset / --no-calc-typeset.", "Calculations"),
         choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div", on_off, "",
                "A block of calculation lines reads better flush left, so a `::: calc` div has no paragraph indent even when the "
                "document has one. Off gives it the document's own. An `indent=` on the div wins. On unless set to off. "
