@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.25 — 2026-11-03
+
+Pre-edit state: commit `835d4d3`. Entry 3ee, step 4(b). **`![[picture.png|300]]` is read as an image embed**, in the `obsidian` and `pdfmd` flavours (a new `embeds` column of the preset table), so Obsidian's own spelling also works outside a vault. The new `pdfmd_obsidian/embeds.py` is the text transform (pure: it takes a `find` function), `find_embedded_image` in `pdfmd.py` looks a name up, and `embed_source` is hooked into `obsidian_source` after the comments.
+
+- **Syntax:** `|300` is a width in pixels, `|300x200` a width and a height, other text after the bar is the alt text (a caption when the picture stands alone); a `#heading` after the name is ignored. Written as `![alt](relative/path){width=225pt}`; fenced code, inline code, math, front matter and HTML comments are not looked into. Not a picture file (`![[note]]`, `![[doc.pdf]]`): left as it is.
+- **Lookup:** the name as written (beside the document, or from the vault's top), the vault's attachment folder (`.obsidian/app.json`), then by file name anywhere below the vault (outside a vault: below the document's folder; hidden and tool folders skipped); the nearest wins when several share a name, with a note. A picture not found stays `[missing image: name]` and is a warning.
+- **Settings** (each a row of `pdfmd --setup`): `embed-px-to-pt` (default 0.75, approved by the author: one CSS pixel), `embed-fit` (`text-width`, the default, or `none`), `embed-search` (`vault`, the default, `folder` or `none`). `embed-fit: text-width` adds the new `pdfmd_lua/embed_fit.lua` filter for a document with embeds: a LaTeX build gets `width=\ifdim Npt>\linewidth \linewidth\else Npt\fi`, an HTML build `max-width: 100%`; Word scales to the page itself, Typst keeps the size given.
+- Tests: `tests/test_embeds.py` (15: the transform, the lookup, whole builds as HTML and LaTeX); a 1200-pixel picture embedded at `|900` in a real vault note came out at the text width (452 pt on A4) in the PDF, and a `|150x82` one at 112 pt.
+
+Not pushed.
+
 ## v3.32.24 — 2026-11-03
 
 Pre-edit state: commit `f83780a`. Entry 3eo. **pdfmd's own syntax is on in the `pdfmd` and `obsidian` flavours.** Two more columns of the preset table (`markup`, `pagebreak` in `pdfmd_flavours`) say what is on when nothing is set: `markup` for callouts, toc, center, highlight, keep, landscape and appendix, and `pagebreak` for every family, in a Markdown file (`.md`, `.markdown`) only. `space` stays off (a lone `<br>` is often a blank line), and so do `linebreak` and `raw` (`linebreak` changes how ordinary paragraphs break, `raw` runs HTML/LaTeX/Typst conversions that can need extra tools). A `markup` or `pagebreak` setting of any kind, `false` and `[]` included, `--markup`, `--pagebreak` and `--no-markup` / `--no-pagebreak` replace the flavour's list; `flavour: pandoc|gfm|commonmark` turns it all off.

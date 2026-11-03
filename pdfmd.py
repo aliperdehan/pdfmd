@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.24"
+PDFMD_VERSION = "3.32.25"
 import argparse
 import atexit
 import csv
@@ -3090,12 +3090,22 @@ def flavour_default(md_path: Path, metadata_files, column: str) -> str:
 
 
 def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
-    """``text`` as Pandoc should read it when the flavour has %%comments%% (obsidian, pdfmd): them hidden, or (``show``, by default
-    `show-comments`) turned into HTML comments the writers draw as Comment boxes. Unchanged when the flavour is not obsidian or
-    the text has no `%%`. A `%%` that never closes is told once (see unclosed_comment_mode for what becomes of it)."""
-    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if "%%" in text else None
-    if preset is None or not preset.comments:
+    """``text`` as Pandoc should read it in the flavour's own syntax: %%comments%% hidden (obsidian, pdfmd), or (``show``, by default
+    `show-comments`) turned into HTML comments the writers draw as Comment boxes; then each `![[picture|300]]` written as a Markdown
+    image (see embed_source). Unchanged when the flavour has neither or the text has none of them. A `%%` that never closes is told
+    once (see unclosed_comment_mode for what becomes of it)."""
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if ("%%" in text or "![[" in text) else None
+    if preset is None:
         return text
+    if preset.comments and "%%" in text:
+        text = hidden_comments(text, md_path, metadata_files, show)
+    if preset.embeds and "![[" in text:
+        text = embed_source(text, md_path, metadata_files)
+    return text
+
+
+def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
+    """``text`` without its %%comments%% (v3.32.20), or with them as HTML comments when they are to be shown."""
     try:
         from pdfmd_obsidian import hide_comments
     except ImportError:
@@ -3113,6 +3123,140 @@ def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | No
                     else "it is kept as text; pdfmd-options: unclosed-comment: hide hides the rest, as Obsidian does")
             print(f"WARN  {display_path(md_path)}, line {line}: a `%%` with no closing `%%`: {what}", file=sys.stderr)
     return result.text
+
+
+# Picture embeds, `![[name.png|300]]` (v3.32.25, entry 3ee): Obsidian's way to show a picture by its name, read as pdfmd's own image
+# embed in the obsidian and pdfmd flavours. pdfmd-options: embed-px-to-pt (points to a pixel of `|300`, default 0.75: 1 CSS px),
+# embed-fit (text-width, the default: a sized picture stays within the text width in a LaTeX build; none), embed-search (where a
+# name is looked for besides the path as written: vault, the default; folder; none).
+EMBED_FIT_WORDS = ("text-width", "none")
+EMBED_SEARCH_WORDS = ("vault", "folder", "none")
+_EMBED_INDEX: dict[Path, dict[str, list[Path]]] = {}
+_EMBED_SKIP_FOLDERS = frozenset({".git", ".obsidian", ".trash", "node_modules", "__pycache__", ".venv", "venv"})
+
+
+def embed_settings(md_path: Path, metadata_files=()) -> dict:
+    """The embed options as they stand: {"px_to_pt": float, "fit": word, "search": word}. A bad value is told once and the default used."""
+    def pick(name, words, default):
+        value = first_pdfmd_option(md_path, list(metadata_files), name)
+        word = default if value is None else str(value).strip().casefold()
+        if word in words:
+            return word
+        if f"{name}:{word}" not in _FLAVOUR_TOLD:
+            _FLAVOUR_TOLD.add(f"{name}:{word}")
+            print(f"NOTE  {name}: {word} is not one of {', '.join(words)}; using {default}", file=sys.stderr)
+        return default
+    ratio = first_pdfmd_option(md_path, list(metadata_files), "embed-px-to-pt")
+    try:
+        px_to_pt = 0.75 if ratio is None else float(ratio)
+        if px_to_pt <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        if f"ratio:{ratio}" not in _FLAVOUR_TOLD:
+            _FLAVOUR_TOLD.add(f"ratio:{ratio}")
+            print(f"NOTE  embed-px-to-pt: {ratio!r} is not a positive number; using 0.75", file=sys.stderr)
+        px_to_pt = 0.75
+    return {"px_to_pt": px_to_pt, "fit": pick("embed-fit", EMBED_FIT_WORDS, "text-width"),
+            "search": pick("embed-search", EMBED_SEARCH_WORDS, "vault")}
+
+
+def _embed_folder_index(root: Path) -> dict[str, list[Path]]:
+    """Every picture below ``root`` by file name (lower case), hidden and tool folders left out; remembered per folder."""
+    if root not in _EMBED_INDEX:
+        from pdfmd_obsidian.embeds import IMAGE_SUFFIXES
+        index: dict[str, list[Path]] = {}
+        for folder, subfolders, files in os.walk(root):
+            subfolders[:] = [name for name in sorted(subfolders) if not name.startswith(".") and name not in _EMBED_SKIP_FOLDERS]
+            for name in sorted(files):
+                if name.lower().endswith(IMAGE_SUFFIXES):
+                    index.setdefault(name.lower(), []).append(Path(folder) / name)
+        _EMBED_INDEX[root] = index
+    return _EMBED_INDEX[root]
+
+
+def find_embedded_image(name: str, md_path: Path, search: str = "vault") -> Path | None:
+    """The file a picture name stands for: the path as written (beside the document, or from the vault's top), the vault's attachment
+    folder (`attachmentFolderPath` of .obsidian/app.json), then by name anywhere below the vault (outside one: below the document's
+    folder); the one nearest the document when several have that name, told once. ``search`` = folder keeps to the document's folder,
+    none to the path as written."""
+    here = md_path.resolve().parent
+    vault = vault_root(md_path) if search == "vault" else None
+    for base in (here, vault):
+        if base is not None and (base / name).is_file():
+            return base / name
+    if vault is not None:
+        try:
+            attachments = json.loads((vault / ".obsidian" / "app.json").read_text(encoding="utf-8")).get("attachmentFolderPath", "")
+        except (OSError, ValueError, AttributeError):
+            attachments = ""
+        if isinstance(attachments, str) and attachments.strip() not in ("", "/"):
+            folder = here / attachments if attachments.startswith("./") else vault / attachments.strip("/")
+            if (folder / name).is_file():
+                return folder / name
+    if search == "none":
+        return None
+    candidates = _embed_folder_index(vault or here).get(Path(name).name.lower(), [])
+    wanted = Path(name).as_posix().lower()
+    candidates = [path for path in candidates if path.as_posix().lower().endswith(wanted)]
+    if not candidates:
+        return None
+
+    def distance(path: Path) -> tuple[int, str]:
+        shared = os.path.commonpath([str(here), str(path.parent)])
+        return len(here.relative_to(shared).parts) + len(path.parent.relative_to(shared).parts), str(path)
+    candidates.sort(key=distance)
+    if len(candidates) > 1 and f"embed:{md_path}:{name}" not in _FLAVOUR_TOLD:
+        _FLAVOUR_TOLD.add(f"embed:{md_path}:{name}")
+        print(f"NOTE  {display_path(md_path)}: {len(candidates)} pictures are named {name}; using {display_path(candidates[0])}",
+              file=sys.stderr)
+    return candidates[0]
+
+
+def embed_source(text: str, md_path: Path, metadata_files=()) -> str:
+    """``text`` with each `![[picture|300]]` written as a Markdown image whose path is relative to the document (absolute when it lies
+    on another drive), sized in points; a picture that is not found stays a visible `[missing image: name]` and is told once."""
+    try:
+        from pdfmd_obsidian.embeds import embed_images
+    except ImportError:
+        return text
+    settings = embed_settings(md_path, metadata_files)
+    here = md_path.resolve().parent
+
+    def find(name: str) -> str | None:
+        found = find_embedded_image(name, md_path, settings["search"])
+        if found is None:
+            return None
+        try:
+            return Path(os.path.relpath(found, here)).as_posix()
+        except ValueError:                        # another drive (Windows)
+            return found.as_posix()
+    result = embed_images(text, find, settings["px_to_pt"], settings["fit"])
+    for _, name in result.missing:
+        told = f"missing:{md_path}:{name}"
+        if told not in _FLAVOUR_TOLD:
+            _FLAVOUR_TOLD.add(told)
+            print(f"WARN  {display_path(md_path)}: ![[{name}]]: no picture of that name was found "
+                  f"(embed-search: {settings['search']}); it is left as [missing image: {name}]", file=sys.stderr)
+    return result.text
+
+
+def embed_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter embed_fit.lua`` when the document has picture embeds in a flavour that reads them and `embed-fit` is
+    `text-width`: it keeps a sized picture within the text width in a LaTeX build (the filter acts on `data-pdfmd-fit` images only)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or files[0].suffix.lower() not in (".md", ".markdown"):
+        return []
+    preset = FLAVOUR_PRESETS.get(flavour_of(files[0], metadata_files))
+    if preset is None or not preset.embeds:
+        return []
+    try:
+        if "![[" not in files[0].read_text(encoding="utf-8-sig") or embed_settings(files[0], metadata_files)["fit"] != "text-width":
+            return []
+        import pdfmd_lua
+    except (OSError, ImportError):
+        return []
+    shipped = pdfmd_lua.path("embed_fit")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
@@ -3133,16 +3277,17 @@ def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
     """``--lua-filter markup.lua`` with the kinds that take part (`-M pdfmd-markup=callouts`), when any."""
     files = sources if isinstance(sources, list) else [sources]
+    fit = embed_filter_args(sources, metadata_files)           # before markup.lua, so a markup filter stays the last argument
     kinds = markup_kinds(files[0], metadata_files) if files else []
     if not kinds:
-        return []
+        return fit
     try:
         import pdfmd_lua
     except ImportError:
         pdfmd_lua_missing()
-        return []
+        return fit
     shipped = pdfmd_lua.path("markup")
-    return ["-M", "pdfmd-markup=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else []
+    return fit + (["-M", "pdfmd-markup=" + ",".join(kinds), "--lua-filter", str(shipped)] if shipped is not None else [])
 
 
 MARKUP_CALLOUT_HEADER = r"""% pdfmd: the box of a callout (pdfmd-options: markup: callouts)

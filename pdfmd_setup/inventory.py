@@ -204,6 +204,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "reader": "options.flavour",
     "flavour": "options.flavour", "flavor": "options.flavour",
     "unclosed-comment": "options.unclosed-comment",
+    "embed-px-to-pt": "options.embed-px-to-pt", "embed-fit": "options.embed-fit", "embed-search": "options.embed-search",
     "seed-labels": "options.seed-labels", "seed-calc": "options.seed-calc",
     "metadata-precedence": "options.metadata-precedence",
     "metadata-append": "options.metadata-append",

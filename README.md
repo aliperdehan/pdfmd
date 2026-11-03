@@ -2537,6 +2537,19 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
 
+- **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the
+  vault finds it wherever it lies, so a picture can move without breaking the note, and every pasted picture is `![[Pasted image
+  2026....png]]`. pdfmd reads the same spelling outside a vault as its own image embed. `|300` is the width in pixels, `|300x200` a
+  width and a height, and any other text after the bar is the alt text (the caption of a picture alone in its paragraph:
+  `![[chart.png|Yields by solvent|400]]`). A pixel is `0.75` pt (`embed-px-to-pt`: one CSS pixel), and a sized picture stays within the
+  text width in a LaTeX or HTML build (`embed-fit: text-width`, the default; `none` keeps the size given; a picture with no size is
+  fitted by Pandoc anyway; Word scales to the page). The name is looked for as written (beside the document, or from the vault's top),
+  in the vault's attachment folder (`attachmentFolderPath` of `.obsidian/app.json`), then by name anywhere below the vault, or outside
+  a vault anywhere below the document's folder; the nearest wins when several share a name, with a note (`embed-search: vault|folder|none`
+  narrows it). A name that is not found is a warning and a visible `[missing image: name]` in the output. Notes, PDFs and other files
+  (`![[note]]`, `![[doc.pdf]]`) and anything in code, math, the front matter or an HTML comment are left as they are for now. All three
+  settings are rows of `pdfmd --setup`.
+
 `flavour: pandoc` (or `gfm`, `commonmark`) turns all of this off: `%%` is the text it looks like, and the markup and page-break spellings are left to Pandoc. Not covered yet: the chapters of a report or
 book build (`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the
 main one.
