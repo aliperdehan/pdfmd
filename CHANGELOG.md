@@ -41,6 +41,13 @@ Pre-edit state: commit `cfd403f` (the split of the report and batch modes into `
 - Checked on the two files that showed the bug (a quiz cheat sheet and a hooks sheet): the report builds in STIX Two Text and STIX Two Math with no `Missing character`; `-r --attach-source` carries both sources and `--restore` writes back both (the body byte for byte; the front matter without the quotes around two values, as `--attach-source` has always written it), and `pdfmd -r` on the restored folder gives the same text. An image path relative to a chapter in a subfolder is still not found, as before.
 - Tests: `tests/test_report_build.py` (the title pieces; chapters, a subtitle and a differing author, one title unchanged, `first`, `last`, the patch build, the ignored-keys note, bad settings, `--font` in both builds).
 
+## v3.32.17d — 2026-11-03
+
+Pre-edit state: commit `9c5ad2c`. Entry 3do (the author, after trying the alpha on a 50 MB file: the colours are "rather aggressive", CotEditor's are "much more pleasing"). `gui/` only; `PDFMD_VERSION` stays 3.32.17, nothing is released. Not pushed.
+
+- pdfmd Edit 0.1.1: the colours were the system's saturated blue, orange, purple, teal, pink and green named in the code; they are now `Palette`, nine roles (heading, key, list, emphasis, link, math, code, comment, quote), each with a soft built-in light and dark pair and replaceable by a `color.<role>` setting (`"#RRGGBB"` or `"#LIGHT,#DARK"`), listed by `pdfmdedit --settings`.
+- The smoke tests counted "strongly coloured" pixels, which the soft palette no longer has: the threshold is lower.
+
 ## v3.32.17c — 2026-11-03
 
 Pre-edit state: commit `cfd403f`. Entry 3do (the author: a native, instant editor as the first GUI piece, "i'd like to see an alpha version of gui still under 3.32"). A new `gui/` folder; no shipped code changes, so `PDFMD_VERSION` stays 3.32.17 and nothing is released. Not pushed.

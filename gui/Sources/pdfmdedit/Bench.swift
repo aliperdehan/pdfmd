@@ -203,7 +203,7 @@ enum Smoke {
         scroll.cacheDisplay(in: scroll.bounds, to: rep)
         var n = 0
         for y in 0..<rep.pixelsHigh { for x in 0..<rep.pixelsWide {
-            if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.saturationComponent > 0.5, c.brightnessComponent > 0.3 { n += 1 }
+            if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.saturationComponent > 0.2, c.brightnessComponent > 0.3 { n += 1 }
         } }
         return n
     }

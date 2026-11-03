@@ -39,6 +39,15 @@ Every number that changes behaviour is a setting (UserDefaults), none is a const
 They are app settings, not `pdfmd --setup` rows yet. `textKit` chooses the text engine (2 = system default,
 1 = older); `wrapLines`, `fontSize`, `spellCheck`, the colouring delays and margin are the others.
 
+## Colours
+
+The colours are named roles with a soft built-in pair for the light and the dark appearance; `pdfmdedit --settings`
+lists them. Replace one in the same way as a setting (read at start-up):
+
+    defaults write io.github.aliperdehan.pdfmdedit color.heading -string "#3B5F99,#8AA9D6"
+
+`"#RRGGBB"` alone is used in both appearances; a wrong value is ignored. A whole-theme file is not built yet.
+
 ## Benchmark and smoke test (no window is ever shown: the smoke tests assert it)
 
     .build/release/pdfmdedit --bench --mb 50 --paste-mb 20 [--tk 1|2] [--no-highlight]

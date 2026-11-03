@@ -15,19 +15,19 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
 
     /// Later rules win over earlier ones where they overlap.
     private static let markdownRules = rules([
-        (#"^>+"#, .systemGray),
-        (#"^[ \t]*(?:[-*+]|\d+[.)])[ \t]"#, .systemOrange),
-        (#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, .systemPurple),
-        (#"\[[^\]\n]*\]\([^)\n]*\)"#, .systemTeal),
-        (#"\$[^$\n]+\$"#, .systemPink),
-        (#"`[^`\n]+`"#, .systemGreen),
-        (#"^#{1,6}[ \t].*$"#, .systemBlue),
-        (#"<!--.*?-->"#, .systemGray),
+        (#"^>+"#, Palette.color("quote")),
+        (#"^[ \t]*(?:[-*+]|\d+[.)])[ \t]"#, Palette.color("list")),
+        (#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, Palette.color("emphasis")),
+        (#"\[[^\]\n]*\]\([^)\n]*\)"#, Palette.color("link")),
+        (#"\$[^$\n]+\$"#, Palette.color("math")),
+        (#"`[^`\n]+`"#, Palette.color("code")),
+        (#"^#{1,6}[ \t].*$"#, Palette.color("heading")),
+        (#"<!--.*?-->"#, Palette.color("comment")),
     ])
 
     private static let yamlRules = rules([
-        (#"^[ \t]*-?[ \t]*[A-Za-z0-9_.-]+(?=:)"#, .systemBlue),
-        (#"#[^\n]*"#, .systemGray),
+        (#"^[ \t]*-?[ \t]*[A-Za-z0-9_.-]+(?=:)"#, Palette.color("key")),
+        (#"#[^\n]*"#, Palette.color("comment")),
     ])
 
     private weak var textView: NSTextView?
@@ -177,7 +177,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
             let f = fences[i]
             emit(NSRange(location: cursor, length: f - cursor), code: inCode, frontEnd: frontEnd, ns)
             let lineEnd = min(hi, NSMaxRange(ns.lineRange(for: NSRange(location: f, length: 0))))
-            color(.systemGreen, NSRange(location: f, length: lineEnd - f))
+            color(Palette.color("code"), NSRange(location: f, length: lineEnd - f))
             inCode.toggle()
             cursor = lineEnd
             i += 1
@@ -233,7 +233,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
     private func emit(_ r: NSRange, code: Bool, frontEnd: Int, _ ns: NSString) {
         guard r.length > 0 else { return }
         if code {
-            color(.systemGreen, r)
+            color(Palette.color("code"), r)
             return
         }
         let front = NSIntersectionRange(r, NSRange(location: 0, length: frontEnd))
