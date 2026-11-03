@@ -130,6 +130,7 @@ jobs:
     needs: [version, publish]
     if: ${{ !cancelled() && needs.version.result == 'success' && (needs.version.outputs.new == 'false' || needs.publish.result == 'success') }}
     runs-on: windows-latest
+    environment: scoop
     permissions:
       contents: write
     steps:

@@ -116,6 +116,7 @@ jobs:
     if: inputs.push
     needs: build
     runs-on: ubuntu-latest
+    environment: docker      # the tags are the deployment: GitHub lists it beside pypi and homebrew
     strategy:
       fail-fast: false
       matrix:

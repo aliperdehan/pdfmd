@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.12e — 2026-11-03
+
+No shipped code (two workflow files); `PDFMD_VERSION` stays 3.32.12. The repository's Deployments panel listed only `pypi` and `homebrew`, because GitHub records a deployment only for a job that names an `environment:`.
+
+- `publish.yml`: the `scoop` job has `environment: scoop`.
+- `docker.yml`: the `merge` job (the one that publishes the tags, one per variant, and only when `push` is on) has `environment: docker`. A test build with push off creates no deployment. The environments are created by GitHub on first use.
+
 ## v3.32.12d — 2026-11-03
 
 No shipped code (a manifest, a release script and a test); `PDFMD_VERSION` stays 3.32.12. The `scoop` job of the third CI run (41567808472) failed at `scoop install`: `'pdfmd' doesn't support current architecture!`. It was the first time the job really installed the manifest (the run before it found the version unchanged and skipped the test), and Scoop's `Get-SupportedArchitecture` returns nothing for a manifest without a `url`, which `bucket/pdfmd.json` did not have (its install script does the work).
