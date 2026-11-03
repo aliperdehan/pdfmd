@@ -6,7 +6,8 @@ package** (`pip install pdfmd-cli` is unchanged), and it contains no pdfmd logic
 Tools (no Xcode), macOS 13 or newer.
 
 Goal of this alpha: typing, pasting and scrolling that stay instant on very large files, to decide whether the
-GUI is worth pursuing. There is no preview pane and no Quick Look extension yet.
+GUI is worth pursuing. There is no preview pane and no Quick Look extension yet. Since 0.2.0 the same app also opens PDFs in a
+viewer window of their own (below); the editor and the viewer are not yet wired together (no build button).
 
 ## Build and try
 
@@ -35,9 +36,24 @@ this is **not tested yet** in this alpha.
   the caret's line at full strength. The number of the first visible line is counted from an anchor kept between draws, so
   scrolling and typing never count from the top again. Width, size, opacity and padding are settings (`lineNumber*`).
 
+- A PDF viewer (0.2.0), opened by File > Open, by `pdfmdedit FILE.pdf` and by Open With (the app is only an "Alternate" handler of
+  PDFs, so Preview keeps its place): PDFKit, pages one below the other, a thumbnail sidebar (⌥⌘T), zoom (⌘= ⌘- ⌘0, ⌘9 fit page,
+  ⌥⌘9 fit width), Go to Page (⌥⌘G), Find (⌘F, ⌘G, ⇧⌘G; Enter in the field runs the search, Enter again goes to the next match;
+  matches are marked in the pages), the page and zoom in the window's subtitle. **A changed file is shown again by itself**
+  (a build, a copy, an atomic replacement): after the file has stayed unchanged for `pdfReloadDebounceMs`, and only when it ends
+  with `%%EOF` (a half-written file is skipped and looked at again), on the same page, at the same place and zoom; the old pages stay
+  on screen (a second PDFView, a second thumbnail view) until the new ones have drawn themselves, because a PDFView that is given
+  a new document blinks. Read-only: no notes yet (marker, pen, eraser, text blocks are the next step). Settings: the PDF tab.
+
+## Source layout
+
+`gui/Sources/` is one SwiftPM target (`pdfmdedit`), grouped by area: `App/` (main, menus), `Editor/` (the editor window, colouring,
+line numbers, status bar), `PDF/` (the viewer), `Settings/` (the settings table, the Settings window, themes and palette),
+`Checks/` (the benchmark and the smoke tests).
+
 ## Settings
 
-**The Settings window (⌘,)** has four tabs (the window is sized to the tab shown): Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), Colours (the two themes,
+**The Settings window (⌘,)** has five tabs (the window is sized to the tab shown): Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), PDF (thumbnails, layout, zoom, reload), Colours (the two themes,
 whether the theme sets the background, and for each colouring role the category it takes its colour from plus its light and
 dark colour, with a Reset) and Performance (the colouring delays and limits). It is generated from the tables in
 `Settings.swift` and `Palette.swift`, so it cannot drift from the shell: a change is stored at once, applied to the open
@@ -91,7 +107,10 @@ means `cacheDisplay` into a bitmap; typing repaints the caret line only, like a 
 The numbers compare variants with each other and are not a measurement of any other editor. `--smoke` opens the
 file through the real document path, edits and scrolls it and checks the bytes and that the colours stay on
 screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to disk. `--gen MB PATH` writes the
-benchmark's document so that it can be opened by hand. A silent fall back from TextKit 2 to TextKit 1 is reported
+benchmark's document so that it can be opened by hand. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
+document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
+caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
+prints the resident memory. A silent fall back from TextKit 2 to TextKit 1 is reported
 on stderr and at the end of `--bench`.
 
 ## Known limits

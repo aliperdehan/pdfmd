@@ -6,7 +6,7 @@
 # Test headless first:  .build/release/pdfmdedit --bench --mb 10   and   build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md
 set -e
 cd "$(dirname "$0")"
-VERSION=$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/pdfmdedit/Settings.swift)
+VERSION=$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/Settings/Settings.swift)
 swift build -c release
 APP=build.noindex/pdfmdedit.app
 rm -rf "$APP"
@@ -43,6 +43,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
    <string>md</string><string>markdown</string><string>qmd</string><string>txt</string><string>tex</string><string>typ</string>
    <string>sty</string><string>cls</string><string>csl</string><string>yaml</string><string>yml</string><string>html</string>
    <string>bak</string><string>hst</string>
+  </array>
+ </dict>
+ <dict>
+  <key>CFBundleTypeName</key><string>PDF document</string>
+  <key>CFBundleTypeRole</key><string>Viewer</string>
+  <key>LSHandlerRank</key><string>Alternate</string>
+  <key>NSDocumentClass</key><string>PDFViewerDocument</string>
+  <key>LSItemContentTypes</key><array>
+   <string>com.adobe.pdf</string>
+  </array>
+  <key>CFBundleTypeExtensions</key><array>
+   <string>pdf</string>
   </array>
  </dict>
 </array>

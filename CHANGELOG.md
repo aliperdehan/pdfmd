@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.27b — 2026-11-03
+
+Pre-edit state: commit `69481de`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.0: a PDF viewer.** The author: "let's first make usable pdf previewer, also native like notepad"; notes on PDFs (marker, pen, eraser, text blocks) come next.
+
+- `gui/Sources/PDF/PDFViewer.swift`: PDFs open in their own window (class `PDFViewerDocument`, a read-only document type, `LSHandlerRank` Alternate so Preview keeps its place; `DocController` picks the class by `.pdf` or `%PDF-`). PDFKit, continuous pages, thumbnail sidebar, zoom with limits, fit width and fit page, go to page, find with marked matches (own search field: PDFView ignores `performTextFinderAction:`), page and zoom in the subtitle.
+- **Reload on change:** the file is watched (`presentedItemDidChange`); after it has stayed unchanged for `pdfReloadDebounceMs` and ends with `%%EOF`, it is read again and shown on the same page, at the same point and zoom (still fitted to the width when it was). Tried against an in-place `cp`, an atomic `mv` and a half-written file (the old pages stay), and against a real `pdfmd readme.md` rebuild of an open PDF (it writes the file twice, a second apart: an unfinished copy in place, then the final one renamed over it, so two reloads).
+- Found with the author's help ("why is it blinking that annoyingly"): giving a PDFView a new document drops every page and draws them one by one (dark, then white); a snapshot laid over it came out white (a PDFView does not draw into `cacheDisplay`); re-pointing a thumbnail view redraws all thumbnails; a place restored before PDFView has worked out its fitted zoom drifted on every reload. Now the new document goes into a second PDFView (and thumbnail view) under the old ones, the zoom is restored first, then the place, then "fit to width" again, and the old views leave after `pdfReloadCoverMs`.
+- At the very top of a document PDFKit cannot restore the view into the margin above page 1 (`go(to:)` stops at the page's edge, so the page moved up about 4.5 points once): the rest is scrolled by hand. Verified live with a still window: 24 frames across three real rewrites of the file, the pages identical to the start in every frame (no dark or white flash), the thumbnails never blank.
+- Settings (new PDF tab, `defaults write`): `pdfThumbnails`, `pdfThumbnailWidth`, `pdfOpenFit`, `pdfDisplayMode`, `pdfZoomStepPercent`, `pdfZoomMinPercent`, `pdfZoomMaxPercent`, `pdfInterpolation`, `pdfReloadDebounceMs`, `pdfReloadRetries`, `pdfReloadCoverMs`, `pdfFindColor`. The only constant: the 1024 bytes in which `%%EOF` must sit (the PDF format's own limit).
+- `gui/Sources/pdfmdedit/` (14 files in one folder) is now grouped by area in `gui/Sources/` (`App`, `Editor`, `PDF`, `Settings`, `Checks`), the extra `pdfmdedit` level dropped (one target needs none); `Package.swift` and `build.sh` follow.
+- Tests: `--smoke-pdf FILE` (44 checks: zoom and limits, the place after three reloads fitted to the width, in place, atomic and half-written, search, the settings), `--bench-pdf FILE`; `--smoke` and `--smoke-prefs` unchanged and passing. Measured on an 868-page, 46 MB textbook: `PDFDocument(url:)` 9 ms, 26 to 70 MB resident, the middle page at 4x 194 ms. Not yet compared with Preview and Skim by hand.
+
+Not pushed.
+
 ## v3.32.25b — 2026-11-03
 
 Pre-edit state: commit `7720630`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit's build output moves to `gui/build.noindex/`**, which Spotlight and LaunchServices skip, so the editor no longer shows up twice (once from the build folder, once from `~/Applications`). `build.sh --install` is the way to get the copy that is launched; the README paths, the `.gitignore` and the smoke-test paths follow. The runtime `NSApp.applicationIconImage` call is removed: it changed nothing. (The bare Stage Manager tile was a stale per-bundle-id icon cache in the system icon store, cleared by hand; nothing in the app was wrong.)

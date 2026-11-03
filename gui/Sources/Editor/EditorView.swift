@@ -281,8 +281,8 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
 /// Opens anything the author points it at, not only the types the Info.plist names.
 final class DocController: NSDocumentController {
     override var defaultType: String? { "Markdown and text" }
-    override func typeForContents(of url: URL) throws -> String { "Markdown and text" }
-    override func documentClass(forType typeName: String) -> AnyClass? { EditorDocument.self }
+    override func typeForContents(of url: URL) throws -> String { isPDFFile(url) ? "PDF document" : "Markdown and text" }
+    override func documentClass(forType typeName: String) -> AnyClass? { typeName == "PDF document" ? PDFViewerDocument.self : EditorDocument.self }
     override func runModalOpenPanel(_ openPanel: NSOpenPanel, forTypes types: [String]?) -> Int {
         super.runModalOpenPanel(openPanel, forTypes: nil)
     }

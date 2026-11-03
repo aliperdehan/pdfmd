@@ -30,6 +30,8 @@ _ = DocController()
 if args.contains("--bench") { Bench.run(args); exit(0) }
 if let i = args.firstIndex(of: "--smoke"), i + 1 < args.count { Smoke.run(args[i + 1]); exit(0) }
 if let i = args.firstIndex(of: "--smoke-prefs"), i + 1 < args.count { PrefsSmoke.run(args[i + 1]); exit(0) }
+if let i = args.firstIndex(of: "--smoke-pdf"), i + 1 < args.count { PDFSmoke.run(args[i + 1]); exit(0) }
+if let i = args.firstIndex(of: "--bench-pdf"), i + 1 < args.count { PDFSmoke.bench(args[i + 1]); exit(0) }
 if let i = args.firstIndex(of: "--smoke-save"), i + 1 < args.count { Smoke.save(args[i + 1]); exit(0) }
 
 let delegate = AppDelegate()

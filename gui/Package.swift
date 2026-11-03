@@ -4,5 +4,5 @@ import PackageDescription
 let package = Package(
     name: "pdfmdedit",
     platforms: [.macOS(.v13)],
-    targets: [.executableTarget(name: "pdfmdedit", path: "Sources/pdfmdedit")]
+    targets: [.executableTarget(name: "pdfmdedit", path: "Sources")]
 )
