@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.13 — 2026-11-03
+
+Pre-edit state: commit `0a1b4f2`. Entry 3ev (the author: "let's start split then by separating those two into modules to reduce pdfmd's own huge source code"). Kept in 3.32. Not pushed. A move, nothing else: no behaviour changes, so the report bug of entry 3ek is still there and is the next patch.
+
+- **Report mode (`-r`, `--report`, `--book`) is the package `pdfmd_report`, batch mode (`-b`) the package `pdfmd_batch`.** Each was a block of `run_main()` in `pdfmd.py` (about 470 and 65 lines); the code is moved as it was, one indent level less, and `run_main()` calls `run()` of the package with the nine to twelve values the block read. The helpers of `pdfmd.py` that the block calls are bound at the top of `run()` from `core`, the `pdfmd` module that `run_main()` passes in, so the file may be running as `__main__` without a second copy of it being imported (a second copy would have its own `AUTO_LOG` and `LAST_*`). A module-level value that `run_main()` rebinds (`CITEPROC_DISABLED`) is read as `core.CITEPROC_DISABLED`.
+- Checked as a pure move: `-r --verbose` on a two-file folder and on `examples/book` (PDF and `--to tex`), `-b --verbose` and `-b -j 2`, run before and after, print the same lines (paths and times aside). `pyproject.toml` lists both packages.
+
 ## v3.32.12e — 2026-11-03
 
 No shipped code (two workflow files); `PDFMD_VERSION` stays 3.32.12. The repository's Deployments panel listed only `pypi` and `homebrew`, because GitHub records a deployment only for a job that names an `environment:`.
