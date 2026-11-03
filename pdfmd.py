@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.25"
+PDFMD_VERSION = "3.32.26"
 import argparse
 import atexit
 import csv
@@ -2971,7 +2971,7 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
 # carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
 # or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "keep", "landscape", "appendix", "space")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "space")
 MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 
@@ -3094,13 +3094,19 @@ def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | No
     `show-comments`) turned into HTML comments the writers draw as Comment boxes; then each `![[picture|300]]` written as a Markdown
     image (see embed_source). Unchanged when the flavour has neither or the text has none of them. A `%%` that never closes is told
     once (see unclosed_comment_mode for what becomes of it)."""
-    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if ("%%" in text or "![[" in text) else None
+    preset = FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if ("%%" in text or "[[" in text) else None
     if preset is None:
         return text
     if preset.comments and "%%" in text:
         text = hidden_comments(text, md_path, metadata_files, show)
     if preset.embeds and "![[" in text:
         text = embed_source(text, md_path, metadata_files)
+    if preset.wikilinks and "[[" in text:
+        try:
+            from pdfmd_obsidian import wikilinks_as_text
+            text = wikilinks_as_text(text).text
+        except ImportError:
+            pass
     return text
 
 
@@ -3315,15 +3321,22 @@ MARKUP_HIGHLIGHT_HEADER = r"""% pdfmd: highlighted text (pdfmd-options: markup: 
 \makeatletter
 \@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
 \makeatother
+\definecolor{pdfmd-mark}{HTML}{FFF3A3}
+% under LuaTeX Pandoc's template loads lua-ul (with soul's \ul) for an underline; the same load here, with its own \highLight, keeps the two apart
+\ifdefined\directlua
+  \IfFileExists{lua-ul.sty}{\def\pdfmdhasluaul{1}}{}
+\fi
 \IfFileExists{soul.sty}{\def\pdfmdhassoul{1}}{}
-\ifdefined\pdfmdhassoul
+\ifdefined\pdfmdhasluaul
+  \usepackage[soul]{lua-ul}
+  \newcommand{\pdfmdhl}[1]{\highLight[pdfmd-mark]{#1}}
+\else\ifdefined\pdfmdhassoul
   \usepackage{soul}
-  \definecolor{pdfmd-mark}{HTML}{FFF3A3}
   \sethlcolor{pdfmd-mark}
   \newcommand{\pdfmdhl}[1]{\hl{#1}}
 \else
   \newcommand{\pdfmdhl}[1]{#1}
-\fi
+\fi\fi
 """
 
 MARKUP_LANDSCAPE_HEADER = r"""% pdfmd: landscape pages (pdfmd-options: markup: landscape)
@@ -28692,7 +28705,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
-                             "text; highlight (==text==) marks it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
+                             "text; highlight (==text==) marks it; underline (<u>text</u>) underlines it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
                              "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
     parser.add_argument("--show-comments", action="store_true", default=None,

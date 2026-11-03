@@ -2406,6 +2406,10 @@ break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (plain text wh
 Pandoc's own Markdown output keeps `==...==`, and OpenDocument keeps the text and says once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
 punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or `true` for all; `--markup highlight` for one run.
 
+**Underlined text** (v3.32.26, `markup: underline`). `<u>text</u>` and `<ins>text</ins>`, which a Markdown reader keeps as raw HTML that
+LaTeX, Typst and Word drop, become Pandoc's own underline: LaTeX `\ul` (`soul`, or `lua-ul` under LuaTeX), Typst `#underline[...]`,
+Word and OpenDocument an underlined run, HTML `<u>`; the Markdown family keeps the tags. Both tags must be in the same paragraph.
+
 **Blocks kept on one page** (v3.29, `markup: keep`). A fenced `::: keep` (also `nobreak`, `keep-together`), a div with
 `style="break-inside: avoid"` and, for writers that are not LaTeX, a raw `\begin{samepage}` ... `\end{samepage}` hold what they
 contain on one page where it fits: LaTeX's `samepage` environment, Typst's `#block(breakable: false)[...]`, a `break-inside:
@@ -2532,11 +2536,16 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
 
 - **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `center`,
-  `highlight`, `keep`, `landscape` and `appendix` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `::: keep`, `::: landscape`,
+  `highlight`, `underline`, `keep`, `landscape` and `appendix` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
   `\appendix`), and `pagebreak` for every family, with no setting. `space` stays off (a lone `<br>` is often just a blank line), and
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
 
+- **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). A printed document has no other notes to open, so a wikilink is
+  written as the text Obsidian shows for it: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
+  and `[[#Heading]]`, a link inside the note, is `Heading`; `[[Note\|alias]]` works in a table. A name with `_` or `*` in it is kept as text.
+  Left as they are: `![[note]]` (a note embed comes later), `[[_TOC_]]` (the contents marker) and `[[1]](url)` (a link whose text is `[1]`).
+  Links become real links to a heading of the same document in a later release.
 - **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the
   vault finds it wherever it lies, so a picture can move without breaking the note, and every pasted picture is `![[Pasted image
   2026....png]]`. pdfmd reads the same spelling outside a vault as its own image embed. `|300` is the width in pixels, `|300x200` a

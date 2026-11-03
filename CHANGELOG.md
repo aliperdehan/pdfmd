@@ -23,6 +23,17 @@ same commit as the change.
 
 Pre-edit state: commit `7720630`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit's build output moves to `gui/build.noindex/`**, which Spotlight and LaunchServices skip, so the editor no longer shows up twice (once from the build folder, once from `~/Applications`). `build.sh --install` is the way to get the copy that is launched; the README paths, the `.gitignore` and the smoke-test paths follow. The runtime `NSApp.applicationIconImage` call is removed: it changed nothing. (The bare Stage Manager tile was a stale per-bundle-id icon cache in the system icon store, cleared by hand; nothing in the app was wrong.)
 
+## v3.32.26 — 2026-11-03
+
+Pre-edit state: commit `7720630`. Entry 3ee, step 4(c). **Obsidian's links between notes are written as the text they show, and `<u>` is underlined in every writer.**
+
+- **Wikilinks as text** (preset column `wikilinks`, in `obsidian` and `pdfmd`; new pure module `pdfmd_obsidian/wikilinks.py`): `[[Note]]` is `Note`, `[[Note|alias]]` is `alias`, `[[Note#Heading]]` is `Note > Heading`, `[[#Heading]]` is `Heading`, `[[Note\|alias]]` works inside a table; the Markdown specials of a name (`\ ` * _ [ ] < $ ~`) are kept as text. Left alone: `![[...]]` (a note embed is a later step), `[[_TOC_]]`, `[[1]](url)`, and anything in code, math, front matter or an HTML comment. Links to the heading of the same document come later.
+- **`markup: underline`**, a new markup kind (on in the `pdfmd` and `obsidian` flavours, like the others): `<u>..</u>` and `<ins>..</ins>` become Pandoc's Underline, so LaTeX gets `\ul`, Typst `#underline`, Word and OpenDocument an underlined run, HTML `<u>`; the Markdown family keeps the tags. Before, LaTeX, Typst and Word dropped the tags and printed the text plain. `==highlight==` was already a markup kind and needed no change.
+- **Fix found on the way:** the LaTeX header of `highlight` loaded `soul`, which clashes with the `lua-ul` that Pandoc's template loads under LuaTeX for any underline (`Command \ul already defined`; lualatex fell back to xelatex). Under LuaTeX the header now loads `lua-ul` with its own `\highLight`; the highlight still renders pale yellow (checked in a PDF).
+- Tests: `tests/test_wikilinks.py` (6: the transform, what is left alone, whole builds as HTML, LaTeX and Typst); `test_markup_callouts.py` lists the new kind.
+
+Not pushed.
+
 ## v3.32.25 — 2026-11-03
 
 Pre-edit state: commit `835d4d3`. Entry 3ee, step 4(b). **`![[picture.png|300]]` is read as an image embed**, in the `obsidian` and `pdfmd` flavours (a new `embeds` column of the preset table), so Obsidian's own spelling also works outside a vault. The new `pdfmd_obsidian/embeds.py` is the text transform (pure: it takes a `find` function), `find_embedded_image` in `pdfmd.py` looks a name up, and `embed_source` is hooked into `obsidian_source` after the comments.

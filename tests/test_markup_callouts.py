@@ -150,7 +150,7 @@ class Options(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             doc = Path(folder) / "d.md"
             doc.write_text("---\ntitle: T\n---\n\n> [!NOTE]\n> x\n", encoding="utf-8")
-            self.assertIn("pdfmd-markup=callouts,toc,center,highlight,keep,landscape,appendix", pdfmd.markup_filter_args(doc, [])[1])
+            self.assertIn("pdfmd-markup=callouts,toc,center,highlight,underline,keep,landscape,appendix", pdfmd.markup_filter_args(doc, [])[1])
             self.assertNotIn("space", pdfmd.markup_kinds(doc, []))          # space stays off
             for front in ("flavour: pandoc", "flavour: gfm", "markup: false", "markup: []"):
                 with self.subTest(front=front):

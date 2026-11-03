@@ -6,5 +6,6 @@ pdfmd.py decides whether the note is Obsidian's (a `.obsidian/` folder above it,
 
 from .comments import Comments, hide_comments
 from .embeds import Embeds, embed_images
+from .wikilinks import Wikilinks, wikilinks_as_text
 
-__all__ = ["Comments", "Embeds", "embed_images", "hide_comments"]
+__all__ = ["Comments", "Embeds", "Wikilinks", "embed_images", "hide_comments", "wikilinks_as_text"]

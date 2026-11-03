@@ -146,6 +146,7 @@ MARKUP_CHOICES = (
     ("toc", "[TOC], [[_TOC_]], <!-- toc -->: the table of contents where it stands"),
     ("center", "<center>, <div align=center>, ::: center, \\begin{center}: centred text in LaTeX, Typst, HTML and Word"),
     ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst, HTML and Word"),
+    ("underline", "<u>text</u>, <ins>text</ins>: underlined in LaTeX (soul), Typst, HTML, Word and OpenDocument"),
     ("keep", "::: keep, break-inside: avoid, \\begin{samepage}: blocks held on one page in LaTeX, Typst and HTML"),
     ("landscape", "::: landscape, \\begin{landscape}: the blocks on landscape pages in LaTeX, Typst, HTML and Word"),
     ("appendix", "\\appendix, <!-- appendix -->, {.appendix}: the sections after it lettered A, B (LaTeX, Typst; with --number-sections)"),

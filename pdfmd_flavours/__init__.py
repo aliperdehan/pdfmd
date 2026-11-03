@@ -15,6 +15,7 @@ The columns of a row:
               space-separated list; ``pagebreak`` likewise for the page-break families (``all``). Only for a Markdown file; a
               ``markup`` / ``pagebreak`` setting of any kind, ``false`` included, replaces the row's.
 ``embeds``    Obsidian's ``![[picture.png|300]]`` is read as an image embed (found by name, sized in px).
+``wikilinks`` Obsidian's ``[[Note|alias]]`` is written as the text it shows.
 ``unclosed``  what a ``%%`` with no closing ``%%`` does: ``hide`` (the rest of the note, as Obsidian does) or ``keep`` (it
               stays text, with a warning). Outside a vault a stray ``%%`` is as likely TeX or plain text as a forgotten close, so
               ``pdfmd`` keeps it.
@@ -33,16 +34,17 @@ class Preset(NamedTuple):
     markup: str = ""
     pagebreak: str = ""
     embeds: bool = False
+    wikilinks: bool = False
 
 
-OWN_SYNTAX = "callouts toc center highlight keep landscape appendix"      # `space` stays off: a lone <br> is often just a blank line
+OWN_SYNTAX = "callouts toc center highlight underline keep landscape appendix"      # `space` stays off: a lone <br> is often just a blank line
 
 PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),
     "gfm": Preset("gfm", False, "keep"),
     "commonmark": Preset("commonmark", False, "keep"),
-    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True),
-    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True),
+    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True),
+    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True),
 }
 WORDS = ("auto", *PRESETS)
 

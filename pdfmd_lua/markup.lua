@@ -1,5 +1,5 @@
 -- pdfmd: universal markup (v3.29.13). Spellings that Markdown dialects, GitHub, Obsidian and Quarto share but Pandoc does not know,
--- carried into every writer as that writer's own. Off unless asked, one kind at a time (`pdfmd-options: markup: [callouts, ...]`,
+-- carried into every writer as that writer's own. On in the pdfmd and obsidian flavours, a kind at a time (`pdfmd-options: markup: [callouts, ...]`,
 -- `--markup`); pdfmd gives the kinds that take part as `-M pdfmd-markup=callouts,...` (run by hand without it, every kind does).
 --
 -- callouts   > [!NOTE]  > [!warning] A title  > [!tip]-   (GitHub, Obsidian: a block quote that starts with the marker);
@@ -32,6 +32,8 @@
 -- highlight  ==marked text==, and <mark> where the reader keeps it: LaTeX \pdfmdhl{...} (soul's \hl; pdfmd's header file defines it),
 --            Typst #highlight[...], HTML, EPUB and Markdown <mark>...</mark>, Word the character style PdfmdHighlight (yellow);
 --            OpenDocument keeps the text, with a note once.
+-- underline  <u>text</u> and <ins>text</ins> (raw HTML in every Markdown reader but Pandoc's own): Pandoc's Underline, so each writer draws
+--            its own: LaTeX \ul (soul), Typst #underline, Word and OpenDocument underlined runs, HTML <u>. The Markdown family keeps the tags.
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -266,6 +268,38 @@ local function center_pairs(blocks)
       index, changed = last + 1, true
     else
       out[#out + 1] = block
+      index = index + 1
+    end
+  end
+  if changed then return out end
+  return nil
+end
+
+
+-- ---- underline -------------------------------------------------------------------------------------------------------
+-- <u>...</u> / <ins>...</ins> within one list of inlines (the tags are RawInline html, the text between them ordinary inlines)
+local function underline_runs(inlines)
+  local out, changed, index = pandoc.Inlines({}), false, 1
+  while index <= #inlines do
+    local item = inlines[index]
+    local done = false
+    if item.t == "RawInline" and item.format == "html" then
+      local tag = item.text:lower():match("^<(%a+)%s*>$")
+      if tag == "u" or tag == "ins" then
+        for position = index + 1, #inlines do
+          local other = inlines[position]
+          if other.t == "RawInline" and other.format == "html" and other.text:lower():match("^</" .. tag .. "%s*>$") then
+            local inner = pandoc.Inlines({})
+            for at = index + 1, position - 1 do inner[#inner + 1] = inlines[at] end
+            out[#out + 1] = pandoc.Underline(inner)
+            index, changed, done = position + 1, true, true
+            break
+          end
+        end
+      end
+    end
+    if not done then
+      out[#out + 1] = item
       index = index + 1
     end
   end
@@ -717,6 +751,9 @@ function Pandoc(doc)
       if on("comments") and enabled ~= nil and enabled["comments"] then after = show_inline_comments(inlines) end
       if on("highlight") and not (FORMAT or ""):match("^markdown") then
         after = highlight_runs(after or inlines) or after
+      end
+      if on("underline") and not ((FORMAT or ""):match("markdown") or (FORMAT or ""):match("^gfm") or (FORMAT or ""):match("^commonmark")) then
+        after = underline_runs(after or inlines) or after
       end
       return after
     end,
