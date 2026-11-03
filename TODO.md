@@ -85,7 +85,6 @@ wait for an answer before any code.
 - [ ] Gaps of `%%comments%%` (3.32.20): report/book chapters, split-document parts, the section and heading scanners, indented code blocks, a `flavour` set only in a metadata file for the citation scan [3ee]
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
 - [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") [3ex]
-- [ ] pdfmd's own syntax on by default as the `pdfmd` flavour (`markup` kinds: callouts, toc, center, highlight; spans later), off with `flavour: pandoc` or `markup: false`; check nulabreport and the author's folders for literal `==`, `[!x]`, `[TOC]` first [3eo]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] British and American spellings of every key, flag and value (colour/color, centre/center, grey/gray, flavour/flavor...): scan, one alias table, a completeness test; docs and help print British, commands British first (`--colour`, `centre`), American accepted as naturally [3ep]
 - [ ] Spans `.caps`, `.wavy`, `.dotted`... in every writer, then the shorthand (`++x++`, `!!x!!`, `??x??`) as opt-in `markup` kinds; CriticMarkup and abbreviations later [3eq]
