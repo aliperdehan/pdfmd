@@ -56,7 +56,7 @@ wait for an answer before any code.
 ## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; started [3du]
 
 - [ ] nulabreport side (its maintenance is done): its `.kit`, course codes as mode aliases, starters without `metadata/` (which stays supported), a course-level `.pdfmd/` in `220/` and `LR9-10`, the manual updated; real builds of copies of 220/LR6 and LR9-10; smoke test
-- [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; fetch, `--install kit`, the trust prompt; Typst, HTML, Word parts; `--kit new|check|pack`; the kit guide [3du, 3dg]
+- [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; a first-use trust prompt for fetched kits; `requires:` for a clear missing-package error; Typst, HTML, Word parts (kits 0.2); `--kit new|check|pack` [3du, 3dg, 3et]
 - [ ] nulabreport at three levels (bare `.sty`, a pandoc defaults file plus the Lua filter mapping the front-matter keys, a pdfmd kit); no custom `.latex`; spike first (does `-H` replace a filter's `header-includes`?), then bare-pandoc and bare-`.sty` lanes in its smoke test [3dw, 3dk, 3du]
 
 ## Pictures and crop, carried inside 3.31 [3dv]
@@ -81,7 +81,7 @@ wait for an answer before any code.
 
 - [ ] First slice, the `obsidian` preset: image embeds with `|width` and `|WxH` found by name in the vault, wikilinks as text, `%%comments%%`, `==highlight==`, `<u>` in every writer, a single newline as a hard break; tested on the real notes [3ee]
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
-- [ ] `flavour` / `flavor` setting, the same setting as `reader:` (`auto` by default: `pdfmd` or, inside a vault with `.obsidian/`, `obsidian`; `pandoc` is strict Pandoc, `gfm`, `commonmark`...), at every level; the gfm-or-Pandoc rules made reliable first: the global metadata no longer counts as linked (its parameters still apply), a leading `---` rule and Obsidian Properties no longer mean Pandoc [3eo]
+- [ ] `flavour` / `flavor` setting, the same setting as `reader:` (`auto` by default: `pdfmd` or, inside a vault with `.obsidian/`, `obsidian`; `pandoc` is strict Pandoc, `gfm`, `commonmark`...), at every level; Obsidian Properties no longer mean Pandoc's reader (the global metadata and a leading `---` rule were fixed in 3.32.4) [3eo]
 - [ ] pdfmd's own syntax on by default as the `pdfmd` flavour (`markup` kinds: callouts, toc, center, highlight; spans later), off with `flavour: pandoc` or `markup: false`; check nulabreport and the author's folders for literal `==`, `[!x]`, `[TOC]` first [3eo]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] British and American spellings of every key, flag and value (colour/color, centre/center, grey/gray, flavour/flavor...): scan, one alias table, a completeness test; docs and help print British, commands British first (`--colour`, `centre`), American accepted as naturally [3ep]
