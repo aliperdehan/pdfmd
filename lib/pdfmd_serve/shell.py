@@ -124,6 +124,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, b"Open the URL that `pdfmd --serve` printed: it carries the token.\n", MIME[".txt"])
         if not self.origin_ok():
             return self.refuse(403, "origin", "a request from another origin")
+        if parts.path == "/api/raw" and self.command in ("GET", "HEAD"):       # a picture or a PDF as it is, not JSON
+            try:
+                data, mime = self.server.core.raw(query)
+            except ApiError as error:
+                return self.refuse(error.status, error.code, error.message)
+            return self.send(200, data, mime)
         if parts.path.startswith("/api/") or parts.path == "/api":
             return self.api(parts)
         if self.command not in ("GET", "HEAD"):

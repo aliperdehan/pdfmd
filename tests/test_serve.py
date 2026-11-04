@@ -147,6 +147,21 @@ class Render(Folder):
         self.assertEqual(answer["warnings"], [])
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_a_csv_block_is_a_table_when_the_core_is_given_the_filter(self):
+        import contextlib
+        import pdfmd
+        (self.root / "tables").mkdir()
+        (self.root / "tables" / "t.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        (self.root / "parts").mkdir()
+        core = Core(self.root, filters=lambda: contextlib.nullcontext([]))
+        text = '::: {#tbl:t .csv file="tables/t.csv" caption="Cap"}\n:::\n'
+        _, plain = core.handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
+        self.assertNotIn("<table", plain["html"])                                 # the core alone is pandoc: no pdfmd syntax
+        _, with_filter = Core(self.root, filters=pdfmd.serve_live_filters).handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
+        self.assertIn("<th>a</th>", with_filter["html"])                          # the file is found at the project's folder, from a part in parts/
+        self.assertIn("<caption>Cap</caption>", with_filter["html"])
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_render_of_what_is_not_written_yet(self):
         status, answer = self.core.handle("POST", "/api/render", {"text": "**unclosed"})
         self.assertEqual(status, 200)
@@ -234,6 +249,19 @@ class Http(Folder):
         self.assertFalse((self.root / "n.md").exists())
         status, _, _ = self.ask("POST", "/api/file", body, {**self.bearer(), "Origin": f"http://127.0.0.1:{self.port}", "Content-Length": str(len(body))})
         self.assertEqual(status, 201)
+
+    def test_raw_serves_a_picture_and_a_pdf_as_they_are(self):
+        (self.root / "sub" / "p.png").write_bytes(b"\x89PNG\r\n\x1a\nfake")
+        (self.root / "sub" / "b.pdf").write_bytes(b"%PDF-1.4 fake")
+        status, headers, body = self.ask("GET", "/api/raw?path=sub/p.png", headers=self.bearer())
+        self.assertEqual((status, headers["Content-Type"], body), (200, "image/png", b"\x89PNG\r\n\x1a\nfake"))
+        status, headers, body = self.ask("GET", "/api/raw?path=sub/b.pdf", headers=self.bearer())
+        self.assertEqual((status, headers["Content-Type"], body), (200, "application/pdf", b"%PDF-1.4 fake"))
+        for path, code, why in (("report.md", 415, "not_viewable"), ("sub/none.png", 404, "no_file"), ("../x.png", 403, "outside")):
+            status, _, body = self.ask("GET", "/api/raw?path=" + path, headers=self.bearer())
+            self.assertEqual((status, json.loads(body)["code"]), (code, why), path)
+        status, _, _ = self.ask("GET", "/api/raw?path=sub/p.png")
+        self.assertEqual(status, 403)                                            # no token, no picture
 
     def test_the_api_over_http(self):
         status, _, body = self.ask("GET", "/api/project", headers=self.bearer())

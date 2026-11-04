@@ -1697,12 +1697,14 @@ pdfmd --api PUT /api/file '{"path": "report.md", "text": "...", "mtime": "..."}'
 pdfmd --api POST /api/file '{"path": "notes.md", "text": ""}'      # a new file; never overwrites
 pdfmd --api GET '/api/outline?path=report.md'     # the headings
 pdfmd --api POST /api/render '{"path": "report.md", "text": "# Hi"}'   # Pandoc's HTML with source positions
+# GET /api/raw?path=photos/a.png    a picture or a PDF of the folder, as it is (the one answer that is not JSON; over --serve only)
 ```
 
 Every answer carries `"api": 1` (an addition keeps the number), and an error is `{"api": 1, "error": ..., "code": ...}` with an HTTP-like
 status. A save sends the `mtime` it read and gets **409** when the file changed on disk meanwhile, so an editor and a build never overwrite
-each other; it keeps the file's line endings (CRLF or LF) and byte-order mark. The live view's render does not resolve citations yet
-(`[@key]` stays as typed): Pandoc's CommonMark reader gives block positions but has no citations. Builds, checks, history and settings are not
+each other; it keeps the file's line endings (CRLF or LF) and byte-order mark. The live view's render runs pdfmd's own CSV filter, so a
+`::: {.csv file=...}` block is a table there as in a build (the file is looked for beside the document and in the project folder), but
+it does not resolve citations yet (`[@key]` stays as typed): Pandoc's CommonMark reader gives block positions but has no citations. Builds, checks, history and settings are not
 in the API yet.
 
 ### Other command names: `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec`

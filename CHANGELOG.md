@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.39 — 2026-11-05
+
+Pre-edit state: commit `efef151`. Entry 3do (the web UI). **The live view shows CSV tables, the files panel mirrors the folders, and the page shows pictures and PDFs.** The author, looking at a real report in the studio: the `.csv` blocks were gone ("instead of being tables"), the files on the left were "messy", and "i can edit all my sources and preview my images sources builds csvs all without leaving colophon".
+
+- The live view's render (`POST /api/render`) now runs pdfmd's own `csv_table.lua` (the core takes a `filters` callable from `pdfmd.py`: `serve_live_filters`), and Pandoc gets `--resource-path` with the document's folder and the project folder, so `::: {#tbl:x .csv file="tables/x.csv"}` in `parts/45-results.md` finds `tables/x.csv` at the project's root, as a build does. Other pdfmd syntax (calc, kits) is still plain Pandoc there.
+- `GET /api/raw?path=NAME` (HTTP only, not `--api`): a picture (png, jpg, gif, svg, webp) or a PDF of the project folder byte for byte with its type; any other type is a 415 `not_viewable`, a path outside the folder a 403, as for every file.
+- The page's files panel is a tree: folders first, then files, as the Finder lists them (numbers sorted as numbers); a folder opens and closes by a click, the choice is remembered, and a folder starts closed unless the open file is inside it. A picture or a PDF opens in a tab and is shown in the editor's place (`/api/raw`; the demo says it has none); a CSV file opens as text with its table beside it; another file that is not Markdown has no preview. The search skips pictures and PDFs.
+- Control-command chords are no longer the page's: the page took control-command-S for its own Save, so the Mac's mode switch never saw it ("going back just saves"). `window.appAdopt(TEXT)` (the text of an unsaved new file of the plain editor, as a new unsaved tab) and `window.appSave()` (save the current file, say whether anything is left unsaved) are for the Mac window's hand-over.
+- Self-test 53 checks (was 48); `tests/test_serve.py` has 2 new tests (a CSV block with and without the filter, from a part in `parts/`; `/api/raw` with its refusals).
+
 ## v3.32.38a — 2026-11-05
 
 Pre-edit state: commit `390d3ee`. Entry 3do. **Colophon (Mac app, `gui/` only): the studio window runs on the real folder through `pdfmd --serve`; command-9; the switch key is a setting.** The author: "can you make it work with pdfmd --serve then?", command-9 "last tab in text editor mode, zoom to fit in pdf viewer mode", and the switch key "easy to change in the app itself too? no hardcoding". No shipped code changes (`PDFMD_VERSION` stays 3.32.38).

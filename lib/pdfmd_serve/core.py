@@ -10,6 +10,7 @@ in by pdfmd.py as functions, so this package imports nothing from it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -32,6 +33,9 @@ KINDS = {
     ".typ": "typst", ".tex": "tex", ".html": "html", ".htm": "html", ".css": "css", ".lua": "lua", ".pdf": "pdf", ".txt": "text",
     ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".svg": "image", ".webp": "image",
 }
+# What /api/raw serves as it is: what the page's viewer can show (a text file goes through /api/file, which keeps its line endings and its mtime).
+RAW_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
+             ".webp": "image/webp", ".pdf": "application/pdf"}
 SKIPPED_DIRS = {"__pycache__", "node_modules"}
 # a position from pandoc reading standard input has no file name (`5:1-6:1`); the page's source mirror wants `name@5:1-6:1`
 POSITION = re.compile(r'data-pos="(\d+:\d+-\d+:\d+)"')      # beside every name that starts with a dot
@@ -84,16 +88,19 @@ def headings(text: str) -> list[dict]:
 
 class Core:
     """One project folder. `pick_main(root)` -> (relative path or None, why); `discover(root, main)` -> [{"role", "file"}];
-    `write_bytes(path, data)` is an atomic write."""
+    `write_bytes(path, data)` is an atomic write; `filters()` is a context manager that yields the Lua filters (paths) the live view runs
+    (pdfmd's own: the CSV tables)."""
 
     def __init__(self, root: Path, pick_main: Optional[Callable] = None, discover: Optional[Callable] = None,
-                 write_bytes: Optional[Callable] = None, which: Callable = shutil.which, display: Optional[Callable] = None):
+                 write_bytes: Optional[Callable] = None, which: Callable = shutil.which, display: Optional[Callable] = None,
+                 filters: Optional[Callable] = None):
         self.root = Path(root).resolve()
         self.pick_main = pick_main or (lambda root: (None, "not asked"))
         self.discover = discover or (lambda root, main: [])
         self.write_bytes = write_bytes or self._write_bytes
         self.which = which
         self.display = display or str
+        self.filters = filters or contextlib.nullcontext
         self.lock = threading.Lock()
 
     # ---- dispatch ---------------------------------------------------------------------------------------------------------------
@@ -178,6 +185,17 @@ class Core:
         return 200, {"path": name, "text": text.replace("\r\n", "\n"), "encoding": "utf-8-sig" if bom else "utf-8",
                      "lineEnding": "crlf" if crlf else "lf", "mtime": str(path.stat().st_mtime_ns)}
 
+    def raw(self, query: dict) -> tuple[bytes, str]:
+        """`GET /api/raw?path=NAME`: a picture or a PDF of the project, byte for byte, and its type. The one answer that is not JSON (the HTTP
+        shell sends it); an error is an `ApiError` as everywhere."""
+        path, name = self.resolve(query.get("path"))
+        mime = RAW_TYPES.get(path.suffix.lower())
+        if mime is None:
+            raise ApiError(415, "not_viewable", f"{name} is not a picture or a PDF")
+        if not path.is_file():
+            raise ApiError(404, "no_file", f"{name} is not a file of this project")
+        return path.read_bytes(), mime
+
     def put_file(self, query: dict, body: dict) -> tuple[int, dict]:
         path, name = self.resolve(body.get("path"))
         text = body.get("text")
@@ -244,9 +262,14 @@ class Core:
         for item in self.discover(self.root, Path(main) if main else None):
             if item["role"] == "metadata" and not item.get("outside"):
                 command += ["--metadata-file", str(self.root / item["file"])]
+        # what a build finds: a file named in the text (a CSV, a picture) is looked for beside the document and in the project's folder
+        command += ["--resource-path", os.pathsep.join(dict.fromkeys([".", str(folder), str(self.root)]))]
         started = time.monotonic()
         try:
-            done = subprocess.run(command, input=text.encode("utf-8"), capture_output=True, cwd=str(folder), timeout=RENDER_TIMEOUT)
+            with self.filters() as lua:
+                for path in (lua or []):
+                    command += ["--lua-filter", str(path)]
+                done = subprocess.run(command, input=text.encode("utf-8"), capture_output=True, cwd=str(folder), timeout=RENDER_TIMEOUT)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "timeout", f"pandoc did not answer in {RENDER_TIMEOUT} s") from None
         except OSError as error:

@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.38"
+PDFMD_VERSION = "3.32.39"
 import argparse
 import atexit
 import csv
@@ -13658,6 +13658,13 @@ def serve_discovered(folder: Path, main: Path | None) -> list[dict]:
     return found
 
 
+@contextmanager
+def serve_live_filters() -> Iterator[list]:
+    """The Lua filters the live view runs besides Pandoc: the `.csv` blocks of a document are tables there too."""
+    with csv_table_filter() as csv_filter:
+        yield [csv_filter]
+
+
 def serve_core(folder: Path):
     """The JSON core of `--serve` and `--api` for the project folder ``folder`` (which becomes the working folder: pdfmd's
     discovery reads it)."""
@@ -13669,7 +13676,7 @@ def serve_core(folder: Path):
         main, why = serve_main_document(root)
         return main, why
     return Core(folder, pick_main=pick, discover=serve_discovered, write_bytes=atomic_write_bytes,
-                display=lambda path: str(path).replace(str(Path.home()), "~", 1))
+                display=lambda path: str(path).replace(str(Path.home()), "~", 1), filters=serve_live_filters)
 
 
 def serve_command(args) -> int:

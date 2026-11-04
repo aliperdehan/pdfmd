@@ -40,7 +40,7 @@ the checks, the live render of an edited text. Not here: files on disk, git, cli
 - `vendor/cm/`: `entry.js` (the CodeMirror implementation of the editor contract), `package.json` (exact versions), `build.sh` (needs node, only to rebuild
   `codemirror.js`), `LICENSES.txt`.
 - `js/selftest.js`: open `index.html#selftest`; it drives the page like a person and writes `ok` / `FAIL` lines into `#selftest`. Headless:
-  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (48 checks).
+  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (53 checks).
 
 ## Findings that the core (S1) must answer
 - Pandoc's source positions exist only for the `commonmark` and `gfm` readers, **not** for pdfmd's own `markdown` reader, and then without citations: the live view
