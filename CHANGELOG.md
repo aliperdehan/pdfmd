@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.32 — 2026-11-04
+
+Pre-edit state: commit `5f54ef4`. `[tables]`, entry 3fa, step 2 of 3. **Vertical alignment of a table cell** (`t`, `m`, `b` in a cell tag: `&t&`, `&mc&`, `<m>`, `&merge-up,bottom&`). The author: "centering (on x and y separately or both together), top bottom left down alignment".
+
+- **LaTeX.** A row has one baseline in LaTeX, so Pandoc's `longtable` cannot align one cell. A table with a vertical letter is rebuilt by `cellalign.lua` as a `longtblr` (tabularray) from Pandoc's own table model: columns and widths (the table-width filter's), header rows (`rowhead`, repeated on every page), spans, per-cell alignment, caption and label (a table without a caption gets `caption={},entry=none,label=none`, otherwise tabularray prints an empty "Table N:"). The package goes in a header file of pdfmd's own (`tblr_header_args`; a filter's `header-includes` is dropped by every header file of pdfmd's) with tabularray's "Continued on next page" and "(Continued)" templates emptied, as Pandoc's tables have none. A table with no vertical letter is untouched.
+- **tabularray's words.** Its `t` and `b` are baseline alignments (a "top" cell beside a "middle" one drew misaligned in the first spike); its true top, middle and bottom are `h`, `m`, `f`, which is what the filter writes, and every cell of such a table starts as `h` (`cells={valign=h}`).
+- **HTML** gets `style="vertical-align: ..."`. Typst and Word do not draw it yet (a `#align(horizon)[...]` wrapper made Typst swallow the cell, so it was not kept).
+- **No tabularray** (`kpsewhich` cannot find it, `tabularray_available()`): the filter is told `-M pdfmd-tblr=off`, the vertical letters are ignored in a LaTeX build and one NOTE says so; the build goes on.
+- `tests/test_celltags.py` (+7: the longtblr keys, a table with and without a caption in one document, spans with vertical letters, the PDF build, HTML, the fallback).
+
 ## v3.32.31 — 2026-11-04
 
 Pre-edit state: commit `c49cfce`. `[tables]`, entry 3fa. **Merged cells in pipe tables, and cell tags in any spelling.** The author: "can we enhance tables, like very? ... merging tables, choosing arbitrary cell width and height, centering (on x and y separately or both together), top bottom left down alignment --- none is easily achievable". Decided over several rounds of design (syntax, delimiters, clashes); this is the first of three steps (spans, then vertical alignment, then widths and heights).

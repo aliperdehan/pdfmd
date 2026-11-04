@@ -13,12 +13,14 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "lib"))
 
+import pdfmd  # noqa: E402
 from pdfmd_tables.celltags import DEFAULT_KINDS, find_tags, normalise, parse_tokens  # noqa: E402
 
 HEAD = "| h | i | j |\n|---|---|---|\n"
@@ -285,6 +287,98 @@ class Build(unittest.TestCase):
         done, _ = self.build("| a |\n|--|\n| x |\n", options="table-tag-brackets: [round]")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("table-tag-brackets", done.stdout + done.stderr)
+
+
+TABULARRAY = bool(shutil.which("kpsewhich") and subprocess.run(["kpsewhich", "tabularray.sty"], capture_output=True, text=True).stdout.strip())
+VERTICAL = ("| Description | Top | Middle | Bottom |\n|:--|:--|:--|:--|\n"
+            "| a long long long long long long long long long text that wraps over lines | &t& top | &m& middle | &b& bottom |\n"
+            "| x | &mc& centred | y | z |\n\nTable: A caption {#tbl:v}\n")
+
+
+class Vertical(unittest.TestCase):
+    """Vertical alignment (v3.32.32): LaTeX draws it with tabularray's longtblr, HTML with a style."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+
+    def build(self, body: str, to: str = "tex") -> tuple[subprocess.CompletedProcess, str]:
+        (self.root / "d.md").write_text(f"---\ntitle: T\n---\n\n{body}", encoding="utf-8")
+        out = self.root / f"out.{to}"
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", to, "-o", out.name, "--no-stamp",
+                               "--no-backup", "--no-auto", "crossref"], cwd=self.root, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "XDG_CACHE_HOME": str(self.root / "cache")})
+        return done, (out.read_text(encoding="utf-8") if out.exists() else "")
+
+    def test_the_pre_pass_counts_the_cells_with_a_vertical_alignment(self):
+        result = normalise(HEAD + "| &t& a | &lc& b | &c& c |\n")
+        self.assertEqual((result.cells, result.vertical), (3, 2))
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
+    def test_latex_gets_a_longtblr_with_the_tabularray_words_for_top_middle_bottom(self):
+        done, tex = self.build(VERTICAL)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("\\begin{longtblr}[caption={A caption},label={tbl:v}]", tex)
+        self.assertIn("\\usepackage{tabularray}", tex)
+        for key in ("cell{2}{2}={}{valign=h}", "cell{2}{3}={}{valign=m}", "cell{2}{4}={}{valign=f}", "cell{3}{2}={}{halign=c,valign=m}"):
+            self.assertIn(key, tex)
+        self.assertIn("cells={valign=h}", tex)           # a baseline cell beside a middle one would misalign
+        self.assertIn("rowhead=1", tex)
+        self.assertNotIn("<pc", tex)
+        self.assertNotIn("\\begin{longtable}", tex)
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
+    def test_a_table_without_a_caption_prints_no_caption_and_a_table_without_tags_stays_a_longtable(self):
+        done, tex = self.build("| a | b |\n|--|--|\n| &m& x | y |\n\n| c | d |\n|--|--|\n| &c& p | q |\n")
+        self.assertIn("caption={},entry=none,label=none", tex)
+        self.assertIn("\\begin{longtable}", tex)                       # the second table has no vertical letter
+        self.assertIn("\\multicolumn{1}{c}{p}", tex)
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
+    def test_spans_and_vertical_letters_together(self):
+        done, tex = self.build("| G | S | << |\n|--|--|--|\n| ^^ | A | B |\n| tall &m& | 1 | 2 |\n| ^^ | 3 | 4 |\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("cell{1}{2}={c=2}{}", tex)
+        self.assertIn("cell{1}{1}={r=2}{}", tex)
+        self.assertIn("cell{3}{1}={r=2}{valign=m}", tex)
+        self.assertIn("rowhead=2", tex)
+        self.assertEqual(tex.count("\\\\"), 4)                          # the header row and three body rows
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY and shutil.which("lualatex"), "needs Pandoc and a LaTeX with tabularray")
+    def test_the_pdf_builds(self):
+        (self.root / "d.md").write_text("---\ntitle: T\n---\n\n" + VERTICAL, encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-o", "o.pdf", "--no-stamp", "--no-backup", "--no-auto",
+                               "crossref"], cwd=self.root, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "XDG_CACHE_HOME": str(self.root / "cache")})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertTrue((self.root / "o.pdf").stat().st_size > 1000)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_html_gets_a_vertical_align_style(self):
+        done, html = self.build(VERTICAL, "html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn('<td style="text-align: left; vertical-align: top;">top</td>', html)
+        self.assertIn('vertical-align: middle;">middle</td>', html)
+        self.assertIn('vertical-align: bottom;">bottom</td>', html)
+        self.assertNotIn("data-valign", html)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_without_tabularray_the_vertical_letters_are_ignored_in_latex_and_the_build_says_so(self):
+        source = self.root / "w.md"
+        source.write_text(VERTICAL, encoding="utf-8")
+        with mock.patch.object(pdfmd, "tabularray_available", return_value=False), mock.patch.object(pdfmd, "TABLAY_NOTED", set()):
+            arguments = pdfmd.cellalign_args(source, [])
+            self.assertEqual(pdfmd.tblr_header_args(source, []), [])
+        self.assertEqual(arguments[:2], ["-M", "pdfmd-tblr=off"])
+        filter_path = arguments[-1]
+        canonical = "| a | b |\n|--|--|\n| <pc vm> x | y |\n"
+        done = subprocess.run(["pandoc", "-f", "markdown", "-t", "latex", "-M", "pdfmd-tblr=off", "--lua-filter", filter_path],
+                              input=canonical, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("\\begin{longtable}", done.stdout)
+        self.assertNotIn("longtblr", done.stdout)
+        self.assertNotIn("<pc", done.stdout)
 
 
 if __name__ == "__main__":

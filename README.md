@@ -2109,7 +2109,7 @@ point at the cell they belong to), and `12` is centred over two columns.
 | tag | meaning |
 |---|---|
 | `l` `r` `c` | horizontal alignment: left, right, centre |
-| `t` `m` `b` | vertical alignment: top, middle, bottom (read and carried; drawn from the next version on) |
+| `t` `m` `b` | vertical alignment: top, middle, bottom of the row (see below) |
 | `<<` `>>` `^^` `vv` | merge: this cell belongs to the neighbour on the left, right, above, below. The arrow points at the cell that holds the content; a chain of arrows is followed |
 
 Letters can be written in any order and case, with a comma, a space or nothing between them: `&tl&`, `&T,L&`, `&top left&`. A lone `c` is
@@ -2129,6 +2129,15 @@ the same word). Use up and down for merging, because top and bottom are the vert
 - `{...}` and `«...»` are off by default (`K_{c}` and `\textbf{b}` look like tags); `table-tag-brackets: [angle, amp, brace]` turns them on.
 
 Code spans and math are never read, and a tag with a backslash before it (`\<c>`, `\&c&`) is plain text.
+
+**Vertical alignment**
+
+In LaTeX a row has one baseline, so a cell cannot be centred or put at the bottom by itself; a table that has a `t`, `m` or `b` cell is
+therefore drawn as a `longtblr` (the `tabularray` package, which pdfmd adds to the preamble), built from the same table: its columns and
+widths, header rows (repeated on every page, without tabularray's "Continued" texts), spans, caption and label. All cells of such a table
+start at the top of their row, so `m` and `b` mean the middle and the bottom of the row. A table with no vertical letter stays the
+ordinary Pandoc table. HTML gets a `vertical-align` style. Typst and Word do not draw it yet. Without `tabularray` (`kpsewhich`
+cannot find it) the vertical letters are ignored in a LaTeX build, with one NOTE.
 
 **Merging**
 

@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.31"
+PDFMD_VERSION = "3.32.32"
 import argparse
 import atexit
 import csv
@@ -3769,17 +3769,42 @@ def cell_tags_text(text: str, md_path: Path, metadata_files: list[Path], label: 
     return result.text
 
 
-def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
-    """``--lua-filter cellalign.lua`` for a document with a cell tag in a pipe table, unless `cell-align` is off."""
+@functools.lru_cache(maxsize=1)
+def tabularray_available() -> bool:
+    """Whether LaTeX has the `tabularray` package, which draws a cell's vertical alignment (found with kpsewhich)."""
+    kpsewhich = shutil.which("kpsewhich")
+    if not kpsewhich:
+        return False
+    try:
+        found = subprocess.run([kpsewhich, "tabularray.sty"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(found.strip())
+
+
+def cell_tag_counts(sources: Path | list[Path], metadata_files: list[Path]) -> tuple[int, int]:
+    """(cells with a tag, cells with a vertical alignment) in the pipe tables of the sources; (0, 0) when `cell-align` is off."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or not cell_align_on(files[0], metadata_files):
-        return []
+        return 0, 0
     try:
         from pdfmd_tables.celltags import normalise
     except ImportError:
-        return []
+        return 0, 0
     kinds = cell_tag_kinds(files[0], metadata_files)
-    if not any(normalise(EMBED_BLOCK_RE.sub("", read_text_best_effort(file)), kinds).cells for file in files):
+    found = [normalise(EMBED_BLOCK_RE.sub("", read_text_best_effort(file)), kinds) for file in files]
+    return sum(result.cells for result in found), sum(result.vertical for result in found)
+
+
+TABLAY_NOTED: set[str] = set()
+
+
+def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter cellalign.lua`` for a document with a cell tag in a pipe table, unless `cell-align` is off. Vertical
+    alignment is drawn in LaTeX with tabularray; without it the filter is told (`-M pdfmd-tblr=off`) and says so once."""
+    files = sources if isinstance(sources, list) else [sources]
+    tagged, vertical = cell_tag_counts(files, metadata_files)
+    if not tagged:
         return []
     try:
         import pdfmd_lua
@@ -3787,7 +3812,37 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
         pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("cellalign")
-    return ["--lua-filter", str(shipped)] if shipped is not None else []
+    if shipped is None:
+        return []
+    arguments = ["--lua-filter", str(shipped)]
+    if vertical and not tabularray_available():
+        arguments = ["-M", "pdfmd-tblr=off"] + arguments
+        label = display_path(files[0])
+        if label not in TABLAY_NOTED:
+            TABLAY_NOTED.add(label)
+            print(f"NOTE  cell-tags: {label}: a cell has a vertical alignment (t, m, b), which LaTeX draws with its `tabularray` "
+                  "package; it was not found (kpsewhich), so those cells keep the top alignment in a LaTeX build. Typst and HTML are unaffected.")
+    return arguments
+
+
+def tblr_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """`--include-in-header` with tabularray for a LaTeX build of a document with a vertical alignment in a cell, or [] (a filter's
+    `header-includes` is dropped by every header file of pdfmd's, so the package goes in a file of its own)."""
+    _, vertical = cell_tag_counts(sources, metadata_files)
+    if not vertical or not tabularray_available():
+        return []
+    text = ("% pdfmd: vertical alignment of table cells (cell tags, entry 3fa)\n\\usepackage{tabularray}\n\\UseTblrLibrary{booktabs}\n"
+            "% a long table repeats its header on every page, as Pandoc's own tables do, without tabularray's continuation texts\n"
+            "\\DeclareTblrTemplate{contfoot-text}{pdfmd}{}\n\\SetTblrTemplate{contfoot-text}{pdfmd}\n"
+            "\\DeclareTblrTemplate{conthead-text}{pdfmd}{}\n\\SetTblrTemplate{conthead-text}{pdfmd}\n")
+    header = cache_root() / "tex" / f"packages-tblr-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.tex"
+    try:
+        if not header.is_file():
+            header.parent.mkdir(parents=True, exist_ok=True)
+            header.write_text(text, encoding="utf-8")
+    except OSError:
+        return []
+    return ["--include-in-header", str(header)]
 
 
 # Markdown inside raw LaTeX (v3.32.0, entry 3dc): `\md{...}` and `\begin{md}...\end{md}`. pdfmd_lua/md_macro.lua reads the argument as
@@ -24056,6 +24111,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if tablewidth_auto:
                 cmd += width_filter_args(width_filter)
             cmd += cellalign_args(md_path, metadata_files)
+            cmd += tblr_header_args(md_path, metadata_files)
             cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
             hoist_code_header(cmd)
             keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
@@ -24585,6 +24641,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += width_filter_args(width_filter)
                 cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                 if is_tex_target:
+                    cmd += tblr_header_args([md_path, *parts_inputs], metadata_files)
                     cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
@@ -24849,6 +24906,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += width_filter_args(width_filter)
                     cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in LATEX_ENGINES:
+                        cmd += tblr_header_args([md_path, *parts_inputs], metadata_files)
                         cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)

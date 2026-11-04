@@ -240,6 +240,7 @@ class Result:
     notes: list[Note] = field(default_factory=list)
     tables: int = 0                  # tables with at least one tag
     cells: int = 0                   # cells with a tag
+    vertical: int = 0                # cells with a vertical alignment (LaTeX draws those with tabularray)
 
 
 def _split_row(line: str) -> tuple[str, list[str], str]:
@@ -426,6 +427,7 @@ def normalise(text: str, kinds: tuple[str, ...] = DEFAULT_KINDS) -> Result:
             if table_changes:
                 result.tables += 1
                 result.cells += sum(piece.count(f"<{TAG}") for piece in table_changes.values())
+                result.vertical += sum(len(re.findall(rf"<{TAG} [^>]*\bv[tmb]\b", piece)) for piece in table_changes.values())
                 changed.update(table_changes)
             index = end
             continue
