@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(view, "Hide Sidebar", "toggleThumbnails:", "t", [.command, .option])
         add(view, "Thumbnails", "showPages:", "2", [.command, .option])
         add(view, "Table of Contents", "showContents:", "3", [.command, .option])
+        add(view, "Reset Sidebar Width", "resetSidebarWidth:", "")
         add(view, "Zoom In", "zoomIn:", "=")
         add(view, "Zoom Out", "zoomOut:", "-")
         add(view, "Actual Size", "actualSize:", "0")

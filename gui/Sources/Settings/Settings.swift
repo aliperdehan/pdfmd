@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.3.0"
+let appVersion = "0.2.4"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -57,7 +57,9 @@ enum Settings {
         Item(key: "highlightMaxMB", value: 0, label: "Colours off above (MB)", help: "above this size the colours are off (0 = never)", tab: "Performance"),
         Item(key: "pdfThumbnails", value: 1, label: "Show thumbnails", help: "1 = show the page thumbnails in a sidebar", tab: "PDF", kind: .flag),
         Item(key: "pdfSidebarMode", value: 0, label: "Sidebar shows", help: "0 = page thumbnails, 1 = the table of contents (outline)", tab: "PDF", kind: .choice([0, 1])),
-        Item(key: "pdfThumbnailWidth", value: 130, label: "Thumbnail width (pt)", help: "width of a page thumbnail in the sidebar; dragging the divider sets it", tab: "PDF"),
+        Item(key: "pdfThumbnailWidth", value: 130, label: "Thumbnail width (pt)", help: "width of a page thumbnail in the sidebar when it has not been dragged to another width", tab: "PDF"),
+        Item(key: "pdfSidebarWidth", value: 0, label: "Sidebar width (pt)", help: "the width the sidebar was last dragged to; 0 = the width that the thumbnail width gives (double-click the divider, or View > Reset Sidebar Width, sets it to 0)", tab: "PDF"),
+        Item(key: "pdfPageSideGutterPt", value: 0, label: "Gap beside the pages (pt)", help: "the dark gap left and right of the pages (PDFKit's own is about 4); 0 puts the page against the sidebar's divider line when it fills the width", tab: "PDF"),
         Item(key: "pdfDividerGrabPt", value: 8, label: "Sidebar divider: grab width (pt)", help: "how wide the strip is that catches the mouse to resize the sidebar (the line drawn stays thin)", tab: "PDF"),
         Item(key: "pdfContentsOpenLevels", value: 2, label: "Contents: levels shown", help: "levels of the table of contents open when a file is opened: 1 = only the top entries, 2 = their children too", tab: "PDF"),
         Item(key: "pdfOpenFit", value: 0, label: "Zoom when a file is opened", help: "0 = fit the page's width, 1 = fit the whole page, 2 = actual size (100%)", tab: "PDF", kind: .choice([0, 1, 2])),

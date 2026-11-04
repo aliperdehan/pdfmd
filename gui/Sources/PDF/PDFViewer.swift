@@ -116,17 +116,37 @@ final class PDFViewerDocument: NSDocument {
     }
 }
 
-/// The split view with a divider that is easy to catch: the slot is `grab` points wide (a setting) and only a hairline is drawn in it.
+/// The colour behind the pages, the thumbnails, the contents and the divider's slot. One explicit colour for all of them: the
+/// system's under-page colour came out in two different greys in different views (a lighter stripe at the divider).
+enum Desk {
+    static let color = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 27 / 255, green: 28 / 255, blue: 29 / 255, alpha: 1)
+            : NSColor(srgbRed: 0.58, green: 0.58, blue: 0.60, alpha: 1)
+    }
+}
+
+/// The split view with a divider that is easy to catch: the slot is `grab` points wide (a setting), painted like the sidebar, with a
+/// hairline on its page side, exactly where the sidebar ends and the pages begin. A double click on it asks for the default width.
 final class SidebarSplit: NSSplitView {
+    var onDefaultWidth: (() -> Void)?
     var grab: CGFloat = 8 {
         didSet { if oldValue != grab { adjustSubviews(); needsDisplay = true } }
     }
     override var dividerThickness: CGFloat { grab }
     override func drawDivider(in rect: NSRect) {
-        NSColor.underPageBackgroundColor.setFill()
+        Desk.color.setFill()
         rect.fill()
         dividerColor.setFill()
-        NSRect(x: rect.midX - 0.5, y: rect.minY, width: 1, height: rect.height).fill()
+        NSRect(x: rect.maxX - 1, y: rect.minY, width: 1, height: rect.height).fill()
+    }
+    override func mouseDown(with event: NSEvent) {
+        let x = convert(event.locationInWindow, from: nil).x
+        if event.clickCount == 2, let first = arrangedSubviews.first, x >= first.frame.maxX, x <= first.frame.maxX + dividerThickness {
+            onDefaultWidth?()
+            return
+        }
+        super.mouseDown(with: event)
     }
 }
 
@@ -175,6 +195,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         split.isVertical = true
         split.dividerStyle = .thin
         split.grab = CGFloat(max(1, Settings.number("pdfDividerGrabPt")))
+        split.onDefaultWidth = { [weak self] in self?.resetSidebarWidth(nil) }
         split.delegate = self
         split.addArrangedSubview(side)
         split.addArrangedSubview(pages)
@@ -298,17 +319,30 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     private func configure(_ view: PDFView) {
         view.displaysPageBreaks = true
-        view.backgroundColor = .underPageBackgroundColor
+        view.backgroundColor = Desk.color
+        let gutter = CGFloat(max(0, Settings.number("pdfPageSideGutterPt")))   // PDFKit's own gap left and right of the pages, which kept the divider off the page
+        let m = view.pageBreakMargins
+        view.pageBreakMargins = NSEdgeInsets(top: m.top, left: gutter, bottom: m.bottom, right: gutter)
         view.displayMode = PDFDisplayMode(rawValue: Settings.int("pdfDisplayMode")) ?? .singlePageContinuous
         view.interpolationQuality = PDFInterpolationQuality(rawValue: Settings.int("pdfInterpolation")) ?? .low
         view.minScaleFactor = CGFloat(Settings.number("pdfZoomMinPercent")) / 100
         view.maxScaleFactor = CGFloat(Settings.number("pdfZoomMaxPercent")) / 100
     }
 
+    /// The sidebar's width: the one last dragged to, or the one the thumbnail width setting gives (the sidebar is as wide as a
+    /// thumbnail plus the margins the thumbnail view keeps around it).
+    private var sidebarWidthWanted: CGFloat {
+        let dragged = Settings.number("pdfSidebarWidth")
+        if dragged > 0 { return CGFloat(max(Double(Self.thumbnailMargin) + 40, dragged)) }
+        return CGFloat(max(40, Settings.number("pdfThumbnailWidth"))) + Self.thumbnailMargin
+    }
+
     private func applySettings() {
         configure(pdfView)
-        let width = CGFloat(max(40, Settings.number("pdfThumbnailWidth")))
+        let sidebarWidth = sidebarWidthWanted
+        let width = max(40, sidebarWidth - Self.thumbnailMargin)
         thumbs.thumbnailSize = CGSize(width: width, height: (width * 1.4).rounded())
+        thumbs.backgroundColor = Desk.color
         let show = Settings.flag("pdfThumbnails")
         let mode = Settings.int("pdfSidebarMode") == 1 ? 1 : 0
         modes.selectedSegment = mode
@@ -329,8 +363,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         }
         if show {
             // the sidebar is as wide as a thumbnail plus the margins the thumbnail view keeps around it
-            let wanted = width + Self.thumbnailMargin
-            if wasHidden || abs(side.frame.width - wanted) > 40 { split.setPosition(wanted, ofDividerAt: 0) }
+            if wasHidden || abs(side.frame.width - sidebarWidth) > 1 { split.setPosition(sidebarWidth, ofDividerAt: 0) }
         }
     }
 
@@ -661,14 +694,25 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
     }
 
     @objc private func rememberWidth() {
-        let w = Int(thumbs.thumbnailSize.width.rounded())
-        if w != Int(Settings.number("pdfThumbnailWidth")) { Settings.set("pdfThumbnailWidth", w) }
+        guard !side.isHidden else { return }
+        let w = Int(side.frame.width.rounded())
+        let standard = Int((CGFloat(max(40, Settings.number("pdfThumbnailWidth"))) + Self.thumbnailMargin).rounded())
+        let wanted = w == standard ? 0 : w   // dragged back to the default: nothing to remember
+        if wanted != Int(Settings.number("pdfSidebarWidth")) { Settings.set("pdfSidebarWidth", wanted) }
+    }
+
+    /// Back to the width the thumbnail width setting gives; the width that was dragged to is forgotten (in every PDF window).
+    @objc func resetSidebarWidth(_ sender: Any?) {
+        Settings.set("pdfSidebarWidth", 0)
+        if !side.isHidden { split.setPosition(sidebarWidthWanted, ofDividerAt: 0) }
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(toggleThumbnails(_:)):
             item.title = Settings.flag("pdfThumbnails") ? "Hide Sidebar" : "Show Sidebar"
+        case #selector(resetSidebarWidth(_:)):
+            return Settings.flag("pdfThumbnails")
         case #selector(showPages(_:)):
             item.state = Settings.flag("pdfThumbnails") && Settings.int("pdfSidebarMode") != 1 ? .on : .off
         case #selector(showContents(_:)):

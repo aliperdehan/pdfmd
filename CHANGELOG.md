@@ -19,9 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.32.29e — 2026-11-04
+
+Pre-edit state: commit `57f9567`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.4: the divider's line meets the page; the sidebar width can be reset; the previous commit's version is 0.2.3, not 0.3.0.** The author: "the dragger line does not sit on the same line as the boundary between the white page and dark thumbnail area ... is there an option to restore default side area width? ... can you checkout it from 0.3 back to 0.2 as patch? i want to keep 0.2 pdf viewer line, and make 0.3 the first working studio design".
+
+- Version: the PDF viewer line stays 0.2.x; 0.3.0 is kept for the first working "studio" design (editor, viewer, notes and the build in one app). `appVersion` 0.2.4; the entry above (v3.32.29d) now says 0.2.3.
+- The line: it is drawn at the page side of the divider slot (before, in the middle of it, with a dark stripe between it and the page). The slot was a lighter grey than the sidebar (measured 40 against 28 on the screen) because the system's under-page colour came out differently in different views; one explicit colour (`Desk.color`) now paints the pages' background, the thumbnails, the contents and the slot, and the measured pixels are equal (27, 28, 29). PDFKit also keeps a dark gap of its own (about 5 pt) left and right of the pages; it is the setting `pdfPageSideGutterPt` (0), so the page itself starts at the line. Checked by screenshot: line at columns 346-347, white from 348.
+- Reset: a double click on the divider, or View > Reset Sidebar Width, goes back to the width the thumbnail width setting gives (in every PDF window). The width dragged to is its own setting, `pdfSidebarWidth` (0 = none), and no longer overwrites `pdfThumbnailWidth` (which was the author's default); a drag back to the default clears it.
+- Tests: `--smoke-pdf` (now 57 checks): the drag is remembered without touching the thumbnail setting; the reset restores the 166 pt sidebar and the 130 pt thumbnails.
+
+Not pushed.
+
 ## v3.32.29d — 2026-11-04
 
-Pre-edit state: commit `19e4e31`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.3.0: the PDF sidebar has a table-of-contents mode, and its divider is easy to catch and resizes the thumbnails.** The author: "can you now make like TOC mode which draws the document's structure instead of thumbnails in the same place?" and "it is a bit hard to catch that dragger for me to resize the thumbnail area, but it actually does nothing except more black area currently".
+Pre-edit state: commit `19e4e31`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.3 (committed as 0.3.0, relabelled in v3.32.29e): the PDF sidebar has a table-of-contents mode, and its divider is easy to catch and resizes the thumbnails.** The author: "can you now make like TOC mode which draws the document's structure instead of thumbnails in the same place?" and "it is a bit hard to catch that dragger for me to resize the thumbnail area, but it actually does nothing except more black area currently".
 
 - New `gui/Sources/PDF/PDFContents.swift`: the PDF's outline as a tree (`NSOutlineView` over `PDFOutline`). A click, or an arrow key, goes to the entry; the entry of the page being read is selected and its parents opened (a click's own entry is not taken away within 0.6 s, nor while it starts on the page shown); a file without an outline says "No table of contents". The levels open at the start are a setting (`pdfContentsOpenLevels`, 2); a reload of the same file puts the open entries back. Pages of entries are looked up only for the entries asked about (a binary search over the outline, which is in document order; looking up all 2628 entries of the R reference manual took 2 s, about 0.8 ms each).
 - The sidebar: a segmented control (Pages | Contents) at its top, View menu items "Thumbnails" (⌥⌘2) and "Table of Contents" (⌥⌘3) with a tick for the mode in use; ⌥⌘T and the toolbar button show or hide the whole sidebar (the menu says "Hide Sidebar"/"Show Sidebar"). Setting `pdfSidebarMode` (0 pages, 1 contents). The contents are loaded only while that mode is shown.

@@ -39,7 +39,7 @@ final class PDFContentsView: NSObject, NSOutlineViewDataSource, NSOutlineViewDel
         outline.style = .plain
         outline.indentationPerLevel = 12
         outline.rowHeight = 22
-        outline.backgroundColor = .underPageBackgroundColor
+        outline.backgroundColor = Desk.color
         outline.autoresizesOutlineColumn = false
         outline.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         outline.dataSource = self
@@ -50,7 +50,7 @@ final class PDFContentsView: NSObject, NSOutlineViewDataSource, NSOutlineViewDel
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = true
-        scroll.backgroundColor = .underPageBackgroundColor
+        scroll.backgroundColor = Desk.color
         empty.textColor = .secondaryLabelColor
         empty.alignment = .center
         empty.isHidden = true
