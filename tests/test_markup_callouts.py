@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-FILTER = ROOT / "pdfmd_lua" / "markup.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
 
 SOURCE = """\
 # H

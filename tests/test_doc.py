@@ -162,7 +162,7 @@ class Bundling(unittest.TestCase):
                              (ROOT / "docs" / "agents.md").read_text(encoding="utf-8"))
             self.assertTrue((Path(folder) / "pdfmd_docs" / "__init__.py").is_file())
         # (the git checkout has no copies: they are made by the build)
-        self.assertFalse((ROOT / "pdfmd_docs" / "README.md").exists())
+        self.assertFalse((ROOT / "lib" / "pdfmd_docs" / "README.md").exists())
 
 
 if __name__ == "__main__":

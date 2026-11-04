@@ -16,6 +16,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from pdfmd_kits.selection import OFF, SelectionError, combine, parse, parse_stack_setting, stack  # noqa: E402

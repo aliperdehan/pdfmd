@@ -267,7 +267,7 @@ Office files.
 <summary>Without pipx</summary>
 
 `pdfmd.py` needs Python 3.9+ and runs straight from a clone, with the folders beside it
-(`pdfmd_inkmd/` for the no-Pandoc fallback, `pdfmd_office/`, `pdfmd_setup/`, `pdfmd_unicode/`). It also runs
+(`lib/pdfmd_inkmd/` for the no-Pandoc fallback, `lib/pdfmd_office/`, `lib/pdfmd_setup/`, `lib/pdfmd_unicode/`). It also runs
 directly, and `pyyaml`/`pypdf` are optional (features that need them are
 skipped with a warning):
 
@@ -466,7 +466,7 @@ OK    notes.md > notes.pdf
 ```
 
 - **[inkmd](https://github.com/eagredev/inkmd)**, written by Dylan Moir (MIT
-  licence), is built in (a copy is vendored in `pdfmd_inkmd/`, about 2 MB,
+  licence), is built in (a copy is vendored in `lib/pdfmd_inkmd/`, about 2 MB,
   standard library only, works offline, same input gives the same bytes). It reads
   GitHub-flavoured Markdown: headings, emphasis, lists, task lists, tables,
   code blocks, quotes, links, images, and PNG/JPEG. It cannot typeset math,
@@ -2982,7 +2982,7 @@ setting `pdfmd-options: {metadata-append: [author]}` (a name or a list; the docu
 or `pdfmd --setup`) makes the document's own `author:` add as well, which suits a course that rotates its lab partners.
 Only a plain value or a list can be added to (a mapping stops with a message), and `header-includes` is left out because
 pdfmd lifts it into header files itself. Pandoc has no such rule, so pdfmd merges the layers and
-`pdfmd_lua/metadata_append.lua`, which runs before every other filter, puts the finished value in. The built-in renderer
+`lib/pdfmd_lua/metadata_append.lua`, which runs before every other filter, puts the finished value in. The built-in renderer
 (no Pandoc) reads the layers as Pandoc does, without adding. An attached or assembled source holds the finished value and
 `metadata-append: []`, so a restored report rebuilds with the same names, once.
 
@@ -3212,6 +3212,6 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 
 [MIT](https://github.com/aliperdehan/pdfmd/blob/main/LICENSE)
 
-`pdfmd_mhchem/` is a Python port of Martin Hensel's
+`lib/pdfmd_mhchem/` is a Python port of Martin Hensel's
 [mhchemParser](https://github.com/mhchem/mhchemParser) (the parser of mhchem's `\ce` and `\pu` that MathJax and KaTeX
-use) and keeps its [Apache License 2.0](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd_mhchem/LICENSE).
+use) and keeps its [Apache License 2.0](https://github.com/aliperdehan/pdfmd/blob/main/lib/pdfmd_mhchem/LICENSE).

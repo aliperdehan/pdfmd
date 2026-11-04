@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from pdfmd_office.docx_post import centre_table, centre_tables, TABLE
 

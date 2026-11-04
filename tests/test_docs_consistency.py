@@ -31,7 +31,7 @@ class Version(unittest.TestCase):
 
     def test_a_version_the_docs_name_as_their_own_is_the_current_one(self):
         # these files state no number of their own; if one is added, it is this version or the test says so
-        for path in (ROOT / "pdfmd_docs" / "__init__.py", ROOT / "docs" / "agents.md"):
+        for path in (ROOT / "lib" / "pdfmd_docs" / "__init__.py", ROOT / "docs" / "agents.md"):
             for found in VERSION_RE.findall(path.read_text(encoding="utf-8")):
                 with self.subTest(path=path.name, found=found):
                     self.assertEqual(found, pdfmd.PDFMD_VERSION)

@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FILTER = ROOT / "pdfmd_lua" / "table_width.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "table_width.lua"
 
 LONG = ("Chooses how the columns of a pipe table share the text width when the separator row says nothing at all "
         "about them")

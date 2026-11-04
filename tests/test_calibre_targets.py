@@ -212,7 +212,7 @@ class Math(unittest.TestCase):
         self.assertEqual(pdfmd.ebook_filter_args()[0], "--lua-filter")                # the pictures only need their titles cleaned
 
 
-EBOOK_LUA = ROOT / "pdfmd_lua" / "ebook.lua"
+EBOOK_LUA = ROOT / "lib" / "pdfmd_lua" / "ebook.lua"
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")

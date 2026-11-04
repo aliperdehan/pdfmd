@@ -17,13 +17,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from pandoc_support import needs_crossref, needs_pandoc  # noqa: E402
 from pdfmd_office import caption_separator, cref_names, parse_aux  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-FILTER = ROOT / "pdfmd_office" / "office.lua"
+FILTER = ROOT / "lib" / "pdfmd_office" / "office.lua"
 # a 1x1 PNG
 TINY_PNG = (b"\x89PNG\r\n\x1a\n" + b"".join(struct.pack(">I", len(data)) + kind + data
             + struct.pack(">I", zlib.crc32(kind + data)) for kind, data in

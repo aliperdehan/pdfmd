@@ -20,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from pdfmd_mhchem import MhchemError, parse, to_tex  # noqa: E402
 
@@ -80,8 +81,8 @@ class Examples(unittest.TestCase):
 
 class Licence(unittest.TestCase):
     def test_the_port_keeps_its_licence(self):
-        self.assertIn("Apache License", (ROOT / "pdfmd_mhchem" / "LICENSE").read_text(encoding="utf-8"))
-        header = (ROOT / "pdfmd_mhchem" / "parser.py").read_text(encoding="utf-8")[:1500]
+        self.assertIn("Apache License", (ROOT / "lib" / "pdfmd_mhchem" / "LICENSE").read_text(encoding="utf-8"))
+        header = (ROOT / "lib" / "pdfmd_mhchem" / "parser.py").read_text(encoding="utf-8")[:1500]
         self.assertIn("Copyright (c) 2015-2023 Martin Hensel", header)
         self.assertIn("Changes (pdfmd", header)
 

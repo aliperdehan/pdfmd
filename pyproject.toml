@@ -9,9 +9,9 @@ name = "pdfmd-cli"
 dynamic = ["version"]
 description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults, project-file discovery and a multi-engine fallback chain"
 readme = "README.md"
-# pdfmd is MIT; pdfmd_mhchem/ is a port of mhchemParser and keeps its Apache licence
+# pdfmd is MIT; lib/pdfmd_mhchem/ is a port of mhchemParser and keeps its Apache licence
 license = "MIT AND Apache-2.0"
-license-files = ["LICENSE", "pdfmd_inkmd/LICENSE", "pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "pdfmd_mhchem/LICENSE"]
+license-files = ["LICENSE", "lib/pdfmd_inkmd/LICENSE", "lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "lib/pdfmd_mhchem/LICENSE"]
 authors = [{ name = "Ali Perdekhan" }]
 requires-python = ">=3.9"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
@@ -28,7 +28,7 @@ classifiers = [
 
 [project.optional-dependencies]
 # Without Pandoc or a PDF engine, pdfmd falls back to a built-in renderer
-# (a vendored inkmd, in pdfmd_inkmd/). These two make it better:
+# (a vendored inkmd, in lib/pdfmd_inkmd/). These two make it better:
 #   math  - md2pdf (pymd2pdf, Python 3.11+) with offline LaTeX math
 #   emoji - the colour emoji font, which the vendored inkmd leaves out
 #   pandoc - the real Pandoc (pypandoc_binary bundles the executable)
@@ -66,6 +66,39 @@ pan-tec = "pdfmd:pan_tec_main"
 [tool.setuptools]
 py-modules = ["pdfmd"]
 packages = ["pdfmd_ansi", "pdfmd_batch", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_obsidian", "pdfmd_office", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode"]
+
+# the packages live in lib/ (the root held thirty folders); pdfmd.py itself stays in the root
+[tool.setuptools.package-dir]
+pdfmd_ansi = "lib/pdfmd_ansi"
+pdfmd_batch = "lib/pdfmd_batch"
+pdfmd_buildinfo = "lib/pdfmd_buildinfo"
+pdfmd_check = "lib/pdfmd_check"
+pdfmd_chem = "lib/pdfmd_chem"
+pdfmd_crop = "lib/pdfmd_crop"
+pdfmd_css = "lib/pdfmd_css"
+pdfmd_direct = "lib/pdfmd_direct"
+pdfmd_docs = "lib/pdfmd_docs"
+pdfmd_edit = "lib/pdfmd_edit"
+pdfmd_flat = "lib/pdfmd_flat"
+pdfmd_flavours = "lib/pdfmd_flavours"
+pdfmd_help = "lib/pdfmd_help"
+pdfmd_history = "lib/pdfmd_history"
+pdfmd_images = "lib/pdfmd_images"
+pdfmd_inkmd = "lib/pdfmd_inkmd"
+pdfmd_kits = "lib/pdfmd_kits"
+pdfmd_labels = "lib/pdfmd_labels"
+pdfmd_lua = "lib/pdfmd_lua"
+pdfmd_mhchem = "lib/pdfmd_mhchem"
+pdfmd_obsidian = "lib/pdfmd_obsidian"
+pdfmd_office = "lib/pdfmd_office"
+pdfmd_ranking = "lib/pdfmd_ranking"
+pdfmd_raw = "lib/pdfmd_raw"
+pdfmd_report = "lib/pdfmd_report"
+pdfmd_setup = "lib/pdfmd_setup"
+pdfmd_smiles = "lib/pdfmd_smiles"
+pdfmd_tables = "lib/pdfmd_tables"
+pdfmd_templates = "lib/pdfmd_templates"
+pdfmd_unicode = "lib/pdfmd_unicode"
 
 [tool.setuptools.package-data]
 pdfmd_docs = ["*.md"]

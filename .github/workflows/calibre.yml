@@ -9,7 +9,7 @@ on:
     branches: [main]
     paths:
       - pdfmd.py
-      - pdfmd_lua/ebook*.lua
+      - lib/pdfmd_lua/ebook*.lua
       - tests/test_calibre*.py
       - tests/test_ebook_input.py
       - tests/test_install_calibre.py

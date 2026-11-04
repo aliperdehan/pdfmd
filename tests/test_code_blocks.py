@@ -12,13 +12,13 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FILTER = ROOT / "pdfmd_lua" / "code.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "code.lua"
 LONG = "word " * 40
 
 
 def latex(markdown: str, *extra: str, header: bool = True) -> str:
     """The LaTeX Pandoc writes with the filter and (as pdfmd passes them) the wrapping header and its flag."""
-    given = ["-H", str(ROOT / "pdfmd_lua" / "code_wrap.tex"), "-M", "pdfmd-code-header=1"] if header else []
+    given = ["-H", str(ROOT / "lib" / "pdfmd_lua" / "code_wrap.tex"), "-M", "pdfmd-code-header=1"] if header else []
     done = subprocess.run(["pandoc", "-f", "markdown", "-s", "-t", "latex", "--lua-filter", str(FILTER), *given, *extra],
                           input=markdown, capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
@@ -28,7 +28,7 @@ def latex(markdown: str, *extra: str, header: bool = True) -> str:
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Filter(unittest.TestCase):
     def test_the_header_is_guarded_for_a_tex_without_fvextra(self):
-        header = (ROOT / "pdfmd_lua" / "code_wrap.tex").read_text(encoding="utf-8")
+        header = (ROOT / "lib" / "pdfmd_lua" / "code_wrap.tex").read_text(encoding="utf-8")
         self.assertIn("\\IfFileExists{fvextra.sty}", header)
         self.assertIn("breaklines", header)
 

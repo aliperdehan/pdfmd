@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 from cache_support import cache_env  # noqa: E402
 
@@ -26,8 +27,8 @@ from pandoc_support import needs_pandoc  # noqa: E402
 PANDOC = shutil.which("pandoc")
 TYPST = shutil.which("typst")
 POPPLER = shutil.which("pdftocairo")
-RAW_LUA = ROOT / "pdfmd_lua" / "raw.lua"
-PDF_LUA = ROOT / "pdfmd_lua" / "pdf_images.lua"
+RAW_LUA = ROOT / "lib" / "pdfmd_lua" / "raw.lua"
+PDF_LUA = ROOT / "lib" / "pdfmd_lua" / "pdf_images.lua"
 
 DOCUMENT = """\
 ---

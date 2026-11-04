@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 from cache_support import cache_env  # noqa: E402
 
@@ -178,7 +179,7 @@ class PandocReadsTheMath(unittest.TestCase):
 class CommandLists(unittest.TestCase):
     def test_one_list_of_commands(self):
         import pdfmd
-        lua = (ROOT / "pdfmd_lua" / "chem_client.lua").read_text(encoding="utf-8")
+        lua = (ROOT / "lib" / "pdfmd_lua" / "chem_client.lua").read_text(encoding="utf-8")
         block = re.search(r"M\.NAMES = \{(.*?)\}", lua, re.S).group(1)
         lua_names = set(re.findall(r"(\w+) = true", block))
         self.assertEqual(lua_names, set(pdfmd.CHEM_COMMANDS))
@@ -269,7 +270,7 @@ class Batch(unittest.TestCase):
         request = {"preamble": r"\sisetup{group-separator={,}}",
                    "items": [{"text": r"\ce{H2O}"}, {"math": r"c = \SI{12345}{\mol}, \ce{Cu^2+}"},
                              {"text": r"\num{2 x 3}"}]}
-        done = subprocess.run([sys.executable, str(ROOT / "pdfmd_chem")], input=json.dumps(request),
+        done = subprocess.run([sys.executable, str(ROOT / "lib" / "pdfmd_chem")], input=json.dumps(request),
                               capture_output=True, text=True, check=True)
         answers = json.loads(done.stdout)
         self.assertEqual(answers[0]["runs"], [["H", ""], ["2", "sub"], ["O", ""]])

@@ -30,8 +30,8 @@ import pdfmd  # noqa: E402
 PANDOC = shutil.which("pandoc")
 TYPST = shutil.which("typst")
 WEASYPRINT = shutil.which("weasyprint")
-TYPST_LUA = ROOT / "pdfmd_lua" / "typst.lua"
-WEASYPRINT_LUA = ROOT / "pdfmd_lua" / "weasyprint.lua"
+TYPST_LUA = ROOT / "lib" / "pdfmd_lua" / "typst.lua"
+WEASYPRINT_LUA = ROOT / "lib" / "pdfmd_lua" / "weasyprint.lua"
 NODE = shutil.which("node")
 # the KaTeX this machine has (`pdfmd --install math:katex`), for the tests that typeset with it
 KATEX = pdfmd.katex_runtime()
@@ -163,7 +163,7 @@ class WeasyPrintArguments(unittest.TestCase):
     def test_plain_math_and_the_filter_only_for_weasyprint(self):
         self.assertEqual(pdfmd.weasyprint_math_args("typst", []), [])
         arguments = pdfmd.weasyprint_math_args("weasyprint", [])
-        self.assertEqual(arguments[-1], str(ROOT / "pdfmd_lua" / "weasyprint.lua"))
+        self.assertEqual(arguments[-1], str(ROOT / "lib" / "pdfmd_lua" / "weasyprint.lua"))
         if pdfmd.pandoc_has_option("--math-method"):
             self.assertIn("--math-method=plain", arguments)
 

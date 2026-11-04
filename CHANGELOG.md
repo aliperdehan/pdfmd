@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.28 — 2026-11-03
+
+Pre-edit state: commit `92ab5e4`. Entry 3ey. **The thirty `pdfmd_*` package folders moved from the repository root into `lib/`** (the author: "the root has become messy with pdfmd_ ... group them all under lib/ and rewire things"). Package names are unchanged, so no `import pdfmd_x` line changed; older entries of this file keep naming the old paths (`pdfmd_lua/…` is now `lib/pdfmd_lua/…`).
+
+- `pdfmd.py` puts `lib/` on `sys.path` when it sits next to a `lib/` folder (a checkout, through the `~/dev/python-projects/pdfmd.py` symlink too); an installed copy and the zipapp have no `lib/` beside the file and are unchanged.
+- `pyproject.toml`: a `[tool.setuptools.package-dir]` table maps each package to `lib/<name>`; `license-files` follow. The wheel and the sdist still hold the packages at the top level.
+- `scripts/`: `build_zipapp.py` reads the packages from `lib/` and writes them at the archive root; `vendor_inkmd.py` and the three `gen_*` scripts write into `lib/`. CI: the ruff line, the vendoring step names and the `calibre.yml` trigger path.
+- Tests: the paths into shipped files (`ROOT / "lib" / "pdfmd_x"`), `test_packaging` (licence paths, the folder list read from `lib/`) and a new test that every package is mapped to `lib/` and that none is left in the root. Twenty-five test files imported a `pdfmd_*` package before `pdfmd` and so worked only after another test had loaded `pdfmd.py`; each now puts `lib/` on the path itself, and runs alone.
+- `CLAUDE.md` has a Layout section; README and TODO name the new paths.
+
+Not pushed.
+
 ## v3.32.27b — 2026-11-03
 
 Pre-edit state: commit `69481de`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.0: a PDF viewer.** The author: "let's first make usable pdf previewer, also native like notepad"; notes on PDFs (marker, pen, eraser, text blocks) come next.

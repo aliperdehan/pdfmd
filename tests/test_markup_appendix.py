@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 PANDOC = shutil.which("pandoc")
-FILTER = ROOT / "pdfmd_lua" / "markup.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
 
 
 def convert(text: str, writer: str, *extra: str, enabled: str = "appendix") -> tuple[str, str]:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from pdfmd_kits import install as kits_install  # noqa: E402
 from pdfmd_kits.install import InstallError, parse_source  # noqa: E402

@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from pdfmd_kits.preamble import PreambleClash, Source, blank_comments, kit_inputs, package_line, resolve  # noqa: E402
 

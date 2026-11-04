@@ -68,7 +68,7 @@ wait for an answer before any code.
 - [ ] Tools: a fallback chain for the ink box, PNG, SVG (gs, mutool, pdftocairo, pdftoppm, sips, pypdfium2), a tool-path setting, `--doctor` lines; `--install` and `--doctor` bring them from pip, brew, winget (Ghostscript on Windows: `gswin64c`, the installer)
 - [ ] A page-numbers setting (`pdfmd-options: {page-numbers: off}`, a flag and a `--setup` row), written per engine without replacing the document's `header-includes` (LaTeX `\pagestyle{empty}`, Typst `numbering: none`, the built-in renderer, Word); `--crop` of a Markdown source then builds without them
 - [ ] `--image-background`; webp (Pillow, pypdfium2 or ImageMagick); `--to pdf,docx` for formats that are not pictures (a loop of runs)
-- [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`pdfmd_office/fragments.py` has the pieces)
+- [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`lib/pdfmd_office/fragments.py` has the pieces)
 - [ ] eqpop calls `pdfmd --crop`, its own AppKit crop stays as the fallback (eqpop repository)
 
 ## Chemical structures, carried inside 3.31 [smiles] [3ec]

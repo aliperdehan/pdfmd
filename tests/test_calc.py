@@ -32,7 +32,7 @@ def pypdf_available() -> bool:
         return False
     return True
 
-CALC_LUA = ROOT / "pdfmd_lua" / "calc.lua"
+CALC_LUA = ROOT / "lib" / "pdfmd_lua" / "calc.lua"
 
 # expression -> the text it becomes (R's print: 7 significant digits, 20 and not 20.0)
 VALUES = (

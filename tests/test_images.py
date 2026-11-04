@@ -254,7 +254,7 @@ class Filter(unittest.TestCase):
         (directory / "map.yaml").write_text('pdfmd-image-map: {"a.svg": "/c/a-1.pdf", "b": "/c/b 2.pdf"}\n', encoding="utf-8")
         (directory / "d.md").write_text("![x](a.svg)\n\n\\includegraphics[width=2cm]{a.svg} \\includesvg[scale=2]{b} "
                                         "\\includegraphics{other.png}\n", encoding="utf-8")
-        done = subprocess.run([PANDOC, "d.md", "-t", "latex", "--lua-filter", str(ROOT / "pdfmd_lua" / "images.lua"),
+        done = subprocess.run([PANDOC, "d.md", "-t", "latex", "--lua-filter", str(ROOT / "lib" / "pdfmd_lua" / "images.lua"),
                                "--metadata-file", "map.yaml"], cwd=directory, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("{/c/a-1.pdf}", done.stdout)

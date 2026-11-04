@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from pdfmd_ranking import Candidate, MISSING, Ranking, RankingError, choose, compare  # noqa: E402
 

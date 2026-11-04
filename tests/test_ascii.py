@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 os.environ["PDFMD_CONFIG"] = ""
@@ -270,7 +271,7 @@ class HelperFailure(unittest.TestCase):
         config.write_text('pdfmd-ascii: {command: "' + str(directory / "no-such-python").replace("\\", "/") + '", script: "x.py", '
                           'missing: question, report: "' + (directory / "r.json").as_posix() + '", smart: all}\n', encoding="utf-8")
         done = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--metadata-file", str(config), "--lua-filter",
-                               str(ROOT / "pdfmd_lua" / "ascii.lua")], input="Caf\u00e9 \u65e5.\n", capture_output=True, text=True,
+                               str(ROOT / "lib" / "pdfmd_lua" / "ascii.lua")], input="Caf\u00e9 \u65e5.\n", capture_output=True, text=True,
                               encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertRegex(done.stderr, r"WARN  ascii: the transliteration helper did not answer \(.+\); the text is mapped on the written file")

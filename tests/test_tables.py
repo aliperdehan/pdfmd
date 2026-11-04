@@ -20,7 +20,7 @@ import pdfmd_tables as tables  # noqa: E402
 from pandoc_support import PANDOC_VERSION, needs_pandoc  # noqa: E402
 from env_support import config_env  # noqa: E402
 
-FILTER = ROOT / "pdfmd_lua" / "csv_table.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "csv_table.lua"
 PANDOC = shutil.which("pandoc")
 
 DOCUMENT_WITH_ID = """---

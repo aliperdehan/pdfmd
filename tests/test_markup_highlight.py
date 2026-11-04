@@ -19,7 +19,7 @@ from pandoc_support import discard_path  # noqa: E402
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-FILTER = ROOT / "pdfmd_lua" / "markup.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
 
 SOURCE = ("Some ==marked text== here, ==one== and ==with *emph* inside==, ==end==. A lone == sign and a == b == c.\n\n"
           "`==code==` stays. ==multi\nline==\n")

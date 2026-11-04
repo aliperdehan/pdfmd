@@ -23,7 +23,7 @@ os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-INDENT_LUA = ROOT / "pdfmd_lua" / "indent.lua"
+INDENT_LUA = ROOT / "lib" / "pdfmd_lua" / "indent.lua"
 
 LONG = " words to wrap onto a second line so that the first-line indent is visible in the output of the build."
 NESTED = f"""Outer.{LONG}

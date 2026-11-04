@@ -21,7 +21,7 @@ from pandoc_support import discard_path  # noqa: E402
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-FILTER = ROOT / "pdfmd_lua" / "markup.lua"
+FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
 
 SOURCE = """\
 Before.

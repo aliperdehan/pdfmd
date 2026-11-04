@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
 
-RUNNER = ROOT / "pdfmd_lua" / "limited_run.py"
+RUNNER = ROOT / "lib" / "pdfmd_lua" / "limited_run.py"
 
 
 def run(seconds: float, *program: str, data: bytes = b"") -> subprocess.CompletedProcess:

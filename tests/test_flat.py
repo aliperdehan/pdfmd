@@ -23,7 +23,7 @@ import pdfmd_flat  # noqa: E402
 from pandoc_support import CROSSREF_USABLE, needs_pandoc  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-FLAT_LUA = ROOT / "pdfmd_lua" / "flat.lua"
+FLAT_LUA = ROOT / "lib" / "pdfmd_lua" / "flat.lua"
 WRITER = pdfmd_flat.writer("gfm", "dollars", pdfmd.pandoc_extensions("gfm")) if PANDOC else "gfm-raw_html"
 
 

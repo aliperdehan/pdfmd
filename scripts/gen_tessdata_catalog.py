@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate pdfmd_unicode/_tessdata_catalog.py, the Tesseract language files `pdfmd --install ocr:LANG` can fetch.
+"""Regenerate lib/pdfmd_unicode/_tessdata_catalog.py, the Tesseract language files `pdfmd --install ocr:LANG` can fetch.
 
     python3 scripts/gen_tessdata_catalog.py            # rewrite the catalog (needs network and `gh`)
     python3 scripts/gen_tessdata_catalog.py --check    # say whether it would change, write nothing
@@ -16,7 +16,7 @@ import json
 import subprocess
 from pathlib import Path
 
-TARGET = Path(__file__).resolve().parent.parent / "pdfmd_unicode" / "_tessdata_catalog.py"
+TARGET = Path(__file__).resolve().parent.parent / "lib" / "pdfmd_unicode" / "_tessdata_catalog.py"
 REPOSITORY = "tesseract-ocr/tessdata_fast"
 TAG = "4.1.0"
 

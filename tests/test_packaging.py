@@ -98,10 +98,10 @@ class PyprojectTests(unittest.TestCase):
         self.assertIn("assets/fonts/*", package_data)
         self.assertIn("LICENSE", package_data)
         licences = self.project["license-files"]
-        self.assertIn("pdfmd_inkmd/LICENSE", licences)
-        self.assertIn("pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", licences)
+        self.assertIn("lib/pdfmd_inkmd/LICENSE", licences)
+        self.assertIn("lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", licences)
         for name in ("LICENSE", "assets/fonts/DejaVuSans.ttf", "assets/fonts/DejaVuSans-LICENSE.txt"):
-            self.assertTrue((ROOT / "pdfmd_inkmd" / name).is_file(), name)
+            self.assertTrue((ROOT / "lib" / "pdfmd_inkmd" / name).is_file(), name)
 
     def test_the_zipapp_and_the_wheel_ship_the_same_packages(self):
         # build_zipapp.py's list once lacked pdfmd_edit, pdfmd_help and pdfmd_raw (found in v3.28.26)
@@ -110,8 +110,16 @@ class PyprojectTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(sorted(module.PACKAGES), sorted(self.setuptools["packages"]))
-        folders = sorted(path.name for path in ROOT.glob("pdfmd_*") if (path / "__init__.py").is_file())
+        folders = sorted(path.name for path in (ROOT / "lib").glob("pdfmd_*") if (path / "__init__.py").is_file())
         self.assertEqual(sorted(self.setuptools["packages"]), folders)
+
+    def test_every_package_is_mapped_to_lib_and_the_root_holds_none(self):
+        # v3.32.28: the packages moved to lib/; a package missing from [tool.setuptools.package-dir] would import in a
+        # checkout (pdfmd.py puts lib/ on sys.path) and be absent from the wheel
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        for name in self.setuptools["packages"]:
+            self.assertIn(f'\n{name} = "lib/{name}"\n', text, name)
+        self.assertEqual([path.name for path in ROOT.glob("pdfmd_*") if (path / "__init__.py").is_file()], [])
 
     def test_the_zipapp_copies_the_documents_the_wheel_does(self):
         import ast

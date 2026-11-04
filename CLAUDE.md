@@ -5,7 +5,7 @@ output format via Pandoc. Started as `batchmd`, a twenty-line `pypandoc`
 batch script (see the changelog's v0.1.0); has since grown auto-discovery for metadata files,
 LaTeX preambles, Lua filters, and fonts, a multi-engine PDF fallback chain,
 a `pdfmd-options:` front-matter block, batch/report/book modes, and its
-own generic table-width-balancing Lua filter (`pdfmd_lua/table_width.lua`) —
+own generic table-width-balancing Lua filter (`lib/pdfmd_lua/table_width.lua`) —
 see the module's own docstring (`pdfmd.py`'s opening lines) for the
 current, authoritative feature list; don't rely on this file for feature
 details, only for process.
@@ -39,9 +39,17 @@ internally.
 
 ## A new flag or a new pdfmd-options key
 
-Add it to `pdfmd_setup/inventory.py` in the same commit: either the `--setup` row that sets it for
-every document (`pdfmd_setup/registry.py`, with its `UNSET` words) or an `Omitted` entry with the
+Add it to `lib/pdfmd_setup/inventory.py` in the same commit: either the `--setup` row that sets it for
+every document (`lib/pdfmd_setup/registry.py`, with its `UNSET` words) or an `Omitted` entry with the
 reason. `tests/test_setup.py` (`Completeness`) fails until it is in one of them.
+
+## Layout
+
+The `pdfmd_*` packages live in `lib/` (names unchanged, so `import pdfmd_lua` is as it always was); `pdfmd.py`, `tests/`,
+`scripts/` and the docs stay in the root. A checkout works because `pdfmd.py` puts `lib/` on `sys.path` itself; the wheel
+and the zipapp get the packages from `[tool.setuptools.package-dir]` in `pyproject.toml` and `PACKAGES` in
+`scripts/build_zipapp.py`. A new package goes into all three (`packages`, `package-dir`, `PACKAGES`);
+`tests/test_packaging.py` fails until it does. A test that reads a shipped file builds the path as `ROOT / "lib" / "pdfmd_x" / ...`.
 
 ## Debugging
 
@@ -55,7 +63,7 @@ doing something the project-specific files don't show at all.
 
 ## Vendored inkmd and the native tier
 
-`pdfmd_inkmd/` is a generated copy of the PyPI package `inkmd` (the built-in
+`lib/pdfmd_inkmd/` is a generated copy of the PyPI package `inkmd` (the built-in
 PDF renderer used when there is no Pandoc or PDF engine). Never edit it by
 hand: change `scripts/vendor_inkmd.py` and re-run it
 (`python3 scripts/vendor_inkmd.py --version X.Y.Z`; `--check` reports drift),

@@ -1,4 +1,4 @@
-# Weekly: has inkmd (vendored in pdfmd_inkmd/) or pymd2pdf (the md2pdf renderer)
+# Weekly: has inkmd (vendored in lib/pdfmd_inkmd/) or pymd2pdf (the md2pdf renderer)
 # moved? Opens one issue per finding; changes nothing itself. Re-vendor with
 # `python3 scripts/vendor_inkmd.py --version X.Y.Z`, then
 # `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests`.
@@ -31,7 +31,7 @@ jobs:
           latest = json.load(urllib.request.urlopen("https://pypi.org/pypi/inkmd/json"))["info"]["version"]
           check = subprocess.run([sys.executable, "scripts/vendor_inkmd.py", "--check"], capture_output=True, text=True)
           if check.returncode:
-              print(f"pdfmd_inkmd/ no longer matches inkmd {vendored}:\n\n```\n{check.stderr.strip()}\n```")
+              print(f"lib/pdfmd_inkmd/ no longer matches inkmd {vendored}:\n\n```\n{check.stderr.strip()}\n```")
           if latest != vendored:
               print(f"inkmd {latest} is out (vendored: {vendored}). Re-vendor with "
                     f"`python3 scripts/vendor_inkmd.py --version {latest}`, run the golden tests "

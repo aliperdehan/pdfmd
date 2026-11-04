@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Regenerate pdfmd_inkmd/, the vendored copy of inkmd, from an upstream wheel.
+"""Regenerate lib/pdfmd_inkmd/, the vendored copy of inkmd, from an upstream wheel.
 
     python3 scripts/vendor_inkmd.py                  # re-vendor INKMD_VERSION
     python3 scripts/vendor_inkmd.py --version 0.5.1  # move to another release
     python3 scripts/vendor_inkmd.py --wheel PATH     # use a local wheel (offline)
-    python3 scripts/vendor_inkmd.py --check          # fail if pdfmd_inkmd/ has drifted
+    python3 scripts/vendor_inkmd.py --check          # fail if lib/pdfmd_inkmd/ has drifted
 
-pdfmd_inkmd/ is generated, never hand-edited. The only differences from the
+lib/pdfmd_inkmd/ is generated, never hand-edited. The only differences from the
 upstream wheel are the ones made below: the package is renamed (so it can sit
 beside a separately installed `inkmd`), the CLI entry points are dropped, and
 the ~10 MB colour-emoji font is left out (inkmd falls back to `[rocket]`-style
@@ -30,7 +30,7 @@ from pathlib import Path
 INKMD_VERSION = "0.5.0"
 PACKAGE = "pdfmd_inkmd"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TARGET = REPO_ROOT / PACKAGE
+TARGET = REPO_ROOT / "lib" / PACKAGE
 
 # Upstream modules we do not ship: the command-line front end (pdfmd has its
 # own) and `python -m inkmd`.
@@ -126,7 +126,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--version", default=INKMD_VERSION, help=f"inkmd release (default {INKMD_VERSION})")
     parser.add_argument("--wheel", type=Path, help="use this local wheel instead of downloading")
-    parser.add_argument("--check", action="store_true", help="verify pdfmd_inkmd/ matches upstream; change nothing")
+    parser.add_argument("--check", action="store_true", help="verify lib/pdfmd_inkmd/ matches upstream; change nothing")
     args = parser.parse_args()
 
     if args.wheel:

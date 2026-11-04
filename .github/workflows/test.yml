@@ -172,7 +172,7 @@ jobs:
       - name: The whole test suite
         run: python -m unittest discover -s tests -v
 
-  # Gating: pdfmd_inkmd/ is the published inkmd, byte for byte, and the PDF the vendored inkmd makes is the one the golden
+  # Gating: lib/pdfmd_inkmd/ is the published inkmd, byte for byte, and the PDF the vendored inkmd makes is the one the golden
   # digest holds (CLAUDE.md: after re-vendoring, `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests` and read what changed).
   golden:
     runs-on: ubuntu-latest
@@ -182,7 +182,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install .
-      - name: pdfmd_inkmd/ matches the inkmd it was generated from
+      - name: lib/pdfmd_inkmd/ matches the inkmd it was generated from
         run: python scripts/vendor_inkmd.py --check
       - name: The golden digest of inkmd's output (the golden modules only)
         env:
@@ -200,7 +200,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install ruff
-      - run: ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py pdfmd_*/ scripts/ tests/      # --force-exclude: the glob names pdfmd_inkmd/ itself, which is generated
+      - run: ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py lib/ scripts/ tests/      # --force-exclude: the generated lib/pdfmd_inkmd/ is skipped even though lib/ is named
 
   # Not gating (continue-on-error): Windows with a LaTeX engine (MiKTeX), which the jobs above do not have there. A failure is
   # something to look at, not something that stops a release.

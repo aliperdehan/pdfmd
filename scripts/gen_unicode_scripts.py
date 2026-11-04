@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate pdfmd_unicode/_scripts.py, the Unicode Script property as ranges.
+"""Regenerate lib/pdfmd_unicode/_scripts.py, the Unicode Script property as ranges.
 
     python3 scripts/gen_unicode_scripts.py           # rewrite the table
     python3 scripts/gen_unicode_scripts.py --check   # fail if it has drifted
@@ -19,7 +19,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-TARGET = Path(__file__).resolve().parent.parent / "pdfmd_unicode" / "_scripts.py"
+TARGET = Path(__file__).resolve().parent.parent / "lib" / "pdfmd_unicode" / "_scripts.py"
 
 
 def build() -> tuple[str, list[tuple[int, int, str]]]:

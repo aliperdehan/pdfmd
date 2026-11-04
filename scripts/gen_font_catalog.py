@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate pdfmd_unicode/_catalog.py, the list of fonts `pdfmd --install fonts` can fetch.
+"""Regenerate lib/pdfmd_unicode/_catalog.py, the list of fonts `pdfmd --install fonts` can fetch.
 
     python3 scripts/gen_font_catalog.py            # rewrite the catalog (needs network and `gh`)
     python3 scripts/gen_font_catalog.py --check    # print what would change, write nothing
@@ -27,7 +27,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-TARGET = Path(__file__).resolve().parent.parent / "pdfmd_unicode" / "_catalog.py"
+TARGET = Path(__file__).resolve().parent.parent / "lib" / "pdfmd_unicode" / "_catalog.py"
 NOTO_REPOSITORY = "notofonts/notofonts.github.io"
 CJK_REPOSITORY = "notofonts/noto-cjk"
 STYLES = ("Regular", "Bold", "Italic", "BoldItalic")

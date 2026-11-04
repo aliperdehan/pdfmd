@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.27"
+PDFMD_VERSION = "3.32.28"
 import argparse
 import atexit
 import csv
@@ -1602,6 +1602,15 @@ def own_python_folder() -> Path:
         base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     return base / "pdfmd" / "python" / f"{sys.version_info[0]}.{sys.version_info[1]}"
 
+
+# A checkout keeps the pdfmd_* packages in lib/ beside this file; an installed copy has them in site-packages and a zipapp at
+# its root, where there is no lib/ to add. Resolved, so the symlink ~/dev/python-projects/pdfmd.py finds the real lib/.
+try:
+    _checkout_lib = Path(__file__).resolve().parent / "lib"
+    if _checkout_lib.is_dir() and str(_checkout_lib) not in sys.path:
+        sys.path.insert(0, str(_checkout_lib))
+except (OSError, RuntimeError):
+    pass
 
 # behind the Python's own packages, before the optional ones below are imported
 try:

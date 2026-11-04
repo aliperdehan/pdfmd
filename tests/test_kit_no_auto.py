@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "lib"))
 
 from pdfmd_kits import load_kit  # noqa: E402
 from pdfmd_kits.kitfile import KIT_NO_AUTO_KINDS  # noqa: E402

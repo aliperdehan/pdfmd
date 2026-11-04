@@ -25,7 +25,7 @@ os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 import pdfmd  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
-PAGEBREAK_LUA = ROOT / "pdfmd_lua" / "pagebreak.lua"
+PAGEBREAK_LUA = ROOT / "lib" / "pdfmd_lua" / "pagebreak.lua"
 
 # (Markdown, a line the built-in renderer also reads): every spelling the filter knows
 SPELLINGS = [

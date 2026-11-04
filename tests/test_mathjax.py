@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
 
-LUA = ROOT / "pdfmd_lua" / "weasyprint.lua"
+LUA = ROOT / "lib" / "pdfmd_lua" / "weasyprint.lua"
 PANDOC = shutil.which("pandoc")
 JAX = pdfmd.mathjax_runtime()                                  # the MathJax this machine has, for the real build
 
