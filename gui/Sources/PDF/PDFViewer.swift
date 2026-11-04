@@ -83,10 +83,25 @@ final class PDFViewerDocument: NSDocument {
         DispatchQueue.main.async { [weak self] in self?.fileChanged() }
     }
 
+    /// The file on disk is not the one on the screen (only meaningful while the automatic reload is off).
+    private(set) var changedOnDisk = false
+
     func fileChanged() {
         if let url = fileURL, let now = FileStamp(url), now == shown { return }   // only the access time moved
+        guard Settings.flag("pdfAutoReload") else {   // manual: say so in the window and wait for Reload
+            changedOnDisk = true
+            controller?.fileStateChanged()
+            return
+        }
         tries = 0
         schedule()
+    }
+
+    /// Reload now (View > Reload, or the automatic reload switched back on while the file was newer): the same page and zoom.
+    func reloadNow() {
+        reloadWork?.cancel()
+        tries = 0
+        reload()
     }
 
     private func schedule() {
@@ -102,6 +117,7 @@ final class PDFViewerDocument: NSDocument {
         if pdfLooksComplete(url), let d = PDFDocument(url: url), d.pageCount > 0 {
             shown = stamp
             pdf = d
+            changedOnDisk = false
             reloads += 1
             controller?.replace(d)
             return
@@ -242,6 +258,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
     // MARK: settings
 
     @objc func settingsChanged() {
+        if Settings.flag("pdfAutoReload"), let doc = document as? PDFViewerDocument, doc.changedOnDisk { doc.reloadNow() }   // switched back on: catch up
         applySettings()
         placeChanged()
     }
@@ -456,6 +473,9 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         placeChanged()
     }
 
+    /// The file changed on disk and was not reloaded, or it was reloaded now: the subtitle says which.
+    func fileStateChanged() { placeChanged() }
+
     @objc private func placeChanged() {
         guard let window, let doc = pdfView.document else { return }
         if Trace.on {
@@ -468,6 +488,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             contents.reveal(page: doc.index(for: page))
         }
         parts.append("\(Int((pdfView.scaleFactor * 100).rounded()))%")
+        if (document as? PDFViewerDocument)?.changedOnDisk == true { parts.append("file changed, ⌘R to reload") }
         if !lastQuery.isEmpty {
             if searching { parts.append("searching… \(matches.count)") }
             else if matches.isEmpty { parts.append("not found") }
@@ -514,6 +535,12 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     @objc func toggleThumbnails(_ sender: Any?) {
         Settings.set("pdfThumbnails", Settings.flag("pdfThumbnails") ? 0 : 1)   // every PDF window follows (settingsChanged)
+    }
+
+    @objc func reloadFile(_ sender: Any?) { (document as? PDFViewerDocument)?.reloadNow() }
+
+    @objc func toggleAutoReload(_ sender: Any?) {
+        Settings.set("pdfAutoReload", Settings.flag("pdfAutoReload") ? 0 : 1)   // every PDF window follows (settingsChanged)
     }
 
     @objc func showPages(_ sender: Any?) { showSidebar(mode: 0) }
@@ -711,6 +738,8 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         switch item.action {
         case #selector(toggleThumbnails(_:)):
             item.title = Settings.flag("pdfThumbnails") ? "Hide Sidebar" : "Show Sidebar"
+        case #selector(toggleAutoReload(_:)):
+            item.state = Settings.flag("pdfAutoReload") ? .on : .off
         case #selector(resetSidebarWidth(_:)):
             return Settings.flag("pdfThumbnails")
         case #selector(showPages(_:)):

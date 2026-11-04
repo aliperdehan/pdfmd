@@ -200,6 +200,27 @@ enum PDFSmoke {
         check("the finished file is then shown", cDone, "reloads \(doc.reloads)")
         sameplace("after the half write", expectPages: pages - 1)
 
+        // (c2) the automatic reload switched off: the file is noticed, not shown, until View > Reload
+        Settings.set("pdfAutoReload", 0)
+        spin(0.2)
+        let manualBefore = doc.reloads
+        let hm = try! FileHandle(forWritingTo: doc1)
+        try! hm.truncate(atOffset: 0); try! hm.write(contentsOf: fullBytes); try! hm.close()
+        spin(Double(Settings.int("pdfReloadDebounceMs")) / 1000 + 1.0)
+        check("manual: a changed file is not reloaded by itself", doc.reloads == manualBefore && view.document?.pageCount == pages - 1, "reloads \(doc.reloads), pages \(view.document?.pageCount ?? -1)")
+        check("manual: the window says the file changed", doc.changedOnDisk && (c.window?.subtitle.contains("file changed") ?? false), c.window?.subtitle ?? "")
+        c.reloadFile(nil)
+        let manualDone = wait(6) { view.document?.pageCount == pages }
+        check("manual: Reload shows the new file", manualDone && !doc.changedOnDisk && !(c.window?.subtitle.contains("file changed") ?? true), "pages \(view.document?.pageCount ?? -1), \(c.window?.subtitle ?? "")")
+        sameplace("after a manual reload", expectPages: pages)
+        // changed again while manual, then the automatic reload is switched back on: it catches up by itself
+        let hn = try! FileHandle(forWritingTo: doc1)
+        try! hn.truncate(atOffset: 0); try! hn.write(contentsOf: shortBytes); try! hn.close()
+        let stale = wait(6) { doc.changedOnDisk }   // the system's notice can come late
+        Settings.set("pdfAutoReload", 1)
+        let caught = wait(6) { view.document?.pageCount == pages - 1 }
+        check("switching the automatic reload on catches up", stale && caught && !doc.changedOnDisk, "stale \(stale), pages \(view.document?.pageCount ?? -1)")
+
         // (d) search
         let sample = (view.document?.page(at: 0)?.string ?? "").split(whereSeparator: { !$0.isLetter }).first { $0.count >= 4 }.map(String.init)
         if let word = sample {

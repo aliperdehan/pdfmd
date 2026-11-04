@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29f — 2026-11-04
+
+Pre-edit state: commit `22dac93`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.5: the PDF window's reload on a changed file can be switched to manual (View > Reload Automatically), and View > Reload (⌘R) reads the file again.** The author: Preview "updates instantly", Skim "requires explicit go to menu, restore, confirm sequence ... annoying when i never use this functionality"; "it should be toggler, with auto updating automatically when no change into pdf is detected and manual requiring explicit reset or some key binding"; ⌘R "compiles in edit mode and reloads in view mode? it is semantically correct both ways".
+
+- Setting `pdfAutoReload` (1 = as before: the file is shown again by itself, same page and zoom; 0 = manual). Manual: the window's subtitle says "file changed, ⌘R to reload" and nothing else happens; View > Reload (⌘R) shows the file on the same page and zoom (the same completeness check and retries as the automatic reload); switching the automatic reload back on while the file is newer catches up at once. The menu item has a tick.
+- Not built yet, recorded (master queue 3do): once notes on a PDF exist (step 2) the automatic mode applies only while the PDF has no notes of the author's, and a reload then asks what to do with them. ⌘R in an editor window will be the build (pdfmd on the saved file, then the viewer reloads); the menu item belongs to the window that answers it, so one key has the two jobs.
+- Tests: `--smoke-pdf` (now 65 checks): manual mode does not reload, says so in the subtitle, Reload shows the new file on the same place, and switching on catches up (the stale flag is waited for: the system's notice can come late).
+
+Not pushed.
+
 ## v3.32.29e — 2026-11-04
 
 Pre-edit state: commit `57f9567`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.4: the divider's line meets the page; the sidebar width can be reset; the previous commit's version is 0.2.3, not 0.3.0.** The author: "the dragger line does not sit on the same line as the boundary between the white page and dark thumbnail area ... is there an option to restore default side area width? ... can you checkout it from 0.3 back to 0.2 as patch? i want to keep 0.2 pdf viewer line, and make 0.3 the first working studio design".
