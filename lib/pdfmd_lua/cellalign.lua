@@ -39,6 +39,7 @@ local HTMLISH = {html = true, html4 = true, html5 = true, epub = true, epub2 = t
   s5 = true, slideous = true, dzslides = true}
 local CSS_V = {t = "top", m = "middle", b = "bottom"}
 local USE_TBLR = true      -- `-M pdfmd-tblr=off` (pdfmd sets it when LaTeX has no tabularray): vertical letters and sizes are then ignored in LaTeX
+local GRID = false         -- `tablestyle: grid` in the metadata (nulabreport's key): a rebuilt table has every rule drawn, like the style's own tables
 local DEFAULTS = {}        -- `-M pdfmd-table-align=` / `pdfmd-table-valign=`: the lowest tier
 
 -- the words of a `<pc ...>` raw tag, or an old `<l>`, `<c>`, `<r>`: {colspan, rowspan, halign, valign, covered}
@@ -153,6 +154,19 @@ local function row_height(spec, r)
   return spec and ((spec.rows[r] and spec.rows[r].ht) or spec.table.ht) or nil
 end
 
+-- a merged cell's covered text was joined with a raw <br>; only HTML keeps that, so it becomes a real line break
+local function line_breaks(inlines)
+  local out = pandoc.Inlines{}
+  for _, item in ipairs(inlines) do
+    if item.t == "RawInline" and item.format:match("^html") and item.text:match("^<br%s*/?>$") then
+      out:insert(pandoc.LineBreak())
+    else
+      out:insert(item)
+    end
+  end
+  return out
+end
+
 local function fix_cell(cell, column, ctx)
   local single = #cell.contents == 1 and (cell.contents[1].t == "Plain" or cell.contents[1].t == "Para")
   local tag, rest
@@ -189,6 +203,7 @@ local function fix_cell(cell, column, ctx)
     return tag
   end
   if not tag and not from_tiers and not (HTMLISH[BASE] and row_height(ctx.spec, ctx.row)) then return nil end
+  if rest then rest = line_breaks(rest) end
   local letter = effective.halign
   local style = {}
   if effective.valign and (ctx.tblr or not TEX[BASE]) then
@@ -370,15 +385,15 @@ local function to_tblr(tbl, spec)
       lines[#lines + 1] = table.concat(parts, " & ") .. " \\\\"
     end
   end
-  lines[#lines + 1] = "\\toprule"
+  if not GRID then lines[#lines + 1] = "\\toprule" end
   emit(tbl.head.rows)
-  if #tbl.head.rows > 0 then lines[#lines + 1] = "\\midrule" end
+  if #tbl.head.rows > 0 and not GRID then lines[#lines + 1] = "\\midrule" end
   for _, body in ipairs(tbl.bodies) do
     emit(body.head)
     emit(body.body)
   end
   emit(tbl.foot.rows)
-  lines[#lines + 1] = "\\bottomrule"
+  if not GRID then lines[#lines + 1] = "\\bottomrule" end
   local options = {}
   local caption = latex_of(tbl.caption.long)
   if caption ~= "" then
@@ -388,7 +403,8 @@ local function to_tblr(tbl, spec)
     -- no caption: tabularray would still print "Table N:" and step the counter; this is `\caption*{}`
     options[#options + 1] = "caption={},entry=none,label=none"
   end
-  local inner = {"colspec={@{}" .. table.concat(columns) .. "@{}}"}
+  local edge = GRID and "" or "@{}"      -- a ruled grid keeps its padding at the outer edges, booktabs rules sit flush with the text
+  local inner = {"colspec={" .. edge .. table.concat(columns) .. edge .. "}"}
   local table_width = spec and spec.table.w
   if table_width and table_width ~= "*" and table_width ~= "auto" then
     inner[#inner + 1] = "width=" .. tblr_width(table_width)
@@ -398,6 +414,7 @@ local function to_tblr(tbl, spec)
     inner[#inner + 1] = string.format("width=%.4f\\linewidth", total)
   end
   if #tbl.head.rows > 0 then inner[#inner + 1] = "rowhead=" .. #tbl.head.rows end
+  if GRID then inner[#inner + 1] = "hlines,vlines" end
   inner[#inner + 1] = "cells={valign=h}"      -- every cell starts at the head of its row: a baseline cell (tabularray's default) beside a middle one misaligns
   for _, item in ipairs(heights) do inner[#inner + 1] = item end
   for _, item in ipairs(cells) do inner[#inner + 1] = item end
@@ -479,6 +496,7 @@ return {
         local value = doc.meta[name]
         return value and pandoc.utils.stringify(value) or nil
       end
+      GRID = (setting("tablestyle") or ""):lower() == "grid"
       if setting("pdfmd-tblr") == "off" then USE_TBLR = false end
       local h, v = setting("pdfmd-table-align"), setting("pdfmd-table-valign")
       DEFAULTS.h = h and h:sub(1, 1):lower() or nil

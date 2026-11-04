@@ -390,6 +390,36 @@ SIZED = ("| Name | Description | Qty |\n|:--|:--|--:|\n| apples | a long descrip
          "| pears | short | 12 |\n\n{widths=\"3cm * 15%\" row2.height=1.8cm col2.align=l,m valign=m}\n\nTable: Sized {#tbl:sized}\n")
 
 
+class MergedTextAndGrid(unittest.TestCase):
+    """v3.32.35: the text of a covered cell is a real line break in LaTeX; `tablestyle: grid` rules a rebuilt table."""
+
+    MERGED = "| Name | Scores &<<& |\n|:--|:--|\n| &m& a | b |\n"
+    setUp = Vertical.setUp
+    build = Vertical.build
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
+    def test_covered_text_is_joined_with_a_line_break_not_dropped(self):
+        done, tex = self.build(self.MERGED)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(tex, r"\{Name\\\\\s*Scores\}")
+        self.assertNotIn("NameScores", tex)
+
+    @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
+    def test_tablestyle_grid_draws_every_rule_and_keeps_the_outer_padding(self):
+        done, tex = self.build(self.MERGED)
+        plain = tex
+        (self.root / "d.md").write_text("---\ntitle: T\ntablestyle: grid\n---\n\n" + self.MERGED, encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "tex", "-o", "g.tex", "--no-stamp", "--no-backup",
+                               "--no-auto", "crossref"], cwd=self.root, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "XDG_CACHE_HOME": str(self.root / "cache")})
+        grid = (self.root / "g.tex").read_text(encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("hlines,vlines", grid)
+        self.assertNotIn("\\toprule", grid.split("\\begin{longtblr}")[1])
+        self.assertIn("\\toprule", plain)
+        self.assertNotIn("hlines", plain)
+
+
 class AttributeLine(unittest.TestCase):
     """Step 3 (v3.32.33): a `{...}` line under a table sets widths, heights and alignments for the table, a column or a row."""
 

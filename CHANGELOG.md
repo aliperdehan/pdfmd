@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.35 — 2026-11-04
+
+Pre-edit state: commit `c4a694f`. `[tables]`, entry 3fa. **A covered cell's text is a real line break in LaTeX; `tablestyle: grid` rules a rebuilt table.** Found by the author's screenshot of a merged table in a nulabreport document.
+
+- **The bug (from v3.32.31, unreleased).** The text of a covered cell was appended to the owner's with a raw `<br>`, which every LaTeX build drops: `Name` and `Scores` came out as `NameScores`. The cell filter now turns that `<br>` into a line break (`\\` in a `longtblr` cell; HTML keeps its `<br />`).
+- **The gap.** A document with `tablestyle: grid` got booktabs rules from a table pdfmd rebuilt as a `longtblr`, because the style's own filter (nulabreport's) runs after pdfmd's cell filter and passes the raw LaTeX through. A rebuilt table now has every rule (`hlines,vlines`) and its outer padding when the metadata says `tablestyle: grid`. The style's own padding and its caption below the table are not copied.
+- **Known, not changed here.** nulabreport's own table writer ignores `row_span` (a covered cell is missing from its rows, so the columns of a row-spanning table shift) and forces a spanned cell to the centre; that is in its repository.
+- **Docs.** The README example had the same wrong tag as the report (`Scores &<<&` merged `Scores` into `Name`); fixed, with a sentence on which cell a tag belongs to.
+- **Tests.** `MergedTextAndGrid` in `tests/test_celltags.py`: the line break, and the grid rules against the booktabs ones.
+
 ## v3.32.34 — 2026-11-04
 
 Pre-edit state: commit `9e96af6`. `[tables]`, entry 3fa. **Cell tags keep a table's natural width; the limits are written down.** Found by reviewing v3.32.31-33 before any push.

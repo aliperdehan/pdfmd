@@ -2093,7 +2093,7 @@ A pipe table sets the alignment of a whole column in its separator row, and cann
 that cell. The tag can sit anywhere in the cell; it is cut out, with one space next to it.
 
 ```markdown
-| Name   | Scores &<<&  | << |
+| Name   | Scores       | << |
 |:-------|-------------:|---:|
 | vv     | A            | B  |
 | x      | 1            | 2  |
@@ -2103,6 +2103,9 @@ that cell. The tag can sit anywhere in the cell; it is cut out, with one space n
 
 Here `Scores` spans two columns (the `<<` cell next to it belongs to the cell on its left), `x` and `Total` span two rows (`vv` and `^^`
 point at the cell they belong to), and `12` is centred over two columns.
+
+A tag points at the cell that owns the text: `<<` in a cell means "I belong to the cell on my left", so `Scores &<<&` would merge
+`Scores` into `Name`. The text of a covered cell is not lost: it is added to the owner's, on a new line, with a warning.
 
 **What a tag says**
 
@@ -2140,6 +2143,10 @@ ordinary Pandoc table. HTML gets a `vertical-align` style. Typst and Word do not
 cannot find it) the vertical letters are ignored in a LaTeX build, with one NOTE. A table drawn this way is raw LaTeX to every filter
 that runs after pdfmd's cell filter (your own Lua filters, `table-keep`), so such a filter does not see it as a table; Beamer is untested.
 Cross-references (`@tbl:id`) and citations in the caption are resolved before the table is rebuilt, so they work.
+
+With `tablestyle: grid` in the metadata (the key nulabreport and its kits use) a rebuilt table has every rule drawn (`hlines`, `vlines`)
+and its outer padding, instead of the booktabs rules. The style's own look (its cell padding, its caption below the table) is not
+copied: a rebuilt table is raw LaTeX to the style's filter.
 
 **Merging**
 
