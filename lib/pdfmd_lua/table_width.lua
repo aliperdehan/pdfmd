@@ -348,10 +348,22 @@ local function table_options(attributes)
   return o
 end
 
+-- pdfmd's cell tags (cellalign.lua) can make a source line longer than Pandoc's column limit, which makes Pandoc read the separator's
+-- dashes as widths. The pre-pass then marks the table `<pt nw ...>` in its first header cell: the table is measured as it would have been.
+local function without_dash_widths(tbl)
+  local row = tbl.head.rows[1]
+  local cell = row and row.cells[1]
+  local block = cell and cell.contents[1]
+  local first = block and block.content and block.content[1]
+  if not (first and first.t == "RawInline" and (first.text:find("^<pt [^>]*[ ]nw[ >]") or first.text:find("^<pt nw[ >]"))) then return end
+  for index, spec in ipairs(tbl.colspecs) do tbl.colspecs[index] = {spec[1]} end
+end
+
 local function rebalance(tbl)
   tables_seen = tables_seen + 1
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
+  without_dash_widths(tbl)
   local attributes = tbl.attr.attributes
   if attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
   local o = table_options(attributes)

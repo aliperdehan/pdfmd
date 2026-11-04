@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.34 — 2026-11-04
+
+Pre-edit state: commit `9e96af6`. `[tables]`, entry 3fa. **Cell tags keep a table's natural width; the limits are written down.** Found by reviewing v3.32.31-33 before any push.
+
+- **The bug (from v3.32.31, unreleased).** A tag is longer than what it replaces (`&c&` 3 characters, `<pc hc>` 7; the carrier of an attribute line 20 to 60). Pandoc reads a pipe table whose longest source line is over 72 characters as a table of widths taken from the separator's dashes, so a small table with unequal dashes that was natural before its tags could be stretched across the page. The first canonical tag (60 characters) did exactly that; shortening it was not enough for a table near the limit.
+- **The fix.** `celltags.py` cuts the padding of the rows it rewrites; when a line that was under 72 would still cross it, the carrier gets the word `nw` (`<pt nw ...>`) and the table's column widths are reset to the default before `table_width.lua` measures it (a few lines in its `rebalance`, which is why this entry names that file) and in `cellalign.lua` for the writers that filter does not run for. A table that was over 72 before its tags is left as Pandoc read it. The 72 is Pandoc's own `--columns` default, a constant in `celltags.py` (`PANDOC_COLUMNS`) and not a setting.
+- **Checked.** Cross-references to a table rebuilt as a `longtblr`: with `pandoc-crossref` running, the caption and `label=` carry over and `\ref` resolves (built and compiled). The native (no-Pandoc) tier prints the author's own text (the arrows, `&c&`, the `{...}` line) and never the internal `<pc>` / `<pt>` tags. README: the limits (a rebuilt table is raw LaTeX to later filters and to `table-keep`; Beamer untested; `cell-align: off` also switches the attribute line off).
+- **Tests.** The tests that depended on Pandoc 3.13's exact output are looser (the LaTeX `\multicolumn`, the HTML style) or gated (`needs_pandoc(3, 1, 13)` for the Typst spans), since CI also runs Pandoc 3.1.3; +3 tests for the natural width.
+
 ## v3.32.33 — 2026-11-04
 
 Pre-edit state: commit `7cb62bc`. `[tables]`, entry 3fa, step 3 of 3. **A table's attribute line: widths, heights and alignment tiers.** The author: "choosing arbitrary cell width and height ... none is easily achievable".

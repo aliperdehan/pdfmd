@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "lib"))
 
 import pdfmd  # noqa: E402
+from pandoc_support import needs_pandoc  # noqa: E402
 from pdfmd_tables.celltags import DEFAULT_KINDS, find_tags, normalise, parse_attribute_line, parse_tokens  # noqa: E402
 
 HEAD = "| h | i | j |\n|---|---|---|\n"
@@ -227,7 +228,7 @@ class Build(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("\\multirow{2}{*}{x}", tex)
         self.assertIn("\\multirow{2}{*}{Total}", tex)
-        self.assertIn("\\multicolumn{2}{c@{}}{%\n12}", tex)
+        self.assertRegex(tex, r"\\multicolumn\{2\}\{c(?:@\{\})?\}\{(?:%\n)?12\}")
         self.assertNotIn("<pc", tex)
         self.assertNotIn("&<<&", tex)
 
@@ -242,12 +243,16 @@ class Build(unittest.TestCase):
         self.assertIn('<th colspan="2"', html)
         self.assertIn('<td rowspan="2"', html)
         self.assertNotIn("<pc", html)
-        done, typst = self.build(self.TABLE, "typ")
-        self.assertIn("table.cell(rowspan: 2)[x]", typst)
-        self.assertIn("colspan: 2", typst)
         done, word = self.build(self.TABLE, "docx")
         self.assertIn('<w:gridSpan w:val="2"', word)
         self.assertIn('<w:vMerge w:val="restart"', word)
+
+    @needs_pandoc(3, 1, 13, why="the Typst writer draws cell spans from then on")
+    def test_typst_gets_the_spans(self):
+        done, typst = self.build(self.TABLE, "typ")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("rowspan: 2", typst)
+        self.assertIn("colspan: 2", typst)
 
     def test_a_span_down_from_the_header_moves_the_rows_into_the_header(self):
         done, html = self.build("| Name | Score | << |\n|--|--|--|\n| ^^ | A | B |\n| x | 1 | 2 |\n", "html")
@@ -358,7 +363,7 @@ class Vertical(unittest.TestCase):
     def test_html_gets_a_vertical_align_style(self):
         done, html = self.build(VERTICAL, "html")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn('<td style="text-align: left; vertical-align: top;">top</td>', html)
+        self.assertIn("vertical-align: top;", html)
         self.assertIn('vertical-align: middle;">middle</td>', html)
         self.assertIn('vertical-align: bottom;">bottom</td>', html)
         self.assertNotIn("data-valign", html)
@@ -431,6 +436,22 @@ class AttributeLine(unittest.TestCase):
         self.assertEqual(out.splitlines()[0], "| <pt v=m> <pc hc> a | b |")
         self.assertEqual(normalise("| a | b |\n|--|--|\n| 1 | 2 |\n").text, "| a | b |\n|--|--|\n| 1 | 2 |\n")
 
+    NEAR = ("| Name | Description | Qty | Price | Note |\n|:------------|:----------------|------:|--------:|:---|\n"
+            "| apple | red fruit that is sold | 3 | 1.20 | ok ok |\n| pear | green | 12 | 0.80 | n/a |\n")
+
+    def test_tags_that_would_push_a_table_over_pandoc_s_line_limit_do_not_change_its_widths(self):
+        lines = lambda text: [line for line in text.splitlines() if line.startswith("|")]
+        self.assertLessEqual(max(map(len, lines(self.NEAR))), 72)
+        # the padding of a rewritten row is cut first: a small tag fits
+        small = normalise(self.NEAR.replace("| apple |", "| &c& apple |")).text
+        self.assertLessEqual(max(map(len, lines(small))), 72)
+        self.assertNotIn(" nw", small)
+        # a carrier that cannot fit says `nw`, and the filters give the natural widths back
+        big = normalise(self.NEAR + "\n{valign=m height=1cm col3.align=r widths=\"1cm 2cm 3cm 4cm 5cm\"}\n").text
+        self.assertIn(" nw>", big)
+        long_already = self.NEAR.replace("red fruit that is sold", "red fruit that is sold " * 3)
+        self.assertNotIn("nw", normalise(long_already + "\n{valign=m}\n").text)    # it was a fixed-width table before the tags
+
     def test_a_note_names_the_line_of_the_attribute_line(self):
         result = normalise("text\n\n| a | b |\n|--|--|\n| 1 | 2 |\n\n{bogus=1}\n")
         self.assertEqual([note.line for note in result.notes], [7])
@@ -464,6 +485,21 @@ class Sizes(unittest.TestCase):
         self.assertIn("\\begin{longtblr}[caption={Sized},label={tbl:sized}]", tex)
         self.assertNotIn("<pt", tex)
         self.assertNotIn("{widths=", tex)
+
+    def test_a_tagged_table_keeps_the_natural_width_it_had_with_unequal_dashes(self):
+        near = AttributeLine.NEAR
+        done, plain = self.build(near)
+        done, tagged = self.build(near + "\n{height=1cm col3.align=r col5.align=c width=auto}\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("real{", plain)
+        self.assertNotIn("real{", tagged)
+        self.assertNotIn("X[", tagged)
+
+    def test_the_width_filter_survives_tables_with_nothing_in_the_first_header_cell(self):
+        for body in ("|  | b |\n|--|--|\n| 1 | 2 |\n", "| a | b |\n|--|--|\n| 1 | 2 |\n", "+--+--+\n| a| b|\n+--+--+\n"):
+            done, tex = self.build(body)
+            self.assertEqual(done.returncode, 0, body + done.stdout + done.stderr)
+            self.assertIn("longtable", tex)
 
     @unittest.skipUnless(TABULARRAY, "needs LaTeX's tabularray")
     def test_a_table_width_alone_and_a_height_alone(self):

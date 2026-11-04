@@ -95,9 +95,10 @@ local function take_settings(tbl)
   if not first or first.t ~= "RawInline" or not first.format:match("^html") then return nil end
   local body = first.text:match("^<pt ([^>]*)>$")
   if not body then return nil end
-  local spec = {table = {}, cols = {}, rows = {}, needs = false, words = {}}
+  local spec = {table = {}, cols = {}, rows = {}, needs = false, words = {}, natural = false}
   for word in body:gmatch("%S+") do
     spec.words[#spec.words + 1] = word
+    if word == "nw" then spec.natural = true end
     local scope, key, value = word:match("^([cr]?%d*)(%a+)=(.+)$")
     if key then
       local target = spec.table
@@ -442,11 +443,16 @@ local function attribute_line(spec)
       items[#items + 1] = prefix .. names[key] .. "=" .. value
     end
   end
+  if #items == 0 then return nil end
   return "{" .. table.concat(items, " ") .. "}"
 end
 
 local function handle_table(tbl)
   local spec = take_settings(tbl)
+  if spec and spec.natural then
+    -- the tags made a line longer than Pandoc's column limit, and it read the dashes as widths: the table as it would have been without them
+    for index, colspec in ipairs(tbl.colspecs) do tbl.colspecs[index] = {colspec[1]} end
+  end
   local tblr = wants_tblr(tbl, spec)
   local ctx = {tblr = tblr, spec = spec, row = 0, column = 0}
   fix_rows(tbl.head.rows, tbl.colspecs, ctx)
@@ -456,7 +462,11 @@ local function handle_table(tbl)
   end
   fix_rows(tbl.foot.rows, tbl.colspecs, ctx)
   if not KEEP[BASE] and has_spans(tbl) then promote_header(tbl) end
-  if KEEP[BASE] and spec and #spec.words > 0 then return {tbl, pandoc.RawBlock(BASE, attribute_line(spec))} end
+  if KEEP[BASE] and spec then
+    local line = attribute_line(spec)
+    if line then return {tbl, pandoc.RawBlock(BASE, line)} end
+    return tbl
+  end
   if tblr then return to_tblr(tbl, spec) end
   if not TEX[BASE] and not KEEP[BASE] then percent_widths(tbl, spec) end
   return tbl

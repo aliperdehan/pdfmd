@@ -2137,7 +2137,9 @@ therefore drawn as a `longtblr` (the `tabularray` package, which pdfmd adds to t
 widths, header rows (repeated on every page, without tabularray's "Continued" texts), spans, caption and label. All cells of such a table
 start at the top of their row, so `m` and `b` mean the middle and the bottom of the row. A table with no vertical letter stays the
 ordinary Pandoc table. HTML gets a `vertical-align` style. Typst and Word do not draw it yet. Without `tabularray` (`kpsewhich`
-cannot find it) the vertical letters are ignored in a LaTeX build, with one NOTE.
+cannot find it) the vertical letters are ignored in a LaTeX build, with one NOTE. A table drawn this way is raw LaTeX to every filter
+that runs after pdfmd's cell filter (your own Lua filters, `table-keep`), so such a filter does not see it as a table; Beamer is untested.
+Cross-references (`@tbl:id`) and citations in the caption are resolved before the table is rebuilt, so they work.
 
 **Merging**
 
@@ -2201,7 +2203,11 @@ pdfmd-options:
   table-valign: middle        # top, middle, bottom: setting it draws every table of a LaTeX build as a longtblr
 ```
 
-Both are also `--setup` rows.
+Both are also `--setup` rows. `cell-align: off` switches the attribute line off as well: it is then an ordinary paragraph of the text.
+
+**Natural widths stay natural.** Pandoc reads a pipe table with a source line longer than 72 characters as a table of fixed widths taken
+from the dashes of the separator row. Tags make lines longer, so pdfmd cuts the padding of the rows it rewrites and, if a line would still
+cross 72 that was under it before, tells the filters to give the table the widths it would have had (`<pt nw>`).
 
 #### A line break inside a table cell
 

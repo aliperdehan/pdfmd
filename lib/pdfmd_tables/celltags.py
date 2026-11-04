@@ -295,6 +295,11 @@ _ATTR_ITEM = re.compile(r"""([A-Za-z][A-Za-z0-9.\-_]*)\s*=\s*("[^"]*"|'[^']*'|[^
 _ATTR_LINE = re.compile(r"^\s{0,3}\{(.*)\}\s*$")
 _ATTR_NAMES = {"width": "w", "widths": "ws", "height": "ht", "align": "h", "valign": "v"}
 _ATTR_CARRIER = "pt"
+# Pandoc reads a pipe table whose longest source line is over its column limit (`--columns`, 72 unless told otherwise) as a table of fixed
+# widths from the dashes of the separator row. The tags make lines longer, so a table that was under the limit must not cross it
+# because of them: the padding of rewritten rows is cut, and if that is not enough the carrier says `nw` (natural widths) and the
+# filters give the table back the widths it would have had. A Pandoc fact, not a setting.
+PANDOC_COLUMNS = 72
 
 
 def _word(value: str, kind: str, notes: list[str]) -> str | None:
@@ -480,6 +485,16 @@ def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: l
     return changed
 
 
+def _compact(line: str) -> str:
+    """A table row with one space on each side of every cell (the padding of a rewritten row is what makes it long)."""
+    lead, cells, closing = _split_row(line)
+    return lead.rstrip() + "|".join(f" {cell.strip()} " for cell in cells) + "|" + ("\r" if line.endswith("\r") else "")
+
+
+def _longest(lines: list[str], numbers: range, changes: dict[int, str]) -> int:
+    return max(len(changes.get(number, lines[number]).rstrip("\r")) for number in numbers)
+
+
 def _find_attribute_line(lines: list[str], end: int) -> int | None:
     """The index of the attribute line of the table that ends before line ``end``: the first line after it (one blank line allowed)
     or after its `Table:` caption, if it is `{...}` with at least one `key=value`; else None."""
@@ -545,6 +560,12 @@ def normalise(text: str, kinds: tuple[str, ...] = DEFAULT_KINDS) -> Result:
                 notes.extend(Note(drop, problem) for problem in problems)
                 removals.append(drop)
             table_changes = _process_table(rows, kinds, notes, attributes)
+            numbers = range(index, end)
+            if table_changes and _longest(lines, numbers, {}) <= PANDOC_COLUMNS < _longest(lines, numbers, table_changes):
+                table_changes = {number: _compact(text) if number in table_changes else text for number, text in table_changes.items()}
+                if _longest(lines, numbers, table_changes) > PANDOC_COLUMNS:
+                    table_changes = {number: _compact(text) for number, text in
+                                     _process_table(rows, kinds, [], [*attributes, "nw"]).items()}
             for note in notes:
                 result.notes.append(Note(note.line + 1, note.message))
             if table_changes:
