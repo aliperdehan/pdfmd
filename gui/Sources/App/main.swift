@@ -41,6 +41,7 @@ if args.contains("--smoke-studio") { StudioSmoke.run(); exit(0) }
 if args.contains("--smoke-html") { HTMLSmoke.run(); exit(0) }
 if args.contains("--smoke-pop") { PopSmoke.run(); exit(0) }
 if args.contains("--smoke-untitled") { Smoke.untitled() }
+if args.contains("--smoke-tabs") { Smoke.tabs() }
 if let i = args.firstIndex(of: "--pop-screenshot"), i + 1 < args.count { PopSmoke.screenshot(args); exit(0) }
 if let i = args.firstIndex(of: "--bench-pdf"), i + 1 < args.count { PDFSmoke.bench(args[i + 1]); exit(0) }
 if args.contains("--live-pdf") { PDFLive.run(args) }

@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29p — 2026-11-04
+
+Pre-edit state: commit `72575f6`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.15: tabs, and what the first look at Export As found.** The author: "make it less verbose, just Auto and HTML are fine"; "how image outputs work? ... if crop, there should also be `cropped PDF` too"; "i want native tabs like coteditor --- implement. not like always ... a new one appears with command+T".
+
+- **Native tabs** (`AppDelegate.newTab`, the window's `tabbingIdentifier`): File > New Tab (⌘T) opens an empty document as a tab of the window it is pressed in (an editor, PDF or HTML window); ⌘N stays a new window, nothing opens as a tab by itself (the system's "Prefer tabs" still applies, "in full screen only" by default). Window menu: Show Tab Bar, Show All Tabs, Merge All Windows, Move Tab to New Window, Show Next and Previous Tab (⌃⇥, ⌃⇧⇥). `--smoke-tabs` (14 checks, headless: the windows are never shown, so a look at a real tab bar is still to be had).
+- **Export As, shorter**: the PDF submenu is Auto, Cropped, LaTeX, Typst, HTML, Others; "Any" for a family; "inkmd (built in)".
+- **Cropped**: PDF > Cropped (`-t pdf --crop`, every page cut to its ink, still vector); Pictures > PNG cropped and SVG cropped (`--crop`). A picture format without it is the whole page (A4 at 300 dpi).
+- **Pictures of several pages make a folder** (pdfmd's `--page-folder`: `NAME/001.png`, `002.png` ...; no zip): the Save panel says so, and the export counts that folder as the file made (before, a correct export of a many-page document would have been reported as "pdfmd wrote no file"). The subtitle says "Exported NAME/ (one picture per page)".
+- `--smoke-export` (58 checks, +1 for the picture folder and the cropped rows), `--smoke-tabs` new; untitled, cli, html and pdf rerun.
+
 ## v3.32.29o — 2026-11-04
 
 Pre-edit state: commit `91ded94`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.14: File > Export As.** The author: "let's implement export into files, like main ones: standalone markdown, pdf (selectable engines, maybe dropdown in dropdown expandable), docx, html, and others dropdown with everything available via pdfmd".

@@ -195,6 +195,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("pdfmdedit.window")
+        window.tabbingIdentifier = AppDelegate.tabGroup   // File > New Tab (command T) and Window > Merge All Windows put these together
         super.init(window: window)
         shouldCascadeWindows = true
         content = EditorContent(frame: window.contentLayoutRect)

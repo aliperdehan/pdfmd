@@ -197,6 +197,44 @@ enum Smoke {
         return result
     }
 
+    /// `--smoke-tabs`: command T makes a new document as a tab of the window it is pressed in, not a window; command N stays a window; the
+    /// menu items that AppKit's tab commands need are answered by a window; a tab closed leaves the other one alone.
+    static func tabs() {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let domain = "io.github.aliperdehan.pdfmdedit.smoketabs"
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        Settings.store = UserDefaults(suiteName: domain)!
+        defer { UserDefaults.standard.removePersistentDomain(forName: domain) }
+        _ = DocController()
+        var failures = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            print("\(ok ? "ok  " : "FAIL") \(name) \(detail)")
+            if !ok { failures += 1 }
+        }
+        guard let first = (try? NSDocumentController.shared.openUntitledDocumentAndDisplay(false)) as? EditorDocument else { print("FAIL no untitled document"); exit(1) }
+        if first.windowControllers.isEmpty { first.makeWindowControllers() }
+        guard let w1 = first.windowControllers.first?.window else { print("FAIL no window"); exit(1) }
+        check("document windows share the tab group", w1.tabbingIdentifier == AppDelegate.tabGroup)
+        check("a window alone has no tabs to show", (w1.tabbedWindows?.count ?? 1) <= 1)
+        let w2 = AppDelegate.newTab(next: w1, show: false)
+        spin(0.3)
+        check("command T made a second window", w2 != nil && w2 !== w1)
+        check("it is a tab of the first", w1.tabbedWindows?.count == 2 && w1.tabbedWindows?.contains { $0 === w2 } == true, "\(w1.tabbedWindows?.count ?? -1)")
+        check("it is a new empty document", (w2?.windowController?.document as? EditorDocument).map { $0 !== first && $0.fileURL == nil } == true)
+        let w3 = AppDelegate.newTab(next: w2, show: false)
+        spin(0.3)
+        check("a tab of a tab joins the same window", w3 != nil && w1.tabbedWindows?.count == 3, "\(w1.tabbedWindows?.count ?? -1)")
+        w3?.close()
+        spin(0.3)
+        check("closing a tab leaves the others", w1.tabbedWindows?.count == 2, "\(w1.tabbedWindows?.count ?? -1)")
+        for s in ["toggleTabBar:", "toggleTabOverview:", "mergeAllWindows:", "moveTabToNewWindow:", "selectNextTab:", "selectPreviousTab:"] {
+            check("a window answers \(s)", NSWindow.instancesRespond(to: Selector(s)))
+        }
+        check("the settings keep tabs from forcing themselves: no setting makes every window a tab", w1.tabbingMode == .automatic, "\(w1.tabbingMode.rawValue)")
+        print(failures == 0 ? "TABS SMOKE OK" : "TABS SMOKE FAILED (\(failures))")
+        exit(failures == 0 ? 0 : 1)
+    }
+
     /// `--smoke-untitled`: a new, empty document is not "edited"; one that was typed in and deleted again closes without asking; one with
     /// text in it still would ask.
     static func untitled() {

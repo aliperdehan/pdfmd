@@ -198,6 +198,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.tabbingIdentifier = AppDelegate.tabGroup
         window.setFrameAutosaveName("pdfmdedit.pdfwindow")
         super.init(window: window)
         shouldCascadeWindows = true

@@ -3,6 +3,30 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var launchedWithFiles = false
 
+    /// The windows of documents (editor, PDF, HTML) that can sit together as tabs of one window. Tabs are never forced: a new document opens
+    /// in a window of its own (command N) unless the system's "Prefer tabs" says otherwise; command T makes a new document in a tab.
+    static let tabGroup = NSWindow.TabbingIdentifier("io.github.aliperdehan.pdfmdedit.documents")
+
+    /// The window command T adds a tab to: the key window if it is a document's, else the main window, else none.
+    func tabHost() -> NSWindow? {
+        for w in [NSApp.keyWindow, NSApp.mainWindow] { if let w, w.tabbingIdentifier == AppDelegate.tabGroup { return w } }
+        return nil
+    }
+
+    @objc func newTab(_ sender: Any?) { _ = AppDelegate.newTab(next: tabHost(), show: true) }
+
+    /// A new empty document as a tab of `host`; without a host, a window as command N makes it. Returns the new window.
+    @discardableResult
+    static func newTab(next host: NSWindow?, show: Bool) -> NSWindow? {
+        guard let host else { NSDocumentController.shared.newDocument(nil); return nil }
+        guard let doc = try? NSDocumentController.shared.openUntitledDocumentAndDisplay(false) else { return nil }
+        if doc.windowControllers.isEmpty { doc.makeWindowControllers() }
+        guard let window = doc.windowControllers.first?.window else { return nil }
+        host.addTabbedWindow(window, ordered: .above)
+        if show { window.makeKeyAndOrderFront(nil) }
+        return window
+    }
+
     func applicationWillFinishLaunching(_ note: Notification) {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
                                                      forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
@@ -140,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let file = menu("File")
         add(file, "New", "newDocument:", "n")
+        add(file, "New Tab", "newTab:", "t")
         add(file, "Open…", "openDocument:", "o")
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu(title: "Open Recent")
@@ -200,6 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = menu("Window")
         add(window, "Minimize", "performMiniaturize:", "m")
         add(window, "Zoom", "performZoom:")
+        window.addItem(.separator())
+        add(window, "Show Tab Bar", "toggleTabBar:")
+        add(window, "Show All Tabs", "toggleTabOverview:")
+        add(window, "Merge All Windows", "mergeAllWindows:")
+        add(window, "Move Tab to New Window", "moveTabToNewWindow:")
+        add(window, "Show Next Tab", "selectNextTab:", "\t", .control)
+        add(window, "Show Previous Tab", "selectPreviousTab:", "\t", [.control, .shift])
         window.addItem(.separator())
         let pop = add(window, "Equation Popup", "toggleWindow", "e", [.command, .option])   // opens it, and closes it when it is the open one
         pop.target = PopController.shared

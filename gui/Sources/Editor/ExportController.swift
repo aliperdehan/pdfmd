@@ -66,7 +66,7 @@ final class ExportController: NSObject {
         }
         let panel = NSSavePanel()
         panel.title = "Export as \(format.title)"
-        panel.message = "pdfmd " + format.words.joined(separator: " ")
+        panel.message = "pdfmd " + format.words.joined(separator: " ") + (format.path.last == "Pictures" ? "   (a document of several pages makes a folder of numbered pictures, named like this file)" : "")
         panel.directoryURL = source.deletingLastPathComponent()
         panel.nameFieldStringValue = proposed.lastPathComponent
         panel.canCreateDirectories = true
@@ -117,12 +117,24 @@ final class ExportController: NSObject {
 
     /// Done means: exit status 0, and the file is there and newer than the start (a stale file of an earlier export is not a success), or
     /// pdfmd's own `OK  a.md > a.docx` line names it (a picture format writes more than one file).
-    static func succeeded(_ r: PdfmdBuild.Result, out: URL, started: Date) -> Bool {
-        guard r.ok else { return false }
-        let name = out.lastPathComponent
-        for line in r.output.split(whereSeparator: \.isNewline) where line.hasPrefix("OK") && line.contains(name) { return true }
-        guard let date = (try? FileManager.default.attributesOfItem(atPath: out.path))?[.modificationDate] as? Date else { return false }
-        return date >= started.addingTimeInterval(-2)
+    /// A picture format of several pages makes a folder instead (pdfmd's `--page-folder`: `NAME/001.png`, `002.png` ...), named like the
+    /// file without its extension; then that folder is what was made.
+    static func made(_ r: PdfmdBuild.Result, out: URL, started: Date) -> URL? {
+        guard r.ok else { return nil }
+        let folder = out.deletingPathExtension()
+        func fresh(_ url: URL) -> Bool {
+            guard let date = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date else { return false }
+            return date >= started.addingTimeInterval(-2)
+        }
+        var named = false
+        for line in r.output.split(whereSeparator: \.isNewline) where line.hasPrefix("OK") {
+            if line.contains(out.lastPathComponent) { named = true }
+            if line.contains(folder.lastPathComponent + "/") { named = true }
+        }
+        if FileManager.default.fileExists(atPath: out.path), named || fresh(out) { return out }
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue, named || fresh(folder) { return folder }
+        return nil
     }
 
     private func finish(_ r: PdfmdBuild.Result, out: URL, started: Date) {
@@ -132,10 +144,11 @@ final class ExportController: NSObject {
         lastResult = r
         let log = owner?.builder.log
         let seconds = String(format: "%.1f", r.seconds)
-        if Self.succeeded(r, out: out, started: started) {
-            lastOutput = out
-            say("Exported \(out.lastPathComponent) in \(seconds) s")
-            if Settings.flag("exportReveal"), displayWindows { NSWorkspace.shared.activateFileViewerSelecting([out]) }
+        if let made = Self.made(r, out: out, started: started) {
+            lastOutput = made
+            let isFolder = made != out
+            say("Exported \(made.lastPathComponent)\(isFolder ? "/ (one picture per page)" : "") in \(seconds) s")
+            if Settings.flag("exportReveal"), displayWindows { NSWorkspace.shared.activateFileViewerSelecting([made]) }
         } else {
             lastOutput = nil
             let why = r.couldNotStart ?? (r.timedOut ? "stopped after \(Settings.int("buildTimeout")) s" : (r.ok ? "pdfmd wrote no file" : "exit status \(r.status)"))

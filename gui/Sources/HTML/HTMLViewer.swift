@@ -228,6 +228,7 @@ final class HTMLWindowController: NSWindowController, NSToolbarDelegate, NSMenuI
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("pdfmdedit.htmlwindow")
+        window.tabbingIdentifier = AppDelegate.tabGroup
         super.init(window: window)
         shouldCascadeWindows = true
         page.frame = window.contentLayoutRect

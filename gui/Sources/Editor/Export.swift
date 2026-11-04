@@ -28,19 +28,20 @@ enum ExportTable {
         // 1. standalone Markdown: pdfmd's own `--merge` (no -t: pdfmd refuses any target together with it)
         list.append(ExportFormat(id: "md", title: "Markdown (standalone)", ext: "md", words: ["--merge"], engine: nil, path: []))
         // 2. PDF, by engine
-        list.append(ExportFormat(id: "pdf", title: "Automatic (pdfmd chooses)", ext: "pdf", words: ["-t", "pdf"], engine: nil, path: ["PDF"]))
+        list.append(ExportFormat(id: "pdf", title: "Auto", ext: "pdf", words: ["-t", "pdf"], engine: nil, path: ["PDF"]))
+        list.append(ExportFormat(id: "pdf-cropped", title: "Cropped", ext: "pdf", words: ["-t", "pdf", "--crop"], engine: nil, path: ["PDF"]))   // every page cut to its ink, still vector
         func pdf(_ path: [String], _ family: (id: String, title: String)?, _ engines: [(id: String, title: String)]) {
             if let family { list.append(ExportFormat(id: "pdf:" + family.id, title: family.title, ext: "pdf", words: ["-t", "pdf", "-e", family.id], engine: nil, path: path)) }
             for e in engines { list.append(ExportFormat(id: "pdf:" + e.id, title: e.title, ext: "pdf", words: ["-t", "pdf", "-e", e.id], engine: e.id, path: path)) }
         }
-        pdf(["PDF", "LaTeX"], ("tex", "Any LaTeX engine"), [("lualatex", "LuaLaTeX"), ("xelatex", "XeLaTeX"), ("pdflatex", "pdfLaTeX"), ("latexmk", "latexmk"), ("tectonic", "Tectonic")])
+        pdf(["PDF", "LaTeX"], ("tex", "Any"), [("lualatex", "LuaLaTeX"), ("xelatex", "XeLaTeX"), ("pdflatex", "pdfLaTeX"), ("latexmk", "latexmk"), ("tectonic", "Tectonic")])
         pdf(["PDF"], nil, [("typst", "Typst")])
-        pdf(["PDF", "HTML and browsers"], ("html", "Any HTML engine"), [("weasyprint", "WeasyPrint"), ("wkhtmltopdf", "wkhtmltopdf"), ("pagedjs-cli", "Paged.js"), ("prince", "Prince")])
-        pdf(["PDF", "HTML and browsers"], ("browser", "Any browser (headless)"), [])
+        pdf(["PDF", "HTML"], ("html", "Any HTML"), [("weasyprint", "WeasyPrint"), ("wkhtmltopdf", "wkhtmltopdf"), ("pagedjs-cli", "Paged.js"), ("prince", "Prince")])
+        pdf(["PDF", "HTML"], ("browser", "Any browser"), [])
         for b in [("chrome", "Chrome"), ("chromium", "Chromium"), ("edge", "Edge"), ("brave", "Brave")] {
-            list.append(ExportFormat(id: "pdf:" + b.0, title: b.1, ext: "pdf", words: ["-t", "pdf", "-e", b.0], engine: nil, path: ["PDF", "HTML and browsers"]))   // pdfmd's report does not list browsers
+            list.append(ExportFormat(id: "pdf:" + b.0, title: b.1, ext: "pdf", words: ["-t", "pdf", "-e", b.0], engine: nil, path: ["PDF", "HTML"]))   // pdfmd's report does not list browsers
         }
-        pdf(["PDF", "Others"], nil, [("soffice", "LibreOffice"), ("calibre", "Calibre"), ("context", "ConTeXt"), ("groff", "groff"), ("pdfroff", "pdfroff"), ("inkmd", "Built in (inkmd, no Pandoc)"), ("md2pdf", "md2pdf")])
+        pdf(["PDF", "Others"], nil, [("soffice", "LibreOffice"), ("calibre", "Calibre"), ("context", "ConTeXt"), ("groff", "groff"), ("pdfroff", "pdfroff"), ("inkmd", "inkmd (built in)"), ("md2pdf", "md2pdf")])
         // 3. the two that people mean most often
         add([], [("docx", "Word (.docx)", "docx")])
         add([], [("html", "HTML (.html)", "html")])
@@ -76,6 +77,9 @@ enum ExportTable {
                                          ("ipynb", "Jupyter notebook (.ipynb)", "ipynb"), ("bibtex", "BibTeX (.bib)", "bib"), ("biblatex", "BibLaTeX (.bib)", "bib")])
         add(["Others", "Pictures"], [("png", "PNG (.png)", "png"), ("jpg", "JPEG (.jpg)", "jpg"), ("tiff", "TIFF (.tiff)", "tiff"), ("svg", "SVG (.svg)", "svg"),
                                      ("eps", "EPS (.eps)", "eps"), ("ps", "PostScript (.ps)", "ps")])
+        // the pages cut to their ink (`--crop`): pdfmd draws the cropped page as the picture; without it a picture is the whole page
+        list.append(ExportFormat(id: "png-cropped", title: "PNG, cropped to the ink (.png)", ext: "png", words: ["-t", "png", "--crop"], engine: nil, path: ["Others", "Pictures"]))
+        list.append(ExportFormat(id: "svg-cropped", title: "SVG, cropped to the ink (.svg)", ext: "svg", words: ["-t", "svg", "--crop"], engine: nil, path: ["Others", "Pictures"]))
         return list
     }()
 

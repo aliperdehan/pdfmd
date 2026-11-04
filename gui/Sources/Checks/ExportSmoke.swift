@@ -32,6 +32,7 @@ enum ExportSmoke {
         check("every row but the standalone Markdown names its target with -t", all.filter { $0.id != "md" }.allSatisfy { $0.words.first == "-t" })
         check("the standalone Markdown is --merge and names no target (pdfmd refuses one)", ExportTable.format("md")?.words == ["--merge"])
         check("every PDF row says -t pdf, so a -t html of the user's cannot make HTML in a .pdf", all.filter { $0.id.hasPrefix("pdf") }.allSatisfy { Array($0.words.prefix(2)) == ["-t", "pdf"] })
+        check("the cropped rows say --crop", ExportTable.format("pdf-cropped")?.words == ["-t", "pdf", "--crop"] && ExportTable.format("png-cropped")?.words == ["-t", "png", "--crop"] && ExportTable.format("svg-cropped")?.words == ["-t", "svg", "--crop"])
         check("an engine row passes -e with its id", ExportTable.format("pdf:typst")?.words == ["-t", "pdf", "-e", "typst"] && ExportTable.format("pdf:tex")?.words == ["-t", "pdf", "-e", "tex"])
         check("docx and html are on the first level", ExportTable.format("docx")?.path == [] && ExportTable.format("html")?.path == [])
         let source = URL(fileURLWithPath: "/x/My Report.md")
@@ -51,7 +52,7 @@ enum ExportSmoke {
         check("the menu has a leaf for every row", leaves.count == all.count, "\(leaves.count) of \(all.count)")
         check("every leaf sends exportAs: with a known id", leaves.allSatisfy { $0.action == #selector(EditorWindowController.exportAs(_:)) && ExportTable.format($0.representedObject as? String ?? "") != nil })
         check("the first level is Markdown, PDF, Word, HTML, Others", menu.items.map(\.title) == ["Markdown (standalone)", "PDF", "Word (.docx)", "HTML (.html)", "Others"], menu.items.map(\.title).joined(separator: ", "))
-        check("PDF has the engines in submenus (a dropdown in a dropdown)", menu.items[1].submenu?.items.map(\.title).prefix(3).joined(separator: ",") == "Automatic (pdfmd chooses),LaTeX,Typst" && submenus.contains("LaTeX") && submenus.contains("HTML and browsers"),
+        check("PDF has the engines in submenus (a dropdown in a dropdown)", menu.items[1].submenu?.items.map(\.title).joined(separator: ",") == "Auto,Cropped,LaTeX,Typst,HTML,Others" && submenus.contains("LaTeX") && submenus.contains("HTML"),
               menu.items[1].submenu?.items.map(\.title).joined(separator: ", ") ?? "")
 
         // every writer pandoc has is offered, or is named here with the reason it is not
@@ -178,6 +179,25 @@ enum ExportSmoke {
         ex.start(ExportTable.format("rtf")!)
         check("the quiet export finished", finishExport())
         check("an old file at that path is not taken for the result", ex.lastOutput == nil && c.window?.subtitle.hasPrefix("Export failed (pdfmd wrote no file)") == true, c.window?.subtitle ?? "")
+        ex.commandOverride = fake.path
+
+        // a picture format of several pages: pdfmd writes a folder named like the file, and that is what was made
+        let pages = dir.appendingPathComponent("pages.png")
+        let folderScript = dir.appendingPathComponent("folder.sh")
+        try! """
+        #!/bin/sh
+        out=""
+        while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done
+        d="${out%.*}"
+        mkdir -p "$d" && echo x > "$d/001.png" && echo x > "$d/002.png"
+        echo "OK    x.md > $(basename "$d")/002.png"
+        """.write(to: folderScript, atomically: true, encoding: .utf8)
+        try! fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folderScript.path)
+        ex.commandOverride = folderScript.path
+        ex.chooseOutput = { _, _ in pages }
+        ex.start(ExportTable.format("png-cropped")!)
+        check("the picture export finished", finishExport())
+        check("several pages: the folder is the result, and the subtitle says so", ex.lastOutput?.lastPathComponent == "pages" && c.window?.subtitle.contains("one picture per page") == true, "\(ex.lastOutput?.path ?? "nil") \(c.window?.subtitle ?? "")")
         ex.commandOverride = fake.path
 
         // the document itself is never overwritten
