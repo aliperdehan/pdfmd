@@ -1,10 +1,15 @@
-# The web UI prototype (`gui/web/`)
+# The web UI (`lib/pdfmd_web/`)
 
 A prototype of the window that `pdfmd --serve` will show in any browser and that the Mac app will frame with native panels (queue entry 3do, Colophon 0.3.0).
 It is **UI only**: every piece of data comes through `js/api.js`, and every editor through `js/editor.js`, so the core (S1-S3) and the native editor can be put
 behind them later without touching the page. The page holds no pdfmd logic: what you can do here is a pdfmd command (the Export dialog shows it).
 
-Open `index.html` in a browser, or `python3 -m http.server -d gui/web` and go to the URL it prints. No build step, no network, no node to use it.
+Open `index.html` in a browser, or `python3 -m http.server -d lib/pdfmd_web` and go to the URL it prints. No build step, no network, no node to use it.
+
+**Two sources of data, chosen once by `js/api.js`.** Served by `pdfmd --serve FOLDER` (open the printed URL) the page works on the real folder: the
+project tree, the files (a save sends the `mtime` it read and is refused with 409 when the file changed on disk), the outline and the live view
+through `/api/...`. Opened from disk, in the Mac app's window, or with `#selftest` in the URL, it runs on `fixtures/fixtures.js` (the demo project).
+Everything else (history, checks, build, settings values, the export table) is still fixtures in either mode: those endpoints come in later slices.
 The placeholder `APP` stands for the product name (undecided).
 
 ## What is in it

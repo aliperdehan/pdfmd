@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let error { NSApp.presentError(error) }
             }
         }
-        if CommandLine.arguments.contains("--web") { WebStudioController.open() }   // the web studio at launch (a Mac window around gui/web)
+        if CommandLine.arguments.contains("--web") { WebStudioController.open() }   // the web studio at launch (a Mac window around lib/pdfmd_web)
         NSApp.activate(ignoringOtherApps: true)
         PopController.shared.settingsChanged()   // the menu-bar icon and the shortcut, when the setting says so
         NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in PopController.shared.settingsChanged() }

@@ -50,6 +50,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "office": ("Word / OpenDocument output and direct .typ / .html builds", (
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
     "crop": ("cutting a finished PDF to what it draws", ("--crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--page-folder", "--no-page-folder")),
+    "serve": ("the local server and JSON API behind the web UI (for the Mac app, a browser, or your own tools)", ("--serve", "--api")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--no-cache", "--seed-labels", "--seed-calc")),
     "setup": ("installing, configuring and checking pdfmd itself", (
         "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",

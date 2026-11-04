@@ -43,6 +43,7 @@ FLAGS: dict[str, str | Omitted] = {
     "presentation": Omitted("run", "slides are asked for per run"),
     "slide_level": Omitted("document", "the document's own slide-level:"),
     "newest": RUN, "include_never": RUN, "which": CMD,
+    "serve": CMD, "api": CMD,
     "batch": RUN, "report": RUN, "recursive": RUN, "out": RUN,
     "strict": "options.strict", "build_time": "options.build-time", "build_log": "options.build-log", "last_build": CMD, "failed": RUN, "time_format": "options.time-format", "max_asset_mb": "options.max-asset-mb", "max_output_mb": "options.max-output-mb",
     "stop_at": RUN, "assemble_only": RUN, "merge": RUN,

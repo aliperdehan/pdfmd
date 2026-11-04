@@ -45,6 +45,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [PDF to Markdown](#pdf-to-markdown)
   - [Bookmarks, header and footer, linked files](#bookmarks-header-and-footer-linked-files)
   - [Use it from Python](#use-it-from-python)
+  - [A local server for the web UI and for your own tools: `--serve` and `--api`](#a-local-server-for-the-web-ui-and-for-your-own-tools---serve-and---api)
   - [Other command names: `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec`](#other-command-names-mdpdf-md2pdf-inkmd-batchmd-and-pan-tec)
   - [Slides](#slides)
   - [A whole folder](#a-whole-folder)
@@ -1672,6 +1673,37 @@ stamped or backed up unless you ask (`stamp=True`, `backup=True`). A failure rai
 `returncode`, `stdout` and `stderr`); `check=False` returns the path anyway. `metadata=` takes metadata files,
 `variables=` a dict of Pandoc variables, `extra_args=` anything else the command line takes, `cwd=` the folder it runs
 in and `timeout=` seconds.
+
+### A local server for the web UI and for your own tools: `--serve` and `--api`
+
+`pdfmd --serve [FOLDER]` starts a small server for one project folder (the working folder by default) and prints one JSON line:
+`{"api": 1, "url": "http://127.0.0.1:PORT/?t=TOKEN", "port": ..., "token": ..., "root": ...}`. Open the `url`: it shows the project in
+the browser (a file tree, a Markdown editor, a live view rendered by Pandoc), from pages that ship inside pdfmd; nothing else is installed
+and nothing is fetched from the network. Ctrl-C stops it. The Mac app's web window uses the same page.
+
+The server is meant to be safe on a shared machine: it listens on 127.0.0.1 only, on a random port; every request needs the token (the
+printed URL trades it for a cookie once, a script sends `Authorization: Bearer TOKEN`); a request is refused when its `Host` is not
+`127.0.0.1` or `localhost` (DNS rebinding) or, for a write, when its `Origin` is another site; files are reached only below the project folder
+(`..`, absolute paths and links out of the folder are refused) and the page is sent with a policy that stops a script in a document's raw
+HTML from running. No CORS header is sent, so no other site can read an answer.
+
+The JSON is a public contract for other programs too, and `pdfmd --api METHOD PATH [JSON]` answers one request on stdout without a server
+(`JSON` may be `-` to read it from standard input; the exit status is 1 for an error answer):
+
+```
+pdfmd --api GET /api/project                       # the folder: main document and why, discovered files, tree
+pdfmd --api GET '/api/file?path=report.md'         # {text, encoding, lineEnding, mtime}
+pdfmd --api PUT /api/file '{"path": "report.md", "text": "...", "mtime": "..."}'
+pdfmd --api POST /api/file '{"path": "notes.md", "text": ""}'      # a new file; never overwrites
+pdfmd --api GET '/api/outline?path=report.md'     # the headings
+pdfmd --api POST /api/render '{"path": "report.md", "text": "# Hi"}'   # Pandoc's HTML with source positions
+```
+
+Every answer carries `"api": 1` (an addition keeps the number), and an error is `{"api": 1, "error": ..., "code": ...}` with an HTTP-like
+status. A save sends the `mtime` it read and gets **409** when the file changed on disk meanwhile, so an editor and a build never overwrite
+each other; it keeps the file's line endings (CRLF or LF) and byte-order mark. The live view's render does not resolve citations yet
+(`[@key]` stays as typed): Pandoc's CommonMark reader gives block positions but has no citations. Builds, checks, history and settings are not
+in the API yet.
 
 ### Other command names: `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec`
 

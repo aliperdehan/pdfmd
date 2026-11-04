@@ -1,7 +1,7 @@
 import Cocoa
 import WebKit
 
-/// `pdfmdedit --smoke-web`: the web studio window (never shown on screen) with the page of `gui/web` in a real WKWebView, which is Safari's
+/// `pdfmdedit --smoke-web`: the web studio window (never shown on screen) with the page of `lib/pdfmd_web` in a real WKWebView, which is Safari's
 /// engine and so the engine the page has to look right in. Checks that the page starts and tells the window its state, that each native
 /// command reaches the page (save, new tab, render, close tab, undo), that the window's title and unsaved dot follow, that the menu's selectors
 /// find this window through the responder chain, that closing with unsaved changes asks, that the page's confirm() is answered (it is

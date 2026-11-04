@@ -1,7 +1,7 @@
 import Cocoa
 import WebKit
 
-/// The web studio window: the page of `gui/web` (the project UI that will also run in a browser, served by `pdfmd --serve`) in a WKWebView,
+/// The web studio window: the page of `lib/pdfmd_web` (the project UI that will also run in a browser, served by `pdfmd --serve`) in a WKWebView,
 /// with the Mac around it. The native side owns the menu bar and every shortcut, so command R renders instead of reloading the page, command T
 /// makes a tab of the project and command S saves by the page's logic: each menu action of this window is sent to the page as a command
 /// (`window.appCommand(name)`), and the page tells the window its state (title, unsaved dot) through the message handler `colophon`.
@@ -12,15 +12,17 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
     static var unthrottled = false
 
     /// The folder with `index.html`: the app's `Resources/web`; when running from a build folder (`--web-root PATH`, or the source tree next
-    /// to `Package.swift`) the checkout's `gui/web`.
+    /// to `Package.swift`) the checkout's `lib/pdfmd_web`.
     static func webRoot() -> URL? {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--web-root"), i + 1 < args.count { return URL(fileURLWithPath: (args[i + 1] as NSString).expandingTildeInPath) }
         if let r = Bundle.main.resourceURL?.appendingPathComponent("web").absoluteURL, FileManager.default.fileExists(atPath: r.appendingPathComponent("index.html").path) { return r }
         var dir = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent()
         for _ in 0..<6 {
-            let c = dir.appendingPathComponent("web/index.html")
-            if FileManager.default.fileExists(atPath: c.path) { return c.deletingLastPathComponent() }
+            for sub in ["lib/pdfmd_web/index.html", "web/index.html"] {
+                let c = dir.appendingPathComponent(sub)
+                if FileManager.default.fileExists(atPath: c.path) { return c.deletingLastPathComponent() }
+            }
             dir = dir.deletingLastPathComponent()
         }
         return nil

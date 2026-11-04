@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "lib"
 PACKAGES = ("pdfmd_ansi", "pdfmd_batch", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_obsidian", "pdfmd_office", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report",
-            "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode")      # = pyproject.toml's packages (test_packaging)
+            "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode", "pdfmd_web")      # = pyproject.toml's packages (test_packaging)
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's lib/pdfmd_docs/ holds no .md
 # file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
@@ -33,6 +33,9 @@ DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("doc
 DEPENDENCIES = ("yaml", "pypdf")
 SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}
 SKIP_SUFFIXES = (".so", ".pyd", ".dylib", ".pyc", ".pyo")
+# the web UI's page is the files `pdfmd --serve` sends (package-data in pyproject.toml); the rest of its folder is for the maintainer
+SKIP_PATHS = ("pdfmd_web/demo/", "pdfmd_web/tools/", "pdfmd_web/README.md", "pdfmd_web/vendor/cm/node_modules/", "pdfmd_web/vendor/cm/build.sh",
+              "pdfmd_web/vendor/cm/entry.js", "pdfmd_web/vendor/cm/package.json", "pdfmd_web/vendor/cm/package-lock.json")
 
 LAUNCHER = '''\
 """pdfmd.pyz: unpack once, then run the real pdfmd.py."""
@@ -66,7 +69,7 @@ def add_tree(bundle: zipfile.ZipFile, source: Path, root: Path) -> int:
     for path in sorted(source.rglob("*")):
         if path.is_dir() or any(part in SKIP_DIRS for part in path.relative_to(root).parts):
             continue
-        if path.name.endswith(SKIP_SUFFIXES):
+        if path.name.endswith(SKIP_SUFFIXES) or path.relative_to(root).as_posix().startswith(SKIP_PATHS):
             continue
         bundle.write(path, path.relative_to(root).as_posix())
         count += 1

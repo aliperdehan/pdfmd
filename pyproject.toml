@@ -65,7 +65,7 @@ pan-tec = "pdfmd:pan_tec_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
-packages = ["pdfmd_ansi", "pdfmd_batch", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_obsidian", "pdfmd_office", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode"]
+packages = ["pdfmd_ansi", "pdfmd_batch", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_obsidian", "pdfmd_office", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode", "pdfmd_web"]
 
 # the packages live in lib/ (the root held thirty folders); pdfmd.py itself stays in the root
 [tool.setuptools.package-dir]
@@ -94,11 +94,13 @@ pdfmd_office = "lib/pdfmd_office"
 pdfmd_ranking = "lib/pdfmd_ranking"
 pdfmd_raw = "lib/pdfmd_raw"
 pdfmd_report = "lib/pdfmd_report"
+pdfmd_serve = "lib/pdfmd_serve"
 pdfmd_setup = "lib/pdfmd_setup"
 pdfmd_smiles = "lib/pdfmd_smiles"
 pdfmd_tables = "lib/pdfmd_tables"
 pdfmd_templates = "lib/pdfmd_templates"
 pdfmd_unicode = "lib/pdfmd_unicode"
+pdfmd_web = "lib/pdfmd_web"
 
 [tool.setuptools.package-data]
 pdfmd_docs = ["*.md"]
@@ -107,6 +109,7 @@ pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]
 pdfmd_mhchem = ["LICENSE"]
 pdfmd_office = ["*.lua"]
 pdfmd_templates = ["data/*/*", "data/*/*/*"]
+pdfmd_web = ["index.html", "css/*.css", "js/*.js", "fixtures/*.js", "fixtures/*.pdf", "vendor/cm/codemirror.js", "vendor/cm/LICENSES.txt"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pdfmd.PDFMD_VERSION" }

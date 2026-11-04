@@ -13,7 +13,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/pdfmdedit "$APP/Contents/MacOS/pdfmdedit"
 cp -R Themes "$APP/Contents/Resources/Themes"
-rsync -a --exclude node_modules --exclude demo --exclude tools --exclude "*.md" web/ "$APP/Contents/Resources/web/"   # the web studio's page
+rsync -a --exclude node_modules --exclude demo --exclude tools --exclude "*.md" --exclude "*.py" --exclude .gitignore --exclude __pycache__ --exclude build.sh --exclude "package*.json" --exclude entry.js ../lib/pdfmd_web/ "$APP/Contents/Resources/web/"   # the web studio's page (lives in the pdfmd wheel)
 cp Resources/pdfmd.icns "$APP/Contents/Resources/pdfmd.icns"
 cp Resources/colophon "$APP/Contents/Resources/colophon"   # the command line: ln -s it into a folder on the PATH
 chmod +x "$APP/Contents/Resources/colophon"   # made by ../scripts/build_brand.py --render
