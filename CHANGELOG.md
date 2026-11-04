@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29c — 2026-11-04
+
+Pre-edit state: commit `7bcc165`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.2: hiding the thumbnails leaves no line across the pages.** The author (on 0.2.1, a 3993-page file, "as smooth as skim"): "thumbnail fix now centres the box, but there is still a line, which i suspect is an artifact".
+
+- Cause: the hidden sidebar stayed in the split view, and on this macOS the split view kept drawing its divider where the sidebar had been, over the pages (a black vertical line at the old sidebar width, also across the gaps between pages). It does not show in a view dump (every frame was right), only in a screenshot of the real window: `--live-pdf FILE hide` with `PDFLIVE_SHOT=PATH` takes one with `screencapture -l` and the line was found as a dark column inside the page.
+- Fix (`gui/Sources/PDF/PDFViewer.swift`): hidden now means taken out of the split view (`removeArrangedSubview`), put back at index 0 with its holding priority when shown. The page area then starts at x 0 (smoke: "hidden thumbnails leave no empty strip"). A redraw request (`needsDisplay`) did not remove the line. Checked by screenshot, also when a window opens with the setting already off.
+- The line itself is not checked by `--smoke-pdf` (it needs a real, drawn window); the screenshot recipe above is the check.
+
+Not pushed.
+
 ## v3.32.29b — 2026-11-04
 
 Pre-edit state: commit `f8fde88`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.1: the PDF viewer no longer reloads itself over and over.** The author: "the pdf viewer in its current state is unusable. zooming doesn't work properly, navigation using thumbnails is broken ... fast scroll ... lagged", then "scrolling is now dead".

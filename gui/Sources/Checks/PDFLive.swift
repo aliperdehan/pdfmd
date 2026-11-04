@@ -75,7 +75,21 @@ enum PDFLive {
             }
             frames("shown")
             Settings.set("pdfThumbnails", 0); spin(0.5); frames("hidden")
+            if let sp = window.contentView as? NSSplitView {
+                print("   divider thickness \(sp.dividerThickness), colour \(sp.dividerColor), content \(sp.frame), window \(window.frame.size)")
+                func walk(_ v: NSView, _ d: Int) {
+                    let r = v.convert(v.bounds, to: nil)
+                    print(String(repeating: " ", count: d * 2) + "\(type(of: v)) x \(Int(r.minX))..\(Int(r.maxX)) y \(Int(r.minY))..\(Int(r.maxY)) hidden \(v.isHidden)")
+                    if d < 5 { for s in v.subviews { walk(s, d + 1) } }
+                }
+                walk(window.contentView!.superview ?? sp, 0)
+            }
             Settings.set("pdfThumbnails", 1); spin(0.5); frames("shown again")
+            if let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] {   // a screenshot of the real window, for an artefact that no view dump shows
+                Settings.set("pdfThumbnails", 0); spin(0.8)
+                let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(window.windowNumber), out]
+                try? p.run(); p.waitUntilExit(); print("screenshot \(out) status \(p.terminationStatus)")
+            }
             Settings.set("pdfThumbnails", 0); spin(0.5); frames("hidden again")
         }
         if steps == "scroll" || steps == "all" {

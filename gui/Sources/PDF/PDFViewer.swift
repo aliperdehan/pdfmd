@@ -256,7 +256,15 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         let show = Settings.flag("pdfThumbnails")
         let wasHidden = side.isHidden
         side.isHidden = !show
-        if !show { split.adjustSubviews() }   // hiding alone leaves the empty strip: the page area has to take the room
+        // Hidden means out of the split view: a hidden pane left the page area where it was (an empty strip) and its divider drawn across the pages
+        let attached = split.arrangedSubviews.contains(side)
+        if !show, attached {
+            split.removeArrangedSubview(side)
+            side.removeFromSuperview()
+        } else if show, !attached {
+            split.insertArrangedSubview(side, at: 0)
+            split.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        }
         if show {
             // the sidebar is as wide as a thumbnail plus the margins the thumbnail view keeps around it
             let wanted = width + 36
