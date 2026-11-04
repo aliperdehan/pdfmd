@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.29d — 2026-11-04
+
+Pre-edit state: commit `19e4e31`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.3.0: the PDF sidebar has a table-of-contents mode, and its divider is easy to catch and resizes the thumbnails.** The author: "can you now make like TOC mode which draws the document's structure instead of thumbnails in the same place?" and "it is a bit hard to catch that dragger for me to resize the thumbnail area, but it actually does nothing except more black area currently".
+
+- New `gui/Sources/PDF/PDFContents.swift`: the PDF's outline as a tree (`NSOutlineView` over `PDFOutline`). A click, or an arrow key, goes to the entry; the entry of the page being read is selected and its parents opened (a click's own entry is not taken away within 0.6 s, nor while it starts on the page shown); a file without an outline says "No table of contents". The levels open at the start are a setting (`pdfContentsOpenLevels`, 2); a reload of the same file puts the open entries back. Pages of entries are looked up only for the entries asked about (a binary search over the outline, which is in document order; looking up all 2628 entries of the R reference manual took 2 s, about 0.8 ms each).
+- The sidebar: a segmented control (Pages | Contents) at its top, View menu items "Thumbnails" (⌥⌘2) and "Table of Contents" (⌥⌘3) with a tick for the mode in use; ⌥⌘T and the toolbar button show or hide the whole sidebar (the menu says "Hide Sidebar"/"Show Sidebar"). Setting `pdfSidebarMode` (0 pages, 1 contents). The contents are loaded only while that mode is shown.
+- The divider (`SidebarSplit`): the slot is `pdfDividerGrabPt` (8) points wide, the line drawn stays 1 point. The thumbnails now follow the sidebar's width (before, a wider sidebar only grew the black area) and the width dragged to is kept as `pdfThumbnailWidth` 0.4 s after the drag stops. The 36 points that PDFKit's thumbnail view keeps around a thumbnail are a constant in the code (a measured fact of that view).
+- Tests: `--smoke-pdf` (now 56 checks): the divider width, the thumbnails following it and the width remembered, the mode switch, the entry of the page being read (it follows the page), a click on an entry. Measured on the 3993-page R reference manual (2628 outline entries): opening the contents 41 ms, a jump to a page about 150 ms including the page jump itself. `--live-pdf FILE contents` (with `PDFLIVE_SHOT=DIR/` it saves a screenshot per page).
+
+Not pushed.
+
 ## v3.32.29c — 2026-11-04
 
 Pre-edit state: commit `7bcc165`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.2: hiding the thumbnails leaves no line across the pages.** The author (on 0.2.1, a 3993-page file, "as smooth as skim"): "thumbnail fix now centres the box, but there is still a line, which i suspect is an artifact".

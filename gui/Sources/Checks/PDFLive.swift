@@ -50,7 +50,7 @@ enum PDFLive {
         let n = c.pdfView.document?.pageCount ?? 0
         print("window id \(window.windowNumber), \(n) pages, page \(pageIndex(c) + 1), zoom \(Int(c.pdfView.scaleFactor * 100))%, autoScales \(c.pdfView.autoScales)")
 
-        let steps = args.last.flatMap { ["thumb", "scroll", "zoom", "hide", "all"].contains($0) ? $0 : nil } ?? "all"
+        let steps = args.last.flatMap { ["thumb", "scroll", "zoom", "hide", "contents", "all"].contains($0) ? $0 : nil } ?? "all"
 
         if steps == "thumb" || steps == "all" {
             let th = c.thumbs
@@ -91,6 +91,25 @@ enum PDFLive {
                 try? p.run(); p.waitUntilExit(); print("screenshot \(out) status \(p.terminationStatus)")
             }
             Settings.set("pdfThumbnails", 0); spin(0.5); frames("hidden again")
+        }
+        if steps == "contents" {
+            func shot(_ name: String) {
+                guard let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] else { return }
+                let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(window.windowNumber), out + name]
+                try? p.run(); p.waitUntilExit()
+            }
+            _ = maxGap()
+            let t0 = Date()
+            Settings.set("pdfSidebarMode", 1)
+            spin(0.3)
+            print("contents mode: \(c.contents.rowCount) rows after \(Int(Date().timeIntervalSince(t0) * 1000)) ms (0.3 s of it waiting), longest stall \(Int(maxGap())) ms")
+            for page in [1, 1200, 3000] where page <= n {
+                let t = Date(); c.go(toPage: page); spin(0.7)
+                print("page \(page): selected entry on page index \(c.contents.selectedPage.map(String.init) ?? "none"), longest stall \(Int(maxGap())) ms")
+                _ = t; shot("-contents-\(page).png")
+            }
+            let t1 = Date(); c.contents.go(row: min(40, max(0, c.contents.rowCount - 1))); spin(0.4)
+            print("click on row 40: now page \(pageIndex(c) + 1), entry is on index \(c.contents.page(ofRow: 40).map(String.init) ?? "none"), \(Int(Date().timeIntervalSince(t1) * 1000)) ms, longest stall \(Int(maxGap())) ms")
         }
         if steps == "scroll" || steps == "all" {
             guard let scroll = c.pdfView.documentView?.enclosingScrollView else { print("no scroll view"); exit(1) }

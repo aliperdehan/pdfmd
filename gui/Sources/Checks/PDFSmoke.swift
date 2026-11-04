@@ -218,7 +218,7 @@ enum PDFSmoke {
         }
 
         // (e) the thumbnails setting
-        let sidebar = c.thumbs.superview
+        let sidebar = c.thumbs.superview?.superview   // the thumbnails sit in the sidebar's body, under the mode control
         check("thumbnails shown by default", sidebar?.isHidden == false)
         Settings.set("pdfThumbnails", 0)
         check("thumbnails hidden by the setting", sidebar?.isHidden == true)
@@ -230,6 +230,39 @@ enum PDFSmoke {
         check("thumbnails shown again", sidebar?.isHidden == false)
         spin(0.2)
         check("shown thumbnails make room again", (c.pdfView.superview?.frame.minX ?? 0) > 50, "pages start at x \(c.pdfView.superview?.frame.minX ?? -1)")
+
+        // (f) the sidebar: the divider is easy to catch and the thumbnails follow it; the contents mode shows the outline
+        if let split = c.window?.contentView as? NSSplitView {
+            check("the divider's grab width is the setting", abs(split.dividerThickness - CGFloat(Settings.number("pdfDividerGrabPt"))) < 0.01, "\(split.dividerThickness)")
+            split.setPosition(250, ofDividerAt: 0)
+            spin(0.7)
+            check("the thumbnails follow the divider", abs(c.thumbs.thumbnailSize.width - (250 - 36)) < 1.5, "thumbnail width \(c.thumbs.thumbnailSize.width)")
+            check("the dragged width is remembered", abs(Settings.number("pdfThumbnailWidth") - (250 - 36)) < 1.5, "setting \(Settings.number("pdfThumbnailWidth"))")
+            Settings.set("pdfSidebarMode", 1)
+            spin(0.3)
+            check("contents mode hides the thumbnails and shows the outline", c.thumbs.isHidden && !c.contents.view.isHidden)
+            if c.contents.rowCount > 0 {
+                c.go(toPage: 30)
+                spin(0.8)
+                let at = c.contents.selectedPage
+                check("the entry of the page being read is selected", at != nil && at! <= 29, "entry starts on page index \(at.map(String.init) ?? "none")")
+                c.go(toPage: 3)
+                spin(0.8)
+                let before = c.contents.selectedPage
+                check("it follows when the page changes", before != nil && before! <= 2 && before! != at, "now \(before.map(String.init) ?? "none")")
+                let row = min(5, c.contents.rowCount - 1)
+                c.contents.go(row: row)
+                spin(0.5)
+                let shown = c.pdfView.currentPage.flatMap { c.pdfView.document?.index(for: $0) }
+                let wanted = c.contents.page(ofRow: row)
+                check("a click on an entry goes to its page", shown != nil && wanted != nil && abs(shown! - wanted!) <= 1, "showing \(shown.map(String.init) ?? "none"), the entry is on \(wanted.map(String.init) ?? "none")")
+            } else {
+                print("skip contents checks: this PDF has no outline")
+            }
+            Settings.set("pdfSidebarMode", 0)
+            spin(0.2)
+            check("thumbnails again after contents mode", !c.thumbs.isHidden && c.contents.view.isHidden)
+        }
         Settings.set("pdfDisplayMode", 0)
         check("page layout setting applied live", view.displayMode == .singlePage)
 

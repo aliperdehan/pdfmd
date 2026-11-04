@@ -116,6 +116,20 @@ final class PDFViewerDocument: NSDocument {
     }
 }
 
+/// The split view with a divider that is easy to catch: the slot is `grab` points wide (a setting) and only a hairline is drawn in it.
+final class SidebarSplit: NSSplitView {
+    var grab: CGFloat = 8 {
+        didSet { if oldValue != grab { adjustSubviews(); needsDisplay = true } }
+    }
+    override var dividerThickness: CGFloat { grab }
+    override func drawDivider(in rect: NSRect) {
+        NSColor.underPageBackgroundColor.setFill()
+        rect.fill()
+        dividerColor.setFill()
+        NSRect(x: rect.midX - 0.5, y: rect.minY, width: 1, height: rect.height).fill()
+    }
+}
+
 /// The window: thumbnails on the left, the pages on the right, the toolbar (sidebar, zoom, fit, search) above, and the page
 /// and zoom in the subtitle.
 final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitViewDelegate, PDFDocumentDelegate, NSMenuItemValidation {
@@ -123,7 +137,12 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
     private let pages = NSView()   // holds the PDFView (two of them for a moment during a reload)
     private(set) var thumbs = PDFThumbnailView()
     private let side = NSView()
-    private let split = NSSplitView()
+    private let modes = NSSegmentedControl()   // Pages | Contents, at the top of the sidebar
+    private let body = NSView()                // under it: the thumbnails or the contents
+    let contents = PDFContentsView()
+    private let split = SidebarSplit()
+    private static let thumbnailMargin: CGFloat = 36   // what the thumbnail view keeps around a thumbnail: the sidebar is this much wider
+    private var lastRemembered = 0
     private var searchItem: NSSearchToolbarItem?
     private(set) var matches: [PDFSelection] = []
     private var matchIndex = -1
@@ -142,11 +161,11 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         shouldCascadeWindows = true
 
         side.autoresizingMask = [.height]
+        setUpSidebar()
         thumbs.pdfView = pdfView
         thumbs.maximumNumberOfColumns = 1
         thumbs.allowsDragging = false
         thumbs.translatesAutoresizingMaskIntoConstraints = false
-        side.addSubview(thumbs)
         pinThumbs(thumbs)
 
         pin(pdfView)
@@ -155,6 +174,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         split.autoresizingMask = [.width, .height]
         split.isVertical = true
         split.dividerStyle = .thin
+        split.grab = CGFloat(max(1, Settings.number("pdfDividerGrabPt")))
         split.delegate = self
         split.addArrangedSubview(side)
         split.addArrangedSubview(pages)
@@ -231,12 +251,48 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         ])
     }
 
+    private func setUpSidebar() {
+        modes.segmentCount = 2
+        modes.trackingMode = .selectOne
+        modes.segmentDistribution = .fillEqually
+        modes.controlSize = .small
+        for (i, (symbol, tip)) in [("square.grid.2x2", "Thumbnails"), ("list.bullet.indent", "Table of Contents")].enumerated() {
+            modes.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: tip), forSegment: i)
+            modes.setToolTip(tip, forSegment: i)
+        }
+        modes.target = self
+        modes.action = #selector(modeChanged(_:))
+        for v in [modes, body] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            side.addSubview(v)
+        }
+        NSLayoutConstraint.activate([
+            modes.topAnchor.constraint(equalTo: side.topAnchor, constant: 6),
+            modes.leadingAnchor.constraint(equalTo: side.leadingAnchor, constant: 8),
+            modes.trailingAnchor.constraint(equalTo: side.trailingAnchor, constant: -8),
+            body.topAnchor.constraint(equalTo: modes.bottomAnchor, constant: 6),
+            body.leadingAnchor.constraint(equalTo: side.leadingAnchor), body.trailingAnchor.constraint(equalTo: side.trailingAnchor),
+            body.bottomAnchor.constraint(equalTo: side.bottomAnchor),
+        ])
+        contents.view.translatesAutoresizingMaskIntoConstraints = false
+        body.addSubview(contents.view)
+        NSLayoutConstraint.activate([
+            contents.view.leadingAnchor.constraint(equalTo: body.leadingAnchor), contents.view.trailingAnchor.constraint(equalTo: body.trailingAnchor),
+            contents.view.topAnchor.constraint(equalTo: body.topAnchor), contents.view.bottomAnchor.constraint(equalTo: body.bottomAnchor),
+        ])
+        contents.onGo = { [weak self] destination in self?.pdfView.go(to: destination) }
+    }
+
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        Settings.set("pdfSidebarMode", sender.selectedSegment)
+    }
+
     private func pinThumbs(_ view: PDFThumbnailView, below other: NSView? = nil) {
         view.translatesAutoresizingMaskIntoConstraints = false
-        if let other { side.addSubview(view, positioned: .below, relativeTo: other) } else if view.superview == nil { side.addSubview(view) }
+        if let other { body.addSubview(view, positioned: .below, relativeTo: other) } else if view.superview == nil { body.addSubview(view) }
         NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: side.leadingAnchor), view.trailingAnchor.constraint(equalTo: side.trailingAnchor),
-            view.topAnchor.constraint(equalTo: side.topAnchor), view.bottomAnchor.constraint(equalTo: side.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: body.leadingAnchor), view.trailingAnchor.constraint(equalTo: body.trailingAnchor),
+            view.topAnchor.constraint(equalTo: body.topAnchor), view.bottomAnchor.constraint(equalTo: body.bottomAnchor),
         ])
     }
 
@@ -254,6 +310,12 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         let width = CGFloat(max(40, Settings.number("pdfThumbnailWidth")))
         thumbs.thumbnailSize = CGSize(width: width, height: (width * 1.4).rounded())
         let show = Settings.flag("pdfThumbnails")
+        let mode = Settings.int("pdfSidebarMode") == 1 ? 1 : 0
+        modes.selectedSegment = mode
+        thumbs.isHidden = mode == 1
+        contents.view.isHidden = mode == 0
+        contents.isActive = show && mode == 1
+        split.grab = CGFloat(max(1, Settings.number("pdfDividerGrabPt")))
         let wasHidden = side.isHidden
         side.isHidden = !show
         // Hidden means out of the split view: a hidden pane left the page area where it was (an empty strip) and its divider drawn across the pages
@@ -267,7 +329,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         }
         if show {
             // the sidebar is as wide as a thumbnail plus the margins the thumbnail view keeps around it
-            let wanted = width + 36
+            let wanted = width + Self.thumbnailMargin
             if wasHidden || abs(side.frame.width - wanted) > 40 { split.setPosition(wanted, ofDividerAt: 0) }
         }
     }
@@ -319,6 +381,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             freshThumbs.maximumNumberOfColumns = oldThumbs.maximumNumberOfColumns
             freshThumbs.allowsDragging = oldThumbs.allowsDragging
             freshThumbs.thumbnailSize = oldThumbs.thumbnailSize
+            freshThumbs.isHidden = oldThumbs.isHidden
             pinThumbs(freshThumbs, below: oldThumbs)
             side.layoutSubtreeIfNeeded()
             thumbs = freshThumbs
@@ -329,6 +392,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         let view = pdfView
         doc.delegate = self
         view.document = doc
+        contents.use(doc, keepOpen: keepingPlace, levels: Settings.int("pdfContentsOpenLevels"))
         applyZoomLimits()
         if keepingPlace {
             // The exact zoom first, the place next, and only then "fit to the width" again: PDFView works out a fitted zoom
@@ -366,7 +430,10 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             Trace.log("place: page \(pdfView.currentPage.map { doc.index(for: $0) + 1 } ?? -1), zoom \(String(format: "%.3f", pdfView.scaleFactor)), autoScales \(pdfView.autoScales), view \(Int(pdfView.bounds.width))x\(Int(pdfView.bounds.height)), clip y \(Int(clip?.bounds.origin.y ?? -1)), doc height \(Int(pdfView.documentView?.frame.height ?? -1))")
         }
         var parts: [String] = []
-        if let page = pdfView.currentPage { parts.append("Page \(doc.index(for: page) + 1) of \(doc.pageCount)") }
+        if let page = pdfView.currentPage {
+            parts.append("Page \(doc.index(for: page) + 1) of \(doc.pageCount)")
+            contents.reveal(page: doc.index(for: page))
+        }
         parts.append("\(Int((pdfView.scaleFactor * 100).rounded()))%")
         if !lastQuery.isEmpty {
             if searching { parts.append("searching… \(matches.count)") }
@@ -414,6 +481,14 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     @objc func toggleThumbnails(_ sender: Any?) {
         Settings.set("pdfThumbnails", Settings.flag("pdfThumbnails") ? 0 : 1)   // every PDF window follows (settingsChanged)
+    }
+
+    @objc func showPages(_ sender: Any?) { showSidebar(mode: 0) }
+    @objc func showContents(_ sender: Any?) { showSidebar(mode: 1) }
+
+    private func showSidebar(mode: Int) {
+        Settings.set("pdfSidebarMode", mode)
+        Settings.set("pdfThumbnails", 1)
     }
 
     @objc func goToPage(_ sender: Any?) {
@@ -551,7 +626,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             return item
         }
         switch id {
-        case Self.sidebarID: return button("sidebar.left", "Thumbnails", #selector(toggleThumbnails(_:)))
+        case Self.sidebarID: return button("sidebar.left", "Sidebar", #selector(toggleThumbnails(_:)))
         case Self.zoomOutID: return button("minus.magnifyingglass", "Zoom Out", #selector(zoomOut(_:)))
         case Self.zoomInID: return button("plus.magnifyingglass", "Zoom In", #selector(zoomIn(_:)))
         case Self.fitID: return button("arrow.up.left.and.arrow.down.right", "Fit Width", #selector(fitWidth(_:)))
@@ -574,10 +649,30 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposed: CGFloat, ofSubviewAt index: Int) -> CGFloat { max(proposed, 90) }
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposed: CGFloat, ofSubviewAt index: Int) -> CGFloat { min(proposed, splitView.bounds.width / 2) }
 
+    /// The thumbnails follow the sidebar's width (a wider sidebar made only more empty space); the width the author drags to is
+    /// remembered as the thumbnail width setting once the drag has stopped.
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard !side.isHidden, side.frame.width > 0 else { return }
+        let w = max(40, side.frame.width - Self.thumbnailMargin).rounded()
+        guard abs(thumbs.thumbnailSize.width - w) > 0.5 else { return }
+        thumbs.thumbnailSize = CGSize(width: w, height: (w * 1.4).rounded())
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(rememberWidth), object: nil)
+        perform(#selector(rememberWidth), with: nil, afterDelay: 0.4)
+    }
+
+    @objc private func rememberWidth() {
+        let w = Int(thumbs.thumbnailSize.width.rounded())
+        if w != Int(Settings.number("pdfThumbnailWidth")) { Settings.set("pdfThumbnailWidth", w) }
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(toggleThumbnails(_:)):
-            item.title = Settings.flag("pdfThumbnails") ? "Hide Thumbnails" : "Show Thumbnails"
+            item.title = Settings.flag("pdfThumbnails") ? "Hide Sidebar" : "Show Sidebar"
+        case #selector(showPages(_:)):
+            item.state = Settings.flag("pdfThumbnails") && Settings.int("pdfSidebarMode") != 1 ? .on : .off
+        case #selector(showContents(_:)):
+            item.state = Settings.flag("pdfThumbnails") && Settings.int("pdfSidebarMode") == 1 ? .on : .off
         case #selector(zoomIn(_:)):
             return pdfView.scaleFactor < pdfView.maxScaleFactor - 0.0001
         case #selector(zoomOut(_:)):

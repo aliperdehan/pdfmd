@@ -37,7 +37,7 @@ this is **not tested yet** in this alpha.
   scrolling and typing never count from the top again. Width, size, opacity and padding are settings (`lineNumber*`).
 
 - A PDF viewer (0.2.0), opened by File > Open, by `pdfmdedit FILE.pdf` and by Open With (the app is only an "Alternate" handler of
-  PDFs, so Preview keeps its place): PDFKit, pages one below the other, a thumbnail sidebar (⌥⌘T), zoom (⌘= ⌘- ⌘0, ⌘9 fit page,
+  PDFs, so Preview keeps its place): PDFKit, pages one below the other, a sidebar (⌥⌘T shows or hides it) with the page thumbnails (⌥⌘2) or the table of contents (⌥⌘3, the PDF's outline as a tree that follows the page being read; a segmented control at its top does the same), a divider that is easy to catch (`pdfDividerGrabPt`) and that resizes the thumbnails with it, zoom (⌘= ⌘- ⌘0, ⌘9 fit page,
   ⌥⌘9 fit width), Go to Page (⌥⌘G), Find (⌘F, ⌘G, ⇧⌘G; Enter in the field runs the search, Enter again goes to the next match;
   matches are marked in the pages), the page and zoom in the window's subtitle. **A changed file is shown again by itself**
   (a build, a copy, an atomic replacement): after the file has stayed unchanged for `pdfReloadDebounceMs`, and only when it ends
@@ -110,7 +110,7 @@ screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to
 benchmark's document so that it can be opened by hand. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
 document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
 caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
-prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
+prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|contents|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
 sidebar toggle) in a real window that never takes focus and prints the page and the longest main-thread stall per step. With `PDFLIVE_SHOT=PATH` the `hide` step also saves a screenshot of the window (for what no view dump shows). `PDFMDEDIT_TRACE=1`
 (environment) writes a timestamped trace of place changes, file-change notifications and main-thread stalls to `/tmp/pdfmdedit-trace.log`; start the
 app with `open -n --env PDFMDEDIT_TRACE=1 -a "$PWD/build.noindex/pdfmdedit.app" FILE`. A silent fall back from TextKit 2 to TextKit 1 is reported
