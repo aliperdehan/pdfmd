@@ -110,7 +110,10 @@ screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to
 benchmark's document so that it can be opened by hand. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
 document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
 caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
-prints the resident memory. A silent fall back from TextKit 2 to TextKit 1 is reported
+prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
+sidebar toggle) in a real window that never takes focus and prints the page and the longest main-thread stall per step. `PDFMDEDIT_TRACE=1`
+(environment) writes a timestamped trace of place changes, file-change notifications and main-thread stalls to `/tmp/pdfmdedit-trace.log`; start the
+app with `open -n --env PDFMDEDIT_TRACE=1 -a "$PWD/build.noindex/pdfmdedit.app" FILE`. A silent fall back from TextKit 2 to TextKit 1 is reported
 on stderr and at the end of `--bench`.
 
 ## Known limits

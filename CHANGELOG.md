@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.29b — 2026-11-04
+
+Pre-edit state: commit `f8fde88`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.1: the PDF viewer no longer reloads itself over and over.** The author: "the pdf viewer in its current state is unusable. zooming doesn't work properly, navigation using thumbnails is broken ... fast scroll ... lagged", then "scrolling is now dead".
+
+- Cause: `presentedItemDidChange` also fires when only the file's access time moves. Every reload reads the file, so it moved the access time, so it reported a change, so it reloaded again, about every 1.5 s. Each reload swaps in a new PDFView and puts the old place and zoom back, which undid the scroll, the thumbnail jump and the zoom, and rebuilt the thumbnails. The file's modification time, status time and attributes did not change (checked with `stat`), which is why it was hard to see.
+- Fix (`gui/Sources/PDF/PDFViewer.swift`): `FileStamp` (modification time to the nanosecond, size, inode) is taken before the file is read; a change report whose stamp equals the shown one is ignored. Taken before the read, so a write landing during the read is still seen next.
+- **The sidebar's empty strip:** hiding the thumbnails hid the view but the page area kept its place, leaving a dark empty box; the split view is laid out again (`adjustSubviews`) when the sidebar is hidden.
+- Tests: `--smoke-pdf` (now 48 checks) has "a change of the access time alone does not reload" (the old test counted reloads with `>=` and never looked for spurious ones) and "hidden thumbnails leave no empty strip" / "shown thumbnails make room again" (the old one only looked at `isHidden`). New developer tools: `PDFMDEDIT_TRACE=1` writes a timestamped trace (place changes, file notifications with the file's times, main-thread stalls over `PDFMDEDIT_TRACE_STALL` ms) to `/tmp/pdfmdedit-trace.log`; `--live-pdf FILE [thumb|scroll|zoom|hide|all]` runs thumbnail clicks, wheel flicks, zooms and the sidebar toggle in a real window without taking focus. It did not reproduce the loop (an inactive app gets no thumbnail clicks, and the loop needs the system's own access-time reports); the trace did.
+
+Not pushed.
+
 ## v3.32.29 — 2026-11-04
 
 Pre-edit state: commit `eaf8a14` (3.32.28). **A calc div with `calc-space` and `calc-align: center` kept only the centring in HTML**, so `test_a_calc_div_has_room_around_it_and_can_be_centred` failed (found by the full run after the move, and it fails the same way on `92ab5e4`, so the move did not cause it).

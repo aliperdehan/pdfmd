@@ -82,6 +82,16 @@ enum PDFSmoke {
         check("opened fitted to the width (autoScales)", view.autoScales)
         check("Save is disabled for a read-only document", !doc.validateUserInterfaceItem(NSMenuItem(title: "", action: #selector(NSDocument.save(_:)), keyEquivalent: "")))
 
+        // reading the file moves its access time and macOS then reports "changed": that must not reload (it looped, every 1.5 s)
+        do {
+            let n = doc.reloads
+            _ = try? Data(contentsOf: doc1)
+            doc.presentedItemDidChange(); spin(0.1)
+            doc.presentedItemDidChange()
+            spin(Double(Settings.int("pdfReloadDebounceMs")) / 1000 + 0.5)
+            check("a change of the access time alone does not reload", doc.reloads == n, "reloads \(doc.reloads) was \(n)")
+        }
+
         // zoom: steps, limits, actual size
         c.actualSize(nil)
         check("actual size is 100%", abs(view.scaleFactor - 1) < 0.001 && !view.autoScales, String(format: "%.3f", view.scaleFactor))
@@ -212,8 +222,14 @@ enum PDFSmoke {
         check("thumbnails shown by default", sidebar?.isHidden == false)
         Settings.set("pdfThumbnails", 0)
         check("thumbnails hidden by the setting", sidebar?.isHidden == true)
+        spin(0.2)
+        // hidden is not enough: the pages must take the room (an empty dark strip stayed where the thumbnails were)
+        let pagesLeft = c.pdfView.superview?.frame.minX ?? -1
+        check("hidden thumbnails leave no empty strip", pagesLeft >= 0 && pagesLeft <= 2, "pages start at x \(pagesLeft)")
         Settings.set("pdfThumbnails", 1)
         check("thumbnails shown again", sidebar?.isHidden == false)
+        spin(0.2)
+        check("shown thumbnails make room again", (c.pdfView.superview?.frame.minX ?? 0) > 50, "pages start at x \(c.pdfView.superview?.frame.minX ?? -1)")
         Settings.set("pdfDisplayMode", 0)
         check("page layout setting applied live", view.displayMode == .singlePage)
 

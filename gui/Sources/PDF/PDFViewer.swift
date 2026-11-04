@@ -21,6 +21,18 @@ func pdfLooksComplete(_ url: URL) -> Bool {
     return data.range(of: Data("%%EOF".utf8)) != nil
 }
 
+/// What identifies a version of a file: its modification time, size and inode. Reading a file changes none of them, but it does
+/// change the access time, and macOS reports that to the document as "the file changed" (every reload read the file, and so
+/// started the next reload: a loop that rebuilt the view every 1.5 s and undid every scroll).
+struct FileStamp: Equatable {
+    let seconds: Int, nanoseconds: Int, size: Int64, inode: UInt64
+    init?(_ url: URL) {
+        var st = stat()
+        guard stat(url.path, &st) == 0 else { return nil }
+        seconds = st.st_mtimespec.tv_sec; nanoseconds = st.st_mtimespec.tv_nsec; size = Int64(st.st_size); inode = UInt64(st.st_ino)
+    }
+}
+
 /// A PDF window's document. Read-only for now (the notes come next). The file is watched: when something rebuilds it (pdfmd,
 /// LaTeX, a copy) the new file replaces the shown one, on the same page, at the same place and at the same zoom.
 @objc(PDFViewerDocument)
@@ -31,6 +43,8 @@ final class PDFViewerDocument: NSDocument {
     private(set) var reloads = 0
     private var reloadWork: DispatchWorkItem?
     private var tries = 0
+    /// The version of the file that is on the screen.
+    private var shown: FileStamp?
 
     override class var autosavesInPlace: Bool { false }
     override class var readableTypes: [String] { ["PDF document"] }
@@ -44,6 +58,7 @@ final class PDFViewerDocument: NSDocument {
     }
 
     override func read(from url: URL, ofType typeName: String) throws {
+        shown = FileStamp(url)   // before the read: a write that lands during it is a change to be seen next
         guard let d = PDFDocument(url: url), d.pageCount > 0 else { throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadCorruptFileError) }
         pdf = d
     }
@@ -59,10 +74,17 @@ final class PDFViewerDocument: NSDocument {
     /// Something wrote the file. NSDocument would revert an unedited document by itself and show an error for a half-written
     /// file, so this replaces that: wait until the writing has paused, and read the file only when it is finished.
     override func presentedItemDidChange() {
+        if Trace.on, let url = fileURL {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let used = getxattr(url.path, "com.apple.lastuseddate#PS", nil, 0, 0, 0) > 0
+            var buf = [UInt8](repeating: 0, count: 16); let got = getxattr(url.path, "com.apple.lastuseddate#PS", &buf, 16, 0, 0)
+            Trace.log("presentedItemDidChange: mtime \((attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0), size \(attrs?[.size] ?? 0), lastuseddate xattr \(used ? buf.prefix(max(0, got)).map { String(format: "%02x", $0) }.joined() : "none")")
+        }
         DispatchQueue.main.async { [weak self] in self?.fileChanged() }
     }
 
     func fileChanged() {
+        if let url = fileURL, let now = FileStamp(url), now == shown { return }   // only the access time moved
         tries = 0
         schedule()
     }
@@ -76,7 +98,9 @@ final class PDFViewerDocument: NSDocument {
 
     private func reload() {
         guard let url = fileURL else { return }
+        let stamp = FileStamp(url)
         if pdfLooksComplete(url), let d = PDFDocument(url: url), d.pageCount > 0 {
+            shown = stamp
             pdf = d
             reloads += 1
             controller?.replace(d)
@@ -145,6 +169,20 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         applySettings()
         replace(document.pdf!, keepingPlace: false)
         let nc = NotificationCenter.default
+        if Trace.on {
+            Trace.watchStalls()
+            pdfView.postsFrameChangedNotifications = true
+            nc.addObserver(forName: NSView.frameDidChangeNotification, object: pdfView, queue: .main) { [weak self] _ in
+                Trace.log("pdfView frame \(self?.pdfView.frame ?? .zero)")
+            }
+            if let clip = pdfView.documentView?.enclosingScrollView?.contentView {
+                clip.postsBoundsChangedNotifications = true
+                nc.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { _ in
+                    Trace.log("scrolled: clip y \(Int(clip.bounds.origin.y))")
+                }
+            }
+            nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { _ in Trace.log("window became key") }
+        }
         nc.addObserver(self, selector: #selector(placeChanged), name: .PDFViewPageChanged, object: nil)   // from whichever PDFView is current
         nc.addObserver(self, selector: #selector(placeChanged), name: .PDFViewScaleChanged, object: nil)
         nc.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
@@ -218,6 +256,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
         let show = Settings.flag("pdfThumbnails")
         let wasHidden = side.isHidden
         side.isHidden = !show
+        if !show { split.adjustSubviews() }   // hiding alone leaves the empty strip: the page area has to take the room
         if show {
             // the sidebar is as wide as a thumbnail plus the margins the thumbnail view keeps around it
             let wanted = width + 36
@@ -314,6 +353,10 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     @objc private func placeChanged() {
         guard let window, let doc = pdfView.document else { return }
+        if Trace.on {
+            let clip = pdfView.documentView?.enclosingScrollView?.contentView
+            Trace.log("place: page \(pdfView.currentPage.map { doc.index(for: $0) + 1 } ?? -1), zoom \(String(format: "%.3f", pdfView.scaleFactor)), autoScales \(pdfView.autoScales), view \(Int(pdfView.bounds.width))x\(Int(pdfView.bounds.height)), clip y \(Int(clip?.bounds.origin.y ?? -1)), doc height \(Int(pdfView.documentView?.frame.height ?? -1))")
+        }
         var parts: [String] = []
         if let page = pdfView.currentPage { parts.append("Page \(doc.index(for: page) + 1) of \(doc.pageCount)") }
         parts.append("\(Int((pdfView.scaleFactor * 100).rounded()))%")
