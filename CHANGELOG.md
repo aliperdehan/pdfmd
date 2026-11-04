@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.29i — 2026-11-04
+
+Pre-edit state: commit `c4815f2`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.8: ⌘R builds the PDF from an editor window.** The author: "let's go ahead with cmd+R to build" (after "so we are doubling cmd+R's duty, like it compiles in edit mode and reloads in view mode? it is semantically correct both ways tho").
+
+- View > Build PDF (⌘R in an editor window; the same menu item is Reload in a PDF window). Saves first (an untitled file asks where; the build starts from the save's completion), then runs the pdfmd that `PdfmdTool` found (or `pdfmdCommand`) in a login shell, in the file's folder; the file and the new text setting `buildArguments` reach the shell as arguments, not inside the script. Verified under `env -i PATH=/usr/bin:/bin` (what a Dock launch has): a real build of a tiny file took 25 s and made the PDF.
+- The PDF is the file pdfmd names in its `OK  a.md > a.pdf` line (else the same name with `.pdf`). An open viewer of it reads it again once (`reloadIfChanged`: nothing happens when the automatic reload was quicker); otherwise it is opened (`buildOpensPDF`, default 1) and the editor keeps the keyboard. In the manual-reload mode a build's own result is shown (my choice, to be confirmed).
+- One build at a time; any number of ⌘R during one make exactly one more build. The window subtitle shows the state ("Building…", "Built a.pdf in 18.7 s", cleared by the next edit; "Build failed (exit status 1)" stays until the next build); a failure opens a small log panel (View > Show Build Log, ⌥⌘R) that never takes the keyboard.
+- **No double build beside a watcher.** `pdfmd --edit --editor CMD` starts the editor *and* `pdfmd --watch FILE`, and a terminal `pdfmd -w` does the same: ⌘R finds such a process (`ps`) and only saves ("pdfmd is watching this file and rebuilds it by itself"); `buildWhenWatched` builds anyway.
+- Settings (new Build tab): `buildTimeout` 600 s (the build and everything below it are killed; 0 = never), `buildOpensPDF`, `buildWhenWatched`, `buildArguments`.
+- `--smoke-build FILE.md [--real]`: 33 checks against a stand-in pdfmd (save first, a file name with quotes and `$`, the report line, one reload, the queue, a failure, the timeout leaves nothing running, a watcher, an unanswering command).
+
 ## v3.32.29h — 2026-11-04
 
 Pre-edit state: commit `cfd258a`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.7 is Colophon 0.2.7: the app is renamed, and the About box says which pdfmd it works with.** The author: "let's go ahead with colophon and say it is the pdfmd workbench in about box! btw, about box currently holds only the app version, which is early alpha, let's make it list the pdfmd version it is currently working together with as well"; on learning that Homebrew had its own, older pdfmd: "let's make it prefer the newest version tho, with a setting to explicitly set the path and desired pdfmd".

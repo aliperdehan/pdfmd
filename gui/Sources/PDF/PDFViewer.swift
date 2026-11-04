@@ -104,6 +104,12 @@ final class PDFViewerDocument: NSDocument {
         reload()
     }
 
+    /// After a build that wrote the file: show it again unless it is on the screen already (the automatic reload may have been quicker).
+    func reloadIfChanged() {
+        if let url = fileURL, let now = FileStamp(url), now == shown, !changedOnDisk { return }
+        reloadNow()
+    }
+
     private func schedule() {
         reloadWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.reload() }
@@ -740,6 +746,8 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             item.title = Settings.flag("pdfThumbnails") ? "Hide Sidebar" : "Show Sidebar"
         case #selector(toggleAutoReload(_:)):
             item.state = Settings.flag("pdfAutoReload") ? .on : .off
+        case #selector(reloadFile(_:)):
+            item.title = "Reload"
         case #selector(resetSidebarWidth(_:)):
             return Settings.flag("pdfThumbnails")
         case #selector(showPages(_:)):

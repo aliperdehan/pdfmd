@@ -57,7 +57,16 @@ line numbers, status bar), `PDF/` (the viewer), `Settings/` (the settings table,
 
 ## Settings
 
-**The Settings window (⌘,)** has six tabs (the window is sized to the tab shown): General (quit when the last window closes), Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), PDF (thumbnails, layout, zoom, reload), Colours (the two themes,
+**Build (⌘R in an editor window).** View > Build PDF saves the file (an untitled one asks where) and runs pdfmd on it, the newest one
+that the login shell knows (or the `pdfmdCommand` setting), in the file's folder and in a login shell, so pandoc and the TeX tools are found
+from a Dock launch too. The result is in the window's subtitle ("Building…", "Built a.pdf in 18.7 s", "Build failed"); a failure opens the log
+(View > Show Build Log, ⌥⌘R, also holds the output of the last build). The PDF is found from pdfmd's own `OK  a.md > a.pdf` line; an open
+window of it is shown again once, otherwise it is opened (`buildOpensPDF`) and the keyboard stays in the editor. ⌘R during a build queues one
+more build. When a `pdfmd --watch` is already rebuilding the file on every save (`pdfmd -w`, or the one `pdfmd --edit --editor` starts), ⌘R only saves
+(`buildWhenWatched` builds anyway). A build is stopped, with everything it started, after `buildTimeout` seconds. In a PDF window the same key
+reloads the file.
+
+**The Settings window (⌘,)** has seven tabs (the window is sized to the tab shown): General (quit when the last window closes, the pdfmd command), Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), PDF (thumbnails, layout, zoom, reload), Build (⌘R: extra pdfmd words, time limit, opening the PDF, a watcher already running), Colours (the two themes,
 whether the theme sets the background, and for each colouring role the category it takes its colour from plus its light and
 dark colour, with a Reset) and Performance (the colouring delays and limits). It is generated from the tables in
 `Settings.swift` and `Palette.swift`, so it cannot drift from the shell: a change is stored at once, applied to the open
@@ -111,7 +120,7 @@ means `cacheDisplay` into a bitmap; typing repaints the caret line only, like a 
 The numbers compare variants with each other and are not a measurement of any other editor. `--smoke` opens the
 file through the real document path, edits and scrolls it and checks the bytes and that the colours stay on
 screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to disk. `--gen MB PATH` writes the
-benchmark's document so that it can be opened by hand. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
+benchmark's document so that it can be opened by hand. `--smoke-build FILE.md [--real]` runs ⌘R in an editor window against a stand-in for pdfmd (save first, a file name with quotes, the PDF found and shown once, a queued second build, a failure's log, a timeout that kills the whole tree, a running `pdfmd --watch`); `--real` also builds with the installed pdfmd (run it under `env -i HOME=$HOME PATH=/usr/bin:/bin` to see what a Dock launch has). `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
 document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
 caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
 prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|contents|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
