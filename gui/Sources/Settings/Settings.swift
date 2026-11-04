@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.5"
+let appVersion = "0.2.6"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -55,6 +55,7 @@ enum Settings {
         Item(key: "highlightDelayMs", value: 120, label: "Pause after typing (ms)", help: "pause after typing before the visible text is recoloured", tab: "Performance"),
         Item(key: "scrollDelayMs", value: 20, label: "Pause after scrolling (ms)", help: "pause after scrolling out of the coloured range before it is recoloured", tab: "Performance"),
         Item(key: "highlightMaxMB", value: 0, label: "Colours off above (MB)", help: "above this size the colours are off (0 = never)", tab: "Performance"),
+        Item(key: "quitAfterLastWindow", value: 0, label: "Quit when the last window closes", help: "1 = closing the last window quits the app (the Windows way); 0 = the app stays open and the Dock icon opens a new window (the Mac way). A launch from the command line (pdfmd --editor) always quits, because the command waits for it", tab: "General", kind: .flag),
         Item(key: "pdfAutoReload", value: 1, label: "Reload when the file changes", help: "1 = a PDF window shows a rewritten file by itself (same page and zoom); 0 = it only says \"file changed\" and waits for View > Reload (command R)", tab: "PDF", kind: .flag),
         Item(key: "pdfThumbnails", value: 1, label: "Show thumbnails", help: "1 = show the page thumbnails in a sidebar", tab: "PDF", kind: .flag),
         Item(key: "pdfSidebarMode", value: 0, label: "Sidebar shows", help: "0 = page thumbnails, 1 = the table of contents (outline)", tab: "PDF", kind: .choice([0, 1])),

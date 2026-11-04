@@ -221,6 +221,17 @@ enum PDFSmoke {
         let caught = wait(6) { view.document?.pageCount == pages - 1 }
         check("switching the automatic reload on catches up", stale && caught && !doc.changedOnDisk, "stale \(stale), pages \(view.document?.pageCount ?? -1)")
 
+        // the red button: the app stays (the Mac way) unless the setting says quit, and a command-line launch always quits
+        do {
+            let delegate = AppDelegate()
+            check("the app stays after the last window by default", !delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp))
+            Settings.set("quitAfterLastWindow", 1)
+            check("the setting makes it quit", delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp))
+            Settings.set("quitAfterLastWindow", 0)
+            delegate.launchedWithFiles = true
+            check("a command-line launch quits whatever the setting", delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp))
+        }
+
         // (d) search
         let sample = (view.document?.page(at: 0)?.string ?? "").split(whereSeparator: { !$0.isLetter }).first { $0.count >= 4 }.map(String.init)
         if let word = sample {

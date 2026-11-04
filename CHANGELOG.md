@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.29g — 2026-11-04
+
+Pre-edit state: commit `619a05e`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.6: the red button no longer quits the app (a setting).** The author: "pressing red button currently also quits the app, which matches the windows behaviour, but looks as odd one among the mac apps, i guess we can make it a setting too".
+
+- Setting `quitAfterLastWindow` (new General tab in the Settings window), default 0: closing the last window leaves the app running and a click on its Dock icon opens a new window; 1 = it quits, as before. A launch from the command line with a file (`pdfmd --editor`, which waits for the editor) always quits with its last window, whatever the setting.
+- Tests: `--smoke-pdf` (now 68 checks): the default stays, the setting quits, a command-line launch quits. Not checked by hand: the Dock click (needs the app to be left running with no window).
+
+Not pushed.
+
 ## v3.32.29f — 2026-11-04
 
 Pre-edit state: commit `22dac93`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.5: the PDF window's reload on a changed file can be switched to manual (View > Reload Automatically), and View > Reload (⌘R) reads the file again.** The author: Preview "updates instantly", Skim "requires explicit go to menu, restore, confirm sequence ... annoying when i never use this functionality"; "it should be toggler, with auto updating automatically when no change into pdf is detected and manual requiring explicit reset or some key binding"; ⌘R "compiles in edit mode and reloads in view mode? it is semantically correct both ways".

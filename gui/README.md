@@ -53,7 +53,7 @@ line numbers, status bar), `PDF/` (the viewer), `Settings/` (the settings table,
 
 ## Settings
 
-**The Settings window (⌘,)** has five tabs (the window is sized to the tab shown): Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), PDF (thumbnails, layout, zoom, reload), Colours (the two themes,
+**The Settings window (⌘,)** has six tabs (the window is sized to the tab shown): General (quit when the last window closes), Editor (font, size, wrapping, spelling, text engine), Status bar (which elements show), PDF (thumbnails, layout, zoom, reload), Colours (the two themes,
 whether the theme sets the background, and for each colouring role the category it takes its colour from plus its light and
 dark colour, with a Reset) and Performance (the colouring delays and limits). It is generated from the tables in
 `Settings.swift` and `Palette.swift`, so it cannot drift from the shell: a change is stored at once, applied to the open

@@ -15,8 +15,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // A command-line launch with a file (pdfmd's --editor) stays alive until its windows are closed.
-    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+    // A command-line launch with a file (pdfmd's --editor) always quits with its last window: the command that started it waits for
+    // that. Otherwise the setting decides: off (the Mac way) keeps the app, and the Dock icon opens a new window.
+    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
+        launchedWithFiles || Settings.flag("quitAfterLastWindow")
+    }
+
+    func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { NSDocumentController.shared.newDocument(nil) }
+        return false
+    }
     func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool { !launchedWithFiles && CommandLine.arguments.count < 2 }
 
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
