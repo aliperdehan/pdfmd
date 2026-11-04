@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.37 — 2026-11-04
+
+Pre-edit state: commit `0e074ab`. Entry 3do (the web UI). **The page answers command-1 to command-8.** The author found that the number keys switch no tabs in the Mac window (they do in CotEditor).
+
+- `lib/pdfmd_web/js/app.js`: the commands `tab1` to `tab8` (the nth tab of the page; a number past the last tab does nothing). The Mac window sends them for command-1 to command-8 (a gui-only change, the next commit's lettered entry); a browser has no menu bar and keeps the browser's own keys. The page's self-test has a check for them (47 checks).
+- command-9 is not a tab number here: it stays Zoom to Fit in the PDF viewer.
+
 ## v3.32.36 — 2026-11-04
 
 Pre-edit state: commit `25ca2f6`. Entry 3do (the web UI). **`pdfmd --serve` and `pdfmd --api`: the JSON core of the web UI, and the page moves into pdfmd.** The author: "go ahead" (the core first, then the history panel).
