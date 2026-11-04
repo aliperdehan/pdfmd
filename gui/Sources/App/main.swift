@@ -38,6 +38,8 @@ if let i = args.firstIndex(of: "--smoke-build"), i + 1 < args.count { BuildSmoke
 if args.contains("--smoke-cli") { CLISmoke.run(); exit(0) }
 if args.contains("--smoke-studio") { StudioSmoke.run(); exit(0) }
 if args.contains("--smoke-html") { HTMLSmoke.run(); exit(0) }
+if args.contains("--smoke-pop") { PopSmoke.run(); exit(0) }
+if let i = args.firstIndex(of: "--pop-screenshot"), i + 1 < args.count { PopSmoke.screenshot(args); exit(0) }
 if let i = args.firstIndex(of: "--bench-pdf"), i + 1 < args.count { PDFSmoke.bench(args[i + 1]); exit(0) }
 if args.contains("--live-pdf") { PDFLive.run(args) }
 if args.contains("--live-studio") { StudioLive.run(args) }

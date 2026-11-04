@@ -49,11 +49,22 @@ this is **not tested yet** in this alpha.
   on screen (a second PDFView, a second thumbnail view) until the new ones have drawn themselves, because a PDFView that is given
   a new document blinks. Read-only: no notes yet (marker, pen, eraser, text blocks are the next step). Settings: the PDF tab.
 
+- **The equation popup** (0.2.12; it was the separate app eqpop, absorbed): a floating window that renders a LaTeX snippet (display or
+  inline math, chemistry with `mhchem`, text) or a Markdown snippet (through pdfmd) to a tightly cropped vector PDF, shows it, and
+  copies it as PDF and PNG with ⌘↩ (or drag it out, or Save as PDF, PNG or SVG). Window > Equation Popup (⌥⌘E) opens it. The preamble
+  is a plain file (`~/Library/Application Support/pdfmdedit/popup/preamble.tex`, copied once from eqpop's folder if there is one, never
+  overwritten); a failed run shows a table of every error (double-click jumps to the line) and a Log. `pdflatex` renders from a cached,
+  compiled preamble. With the setting **`popMenuBar`** on, Colophon keeps running in the menu bar (an `f(x)` icon, a global shortcut,
+  `popHotkey`, ⌥⇧T by default; **quit a still-running eqpop first**: it holds the same shortcut, and macOS lets both apps register it, so neither tells you about the clash) and stays alive when its last window is closed; with
+  it off, which is the default, there is no icon and no shortcut. Every choice is a setting on the Popup tab (and so a
+  `colophon settings set` away), including the delays, time limits and the crop numbers that eqpop had written into its code.
+  `colophon eq SNIPPET OUT.pdf [--inline|--text] [--engine E] [--png F] [--svg F]` renders without a window.
+
 ## Source layout
 
 `gui/Sources/` is one SwiftPM target (`pdfmdedit`), grouped by area: `App/` (main, menus), `Editor/` (the editor window, colouring,
 line numbers, status bar), `PDF/` (the viewer), `Settings/` (the settings table, the Settings window, themes and palette),
-`Checks/` (the benchmark and the smoke tests).
+`Pop/` (the equation popup), `Checks/` (the benchmark and the smoke tests).
 
 ## Settings
 
@@ -149,7 +160,7 @@ file through the real document path, edits and scrolls it and checks the bytes a
 screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to disk. `--gen MB PATH` writes the
 benchmark's document so that it can be opened by hand. `--smoke-build FILE.md [--real]` runs ⌘R in an editor window against a stand-in for pdfmd (save first, a file name with quotes, the PDF found and shown once, a queued second build, a failure's log, a timeout that kills the whole tree, a running `pdfmd --watch`); `--real` also builds with the installed pdfmd (run it under `env -i HOME=$HOME PATH=/usr/bin:/bin` to see what a Dock launch has). `--smoke-cli` runs the command line as a program on a scratch settings domain (settings list/get/set/reset and their checks, a running app told at once, render/restore/install/pandoc handing over unchanged, check). `--smoke-studio` drives the preview pane against the real pandoc (unsaved text, a burst of typing, math, a picture, an anchor, a script that must not run, an error, the PDF, following the scroll, the startup setting); `--live-studio FILE.md [FILE.pdf]` does it in a real window and saves screenshots (`PDFLIVE_SHOT=PREFIX`). `--smoke-html` opens an HTML file through the real path and checks the load, the reload on the same place (once), the manual mode, find, zoom, anchors and Show Source. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
 document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
-caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
+caught half-written, search, and the PDF settings; `--smoke-pop` checks the equation popup headless (the wrapper and error parser, the shortcut words, the settings, the copy from an eqpop folder, real pdflatex and pdfmd renders, the window built and never shown, the keys, a private pasteboard, `colophon eq` as a subprocess); `--pop-screenshot OUT.png [--source TEXT] [--appearance light|dark] [--below] [--preamble]` draws the popup **off screen** (use this, not a live window, to look at it). `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
 prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|contents|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
 sidebar toggle) in a real window that never takes focus and prints the page and the longest main-thread stall per step. With `PDFLIVE_SHOT=PATH` the `hide` step also saves a screenshot of the window (for what no view dump shows). `PDFMDEDIT_TRACE=1`
 (environment) writes a timestamped trace of place changes, file-change notifications and main-thread stalls to `/tmp/pdfmdedit-trace.log`; start the

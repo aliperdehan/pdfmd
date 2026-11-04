@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.11"
+let appVersion = "0.2.12"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -91,6 +91,26 @@ enum Settings {
         Item(key: "pdfReloadDebounceMs", value: 400, label: "Reload pause (ms)", help: "when the PDF file changes on disk it is shown again after it has stayed unchanged for this long", tab: "PDF"),
         Item(key: "pdfReloadCoverMs", value: 400, label: "Keep the old pages for (ms)", help: "after a reload the old pages stay on the screen this long while the new ones draw themselves underneath (0 = replace at once: the pages blink)", tab: "PDF"),
         Item(key: "pdfReloadRetries", value: 40, label: "Reload attempts", help: "how many times a file that is still being written is looked at again before it is given up until the next change", tab: "PDF"),
+        Item(key: "popMenuBar", value: 0, label: "Keep running in the menu bar", help: "1 = a menu-bar icon and the global shortcut open the equation popup from any app, and Colophon stays running when its last window is closed (a shortcut that another app holds is reported in the icon's menu)", tab: "Popup", kind: .flag),
+        Item(key: "popLaunchAtLogin", value: 0, label: "Start at login", help: "1 = Colophon starts when you log in (use it with the menu-bar icon); applies while Colophon runs and at its next launch", tab: "Popup", kind: .flag),
+        Item(key: "popLive", value: 1, label: "Render while typing", help: "1 = the popup renders after a pause in the typing; 0 = only with command R or command return (pdfmd documents never render while typing: they take seconds)", tab: "Popup", kind: .flag),
+        Item(key: "popHideAfterCopy", value: 1, label: "Hide after copying", help: "1 = the popup closes after command return and gives the focus back to the app you came from", tab: "Popup", kind: .flag),
+        Item(key: "popPreviewAbove", value: 1, label: "Preview above the editor", help: "1 = the result is on top, as in LaTeXiT; 0 = below the editor", tab: "Popup", kind: .flag),
+        Item(key: "popLineNumbers", value: 1, label: "Line numbers in the popup", help: "1 = a line-number margin in the popup's editors", tab: "Popup", kind: .flag),
+        Item(key: "popPreambleShown", value: 0, label: "Show the preamble pane", help: "1 = the popup shows its preamble (and, for pdfmd, its metadata) above the editor", tab: "Popup", kind: .flag),
+        Item(key: "popRenderDelayMs", value: 400, label: "Pause before rendering (ms)", help: "the popup renders after the typing has paused this long", tab: "Popup"),
+        Item(key: "popPreambleDelayMs", value: 600, label: "Pause after a preamble edit (ms)", help: "the popup renders after an edit of the preamble or the metadata has paused this long", tab: "Popup"),
+        Item(key: "popTimeoutS", value: 30, label: "TeX time limit (s)", help: "a TeX run that takes longer is stopped", tab: "Popup"),
+        Item(key: "popPdfmdTimeoutS", value: 120, label: "pdfmd time limit (s)", help: "a pdfmd run of the popup that takes longer is stopped", tab: "Popup"),
+        Item(key: "popFormatTimeoutS", value: 60, label: "Preamble cache time limit (s)", help: "compiling the preamble into a cached TeX format (pdflatex) is stopped after this long", tab: "Popup"),
+        Item(key: "popFormatKeep", value: 6, label: "Cached preambles kept", help: "how many compiled preambles (about 9 MB each) are kept; the oldest go first", tab: "Popup"),
+        Item(key: "popBorderPt", value: 2, label: "Border of the snippet (pt)", help: "the border that LaTeX's standalone class leaves around the snippet", tab: "Popup"),
+        Item(key: "popMaxWidthCm", value: 16, label: "Widest line (cm)", help: "the width at which the text of a snippet wraps (standalone's varwidth)", tab: "Popup"),
+        Item(key: "popCropPadPt", value: 2, label: "Padding after cropping (pt)", help: "what is left around the ink when the page is cropped to it", tab: "Popup"),
+        Item(key: "popPdfmdBottomPt", value: 66, label: "pdfmd page number strip (pt)", help: "the strip at the bottom of a pdfmd page that is left out when cropping, because it holds the page number", tab: "Popup"),
+        Item(key: "popPngScale", value: 4, label: "PNG pixels per point", help: "the copied PNG is drawn at this scale (4 = 288 dpi)", tab: "Popup"),
+        Item(key: "popErrorsListed", value: 30, label: "Errors listed", help: "at most this many errors of a failed run are listed", tab: "Popup"),
+        Item(key: "popPdfmdLines", value: 6, label: "pdfmd lines shown as errors", help: "when pdfmd fails, this many of its last lines are listed", tab: "Popup"),
         Item(key: "frontMatterScanChars", value: 20000, label: "Front matter scan (characters)", help: "how far from the top the closing --- of a YAML front matter is looked for", tab: "Performance"),
     ]
 
@@ -98,6 +118,8 @@ enum Settings {
         case free
         case themes
         case fonts
+        case options([String])   // one of these words
+        case hotkey              // a keyboard shortcut: ⌥⇧T, option+shift+t, or none
     }
 
     struct Text {
@@ -117,6 +139,10 @@ enum Settings {
         Text(key: "htmlPreviewCSS", value: "", label: "Style sheet for the preview", help: "the path of a .css file that is added to the preview's own style (empty = none)", tab: "Studio"),
         Text(key: "fontName", value: "JetBrains Mono", label: "Font", help: "editor font: a font family (monospaced fonts are listed by --fonts); if it is not installed the system monospaced font is used", tab: "Editor", kind: .fonts),
         Text(key: "theme", value: "Anura", label: "Theme (light appearance)", help: "colour theme in a light appearance: the name of a .cottheme file (CotEditor's format), see --themes", tab: "Colours", kind: .themes),
+        Text(key: "popHotkey", value: "⌥⇧T", label: "Shortcut", help: "the global shortcut that opens the popup while Colophon keeps running in the menu bar: symbols (⌥⇧T) or words (option+shift+t), with Control, Option or Command; none = no shortcut", tab: "Popup", kind: .hotkey),
+        Text(key: "popMode", value: "display", label: "Snippet is", help: "what a LaTeX snippet is set as: display (display math), inline (inline math) or text (LaTeX text)", tab: "Popup", kind: .options(["display", "inline", "text"])),
+        Text(key: "popEngine", value: "pdflatex", label: "Engine", help: "pdflatex, lualatex or xelatex for LaTeX snippets; pdfmd for a Markdown snippet (math, tables, anything pdfmd builds)", tab: "Popup", kind: .options(["pdflatex", "lualatex", "xelatex", "pdfmd"])),
+        Text(key: "popPdfmdEngine", value: "auto", label: "pdfmd's engine", help: "pdfmd's own -e for the pdfmd engine: auto leaves the choice to pdfmd (typst takes about a second, pdflatex four, lualatex ten)", tab: "Popup", kind: .options(["auto", "tex", "lualatex", "pdflatex", "xelatex", "typst", "html"])),
         Text(key: "pdfFindColor", value: "#FFEB3B", label: "Colour of the found text", help: "the colour (#RRGGBB) that the matches of a search are marked with in a PDF", tab: "PDF"),
         Text(key: "themeDark", value: "Anura (Dark)", label: "Theme (dark appearance)", help: "colour theme in a dark appearance", tab: "Colours", kind: .themes),
     ]

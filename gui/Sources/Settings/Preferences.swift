@@ -7,7 +7,7 @@ import Cocoa
 final class PreferencesController: NSWindowController, NSTabViewDelegate {
     static let shared = PreferencesController()
 
-    static let tabs = ["General", "Editor", "Status bar", "PDF", "HTML", "Studio", "Build", "Colours", "Performance"]
+    static let tabs = ["General", "Editor", "Status bar", "PDF", "HTML", "Studio", "Build", "Popup", "Colours", "Performance"]
 
     /// Every control by name, for refreshing it and for the smoke test: a setting's key, `category.<role>`,
     /// `color.<role>.light`, `color.<role>.dark`, `reset.<role>`, `restore.<tab>`.
@@ -146,8 +146,10 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             control = NSTextField(string: "")
         case .themes:
             control = NSPopUpButton(frame: .zero, pullsDown: false)
-        case .fonts:
+        case .fonts, .options:
             control = NSPopUpButton(frame: .zero, pullsDown: false)
+        case .hotkey:
+            control = NSTextField(string: "")
         }
         register(control, text.key, tip: "\(text.help)  [\(text.key)]")
         return [NSTextField(labelWithString: text.label), control, note(text.help)]
@@ -198,6 +200,8 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             case .free: (c as? NSTextField)?.stringValue = now
             case .themes: fill(c as? NSPopUpButton, Theme.available(), select: now)
             case .fonts: fill(c as? NSPopUpButton, monospacedFamilies(), select: now)
+            case .options(let names): fill(c as? NSPopUpButton, names, select: now)
+            case .hotkey: (c as? NSTextField)?.stringValue = now
             }
         }
         refreshRoles()
@@ -255,8 +259,13 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             }
             return
         }
-        if Settings.texts.contains(where: { $0.key == id }) {
-            let value = (sender as? NSPopUpButton)?.titleOfSelectedItem ?? (sender as? NSTextField)?.stringValue ?? ""
+        if let text = Settings.texts.first(where: { $0.key == id }) {
+            var value = (sender as? NSPopUpButton)?.titleOfSelectedItem ?? (sender as? NSTextField)?.stringValue ?? ""
+            if case .hotkey = text.kind, !value.isEmpty {   // a shortcut is stored in its written-out form, or not at all
+                if value.lowercased() == "none" { value = "none" }
+                else if let shortcut = PopShortcut.parse(value) { value = shortcut.label }
+                else { NSSound.beep(); refresh(); return }   // a wrong entry goes back to what is stored
+            }
             Settings.set(id, value.isEmpty ? nil : value)
             if id.hasPrefix("theme") { refreshRoles() }
         }

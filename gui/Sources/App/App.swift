@@ -19,13 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         NSApp.activate(ignoringOtherApps: true)
+        PopController.shared.settingsChanged()   // the menu-bar icon and the shortcut, when the setting says so
+        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in PopController.shared.settingsChanged() }
         DispatchQueue.global(qos: .utility).async { _ = PdfmdTool.cachedResolve(); _ = PdfmdTool.pandoc() }   // so that the About box and the preview have their answer
     }
 
     // A command-line launch with a file (pdfmd's --editor) always quits with its last window: the command that started it waits for
     // that. Otherwise the setting decides: off (the Mac way) keeps the app, and the Dock icon opens a new window.
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
-        launchedWithFiles || Settings.flag("quitAfterLastWindow")
+        launchedWithFiles || (Settings.flag("quitAfterLastWindow") && !Settings.flag("popMenuBar"))   // the menu-bar icon keeps the app
     }
 
     func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -182,6 +184,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = menu("Window")
         add(window, "Minimize", "performMiniaturize:", "m")
         add(window, "Zoom", "performZoom:")
+        window.addItem(.separator())
+        let pop = add(window, "Equation Popup", "show", "e", [.command, .option])
+        pop.target = PopController.shared
         NSApp.windowsMenu = window
     }
 }

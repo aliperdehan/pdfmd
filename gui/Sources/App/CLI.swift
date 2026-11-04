@@ -26,6 +26,7 @@ enum CLI {
         ("install", "colophon install WHAT   `pdfmd --install WHAT` (fonts, kits, engines)"),
         ("pandoc", "colophon pandoc ARGS    the pandoc that the preview uses"),
         ("check", "colophon check [--json] the versions and places of Colophon, pdfmd, pandoc, the TeX engines and typst"),
+        ("eq", "colophon eq SNIPPET OUT.pdf [options]  the equation popup without its window: a LaTeX or Markdown snippet to a cropped vector PDF (--png, --svg too)"),
         ("open", "colophon open [-w] FILE...  open in Colophon (-w waits until its windows close); `colophon FILE` does the same"),
         ("settings", "colophon settings ...  list | get KEY | set KEY VALUE... | reset KEY... | fonts | themes   (--json for programs)"),
         ("help", "colophon help [VERB]"),
@@ -57,6 +58,7 @@ enum CLI {
         case "check": check(json: rest.contains("--json"))
         case "open": open(rest.filter { $0 != "-w" && $0 != "--wait" }, wait: rest.contains("-w") || rest.contains("--wait"))
         case "settings": SettingsCLI.run(rest)
+        case "eq": PopCLI.run(rest)
         case "help", "--help", "-h": help(rest.first)
         case "version", "--version", "-V": out("Colophon \(appVersion)"); exit(0)
         default:
@@ -170,7 +172,11 @@ enum SettingsCLI {
             case .choice(let c): list.append(Entry(key: i.key, kind: "choice", tab: i.tab, help: i.help, defaultValue: show(i.value), choices: c.map(show)))
             }
         }
-        for t in Settings.texts { list.append(Entry(key: t.key, kind: "text", tab: t.tab, help: t.help, defaultValue: t.value, choices: nil, textKind: t.kind)) }
+        for t in Settings.texts {
+            var names: [String]?
+            if case .options(let n) = t.kind { names = n }
+            list.append(Entry(key: t.key, kind: "text", tab: t.tab, help: t.help, defaultValue: t.value, choices: names, textKind: t.kind))
+        }
         for r in Palette.roles {
             list.append(Entry(key: "color." + r.key, kind: "text", tab: "Colours", help: "colour of \(r.help): #RRGGBB or #LIGHT,#DARK (empty = the theme's)", defaultValue: "", choices: nil))
             list.append(Entry(key: "category." + r.key, kind: "choice", tab: "Colours", help: "the theme category that colours \(r.help) (text = no colouring)", defaultValue: r.category, choices: Theme.categoryNames + ["text"]))
@@ -218,6 +224,15 @@ enum SettingsCLI {
                 if let hit = names.first(where: { $0.lowercased() == text.lowercased() }) { return (hit, nil) }
                 let near = names.filter { $0.lowercased().contains(text.lowercased()) }
                 return (nil, "no monospaced font family \"\(raw)\"" + (near.isEmpty ? " (colophon settings fonts lists them)" : "; did you mean: \(near.prefix(8).joined(separator: ", "))"))
+            case .options(let names):
+                if let hit = names.first(where: { $0.lowercased() == text.lowercased() }) { return (hit, nil) }
+                return (nil, "\(e.key) is one of \(names.joined(separator: ", ")), not \"\(raw)\"")
+            case .hotkey:
+                if text.lowercased() == "none" { return ("none", nil) }
+                guard let s = PopShortcut.parse(text) else {
+                    return (nil, "\(e.key) is a shortcut with Control, Option or Command and a key, such as ⌥⇧T or option+shift+t (or none)")
+                }
+                return (s.label, nil)
             case .free:
                 if e.key.hasPrefix("color.") {
                     let parts = text.split(separator: ",").map(String.init)
