@@ -15,6 +15,7 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
 
     /// The size each tab needs, so the window follows the tab that is shown (CotEditor's Settings window does the same).
     private var stacks: [String: NSStackView] = [:]
+    private var pages: [String: NSView] = [:]
     private let margin: CGFloat = 18
     private let tabView = NSTabView()
 
@@ -47,8 +48,14 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
         let need = stack.fittingSize
         let size = NSSize(width: need.width + 2 * margin, height: need.height + 2 * margin)
         let chrome = NSSize(width: tabView.frame.width - tabView.contentRect.width, height: tabView.frame.height - tabView.contentRect.height)
+        pages[id]?.frame = NSRect(origin: .zero, size: size)   // the scroll view's document: as tall as the page needs
         var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: NSSize(width: size.width + chrome.width, height: size.height + chrome.height)))
+        // never taller than the screen that the window is on: what does not fit scrolls
+        let room = (window.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        frame.size.height = min(frame.height, room.height)
         frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if frame.minY < room.minY { frame.origin.y = room.minY }   // lifted off the Dock
+        if frame.maxY > room.maxY { frame.origin.y = room.maxY - frame.height }
         window.setFrame(frame, display: true, animate: window.isVisible)
     }
 
@@ -110,14 +117,22 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
         stack.alignment = .leading
         stack.spacing = 16
         stacks[tab] = stack
-        let view = NSView()
+        let view = PreferencesPage()
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: view.topAnchor, constant: margin),
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: margin),
         ])
-        return view
+        // a page taller than the screen scrolls: the window is cut to the screen in `fit`, the page is the scroll view's document
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.documentView = view
+        pages[tab] = view
+        return scroll
     }
 
     private func row(_ item: Settings.Item) -> [NSView] {
@@ -278,4 +293,9 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
         Settings.remove(keys)
         refresh()
     }
+}
+
+/// A page of the Settings window: flipped, so that it starts at the top of its scroll view.
+final class PreferencesPage: NSView {
+    override var isFlipped: Bool { true }
 }

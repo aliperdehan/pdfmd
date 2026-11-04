@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.12"
+let appVersion = "0.2.13"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -93,6 +93,7 @@ enum Settings {
         Item(key: "pdfReloadRetries", value: 40, label: "Reload attempts", help: "how many times a file that is still being written is looked at again before it is given up until the next change", tab: "PDF"),
         Item(key: "popMenuBar", value: 0, label: "Keep running in the menu bar", help: "1 = a menu-bar icon and the global shortcut open the equation popup from any app, and Colophon stays running when its last window is closed (a shortcut that another app holds is reported in the icon's menu)", tab: "Popup", kind: .flag),
         Item(key: "popLaunchAtLogin", value: 0, label: "Start at login", help: "1 = Colophon starts when you log in (use it with the menu-bar icon); applies while Colophon runs and at its next launch", tab: "Popup", kind: .flag),
+        Item(key: "popNoStartWindow", value: 0, label: "No window at start", help: "1 = with the menu-bar icon on, Colophon starts without opening an untitled editor window (it also never opens one when it was started as a login item, whatever this says)", tab: "Popup", kind: .flag, live: false),
         Item(key: "popLive", value: 1, label: "Render while typing", help: "1 = the popup renders after a pause in the typing; 0 = only with command R or command return (pdfmd documents never render while typing: they take seconds)", tab: "Popup", kind: .flag),
         Item(key: "popHideAfterCopy", value: 1, label: "Hide after copying", help: "1 = the popup closes after command return and gives the focus back to the app you came from", tab: "Popup", kind: .flag),
         Item(key: "popPreviewAbove", value: 1, label: "Preview above the editor", help: "1 = the result is on top, as in LaTeXiT; 0 = below the editor", tab: "Popup", kind: .flag),
@@ -111,6 +112,14 @@ enum Settings {
         Item(key: "popPngScale", value: 4, label: "PNG pixels per point", help: "the copied PNG is drawn at this scale (4 = 288 dpi)", tab: "Popup"),
         Item(key: "popErrorsListed", value: 30, label: "Errors listed", help: "at most this many errors of a failed run are listed", tab: "Popup"),
         Item(key: "popPdfmdLines", value: 6, label: "pdfmd lines shown as errors", help: "when pdfmd fails, this many of its last lines are listed", tab: "Popup"),
+        Item(key: "popWidth", value: 520, label: "Window width (pt)", help: "the width of the popup the first time it opens (after that it opens as you left it)", tab: "Popup", live: false),
+        Item(key: "popHeight", value: 520, label: "Window height (pt)", help: "the height of the popup the first time it opens, without the preamble pane", tab: "Popup", live: false),
+        Item(key: "popPaneHeight", value: 156, label: "Preamble pane height (pt)", help: "the height of the preamble pane; the window grows by this much when the pane opens", tab: "Popup"),
+        Item(key: "popEditorHeight", value: 110, label: "Editor height (pt)", help: "the height of the popup's text editor", tab: "Popup", live: false),
+        Item(key: "popPreviewMinHeight", value: 120, label: "Preview minimum height (pt)", help: "the preview never gets smaller than this when the window is made smaller", tab: "Popup", live: false),
+        Item(key: "popInkScale", value: 4, label: "Crop measuring scale (px per pt)", help: "the page is drawn at this many pixels per point to find where the ink is; more is more exact and slower", tab: "Popup"),
+        Item(key: "popLogLookahead", value: 12, label: "Error line look-ahead (lines)", help: "after a TeX error the line number (l.N) is looked for in this many lines of the log", tab: "Popup"),
+        Item(key: "popWarmWaitS", value: 60, label: "colophon eq --warm waits at most (s)", help: "with --warm the command waits for the cached preamble to finish, this long at most", tab: "Popup"),
         Item(key: "frontMatterScanChars", value: 20000, label: "Front matter scan (characters)", help: "how far from the top the closing --- of a YAML front matter is looked for", tab: "Performance"),
     ]
 

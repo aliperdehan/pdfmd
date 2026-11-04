@@ -82,7 +82,7 @@ enum PopSmoke {
         check("settings set popMode takes any case", SettingsCLI.parse(entry("popMode"), "TEXT").value as? String == "text")
         check("settings set popMode refuses a wrong word and names the choices", SettingsCLI.parse(entry("popMode"), "big").error?.contains("display, inline, text") == true)
         check("settings set popMenuBar on", (SettingsCLI.parse(entry("popMenuBar"), "on").value as? NSNumber)?.intValue == 1)
-        check("every popup setting is on the Popup tab", entries.filter { $0.key.hasPrefix("pop") }.allSatisfy { $0.tab == "Popup" } && entries.filter { $0.key.hasPrefix("pop") }.count == 24)
+        check("every popup setting is on the Popup tab", entries.filter { $0.key.hasPrefix("pop") }.allSatisfy { $0.tab == "Popup" } && entries.filter { $0.key.hasPrefix("pop") }.count == Settings.items.filter { $0.key.hasPrefix("pop") }.count + Settings.texts.filter { $0.key.hasPrefix("pop") }.count)
         check("the popup's keys do not meet the editor's", Settings.items.filter { $0.key.hasPrefix("pop") }.allSatisfy { $0.key != "popLineNumbers" || $0.tab == "Popup" } && Settings.items.contains { $0.key == "lineNumbers" && $0.tab == "Editor" })
 
         // the Settings window stores a shortcut written out, and refuses a wrong one

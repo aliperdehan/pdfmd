@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.32.29n — 2026-11-04
+
+Pre-edit state: commit `8e464c2`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.13: what the first try of the popup found.** The author's first look: an empty "Untitled — Edited" window asked whether to keep it; ⌘⌥E opened the popup but did not close it; "settings windows too high are kinda not scrollable and just run even if it doesnt fit"; "constants in the code --- adjustable?"; "can you [handle the untitled editor window at a login launch]?".
+
+- **An empty new document closes without asking** (`EditorDocument.canClose`): whatever the change count says, a new document with no text in it is not worth keeping. (A new document is clean when opened, which `--smoke-untitled` checks; the cause of the author's "Edited" window was not reproduced: probably typed in and deleted again, which the change count keeps.) A document with text in it still asks.
+- **⌘⌥E toggles** the popup (Window > Equation Popup closes it when it is the open one).
+- **The Settings window is never taller than the screen** and every tab scrolls (`PreferencesPage`, a scroll view per tab); the window is lifted off the Dock. `--smoke-prefs` +2.
+- **The constants are settings now** (Popup tab): window width and height at first opening (`popWidth`, `popHeight`), the preamble pane's height (`popPaneHeight`), the editor's height (`popEditorHeight`), the preview's smallest height (`popPreviewMinHeight`), the measuring scale of the crop (`popInkScale`), the look-ahead for TeX's `l.N` line (`popLogLookahead`), how long `colophon eq --warm` waits (`popWarmWaitS`). Nothing in the popup is a constant now except the number of status-line rows (4) and the table's column widths.
+- **No untitled window for a menu-bar Colophon**: with `popMenuBar` on, a launch as a login item (the launch event says so; best effort, only a real login shows it) opens no untitled editor window, and `popNoStartWindow` makes that so for every launch.
+- Measured, not changed: the popup renders as fast as the old eqpop: the same cached-preamble key, `colophon eq` 2.5–3.0 s against `eqpop --render` 3.2–3.5 s one after the other, on a machine at load average 30 to 40 (Safari at 66 % CPU). The popup uses eqpop's own AppKit crop, not `pdfmd --crop`, so the crop is not the lag.
+- `--smoke-untitled` (4 checks), `--smoke-pop` and `--smoke-prefs` rerun.
+
 ## v3.32.29m — 2026-11-04
 
 Pre-edit state: commit `ff5c66f`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.12: the equation popup, the standalone eqpop app absorbed.** The author: "maybe it will be a good time to absorb eqpop to colophon, check it out. if it works out, i may just either delete or archive eqpop and in its readme redirect users to colophon"; later "go ahead with eqpop".

@@ -60,7 +60,7 @@ enum PopFormatCache {
 
     /// For a one-shot process: wait for the build that a render started, or the process would end before it.
     static func waitIdle() {
-        for _ in 0..<600 {
+        for _ in 0..<Int(Settings.number("popWarmWaitS") * 10) {
             lock.lock(); let idle = building.isEmpty; lock.unlock()
             if idle { return }
             Thread.sleep(forTimeInterval: 0.1)

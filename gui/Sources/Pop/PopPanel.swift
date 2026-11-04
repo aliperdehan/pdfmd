@@ -60,7 +60,7 @@ final class PopController: NSObject, NSTextViewDelegate {
     var chain: [NSLayoutConstraint] = []   // the vertical order of the rows; changes with the preview position
     var content: NSView!
     var rows: [NSView] = []                // preview, status, the pane (and the editor under it), the option row, the buttons
-    static let preamblePaneHeight: CGFloat = 156   // layout, not behaviour: a constant
+    static var preamblePaneHeight: CGFloat { CGFloat(Settings.number("popPaneHeight")) }
     var built = false
     var offscreen = false                  // tests and screenshots: the window is never shown, nothing is saved
 
@@ -122,7 +122,7 @@ final class PopController: NSObject, NSTextViewDelegate {
         input.string = Settings.store.string(forKey: "popSource") ?? "\\ce{2H2 + O2 -> 2H2O}"
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        scroll.heightAnchor.constraint(equalToConstant: 110).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: CGFloat(Settings.number("popEditorHeight"))).isActive = true
         inputEditing = PopTeXEditing(input)
         inputScroll = scroll
         scroll.verticalRulerView = PopLineNumbers(scroll, input)
@@ -179,7 +179,7 @@ final class PopController: NSObject, NSTextViewDelegate {
         preview.layer?.borderWidth = 1
         preview.layer?.borderColor = NSColor(white: 0.5, alpha: 0.35).cgColor   // keeps the white sheet visible on a light window
         preview.setContentHuggingPriority(.defaultLow, for: .vertical)
-        preview.heightAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+        preview.heightAnchor.constraint(greaterThanOrEqualToConstant: CGFloat(Settings.number("popPreviewMinHeight"))).isActive = true
         preview.dragItem = { [weak self] in self?.pasteboardItem() }
         errors.onJump = { [weak self] line in self?.jump(toLine: line) }
         errors.scroll.isHidden = true
@@ -231,7 +231,7 @@ final class PopController: NSObject, NSTextViewDelegate {
         NSLayoutConstraint.activate([preambleHeight, preambleGap])
         rows = [preview, status, paneBox, modePopup, edit]   // the rows, see applyLayout
 
-        panel = PopPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 520), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        panel = PopPanel(contentRect: NSRect(x: 0, y: 0, width: Settings.number("popWidth"), height: Settings.number("popHeight")), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         panel.title = "Equation popup"
         panel.isReleasedWhenClosed = false
         panel.level = .floating
@@ -326,6 +326,9 @@ final class PopController: NSObject, NSTextViewDelegate {
     // MARK: show and hide
 
     func toggle() { built && panel.isVisible && NSApp.isActive ? hide() : show() }
+
+    /// The menu item: opens the popup, or closes it when it is the open one.
+    @objc func toggleWindow() { toggle() }
 
     @objc func show() {
         ensureBuilt()

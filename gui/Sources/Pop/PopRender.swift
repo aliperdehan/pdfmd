@@ -103,7 +103,8 @@ enum PopWrapper {
 
     /// Every "! ..." error of a TeX log. `prefix` is the number of file lines before the content block (it differs
     /// between the full document and a run from a cached format), to turn TeX's line numbers into the user's.
-    static func issues(log: String, source: String, mode: PopMode, prefix: Int, limit: Int = Int(Settings.number("popErrorsListed"))) -> [PopIssue] {
+    static func issues(log: String, source: String, mode: PopMode, prefix: Int, limit: Int = Int(Settings.number("popErrorsListed")),
+                       lookahead: Int = Int(Settings.number("popLogLookahead"))) -> [PopIssue] {
         let lines = log.components(separatedBy: "\n")
         let sourceLines = max(1, source.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n").count)
         let leading = source.prefix(while: { $0.isWhitespace }).filter { $0 == "\n" }.count   // dropped by the trim
@@ -113,7 +114,7 @@ enum PopWrapper {
             let message = l.dropFirst(2).trimmingCharacters(in: .whitespaces)
             if message.hasPrefix("==> Fatal error") || message.hasPrefix("Emergency stop") { continue }
             var issue = PopIssue(line: nil, message: message)
-            for j in (i + 1)..<min(i + 12, lines.count) where lines[j].hasPrefix("l.") {
+            for j in (i + 1)..<max(i + 1, min(i + 1 + lookahead, lines.count)) where lines[j].hasPrefix("l.") {
                 let digits = lines[j].dropFirst(2).prefix(while: { $0.isNumber })
                 if let n = Int(digits) {
                     let u = n - offset

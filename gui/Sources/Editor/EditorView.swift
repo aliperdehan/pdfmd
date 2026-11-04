@@ -126,6 +126,12 @@ final class EditorDocument: NSDocument {
         controller = c
     }
 
+    /// Closing an empty new document never asks whether to keep it, whatever the change count says.
+    override func canClose(withDelegate delegate: Any, shouldClose shouldCloseSelector: Selector?, contextInfo: UnsafeMutableRawPointer?) {
+        if fileURL == nil, isDocumentEdited, (controller?.currentString() ?? text).isEmpty { updateChangeCount(.changeCleared) }
+        super.canClose(withDelegate: delegate, shouldClose: shouldCloseSelector, contextInfo: contextInfo)
+    }
+
     override func read(from data: Data, ofType typeName: String) throws {
         lineEnding = detectLineEnding(data)
         if let s = String(data: data, encoding: .utf8) {

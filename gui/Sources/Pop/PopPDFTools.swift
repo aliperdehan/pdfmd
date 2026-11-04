@@ -36,7 +36,7 @@ enum PopPDFTools {
     /// box, which is not always the ink (`align*` is as wide as the line); the ink is found on a bitmap, so this works
     /// for any engine's PDF and needs no tool. The page stays vector: only its boxes change.
     static func tight(_ pdf: Data, pad: CGFloat = CGFloat(Settings.number("popCropPadPt")), ignoreBottom: CGFloat = 0) -> (pdf: Data, pages: Int) {
-        let scale: CGFloat = 4   // the ink is looked for on a bitmap of this many pixels per point (a measuring resolution, not a look)
+        let scale = CGFloat(max(1, Settings.number("popInkScale")))   // the ink is looked for on a bitmap of this many pixels per point
         guard let rep = NSPDFImageRep(data: pdf), let bmp = bitmap(rep, scale: scale), let px = bmp.bitmapData,
               let doc = PDFDocument(data: pdf), let page = doc.page(at: 0) else { return (pdf: pdf, pages: 1) }
         let pages = doc.pageCount

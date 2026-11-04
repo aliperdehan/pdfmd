@@ -197,6 +197,45 @@ enum Smoke {
         return result
     }
 
+    /// `--smoke-untitled`: a new, empty document is not "edited"; one that was typed in and deleted again closes without asking; one with
+    /// text in it still would ask.
+    static func untitled() {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let domain = "io.github.aliperdehan.pdfmdedit.smokeuntitled"
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        Settings.store = UserDefaults(suiteName: domain)!
+        defer { UserDefaults.standard.removePersistentDomain(forName: domain) }
+        _ = DocController()
+        var failures = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            print("\(ok ? "ok  " : "FAIL") \(name) \(detail)")
+            if !ok { failures += 1 }
+        }
+        final class Answer: NSObject {
+            var shouldClose: Bool?
+            @objc func document(_ doc: NSDocument, shouldClose: Bool, contextInfo: UnsafeMutableRawPointer?) { self.shouldClose = shouldClose }
+        }
+        guard let doc = (try? NSDocumentController.shared.openUntitledDocumentAndDisplay(false)) as? EditorDocument else { print("FAIL no untitled document"); exit(1) }
+        if doc.windowControllers.isEmpty { doc.makeWindowControllers() }
+        spin(0.8)
+        check("a new document has no file", doc.fileURL == nil)
+        check("a new, empty document is not edited", !doc.isDocumentEdited)
+        if let tv = doc.controller?.parts.textView {
+            tv.insertText("x", replacementRange: NSRange(location: 0, length: 0))
+            spin(0.4)
+            check("typing makes it edited", doc.isDocumentEdited)
+            tv.insertText("", replacementRange: NSRange(location: 0, length: 1))   // deleted by hand, not undone
+            spin(0.4)
+            let answer = Answer()
+            doc.canClose(withDelegate: answer, shouldClose: #selector(Answer.document(_:shouldClose:contextInfo:)), contextInfo: nil)
+            spin(0.3)
+            check("typed and deleted again: it is empty and closes without asking", tv.string.isEmpty && answer.shouldClose == true, "answer \(String(describing: answer.shouldClose))")
+        }
+        doc.close()
+        print(failures == 0 ? "UNTITLED SMOKE OK" : "UNTITLED SMOKE FAILED (\(failures))")
+        exit(failures == 0 ? 0 : 1)
+    }
+
     static func openHTML(_ url: URL) -> HTMLViewerDocument? {
         var result: HTMLViewerDocument?
         var done = false
@@ -379,6 +418,20 @@ enum PrefsSmoke {
         check("controls generated from the tables", prefs.controls.count >= Settings.items.count + Settings.texts.count + Palette.roles.count * 4 + PreferencesController.tabs.count,
               "(\(prefs.controls.count) controls)")
         check("every tab has a page", prefs.window?.contentView is NSTabView && (prefs.window!.contentView as! NSTabView).numberOfTabViewItems == PreferencesController.tabs.count)
+
+        // no tab makes the window taller than the screen; what does not fit scrolls
+        if let tabs = prefs.window?.contentView as? NSTabView, let window = prefs.window {
+            let room = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? 900
+            var worst = 0.0, scrolled = 0
+            for item in tabs.tabViewItems {
+                tabs.selectTabViewItem(item)
+                worst = max(worst, window.frame.height)
+                if let sv = item.view as? NSScrollView, let doc = sv.documentView, doc.frame.height > sv.contentSize.height + 1 { scrolled += 1 }
+            }
+            check("the window is never taller than the screen", worst <= room + 0.5, "(tallest \(Int(worst)), room \(Int(room)))")
+            check("every tab is a scroll view, and some do scroll", tabs.tabViewItems.allSatisfy { $0.view is NSScrollView } && scrolled > 0, "(\(scrolled) tabs scroll)")
+            tabs.selectTabViewItem(at: 0)
+        }
 
         // a flag: wrap lines
         let wrap = control("wrapLines") as! NSButton

@@ -34,7 +34,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !flag { NSDocumentController.shared.newDocument(nil) }
         return false
     }
-    func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool { !launchedWithFiles && CommandLine.arguments.count < 2 }
+    /// An untitled editor window opens at a plain launch. Not when files were given, and not when Colophon is only there for the menu-bar
+    /// icon: started as a login item (the launch event says so), or always when `popNoStartWindow` is on.
+    func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool {
+        guard !launchedWithFiles && CommandLine.arguments.count < 2 else { return false }
+        if Settings.flag("popMenuBar") && (Settings.flag("popNoStartWindow") || launchedAsLoginItem()) { return false }
+        return true
+    }
+
+    /// Whether the launch event that started the app says "a login item" (best effort: it can only be seen at a real login).
+    func launchedAsLoginItem() -> Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent else { return false }
+        return event.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue == OSType(keyAELaunchedAsLogInItem)
+    }
 
     /// The standard About panel with the app's own words: what it is, how early it is, and the pdfmd it works with: one line, and a "more"
     /// link that opens the details (asked of the shell off the main thread, so the panel opens a moment later).
@@ -185,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(window, "Minimize", "performMiniaturize:", "m")
         add(window, "Zoom", "performZoom:")
         window.addItem(.separator())
-        let pop = add(window, "Equation Popup", "show", "e", [.command, .option])
+        let pop = add(window, "Equation Popup", "toggleWindow", "e", [.command, .option])   // opens it, and closes it when it is the open one
         pop.target = PopController.shared
         NSApp.windowsMenu = window
     }
