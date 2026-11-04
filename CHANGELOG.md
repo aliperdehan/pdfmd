@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.33 — 2026-11-04
+
+Pre-edit state: commit `7cb62bc`. `[tables]`, entry 3fa, step 3 of 3. **A table's attribute line: widths, heights and alignment tiers.** The author: "choosing arbitrary cell width and height ... none is easily achievable".
+
+- **The line.** `{widths="3cm * 15%" row2.height=1.8cm col2.align=l,m valign=m}` right under a table (or under its `Table:` caption). Settings: `width` / `widths` (a length in cm, mm, in, pt or em, a percentage, `*` for a share of what is left, `auto`), `height` (the least height of a row: `row3.height`, or `height` for every row; `ht` in tabularray is a minimum, a taller cell still grows its row), `align` (the words of a cell tag) and `valign`, each for the table, `colN.` or `rowN.`. A problem in it (`col9.width` in a table of three columns, a width that is not a length) is a `WARN  cell-tags` and left out; a braced line with no `key=value` (`{#tbl:x}`) is not read.
+- **How.** The pre-pass cuts the line out and writes its settings, short, into the first header cell as `<pt c2w=3cm r2ht=1.8cm v=m>` (a block between a table and its `Table:` caption would cut the tie Pandoc makes, so the carrier is a cell). LaTeX draws such a table as a `longtblr` (the vertical-alignment machinery of v3.32.32, now also for widths and heights): `Q[l,wd=3cm]`, `X[1,l]` for `*`, `Q[r,wd=0.15\linewidth]`, `row{2}={ht=1.8cm}`, `width=` for the table. HTML gets percentage widths as `<col style="width: 20%">` (the AST's column widths), a `height` and a `vertical-align` style per cell. Absolute widths outside LaTeX, and these settings in Typst and Word, are not drawn yet. The Markdown writers write the line back in its own spelling.
+- **Tiers.** For a cell, most specific first: its tag, its row, its column, the column's `:--:`, the table's `align=` / `valign=`, then the defaults of the two new options. A column's `:--` is above a table-wide `align=` (a first version had it the other way round).
+- **New options** `table-align` (left, center, right) and `table-valign` (top, middle, bottom), `pdfmd-options` and `--setup` rows (Tables); a word that is not one of them stops the build. `table-valign` draws every table of a LaTeX build through tabularray. The `NOTE` without tabularray now covers widths and heights too.
+- `tests/test_celltags.py` (+14: the parser, the carrier and the caption, the two orders, a line that is not one, the LaTeX keys, HTML, Markdown reading it again, the option tiers, the stop on a wrong word).
+
 ## v3.32.32 — 2026-11-04
 
 Pre-edit state: commit `5f54ef4`. `[tables]`, entry 3fa, step 2 of 3. **Vertical alignment of a table cell** (`t`, `m`, `b` in a cell tag: `&t&`, `&mc&`, `<m>`, `&merge-up,bottom&`). The author: "centering (on x and y separately or both together), top bottom left down alignment".

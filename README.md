@@ -2161,6 +2161,48 @@ pdfmd-options:
 
 Both are also `--setup` rows.
 
+#### A table's attribute line: widths, heights, alignment
+
+A pipe table has no way to say how wide a column is, how tall a row is, or how the cells sit in them. A line in braces right under
+the table (or under its `Table:` caption) does:
+
+```markdown
+| Name   | Description                             | Qty |
+|:-------|:----------------------------------------|----:|
+| apples | a long description that wraps and wraps |   3 |
+| pears  | short                                   |  12 |
+
+{widths="3cm * 15%" row2.height=1.8cm col2.align=l,m valign=m}
+
+Table: Sized {#tbl:sized}
+```
+
+| setting | meaning |
+|---|---|
+| `widths="3cm * 15%"` | the width of every column: a length (`cm mm in pt em`), a percentage of the text width, `*` (a share of what the others leave) or `auto` (the text's own width). A column left out of an explicit list is `*` |
+| `col2.width=3cm`, `width=80%` | one column's width; the whole table's width |
+| `row3.height=1.5cm`, `height=1cm` | the least height of one row, of every row (a taller cell still grows its row). Row 1 is the header |
+| `align=c`, `col2.align=r,m`, `row1.align=c` | the alignment of every cell, of a column's, of a row's: the words of a cell tag |
+| `valign=m`, `col1.valign=bottom` | the vertical alignment: top, middle or bottom |
+
+**Which setting wins**, for a cell, from the most specific: its own tag, its row, its column, the column's `:--:` in the separator
+row, the table's `align=` / `valign=`, then `table-align` and `table-valign` of `pdfmd-options` (for every table of the document).
+
+A line with no `key=value` in it (`{#tbl:x}`) is not an attribute line. Something that is wrong in one (`col9.width` in a table with
+three columns, a width that is not a length) is a `WARN  cell-tags` and is left out; the rest is used.
+
+LaTeX draws a table with a width, a height or a vertical alignment as a `longtblr` (see above). HTML gets percentage widths (`<col
+style="width: 20%">`), a `height` and a `vertical-align` style; absolute widths (`3cm`) and these settings in Typst and Word are not
+drawn yet. The Markdown writers write the line back. The native (no-Pandoc) renderer does not read it.
+
+```yaml
+pdfmd-options:
+  table-align: right          # left, center, right: every cell with nothing more specific (default: the column's own)
+  table-valign: middle        # top, middle, bottom: setting it draws every table of a LaTeX build as a longtblr
+```
+
+Both are also `--setup` rows.
+
 #### A line break inside a table cell
 
 A cell cannot hold a blank line or `\par`, and a raw `<br>` is dropped by every writer but HTML (`one<br>two` printed `onetwo` in

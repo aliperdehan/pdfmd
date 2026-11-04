@@ -60,7 +60,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.table-tag-brackets": "angle, amp", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
+    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.table-tag-brackets": "angle, amp", "options.table-align": "the column's own", "options.table-valign": "top (the baseline of the row)", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
@@ -86,7 +86,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -319,6 +319,15 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "merges the cell with its neighbour. A pipe table's separator row (`:--`, `:-:`, `--:`) sets whole columns. HTML, Typst, "
                "Word and the rest use the cell's own alignment and spans; LaTeX gets `\\multicolumn`, `\\multirow` and raw TeX around "
                "the cell. The Markdown writers write the tags back as `&...&`.", "Tables"),
+        choice("options.table-align", "Horizontal alignment of every table cell that has no other",
+               (("", "the column's own (its `:--:` in the separator row)"), ("left", "left"), ("center", "centred"), ("right", "right")), "",
+               "The lowest tier, under a cell's tag, its row's and column's `{row2.align=r}` / `{col3.align=c}`, the column's `:--:` and the table's own "
+               "`{align=c}`. Per table: the attribute line under it.", "Tables"),
+        choice("options.table-valign", "Vertical alignment of every table cell that has no other",
+               (("", "the top (the baseline of the row)"), ("top", "the top of the row"), ("middle", "the middle of the row"),
+                ("bottom", "the bottom of the row")), "",
+               "Setting it draws every table of a LaTeX build as a tabularray `longtblr`; a cell's tag (`&b&`), a row's or column's "
+               "`{row2.valign=m}` and the table's own `{valign=m}` win over it. HTML gets `vertical-align`; Typst and Word do not draw it yet.", "Tables"),
         text("options.table-tag-brackets", "Which spellings of a cell tag are read",
              "Words separated by commas: `angle` (`<c>`, `<merge-up, top>`), `amp` (`&mc&`, the form that never clashes), `brace` "
              "(`{mc}`) and `guillemet` (`\u00abmc\u00bb`). The default is `angle, amp`; `brace` is off because `K_{c}` or `\\textbf{b}` can "

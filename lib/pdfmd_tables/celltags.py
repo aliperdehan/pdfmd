@@ -28,7 +28,21 @@ copy, the file is never changed) resolves the merges and writes ONE canonical ra
 
 The tag is short on purpose: Pandoc reads a pipe table whose source line is longer than its column limit as a table of
 fixed, dash-proportional widths, so a long tag would stretch a small table to the page width.
-pdfmd_lua/cellalign.lua reads only that tag. Functions are pure: text in, text and notes out.
+A line `{...}` right under a table (or under its `Table:` caption) is the table's *attribute line*: sizes and defaults for the whole
+table, a column or a row, which the cell tags cannot say (step 3 of entry 3fa):
+
+    {widths="2cm * 30%" col2.align=r,m row3.height=1.5cm valign=middle}
+
+    width / widths   a length (`3cm`, `12mm`, `2in`, `40pt`, `10em`), a percentage of the text width, `*` (a share of what is left)
+                     or `auto` (the text's own width); `widths="..."` lists every column, `col2.width=3cm` sets one, `width=80%`
+                     alone is the whole table's
+    height           the least height of a row (`row3.height=1.5cm`), or of every row (`height=1cm`)
+    align            alignment words as in a cell tag (`col2.align=r,m`, `row1.align=c`, `align=c`)
+    valign           top, middle or bottom (`valign=m` = `align=m`)
+
+and is written, short, into the first header cell as `<pt c2w=3cm r3ht=1.5cm v=m>` (the carrier is a cell because Pandoc ties a
+`Table:` caption to the table it follows, and a block between them would cut the tie). pdfmd_lua/cellalign.lua reads both tags.
+Functions are pure: text in, text and notes out.
 """
 
 from __future__ import annotations
@@ -240,7 +254,7 @@ class Result:
     notes: list[Note] = field(default_factory=list)
     tables: int = 0                  # tables with at least one tag
     cells: int = 0                   # cells with a tag
-    vertical: int = 0                # cells with a vertical alignment (LaTeX draws those with tabularray)
+    tblr: int = 0                    # cells and tables LaTeX can only draw with tabularray: a vertical alignment, a width, a height
 
 
 def _split_row(line: str) -> tuple[str, list[str], str]:
@@ -275,6 +289,83 @@ def _canon(spec: Spec | None, colspan: int = 1, rowspan: int = 1, covered: str =
     return f"<{TAG}{' ' if words else ''}{' '.join(words)}>"
 
 
+_LENGTH = re.compile(r"\d+(?:\.\d+)?(?:cm|mm|in|pt|em|ex)")
+_PERCENT = re.compile(r"\d+(?:\.\d+)?%")
+_ATTR_ITEM = re.compile(r"""([A-Za-z][A-Za-z0-9.\-_]*)\s*=\s*("[^"]*"|'[^']*'|[^\s"']+)""")
+_ATTR_LINE = re.compile(r"^\s{0,3}\{(.*)\}\s*$")
+_ATTR_NAMES = {"width": "w", "widths": "ws", "height": "ht", "align": "h", "valign": "v"}
+_ATTR_CARRIER = "pt"
+
+
+def _word(value: str, kind: str, notes: list[str]) -> str | None:
+    """One width, height or alignment value as the carrier's short word, or None (with a note)."""
+    low = value.strip().casefold()
+    if kind == "w":
+        if low in ("*", "auto") or _LENGTH.fullmatch(low) or _PERCENT.fullmatch(low):
+            return low
+        notes.append(f"`{value}` is not a width (3cm, 12mm, 2in, 40pt, 10em, 30%, * or auto)")
+    elif kind == "ht":
+        if _LENGTH.fullmatch(low):
+            return low
+        notes.append(f"`{value}` is not a height (3cm, 12mm, 2in, 40pt or 10em)")
+    return None
+
+
+def parse_attribute_line(content: str, columns: int) -> tuple[list[str], list[str]]:
+    """The words of a table's attribute line (`<pt ...>` carrier words like `c2w=3cm`) and the problems found."""
+    words: list[str] = []
+    notes: list[str] = []
+    rest = _ATTR_ITEM.sub(" ", content)
+    if rest.strip(" ,;"):
+        notes.append(f"`{rest.strip()}` in the attribute line is not understood and was left out")
+    for match in _ATTR_ITEM.finditer(content):
+        key, value = match.group(1).casefold(), match.group(2).strip("\"'")
+        scope = ""
+        scoped = re.fullmatch(r"(?:col|column|c)(\d+)\.(\w+)|(?:row|r)(\d+)\.(\w+)", key)
+        if scoped:
+            scope, key = (f"c{scoped.group(1)}", scoped.group(2)) if scoped.group(1) else (f"r{scoped.group(3)}", scoped.group(4))
+            if scope[0] == "c" and not 1 <= int(scope[1:]) <= columns:
+                notes.append(f"`{match.group(1)}`: the table has {columns} columns")
+                continue
+        if key not in _ATTR_NAMES:
+            notes.append(f"`{match.group(1)}` is not a table setting (width, widths, height, align, valign)")
+            continue
+        name = _ATTR_NAMES[key]
+        if name == "ws":
+            parts = [part for part in re.split(r"[\s,]+", value) if part]
+            for index, part in enumerate(parts[:columns], 1):
+                word = _word(part, "w", notes)
+                if word:
+                    words.append(f"c{index}w={word}")
+            if len(parts) > columns:
+                notes.append(f"`widths` lists {len(parts)} widths for {columns} columns; the extra were left out")
+        elif name in ("w", "ht"):
+            word = _word(value, name, notes)
+            if word and name == "ht" and scope.startswith("c"):
+                notes.append("a height belongs to a row (`row3.height=1cm`) or to the table, not to a column")
+            elif word:
+                words.append(f"{scope}{name}={word}")
+        elif name in ("h", "v"):
+            spec = parse_tokens(value, False)
+            if spec is None or spec.merge:
+                vertical = {"top": "t", "middle": "m", "bottom": "b"}.get(value.casefold())
+                if key == "valign" and vertical:
+                    words.append(f"{scope}v={vertical}")
+                else:
+                    notes.append(f"`{value}` is not an alignment (l, r, c, t, m, b, or words like top, centre)")
+                continue
+            notes.extend(spec.problems)
+            if key == "valign":
+                if spec.h:
+                    notes.append("`valign` takes top, middle or bottom")
+                spec.h, spec.v = "", spec.v or ("m" if spec.h == "c" else "")
+            if spec.h:
+                words.append(f"{scope}h={spec.h}")
+            if spec.v:
+                words.append(f"{scope}v={spec.v}")
+    return words, notes
+
+
 @dataclass
 class _Cell:
     raw: str
@@ -284,8 +375,10 @@ class _Cell:
     virtual: bool = False
 
 
-def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: list[Note]) -> dict[int, str]:
-    """The rewritten lines of one table (line number -> new text), ``rows`` being its header and body lines."""
+def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: list[Note],
+                   attributes: list[str] | None = None) -> dict[int, str]:
+    """The rewritten lines of one table (line number -> new text), ``rows`` being its header and body lines. ``attributes`` are the
+    words of its attribute line, which go in front of the first header cell."""
     parsed = []
     for number, line in rows:
         lead, cells, closing = _split_row(line)
@@ -307,7 +400,7 @@ def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: l
             else:
                 row.append(_Cell(raw, raw.strip()))
         grid.append(row)
-    if not any_tag:
+    if not any_tag and not attributes:
         return {}
     width = max(columns, *(len(row) for row in grid))
     for row in grid:
@@ -368,6 +461,10 @@ def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: l
             if cell.new is None and cell.spec is not None:
                 cell.new = (_canon(cell.spec) + (" " + cell.text if cell.text else "")) if (cell.spec.h or cell.spec.v) \
                     else cell.text
+    if attributes:
+        first = grid[0][0]
+        carrier = f"<{_ATTR_CARRIER} {' '.join(attributes)}>"
+        first.new = carrier + (" " + (first.new if first.new is not None else first.text) if (first.new or first.text) else "")
     changed: dict[int, str] = {}
     for r, (number, lead, closing, cells) in enumerate(parsed):
         row = grid[r]
@@ -381,6 +478,24 @@ def _process_table(rows: list[tuple[int, str]], kinds: tuple[str, ...], notes: l
             lead = lead + "|"
         changed[number] = lead + "|".join(pieces) + closing
     return changed
+
+
+def _find_attribute_line(lines: list[str], end: int) -> int | None:
+    """The index of the attribute line of the table that ends before line ``end``: the first line after it (one blank line allowed)
+    or after its `Table:` caption, if it is `{...}` with at least one `key=value`; else None."""
+    index = end
+    if index < len(lines) and not lines[index].strip():
+        index += 1
+    if index < len(lines) and re.match(r"^\s{0,3}(?:Table)?:\s", lines[index]):
+        while index < len(lines) and lines[index].strip():
+            index += 1
+        if index < len(lines):
+            index += 1
+    if index < len(lines):
+        match = _ATTR_LINE.match(lines[index].rstrip("\r"))
+        if match and _ATTR_ITEM.search(match.group(1)):
+            return index
+    return None
 
 
 def rows_label(rows: list[tuple[int, str]], top: int, bottom: int) -> str:
@@ -401,6 +516,7 @@ def normalise(text: str, kinds: tuple[str, ...] = DEFAULT_KINDS) -> Result:
                 index = end + 1
                 break
     changed: dict[int, str] = {}
+    removals: list[int] = []
     while index < len(lines):
         line = lines[index].rstrip("\r")
         match = _FENCE.match(line)
@@ -421,20 +537,33 @@ def normalise(text: str, kinds: tuple[str, ...] = DEFAULT_KINDS) -> Result:
                 rows.append((end, lines[end]))
                 end += 1
             notes: list[Note] = []
-            table_changes = _process_table(rows, kinds, notes)
+            attributes: list[str] = []
+            drop = _find_attribute_line(lines, end)
+            if drop is not None:
+                attributes, problems = parse_attribute_line(_ATTR_LINE.match(lines[drop].rstrip("\r")).group(1),
+                                                            len(_split_row(rows[0][1])[1]))
+                notes.extend(Note(drop, problem) for problem in problems)
+                removals.append(drop)
+            table_changes = _process_table(rows, kinds, notes, attributes)
             for note in notes:
                 result.notes.append(Note(note.line + 1, note.message))
             if table_changes:
                 result.tables += 1
-                result.cells += sum(piece.count(f"<{TAG}") for piece in table_changes.values())
-                result.vertical += sum(len(re.findall(rf"<{TAG} [^>]*\bv[tmb]\b", piece)) for piece in table_changes.values())
+                result.cells += sum(piece.count(f"<{TAG}") + piece.count(f"<{_ATTR_CARRIER} ") for piece in table_changes.values())
+                result.tblr += sum(len(re.findall(rf"<{TAG} [^>]*\bv[tmb]\b", piece)) + len(re.findall(r"<pt [^>]*>", piece))
+                                   for piece in table_changes.values())
                 changed.update(table_changes)
             index = end
             continue
         index += 1
-    if not changed and not result.notes:
+    if not changed and not result.notes and not removals:
         return result
     for number, new in changed.items():
         lines[number] = new + ("\r" if lines[number].endswith("\r") else "")
+    for number in sorted(removals, reverse=True):
+        # the attribute line goes, and the blank line before it when a blank line follows it (two blank lines in a row are one)
+        del lines[number]
+        if number < len(lines) and not lines[number].strip() and number > 0 and not lines[number - 1].strip():
+            del lines[number]
     result.text = "\n".join(lines)
     return result

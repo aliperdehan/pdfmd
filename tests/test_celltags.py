@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "lib"))
 
 import pdfmd  # noqa: E402
-from pdfmd_tables.celltags import DEFAULT_KINDS, find_tags, normalise, parse_tokens  # noqa: E402
+from pdfmd_tables.celltags import DEFAULT_KINDS, find_tags, normalise, parse_attribute_line, parse_tokens  # noqa: E402
 
 HEAD = "| h | i | j |\n|---|---|---|\n"
 
@@ -313,7 +313,7 @@ class Vertical(unittest.TestCase):
 
     def test_the_pre_pass_counts_the_cells_with_a_vertical_alignment(self):
         result = normalise(HEAD + "| &t& a | &lc& b | &c& c |\n")
-        self.assertEqual((result.cells, result.vertical), (3, 2))
+        self.assertEqual((result.cells, result.tblr), (3, 2))
 
     @unittest.skipUnless(shutil.which("pandoc") and TABULARRAY, "needs Pandoc and LaTeX's tabularray")
     def test_latex_gets_a_longtblr_with_the_tabularray_words_for_top_middle_bottom(self):
@@ -379,6 +379,138 @@ class Vertical(unittest.TestCase):
         self.assertIn("\\begin{longtable}", done.stdout)
         self.assertNotIn("longtblr", done.stdout)
         self.assertNotIn("<pc", done.stdout)
+
+
+SIZED = ("| Name | Description | Qty |\n|:--|:--|--:|\n| apples | a long description that goes on and on and on | 3 |\n"
+         "| pears | short | 12 |\n\n{widths=\"3cm * 15%\" row2.height=1.8cm col2.align=l,m valign=m}\n\nTable: Sized {#tbl:sized}\n")
+
+
+class AttributeLine(unittest.TestCase):
+    """Step 3 (v3.32.33): a `{...}` line under a table sets widths, heights and alignments for the table, a column or a row."""
+
+    def words(self, line: str, columns: int = 3):
+        return parse_attribute_line(line, columns)
+
+    def test_widths_take_lengths_percentages_stars_and_auto(self):
+        words, notes = self.words('widths="3cm, 30% * auto"', 4)
+        self.assertEqual(words, ["c1w=3cm", "c2w=30%", "c3w=*", "c4w=auto"])
+        self.assertEqual(notes, [])
+        self.assertEqual(self.words("col2.width=12mm width=80%")[0], ["c2w=12mm", "w=80%"])
+
+    def test_heights_belong_to_rows_or_the_table(self):
+        self.assertEqual(self.words("row3.height=1.5cm height=1cm")[0], ["r3ht=1.5cm", "ht=1cm"])
+        words, notes = self.words("col2.height=1cm")
+        self.assertEqual(words, [])
+        self.assertTrue(notes)
+
+    def test_alignment_words_and_the_tiers_of_scope(self):
+        self.assertEqual(self.words("col2.align=r,m row1.align=c align=left valign=middle")[0],
+                         ["c2h=r", "c2v=m", "r1h=c", "h=l", "v=m"])
+        self.assertEqual(self.words("valign=bottom")[0], ["v=b"])
+
+    def test_what_is_wrong_is_reported_and_left_out(self):
+        words, notes = self.words("width=big col9.width=2cm bogus=1 widths=1cm,2cm,3cm,4cm")
+        self.assertEqual(words, ["c1w=1cm", "c2w=2cm", "c3w=3cm"])
+        text = " ".join(notes)
+        for part in ("big", "col9.width", "bogus", "4 widths"):
+            self.assertIn(part, text)
+
+    def test_the_line_under_a_table_becomes_a_carrier_in_its_first_header_cell_and_the_caption_stays_attached(self):
+        out = normalise("| a | b |\n|--|--|\n| 1 | 2 |\n\n{col2.width=3cm}\n\nTable: Cap {#tbl:x}\n").text
+        self.assertEqual(out, "| <pt c2w=3cm> a | b |\n|--|--|\n| 1 | 2 |\n\nTable: Cap {#tbl:x}\n")
+        again = normalise("| a | b |\n|--|--|\n| 1 | 2 |\n\nTable: Cap {#tbl:x}\n\n{col2.width=3cm}\n").text
+        self.assertEqual(again, out)                                   # under the caption too
+
+    def test_a_braced_line_with_no_setting_is_not_an_attribute_line(self):
+        for text in ("| a |\n|--|\n| 1 |\n\n{#tbl:x .unnumbered}\n", "| a |\n|--|\n| 1 |\n\nplain text {width=3cm}\n",
+                     "| a |\n|--|\n| 1 |\n\n\n{width=3cm}\n"):
+            self.assertEqual(normalise(text).text, text)
+
+    def test_the_carrier_goes_before_the_cell_s_own_tag_and_a_table_without_one_is_untouched(self):
+        out = normalise("| &c& a | b |\n|--|--|\n| 1 | 2 |\n{valign=m}\n").text
+        self.assertEqual(out.splitlines()[0], "| <pt v=m> <pc hc> a | b |")
+        self.assertEqual(normalise("| a | b |\n|--|--|\n| 1 | 2 |\n").text, "| a | b |\n|--|--|\n| 1 | 2 |\n")
+
+    def test_a_note_names_the_line_of_the_attribute_line(self):
+        result = normalise("text\n\n| a | b |\n|--|--|\n| 1 | 2 |\n\n{bogus=1}\n")
+        self.assertEqual([note.line for note in result.notes], [7])
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Sizes(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+
+    def build(self, body: str, to: str = "tex", options: str = "") -> tuple[subprocess.CompletedProcess, str]:
+        front = f"pdfmd-options: {{{options}}}\n" if options else ""
+        (self.root / "d.md").write_text(f"---\ntitle: T\n{front}---\n\n{body}", encoding="utf-8")
+        out = self.root / f"out.{to}"
+        out.unlink(missing_ok=True)
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", to, "-o", out.name, "--no-stamp",
+                               "--no-backup", "--no-auto", "crossref"], cwd=self.root, capture_output=True, text=True,
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "XDG_CACHE_HOME": str(self.root / "cache")})
+        return done, (out.read_text(encoding="utf-8") if out.exists() else "")
+
+    @unittest.skipUnless(TABULARRAY, "needs LaTeX's tabularray")
+    def test_latex_gets_widths_heights_and_the_tiers(self):
+        done, tex = self.build(SIZED)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("colspec={@{}Q[l,wd=3cm]X[1,l]Q[r,wd=0.1500\\linewidth]@{}}", tex)
+        self.assertIn("width=\\linewidth", tex)
+        self.assertIn("row{2}={ht=1.8cm}", tex)
+        self.assertIn("cell{2}{2}={}{halign=l,valign=m}", tex)          # the column's alignment words, the table's valign
+        self.assertIn("\\begin{longtblr}[caption={Sized},label={tbl:sized}]", tex)
+        self.assertNotIn("<pt", tex)
+        self.assertNotIn("{widths=", tex)
+
+    @unittest.skipUnless(TABULARRAY, "needs LaTeX's tabularray")
+    def test_a_table_width_alone_and_a_height_alone(self):
+        done, tex = self.build("| a | b |\n|--|--|\n| 1 | 2 |\n\n{width=80% height=1cm}\n")
+        self.assertIn("width=0.8000\\linewidth", tex)
+        self.assertIn("row{1}={ht=1cm}", tex)
+        self.assertIn("row{2}={ht=1cm}", tex)
+
+    def test_html_gets_percent_widths_vertical_align_and_heights(self):
+        done, html = self.build("| a | b | c |\n|:--|:--|--:|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n\n{widths=\"20% 60% *\" row2.height=1cm valign=bottom}\n", "html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn('<col style="width: 20%" />', html)
+        self.assertIn('<col style="width: 60%" />', html)
+        self.assertIn("vertical-align: bottom;", html)
+        self.assertIn("height: 1cm;", html)
+        self.assertNotIn("<pt", html)
+
+    def test_markdown_gets_the_attribute_line_back_and_it_reads_again(self):
+        done, md = self.build("| a | b |\n|:--|:--|\n| 1 | 2 |\n\n{widths=\"2cm *\" row2.height=1cm col2.align=r valign=m}\n", "commonmark_x")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        line = [text for text in md.splitlines() if text.startswith("{")][0]
+        self.assertEqual(line, "{col1.width=2cm col2.width=* row2.height=1cm col2.align=r valign=m}")
+        again = normalise(md)
+        self.assertEqual(again.notes, [])
+        self.assertIn("<pt", again.text)
+
+    @unittest.skipUnless(TABULARRAY, "needs LaTeX's tabularray")
+    def test_the_options_are_the_lowest_tier(self):
+        done, tex = self.build("| a | b |\n|:--|--|\n| x | y |\n", options="table-valign: middle, table-align: right")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("cell{2}{1}={}{valign=m}", tex)                    # the separator row's `:--` beats the option
+        self.assertIn("cell{2}{2}={}{halign=r,valign=m}", tex)
+        done, tex = self.build("| a | b |\n|:--|--|\n| x | y |\n\n{valign=top align=c}\n", options="table-valign: middle, table-align: right")
+        self.assertIn("cell{2}{1}={}{valign=h}", tex)                    # the table's own words beat the option
+        self.assertIn("cell{2}{2}={}{halign=c,valign=h}", tex)
+
+    def test_a_word_that_is_not_a_choice_stops_the_build(self):
+        for option in ("table-align: sideways", "table-valign: up"):
+            done, _ = self.build("| a |\n|--|\n| x |\n", options=option)
+            self.assertNotEqual(done.returncode, 0, option)
+            self.assertIn(option.split(":")[0], done.stdout + done.stderr)
+
+    def test_an_attribute_line_problem_is_a_warning_and_the_build_goes_on(self):
+        done, _ = self.build("| a | b |\n|--|--|\n| 1 | 2 |\n\n{col9.width=2cm}\n", "html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("WARN  cell-tags", done.stdout)
+        self.assertIn("col9.width", done.stdout)
 
 
 if __name__ == "__main__":

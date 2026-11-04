@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.32"
+PDFMD_VERSION = "3.32.33"
 import argparse
 import atexit
 import csv
@@ -3755,6 +3755,26 @@ def cell_tag_kinds(md_path: Path, metadata_files: list[Path]) -> tuple[str, ...]
     return kinds
 
 
+CELL_ALIGN_WORDS = {"l": "l", "left": "l", "r": "r", "right": "r", "c": "c", "center": "c", "centre": "c"}
+CELL_VALIGN_WORDS = {"t": "t", "top": "t", "m": "m", "middle": "m", "b": "b", "bottom": "b"}
+
+
+def table_defaults(md_path: Path, metadata_files: list[Path]) -> dict[str, str]:
+    """The `table-align` (left, right, centre) and `table-valign` (top, middle, bottom) options: the alignment every cell has when
+    nothing more specific says (its tag, row, column or the table's own `{align=}`); {} for neither. A word that is not one of them
+    stops the build. Either one set makes every table of the document go through cellalign.lua (a vertical one through tabularray)."""
+    found: dict[str, str] = {}
+    for option, words, key in (("table-align", CELL_ALIGN_WORDS, "h"), ("table-valign", CELL_VALIGN_WORDS, "v")):
+        value = first_pdfmd_option(md_path, metadata_files, option)
+        if value in (None, "", False):
+            continue
+        word = str(value).strip().casefold()
+        if word not in words:
+            raise SystemExit(f"pdfmd-options {option}: {value!r} is not one of {', '.join(sorted(set(words)))}")
+        found[key] = words[word]
+    return found
+
+
 def cell_tags_text(text: str, md_path: Path, metadata_files: list[Path], label: str) -> str:
     """``text`` with the cell tags of its pipe tables written as canonical tags (a WARN for each thing that could not be done)."""
     if "|" not in text or not cell_align_on(md_path, list(metadata_files)):
@@ -3783,7 +3803,8 @@ def tabularray_available() -> bool:
 
 
 def cell_tag_counts(sources: Path | list[Path], metadata_files: list[Path]) -> tuple[int, int]:
-    """(cells with a tag, cells with a vertical alignment) in the pipe tables of the sources; (0, 0) when `cell-align` is off."""
+    """(cells with a tag or tables with settings, those LaTeX draws only with tabularray: a vertical alignment, a width, a height) in the
+    pipe tables of the sources; (0, 0) when `cell-align` is off."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or not cell_align_on(files[0], metadata_files):
         return 0, 0
@@ -3793,7 +3814,7 @@ def cell_tag_counts(sources: Path | list[Path], metadata_files: list[Path]) -> t
         return 0, 0
     kinds = cell_tag_kinds(files[0], metadata_files)
     found = [normalise(EMBED_BLOCK_RE.sub("", read_text_best_effort(file)), kinds) for file in files]
-    return sum(result.cells for result in found), sum(result.vertical for result in found)
+    return sum(result.cells for result in found), sum(result.tblr for result in found)
 
 
 TABLAY_NOTED: set[str] = set()
@@ -3804,7 +3825,8 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
     alignment is drawn in LaTeX with tabularray; without it the filter is told (`-M pdfmd-tblr=off`) and says so once."""
     files = sources if isinstance(sources, list) else [sources]
     tagged, vertical = cell_tag_counts(files, metadata_files)
-    if not tagged:
+    defaults = table_defaults(files[0], metadata_files) if files and cell_align_on(files[0], metadata_files) else {}
+    if not tagged and not defaults:
         return []
     try:
         import pdfmd_lua
@@ -3815,20 +3837,26 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
     if shipped is None:
         return []
     arguments = ["--lua-filter", str(shipped)]
-    if vertical and not tabularray_available():
+    for key, option in (("h", "pdfmd-table-align"), ("v", "pdfmd-table-valign")):
+        if key in defaults:
+            arguments = ["-M", f"{option}={defaults[key]}"] + arguments
+    if (vertical or "v" in defaults) and not tabularray_available():
         arguments = ["-M", "pdfmd-tblr=off"] + arguments
         label = display_path(files[0])
         if label not in TABLAY_NOTED:
             TABLAY_NOTED.add(label)
-            print(f"NOTE  cell-tags: {label}: a cell has a vertical alignment (t, m, b), which LaTeX draws with its `tabularray` "
-                  "package; it was not found (kpsewhich), so those cells keep the top alignment in a LaTeX build. Typst and HTML are unaffected.")
+            print(f"NOTE  cell-tags: {label}: a table has a vertical alignment, a width or a height, which LaTeX draws with its "
+                  "`tabularray` package; it was not found (kpsewhich), so a LaTeX build ignores them. HTML is unaffected.")
     return arguments
 
 
 def tblr_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
     """`--include-in-header` with tabularray for a LaTeX build of a document with a vertical alignment in a cell, or [] (a filter's
     `header-includes` is dropped by every header file of pdfmd's, so the package goes in a file of its own)."""
-    _, vertical = cell_tag_counts(sources, metadata_files)
+    files = sources if isinstance(sources, list) else [sources]
+    _, vertical = cell_tag_counts(files, metadata_files)
+    if files and cell_align_on(files[0], metadata_files) and "v" in table_defaults(files[0], metadata_files):
+        vertical += 1
     if not vertical or not tabularray_available():
         return []
     text = ("% pdfmd: vertical alignment of table cells (cell tags, entry 3fa)\n\\usepackage{tabularray}\n\\UseTblrLibrary{booktabs}\n"
