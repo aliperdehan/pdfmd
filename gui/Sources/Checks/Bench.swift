@@ -235,6 +235,36 @@ enum Smoke {
             check("a window answers \(s)", NSWindow.instancesRespond(to: Selector(s)))
         }
         check("the settings keep tabs from forcing themselves: no setting makes every window a tab", w1.tabbingMode == .automatic, "\(w1.tabbingMode.rawValue)")
+
+        // the real menu: the key press goes through the main menu's own key-equivalent search, the way a keyboard does it
+        // command-9 is one menu item: AppKit gives a key to the FIRST item that has it and does nothing when that one is off (tried: two items
+        // with the key, one on and one off, do not work in either order), so View > Zoom to Fit is also the "Last Tab" of the other windows
+        let app = AppDelegate()
+        NSApp.delegate = app
+        app.buildMenus()
+        let nine = app.mainMenu9()
+        check("exactly one menu item carries command-9", nine == ["Zoom to Fit"], "\(nine)")
+        var zoomItem: NSMenuItem?
+        func find(_ m: NSMenu) { for i in m.items { if i.action == #selector(AppDelegate.fitPage(_:)) { zoomItem = i }; if let s = i.submenu { find(s) } } }
+        find(NSApp.mainMenu!)
+        check("the application delegate answers it (the PDF window answers it before)", AppDelegate.instancesRespond(to: #selector(AppDelegate.fitPage(_:))) && zoomItem != nil)
+        check("in a window that is not a PDF viewer the item is called Last Tab", zoomItem.map { _ = app.validateMenuItem($0); return $0.title == "Last Tab" } == true, zoomItem?.title ?? "")
+        var numbered: [NSMenuItem] = []
+        func collect(_ m: NSMenu) { for i in m.items { if i.title.hasPrefix("Tab "), i.action == Selector(("selectTabNumber:")) { numbered.append(i) }; if let s = i.submenu { collect(s) } } }
+        collect(NSApp.mainMenu!)
+        check("Tab 1 to Tab 8 are in the menu with the command key", numbered.count == 8 && numbered.allSatisfy { $0.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask) == .command && $0.keyEquivalent == String($0.tag) }, "\(numbered.count)")
+        let switchItem = app.switchItem!
+        check("the mode switch has the setting's default key, control-command-S", switchItem.keyEquivalent == "s" && switchItem.keyEquivalentModifierMask == [.control, .command])
+        Settings.set("keySwitchMode", "⌥⌘K"); app.applySwitchShortcut()
+        check("a new shortcut in the setting is put on the menu item", switchItem.keyEquivalent == "k" && switchItem.keyEquivalentModifierMask == [.option, .command])
+        Settings.set("keySwitchMode", "⌘R"); app.applySwitchShortcut()
+        check("a key another item has is not taken", switchItem.keyEquivalent.isEmpty && AppDelegate.menuConflict(PopShortcut.parse("⌘R")!, besides: switchItem) != nil)
+        Settings.set("keySwitchMode", "none"); app.applySwitchShortcut()
+        check("none leaves the item without a key", switchItem.keyEquivalent.isEmpty)
+        Settings.set("keySwitchMode", nil); app.applySwitchShortcut()
+        check("the setting removed: the default again", switchItem.keyEquivalent == "s")
+        check("a file of parts/ belongs to the project above", StudioServer.projectFolder(of: URL(fileURLWithPath: "/x/LR8/parts/40-calculations.md")).path == "/x/LR8" && StudioServer.projectFolder(of: URL(fileURLWithPath: "/x/LR8/report.md")).path == "/x/LR8")
+        check("the server's JSON line is found among other output", StudioServer.announced(in: "Last login\nnoise {\n{\"api\": 1, \"url\": \"http://127.0.0.1:5/?t=a\"}\n")?.absoluteString == "http://127.0.0.1:5/?t=a")
         print(failures == 0 ? "TABS SMOKE OK" : "TABS SMOKE FAILED (\(failures))")
         exit(failures == 0 ? 0 : 1)
     }

@@ -75,6 +75,24 @@ struct PopShortcut: Equatable {
     }
 }
 
+extension PopShortcut {
+    /// The shortcut as a menu item has it: the key's character (a letter in lower case, F1 to F12 as the function-key characters) and the modifiers.
+    var menuKey: String {
+        let name = PopShortcut.keys.first { $0.value == code }?.key ?? ""
+        if name == "Space" { return " " }
+        if name.count > 1, name.hasPrefix("F"), let n = Int(name.dropFirst()), (1...12).contains(n) { return String(UnicodeScalar(NSF1FunctionKey + n - 1)!) }
+        return name.lowercased()
+    }
+    var menuMask: NSEvent.ModifierFlags {
+        var m: NSEvent.ModifierFlags = []
+        if mods & UInt32(controlKey) != 0 { m.insert(.control) }
+        if mods & UInt32(optionKey) != 0 { m.insert(.option) }
+        if mods & UInt32(shiftKey) != 0 { m.insert(.shift) }
+        if mods & UInt32(cmdKey) != 0 { m.insert(.command) }
+        return m
+    }
+}
+
 /// A global hotkey through Carbon, which needs no privacy permission.
 final class PopHotKey {
     static var action: (() -> Void)?

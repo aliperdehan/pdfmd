@@ -130,6 +130,30 @@ enum WebSmoke {
         c.window?.close()
         check("the window is released when closed", PDFSmoke.wait(2) { !WebStudioController.all.contains { $0 === c } })
 
+        // the real folder: the app starts `pdfmd --serve` (the pdfmd the login shell finds), the page loads from it and works on the files
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("colophon-smoke-\(getpid())")
+        try? fm.createDirectory(at: dir.appendingPathComponent("parts"), withIntermediateDirectories: true)
+        try? "# Real project\n\nHello from the disk.\n".write(to: dir.appendingPathComponent("report.md"), atomically: true, encoding: .utf8)
+        try? "# Intro part\n\nText of the part.\n".write(to: dir.appendingPathComponent("parts/10-intro.md"), atomically: true, encoding: .utf8)
+        defer { try? fm.removeItem(at: dir) }
+        let live = WebStudioController.open(folder: dir, file: "parts/10-intro.md")
+        let started = PDFSmoke.wait(Settings.number("studioServerTimeout") + 15) { live.loaded && (live.state["cur"] as? String) != nil || live.failure != nil }
+        check("the studio starts pdfmd --serve for a folder and loads its page", started && live.failure == nil && live.pageURL?.scheme == "http", live.failure ?? live.pageURL?.host ?? "")
+        check("it opens on the file that was asked for", (live.state["cur"] as? String) == "parts/10-intro.md", "\(live.state["cur"] ?? "")")
+        check("the page is live, on the folder", js(live, "window.__app.project.name") as? String == dir.lastPathComponent && js(live, "location.protocol") as? String == "http:", "\(js(live, "window.__app.project.name") ?? "")")
+        check("the editor holds the file's real text", (js(live, "window.__app.editor.getText()") as? String)?.contains("Text of the part.") == true)
+        check("the window knows the file it is on", live.currentFileURL?.lastPathComponent == "10-intro.md")
+        _ = js(live, "window.__app.editor.replaceSelection('Edited in the app. ', false); 0")
+        live.saveDocument(nil)
+        let wrote = PDFSmoke.wait(8) { (try? String(contentsOf: dir.appendingPathComponent("parts/10-intro.md")))?.contains("Edited in the app.") == true }
+        check("save writes the file on the disk, through the core", wrote)
+        let same = WebStudioController.open(folder: dir)
+        check("the same folder again brings the same window forward", same === live)
+        let pid = live.server?.lastPid
+        live.window?.close()
+        check("closing the window stops the server", pid != nil && PDFSmoke.wait(5) { kill(pid!, 0) != 0 }, "pid \(pid.map(String.init) ?? "nil")")
+
         // the page's own self-test, in WebKit
         let t = WebStudioController.open(hash: "selftest-slow4")
         _ = PDFSmoke.wait(60) { (js(t, "document.title") as? String).map { $0 == "OK" || $0 == "FAILED" } ?? false }

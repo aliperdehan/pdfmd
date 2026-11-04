@@ -45,7 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if CommandLine.arguments.contains("--web") { WebStudioController.open() }   // the web studio at launch (a Mac window around lib/pdfmd_web)
         NSApp.activate(ignoringOtherApps: true)
         PopController.shared.settingsChanged()   // the menu-bar icon and the shortcut, when the setting says so
-        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in PopController.shared.settingsChanged() }
+        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { [weak self] _ in
+            PopController.shared.settingsChanged(); self?.applySwitchShortcut()
+        }
         DispatchQueue.global(qos: .utility).async { _ = PdfmdTool.cachedResolve(); _ = PdfmdTool.pandoc() }   // so that the About box and the preview have their answer
     }
 
@@ -152,28 +154,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.orderedWindows.first { $0.windowController?.document != nil && !($0.windowController is WebStudioController) && ($0.isVisible || $0.tabbingIdentifier == tabGroup) }
     }
 
-    /// Control-command-S: from a document window to the web studio, from the studio back to the last document window (a new empty document when
-    /// there is none). The studio runs on fixtures today, so neither direction carries the file or the folder across yet (that comes with the app
-    /// starting `pdfmd --serve` itself).
+    /// The mode switch (its key is the setting `keySwitchMode`). From a document window to the studio of its project: the folder of the file
+    /// (the one above, for a file of `parts/`), on that file; an editor with unsaved text is saved first, as command R does. Without a file, the
+    /// folder the studio was last on, else the folder the author picks. From the studio back to plain text: the file its page is on, opened in an
+    /// editor window; else the last document window, else a new document.
     @objc func switchMode(_ sender: Any?) {
-        if NSApp.keyWindow?.windowController is WebStudioController {
-            if let w = AppDelegate.lastDocumentWindow() { w.makeKeyAndOrderFront(nil) } else { NSDocumentController.shared.newDocument(nil) }
-        } else if let studio = WebStudioController.all.last {
-            studio.showWindow(nil); studio.window?.makeKeyAndOrderFront(nil)
-        } else {
-            WebStudioController.open()
+        if let studio = NSApp.keyWindow?.windowController as? WebStudioController {
+            if let url = studio.currentFileURL, FileManager.default.fileExists(atPath: url.path) {
+                NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in if let error { NSApp.presentError(error) } }
+            } else if let w = AppDelegate.lastDocumentWindow() { w.makeKeyAndOrderFront(nil) } else { NSDocumentController.shared.newDocument(nil) }
+            return
         }
+        if let doc = NSApp.keyWindow?.windowController?.document as? NSDocument, let url = doc.fileURL {
+            if doc is EditorDocument, doc.isDocumentEdited {
+                doc.save(withDelegate: self, didSave: #selector(savedForStudio(_:didSave:contextInfo:)), contextInfo: nil)
+            } else {
+                openStudio(near: url, markdown: doc is EditorDocument)
+            }
+        } else if let last = Settings.store.string(forKey: "studioLastFolder"), FileManager.default.fileExists(atPath: last) {
+            WebStudioController.open(folder: URL(fileURLWithPath: last))
+        } else {
+            openStudioFolder(nil)
+        }
+    }
+
+    @objc func savedForStudio(_ doc: NSDocument, didSave: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        guard didSave, let url = doc.fileURL else { return }
+        openStudio(near: url, markdown: true)
+    }
+
+    /// The studio of the project that `file` belongs to, on that file when it is one the page can edit.
+    func openStudio(near file: URL, markdown: Bool) {
+        let folder = StudioServer.projectFolder(of: file)
+        let relative = file.standardizedFileURL.path.replacingOccurrences(of: folder.standardizedFileURL.path + "/", with: "")
+        WebStudioController.open(folder: folder, file: markdown ? relative : nil)
+    }
+
+    /// File > Open Folder in Studio…
+    @objc func openStudioFolder(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        panel.prompt = "Open"; panel.message = "The folder of the project (the one with report.md in it)"
+        if let last = Settings.store.string(forKey: "studioLastFolder") { panel.directoryURL = URL(fileURLWithPath: last) }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        WebStudioController.open(folder: url)
+    }
+
+    func applicationWillTerminate(_ note: Notification) {
+        for c in WebStudioController.all { c.server?.stop() }
+    }
+
+    /// Command-9 is ONE menu item (View > Zoom to Fit, action `fitPage:`): AppKit gives a key to the first item that has it, and does nothing
+    /// when that one is off, so two items with the key cannot share it. The PDF window answers `fitPage:` first and the item says "Zoom to
+    /// Fit"; in every other window nothing does, the application delegate does, and the item says "Last Tab" (the studio window answers it
+    /// itself, with its own tabs).
+    @objc func fitPage(_ sender: Any?) { selectLastTab(nil) }
+
+    /// The last tab of the key window's tab group (also Window > Select Tab > Last Tab, which has no key of its own).
+    @objc func selectLastTab(_ sender: Any?) { AppDelegate.selectTab(NSApp.keyWindow?.tabbedWindows?.count ?? 0, in: NSApp.keyWindow) }
+
+    /// The menu item for the mode switch (its key is the setting `keySwitchMode`).
+    weak var switchItem: NSMenuItem?
+
+    /// The titles of the menu items that carry command-9 (for the self-test).
+    func mainMenu9() -> [String] {
+        func walk(_ m: NSMenu) -> [String] { m.items.flatMap { ($0.keyEquivalent == "9" && $0.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask) == .command ? [$0.title] : []) + ($0.submenu.map(walk) ?? []) } }
+        return NSApp.mainMenu.map(walk) ?? []
+    }
+
+    /// Puts the setting's shortcut on the menu item. A key that another item of the menu already has is not taken (the item then has none).
+    func applySwitchShortcut() {
+        guard let item = switchItem else { return }
+        let text = Settings.string("keySwitchMode")
+        guard text.lowercased() != "none", let s = PopShortcut.parse(text), AppDelegate.menuConflict(s, besides: item) == nil else {
+            item.keyEquivalent = ""; return
+        }
+        item.keyEquivalent = s.menuKey
+        item.keyEquivalentModifierMask = s.menuMask
+    }
+
+    /// The title of the menu item that already has this shortcut, if any (looked for in every menu of the menu bar, besides `skip`).
+    static func menuConflict(_ s: PopShortcut, besides skip: NSMenuItem?) -> String? {
+        func search(_ menu: NSMenu) -> String? {
+            for item in menu.items where item !== skip {
+                if !item.keyEquivalent.isEmpty, item.keyEquivalent == s.menuKey, item.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask) == s.menuMask { return item.title }
+                if let sub = item.submenu, let found = search(sub) { return found }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap(search)
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(switchMode(_:)) {
             item.title = NSApp.keyWindow?.windowController is WebStudioController ? "Switch to Plain Text" : "Switch to Studio"
         }
+        if item.action == #selector(fitPage(_:)) {
+            item.title = "Last Tab"
+            return (NSApp.keyWindow?.tabbedWindows?.count ?? 0) > 1
+        }
+        if item.action == #selector(selectLastTab(_:)) { return (NSApp.keyWindow?.tabbedWindows?.count ?? 0) > 1 }
         return true
     }
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
 
-    private func buildMenus() {
+    func buildMenus() {
         let main = NSMenu()
         NSApp.mainMenu = main
 
@@ -205,7 +290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         add(file, "New", "newDocument:", "n")
         add(file, "New Tab", "newTab:", "t")
         add(file, "Open…", "openDocument:", "o")
-        add(file, "New Web Studio Window", "openWebStudio:", "n", [.command, .shift])
+        add(file, "Open Folder in Studio…", "openStudioFolder:", "o", [.command, .shift])
+        add(file, "New Studio Demo Window", "openWebStudio:", "n", [.command, .shift])
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu(title: "Open Recent")
         recentMenu.addItem(NSMenuItem(title: "Clear Menu", action: Selector(("clearRecentDocuments:")), keyEquivalent: ""))
@@ -277,12 +363,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         for n in 1...8 {
             let item = NSMenuItem(title: "Tab \(n)", action: Selector(("selectTabNumber:")), keyEquivalent: String(n))
             item.tag = n
+            item.keyEquivalentModifierMask = .command
             tabsMenu.addItem(item)
         }
+        tabsMenu.addItem(NSMenuItem(title: "Last Tab", action: Selector(("selectLastTab:")), keyEquivalent: ""))   // its key, command-9, is View > Zoom to Fit's (see fitPage)
         tabs.submenu = tabsMenu
         window.addItem(tabs)
         window.addItem(.separator())
-        add(window, "Switch to Studio", "switchMode:", "s", [.control, .command])   // its title follows the key window (validateMenuItem)
+        switchItem = add(window, "Switch to Studio", "switchMode:")   // its title follows the key window (validateMenuItem), its key is a setting
+        applySwitchShortcut()
         window.addItem(.separator())
         let pop = add(window, "Equation Popup", "toggleWindow", "e", [.command, .option])   // opens it, and closes it when it is the open one
         pop.target = PopController.shared

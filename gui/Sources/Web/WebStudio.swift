@@ -5,7 +5,8 @@ import WebKit
 /// with the Mac around it. The native side owns the menu bar and every shortcut, so command R renders instead of reloading the page, command T
 /// makes a tab of the project and command S saves by the page's logic: each menu action of this window is sent to the page as a command
 /// (`window.appCommand(name)`), and the page tells the window its state (title, unsaved dot) through the message handler `colophon`.
-/// Today the page runs on fixtures (a demo project); the core arrives with `pdfmd --serve`.
+/// With a folder the page runs on the real project: the app starts `pdfmd --serve FOLDER` (`StudioServer`) and loads the page from it. Without a
+/// folder it runs on fixtures (a demo project, and what the self-tests use).
 final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     static var all: [WebStudioController] = []
     /// Set by the smoke test only: private WebKit switches that keep the timers of a hidden page running at their pace.
@@ -37,10 +38,25 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
     /// What the page said through the window's own dialogs (the smoke test answers them without a sheet).
     var dialogAnswer: Bool?
 
-    convenience init(hash: String = "") {
+    /// The project folder whose `pdfmd --serve` this window shows; nil for the demo.
+    var folder: URL?
+    var server: StudioServer?
+    /// Why the server did not start (shown in the window; the smoke test reads it).
+    var failure: String?
+    /// The URL the page was loaded from, once the server has answered.
+    var pageURL: URL?
+
+    /// The file the page is on (its current tab), if the window has a folder.
+    var currentFileURL: URL? {
+        guard let folder, let cur = state["cur"] as? String, !cur.isEmpty else { return nil }
+        return folder.appendingPathComponent(cur)
+    }
+
+    convenience init(hash: String = "", folder: URL? = nil, file: String? = nil, serveCommand: String? = nil) {
         let config = WKWebViewConfiguration()
         let user = WKUserContentController()
         config.userContentController = user
+        if folder != nil { config.websiteDataStore = .nonPersistent() }   // each server has its own token, and cookies do not tell ports apart
         if WebStudioController.unthrottled {   // the smoke test's window is never on screen: WebKit would wake its timers once a second
             for key in ["_setHiddenPageDOMTimerThrottlingEnabled:", "_setPageVisibilityBasedProcessSuppressionEnabled:"] {
                 let off = key.contains("Throttling") ? "hiddenPageDOMTimerThrottlingEnabled" : "pageVisibilityBasedProcessSuppressionEnabled"
@@ -52,7 +68,11 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
         user.add(WeakHandler(self), name: "colophon")
         web.navigationDelegate = self
         web.uiDelegate = self
-        if let root = WebStudioController.webRoot() {
+        if let folder {
+            self.folder = folder
+            web.loadHTMLString("<body style='font:15px -apple-system;padding:2em;color:gray'>Starting <code>pdfmd --serve</code> for \(Self.escaped(folder.lastPathComponent))…</body>", baseURL: nil)
+            startServer(file: file, command: serveCommand)
+        } else if let root = WebStudioController.webRoot() {
             var url = root.appendingPathComponent("index.html").absoluteURL
             if !hash.isEmpty, let u = URL(string: url.absoluteString + "#" + hash) { url = u }
             web.loadFileURL(url, allowingReadAccessTo: root)
@@ -85,6 +105,53 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
         return c
     }
 
+    /// The studio of a project folder: the window that already shows it (brought forward, and on `file` when one is given), else a new one.
+    @discardableResult
+    static func open(folder: URL, file: String? = nil, serveCommand: String? = nil) -> WebStudioController {
+        let same = folder.standardizedFileURL
+        if let c = all.first(where: { $0.folder?.standardizedFileURL == same }) {
+            c.showWindow(nil); c.window?.makeKeyAndOrderFront(nil)
+            if let file { c.openInPage(file) }
+            return c
+        }
+        let c = WebStudioController(folder: folder, file: file, serveCommand: serveCommand)
+        c.showWindow(nil)
+        c.window?.makeKeyAndOrderFront(nil)
+        Settings.store.set(folder.path, forKey: "studioLastFolder")
+        return c
+    }
+
+    private static func escaped(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private func startServer(file: String?, command: String?) {
+        guard let folder else { return }
+        let s = StudioServer(folder: folder)
+        server = s
+        s.start(commandOverride: command) { [weak self] result in
+            guard let self else { s.stop(); return }
+            switch result {
+            case .success(let url):
+                var page = url
+                if let file, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                    c.queryItems = (c.queryItems ?? []) + [URLQueryItem(name: "open", value: file)]
+                    page = c.url ?? url
+                }
+                self.pageURL = page
+                self.web.load(URLRequest(url: page))
+            case .failure(let f):
+                self.failure = f.message
+                self.web.loadHTMLString("<body style='font:15px -apple-system;padding:2em'><h2>The studio could not start</h2><p>\(Self.escaped(folder.path))</p><pre style='white-space:pre-wrap'>\(Self.escaped(f.message))</pre>", baseURL: nil)
+            }
+        }
+    }
+
+    /// Opens a file of the project in a tab of the page that is running.
+    func openInPage(_ path: String) {
+        web.evaluateJavaScript("window.appOpen && window.appOpen(\(JSONEncoder.quoted(path)))", completionHandler: nil)
+    }
+
     // MARK: page -> window
 
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -102,7 +169,8 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
 
     /// Links to the web open in the browser; the page's own files stay in the window.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = action.request.url, action.navigationType == .linkActivated, url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
+        if let url = action.request.url, action.navigationType == .linkActivated, url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto",
+           url.host != "127.0.0.1" {   // the studio's own server stays in the window
             NSWorkspace.shared.open(url); decisionHandler(.cancel); return
         }
         decisionHandler(.allow)
@@ -145,6 +213,9 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
     @objc func selectPreviousTab(_ sender: Any?) { command("previousTab") }
     /// Command-1 to command-8 while the studio is the key window: the page's own tabs (the menu item's tag is the number).
     @objc func selectTabNumber(_ sender: NSMenuItem) { command("tab\(sender.tag)") }
+    /// Command-9 while the studio is the key window: the page's last tab.
+    @objc func selectLastTab(_ sender: Any?) { command("tabLast") }
+    @objc func fitPage(_ sender: Any?) { command("tabLast") }   // the View menu's command-9 item: "Zoom to Fit" in a PDF window, "Last Tab" elsewhere
     @objc func showSource(_ sender: Any?) { command("layoutEditor") }
     @objc func togglePreview(_ sender: Any?) { command("layoutSplit") }
 
@@ -153,6 +224,7 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
         case #selector(reloadFile(_:)): item.title = "Render Preview"
         case #selector(saveDocument(_:)): item.title = "Save"
         case #selector(newTab(_:)): item.title = "New Tab"
+        case #selector(fitPage(_:)): item.title = "Last Tab"
         case #selector(performTextFinderAction(_:)): return item.tag == 1
         default: break
         }
@@ -172,6 +244,7 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
 
     func windowWillClose(_ notification: Notification) {
         WebStudioController.all.removeAll { $0 === self }
+        server?.stop()
         web.configuration.userContentController.removeScriptMessageHandler(forName: "colophon")
     }
 }

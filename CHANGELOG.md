@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.38a — 2026-11-05
+
+Pre-edit state: commit `390d3ee`. Entry 3do. **Colophon (Mac app, `gui/` only): the studio window runs on the real folder through `pdfmd --serve`; command-9; the switch key is a setting.** The author: "can you make it work with pdfmd --serve then?", command-9 "last tab in text editor mode, zoom to fit in pdf viewer mode", and the switch key "easy to change in the app itself too? no hardcoding". No shipped code changes (`PDFMD_VERSION` stays 3.32.38).
+
+- The web studio window for a folder: File > Open Folder in Studio… (⇧⌘O), or Window > Switch to Studio from a document window. The app starts `pdfmd --serve FOLDER` in a login shell (the pdfmd found like the build's, `Web/StudioServer.swift`), reads the one JSON line, loads the page from that address (the file the editor was on, as `?open=`), and stops the server when the window closes or the app quits (`studioServerTimeout`, 30 s, is how long it waits; a failure is shown in the window with pdfmd's own words). The window uses a non-persistent web data store: every server has its own token, and cookies do not tell ports apart. The same folder again brings the same window forward. The project folder of a file is its own folder, or the one above for a file of `parts/`. A crashed app leaves an idle server on its random port, which only its token opens. The demo on fixtures stays as File > New Studio Demo Window.
+- From the studio back: Switch to Plain Text opens the file the page is on in an editor window. An unsaved editor is saved before the studio opens (as command-R does).
+- Command-9 is one menu item whose name follows the window (Zoom to Fit in a PDF window, which answers `fitPage:` first; Last Tab elsewhere, answered by the application delegate or, in the studio, by the page). Tried first as two items with the key: AppKit gives the key to the first item that has it and does nothing when that one is off, in either order. Window > Select Tab also lists Last Tab, without a key.
+- The mode switch's key is the setting `keySwitchMode` (General, default ⌃⌘S, `none` for no key); a key that another menu item already has is refused in Settings, and not taken from the menu when set otherwise.
+- `--smoke-tabs` has 9 new checks (one item with command-9 and its name, Tab 1 to 8 with the command key, the setting on the menu item, the project folder of a `parts/` file, the server's JSON line among noise); `--smoke-web` 8 (a real folder through the real pdfmd: the page loads over http, opens on the asked file, the real text, save writes the disk, the same folder reuses the window, closing stops the server). Not tried with real key presses.
+
 ## v3.32.38 — 2026-11-05
 
 Pre-edit state: commit `ed3208a`. Entry 3do (the web UI). **The page answers command-9 and opens on a file it is asked for.** The author: command-9 should be the last tab in a text window (and Zoom to Fit in a PDF window), and the Mac window should work on the real folder through `pdfmd --serve`.

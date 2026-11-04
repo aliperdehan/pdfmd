@@ -290,7 +290,13 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             var value = (sender as? NSPopUpButton)?.titleOfSelectedItem ?? (sender as? NSTextField)?.stringValue ?? ""
             if case .hotkey = text.kind, !value.isEmpty {   // a shortcut is stored in its written-out form, or not at all
                 if value.lowercased() == "none" { value = "none" }
-                else if let shortcut = PopShortcut.parse(value) { value = shortcut.label }
+                else if let shortcut = PopShortcut.parse(value) {
+                    if id == "keySwitchMode", let used = AppDelegate.menuConflict(shortcut, besides: (NSApp.delegate as? AppDelegate)?.switchItem) {   // a menu key that another item has is not taken
+                        let a = NSAlert(); a.messageText = "\(shortcut.label) is already the shortcut of “\(used)”."
+                        a.informativeText = "Pick another key for the switch."; a.runModal(); refresh(); return
+                    }
+                    value = shortcut.label
+                }
                 else { NSSound.beep(); refresh(); return }   // a wrong entry goes back to what is stored
             }
             Settings.set(id, value.isEmpty ? nil : value)

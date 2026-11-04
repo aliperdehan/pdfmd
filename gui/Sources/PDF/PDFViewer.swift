@@ -749,6 +749,8 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             item.state = Settings.flag("pdfAutoReload") ? .on : .off
         case #selector(reloadFile(_:)):
             item.title = "Reload"
+        case #selector(fitPage(_:)):
+            item.title = "Zoom to Fit"   // command-9 is "Last Tab" in the other windows (the same menu item)
         case #selector(resetSidebarWidth(_:)):
             return Settings.flag("pdfThumbnails")
         case #selector(showPages(_:)):
