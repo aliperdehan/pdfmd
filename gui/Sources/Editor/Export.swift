@@ -10,6 +10,9 @@ struct ExportFormat: Equatable {
     let engine: String?      // the program that must be there for it, as `pdfmd --check-dependencies` names it (nil: pandoc alone)
     let path: [String]       // the submenus below "Export As", [] = on the first level
 
+    /// What the Save panel's title says: "Export as Cropped PDF" (the menu item alone, "PDF", would not tell it from the plain one).
+    var panelTitle: String { path.first == "Cropped" ? "Cropped " + title : title }
+
     /// The name a Save panel proposes: the document's, with this format's extension.
     func fileName(for source: URL) -> String {
         let base = source.deletingPathExtension().lastPathComponent
@@ -29,7 +32,6 @@ enum ExportTable {
         list.append(ExportFormat(id: "md", title: "Markdown (standalone)", ext: "md", words: ["--merge"], engine: nil, path: []))
         // 2. PDF, by engine
         list.append(ExportFormat(id: "pdf", title: "Auto", ext: "pdf", words: ["-t", "pdf"], engine: nil, path: ["PDF"]))
-        list.append(ExportFormat(id: "pdf-cropped", title: "Cropped", ext: "pdf", words: ["-t", "pdf", "--crop"], engine: nil, path: ["PDF"]))   // every page cut to its ink, still vector
         func pdf(_ path: [String], _ family: (id: String, title: String)?, _ engines: [(id: String, title: String)]) {
             if let family { list.append(ExportFormat(id: "pdf:" + family.id, title: family.title, ext: "pdf", words: ["-t", "pdf", "-e", family.id], engine: nil, path: path)) }
             for e in engines { list.append(ExportFormat(id: "pdf:" + e.id, title: e.title, ext: "pdf", words: ["-t", "pdf", "-e", e.id], engine: e.id, path: path)) }
@@ -45,6 +47,11 @@ enum ExportTable {
         // 3. the two that people mean most often
         add([], [("docx", "Word (.docx)", "docx")])
         add([], [("html", "HTML (.html)", "html")])
+        // 3b. the pages cut to their ink (`--crop`), one submenu below HTML: a PDF stays vector with every page cut to its own ink; without
+        // `--crop` a picture is the whole page
+        list.append(ExportFormat(id: "pdf-cropped", title: "PDF", ext: "pdf", words: ["-t", "pdf", "--crop"], engine: nil, path: ["Cropped"]))
+        list.append(ExportFormat(id: "svg-cropped", title: "SVG", ext: "svg", words: ["-t", "svg", "--crop"], engine: nil, path: ["Cropped"]))
+        list.append(ExportFormat(id: "png-cropped", title: "PNG", ext: "png", words: ["-t", "png", "--crop"], engine: nil, path: ["Cropped"]))
         // 4. everything else pdfmd writes, by kind
         add(["Others", "Documents"], [("odt", "OpenDocument text (.odt)", "odt"), ("rtf", "Rich Text (.rtf)", "rtf"), ("fodt", "Flat OpenDocument (.fodt)", "fodt"),
                                        ("icml", "InDesign (.icml)", "icml")])
@@ -77,9 +84,6 @@ enum ExportTable {
                                          ("ipynb", "Jupyter notebook (.ipynb)", "ipynb"), ("bibtex", "BibTeX (.bib)", "bib"), ("biblatex", "BibLaTeX (.bib)", "bib")])
         add(["Others", "Pictures"], [("png", "PNG (.png)", "png"), ("jpg", "JPEG (.jpg)", "jpg"), ("tiff", "TIFF (.tiff)", "tiff"), ("svg", "SVG (.svg)", "svg"),
                                      ("eps", "EPS (.eps)", "eps"), ("ps", "PostScript (.ps)", "ps")])
-        // the pages cut to their ink (`--crop`): pdfmd draws the cropped page as the picture; without it a picture is the whole page
-        list.append(ExportFormat(id: "png-cropped", title: "PNG, cropped to the ink (.png)", ext: "png", words: ["-t", "png", "--crop"], engine: nil, path: ["Others", "Pictures"]))
-        list.append(ExportFormat(id: "svg-cropped", title: "SVG, cropped to the ink (.svg)", ext: "svg", words: ["-t", "svg", "--crop"], engine: nil, path: ["Others", "Pictures"]))
         return list
     }()
 

@@ -61,10 +61,22 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func show() {
+    /// Shows the tab of that name (false: there is none). The window follows its size.
+    @discardableResult func select(tab: String) -> Bool {
+        guard let item = tabView.tabViewItems.first(where: { ($0.identifier as? String) == tab }) else { return false }
+        tabView.selectTabViewItem(item)
+        fit(item)
+        return true
+    }
+
+    /// Opens the window, on the tab named (one of `tabs`) or on the one that was last shown. The app is brought forward too: a menu-bar
+    /// icon's item is used while another app is in front and no Colophon window exists, and an inactive app's window opens hidden behind.
+    func show(tab: String? = nil) {
+        if let tab { select(tab: tab) }
         window?.center()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: building

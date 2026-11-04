@@ -65,8 +65,9 @@ final class ExportController: NSObject {
             return
         }
         let panel = NSSavePanel()
-        panel.title = "Export as \(format.title)"
-        panel.message = "pdfmd " + format.words.joined(separator: " ") + (format.path.last == "Pictures" ? "   (a document of several pages makes a folder of numbered pictures, named like this file)" : "")
+        panel.title = "Export as \(format.panelTitle)"
+        let pictures = format.path.last == "Pictures" || ["png-cropped", "svg-cropped"].contains(format.id)
+        panel.message = "pdfmd " + format.words.joined(separator: " ") + (pictures ? "   (a document of several pages makes a folder of numbered pictures, named like this file)" : "")
         panel.directoryURL = source.deletingLastPathComponent()
         panel.nameFieldStringValue = proposed.lastPathComponent
         panel.canCreateDirectories = true

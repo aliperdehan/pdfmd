@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.29q — 2026-11-04
+
+Pre-edit state: commit `3c73161`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.16: the Cropped submenu, and the popup's Settings item.** The author, on the menu of 0.2.15: "better to move all cropped kinds here, and move cropped kind below html above others, and make it expandable too, like latex and html, with options, pdf, svg, and png"; on the menu-bar icon: "[the popup] settings are buggy. it requires running editor window (without it the settings are silently hidden until i open colophon), and even when it opens settings, it opens whatever settings tab is there, not the eqpop settings specifically".
+
+- **Export As > Cropped** (first level, below HTML, above Others): PDF, SVG, PNG, every page cut to its ink (`--crop`). PDF > Cropped and the two cropped rows of Others > Pictures are gone (the ids `pdf-cropped`, `svg-cropped`, `png-cropped` are the same, so `colophon export FILE png-cropped` still works). The Save panel's title says "Export as Cropped PDF".
+- **Settings… in the menu-bar icon's menu** opens the Popup tab and brings Colophon forward (an inactive app's window opened hidden behind the other apps when no editor window existed). `PreferencesController.show(tab:)`.
+- `--smoke-export` 60 checks (+2), `--smoke-pop` +1.
+
 ## v3.32.29p — 2026-11-04
 
 Pre-edit state: commit `72575f6`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.15: tabs, and what the first look at Export As found.** The author: "make it less verbose, just Auto and HTML are fine"; "how image outputs work? ... if crop, there should also be `cropped PDF` too"; "i want native tabs like coteditor --- implement. not like always ... a new one appears with command+T".

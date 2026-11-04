@@ -87,6 +87,7 @@ enum PopSmoke {
 
         // the Settings window stores a shortcut written out, and refuses a wrong one
         let prefs = PreferencesController()
+        check("the popup menu's Settings item selects the Popup tab, and a wrong name selects nothing", prefs.select(tab: "Colours") && prefs.select(tab: "Popup") && !prefs.select(tab: "Nope"))
         if let field = prefs.controls["popHotkey"] as? NSTextField {
             func fire(_ c: NSControl) { _ = c.sendAction(c.action, to: c.target) }
             field.stringValue = "alt+cmd+K"; fire(field)

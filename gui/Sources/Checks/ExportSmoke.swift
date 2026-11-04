@@ -51,9 +51,13 @@ enum ExportSmoke {
         walk(menu)
         check("the menu has a leaf for every row", leaves.count == all.count, "\(leaves.count) of \(all.count)")
         check("every leaf sends exportAs: with a known id", leaves.allSatisfy { $0.action == #selector(EditorWindowController.exportAs(_:)) && ExportTable.format($0.representedObject as? String ?? "") != nil })
-        check("the first level is Markdown, PDF, Word, HTML, Others", menu.items.map(\.title) == ["Markdown (standalone)", "PDF", "Word (.docx)", "HTML (.html)", "Others"], menu.items.map(\.title).joined(separator: ", "))
-        check("PDF has the engines in submenus (a dropdown in a dropdown)", menu.items[1].submenu?.items.map(\.title).joined(separator: ",") == "Auto,Cropped,LaTeX,Typst,HTML,Others" && submenus.contains("LaTeX") && submenus.contains("HTML"),
+        check("the first level is Markdown, PDF, Word, HTML, Cropped, Others", menu.items.map(\.title) == ["Markdown (standalone)", "PDF", "Word (.docx)", "HTML (.html)", "Cropped", "Others"], menu.items.map(\.title).joined(separator: ", "))
+        check("PDF has the engines in submenus (a dropdown in a dropdown)", menu.items[1].submenu?.items.map(\.title).joined(separator: ",") == "Auto,LaTeX,Typst,HTML,Others" && submenus.contains("LaTeX") && submenus.contains("HTML"),
               menu.items[1].submenu?.items.map(\.title).joined(separator: ", ") ?? "")
+
+        check("Cropped is one submenu of PDF, SVG, PNG (the cropped kinds are nowhere else)", menu.items[4].submenu?.items.map(\.title).joined(separator: ",") == "PDF,SVG,PNG"
+              && all.filter { $0.id.hasSuffix("-cropped") }.allSatisfy { $0.path == ["Cropped"] } && all.filter { $0.id.hasSuffix("-cropped") }.count == 3)
+        check("the Save panel names a cropped kind in full", ExportTable.format("pdf-cropped")?.panelTitle == "Cropped PDF" && ExportTable.format("pdf")?.panelTitle == "Auto")
 
         // every writer pandoc has is offered, or is named here with the reason it is not
         let pandocOnPath = PdfmdTool.run("whence -p pandoc", command: "", interactive: true, timeout: 8).trimmingCharacters(in: .whitespacesAndNewlines)

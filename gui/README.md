@@ -63,9 +63,9 @@ this is **not tested yet** in this alpha.
 - **Tabs** (0.2.15): File > New Tab (⌘T) opens a new empty document as a tab of the window you are in; ⌘N is still a new window and nothing becomes a tab by itself
   (macOS's "Prefer tabs when opening documents" still applies). The Window menu has Show Tab Bar, Merge All Windows, Move Tab to New Window and the tab switchers.
 - **Export As** (0.2.14): File > Export As writes the document in another format through pdfmd: **Markdown (standalone)** (`--merge`: the parts, the
-  metadata, the preamble, the pictures in one file that builds anywhere), **PDF** (Auto, Cropped, or an engine: LaTeX > lualatex, xelatex, pdflatex, latexmk,
+  metadata, the preamble, the pictures in one file that builds anywhere), **PDF** (Auto, or an engine: LaTeX > lualatex, xelatex, pdflatex, latexmk,
   tectonic; Typst; HTML > WeasyPrint, wkhtmltopdf, Paged.js, Prince, Chrome, Chromium, Edge, Brave; Others > LibreOffice, Calibre, ConTeXt,
-  groff, the built-in inkmd, md2pdf), **Word**, **HTML**, and **Others** (documents, slides, e-books, web, plain text and Markdown, markup, XML and
+  groff, the built-in inkmd, md2pdf), **Word**, **HTML**, **Cropped** (PDF, SVG, PNG: every page cut to its ink), and **Others** (documents, slides, e-books, web, plain text and Markdown, markup, XML and
   data, pictures: every format pdfmd writes). An engine that `pdfmd --check-dependencies` reports missing is greyed. The document is saved first (pdfmd
   needs its folder), a Save panel asks where, the window's subtitle says how it went, a failure opens the build log. Your "pdfmd options for a build"
   are used too, except a `-t` or `-o` of yours. An export never lands in the preview pane and never opens a viewer. `colophon export FILE FORMAT

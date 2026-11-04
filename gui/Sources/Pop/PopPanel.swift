@@ -691,7 +691,7 @@ final class PopController: NSObject, NSTextViewDelegate {
     }
 
     @objc func newWindow() { NSDocumentController.shared.newDocument(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc func openSettings() { PreferencesController.shared.show() }
+    @objc func openSettings() { PreferencesController.shared.show(tab: "Popup") }
 
     @objc func changeShortcut() {
         let catcher = PopShortcutCatcher(frame: NSRect(x: 0, y: 0, width: 260, height: 40))
