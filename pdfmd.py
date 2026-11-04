@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.29"
+PDFMD_VERSION = "3.32.30"
 import argparse
 import atexit
 import csv
@@ -2651,6 +2651,68 @@ def _keep_header_includes(cmd: list[str], sources: list[Path], metadata_files: l
         at = next((index for index in positions if Path(cmd[index + 1]).parent == packages
                    and Path(cmd[index + 1]).name.startswith("packages-")), len(cmd))
     cmd[at:at] = ["--include-in-header", str(path)]
+
+
+HEADER_FILTER_OPTIONS = ("--lua-filter", "--filter", "-L", "--citeproc", "-C")      # where the first filter runs
+
+
+def build_is_latex(cmd: list[str]) -> bool:
+    """Whether the Pandoc command writes LaTeX: a LaTeX PDF engine (ConTeXt has its own template), or `-t latex` / `beamer`."""
+    for index, item in enumerate(cmd):
+        if item.startswith("--pdf-engine="):
+            return item.split("=", 1)[1] in LATEX_ENGINES - {"context"}
+        target = (cmd[index + 1] if item in ("-t", "--to", "-w", "--write") and index + 1 < len(cmd)
+                  else item.split("=", 1)[1] if item.startswith(("--to=", "--write=")) else None)
+        if target is not None:
+            return target.split("+", 1)[0].split("-", 1)[0] in ("latex", "beamer")
+    return False
+
+
+def pandoc_filter_paths(cmd: list[str]) -> list[str]:
+    """The files of the Lua and JSON filters of a Pandoc command, in order."""
+    found = []
+    for index, item in enumerate(cmd):
+        if item in ("--lua-filter", "--filter", "-L") and index + 1 < len(cmd):
+            found.append(cmd[index + 1])
+        elif item.startswith(("--lua-filter=", "--filter=")):
+            found.append(item.split("=", 1)[1])
+    return found
+
+
+def headers_as_metadata(cmd: list[str]) -> list[str]:
+    """``cmd`` with its --include-in-header files given to Pandoc as `header-includes` instead (v3.32.30), or ``cmd`` itself.
+    Pandoc puts the files and `header-includes` in one template variable and the files win, so a LaTeX build with any
+    header file of pdfmd's lost what a Lua filter had put into `header-includes`: a kit's front-matter commands
+    (apa7's \\authorsnames made \\maketitle stop in a partial build, which passes the labels of the whole document as
+    header files; the same would have happened to a document with code). Only for a LaTeX build that has a filter of
+    somebody else's (a kit's, the document's own): header_snap.lua records `header-includes` before the filters,
+    header_merge.lua, last, makes it the files (-M pdfmd-header-file-N=PATH, in order) plus whatever the filters added."""
+    positions = header_argument_positions(cmd)
+    if not positions or not build_is_latex(cmd):
+        return cmd
+    try:
+        import pdfmd_lua
+        snap, merge = pdfmd_lua.path("header_snap"), pdfmd_lua.path("header_merge")
+    except ImportError:
+        return cmd
+    if snap is None or merge is None:
+        return cmd
+    own = pdfmd_lua.FILTERS.resolve()
+    foreign = any(Path(name).resolve().parent != own for name in pandoc_filter_paths(cmd))
+    if not foreign:
+        return cmd
+    files: list[str] = []
+    drop: set[int] = set()
+    for index, equals in positions:
+        files.append(cmd[index].split("=", 1)[1] if equals else cmd[index])
+        drop.update({index} if equals else {index - 1, index})
+    rest = [item for index, item in enumerate(cmd) if index not in drop]
+    first = next((index for index, item in enumerate(rest)
+                  if item in HEADER_FILTER_OPTIONS or item.startswith(("--lua-filter=", "--filter="))), len(rest))
+    result = [*rest[:first], "--lua-filter", str(snap), *rest[first:]]
+    for number, name in enumerate(files, 1):
+        result += ["-M", f"pdfmd-header-file-{number}={name}"]
+    return [*result, "--lua-filter", str(merge)]
 
 
 def read_text_best_effort(path: Path) -> str:
@@ -23960,6 +24022,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
+            cmd = headers_as_metadata(cmd)
             log_cmd(cmd, pandoc_cwd, verbose)
             result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
         if result.returncode != 0 or not tex_path.exists():
@@ -24507,6 +24570,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if office_arguments.filter_arguments:
                         result = run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                     else:
+                        cmd = headers_as_metadata(cmd)
                         log_cmd(cmd, pandoc_cwd, verbose)
                         result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                                 env=tex_search_env(md_path.parent, pandoc_cwd, md_path) if flat_markdown else None)
@@ -24781,6 +24845,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += last_filters
 
                     def run_pandoc(command: list[str], target: Path):
+                        command = headers_as_metadata(command)
                         log_cmd(command, pandoc_cwd, verbose)
                         return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=tex_search_env(md_path.parent, pandoc_cwd, md_path))

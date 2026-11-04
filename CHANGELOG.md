@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.30 — 2026-11-04
+
+Pre-edit state: commit `3b179af`. **A kit's front matter survives every header file (`headers_as_metadata`).** The author, after `pdfmd '#20'` on an APA 7 paper stopped with "There's no line here to end": "let's make it more robust ... the same issue may repeat with other kits".
+
+- **The bug.** Pandoc puts `--include-in-header` files and `header-includes` in one template variable and the files win. A kit's Lua filter writes its front-matter commands (apa7's `\authorsnames`, `\authorsaffiliations`, `\shorttitle` ...) into `header-includes`, so any header file of pdfmd's dropped them: `\maketitle` stopped. A full build passed no header file and worked; a partial build (`report#methods`) passes the labels of the whole document as two, so it failed, and so would a full build of a document with a code block, a raw `\includegraphics` or a callout. All nine kits write their preamble this way.
+- **The fix.** For a LaTeX build (a LaTeX PDF engine, or `-t latex` / `beamer`) that has a header file and a Lua filter that is not pdfmd's own, `headers_as_metadata` takes the header files off the command and hands them over as `-M pdfmd-header-file-N=PATH`. Two new filters do the rest: `header_snap.lua` (first) records what `header-includes` holds, `header_merge.lua` (last) makes `header-includes` the files in their order plus whatever the other filters added, in front of the packages header. Nothing else about the header files changes (`keep_header_includes`, `hoist_code_header`, the kit header all still work on the files). A build without a foreign filter, or a non-LaTeX build, runs exactly as before.
+- Run at the three places where the finished command runs: the PDF engine closure, `-t latex` and the native-bibliography `.tex`.
+
 ## v3.32.29q — 2026-11-04
 
 Pre-edit state: commit `3c73161`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.16: the Cropped submenu, and the popup's Settings item.** The author, on the menu of 0.2.15: "better to move all cropped kinds here, and move cropped kind below html above others, and make it expandable too, like latex and html, with options, pdf, svg, and png"; on the menu-bar icon: "[the popup] settings are buggy. it requires running editor window (without it the settings are silently hidden until i open colophon), and even when it opens settings, it opens whatever settings tab is there, not the eqpop settings specifically".
