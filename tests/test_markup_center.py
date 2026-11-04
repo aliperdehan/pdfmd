@@ -80,6 +80,16 @@ class Filter(unittest.TestCase):
         self.assertIn("<p>tex centred</p>", out)
         self.assertNotIn("<center>", out)
 
+    def test_html_keeps_the_other_declarations_of_a_styled_centre_div(self):
+        # v3.32.29: calc.lua's div (padding and text-align) was rebuilt as a bare text-align div, the padding lost
+        styled = '<div style="padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;">\n\nBox\n\n</div>\n'
+        for writer in ("html5", "html4"):
+            out, _ = convert(writer, text=styled)
+            self.assertIn("padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;", out, writer)
+        latex, _ = convert("latex", text=styled)                                 # the other writers still get their own centring
+        self.assertIn("\\begin{center}", latex)
+        self.assertNotIn("padding", latex)
+
     def test_other_writers_keep_the_text(self):
         out, err = convert("markdown")
         for word in ("Centred para", "A div", "Colon div", "tex centred", "Styled"):

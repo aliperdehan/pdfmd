@@ -238,6 +238,14 @@ local function is_center_div(div)
   return (div.attributes["style"] or ""):lower():match("text%-align%s*:%s*center") ~= nil
 end
 
+-- A div that already carries `text-align: center` in its style, for an HTML writer: make_center would write the same style back
+-- and lose the other declarations (calc.lua's `padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;` is such a div).
+local function html_centred(div)
+  local format = FORMAT or ""
+  if not (format:match("^html") or format:match("^epub")) then return false end
+  return (div.attributes["style"] or ""):lower():match("text%-align%s*:%s*center") ~= nil
+end
+
 local function raw_is(block, format_pattern, text_pattern)
   if block.t ~= "RawBlock" then return false end
   local format = block.format:lower()
@@ -778,6 +786,7 @@ function Pandoc(doc)
     end,
     Div = function(div)
       if on("center") and is_center_div(div) then
+        if html_centred(div) then return nil end        -- already what make_center writes; rebuilding it dropped the rest of the style
         return make_center(div.content)
       end
       if on("keep") and is_keep_div(div) then

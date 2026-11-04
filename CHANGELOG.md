@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29 — 2026-11-04
+
+Pre-edit state: commit `eaf8a14` (3.32.28). **A calc div with `calc-space` and `calc-align: center` kept only the centring in HTML**, so `test_a_calc_div_has_room_around_it_and_can_be_centred` failed (found by the full run after the move, and it fails the same way on `92ab5e4`, so the move did not cause it).
+
+- Cause: `calc.lua` writes `<div style="padding-top: 0.75em; padding-bottom: 0.75em; text-align: center;">`; `markup.lua` (the `center` kind, which runs after it) takes any div whose style contains `text-align: center` for a centre div and rebuilt it as `<div style="text-align: center">`, the padding lost.
+- `markup.lua`: for an HTML or EPUB writer a div that already has the centring in its style is left as it is (what `make_center` would write is the same centring). `align="center"`, `.center` and the other writers are unchanged; LaTeX and Typst still get their environment.
+- Test: `test_markup_center` (the padding stays in `html5` and `html4`; LaTeX still gets `center` and no padding).
+
+Not pushed.
+
 ## v3.32.28 — 2026-11-03
 
 Pre-edit state: commit `92ab5e4`. Entry 3ey. **The thirty `pdfmd_*` package folders moved from the repository root into `lib/`** (the author: "the root has become messy with pdfmd_ ... group them all under lib/ and rewire things"). Package names are unchanged, so no `import pdfmd_x` line changed; older entries of this file keep naming the old paths (`pdfmd_lua/…` is now `lib/pdfmd_lua/…`).
