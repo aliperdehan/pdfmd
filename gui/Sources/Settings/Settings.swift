@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.8"
+let appVersion = "0.2.9"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -56,6 +56,11 @@ enum Settings {
         Item(key: "scrollDelayMs", value: 20, label: "Pause after scrolling (ms)", help: "pause after scrolling out of the coloured range before it is recoloured", tab: "Performance"),
         Item(key: "highlightMaxMB", value: 0, label: "Colours off above (MB)", help: "above this size the colours are off (0 = never)", tab: "Performance"),
         Item(key: "quitAfterLastWindow", value: 0, label: "Quit when the last window closes", help: "1 = closing the last window quits the app (the Windows way); 0 = the app stays open and the Dock icon opens a new window (the Mac way). A launch from the command line (pdfmd --editor) always quits, because the command waits for it", tab: "General", kind: .flag),
+        Item(key: "htmlOpenAs", value: 0, label: "Open .html files as", help: "0 = the web page (View > Show Source opens the code), 1 = text, in an editor window", tab: "HTML", kind: .choice([0, 1])),
+        Item(key: "htmlAutoReload", value: 1, label: "Reload when the file changes", help: "1 = an HTML window shows a rewritten file by itself (same place on the page); 0 = it only says \"file changed\" and waits for View > Reload (command R)", tab: "HTML", kind: .flag),
+        Item(key: "htmlReloadDebounceMs", value: 300, label: "Reload pause (ms)", help: "when the HTML file changes on disk it is shown again after it has stayed unchanged for this long", tab: "HTML"),
+        Item(key: "htmlCoverMs", value: 150, label: "Keep the old page for (ms)", help: "after a reload the old picture of the page stays on the screen this long after the new one has loaded (0 = at once: the page may blink)", tab: "HTML"),
+        Item(key: "htmlZoomStepPercent", value: 10, label: "Zoom step (%)", help: "each Zoom In or Zoom Out changes the size of the page by this many percent", tab: "HTML"),
         Item(key: "buildTimeout", value: 600, label: "Stop a build after (s)", help: "a build (command R in an editor window) that has not ended after this many seconds is stopped, with everything it started; 0 = never", tab: "Build"),
         Item(key: "buildOpensPDF", value: 1, label: "Open the PDF after a build", help: "1 = a build whose PDF is not open yet opens it in a window (the editor keeps the keyboard); a PDF that is open is always shown again", tab: "Build", kind: .flag),
         Item(key: "buildWhenWatched", value: 0, label: "Build although pdfmd is watching", help: "0 = when a pdfmd --watch (pdfmd -w, or the one that pdfmd --edit --editor starts) is already rebuilding this file on every save, command R only saves; 1 = build as well", tab: "Build", kind: .flag),

@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(view, "Thumbnails", "showPages:", "2", [.command, .option])
         add(view, "Table of Contents", "showContents:", "3", [.command, .option])
         add(view, "Reset Sidebar Width", "resetSidebarWidth:", "")
+        add(view, "Show Source", "showSource:", "u", [.command, .option])
         add(view, "Reload", "reloadFile:", "r")   // "Build PDF" in an editor window (the window's validation renames it)
         add(view, "Show Build Log", "showBuildLog:", "r", [.command, .option])
         add(view, "Reload Automatically", "toggleAutoReload:")

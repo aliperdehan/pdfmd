@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.29j — 2026-11-04
+
+Pre-edit state: commit `0f4262e`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.9 reads HTML.** The author: "let's empower colophon to both read and render html so the first studio mode could have a fast option to preview in html" (this is the reading half; the rendering is the next entry).
+
+- A new document type, "HTML document" (`.html`, `.htm`, `.xhtml`; they were part of "Markdown and text" before): the page in a WebKit window (`Sources/HTML/HTMLViewer.swift`), `HTMLViewerDocument` + `HTMLWindowController` + `HTMLPageView`. `htmlOpenAs` = 1 opens such a file as text again (my default is the page: the author has not been asked; View > Show Source, ⌥⌘U, opens the code of a page).
+- Watched like the PDF viewer, with the same `FileStamp` guard (an access-time notice reloads nothing): `htmlAutoReload` (View > Reload Automatically, per kind of window), `htmlReloadDebounceMs` 300. A reload keeps the place on the page and keeps the old picture on the screen (`htmlCoverMs` 150) until the new page is drawn: no blink. View > Reload (⌘R) in manual mode; "file changed, ⌘R to reload" in the subtitle.
+- Zoom (`htmlZoomStepPercent` 10), search in the toolbar (⌘F, ⌘G, ⇧⌘G), links: another file opens in Colophon, a web link in the browser, an `#anchor` stays on the page.
+- New HTML tab in Settings (`htmlOpenAs`, `htmlAutoReload`, `htmlReloadDebounceMs`, `htmlCoverMs`, `htmlZoomStepPercent`). `--smoke-html`: 24 checks.
+
 ## v3.32.29i — 2026-11-04
 
 Pre-edit state: commit `c4815f2`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.8: ⌘R builds the PDF from an editor window.** The author: "let's go ahead with cmd+R to build" (after "so we are doubling cmd+R's duty, like it compiles in edit mode and reloads in view mode? it is semantically correct both ways tho").

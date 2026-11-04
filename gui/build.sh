@@ -41,8 +41,20 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   </array>
   <key>CFBundleTypeExtensions</key><array>
    <string>md</string><string>markdown</string><string>qmd</string><string>txt</string><string>tex</string><string>typ</string>
-   <string>sty</string><string>cls</string><string>csl</string><string>yaml</string><string>yml</string><string>html</string>
+   <string>sty</string><string>cls</string><string>csl</string><string>yaml</string><string>yml</string>
    <string>bak</string><string>hst</string>
+  </array>
+ </dict>
+ <dict>
+  <key>CFBundleTypeName</key><string>HTML document</string>
+  <key>CFBundleTypeRole</key><string>Viewer</string>
+  <key>LSHandlerRank</key><string>Alternate</string>
+  <key>NSDocumentClass</key><string>HTMLViewerDocument</string>
+  <key>LSItemContentTypes</key><array>
+   <string>public.html</string>
+  </array>
+  <key>CFBundleTypeExtensions</key><array>
+   <string>html</string><string>htm</string><string>xhtml</string>
   </array>
  </dict>
  <dict>
