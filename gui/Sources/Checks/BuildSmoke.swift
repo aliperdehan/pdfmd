@@ -28,6 +28,17 @@ enum BuildSmoke {
         try! fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
+        // a file of parts/ is built as part of ../report.md: pdfmd's line names that source, and the PDF is beside it, not beside the part
+        let partsDir = dir.appendingPathComponent("report-folder/parts")
+        try! fm.createDirectory(at: partsDir, withIntermediateDirectories: true)
+        let partial = dir.appendingPathComponent("report-folder/report.results.pdf")
+        try! Data("%PDF".utf8).write(to: partial)
+        let partsFile = partsDir.appendingPathComponent("45-results.md")
+        let partialLine = "WARN something\nOK    ../report.md > report.results.pdf  in 45.4 s  (lualatex)\n"
+        check("a partial build's PDF is found beside the report, not beside the part", PdfmdBuild.madeFile(output: partialLine, source: partsFile)?.standardizedFileURL.path == partial.standardizedFileURL.path,
+              PdfmdBuild.madeFile(output: partialLine, source: partsFile)?.lastPathComponent ?? "nil")
+        check("a plain build's PDF is still found beside the source", PdfmdBuild.madeFile(output: "OK    45-results.md > 45-results.pdf  in 1.0 s  (typst)\n", source: partsFile) == nil)
+
         // the stand-in for pdfmd and the PDF it "makes"
         let fixture = dir.appendingPathComponent("fixture.pdf")
         let pdf = PDFDocument()

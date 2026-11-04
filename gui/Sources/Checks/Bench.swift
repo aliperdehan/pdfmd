@@ -456,6 +456,34 @@ enum Smoke {
             if !ok { failures += 1 }
             doc.close()
         }
+        // a file that another program rewrites while it is open: an unedited window follows it, an edited one asks (CotEditor does both)
+        let outside = base.appendingPathComponent("outside.md")
+        try! "one\n".write(to: outside, atomically: true, encoding: .utf8)
+        if let doc = open(outside), let controller = doc.controller {
+            func rewrite(_ text: String) {
+                let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/sh"); p.arguments = ["-c", "sleep 1.1; printf '%s' \"$2\" > \"$1\"", "sh", outside.path, text]
+                try? p.run(); p.waitUntilExit()
+            }
+            func wait(_ want: String) -> Bool { for _ in 0..<60 { spin(0.1); if controller.currentString() == want { return true } }; return false }
+            func report(_ name: String, _ ok: Bool, _ got: String) { print("\(ok ? "ok  " : "FAIL") \(name) \(ok ? "" : got)"); if !ok { failures += 1 } }
+            rewrite("two\n")
+            report("an unedited window follows a file another program rewrote", wait("two\n"), controller.currentString().debugDescription)
+            controller.parts.textView.insertText("MINE ", replacementRange: NSRange(location: 0, length: 0))
+            EditorDocument.diskChoice = false
+            rewrite("three\n")
+            spin(1.0)
+            report("an edited window keeps its text when told to", controller.currentString() == "MINE two\n" && doc.isDocumentEdited, controller.currentString().debugDescription)
+            EditorDocument.diskChoice = true
+            rewrite("four\n")
+            report("... and loads the file on disk when told to, unedited again", wait("four\n") && !doc.isDocumentEdited, controller.currentString().debugDescription)
+            EditorDocument.diskChoice = nil
+            controller.parts.textView.insertText("X", replacementRange: NSRange(location: 0, length: 0))
+            doc.save(to: outside, ofType: "Markdown and text", for: .saveOperation) { _ in }
+            spin(1.0)
+            report("our own save is not taken for somebody else's change", controller.currentString() == "Xfour\n" && !doc.isDocumentEdited, controller.currentString().debugDescription)
+            doc.updateChangeCount(.changeCleared)
+            doc.close()
+        }
         print(failures == 0 ? "SAVE OK" : "SAVE FAILED (\(failures))")
         exit(failures == 0 ? 0 : 1)
     }

@@ -116,6 +116,51 @@ final class EditorDocument: NSDocument {
     var controller: EditorWindowController?
 
     override class var autosavesInPlace: Bool { true }
+
+    // MARK: a file that another program changes
+
+    /// For the self-test: answers the question of an edited window without a sheet (true = load the file on disk, false = keep mine).
+    static var diskChoice: Bool?
+    private var watcher: DiskWatcher?
+    private var asking = false
+
+    override var fileURL: URL? {
+        didSet {
+            guard fileURL != oldValue else { return }
+            watcher?.stop(); watcher = nil
+            if let url = fileURL, Settings.flag("reloadOnDiskChange") { watcher = DiskWatcher(url: url) { [weak self] in self?.diskChanged() } }
+        }
+    }
+
+    /// The file was written by someone. Our own save is no change (the same bytes); an unedited window loads the new text with its caret where it
+    /// was; an edited one asks which version to keep.
+    func diskChanged() {
+        guard Settings.flag("reloadOnDiskChange"), let url = fileURL, !asking, let disk = try? Data(contentsOf: url) else { return }
+        let mine = (try? data(ofType: "Markdown and text")) ?? Data()
+        if disk == mine { fileModificationDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? fileModificationDate; return }
+        if !isDocumentEdited { loadFromDisk(url); return }
+        let choose = { [weak self] (loadIt: Bool) in
+            guard let self else { return }
+            self.asking = false
+            if loadIt { self.updateChangeCount(.changeCleared); self.loadFromDisk(url) }
+            else { self.fileModificationDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? self.fileModificationDate }   // kept: no second question at the save
+        }
+        asking = true
+        if let answer = EditorDocument.diskChoice { choose(answer); return }
+        let alert = NSAlert()
+        alert.messageText = "“\(url.lastPathComponent)” was changed by another program."
+        alert.informativeText = "This window has changes that are not saved. Keep yours (the file on disk is replaced when you save), or load the file on disk (your changes are lost)."
+        alert.addButton(withTitle: "Keep Mine"); alert.addButton(withTitle: "Load the File on Disk")
+        if let window = controller?.window { alert.beginSheetModal(for: window) { choose($0 == .alertSecondButtonReturn) } }
+        else { choose(alert.runModal() == .alertSecondButtonReturn) }
+    }
+
+    private func loadFromDisk(_ url: URL) {
+        let caret = controller?.parts.textView.selectedRange().location ?? 0
+        try? revert(toContentsOf: url, ofType: fileType ?? "Markdown and text")
+        if let tv = controller?.parts.textView { tv.setSelectedRange(NSRange(location: min(caret, (tv.string as NSString).length), length: 0)) }
+    }
+
     override class var readableTypes: [String] { ["Markdown and text"] }
     override class var writableTypes: [String] { ["Markdown and text"] }
     override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool { false }

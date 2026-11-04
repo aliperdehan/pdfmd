@@ -154,33 +154,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.orderedWindows.first { $0.windowController?.document != nil && !($0.windowController is WebStudioController) && ($0.isVisible || $0.tabbingIdentifier == tabGroup) }
     }
 
-    /// The mode switch (its key is the setting `keySwitchMode`). From a document window to the studio of its project: the folder of the file
-    /// (the one above, for a file of `parts/`), on that file; an editor with unsaved text is saved first, as command R does. Without a file, the
-    /// folder the studio was last on, else the folder the author picks. From the studio back to plain text: the file its page is on, opened in an
-    /// editor window; else the last document window, else a new document.
+    /// The mode switch (its key is the setting `keySwitchMode`): the window is REPLACED, not just another one raised.
+    /// Plain text -> studio: the editor's file is saved and opened in the studio of its project (the file's folder, the one above for a file
+    /// of `parts/`), and the editor window closes. An unsaved new file has no folder: its text becomes a new unsaved tab of the studio's project
+    /// (the folder the studio was last on, else one the author picks), and the editor closes once the page has taken the text.
+    /// Studio -> plain text: the page saves the file it is on, which opens in an editor window, and the studio window closes.
+    /// A PDF or HTML window is not converted: it only gets the studio of its folder beside it.
     @objc func switchMode(_ sender: Any?) {
-        if let studio = NSApp.keyWindow?.windowController as? WebStudioController {
-            if let url = studio.currentFileURL, FileManager.default.fileExists(atPath: url.path) {
-                NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in if let error { NSApp.presentError(error) } }
-            } else if let w = AppDelegate.lastDocumentWindow() { w.makeKeyAndOrderFront(nil) } else { NSDocumentController.shared.newDocument(nil) }
+        if let studio = NSApp.keyWindow?.windowController as? WebStudioController { backToPlain(from: studio); return }
+        guard let doc = NSApp.keyWindow?.windowController?.document as? NSDocument else {
+            if let folder = rememberedStudioFolder() ?? pickStudioFolder() { WebStudioController.open(folder: folder) }
             return
         }
-        if let doc = NSApp.keyWindow?.windowController?.document as? NSDocument, let url = doc.fileURL {
-            if doc is EditorDocument, doc.isDocumentEdited {
-                doc.save(withDelegate: self, didSave: #selector(savedForStudio(_:didSave:contextInfo:)), contextInfo: nil)
+        guard let editor = doc as? EditorDocument else {
+            if let url = doc.fileURL { openStudio(near: url, markdown: false) }
+            return
+        }
+        if let url = editor.fileURL {
+            if editor.isDocumentEdited {
+                editor.save(withDelegate: self, didSave: #selector(savedForStudio(_:didSave:contextInfo:)), contextInfo: nil)
             } else {
-                openStudio(near: url, markdown: doc is EditorDocument)
+                openStudio(near: url, markdown: true)
+                editor.close()
             }
-        } else if let last = Settings.store.string(forKey: "studioLastFolder"), FileManager.default.fileExists(atPath: last) {
-            WebStudioController.open(folder: URL(fileURLWithPath: last))
         } else {
-            openStudioFolder(nil)
+            moveUntitledToStudio(editor)
         }
     }
 
     @objc func savedForStudio(_ doc: NSDocument, didSave: Bool, contextInfo: UnsafeMutableRawPointer?) {
         guard didSave, let url = doc.fileURL else { return }
         openStudio(near: url, markdown: true)
+        doc.close()
+    }
+
+    /// The text of an unsaved new file goes to the studio as a new tab; the editor window closes when the page has it.
+    private func moveUntitledToStudio(_ doc: EditorDocument) {
+        let text = doc.controller?.currentString() ?? doc.text
+        guard let folder = rememberedStudioFolder() ?? pickStudioFolder() else { return }
+        let studio = WebStudioController.open(folder: folder)
+        if text.isEmpty { doc.updateChangeCount(.changeCleared); doc.close(); return }
+        studio.adopt(text: text) { ok in
+            if ok { doc.updateChangeCount(.changeCleared); doc.close() }
+            else { let a = NSAlert(); a.messageText = "The studio did not take the text over."; a.informativeText = "It stays in the editor window."; a.runModal() }
+        }
+    }
+
+    /// Back from the studio: the page saves its file, the file opens in an editor window, the studio closes (it asks first when another
+    /// tab of it has changes that are not saved).
+    private func backToPlain(from studio: WebStudioController) {
+        guard let url = studio.currentFileURL, FileManager.default.fileExists(atPath: url.path) else {
+            if let w = AppDelegate.lastDocumentWindow() { w.makeKeyAndOrderFront(nil) } else { NSDocumentController.shared.newDocument(nil) }
+            studio.window?.performClose(nil)
+            return
+        }
+        studio.saveCurrent { saved in
+            guard saved else { let a = NSAlert(); a.messageText = "The file could not be saved."; a.informativeText = "The studio stays open."; a.runModal(); return }
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
+                if let error { NSApp.presentError(error); return }
+                studio.window?.performClose(nil)
+            }
+        }
+    }
+
+    private func rememberedStudioFolder() -> URL? {
+        guard let last = Settings.store.string(forKey: "studioLastFolder"), FileManager.default.fileExists(atPath: last) else { return nil }
+        return URL(fileURLWithPath: last)
     }
 
     /// The studio of the project that `file` belongs to, on that file when it is one the page can edit.
@@ -190,14 +229,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         WebStudioController.open(folder: folder, file: markdown ? relative : nil)
     }
 
-    /// File > Open Folder in Studio…
-    @objc func openStudioFolder(_ sender: Any?) {
+    /// The folder panel of File > Open Folder in Studio…; nil when it is cancelled.
+    func pickStudioFolder() -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         panel.prompt = "Open"; panel.message = "The folder of the project (the one with report.md in it)"
         if let last = Settings.store.string(forKey: "studioLastFolder") { panel.directoryURL = URL(fileURLWithPath: last) }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        WebStudioController.open(folder: url)
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    @objc func openStudioFolder(_ sender: Any?) {
+        if let url = pickStudioFolder() { WebStudioController.open(folder: url) }
     }
 
     func applicationWillTerminate(_ note: Notification) {

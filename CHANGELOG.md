@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.40a — 2026-11-05
+
+Pre-edit state: commit `f9ab563`. Entry 3do. **Colophon (Mac app, `gui/` only): command-R opens the PDF of a part, the mode switch replaces the window, an editor window follows a file that another program rewrites.** The author: command-R on a file of `parts/` "builds but I expected it to open the pdf"; the switch should "close the plain app, while simultaneously opening this same contents in studio mode", and back; "CotEditor just instantly updates". No shipped code changes (`PDFMD_VERSION` stays 3.32.40).
+
+- **Command-R and a part.** A file of `parts/` is built as part of `../report.md`, and pdfmd's report line says `OK    ../report.md > report.results.pdf`: the PDF is beside the report, and the app looked for it beside the part, found nothing and showed nothing ("Built in 81.3 s" and no window). The name is now looked for beside the source the line names, then beside the file. `--smoke-build` has 2 checks for it.
+- **Control-command-S replaces the window.** From an editor with a saved file: the file is saved, opens in the studio of its project, and the editor window closes. From an unsaved new file: its text becomes a new unsaved tab of the studio's project (the folder the studio was last on, else the one the author picks) and the editor closes once the page has taken it (it stays if the page did not). From the studio: the page saves the file it is on, the file opens in an editor window, and the studio window closes (it asks first when another tab has unsaved changes). A PDF or HTML window is not closed: it gets the studio of its folder beside it. `--smoke-web` has 4 checks for the hand-over.
+- **Following the disk.** `Editor/DiskWatcher.swift` watches the open file (a write, a rename over it, a delete): an unedited window shows the new text with the caret where it was; an edited one asks, in a sheet, which version to keep (keeping yours also stops AppKit's own question at the save); the app's own save is no change (the same bytes). Settings > Editor: `reloadOnDiskChange` (on), `diskChangeDelayMs` (150). Tried first: AppKit's own file presenting did not reload an unedited window at all. The studio window asks its page to look at the disk (`checkDisk`) each time it becomes the key window. `--smoke-save` has 4 checks (an outside writer, both answers of the sheet, the app's own save), `--smoke-web` 1.
+
 ## v3.32.40 — 2026-11-05
 
 Pre-edit state: commit `7775f35`. Entry 3do (the web UI). **The page shows a file again that another program changed.** The author: "how the whole thing currently handles files that were edited on disk? CotEditor just instantly updates as if it doesn't cache the contents".

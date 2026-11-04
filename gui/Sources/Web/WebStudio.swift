@@ -147,6 +147,31 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
         }
     }
 
+    /// Text waiting for a page that has not started yet (an unsaved new file of the editor).
+    private var pendingAdopt: (text: String, done: (Bool) -> Void)?
+
+    /// Hands the text of an unsaved new file to the page as a new unsaved tab; `done(true)` once the page has it.
+    func adopt(text: String, done: @escaping (Bool) -> Void) {
+        if (state["cur"] as? String)?.isEmpty == false { sendAdopt(text, done) } else { pendingAdopt = (text, done) }
+    }
+
+    private func sendAdopt(_ text: String, _ done: @escaping (Bool) -> Void) {
+        web.callAsyncJavaScript("return await window.appAdopt(text)", arguments: ["text": text], in: nil, in: .page) { r in
+            if case .success(let v) = r { done((v as? Bool) == true) } else { done(false) }
+        }
+    }
+
+    /// The page saves the file it is on; `done(true)` when nothing of it is unsaved afterwards. What the page still holds unsaved (other tabs)
+    /// is put in `state` at once, so that closing the window asks about the right thing.
+    func saveCurrent(_ done: @escaping (Bool) -> Void) {
+        web.callAsyncJavaScript("return await window.appSave()", arguments: [:], in: nil, in: .page) { [weak self] r in
+            if case .success(let v) = r, let o = v as? [String: Any] {
+                self?.state["dirty"] = (o["dirty"] as? Bool) ?? true
+                done((o["saved"] as? Bool) == true)
+            } else { done(false) }
+        }
+    }
+
     /// Opens a file of the project in a tab of the page that is running.
     func openInPage(_ path: String) {
         web.evaluateJavaScript("window.appOpen && window.appOpen(\(JSONEncoder.quoted(path)))", completionHandler: nil)
@@ -162,10 +187,14 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
             let project = (m["project"] as? String) ?? "", cur = (m["cur"] as? String) ?? ""
             window?.title = cur.isEmpty ? (project.isEmpty ? "Colophon Web Studio" : project) : "\(cur) — \(project)"
             window?.isDocumentEdited = (m["dirty"] as? Bool) ?? false
+            if !cur.isEmpty, let p = pendingAdopt { pendingAdopt = nil; sendAdopt(p.text, p.done) }
         }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded = true }
+
+    /// Coming back to the window (or to the app): the page looks at the files on disk, which another program may have changed meanwhile.
+    func windowDidBecomeKey(_ notification: Notification) { if folder != nil { command("checkDisk") } }
 
     /// Links to the web open in the browser; the page's own files stay in the window.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

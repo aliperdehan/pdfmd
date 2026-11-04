@@ -14,21 +14,27 @@ enum PdfmdBuild {
         var ok: Bool { status == 0 && !timedOut && couldNotStart == nil }
     }
 
-    /// The file named by pdfmd's own report line, `OK    a.md > a.pdf  in 18.7 s  (lualatex)` (relative to the folder it ran in);
-    /// without one, the same name with `.pdf` if that exists.
+    /// The file named by pdfmd's own report line, `OK    a.md > a.pdf  in 18.7 s  (lualatex)`. The name is beside the source the line names,
+    /// which is not always the file that was built: a file of `parts/` is built as part of `../report.md`, and the line says
+    /// `OK    ../report.md > report.results.pdf`, so the PDF is in the folder above. Looked for there first, then in the folder it ran in;
+    /// without a line, the same name with `.pdf` if that exists.
     static func madeFile(output: String, source: URL) -> URL? {
         let folder = source.deletingLastPathComponent()
-        var named: String?
+        var named: (source: String, output: String)?
         for line in output.split(whereSeparator: \.isNewline) {
             guard line.hasPrefix("OK"), let range = line.range(of: " > ") else { continue }
             var rest = line[range.upperBound...]
             if let end = rest.range(of: #"\s+in \d"#, options: .regularExpression) { rest = rest[..<end.lowerBound] }
             let name = rest.trimmingCharacters(in: .whitespaces)
-            if !name.isEmpty { named = name }
+            if !name.isEmpty { named = (line[line.index(line.startIndex, offsetBy: 2)..<range.lowerBound].trimmingCharacters(in: .whitespaces), name) }
         }
         if let named {
-            let url = named.hasPrefix("/") ? URL(fileURLWithPath: named) : URL(fileURLWithPath: named, relativeTo: folder).standardizedFileURL
-            if FileManager.default.fileExists(atPath: url.path) { return url }
+            func resolve(_ path: String, in base: URL) -> URL { path.hasPrefix("/") ? URL(fileURLWithPath: path) : URL(fileURLWithPath: path, relativeTo: base).standardizedFileURL }
+            let beside = named.source.isEmpty ? folder : resolve(named.source, in: folder).deletingLastPathComponent()
+            for base in [beside, folder] {
+                let url = resolve(named.output, in: base)
+                if FileManager.default.fileExists(atPath: url.path) { return url }
+            }
         }
         let same = source.deletingPathExtension().appendingPathExtension("pdf")
         return FileManager.default.fileExists(atPath: same.path) ? same : nil

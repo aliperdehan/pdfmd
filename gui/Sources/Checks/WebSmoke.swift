@@ -148,6 +148,20 @@ enum WebSmoke {
         live.saveDocument(nil)
         let wrote = PDFSmoke.wait(8) { (try? String(contentsOf: dir.appendingPathComponent("parts/10-intro.md")))?.contains("Edited in the app.") == true }
         check("save writes the file on the disk, through the core", wrote)
+        // a file another program rewrites while the studio is open: the page shows it again when the window is entered
+        try? "# Intro part\n\nRewritten by another program.\n".write(to: dir.appendingPathComponent("parts/10-intro.md"), atomically: true, encoding: .utf8)
+        live.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        check("the page shows a file again that another program rewrote", PDFSmoke.wait(8) { (js(live, "window.__app.editor.getText()") as? String)?.contains("Rewritten by another program.") == true })
+        // the mode switch's hand-over: the text of an unsaved new file arrives as a new unsaved tab, and the page saves it when asked
+        var adopted: Bool?
+        live.adopt(text: "Text from the plain editor.\n") { adopted = $0 }
+        check("the text of an unsaved file is taken over as a new tab", PDFSmoke.wait(8) { adopted != nil } && adopted == true && (live.state["cur"] as? String)?.hasPrefix("untitled") == true, "\(live.state["cur"] ?? "")")
+        check("... and it shows as unsaved", PDFSmoke.wait(5) { (live.state["dirty"] as? Bool) == true })
+        var saved: Bool?
+        live.saveCurrent { saved = $0 }
+        _ = PDFSmoke.wait(8) { saved != nil }
+        let untitled = (live.state["cur"] as? String).map { dir.appendingPathComponent($0) }
+        check("the page saves it when the window leaves (the file is on the disk with the text)", saved == true && untitled.flatMap { try? String(contentsOf: $0) } == "Text from the plain editor.\n", untitled?.lastPathComponent ?? "nil")
         let same = WebStudioController.open(folder: dir)
         check("the same folder again brings the same window forward", same === live)
         let pid = live.server?.lastPid
