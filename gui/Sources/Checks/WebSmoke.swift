@@ -93,6 +93,18 @@ enum WebSmoke {
         c.saveDocument(nil)
         check("save: the unsaved dot goes (file and the other tab)", PDFSmoke.wait(5) { c.window?.isDocumentEdited == false } || (c.state["dirty"] as? Bool) == false, "\(c.state["dirty"] ?? "")")
 
+        // command-1 and command-2 of the menu reach the page's tabs (the window's own selectTabNumber, found before the app's)
+        let first = (c.state["cur"] as? String) ?? ""
+        let numbered = { (n: Int) -> NSMenuItem in let i = NSMenuItem(title: "Tab \(n)", action: nil, keyEquivalent: String(n)); i.tag = n; return i }
+        c.selectTabNumber(numbered(2))
+        check("command-2 in the studio picks the second tab", PDFSmoke.wait(5) { (c.state["cur"] as? String).map { $0 != first && $0.hasPrefix("untitled") } == true }, "\(c.state["cur"] ?? "")")
+        c.selectTabNumber(numbered(8))
+        spin(0.3)
+        check("command-8 with two tabs does nothing", (c.state["cur"] as? String)?.hasPrefix("untitled") == true, "\(c.state["cur"] ?? "")")
+        c.selectTabNumber(numbered(1))
+        check("command-1 in the studio picks the first tab", PDFSmoke.wait(5) { (c.state["cur"] as? String) == first }, "\(c.state["cur"] ?? "")")
+        check("the studio answers the tab-number action before the app does", c.responds(to: Selector(("selectTabNumber:"))))
+
         // render: the live view is made again, whatever the render mode
         _ = js(c, "window.api.lastRender = null; window.__app.editor.replaceSelection('\\n\\nA new paragraph.', false); 0")
         c.reloadFile(nil)

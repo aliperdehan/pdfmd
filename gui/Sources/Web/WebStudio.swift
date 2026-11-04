@@ -143,6 +143,8 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
     @objc func redo(_ sender: Any?) { command("redo") }
     @objc func selectNextTab(_ sender: Any?) { command("nextTab") }
     @objc func selectPreviousTab(_ sender: Any?) { command("previousTab") }
+    /// Command-1 to command-8 while the studio is the key window: the page's own tabs (the menu item's tag is the number).
+    @objc func selectTabNumber(_ sender: NSMenuItem) { command("tab\(sender.tag)") }
     @objc func showSource(_ sender: Any?) { command("layoutEditor") }
     @objc func togglePreview(_ sender: Any?) { command("layoutSplit") }
 

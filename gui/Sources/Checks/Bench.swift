@@ -227,6 +227,10 @@ enum Smoke {
         w3?.close()
         spin(0.3)
         check("closing a tab leaves the others", w1.tabbedWindows?.count == 2, "\(w1.tabbedWindows?.count ?? -1)")
+        check("command-1 picks the first tab", AppDelegate.selectTab(1, in: w1) && w1.tabGroup?.selectedWindow === w1)
+        check("command-2 picks the second tab", AppDelegate.selectTab(2, in: w1) && w1.tabGroup?.selectedWindow === w2)
+        check("a number past the last tab does nothing", !AppDelegate.selectTab(5, in: w1) && w1.tabGroup?.selectedWindow === w2)
+        check("the menu's tab items and the mode switch are answered by the app", AppDelegate.instancesRespond(to: Selector(("selectTabNumber:"))) && AppDelegate.instancesRespond(to: Selector(("switchMode:"))))
         for s in ["toggleTabBar:", "toggleTabOverview:", "mergeAllWindows:", "moveTabToNewWindow:", "selectNextTab:", "selectPreviousTab:"] {
             check("a window answers \(s)", NSWindow.instancesRespond(to: Selector(s)))
         }

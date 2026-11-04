@@ -1,6 +1,6 @@
 import Cocoa
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     var launchedWithFiles = false
 
     /// The windows of documents (editor, PDF, HTML) that can sit together as tabs of one window. Tabs are never forced: a new document opens
@@ -134,6 +134,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openWebStudio(_ sender: Any?) { WebStudioController.open() }
+
+    /// Command-1 to command-8: the nth tab of `window`'s tab group (the window's own order, left to right). False when there is no such tab.
+    @discardableResult
+    static func selectTab(_ n: Int, in window: NSWindow?) -> Bool {
+        guard let window, let tabs = window.tabbedWindows, n >= 1, n <= tabs.count else { return false }
+        window.tabGroup?.selectedWindow = tabs[n - 1]
+        tabs[n - 1].makeKeyAndOrderFront(nil)
+        return true
+    }
+
+    /// The menu's command-1 to command-8 for the document windows; the web studio window has its own `selectTabNumber` (its tabs are the page's).
+    @objc func selectTabNumber(_ sender: NSMenuItem) { AppDelegate.selectTab(sender.tag, in: NSApp.keyWindow) }
+
+    /// The window that was in use last and is not the web studio: a document's (editor, PDF or HTML), the frontmost first.
+    static func lastDocumentWindow() -> NSWindow? {
+        NSApp.orderedWindows.first { $0.windowController?.document != nil && !($0.windowController is WebStudioController) && ($0.isVisible || $0.tabbingIdentifier == tabGroup) }
+    }
+
+    /// Control-command-S: from a document window to the web studio, from the studio back to the last document window (a new empty document when
+    /// there is none). The studio runs on fixtures today, so neither direction carries the file or the folder across yet (that comes with the app
+    /// starting `pdfmd --serve` itself).
+    @objc func switchMode(_ sender: Any?) {
+        if NSApp.keyWindow?.windowController is WebStudioController {
+            if let w = AppDelegate.lastDocumentWindow() { w.makeKeyAndOrderFront(nil) } else { NSDocumentController.shared.newDocument(nil) }
+        } else if let studio = WebStudioController.all.last {
+            studio.showWindow(nil); studio.window?.makeKeyAndOrderFront(nil)
+        } else {
+            WebStudioController.open()
+        }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(switchMode(_:)) {
+            item.title = NSApp.keyWindow?.windowController is WebStudioController ? "Switch to Plain Text" : "Switch to Studio"
+        }
+        return true
+    }
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
 
     private func buildMenus() {
@@ -235,6 +272,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(window, "Move Tab to New Window", "moveTabToNewWindow:")
         add(window, "Show Next Tab", "selectNextTab:", "\t", .control)
         add(window, "Show Previous Tab", "selectPreviousTab:", "\t", [.control, .shift])
+        let tabs = NSMenuItem(title: "Select Tab", action: nil, keyEquivalent: "")
+        let tabsMenu = NSMenu(title: "Select Tab")
+        for n in 1...8 {
+            let item = NSMenuItem(title: "Tab \(n)", action: Selector(("selectTabNumber:")), keyEquivalent: String(n))
+            item.tag = n
+            tabsMenu.addItem(item)
+        }
+        tabs.submenu = tabsMenu
+        window.addItem(tabs)
+        window.addItem(.separator())
+        add(window, "Switch to Studio", "switchMode:", "s", [.control, .command])   // its title follows the key window (validateMenuItem)
         window.addItem(.separator())
         let pop = add(window, "Equation Popup", "toggleWindow", "e", [.command, .option])   // opens it, and closes it when it is the open one
         pop.target = PopController.shared

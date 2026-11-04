@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.37a — 2026-11-04
+
+Pre-edit state: commit `b476b1b`. Entry 3do. **Colophon (Mac app, `gui/` only): command-1 to command-8 select tabs, and control-command-S switches between plain text and the studio.** The author: the number keys switch no tabs in plain text mode (CotEditor's do), and "a hotkey to switch between the plain text mode and studio mode". No shipped code changes (`PDFMD_VERSION` stays 3.32.37).
+
+- Window > Select Tab > Tab 1 to Tab 8, command-1 to command-8: the nth tab of the key window's tab group (editor, PDF and HTML documents share one group; a lone window has none, so the key does nothing; a number past the last tab does nothing). In the web studio window the same keys go to the page's own tabs (the page's `tab1`..`tab8`, 3.32.37). Command-9 is not "last tab": it stays Zoom to Fit in the PDF viewer.
+- Window > Switch to Studio / Switch to Plain Text, control-command-S (the title follows the key window): from a document window it raises the studio window (one is opened when there is none), from the studio it raises the last document window (a new empty document when there is none). The studio still runs on fixtures, so the switch does not carry the file or the folder across; that comes with the app starting `pdfmd --serve`.
+- `--smoke-tabs` has 4 new checks (first, second, a number past the last tab, the menu's selectors), `--smoke-web` 4 (command-2, command-8, command-1 in the studio, the studio answers first): 29 ok. Not tried with real key presses: the author is asked to press them in both window kinds.
+
 ## v3.32.37 — 2026-11-04
 
 Pre-edit state: commit `0e074ab`. Entry 3do (the web UI). **The page answers command-1 to command-8.** The author found that the number keys switch no tabs in the Mac window (they do in CotEditor).
