@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.32.40 — 2026-11-05
+
+Pre-edit state: commit `7775f35`. Entry 3do (the web UI). **The page shows a file again that another program changed.** The author: "how the whole thing currently handles files that were edited on disk? CotEditor just instantly updates as if it doesn't cache the contents".
+
+- When the page's window gets the focus (and when the Mac window asks, `checkDisk`), every open tab is compared with the disk: a tab without changes shows the new text (the caret stays) and takes the new mtime; a tab with changes keeps its text and says so, and its next save is refused by the core (the mtime it holds is the old one), so nothing is overwritten unseen. `api.peekFile` reads a file without taking its mtime. The page's self-test has a check (54 checks).
+
 ## v3.32.39 — 2026-11-05
 
 Pre-edit state: commit `efef151`. Entry 3do (the web UI). **The live view shows CSV tables, the files panel mirrors the folders, and the page shows pictures and PDFs.** The author, looking at a real report in the studio: the `.csv` blocks were gone ("instead of being tables"), the files on the left were "messy", and "i can edit all my sources and preview my images sources builds csvs all without leaving colophon".
