@@ -82,6 +82,11 @@ window.AppEditorCM = function (parent, initial) {
       view.dispatch({changes: {from: s.from, to: s.to, insert: text}, selection: selectInserted ? {anchor: s.from, head: s.from + text.length} : {anchor: s.from + text.length}, scrollIntoView: true})
       view.focus()
     },
+    replaceRange(from, to, text, selFrom, selTo) {
+      const a = selFrom == null ? from + text.length : selFrom
+      view.dispatch({changes: {from, to, insert: text}, selection: {anchor: a, head: selTo == null ? a : selTo}, scrollIntoView: true})
+      view.focus()
+    },
     undo: () => undo(view), redo: () => redo(view),
     lineCount: () => view.state.doc.lines,
     focus: () => view.focus(),

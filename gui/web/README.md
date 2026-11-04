@@ -17,6 +17,11 @@ The placeholder `APP` stands for the product name (undecided).
   Only the demo's own text is rendered by pandoc (CommonMark with source positions); an edited text goes through a small stand-in renderer (`api.js`).
 - **Settings** drawn from the schema (126 rows from the Mac app's table, plus the live view's), validated by a schema-driven validator; rows whose `platforms`
   lack `browser` are hidden (the stored value is kept). **History**: two lanes (git edits with a coloured diff, builds). **Checks**: sample.
+- **Toggles, not repeats**: a template pressed again takes itself out (B, I, code, link, comment, math, footnote, citation, code block wrap and unwrap the selection; a table,
+  div, calc block or image inserted twice at one place is inserted once). The Ω picker inserts the LaTeX equivalent (`$\alpha$`, plain ASCII, the default) or the Unicode
+  character: a switch in the picker and the setting `symbolInsert`.
+- **A render costs what changed**: the live view keeps every block that an edit did not touch (pandoc's own HTML, found again by the source text of the block) and renders
+  only the edited ones; an unfinished `**bold`, `*italic`, `` `code ``, `$math` or `<!-- comment` is closed for display.
 - **The editor is switchable**: CodeMirror 6 (vendored, MIT, `vendor/cm/`, 537 KB, 188 KB gzipped) or a plain text box, behind one contract.
 
 ## What is real and what is a stand-in
@@ -30,7 +35,7 @@ the checks, the live render of an edited text. Not here: files on disk, git, cli
 - `vendor/cm/`: `entry.js` (the CodeMirror implementation of the editor contract), `package.json` (exact versions), `build.sh` (needs node, only to rebuild
   `codemirror.js`), `LICENSES.txt`.
 - `js/selftest.js`: open `index.html#selftest`; it drives the page like a person and writes `ok` / `FAIL` lines into `#selftest`. Headless:
-  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (38 checks).
+  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (46 checks).
 
 ## Findings that the core (S1) must answer
 - Pandoc's source positions exist only for the `commonmark` and `gfm` readers, **not** for pdfmd's own `markdown` reader, and then without citations: the live view

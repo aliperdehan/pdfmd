@@ -19,28 +19,55 @@
     s = s.replace(/`([^`]*)$/, (_, c) => "\u0000" + (codes.push('<code class="pending">' + c + "</code>") - 1) + "\u0000");   // an unfinished `code
     s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*\*(\S.*)$/, '<strong class="pending">$1</strong>');
     s = s.replace(/\*(\S(?:.*?\S)?)\*/g, "<em>$1</em>").replace(/\*(\S.*)$/, '<em class="pending">$1</em>');
-    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>').replace(/\$\$?([^$]+)\$\$?/g, '<span class="pending" title="math: the core renders it">$&</span>');
+    s = s.replace(/&lt;!--([\s\S]*?)--&gt;/g, '<span class="cmt" title="a comment: it is not in the output">&lt;!--$1--&gt;</span>').replace(/&lt;!--([\s\S]*)$/, '<span class="cmt pending" title="an unfinished comment, closed for display">&lt;!--$1--&gt;</span>');   // an unfinished <!-- would hide the rest of the page in a real render
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>').replace(/\$\$?([^$]+)\$\$?/g, '<span class="pending" title="math: the core renders it">$&</span>').replace(/\$([^$]+)$/, '<span class="pending" title="unfinished math, closed for display">$$$1$$</span>');
     return s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[+i]);
   }
-  function standIn(name, text) {
+  // `cache` maps the source text of a block to pandoc's HTML of it: a block that did not change is taken from there (its line numbers shifted),
+  // one that did is made by this stand-in. The core will do the same with a hash of the block: a render costs what changed.
+  function standIn(name, text, cache, stats) {
     const lines = text.split("\n");
     let i = 0, out = "";
     if (lines[0] === "---") { i = lines.indexOf("---", 1) + 1 || 0; }   // the YAML block is not shown
-    const pos = (a, b) => ` data-pos="${name}@${a + 1}:1-${b + 1}:1"`;
+    const posOf = (a, b) => ` data-pos="${name}@${a + 1}:1-${b + 1}:1"`;
+    const key = (a, b) => lines.slice(a, b).join("\n").replace(/\s+$/, "");
+    function block(a, b, make) {                                          // lines a..b-1 (0-based) are one block
+      const hit = cache && cache.get(key(a, b));
+      if (hit) { if (stats) stats.kept++; const d = a + 1 - hit.a; return hit.html.replace(/@(\d+):(\d+)-(\d+):(\d+)/g, (_, p, q, r, t) => `@${+p + d}:${q}-${+r + d}:${t}`); }
+      if (stats) stats.rendered++;
+      return make(posOf(a, b));
+    }
     while (i < lines.length) {
       const L = lines[i];
       if (!L.trim()) { i++; continue; }
-      let m, start = i;
-      if ((m = /^(#{1,6})\s+(.*)/.exec(L))) { out += `<h${m[1].length}${pos(i, i + 1)}>${inline(m[2])}</h${m[1].length}>\n`; i++; continue; }
-      if (/^```/.test(L)) { let j = i + 1; while (j < lines.length && !/^```/.test(lines[j])) j++; out += `<pre${pos(i, j + 1)}><code>${esc(lines.slice(i + 1, j).join("\n"))}</code></pre>\n`; i = j + 1; continue; }
-      if (/^\s*([-*]|\d+\.)\s/.test(L)) { const ord = /^\s*\d+\./.test(L), tag = ord ? "ol" : "ul"; let items = ""; while (i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i])) { items += `<li${pos(i, i + 1)}>${inline(lines[i].replace(/^\s*([-*]|\d+\.)\s+(\[[ x]\]\s+)?/, ""))}</li>`; i++; } out += `<${tag}${pos(start, i)}>${items}</${tag}>\n`; continue; }
-      if (/^\|/.test(L)) { const rows = []; while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]); const cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
-        out += `<table${pos(start, i)}><thead><tr>${cells(rows[0]).map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(2).map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>\n`; continue; }
-      if (/^>/.test(L)) { let q = ""; while (i < lines.length && /^>/.test(lines[i])) q += lines[i++].replace(/^>\s?/, "") + " "; out += `<blockquote${pos(start, i)}>${inline(q)}</blockquote>\n`; continue; }
-      let para = ""; while (i < lines.length && lines[i].trim() && !/^(#|```|\||>|\s*([-*]|\d+\.)\s)/.test(lines[i])) para += (para ? " " : "") + lines[i++];
-      out += `<p${pos(start, i)}>${inline(para)}</p>\n`;
+      let m; const start = i;
+      if ((m = /^(#{1,6})\s+(.*)/.exec(L))) { i++; out += block(start, i, p => `<h${m[1].length}${p}>${inline(m[2])}</h${m[1].length}>\n`); continue; }
+      if (/^```/.test(L)) { let j = i + 1; while (j < lines.length && !/^```/.test(lines[j])) j++; i = j + 1; out += block(start, i, p => `<pre${p}><code>${esc(lines.slice(start + 1, j).join("\n"))}</code></pre>\n`); continue; }
+      if (/^\s*([-*]|\d+\.)\s/.test(L)) { const tag = /^\s*\d+\./.test(L) ? "ol" : "ul"; while (i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i])) i++;
+        out += block(start, i, p => `<${tag}${p}>${lines.slice(start, i).map(l => `<li>${inline(l.replace(/^\s*([-*]|\d+\.)\s+(\[[ x]\]\s+)?/, ""))}</li>`).join("")}</${tag}>\n`); continue; }
+      if (/^\|/.test(L)) { while (i < lines.length && /^\|/.test(lines[i])) i++; const rows = lines.slice(start, i), cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+        out += block(start, i, p => `<table${p}><thead><tr>${cells(rows[0]).map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(2).map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>\n`); continue; }
+      if (/^>/.test(L)) { while (i < lines.length && /^>/.test(lines[i])) i++; out += block(start, i, p => `<blockquote${p}>${inline(lines.slice(start, i).map(l => l.replace(/^>\s?/, "")).join(" "))}</blockquote>\n`); continue; }
+      while (i < lines.length && lines[i].trim() && !/^(#|```|\||>|\s*([-*]|\d+\.)\s)/.test(lines[i])) i++;
+      if (i === start) i++;
+      out += block(start, i, p => `<p${p}>${inline(lines.slice(start, i).join(" "))}</p>\n`);
     }
     return out;
+  }
+
+  // the cache of a file: the source text of each block of its first text -> pandoc's HTML of that block
+  const CACHE = {};
+  function partial(p, text, unchanged) {
+    if (!CACHE[p] && F.preview[p]) {
+      const lines = F.files[p].text.split("\n"), tpl = document.createElement("template"); tpl.innerHTML = F.preview[p];
+      const nodes = [...tpl.content.children].map(n => { const m = /@(\d+):\d+-(\d+):(\d+)/.exec(n.getAttribute("data-pos") || ""); return { n, a: m ? +m[1] : 0, c: m ? (+m[3] === 1 && +m[2] > +m[1] ? +m[2] - 1 : +m[2]) : 0 }; });
+      nodes.forEach((x, i) => { const nx = nodes[i + 1]; if (nx && nx.a) x.c = Math.min(x.c, nx.a - 1); });
+      CACHE[p] = new Map();
+      for (const x of nodes) if (x.a) CACHE[p].set(lines.slice(x.a - 1, x.c).join("\n").replace(/\s+$/, ""), { a: x.a, html: x.n.outerHTML + "\n" });
+    }
+    if (unchanged && F.preview[p]) return { html: F.preview[p], stats: { kept: 0, rendered: 0 } };
+    const stats = { kept: 0, rendered: 0 };
+    return { html: standIn(p, text, CACHE[p], stats), stats };
   }
 
   // ---- settings: a schema-driven validator (type, choices; no per-key code) ----------------------------------------------------
@@ -48,6 +75,7 @@
   // settings, not constants
   const EXTRA = [
     { key: "editorKind", kind: "choice", choices: ["codemirror", "plain"], default: "codemirror", tab: "Editor", help: "which editor the page uses: the vendored CodeMirror 6, or a plain text box (the Mac app can use its native editor)" },
+    { key: "symbolInsert", kind: "choice", choices: ["ascii", "unicode"], default: "ascii", tab: "Editor", help: "the symbols picker (Greek letters, math) inserts the LaTeX equivalent ($\\alpha$, plain ASCII, preferred) or the Unicode character itself" },
     { key: "renderAutoMaxLines", kind: "number", default: "3000", tab: "Live view", help: "render mode auto: a file of up to this many lines renders after every edit (instant); a longer one renders on save (watch)" },
     { key: "renderDelayMs", kind: "number", default: "150", tab: "Live view", help: "instant mode: how long the page waits after the last keystroke before it renders" },
     { key: "mirrorSource", kind: "flag", default: "1", tab: "Live view", help: "1 = a selection in the source marks the part of the preview that it makes, and a block under the pointer marks its source lines" },
@@ -67,12 +95,14 @@
   // ---- the API: one function per planned endpoint -----------------------------------------------------------------------------
   window.api = {
     store,
-    standIn,
+    standIn: (n, t) => standIn(n, t),
     project: () => later(F.project),                                   // GET /project
     readFile: p => later(F.files[p]),                                  // GET /file?path=
     writeFile: (p, text) => { F.files[p].text = text; return later({ ok: true, mtime: new Date().toISOString() }); },   // PUT /file (409 on a newer mtime)
     outline: p => later(F.outline[p] || []),                           // GET /outline?path=
-    renderLive: (p, text, unchanged) => later(unchanged && F.preview[p] ? F.preview[p] : standIn(p, text)),   // POST /render {file,text,mode:"live"}
+    // POST /render {file,text,mode:"live"}. Only the blocks that the edit touches are rendered anew; every other block keeps pandoc's own HTML (a
+    // shifted line number is all that changes), which is what the core will do too: a render costs what changed, not what the file holds.
+    renderLive: (p, text, unchanged) => { const r = partial(p, text, unchanged); api.lastRender = r.stats; return later(r.html); },
     exports: () => later(F.exports),                                   // GET /formats  (pdfmd --list-formats --json, S1)
     settingsSchema: () => later(schema.map(s => ({ ...s, platforms: MAC_ONLY(s.key) ? ["macos"] : ["macos", "windows", "linux", "browser"] }))),   // GET /settings/schema
     settings: () => later(Object.fromEntries(schema.map(s => [s.key, store.get("set." + s.key, s.default)]))),                                  // GET /settings

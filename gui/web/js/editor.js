@@ -1,7 +1,7 @@
 // THE EDITOR CONTRACT. The page talks to an editor only through these members, so the editor behind them can change (the vendored
 // CodeMirror 6 here, a plain textarea as the fallback, the native TextKit 2 editor in a Mac panel later) without touching the UI:
 //   setText(text)  getText()  onChange(fn(text))  onSelection(fn({from,to,line,col}))  selection()  setSelection(from,to)
-//   scrollTo(line)  decorate(ranges[{from,to}], cls)  replaceSelection(text, selectInserted)  undo()  redo()  lineCount()  focus()
+//   scrollTo(line)  decorate(ranges[{from,to}], cls)  replaceSelection(text, selectInserted)  replaceRange(from, to, text, selFrom, selTo)  undo()  redo()  lineCount()  focus()
 (function () {
   "use strict";
   function plain(parent, initial) {
@@ -21,6 +21,7 @@
       scrollTo(line) { const at = ta.value.split("\n").slice(0, line - 1).join("\n").length + (line > 1 ? 1 : 0); ta.setSelectionRange(at, at); ta.blur(); ta.focus(); ta.scrollTop = (line - 3) * 21; },
       decorate() { /* a textarea cannot mark a range: the preview side still highlights */ },
       replaceSelection(text, selectInserted) { ta.focus(); ta.setRangeText(text, ta.selectionStart, ta.selectionEnd, selectInserted ? "select" : "end"); ta.dispatchEvent(new Event("input")); },
+      replaceRange(from, to, text, selFrom, selTo) { ta.focus(); ta.setRangeText(text, from, to, "preserve"); ta.setSelectionRange(selFrom == null ? from + text.length : selFrom, selTo == null ? (selFrom == null ? from + text.length : selFrom) : selTo); ta.dispatchEvent(new Event("input")); },
       undo() { ta.focus(); document.execCommand("undo"); }, redo() { ta.focus(); document.execCommand("redo"); },
       lineCount: () => ta.value.split("\n").length,
       focus: () => ta.focus(),

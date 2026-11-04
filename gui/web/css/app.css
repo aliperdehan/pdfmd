@@ -1,6 +1,7 @@
 /* One theme for the whole window. Every colour is a variable (the editor's too), so light and dark follow the system and the panels cannot
    drift apart: one background plane, one hairline, one radius. Nothing is drawn twice (no card, no shadow between panels). */
 :root {
+  color-scheme: light dark;
   --bg: #ffffff; --bg2: #f6f6f7; --fg: #1d1d1f; --dim: #6e6e73; --line: #dcdce0; --accent: #0a64d8; --accent-fg: #fff;
   --hover: rgba(0,0,0,.06); --active: rgba(10,100,216,.12); --warn: #b25e00; --bad: #c4261d; --good: #1b7f3a;
   --add: #e6f6e9; --del: #fde8e6;
@@ -27,6 +28,9 @@ button { background: none; border: 0; border-radius: var(--r); padding: 4px 8px;
 button:hover { background: var(--hover); }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+select { appearance: none; -webkit-appearance: none; padding-right: 22px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 7px center; }
+button, input[type=checkbox] { -webkit-appearance: none; appearance: none; }
+input[type=checkbox] { width: 15px; height: 15px; border: 1px solid var(--dim); border-radius: 4px; background: var(--bg); vertical-align: middle; } input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--bg); }
 select, input[type=text], input[type=number], input[type=search], textarea { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 3px 6px; }
 .dim { color: var(--dim); } .small { font-size: 11.5px; } .grow { flex: 1; }
 .badge { font-size: 10px; background: var(--warn); color: #fff; border-radius: 8px; padding: 0 5px; margin-left: -4px; vertical-align: top; }
@@ -88,6 +92,7 @@ body.preview-only #work { grid-template-columns: 0 0 minmax(0,1fr); }
 #live code { font: .85em var(--mono); background: var(--bg2); padding: 1px 4px; border-radius: 3px; } #live pre { background: var(--bg2); padding: 10px 12px; border-radius: var(--r); overflow: auto; }
 #live table { border-collapse: collapse; margin: 1em auto; } #live th, #live td { border-bottom: 1px solid var(--line); padding: 3px 12px; } #live thead th { border-bottom: 2px solid var(--fg); }
 #live blockquote { margin-left: 0; padding-left: 14px; border-left: 3px solid var(--line); color: var(--dim); }
+#live .cmt { color: var(--dim); opacity: .65; font: italic .85em var(--mono); }
 #live .pending { color: var(--dim); } /* an unfinished **bold is closed for display and shown dimmed until it is really closed */
 #live [data-pos] { border-radius: 3px; transition: background .12s; } #live .mirror { background: var(--mirror); box-shadow: 0 0 0 3px var(--mirror); }
 #live math { font-size: 1.05em; }

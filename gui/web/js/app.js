@@ -112,7 +112,7 @@
     const html = await api.renderLive(S.cur, text, unchanged);
     const live = $("#live"), top = $("#liveView").scrollTop;
     live.innerHTML = html; $("#liveView").scrollTop = top;
-    banner(unchanged ? "" : "Showing the stand-in renderer (headings, text, lists, tables); the core's pandoc render replaces it. Math and citations appear as typed.");
+    const st = api.lastRender; banner(unchanged ? "" : `${st.kept} blocks are pandoc's own, ${st.rendered} edited block${st.rendered === 1 ? "" : "s"} from the stand-in renderer (the core renders those through pandoc too; math and citations show as typed here)`);
     S.renderedFor = S.cur; S.lastHtml = html;
     if (S.channel) S.channel.postMessage({ html });
     onSelection(S.editor.selection());
@@ -162,32 +162,70 @@
     math: ["$¦$", "Inline math", MOD + "M"], mathblock: ["$$\n¦\n$$", "Display math", MOD + "⌥M"], footnote: ["[^¦]", "Footnote", MOD + "⌥F"],
     cite: ["[@¦]", "Citation", MOD + "⌥R"], list: ["- ¦", "Bullet list", ""], pagebreak: ["<!-- pagebreak -->\n¦", "Page break", ""],
   };
+  // A template TOGGLES: pressing it again where it was just put (or around what it wrapped) takes it out again.
+  //  - a WRAPPER (bold, italic, code, link, comment, math, footnote, citation, code block, display math) wraps the selection; with the
+  //    selection already inside its marks, or the cursor between them, it unwraps;
+  //  - any other (div, calc, image, table, list, page break) is put in once; the same key pressed with the cursor in what it inserted removes it.
+  const WRAP = new Set(["bold", "italic", "code", "link", "comment", "math", "mathblock", "fence", "footnote", "cite"]);
   function insert(key) {
-    const [tpl] = T[key], at = tpl.indexOf("¦"), text = tpl.replace("¦", "");
-    const sel = S.editor.selection(), chosen = S.editor.getText().slice(sel.from, sel.to);
-    if (chosen && at >= 0 && /^(bold|italic|code|link|math)$/.test(key)) {                // wrap the selection
-      const pre = tpl.slice(0, at), post = tpl.slice(at + 1); S.editor.replaceSelection(pre + chosen + post, false); return;
+    const [tpl] = T[key], at = tpl.indexOf("\u00A6"), text = tpl.replace("\u00A6", "");
+    const ed = S.editor, all = ed.getText(), sel = ed.selection();
+    if (WRAP.has(key) && at >= 0) {
+      const pre = tpl.slice(0, at), post = tpl.slice(at + 1), chosen = all.slice(sel.from, sel.to);
+      let around = all.slice(sel.from - pre.length, sel.from) === pre && all.startsWith(post, sel.to);
+      if (key === "bold" || key === "italic") {                          // stars: **x** is bold, *x* italic, ***x*** both: judge by the run of stars around the selection
+        let l = 0, r = 0; while (all[sel.from - 1 - l] === "*") l++; while (all[sel.to + r] === "*") r++;
+        const run = Math.min(l, r); around = key === "bold" ? run >= 2 : run % 2 === 1;
+      }
+      if (around) {                                                      // the marks around the selection: take them off
+        ed.replaceRange(sel.from - pre.length, sel.to + post.length, chosen, sel.from - pre.length, sel.from - pre.length + chosen.length); S.last = null; return;
+      }
+      if (chosen.length >= pre.length + post.length && chosen.startsWith(pre) && chosen.endsWith(post)) {            // the selection includes the marks
+        const inner = chosen.slice(pre.length, chosen.length - post.length); ed.replaceRange(sel.from, sel.to, inner, sel.from, sel.from + inner.length); S.last = null; return;
+      }
+      ed.replaceRange(sel.from, sel.to, pre + chosen + post, sel.from + pre.length, sel.from + pre.length + chosen.length); S.last = null; return;
     }
-    S.editor.replaceSelection(text, false);
-    if (at >= 0) { const here = S.editor.selection().from; S.editor.setSelection(here - (text.length - at)); }
+    const last = S.last;                                                                                                // the same template again, in what it inserted
+    if (last && last.key === key && last.file === S.cur && all.slice(last.from, last.from + last.text.length) === last.text && sel.from >= last.from && sel.to <= last.from + last.text.length) {
+      ed.replaceRange(last.from, last.from + last.text.length, "", last.from, last.from); S.last = null; return;
+    }
+    ed.replaceRange(sel.from, sel.to, text, sel.from + (at >= 0 ? at : text.length));
+    S.last = { key, file: S.cur, from: sel.from, text };
   }
   function heading(level) {
     const sel = S.editor.selection(), text = S.editor.getText(), start = text.lastIndexOf("\n", sel.from - 1) + 1, end = text.indexOf("\n", sel.from) < 0 ? text.length : text.indexOf("\n", sel.from);
     const line = text.slice(start, end).replace(/^#{1,6}\s+/, "");
     S.editor.setSelection(start, end); S.editor.replaceSelection(level ? "#".repeat(level) + " " + line : line, false);
   }
+  // [character, LaTeX]: the document stays ASCII-only by default (setting symbolInsert = ascii: `$\\alpha$`, or `\\alpha` when the cursor is already in math)
   const SYMBOLS = {
-    Greek: "αβγδεζηθλμνξπρστφχψωΔΘΛΠΣΦΨΩ",
-    Math: "±×÷−≠≈≡≤≥∞√∑∏∫∂∇∈⊂∪∩∀∃→⇒⇄",
-    Chemistry: "°•′″Å⇌→↑↓⁺⁻⁰¹²³⁴₀₁₂₃₄₅₆₇",
+    Greek: [["\u03B1","\\alpha"],["\u03B2","\\beta"],["\u03B3","\\gamma"],["\u03B4","\\delta"],["\u03B5","\\varepsilon"],["\u03B6","\\zeta"],["\u03B7","\\eta"],["\u03B8","\\theta"],["\u03BB","\\lambda"],["\u03BC","\\mu"],["\u03BD","\\nu"],["\u03BE","\\xi"],["\u03C0","\\pi"],["\u03C1","\\rho"],["\u03C3","\\sigma"],["\u03C4","\\tau"],["\u03C6","\\varphi"],["\u03C7","\\chi"],["\u03C8","\\psi"],["\u03C9","\\omega"],["\u0394","\\Delta"],["\u0398","\\Theta"],["\u039B","\\Lambda"],["\u03A0","\\Pi"],["\u03A3","\\Sigma"],["\u03A6","\\Phi"],["\u03A8","\\Psi"],["\u03A9","\\Omega"]],
+    Math: [["\u00B1","\\pm"],["\u00D7","\\times"],["\u00F7","\\div"],["\u2212","-"],["\u2260","\\neq"],["\u2248","\\approx"],["\u2261","\\equiv"],["\u2264","\\leq"],["\u2265","\\geq"],["\u221E","\\infty"],["\u221A","\\sqrt{}"],["\u2211","\\sum"],["\u220F","\\prod"],["\u222B","\\int"],["\u2202","\\partial"],["\u2207","\\nabla"],["\u2208","\\in"],["\u2282","\\subset"],["\u222A","\\cup"],["\u2229","\\cap"],["\u2200","\\forall"],["\u2203","\\exists"],["\u2192","\\to"],["\u21D2","\\Rightarrow"],["\u21C4","\\rightleftarrows"]],
+    Chemistry: [["\u00B0","^\\circ"],["\u2022","\\cdot"],["\u2032","^\\prime"],["\u2033","^{\\prime\\prime}"],["\u212B","\\text{\\AA}"],["\u21CC","\\rightleftharpoons"],["\u2191","\\uparrow"],["\u2193","\\downarrow"],["\u207A","^+"],["\u207B","^-"],["\u2070","^0"],["\u00B9","^1"],["\u00B2","^2"],["\u00B3","^3"],["\u2074","^4"],["\u2080","_0"],["\u2081","_1"],["\u2082","_2"],["\u2083","_3"],["\u2084","_4"],["\u2085","_5"],["\u2086","_6"],["\u2087","_7"]],
   };
+  // is the cursor inside $...$ or $$...$$ of its paragraph?
+  function inMath(text, at) {
+    const para = text.slice(text.lastIndexOf("\n\n", at - 1) + 1, at), display = (para.match(/\$\$/g) || []).length;
+    return display % 2 === 1 || (para.replace(/\$\$/g, "").match(/(?<!\\)\$/g) || []).length % 2 === 1;
+  }
+  function putSymbol([ch, tex]) {
+    if (setting("symbolInsert") === "unicode") { S.editor.replaceSelection(ch, false); return; }
+    const text = S.editor.getText(), sel = S.editor.selection(), next = text[sel.to] || "";
+    const body = tex + (/[A-Za-z]$/.test(tex) && /[A-Za-z0-9]/.test(next) ? " " : "");
+    const put = inMath(text, sel.from) ? body : "$" + tex + "$";
+    S.editor.replaceRange(sel.from, sel.to, put, sel.from + put.length - (tex.endsWith("{}") && !put.endsWith("$") ? 1 : tex.endsWith("{}") ? 2 : 0));
+  }
   function symbolsPicker(anchor) {
     closePops();
     const box = el("div", { className: "popover" });
-    for (const [name, chars] of Object.entries(SYMBOLS)) {
+    const mode = el("div", { className: "seg", style: "margin:2px 2px 4px" });
+    const paint = () => { mode.textContent = ""; for (const [v, label, tip] of [["ascii", "ASCII (LaTeX)", "inserts $\\alpha$: the document stays plain ASCII"], ["unicode", "Unicode", "inserts the character itself"]])
+      mode.append(el("button", { className: setting("symbolInsert") === v ? "on" : "", textContent: label, title: tip, onclick: async () => { S.settings.symbolInsert = v; await api.setSetting("symbolInsert", v); paint(); } })); };
+    paint(); box.append(mode);
+    for (const [name, pairs] of Object.entries(SYMBOLS)) {
       box.append(el("div", { className: "head" }, name));
       const grid = el("div", { className: "symgrid" });
-      for (const ch of [...chars]) grid.append(el("button", { textContent: ch, title: "U+" + ch.codePointAt(0).toString(16).toUpperCase(), onclick: () => { S.editor.replaceSelection(ch, false); closePops(); } }));
+      for (const pair of pairs) grid.append(el("button", { textContent: pair[0], title: pair[1] + "   U+" + pair[0].codePointAt(0).toString(16).toUpperCase(), onclick: () => { putSymbol(pair); closePops(); } }));
       box.append(grid);
     }
     document.body.append(box); pops[0] = box;

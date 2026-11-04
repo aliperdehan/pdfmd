@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.35b — 2026-11-04
+
+Pre-edit state: commit `c9a11ff`. Entry 3do; `gui/web/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump (and no Colophon version: the prototype is not in the app; 0.3.0 comes with the native window around it). The author on the prototype: "the symbols currently pass unicode, so documents become not ascii only ... a toggler between latex equivalent and plain unicode, with ascii being preferred"; the insert templates "insert it once more instead of acting as a toggle"; "the built in renderer was pretty once loaded and everything is gone after the first edit"; "**bold was just an example, does it apply to other things like *italic, comments, $math".
+
+- **Symbols**: the picker inserts the LaTeX equivalent by default (`$\alpha$`, or the bare `\alpha` when the cursor is already inside math) or the Unicode character; a switch in the picker and the setting `symbolInsert` (ascii, unicode). Each symbol's tooltip names its macro.
+- **Templates toggle**: bold, italic, code, link, comment, math, footnote, citation, code block and display math wrap the selection and unwrap it on a second press (a star-run rule tells `*` from `**` from `***`); the others (div, calc, image, table, list, page break) are taken out again when pressed a second time in what they inserted. New in the editor contract: `replaceRange`.
+- **A render costs what changed**: the stand-in keeps every unchanged block as pandoc's own HTML (looked up by the block's source text, line numbers shifted) and renders only the edited blocks; the banner counts both. An unfinished `` `code ``, `$math`, `*italic` and `<!-- comment` is closed for display like `**bold`, and an unfinished comment no longer hides the rest of the page.
+- Safari/WebKit look (the app's wrapper will be WebKit): `color-scheme`, own select and checkbox appearance.
+- `js/selftest.js` grows to 46 checks, all pass in headless Edge. Measured for the core: pandoc `commonmark_x` HTML of the demo 0.05 s warm, the `markdown` reader with citeproc 0.12 s, a whole `pdfmd report.md -t html` 0.5 s (0.26 s of it inside pdfmd).
+
 ## v3.32.35a — 2026-11-04
 
 Pre-edit state: commit `97a6523`. Entry 3do; `gui/web/` only (new), no shipped pdfmd code, so no `PDFMD_VERSION` bump. **The web UI prototype.** The author: "let's prototype the webui interface then".

@@ -6,6 +6,8 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const out = []; let fails = 0;
   const check = (name, ok, extra) => { out.push((ok ? "ok    " : "FAIL  ") + name + (ok ? "" : "  " + (extra || ""))); if (!ok) fails++; };
+  const setting = k => S.settings[k], closeAll = () => document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  const renderNow = async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", metaKey: true, bubbles: true })); await sleep(150); };
   const menuTexts = () => $$(".popover .mi").map(m => m.firstChild.textContent);
   const clickMenu = label => { const m = $$(".popover .mi").find(x => x.firstChild.textContent.replace(/^✓ /, "") === label); m && m.click(); return !!m; };
   const on = (n, ev) => n.dispatchEvent(new Event(ev, { bubbles: true }));
@@ -39,13 +41,32 @@
     $("#headingSel").value = "2"; on($("#headingSel"), "change"); await sleep(30);
     check("the heading menu changes the level of the line", /^## /m.test(S.editor.getText().split("\n").slice(-1)[0]) || S.editor.getText().includes("## "), S.editor.getText().slice(-40));
     $("#toolbar [data-do=symbols]").click(); const sym = $$(".symgrid button"); check("the symbols picker offers Greek, math and chemistry", sym.length > 60 && $$(".popover .head").map(h => h.textContent).join() === "Greek,Math,Chemistry"); sym[0].click(); await sleep(30);
-    check("a symbol is inserted", S.editor.getText().includes("α"));
+    check("a symbol is inserted as its LaTeX equivalent (ASCII preferred)", S.editor.getText().includes("$\\alpha$") && !S.editor.getText().includes("α"), S.editor.getText().slice(-30));
+    S.editor.replaceSelection(" $x = ", false); $("#toolbar [data-do=symbols]").click(); $$(".symgrid button")[1].click(); await sleep(30);
+    check("inside math it inserts the bare macro", S.editor.getText().endsWith("$x = \\beta"), S.editor.getText().slice(-20));
+    S.editor.replaceSelection("$", false); $("#toolbar [data-do=symbols]").click(); $$(".popover .seg button")[1].click(); $$(".symgrid button")[2].click(); await sleep(30);
+    check("the toggle switches to the Unicode character", S.editor.getText().endsWith("γ") && setting("symbolInsert") === "unicode", S.editor.getText().slice(-8));
+    $("#toolbar [data-do=symbols]").click(); $$(".popover .seg button")[0].click(); closeAll(); await sleep(10);
+
+    // a template pressed twice toggles
+    const t0 = S.editor.getText(); S.editor.setSelection(t0.length);
+    $("#toolbar [data-do=table]").click(); await sleep(20); const t1 = S.editor.getText();
+    $("#toolbar [data-do=table]").click(); await sleep(20);
+    check("a table template pressed twice at the same place is inserted once and taken out again", t1.length > t0.length && S.editor.getText() === t0, S.editor.getText().slice(-40));
+    S.editor.setSelection(t0.length); $("#toolbar [data-do=bold]").click(); await sleep(20);
+    check("bold with no selection puts the marks around the cursor", S.editor.getText() === t0 + "****" && S.editor.selection().from === t0.length + 2);
+    $("#toolbar [data-do=bold]").click(); await sleep(20);
+    check("and a second press takes them off", S.editor.getText() === t0, S.editor.getText().slice(-10));
+    const w = t0.indexOf("Samples"); S.editor.setSelection(w, w + 7); $("#toolbar [data-do=italic]").click(); $("#toolbar [data-do=italic]").click(); await sleep(20);
+    check("a wrapped selection unwraps with the second press", S.editor.getText() === t0 && S.editor.selection().from === w && S.editor.selection().to === w + 7);
 
     // render modes and the unfinished bold
     S.editor.setText(S.editor.getText()); const end = S.editor.getText().length; S.editor.setSelection(end); S.editor.replaceSelection("\n\nThis is **not finished", false);
     await sleep(500);
     check("instant (auto): an unfinished **bold is closed in the preview, dimmed", !!$("#live strong.pending") && $("#live strong.pending").textContent === "not finished", $("#live").innerHTML.slice(-200));
-    check("the edited text is shown by the stand-in renderer, and the banner says so", /stand-in/i.test($("#liveBanner").textContent) && !$("#liveBanner").hidden);
+    check("an edit re-renders its block only: the rest keeps pandoc's own HTML (MathML is still there), and the banner counts", /stand-in/i.test($("#liveBanner").textContent) && !$("#liveBanner").hidden && $$("#live math").length >= 3 && api.lastRender.kept > 5, JSON.stringify(api.lastRender) + " math:" + $$("#live math").length);
+    S.editor.setText(S.editor.getText().replace("# Results", "<!-- note to self\n\n# Results")); await renderNow();
+    check("an unfinished <!-- comment does not hide the rest of the page", $$("#live .cmt").length >= 1 && $("#live").textContent.includes("Discussion"), $("#live").textContent.slice(-60));
     $("#renderMode").value = "watch"; on($("#renderMode"), "change");
     S.editor.replaceSelection(" more", false); await sleep(400);
     check("watch: the preview waits for a save", /Save to update/.test($("#liveBanner").textContent) && !$("#live").textContent.includes("not finished more"));
