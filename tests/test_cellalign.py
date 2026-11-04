@@ -24,11 +24,21 @@ LONG = ("| Name | Note |\n|:--|:--|\n| a | " + "a long sentence that needs wrapp
 
 
 class Detect(unittest.TestCase):
-    def test_the_filter_is_wanted_only_for_a_tag_that_starts_a_cell(self):
-        for text in ("| a | <c> b |", "<r> x | y", "| <L> |", "a | <c>"):
-            self.assertTrue(pdfmd.CELL_ALIGN_RE.search(text), text)
-        for text in ("a <c> b", "| a<c> | b |", "<center>", "text <r>"):
-            self.assertFalse(pdfmd.CELL_ALIGN_RE.search(text), text)
+    """The filter is wanted for a document with a cell tag in a pipe table (v3.32.31: anywhere in the cell, not only at its start)."""
+
+    @staticmethod
+    def wanted(table: str) -> bool:
+        from pdfmd_tables.celltags import normalise
+        return bool(normalise(table).cells)
+
+    def test_a_tag_in_a_cell_of_a_pipe_table_is_wanted_and_prose_is_not(self):
+        head = "| h | i |\n|---|---|\n"
+        for row in ("| a | <c> b |", "<r> x | y", "| <L> | z |", "a | <c>", "| a<c> | b |", "| a | b <c> |"):
+            self.assertTrue(self.wanted(head + row + "\n"), row)
+        for row in ("| a | <center>b</center> |", "| a | <b>bold</b> |", "| a | b<br>c |", "| a | b |"):
+            self.assertFalse(self.wanted(head + row + "\n"), row)
+        self.assertFalse(self.wanted("a <c> b\n"))
+        self.assertFalse(self.wanted("text <r>\n"))
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
@@ -86,7 +96,8 @@ class Build(unittest.TestCase):
     def test_the_markdown_writers_keep_what_was_written(self):
         done, md = self.build(TABLE, "md")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("<c>", md)                      # as raw HTML, the way the table was written
+        self.assertIn("&c& total", md)                # Markdown has no cell alignment: the tag comes back as a `&...&` tag
+        self.assertNotIn("<pc", md)
         self.assertNotIn("multicolumn", md)
 
     def test_a_table_that_needs_no_tags_has_no_filter(self):

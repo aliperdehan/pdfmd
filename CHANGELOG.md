@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.31 — 2026-11-04
+
+Pre-edit state: commit `c49cfce`. `[tables]`, entry 3fa. **Merged cells in pipe tables, and cell tags in any spelling.** The author: "can we enhance tables, like very? ... merging tables, choosing arbitrary cell width and height, centering (on x and y separately or both together), top bottom left down alignment --- none is easily achievable". Decided over several rounds of design (syntax, delimiters, clashes); this is the first of three steps (spans, then vertical alignment, then widths and heights).
+
+- **Merging.** A cell that is `<<`, `>>`, `^^` or `vv` (bare, or inside a `&...&` tag) belongs to the neighbour on that side; the arrow points at the cell that holds the content, chains are followed, the region must be a rectangle (a WARN and no merge otherwise), an empty cell is never merged by itself, a covered cell's text is added to the merged cell on a new line with a WARN, and a header cell that spans rows takes the body rows it reaches into the header. LaTeX gets `\multirow` / `\multicolumn`; HTML, Typst and Word the spans of Pandoc's table model.
+- **Tags anywhere in the cell**, in three spellings: `&...&` (the recommended one, takes letters, words and arrows), `<...>` (letters and words, `<br>` / `<tr>` / `<tt>` stay HTML, `<b>` and `<center>` only without a closing tag) and a bare arrow as the whole cell; `{...}` and `«...»` are opt-in. Letters in any order and case (`mc` = `cm` = `cc`; a lone `c` is still horizontal), comma, space or nothing between them, full words (`top`, `centre`, `merge-up`) matched without `-`, `_` and `.`. Code, math and a backslash-escaped tag are left alone; a tag must stand apart.
+- **New setting `table-tag-brackets`** (a list of `angle`, `amp`, `brace`, `guillemet`; default `angle, amp`), a `--setup` row. `cell-align: off` now switches every cell tag off.
+- **How.** A pre-pass on a temporary copy (`lib/pdfmd_tables/celltags.py`, like `table-ascii`) reads every spelling and writes one short canonical raw tag per cell (`<pc c2 r2 hc vm>`, `<pc xl>`); `cellalign.lua` reads only that, sets `col_span` / `row_span`, drops covered cells and moves header rows. The tag is short on purpose: Pandoc turns a pipe table whose source line is longer than its column limit into a full-width table of dash-proportional columns, which a long tag did to a small table in the first try. The filter still runs after the table-width filter, which measures the table as written.
+- **Changed behaviour.** `<l>`, `<c>`, `<r>` are found anywhere in a cell (before: only at its start). The Markdown writers write a cell tag back as `&c&` (before: the raw `<c>`), so the output reads again. Vertical letters (`t`, `m`, `b`) are read and carried but not drawn yet (the next patch).
+- `tests/test_celltags.py` (35 tests: tokens, spellings, clashes, merging, real builds to LaTeX, HTML, Typst, Word and Markdown), `test_cellalign.py` adjusted for the two changes above.
+
 ## v3.32.30 — 2026-11-04
 
 Pre-edit state: commit `3b179af`. **A kit's front matter survives every header file (`headers_as_metadata`).** The author, after `pdfmd '#20'` on an APA 7 paper stopped with "There's no line here to end": "let's make it more robust ... the same issue may repeat with other kits".

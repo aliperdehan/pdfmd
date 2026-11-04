@@ -2087,30 +2087,70 @@ pdfmd-options:
 
 Also a `--setup` row, at the config and folder levels.
 
-#### A table cell with its own alignment
+#### Cell tags: one cell's alignment, and merged cells
 
-A pipe table sets the alignment of a whole column in its separator row. A cell that starts with `<l>`, `<c>` or `<r>` overrides it
-for that cell alone:
+A pipe table sets the alignment of a whole column in its separator row, and cannot merge cells at all. A **tag** in a cell does both for
+that cell. The tag can sit anywhere in the cell; it is cut out, with one space next to it.
 
 ```markdown
-| Name   | Qty |
-|:-------|----:|
-| apples |   3 |
-| <c> total | <l> 12 |
+| Name   | Scores &<<&  | << |
+|:-------|-------------:|---:|
+| vv     | A            | B  |
+| x      | 1            | 2  |
+| Total  | &c& 12       | << |
+| ^^     | y            | z  |
 ```
 
-The tag and the space after it are cut off (`<c>mid` works too, and a cell of only the tag is an empty cell). HTML, Typst, Word
-and the other writers use the alignment the cell carries; Pandoc's LaTeX writer ignores it, so for LaTeX and Beamer pdfmd wraps
-the cell in raw TeX: `\multicolumn{1}{c}{...}` in a column of its natural width, `{\centering ...\par}` in a column that has a width
-(`\raggedleft`, `\raggedright` for the others). A cell with more than one paragraph or a list is left as written, and so is
-everything for the Markdown writers. It is not Org's syntax (Org's cookies are a row that sets whole columns, see above).
+Here `Scores` spans two columns (the `<<` cell next to it belongs to the cell on its left), `x` and `Total` span two rows (`vv` and `^^`
+point at the cell they belong to), and `12` is centred over two columns.
+
+**What a tag says**
+
+| tag | meaning |
+|---|---|
+| `l` `r` `c` | horizontal alignment: left, right, centre |
+| `t` `m` `b` | vertical alignment: top, middle, bottom (read and carried; drawn from the next version on) |
+| `<<` `>>` `^^` `vv` | merge: this cell belongs to the neighbour on the left, right, above, below. The arrow points at the cell that holds the content; a chain of arrows is followed |
+
+Letters can be written in any order and case, with a comma, a space or nothing between them: `&tl&`, `&T,L&`, `&top left&`. A lone `c` is
+horizontal (as it always was); with one other letter it takes the free axis (`mc`, `cm`, `ct` and `lc` read as you would expect), and `cc`
+is the centre both ways, the same as `mc`. A lone `m` is vertical. Full words work too: `top middle bottom left right center centre`
+and `merge-left merge-right merge-up merge-down` (matched in lower case, ignoring `-`, `_` and `.`, so `merge_up` and `mergeup` are
+the same word). Use up and down for merging, because top and bottom are the vertical alignment.
+
+**Three spellings, one meaning**
+
+- `&...&` is the one to use: it takes anything, arrows included (`&mc&`, `&<<&`, `&^^,t,c&`, `&merge-up,top&`), and nothing else in Markdown
+  or LaTeX means that. It must stand apart: at the start or end of the cell, or with whitespace around it (`AT&T` and `R&D` are text).
+- `<...>` takes the letters and words (`<c>`, `<mc>`, `<merge-up, top>`), never a symbolic arrow. `<br>`, `<tr>` and `<tt>` stay HTML (write
+  bottom right as `<rb>` or `<b,r>`, top right as `<rt>`), and `<b>` and `<center>` are tags only when the cell has no closing `</b>` or
+  `</center>`. The full-name form with commas is the safest.
+- A cell that is nothing but `<<`, `>>`, `^^` or `vv` needs no brackets.
+- `{...}` and `«...»` are off by default (`K_{c}` and `\textbf{b}` look like tags); `table-tag-brackets: [angle, amp, brace]` turns them on.
+
+Code spans and math are never read, and a tag with a backslash before it (`\<c>`, `\&c&`) is plain text.
+
+**Merging**
+
+- The merged region must be a rectangle. If it is not, pdfmd says so (`WARN  cell-tags: ...`) and merges nothing there.
+- An empty cell is never merged by itself; only an arrow merges.
+- A covered cell that holds text is not dropped: its text is added to the merged cell on a new line, with a WARN.
+- A cell of the header can span rows: the body rows it reaches become header rows (a pipe table has one header row).
+- A merge arrow that points outside the table is reported and ignored.
+- The column widths are worked out for the table as written, before the merge; a merged cell does not widen its columns.
+
+HTML, Typst and Word get the spans from Pandoc's own table model; LaTeX gets `\multicolumn` and `\multirow` (and raw TeX around a one-column
+cell with its own alignment, because Pandoc's LaTeX writer ignores that). The Markdown writers write the tags back as `&...&`, which
+pdfmd reads again. Pandoc's grid tables merge cells already (a cell that spans lines of `+` borders); this is the short way for pipe tables.
+The native (no-Pandoc) renderer does not read the tags.
 
 ```yaml
 pdfmd-options:
-  cell-align: on              # on (default), off
+  cell-align: on              # on (default), off: switches every cell tag off
+  table-tag-brackets: [angle, amp]   # which spellings are read: angle, amp, brace, guillemet
 ```
 
-Also a `--setup` row. The native (no-Pandoc) renderer does not do it.
+Both are also `--setup` rows.
 
 #### A line break inside a table cell
 

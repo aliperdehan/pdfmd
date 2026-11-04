@@ -60,7 +60,7 @@ UNSET = {
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
     "options.bundle-packages": "off", "options.cache.plots": "off",
-    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
+    "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.table-tag-brackets": "angle, amp", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
@@ -86,7 +86,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
-    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
+    "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
@@ -313,11 +313,16 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "box-drawing table (`┌─┬─┐ │ ├─┼─┤`), psql output (`a | b`, `---+---`), MySQL console output (no header rule), Org-mode tables (`|---+---|`, `<r>` cookies, `#+CAPTION:`) and `|` lines with no separator row. The first "
                "row is the header, wrapped cell lines are joined, bar positions are not trusted. A real grid table (`+---+---+`) is "
                "never touched.", "Tables"),
-        choice("options.cell-align", "A cell that starts with <l>, <c> or <r> keeps that alignment, whatever its column's",
-               (("on", "cut the tag off and align that cell"), ("off", "leave the cells as written")), "on",
-               "`| <c> total | <r> 12 |`: the tag and the space after it are cut off. A pipe table's separator row (`:--`, `:-:`, `--:`) "
-               "sets whole columns; this sets one cell. HTML, Typst, Word and the rest use the cell's alignment; LaTeX gets raw TeX "
-               "around the cell. The Markdown writers keep the text as written.", "Tables"),
+        choice("options.cell-align", "Cell tags in a pipe table: one cell's alignment, and merged cells",
+               (("on", "read the tags: `<c>`, `&mc&`, `&<<&`, a bare `<<` or `^^`"), ("off", "leave the cells as written")), "on",
+               "`| <c> total | &r& 12 | << |`: a tag anywhere in a cell sets that cell's alignment, whatever its column's; an arrow "
+               "merges the cell with its neighbour. A pipe table's separator row (`:--`, `:-:`, `--:`) sets whole columns. HTML, Typst, "
+               "Word and the rest use the cell's own alignment and spans; LaTeX gets `\\multicolumn`, `\\multirow` and raw TeX around "
+               "the cell. The Markdown writers write the tags back as `&...&`.", "Tables"),
+        text("options.table-tag-brackets", "Which spellings of a cell tag are read",
+             "Words separated by commas: `angle` (`<c>`, `<merge-up, top>`), `amp` (`&mc&`, the form that never clashes), `brace` "
+             "(`{mc}`) and `guillemet` (`\u00abmc\u00bb`). The default is `angle, amp`; `brace` is off because `K_{c}` or `\\textbf{b}` can "
+             "look like a tag.", "Tables"),
         choice("options.slide-notes", "Speaker notes (`::: notes`) in a Beamer deck (`-p`)",
                (("off", "leave them out of the PDF"), ("show", "a notes page after each slide"),
                 ("only", "the notes pages alone, for printing")), "off",

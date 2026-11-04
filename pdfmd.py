@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.30"
+PDFMD_VERSION = "3.32.31"
 import argparse
 import atexit
 import csv
@@ -3722,11 +3722,13 @@ def linebreak_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
             if shipped is not None else [])
 
 
-# One table cell with its own alignment (v3.31.52, entry 3el): a cell that starts with `<l>`, `<c>` or `<r>` overrides the column's
-# alignment. pdfmd_lua/cellalign.lua cuts the tag off and sets the cell's alignment (LaTeX gets raw TeX around the cell, which is why
-# the filter goes in after the table-width filter). pdfmd-options: cell-align: on (the default) | off. Only for a document that has a cell
-# like that.
-CELL_ALIGN_RE = re.compile(r"(?:^|\|)[ \t]*<[lcr]>(?:[ \t]|\||$)", re.MULTILINE | re.IGNORECASE)
+# Cell tags of pipe tables: one cell's alignment (v3.31.52, entry 3el) and merged cells (v3.32.31, entry 3fa). A cell may carry a tag
+# (`<c>`, `&mc&`, `&<<&`, `<merge-up, top>`, a bare `<<` or `^^`) anywhere in it; lib/pdfmd_tables/celltags.py (a pre-pass on a temporary
+# copy) reads every spelling and writes one canonical raw tag, and pdfmd_lua/cellalign.lua makes the spans and the alignment from it (the
+# filter goes in after the table-width filter). pdfmd-options: cell-align: on (the default) | off, which switches every cell tag off;
+# table-tag-brackets: which spellings are read (a list of angle, amp, brace, guillemet; default angle, amp).
+CELL_TAG_KINDS = ("angle", "amp", "brace", "guillemet")
+CELL_TAG_DEFAULT_KINDS = ("angle", "amp")
 
 
 def cell_align_on(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -3740,12 +3742,44 @@ def cell_align_on(md_path: Path, metadata_files: list[Path]) -> bool:
     return word == "on"
 
 
+def cell_tag_kinds(md_path: Path, metadata_files: list[Path]) -> tuple[str, ...]:
+    """The `table-tag-brackets` option: the spellings of a cell tag that are read (a list, or words split by commas or spaces)."""
+    value = first_pdfmd_option(md_path, metadata_files, "table-tag-brackets")
+    if value is None:
+        return CELL_TAG_DEFAULT_KINDS
+    words = [str(item) for item in value] if isinstance(value, list) else re.split(r"[,\s]+", str(value))
+    kinds = tuple(dict.fromkeys(word.strip().casefold() for word in words if word.strip()))
+    for kind in kinds:
+        if kind not in CELL_TAG_KINDS:
+            raise SystemExit(f"pdfmd-options table-tag-brackets: {kind!r} is not one of {', '.join(CELL_TAG_KINDS)}")
+    return kinds
+
+
+def cell_tags_text(text: str, md_path: Path, metadata_files: list[Path], label: str) -> str:
+    """``text`` with the cell tags of its pipe tables written as canonical tags (a WARN for each thing that could not be done)."""
+    if "|" not in text or not cell_align_on(md_path, list(metadata_files)):
+        return text
+    try:
+        from pdfmd_tables.celltags import normalise
+    except ImportError:
+        return text
+    result = normalise(text, cell_tag_kinds(md_path, list(metadata_files)))
+    for note in result.notes:
+        print(f"WARN  cell-tags: {label}, line {note.line}: {note.message}")
+    return result.text
+
+
 def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
-    """``--lua-filter cellalign.lua`` for a document with a `<l>`, `<c>` or `<r>` cell, unless `cell-align` is off."""
+    """``--lua-filter cellalign.lua`` for a document with a cell tag in a pipe table, unless `cell-align` is off."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or not cell_align_on(files[0], metadata_files):
         return []
-    if not any(CELL_ALIGN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
+    try:
+        from pdfmd_tables.celltags import normalise
+    except ImportError:
+        return []
+    kinds = cell_tag_kinds(files[0], metadata_files)
+    if not any(normalise(EMBED_BLOCK_RE.sub("", read_text_best_effort(file)), kinds).cells for file in files):
         return []
     try:
         import pdfmd_lua
@@ -14669,6 +14703,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
             text = obsidian_source(text, md_path, metadata_files)
             text = repair_ascii_text(text, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
+            text = cell_tags_text(text, md_path, metadata_files, display_path(md_path))
         with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
                                 prefix=f".{md_path.stem}.pdfmd-section-", dir=md_path.parent,
                                 delete=False) as temporary:
@@ -14688,6 +14723,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     if not disabled:
         corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
     repaired = repair_ascii_text(corrected, table_ascii_mode(md_path, list(metadata_files)), display_path(md_path))
+    repaired = cell_tags_text(repaired, md_path, metadata_files, display_path(md_path))
     chapter = (REPORT_BUILD.get("chapters") or {}).get(md_path)
     if chapter is not None:
         # a report's first file: its title leaves the front matter and becomes a chapter heading (pdfmd_report.titles)
@@ -18367,9 +18403,12 @@ def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list
     if not parts:
         return None
     mode = table_ascii_mode(md_path, list(metadata_files))
-    if mode == "off":
-        return None
-    return lambda text, part: repair_ascii_text(text, mode, display_path(part))
+
+    def transform(text: str, part: Path) -> str:
+        if mode != "off":
+            text = repair_ascii_text(text, mode, display_path(part))
+        return cell_tags_text(text, md_path, metadata_files, display_path(part))
+    return transform
 
 
 def print_parts(plan: ScaffoldPlan) -> None:
