@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.6"
+let appVersion = "0.2.7"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -92,6 +92,7 @@ enum Settings {
     }
 
     static let texts: [Text] = [
+        Text(key: "pdfmdCommand", value: "", label: "pdfmd command", help: "the command that runs pdfmd, as typed in a shell (for example python3 ~/dev/py/pdfmd/pdfmd.py); empty = the newest pdfmd that the shell knows (the terminal's alias and every pdfmd on its PATH). The About box shows which one is used", tab: "General"),
         Text(key: "fontName", value: "JetBrains Mono", label: "Font", help: "editor font: a font family (monospaced fonts are listed by --fonts); if it is not installed the system monospaced font is used", tab: "Editor", kind: .fonts),
         Text(key: "theme", value: "Anura", label: "Theme (light appearance)", help: "colour theme in a light appearance: the name of a .cottheme file (CotEditor's format), see --themes", tab: "Colours", kind: .themes),
         Text(key: "pdfFindColor", value: "#FFEB3B", label: "Colour of the found text", help: "the colour (#RRGGBB) that the matches of a search are marked with in a PDF", tab: "PDF"),

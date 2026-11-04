@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Build pdfmdedit.app (needs only the Command Line Tools). Output: build.noindex/pdfmdedit.app
-# (build.noindex: Spotlight and LaunchServices skip a folder with that suffix, so the build output is not a second "pdfmd Edit" next to the installed copy.)
+# Build Colophon.app (needs only the Command Line Tools). Output: build.noindex/Colophon.app
+# (build.noindex: Spotlight and LaunchServices skip a folder with that suffix, so the build output is not a second "Colophon" next to the installed copy.)
 #   ./build.sh            build only (nothing is launched)
 #   ./build.sh --install  also copies the app to ~/Applications
-# Test headless first:  .build/release/pdfmdedit --bench --mb 10   and   build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md
+# Test headless first:  .build/release/pdfmdedit --bench --mb 10   and   build.noindex/Colophon.app/Contents/MacOS/pdfmdedit --smoke FILE.md
 set -e
 cd "$(dirname "$0")"
 VERSION=$(sed -n 's/^let appVersion = "\(.*\)"/\1/p' Sources/Settings/Settings.swift)
 swift build -c release
-APP=build.noindex/pdfmdedit.app
+APP=build.noindex/Colophon.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/pdfmdedit "$APP/Contents/MacOS/pdfmdedit"
@@ -18,8 +18,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleName</key><string>pdfmd Edit</string>
-<key>CFBundleDisplayName</key><string>pdfmd Edit</string>
+<key>CFBundleName</key><string>Colophon</string>
+<key>CFBundleDisplayName</key><string>Colophon</string>
 <key>CFBundleIdentifier</key><string>io.github.aliperdehan.pdfmdedit</string>
 <key>CFBundleExecutable</key><string>pdfmdedit</string>
 <key>CFBundleIconFile</key><string>pdfmd</string>
@@ -66,7 +66,8 @@ echo "built $APP ($VERSION)"
 if [[ "$1" == "--install" ]]; then
     DEST="$HOME/Applications"
     mkdir -p "$DEST"
-    rm -rf "$DEST/pdfmdedit.app"
-    cp -R "$APP" "$DEST/pdfmdedit.app"
-    echo "installed $DEST/pdfmdedit.app (not started)"
+    rm -rf "$DEST/pdfmdedit.app"   # the app's name before it was called Colophon (same bundle id: two copies would fight over Open With)
+    rm -rf "$DEST/Colophon.app"
+    cp -R "$APP" "$DEST/Colophon.app"
+    echo "installed $DEST/Colophon.app (not started)"
 fi

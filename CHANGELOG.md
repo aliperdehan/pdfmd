@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29h — 2026-11-04
+
+Pre-edit state: commit `cfd258a`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.7 is Colophon 0.2.7: the app is renamed, and the About box says which pdfmd it works with.** The author: "let's go ahead with colophon and say it is the pdfmd workbench in about box! btw, about box currently holds only the app version, which is early alpha, let's make it list the pdfmd version it is currently working together with as well"; on learning that Homebrew had its own, older pdfmd: "let's make it prefer the newest version tho, with a setting to explicitly set the path and desired pdfmd".
+
+- The name: display name Colophon, the file `Colophon.app` (Finder's Open With lists the file name); the menu, About, Hide and Quit say Colophon; `--version` prints `Colophon 0.2.7`. The bundle id (`io.github.aliperdehan.pdfmdedit`), the executable and the SwiftPM target stay `pdfmdedit`, so the settings, the file associations and the window positions are kept. `build.sh --install` removes the old `~/Applications/pdfmdedit.app` (same bundle id: two copies would fight over Open With) and installs `Colophon.app`.
+- The About box (new `gui/Sources/App/PdfmdTool.swift`): "the pdfmd workbench", "Version 0.2.7 (early alpha)", and the pdfmd found: the number, where it is, and the others found. The app asks a login shell (an app started from the Dock has almost no PATH): `alias pdfmd` (the terminal's alias, which reaches a checkout) and `whence -ap pdfmd` (every `pdfmd` on the PATH, de-duplicated by real path), runs `--version` of each, and takes the newest (a tie goes to the one found first); numbers are compared as numbers (3.10.0 is newer than 3.9.9). On the author's Mac that is the checkout, 3.32.29, ahead of a Homebrew 3.31.46 that a Dock-started app would otherwise have taken; both are listed. The setting `pdfmdCommand` (Settings, General; empty = the newest found) names one command, as typed in a shell (`python3 ~/dev/py/pdfmd/pdfmd.py`), and then that one is used whatever its version; one that does not answer is reported in the About box. The answer is remembered for two minutes and looked up once at launch (it takes about two seconds: a shell and a Python start for each).
+- Tests: `--smoke-pdf` (now 73 checks): the version is read from an answer, a missing command is not found, versions compare as numbers, the setting wins, a setting that does not answer is reported; it prints what it finds. The About panel was looked at in a screenshot of the real panel. Not done: the build command (⌘R in an editor window) that will use this pdfmd.
+
+Not pushed.
+
 ## v3.32.29g — 2026-11-04
 
 Pre-edit state: commit `619a05e`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **pdfmd Edit 0.2.6: the red button no longer quits the app (a setting).** The author: "pressing red button currently also quits the app, which matches the windows behaviour, but looks as odd one among the mac apps, i guess we can make it a setting too".

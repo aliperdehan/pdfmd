@@ -232,6 +232,19 @@ enum PDFSmoke {
             check("a command-line launch quits whatever the setting", delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp))
         }
 
+        // the pdfmd the About box names: asked of a login shell, a missing command is "not found"
+        do {
+            check("the pdfmd version is read from the command's answer", PdfmdTool.probe("echo pdfmd 9.8.7") == "9.8.7")
+            check("a missing command is not found", PdfmdTool.probe("no-such-command-xyz-123", timeout: 4) == nil)
+            check("versions compare as numbers", PdfmdTool.newer("3.10.0", than: "3.9.9") && PdfmdTool.newer("3.32.29", than: "3.31.46") && !PdfmdTool.newer("3.2.0", than: "3.2.0"))
+            let named = PdfmdTool.resolve(explicit: "echo pdfmd 1.2.3")
+            check("the setting wins whatever the version", named.explicit && named.best?.version == "1.2.3" && named.others.isEmpty)
+            check("a setting that does not answer is reported", PdfmdTool.resolve(explicit: "no-such-command-xyz-123").failedCommand != nil)
+            let t0 = Date()
+            let real = PdfmdTool.resolve(explicit: nil)
+            print("   pdfmd found in \(Int(Date().timeIntervalSince(t0) * 1000)) ms: best \(real.best.map { "\($0.version) \($0.shown)" } ?? "none"); others \(real.others.map { "\($0.version) \($0.shown)" })")
+        }
+
         // (d) search
         let sample = (view.document?.page(at: 0)?.string ?? "").split(whereSeparator: { !$0.isLetter }).first { $0.count >= 4 }.map(String.init)
         if let word = sample {

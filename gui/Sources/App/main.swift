@@ -2,7 +2,7 @@ import Cocoa
 
 let args = Array(CommandLine.arguments.dropFirst())
 
-if args.contains("--version") { print("pdfmdedit \(appVersion)"); exit(0) }
+if args.contains("--version") { print("Colophon \(appVersion)"); exit(0) }
 // `--set key=value` overrides a setting for this run (benchmark and smoke test).
 for (i, a) in args.enumerated() where a == "--set" && i + 1 < args.count {
     let kv = args[i + 1].split(separator: "=", maxSplits: 1).map(String.init)

@@ -1,6 +1,10 @@
-# pdfmd Edit (alpha, `gui/`)
+# Colophon (alpha, `gui/`)
 
-A native macOS text editor for Markdown and other plain-text sources: the first piece of the planned pdfmd GUI.
+**Colophon, the pdfmd workbench** (named on 2026-11-04; a colophon is the note at the end of a book about how it was made): a native macOS
+text editor for Markdown and other plain-text sources, and a PDF viewer, the first piece of the planned pdfmd GUI. Its executable, the
+SwiftPM target and the bundle id keep the older name `pdfmdedit` (so settings, file associations and window positions stay).
+The About box names the pdfmd it works with: the newest one the login shell knows (the terminal's alias and every `pdfmd` on its PATH)
+unless the setting `pdfmdCommand` names one.
 It is a separate program in this repository, written in Swift with AppKit; **nothing in it ships in the PyPI
 package** (`pip install pdfmd-cli` is unchanged), and it contains no pdfmd logic. Needs only the Command Line
 Tools (no Xcode), macOS 13 or newer.
@@ -12,9 +16,9 @@ viewer window of their own (below); the editor and the viewer are not yet wired 
 ## Build and try
 
     cd gui
-    ./build.sh              # swift build + build.noindex/pdfmdedit.app (ad-hoc signed); nothing is launched
+    ./build.sh              # swift build + build.noindex/Colophon.app (ad-hoc signed); nothing is launched
     ./build.sh --install    # also copies the app to ~/Applications
-    build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit FILE.md   # blocks until its windows are closed
+    build.noindex/Colophon.app/Contents/MacOS/pdfmdedit FILE.md   # blocks until its windows are closed
 
 `pdfmd --editor` should be able to point at that last command (the process lives until its windows close);
 this is **not tested yet** in this alpha.
@@ -100,7 +104,7 @@ editor did; `--png` also draws each tab into DIR.
 ## Benchmark and smoke test (no window is ever shown: the smoke tests assert it)
 
     .build/release/pdfmdedit --bench --mb 50 --paste-mb 20 [--tk 1|2] [--no-highlight]
-    build.noindex/pdfmdedit.app/Contents/MacOS/pdfmdedit --smoke FILE.md [--set textKit=1]
+    build.noindex/Colophon.app/Contents/MacOS/pdfmdedit --smoke FILE.md [--set textKit=1]
 
 `--bench` prints open, jump, typing, paste and scrolling times for a generated (or `--file`) document. "Paint"
 means `cacheDisplay` into a bitmap; typing repaints the caret line only, like a screen refresh after a key press.
@@ -113,7 +117,7 @@ caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times 
 prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|contents|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the
 sidebar toggle) in a real window that never takes focus and prints the page and the longest main-thread stall per step. With `PDFLIVE_SHOT=PATH` the `hide` step also saves a screenshot of the window (for what no view dump shows). `PDFMDEDIT_TRACE=1`
 (environment) writes a timestamped trace of place changes, file-change notifications and main-thread stalls to `/tmp/pdfmdedit-trace.log`; start the
-app with `open -n --env PDFMDEDIT_TRACE=1 -a "$PWD/build.noindex/pdfmdedit.app" FILE`. A silent fall back from TextKit 2 to TextKit 1 is reported
+app with `open -n --env PDFMDEDIT_TRACE=1 -a "$PWD/build.noindex/Colophon.app" FILE`. A silent fall back from TextKit 2 to TextKit 1 is reported
 on stderr and at the end of `--bench`.
 
 ## Known limits

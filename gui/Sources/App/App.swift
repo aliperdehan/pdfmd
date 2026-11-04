@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.global(qos: .utility).async { _ = PdfmdTool.cachedResolve() }   // so that the About box has its answer
     }
 
     // A command-line launch with a file (pdfmd's --editor) always quits with its last window: the command that started it waits for
@@ -26,6 +27,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
     func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool { !launchedWithFiles && CommandLine.arguments.count < 2 }
+
+    /// The standard About panel with the app's own words: what it is, how early it is, and which pdfmd it works with (asked of the
+    /// shell off the main thread, so the panel opens a moment later).
+    @objc func showAbout(_ sender: Any?) {
+        DispatchQueue.global().async {
+            let lines = PdfmdTool.aboutLines()
+            DispatchQueue.main.async {
+                let style = NSMutableParagraphStyle()
+                style.alignment = .center
+                let credits = NSMutableAttributedString(string: "the pdfmd workbench\n", attributes: [
+                    .font: NSFont.boldSystemFont(ofSize: 12), .paragraphStyle: style, .foregroundColor: NSColor.labelColor])
+                credits.append(NSAttributedString(string: "\n" + lines.joined(separator: "\n") + "\n", attributes: [
+                    .font: NSFont.systemFont(ofSize: 11), .paragraphStyle: style, .foregroundColor: NSColor.secondaryLabelColor]))
+                NSApp.orderFrontStandardAboutPanel(options: [
+                    .applicationName: "Colophon",
+                    .applicationVersion: "\(appVersion) (early alpha)",
+                    .version: "",
+                    .credits: credits,
+                ])
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+    }
 
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
 
@@ -47,15 +71,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return item
         }
 
-        let app = menu("pdfmdedit")
-        add(app, "About pdfmd Edit", "orderFrontStandardAboutPanel:")
+        let app = menu("Colophon")
+        add(app, "About Colophon", "showAbout:")
         app.addItem(.separator())
         add(app, "Settings…", "showPreferences:", ",")
         app.addItem(.separator())
-        add(app, "Hide pdfmd Edit", "hide:", "h")
+        add(app, "Hide Colophon", "hide:", "h")
         add(app, "Hide Others", "hideOtherApplications:", "h", [.command, .option])
         app.addItem(.separator())
-        add(app, "Quit pdfmd Edit", "terminate:", "q")
+        add(app, "Quit Colophon", "terminate:", "q")
 
         let file = menu("File")
         add(file, "New", "newDocument:", "n")

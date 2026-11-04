@@ -50,7 +50,7 @@ enum PDFLive {
         let n = c.pdfView.document?.pageCount ?? 0
         print("window id \(window.windowNumber), \(n) pages, page \(pageIndex(c) + 1), zoom \(Int(c.pdfView.scaleFactor * 100))%, autoScales \(c.pdfView.autoScales)")
 
-        let steps = args.last.flatMap { ["thumb", "scroll", "zoom", "hide", "contents", "all"].contains($0) ? $0 : nil } ?? "all"
+        let steps = args.last.flatMap { ["thumb", "scroll", "zoom", "hide", "contents", "about", "all"].contains($0) ? $0 : nil } ?? "all"
 
         if steps == "thumb" || steps == "all" {
             let th = c.thumbs
@@ -91,6 +91,14 @@ enum PDFLive {
                 try? p.run(); p.waitUntilExit(); print("screenshot \(out) status \(p.terminationStatus)")
             }
             Settings.set("pdfThumbnails", 0); spin(0.5); frames("hidden again")
+        }
+        if steps == "about" {
+            AppDelegate().showAbout(nil)
+            spin(6)   // the first answer starts a shell and runs every pdfmd
+            if let panel = NSApp.windows.first(where: { $0 !== window && $0.isVisible && $0.title.isEmpty && $0.frame.width < 500 }), let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] {
+                let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(panel.windowNumber), out + "about.png"]
+                try? p.run(); p.waitUntilExit(); print("about panel \(panel.frame.size) saved")
+            } else { print("no about panel found: \(NSApp.windows.map { "\($0.title)|\(Int($0.frame.width))" })") }
         }
         if steps == "contents" {
             func shot(_ name: String) {
