@@ -3,7 +3,8 @@
 (async function () {
   "use strict";
   const S = window.__app, $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const slow = +((location.hash.match(/slow(\d+)/) || [])[1] || 1);   // #selftest-slow4: a real window that WebKit throttles (not the headless run) needs longer waits
+  const sleep = ms => new Promise(r => setTimeout(r, ms * slow));
   const out = []; let fails = 0;
   const check = (name, ok, extra) => { out.push((ok ? "ok    " : "FAIL  ") + name + (ok ? "" : "  " + (extra || ""))); if (!ok) fails++; };
   const setting = k => S.settings[k], closeAll = () => document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));

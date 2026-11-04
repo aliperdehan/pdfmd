@@ -1,0 +1,138 @@
+import Cocoa
+import WebKit
+
+/// `pdfmdedit --smoke-web`: the web studio window (never shown on screen) with the page of `gui/web` in a real WKWebView, which is Safari's
+/// engine and so the engine the page has to look right in. Checks that the page starts and tells the window its state, that each native
+/// command reaches the page (save, new tab, render, close tab, undo), that the window's title and unsaved dot follow, that the menu's selectors
+/// find this window through the responder chain, that closing with unsaved changes asks, that the page's confirm() is answered (it is
+/// silently "no" without a delegate), and the page's own 46-check self-test inside WebKit.
+enum WebSmoke {
+    static func spin(_ s: Double) { RunLoop.current.run(until: Date().addingTimeInterval(s)) }
+
+    static func js(_ c: WebStudioController, _ code: String) -> Any? {
+        var value: Any?
+        var done = false
+        c.web.evaluateJavaScript(code) { r, _ in value = r; done = true }
+        _ = PDFSmoke.wait(5) { done }
+        return value
+    }
+
+    /// `pdfmdedit --web-screenshot PATH [--dark]`: the page as WebKit draws it, written as a PNG without showing anything on screen.
+    static func screenshot(_ args: [String]) {
+        NSApplication.shared.setActivationPolicy(.accessory)
+        guard let i = args.firstIndex(of: "--web-screenshot"), i + 1 < args.count else { exit(2) }
+        NSApp.appearance = NSAppearance(named: args.contains("--dark") ? .darkAqua : .aqua)
+        WebStudioController.unthrottled = true
+        let c = WebStudioController.open()
+        _ = PDFSmoke.wait(15) { c.loaded && ((c.state["tabs"] as? Int) ?? 0) > 0 }
+        spin(1.5)
+        var done = false
+        c.web.takeSnapshot(with: nil) { image, _ in
+            if let tiff = image?.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: URL(fileURLWithPath: args[i + 1]))
+            }
+            done = true
+        }
+        _ = PDFSmoke.wait(10) { done }
+        exit(done ? 0 : 1)
+    }
+
+    static func run() {
+        NSApplication.shared.setActivationPolicy(.accessory)
+        var failures = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            print("\(ok ? "ok  " : "FAIL") \(name) \(detail)")
+            if !ok { failures += 1 }
+        }
+        guard let root = WebStudioController.webRoot() else { print("FAIL no web root"); exit(1) }
+        check("the page is found", FileManager.default.fileExists(atPath: root.appendingPathComponent("index.html").path), root.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+
+        WebStudioController.unthrottled = true
+        let c = WebStudioController.open()
+        let state = { (c.state["tabs"] as? Int) ?? 0 }
+        check("the page loads and reports its state", PDFSmoke.wait(15) { c.loaded && state() > 0 }, "\(c.state)")
+        _ = PDFSmoke.wait(5) { (c.state["cur"] as? String) != nil }
+        check("the title is the file and the project", c.window?.title.contains(" — ") == true, c.window?.title ?? "")
+        check("it opens with one tab, nothing unsaved", state() == 1 && (c.state["dirty"] as? Bool) == false, "\(c.state)")
+        check("the page knows it is in the app", js(c, "window.NATIVE !== null && document.documentElement.classList.contains('native')") as? Bool == true)
+        check("the browser-tab layout is not offered", js(c, "getComputedStyle(document.querySelector('[data-layout=tab]')).display") as? String == "none")
+
+        // timers: a hidden WKWebView is throttled by WebKit to one wake-up a second, which would make every wait in a test wrong
+        var hops = -1.0
+        c.web.callAsyncJavaScript("const t0 = performance.now(); for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 0)); return performance.now() - t0;", arguments: [:], in: nil, in: .page) { r in
+            if case .success(let v) = r { hops = (v as? Double) ?? -2 }
+        }
+        _ = PDFSmoke.wait(30) { hops >= 0 }
+        print("  20 chained timers took \(Int(hops)) ms; visible=\(c.window?.isVisible ?? false) occluded=\(!(c.window?.occlusionState.contains(.visible) ?? false)) active=\(NSApp.isActive)")
+
+        // the commands
+        c.newTab(nil)
+        check("new tab: a second tab with an untitled file", PDFSmoke.wait(5) { state() == 2 } && (c.state["cur"] as? String)?.hasPrefix("untitled") == true, "\(c.state)")
+        c.newTab(nil)
+        check("new tab again: the next free name", PDFSmoke.wait(5) { state() == 3 } && (c.state["cur"] as? String) == "untitled-2.md", "\(c.state["cur"] ?? "")")
+        _ = js(c, "window.__app.editor.replaceSelection('Typed text with **bold**.', false); 0")
+        check("an edit shows the unsaved dot in the window", PDFSmoke.wait(5) { c.window?.isDocumentEdited == true }, "\(c.state["dirty"] ?? "")")
+
+        // closing asks; the page's confirm() is answered by the window
+        c.dialogAnswer = false
+        check("closing the window with unsaved changes asks (and can say no)", c.windowShouldClose(c.window!) == false)
+        c.dialogAnswer = true
+        check("... and can say yes", c.windowShouldClose(c.window!) == true)
+        c.dialogAnswer = false
+        _ = js(c, "window.appCommand('closeTab'); 0"); spin(0.3)
+        check("a tab with changes stays when the page's confirm() is answered no", state() == 3, "\(state()) tabs")
+        c.dialogAnswer = true
+        _ = js(c, "window.appCommand('closeTab'); 0")
+        check("... and closes when it is answered yes", PDFSmoke.wait(5) { state() == 2 }, "\(state()) tabs")
+        c.dialogAnswer = nil
+
+        // save by the page's logic
+        _ = js(c, "window.appCommand('previousTab'); 0"); spin(0.2)
+        _ = js(c, "window.__app.editor.replaceSelection(' more', false); 0")
+        check("previous tab moves to the first file", (c.state["cur"] as? String) != nil && PDFSmoke.wait(5) { c.window?.isDocumentEdited == true })
+        c.saveDocument(nil)
+        check("save: the unsaved dot goes (file and the other tab)", PDFSmoke.wait(5) { c.window?.isDocumentEdited == false } || (c.state["dirty"] as? Bool) == false, "\(c.state["dirty"] ?? "")")
+
+        // render: the live view is made again, whatever the render mode
+        _ = js(c, "window.api.lastRender = null; window.__app.editor.replaceSelection('\\n\\nA new paragraph.', false); 0")
+        c.reloadFile(nil)
+        check("render: the live view is rendered at once", PDFSmoke.wait(5) { (js(c, "document.querySelector('#live').textContent.includes('A new paragraph') ") as? Bool) == true })
+
+        // the responder chain from the page up: the menu's actions find the window controller before the application's own
+        for sel in ["newTab:", "reloadFile:", "saveDocument:"] {
+            var r: NSResponder? = c.web
+            while let x = r, !x.responds(to: Selector(sel)) { r = x.nextResponder }
+            check("the menu's \(sel) reaches the web window", (r as AnyObject?) === c, "\(String(describing: r))")
+        }
+        let reload = NSMenuItem(title: "Reload", action: #selector(WebStudioController.reloadFile(_:)), keyEquivalent: "r")
+        _ = c.validateMenuItem(reload)
+        check("Reload is called Render Preview here", reload.title == "Render Preview", reload.title)
+        let find = NSMenuItem(title: "Find Next", action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "g"); find.tag = 2
+        check("Find Next is off, Find… is on", c.validateMenuItem(find) == false)
+        find.tag = 1
+        check("... Find… is on", c.validateMenuItem(find))
+
+        // links to the web go to the browser, not into the window
+        check("the page's own files stay in the window", js(c, "location.protocol") as? String == "file:")
+
+        c.window?.close()
+        check("the window is released when closed", PDFSmoke.wait(2) { !WebStudioController.all.contains { $0 === c } })
+
+        // the page's own self-test, in WebKit
+        let t = WebStudioController.open(hash: "selftest-slow4")
+        _ = PDFSmoke.wait(60) { (js(t, "document.title") as? String).map { $0 == "OK" || $0 == "FAILED" } ?? false }
+        let report = (js(t, "(document.querySelector('#selftest')||{}).textContent||''") as? String) ?? ""
+        let fails = report.components(separatedBy: "\n").filter { $0.hasPrefix("FAIL") }
+        for f in fails { print(f) }
+        if !fails.isEmpty {   // what the page shows, for the failure
+            print("  live view ends: \((js(t, "document.querySelector('#live').textContent.slice(-120)") as? String) ?? "")")
+            print("  banner: \((js(t, "document.querySelector('#liveBanner').textContent") as? String) ?? "")  mode: \((js(t, "document.querySelector('#renderMode').value") as? String) ?? "")")
+            print("  tabs: \((js(t, "[...document.querySelectorAll('.tab')].map(x=>x.textContent).join('|')") as? String) ?? "")  side: \((js(t, "document.querySelector('#side').textContent.slice(0,200)") as? String) ?? "")")
+        }
+        check("the page's self-test passes in WebKit", report.contains("SELFTEST OK"), report.components(separatedBy: "\n").last(where: { $0.hasPrefix("SELFTEST") }) ?? "no report")
+        t.window?.close()
+
+        print(failures == 0 ? "web smoke: all ok" : "web smoke: \(failures) FAILED")
+        exit(failures == 0 ? 0 : 1)
+    }
+}

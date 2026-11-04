@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.35c — 2026-11-04
+
+Pre-edit state: commit `a0f09c4`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.0: the web studio window.** The author: "you may write a wrapper around that web thing i guess now so it does not depend on browser and we can remap the shortcuts however we want".
+
+- `Sources/Web/WebStudio.swift`: a window with a WKWebView around `gui/web` (the app's `Resources/web`, copied by `build.sh`; `--web-root PATH` for a checkout). File ▸ New Web Studio Window (⇧⌘N), `--web` at launch. The native side owns the menu bar: ⌘R (Render Preview, not a page reload), ⌘T (a new tab of the project, not a browser tab), ⌘S (the page's save), ⇧⌘F, ⌃Tab, ⌘Z and ⇧⌘Z reach the page as commands (`window.appCommand(name)`, `js/native.js`); the page reports its state back (window title, unsaved dot). The page's `confirm`/`alert`/`prompt` are answered by native dialogs (WKWebView answers "no" silently without them); links to the web open in the browser; closing with unsaved changes asks.
+- Page: `js/native.js` (the bridge, `NATIVE` is null in a browser), a command table, new empty file as a tab (`api.createFile`), the browser-tab preview layout hidden inside the app.
+- `--smoke-web` (25 checks, real WebKit, window never shown; private WebKit switches keep a hidden page's timers running, which WebKit otherwise wakes once a second) runs the page's 46-check self-test inside WebKit as well (`#selftest-slow4` stretches its waits); `--web-screenshot PATH [--dark]`.
+
 ## v3.32.35b — 2026-11-04
 
 Pre-edit state: commit `c9a11ff`. Entry 3do; `gui/web/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump (and no Colophon version: the prototype is not in the app; 0.3.0 comes with the native window around it). The author on the prototype: "the symbols currently pass unicode, so documents become not ascii only ... a toggler between latex equivalent and plain unicode, with ascii being preferred"; the insert templates "insert it once more instead of acting as a toggle"; "the built in renderer was pretty once loaded and everything is gone after the first edit"; "**bold was just an example, does it apply to other things like *italic, comments, $math".

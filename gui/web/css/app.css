@@ -126,3 +126,4 @@ dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--b
 dialog h2 { margin: 0 0 8px; font-size: 15px; } dialog pre.cmd { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; font: 12px/1.5 var(--mono); white-space: pre-wrap; }
 dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 pre.diff { margin: 0; font: 12px/1.5 var(--mono); max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); } pre.diff div { padding: 0 8px; white-space: pre-wrap; } pre.diff .a { background: var(--add); } pre.diff .d { background: var(--del); } pre.diff .h { color: var(--accent); }
+.native [data-layout=tab] { display: none; }

@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let error { NSApp.presentError(error) }
             }
         }
+        if CommandLine.arguments.contains("--web") { WebStudioController.open() }   // the web studio at launch (a Mac window around gui/web)
         NSApp.activate(ignoringOtherApps: true)
         PopController.shared.settingsChanged()   // the menu-bar icon and the shortcut, when the setting says so
         NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in PopController.shared.settingsChanged() }
@@ -132,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if url.host == "pdfmd" { showPdfmdVersions(nil) }
     }
 
+    @objc func openWebStudio(_ sender: Any?) { WebStudioController.open() }
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }
 
     private func buildMenus() {
@@ -166,6 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(file, "New", "newDocument:", "n")
         add(file, "New Tab", "newTab:", "t")
         add(file, "Open…", "openDocument:", "o")
+        add(file, "New Web Studio Window", "openWebStudio:", "n", [.command, .shift])
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu(title: "Open Recent")
         recentMenu.addItem(NSMenuItem(title: "Clear Menu", action: Selector(("clearRecentDocuments:")), keyEquivalent: ""))

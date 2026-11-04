@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.16"
+let appVersion = "0.3.0"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:

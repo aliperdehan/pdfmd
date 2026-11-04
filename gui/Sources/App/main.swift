@@ -39,6 +39,8 @@ if args.contains("--smoke-cli") { CLISmoke.run(); exit(0) }
 if args.contains("--smoke-export") { ExportSmoke.run(); exit(0) }
 if args.contains("--smoke-studio") { StudioSmoke.run(); exit(0) }
 if args.contains("--smoke-html") { HTMLSmoke.run(); exit(0) }
+if args.contains("--smoke-web") { WebSmoke.run(); exit(0) }
+if args.contains("--web-screenshot") { WebSmoke.screenshot(args); exit(0) }
 if args.contains("--smoke-pop") { PopSmoke.run(); exit(0) }
 if args.contains("--smoke-untitled") { Smoke.untitled() }
 if args.contains("--smoke-tabs") { Smoke.tabs() }

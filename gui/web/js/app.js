@@ -67,6 +67,10 @@
     if (line) S.editor.scrollTo(line);
     renderTabs(); renderSide(); refreshAll(); S.editor.focus();
   }
+  async function newFile() {      // a new empty file as a new tab of the project (the native command T)
+    let n = 1, name = "untitled.md"; while (S.files[name] || S.project.tree.some(t => t.name === name)) name = "untitled-" + (++n) + ".md";
+    await api.createFile(name); await openFile(name);
+  }
   function closeTab(path) {
     const f = S.files[path];
     if (f && isDirty(f) && !confirm(path + " has changes that are not saved. Close it anyway?")) return;
@@ -83,6 +87,7 @@
       tab.addEventListener("click", e => { if (e.target.classList.contains("x")) closeTab(p); else if (!on) openFile(p); });
       box.append(tab);
     }
+    reportState();
   }
   async function save() {
     const f = file(); if (!f) return;
@@ -340,6 +345,7 @@
 
   // ---------- chrome: menus, layouts, views, splitters ---------------------------------------------------------------------------
   function setLayout(l) {
+    if (l === "tab" && window.NATIVE) return;
     if (l === "tab") { window.open(location.pathname + "#preview", "app-preview"); toast("Preview opened in a browser tab; it follows this page"); return; }
     S.layout = l; document.body.dataset.layout = l; $$("#layoutSeg button").forEach(b => b.classList.toggle("on", b.dataset.layout === l)); api.store.set("layout", l);
   }
@@ -350,7 +356,7 @@
       file: [{ label: "Save", keys: MOD + "S", run: save }, { label: "Close tab", keys: MOD + "W", run: () => S.cur && closeTab(S.cur) }, "-", { label: "Export As", sub: exportTree() }, "-", { label: "Build", keys: MOD + "↩", run: runBuild }],
       edit: [{ label: "Undo", keys: MOD + "Z", run: () => S.editor.undo() }, { label: "Redo", keys: MOD + "⇧Z", run: () => S.editor.redo() }, "-", { label: "Find in all files", keys: MOD + "⇧F", run: () => setPanel("search") }],
       insert: ["comment", "code", "fence", "div", "calc", "-", "image", "link", "table", "-", "math", "mathblock", "footnote", "cite", "-", "pagebreak"].map(k => (k === "-" ? k : mk(k))),
-      view: [{ head: "Layout" }, ...[["split", "Split"], ["editor", "Editor only"], ["preview", "Preview only"], ["tab", "Preview in a browser tab"], ["focus", "Focus mode"]].map(([k, l]) => ({ label: l, check: S.layout === k, run: () => setLayout(k) })),
+      view: [{ head: "Layout" }, ...[["split", "Split"], ["editor", "Editor only"], ["preview", "Preview only"], ...(window.NATIVE ? [] : [["tab", "Preview in a browser tab"]]), ["focus", "Focus mode"]].map(([k, l]) => ({ label: l, check: S.layout === k, run: () => setLayout(k) })),
         "-", { head: "Editor" }, { label: "CodeMirror 6", check: S.editor.kind === "codemirror", run: () => switchEditorKind("codemirror") }, { label: "Plain text box", check: S.editor.kind === "textarea", run: () => switchEditorKind("plain") },
         "-", { head: "Panels" }, ...[["files", "Files and outline"], ["search", "Search"], ["checks", "Checks"], ["history", "History"], ["settings", "Settings"]].map(([k, l]) => ({ label: l, check: S.panel === k, run: () => setPanel(k) }))],
       format: [mk("bold"), mk("italic"), mk("code"), "-", ...[1, 2, 3].map(n => ({ label: "Heading " + n, run: () => heading(n) })), { label: "Normal text", run: () => heading(0) }, "-", mk("list")],
@@ -369,6 +375,22 @@
   }
 
   function refreshAll() { const f = file(); $("#mainName").textContent = S.project.main; $("#projectName").textContent = S.project.name; $("#stKind").textContent = S.cur ? (S.cur.endsWith(".md") ? "Markdown" : S.cur.endsWith(".bib") ? "BibTeX" : "text") : ""; if (f) { $("#stWords").textContent = words(f.text) + " words"; renderLive(); } }
+
+  // ---------- the native window (WKWebView): it owns the shortcuts and the menu bar and calls these; the page tells it what to show -----------
+  const COMMANDS = {
+    save, render: () => renderLive(), build: runBuild, newTab: newFile, closeTab: () => S.cur && closeTab(S.cur),
+    find: () => setPanel("search"), undo: () => S.editor.undo(), redo: () => S.editor.redo(), settings: () => setPanel("settings"),
+    layoutSplit: () => setLayout("split"), layoutEditor: () => setLayout("editor"), layoutPreview: () => setLayout("preview"), layoutFocus: () => setLayout("focus"),
+    nextTab: () => cycleTab(1), previousTab: () => cycleTab(-1),
+  };
+  function cycleTab(d) { if (S.tabs.length > 1) openFile(S.tabs[(S.tabs.indexOf(S.cur) + d + S.tabs.length) % S.tabs.length]); }
+  window.appCommand = name => { const c = COMMANDS[name]; if (!c) return false; c(); return true; };
+  function reportState() {
+    if (!window.NATIVE || !S.project) return;
+    const dirty = S.tabs.some(p => { const f = S.files[p]; return f && (p === S.cur ? S.editor.getText() !== f.saved : isDirty(f)); });
+    const st = JSON.stringify({ type: "state", project: S.project.name, main: S.project.main, cur: S.cur, tabs: S.tabs.length, dirty });
+    if (st !== reportState.last) { reportState.last = st; window.NATIVE.post(JSON.parse(st)); }
+  }
 
   // ---------- start ---------------------------------------------------------------------------------------------------------------
   async function start() {
@@ -412,5 +434,5 @@
   }
   start();
   window.__app = S;    // for the self-test only
-  if (location.hash === "#selftest") document.head.append(el("script", { src: "js/selftest.js" }));
+  if (location.hash.startsWith("#selftest")) document.head.append(el("script", { src: "js/selftest.js" }));
 })();

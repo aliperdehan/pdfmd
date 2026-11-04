@@ -98,6 +98,7 @@
     standIn: (n, t) => standIn(n, t),
     project: () => later(F.project),                                   // GET /project
     readFile: p => later(F.files[p]),                                  // GET /file?path=
+    createFile: name => { F.files[name] = { text: "" }; F.project.tree.push({ name, kind: "markdown" }); F.outline[name] = []; F.preview[name] = ""; return later({ ok: true }); },   // POST /file (new)
     writeFile: (p, text) => { F.files[p].text = text; return later({ ok: true, mtime: new Date().toISOString() }); },   // PUT /file (409 on a newer mtime)
     outline: p => later(F.outline[p] || []),                           // GET /outline?path=
     // POST /render {file,text,mode:"live"}. Only the blocks that the edit touches are rendered anew; every other block keeps pandoc's own HTML (a
