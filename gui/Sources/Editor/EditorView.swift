@@ -186,6 +186,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     private(set) var content: EditorContent!
     private(set) var ruler: LineNumberRuler!
     let builder = BuildController()
+    let exporter = ExportController()
     let studio = StudioController()
 
     init(document: EditorDocument) {
@@ -216,9 +217,11 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         load(document.text, document: document)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
         builder.owner = self
+        exporter.owner = self
         studio.owner = self
         NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: parts.textView, queue: .main) { [weak self] _ in
             self?.builder.textEdited()
+            self?.exporter.textEdited()
         }
         if Settings.int("startupWindow") == 1 { studio.show(growWindow: false) }
     }
@@ -284,6 +287,11 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     /// Command R in an editor window: save, run pdfmd, show the PDF (in a PDF window the same menu item reloads the file).
     @objc func reloadFile(_ sender: Any?) { builder.request() }
     @objc func showBuildLog(_ sender: Any?) { builder.showLog() }
+    /// File > Export As: the item carries the id of a row of `ExportTable`.
+    @objc func exportAs(_ sender: Any?) {
+        guard let id = (sender as? NSMenuItem)?.representedObject as? String, let format = ExportTable.format(id) else { return }
+        exporter.start(format)
+    }
     @objc func togglePreview(_ sender: Any?) { studio.toggle() }
     @objc func previewAsHTML(_ sender: Any?) { studio.setMode(pdf: false) }
     @objc func previewAsPDF(_ sender: Any?) { studio.setMode(pdf: true) }
@@ -291,6 +299,12 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(reloadFile(_:)) { item.title = "Build PDF" }
         if item.action == #selector(showBuildLog(_:)) { return builder.hasLog }
+        if item.action == #selector(exportAs(_:)) {
+            ExportAvailability.ensureLoaded()
+            guard let format = ExportTable.format(item.representedObject as? String ?? "") else { return false }
+            if let engine = format.engine, ExportAvailability.missing.contains(engine) { return false }
+            return !exporter.running
+        }
         if item.action == #selector(togglePreview(_:)) { item.title = studio.isShown ? "Hide Preview" : "Show Preview" }
         if item.action == #selector(previewAsHTML(_:)) { item.state = studio.isShown && !studio.showsPDF ? .on : .off; return studio.isShown }
         if item.action == #selector(previewAsPDF(_:)) { item.state = studio.isShown && studio.showsPDF ? .on : .off; return studio.isShown }

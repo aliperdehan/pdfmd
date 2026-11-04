@@ -26,6 +26,7 @@ enum CLI {
         ("install", "colophon install WHAT   `pdfmd --install WHAT` (fonts, kits, engines)"),
         ("pandoc", "colophon pandoc ARGS    the pandoc that the preview uses"),
         ("check", "colophon check [--json] the versions and places of Colophon, pdfmd, pandoc, the TeX engines and typst"),
+        ("export", "colophon export FILE FORMAT [--engine E] [-o OUT]  write another format (pdf, docx, html, md ...); --list shows every one"),
         ("eq", "colophon eq SNIPPET OUT.pdf [options]  the equation popup without its window: a LaTeX or Markdown snippet to a cropped vector PDF (--png, --svg too)"),
         ("open", "colophon open [-w] FILE...  open in Colophon (-w waits until its windows close); `colophon FILE` does the same"),
         ("settings", "colophon settings ...  list | get KEY | set KEY VALUE... | reset KEY... | fonts | themes   (--json for programs)"),
@@ -59,6 +60,7 @@ enum CLI {
         case "open": open(rest.filter { $0 != "-w" && $0 != "--wait" }, wait: rest.contains("-w") || rest.contains("--wait"))
         case "settings": SettingsCLI.run(rest)
         case "eq": PopCLI.run(rest)
+        case "export": ExportCLI.run(rest)
         case "help", "--help", "-h": help(rest.first)
         case "version", "--version", "-V": out("Colophon \(appVersion)"); exit(0)
         default:

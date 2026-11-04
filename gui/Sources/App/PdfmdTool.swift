@@ -171,7 +171,7 @@ enum PdfmdTool {
         return lines
     }
 
-    private static func run(_ script: String, command: String, interactive: Bool, timeout: Double) -> String {
+    static func run(_ script: String, command: String, interactive: Bool, timeout: Double) -> String {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
         p.arguments = [interactive ? "-lic" : "-lc", script]

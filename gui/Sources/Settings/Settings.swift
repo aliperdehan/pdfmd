@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.13"
+let appVersion = "0.2.14"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -74,6 +74,7 @@ enum Settings {
         Item(key: "buildTimeout", value: 600, label: "Stop a build after (s)", help: "a build (command R in an editor window) that has not ended after this many seconds is stopped, with everything it started; 0 = never", tab: "Build"),
         Item(key: "buildOpensPDF", value: 1, label: "Open the PDF after a build", help: "1 = a build whose PDF is not open yet opens it in a window (the editor keeps the keyboard); a PDF that is open is always shown again", tab: "Build", kind: .flag),
         Item(key: "buildWhenWatched", value: 0, label: "Build although pdfmd is watching", help: "0 = when a pdfmd --watch (pdfmd -w, or the one that pdfmd --edit --editor starts) is already rebuilding this file on every save, command R only saves; 1 = build as well", tab: "Build", kind: .flag),
+        Item(key: "exportReveal", value: 0, label: "Show the exported file in Finder", help: "1 = File > Export As shows the new file in Finder when it is done (Finder then takes the keyboard); 0 = only the window's subtitle says it", tab: "Build", kind: .flag),
         Item(key: "pdfAutoReload", value: 1, label: "Reload when the file changes", help: "1 = a PDF window shows a rewritten file by itself (same page and zoom); 0 = it only says \"file changed\" and waits for View > Reload (command R)", tab: "PDF", kind: .flag),
         Item(key: "pdfThumbnails", value: 1, label: "Show thumbnails", help: "1 = show the page thumbnails in a sidebar", tab: "PDF", kind: .flag),
         Item(key: "pdfSidebarMode", value: 0, label: "Sidebar shows", help: "0 = page thumbnails, 1 = the table of contents (outline)", tab: "PDF", kind: .choice([0, 1])),
@@ -142,7 +143,7 @@ enum Settings {
 
     static let texts: [Text] = [
         Text(key: "pdfmdCommand", value: "", label: "pdfmd command", help: "the command that runs pdfmd, as typed in a shell (for example python3 ~/dev/py/pdfmd/pdfmd.py); empty = the newest pdfmd that the shell knows (the terminal's alias and every pdfmd on its PATH). The About box shows which one is used", tab: "General"),
-        Text(key: "buildArguments", value: "", label: "pdfmd options for a build", help: "words added to the pdfmd command that command R runs, as typed in a shell (for example --engine typst, or -t html to build something else; the file is added last). Empty = pdfmd's own defaults, including the folder's pdfmd --setup", tab: "Build"),
+        Text(key: "buildArguments", value: "", label: "pdfmd options for a build", help: "words added to the pdfmd command that command R runs, as typed in a shell (for example --engine typst, or -t html to build something else; the file is added last). File > Export As uses them too, without any -t or -o of yours (it writes its own). Empty = pdfmd's own defaults, including the folder's pdfmd --setup", tab: "Build"),
         Text(key: "pandocCommand", value: "", label: "pandoc for the preview", help: "the path of the pandoc that makes the HTML preview; empty = the first pandoc on the login shell's PATH", tab: "Studio"),
         Text(key: "htmlPreviewArguments", value: "", label: "pandoc options for the preview", help: "words added to the pandoc command of the preview, as typed in a shell (for example --citeproc --number-sections, or --lua-filter ~/x.lua); the page is made from the text of the window, in its folder", tab: "Studio"),
         Text(key: "htmlPreviewCSS", value: "", label: "Style sheet for the preview", help: "the path of a .css file that is added to the preview's own style (empty = none)", tab: "Studio"),

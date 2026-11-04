@@ -36,11 +36,12 @@ enum PdfmdBuild {
 
     /// Starts the build; `output` gets pieces of what pdfmd prints while it runs, `done` the result. Both are called on the main thread.
     @discardableResult
-    static func run(command: String, arguments: String, file: URL, timeout: Double, output: @escaping (String) -> Void,
+    static func run(command: String, arguments: String, file: URL, extra: [String] = [], timeout: Double, output: @escaping (String) -> Void,
                     done: @escaping (Result) -> Void) -> Process {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lic", #"eval "$PDFMD_CMD $PDFMD_ARGS \"\$@\"""#, "pdfmd", file.path]
+        // `extra` (an export's `-t docx -o OUT`) follows the file as arguments of the shell, never inside the script: a path with a quote stays a path
+        p.arguments = ["-lic", #"eval "$PDFMD_CMD $PDFMD_ARGS \"\$@\"""#, "pdfmd", file.path] + extra
         var env = ProcessInfo.processInfo.environment
         env["PDFMD_CMD"] = command
         env["PDFMD_ARGS"] = arguments
@@ -207,6 +208,11 @@ final class BuildController: NSObject {
 
     func request() {
         guard let doc = editorDocument else { return }
+        if owner?.exporter.running == true {
+            say("Exporting… build when it ends", status: false)
+            NSSound.beep()
+            return
+        }
         if running {
             queued = true
             say("Building… (the next build is queued)")

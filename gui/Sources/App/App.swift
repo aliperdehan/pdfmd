@@ -151,6 +151,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(file, "Save", "saveDocument:", "s")
         add(file, "Save As…", "saveDocumentAs:", "s", [.command, .shift])
         add(file, "Revert to Saved", "revertDocumentToSaved:")
+        file.addItem(.separator())
+        let export = NSMenuItem(title: "Export As", action: nil, keyEquivalent: "")
+        export.submenu = ExportTable.makeMenu()
+        file.addItem(export)
 
         let edit = menu("Edit")
         add(edit, "Undo", "undo:", "z")
