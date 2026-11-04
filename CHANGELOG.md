@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.32.38 — 2026-11-05
+
+Pre-edit state: commit `ed3208a`. Entry 3do (the web UI). **The page answers command-9 and opens on a file it is asked for.** The author: command-9 should be the last tab in a text window (and Zoom to Fit in a PDF window), and the Mac window should work on the real folder through `pdfmd --serve`.
+
+- `lib/pdfmd_web/js/app.js`: the command `tabLast` (the last tab, whatever their number; command-9 of the Mac window). `?open=PATH` in the page's address opens that file of the project at start instead of the main document (the Mac app puts the file it was editing there), and `window.appOpen(PATH)` opens a file in a tab of a running page (false, with a toast, when there is no such file). The page's self-test has a check for `tabLast` (48 checks).
+
 ## v3.32.37a — 2026-11-04
 
 Pre-edit state: commit `b476b1b`. Entry 3do. **Colophon (Mac app, `gui/` only): command-1 to command-8 select tabs, and control-command-S switches between plain text and the studio.** The author: the number keys switch no tabs in plain text mode (CotEditor's do), and "a hotkey to switch between the plain text mode and studio mode". No shipped code changes (`PDFMD_VERSION` stays 3.32.37).
