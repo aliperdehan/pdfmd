@@ -1,0 +1,16 @@
+#!/bin/sh
+# The command line of Colophon: the app's own program, started without the app's windows. Put a symbolic link to this file in a
+# folder on the PATH (ln -s ~/Applications/Colophon.app/Contents/Resources/colophon ~/.local/bin/colophon).
+self="$0"
+while [ -L "$self" ]; do
+    dir=$(dirname "$self")
+    self=$(readlink "$self")
+    case "$self" in
+        /*) ;;
+        *) self="$dir/$self" ;;
+    esac
+done
+here=$(cd "$(dirname "$self")" && pwd)
+COLOPHON_CLI=1
+export COLOPHON_CLI
+exec "$here/../MacOS/pdfmdedit" "$@"

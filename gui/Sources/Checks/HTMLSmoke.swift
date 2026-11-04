@@ -118,6 +118,17 @@ enum HTMLSmoke {
         check("an anchor link scrolls the page", y2 > 1000, "y \(y2)")
         check("and the page is still this file", page.web.url?.lastPathComponent == "page%20one.html" || page.web.url?.lastPathComponent == "page one.html", page.web.url?.absoluteString ?? "nil")
 
+        // a drawing
+        let svg = dir.appendingPathComponent("drawing.svg")
+        try! "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='teal'/><script>document.documentElement.setAttribute('data-ran','1')</script></svg>".write(to: svg, atomically: true, encoding: .utf8)
+        check("an .svg file is an HTML document too", (try? DocController().typeForContents(of: svg)) == "HTML document")
+        if let sdoc = open(svg), let sc = sdoc.controller {
+            check("the drawing loaded", PDFSmoke.wait(15) { sc.page.loads >= 1 })
+            check("it is drawn as an SVG", (js(sc.page, "document.documentElement.tagName") as? String) == "svg")
+            check("a script inside it did not run", js(sc.page, "document.documentElement.getAttribute('data-ran')") is NSNull || js(sc.page, "document.documentElement.getAttribute('data-ran')") == nil)
+            sdoc.close()
+        } else { check("the drawing opened", false) }
+
         // the source
         let before = NSDocumentController.shared.documents.count
         c.openSource(display: false)

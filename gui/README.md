@@ -57,10 +57,22 @@ line numbers, status bar), `PDF/` (the viewer), `Settings/` (the settings table,
 
 ## Settings
 
+**The command line, `colophon`.** The app's own program started without a window; `build.sh --install` prints the one line that links it
+into a folder on the PATH (`ln -s ~/Applications/Colophon.app/Contents/Resources/colophon ~/.local/bin/colophon`). In the manner of `quarto VERB`:
+`colophon render ARGS` is `pdfmd ARGS`, `restore ARGS` is `pdfmd --restore ARGS`, `install WHAT` is `pdfmd --install WHAT`, `pandoc ARGS` is
+the pandoc the preview uses (all hand the arguments over unchanged, in the terminal's own environment, and exit with the tool's status; the pdfmd is
+the newest found, or the `pdfmdCommand` setting, remembered for `toolCacheSeconds` in a file so that a new process does not ask the shell
+again); `check [--json]` lists the versions and places of Colophon, pdfmd, pandoc, the TeX engines and typst; `open [-w] FILE...` (also plain
+`colophon FILE`); `help`, `version`. **Everything the Settings window sets can be set from here**, for scripts and for an agent that is told
+"set my font to Courier": `colophon settings list [TAB|WORD] [--json]`, `get KEY`, `set KEY VALUE [KEY VALUE ...]` (all or nothing; values are
+checked, a font or a theme is accepted in any case and stored by its real name, a wrong name suggests the right one), `reset KEY... | --all`, `fonts`,
+`themes`. A running Colophon applies the change at once. `COLOPHON_DOMAIN` points the command at another settings domain (the tests).
+All menu shortcuts are fixed in the code for now (65 rows in `App.swift`); user-set shortcuts and presets are planned.
+
 **HTML files** (`.html`, `.htm`, `.xhtml`) open as the page, in a window of their own (WebKit), and are watched like a PDF: a rewritten file
 is loaded again on the same place of the page, once (View > Reload Automatically, `htmlAutoReload`, turns that off: the window says "file
 changed" and ⌘R loads it), with the old picture of the page kept on screen until the new one is there. The toolbar has zoom, Show Source
-(⌥⌘U: the same file as text, in an editor window) and a search field (⌘F, ⌘G, ⇧⌘G). A link to another file opens it in Colophon, a web link
+(⌥⌘U: the same file as text, in an editor window; an `.svg` file opens here too, drawn by WebKit, with scripts off) and a search field (⌘F, ⌘G, ⇧⌘G). A link to another file opens it in Colophon, a web link
 in the browser. `htmlOpenAs` = 1 opens `.html` as text instead.
 
 **The studio (first sketch): the preview pane.** View > Show Preview (⌥⌘P) puts a pane beside the text of an editor window. A switch at its
@@ -135,7 +147,7 @@ means `cacheDisplay` into a bitmap; typing repaints the caret line only, like a 
 The numbers compare variants with each other and are not a measurement of any other editor. `--smoke` opens the
 file through the real document path, edits and scrolls it and checks the bytes and that the colours stay on
 screen; `--smoke-save DIR` makes files of several kinds in DIR and saves each to disk. `--gen MB PATH` writes the
-benchmark's document so that it can be opened by hand. `--smoke-build FILE.md [--real]` runs ⌘R in an editor window against a stand-in for pdfmd (save first, a file name with quotes, the PDF found and shown once, a queued second build, a failure's log, a timeout that kills the whole tree, a running `pdfmd --watch`); `--real` also builds with the installed pdfmd (run it under `env -i HOME=$HOME PATH=/usr/bin:/bin` to see what a Dock launch has). `--smoke-studio` drives the preview pane against the real pandoc (unsaved text, a burst of typing, math, a picture, an anchor, a script that must not run, an error, the PDF, following the scroll, the startup setting); `--live-studio FILE.md [FILE.pdf]` does it in a real window and saves screenshots (`PDFLIVE_SHOT=PREFIX`). `--smoke-html` opens an HTML file through the real path and checks the load, the reload on the same place (once), the manual mode, find, zoom, anchors and Show Source. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
+benchmark's document so that it can be opened by hand. `--smoke-build FILE.md [--real]` runs ⌘R in an editor window against a stand-in for pdfmd (save first, a file name with quotes, the PDF found and shown once, a queued second build, a failure's log, a timeout that kills the whole tree, a running `pdfmd --watch`); `--real` also builds with the installed pdfmd (run it under `env -i HOME=$HOME PATH=/usr/bin:/bin` to see what a Dock launch has). `--smoke-cli` runs the command line as a program on a scratch settings domain (settings list/get/set/reset and their checks, a running app told at once, render/restore/install/pandoc handing over unchanged, check). `--smoke-studio` drives the preview pane against the real pandoc (unsaved text, a burst of typing, math, a picture, an anchor, a script that must not run, an error, the PDF, following the scroll, the startup setting); `--live-studio FILE.md [FILE.pdf]` does it in a real window and saves screenshots (`PDFLIVE_SHOT=PREFIX`). `--smoke-html` opens an HTML file through the real path and checks the load, the reload on the same place (once), the manual mode, find, zoom, anchors and Show Source. `--smoke-pdf FILE.pdf` (at least 3 pages) opens a copy of the PDF through the real
 document path without a window and checks zoom and its limits, the same place after the file is rewritten in place, replaced atomically and
 caught half-written, search, and the PDF settings; `--bench-pdf FILE.pdf` times PDFKit's open and a page rendered at 1x, 4x and 16x and
 prints the resident memory. `--live-pdf FILE [thumb|scroll|zoom|hide|contents|all]` does what a hand does (thumbnail clicks, wheel flicks, zooms, the

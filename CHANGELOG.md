@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29l — 2026-11-04
+
+Pre-edit state: commit `80032a0`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.11: a command line (`colophon`), a shorter About box, SVG files.** The author: "cli. we agreed that no setting in gui ... should depend on clicking on buttons, everything should be able to be done from shell ... have api so agents like you can interact"; "`colophon render` (which just redirects everything after it into pdfmd-cli) and `colophon restore` (just pdfmd --restore), and else --- mirroring quarto syntax, i suppose?"; "in about: the found versions are kinda verbose, let's hide it under `pdfmd` or its version number ... or `more` button"; "i guess it also makes it cheap to use pdfmd to preview svg as well?".
+
+- **`colophon VERB`** (`Sources/App/CLI.swift`, the script `Resources/colophon` that the bundle carries; it sets `COLOPHON_CLI=1` and starts the app's program, which then creates no window): `render`, `restore`, `install`, `pandoc` hand everything to pdfmd or pandoc unchanged (terminal's environment, the tool's exit status, Ctrl-C reaches the tool); `check [--json]`; `open [-w]` / `colophon FILE`; `help`; `version`; `settings list|get|set|reset|fonts|themes [--json]`. `settings` covers every row of the Settings window and the colour roles, checks each value (switch, number, choice, a font family or theme in any case, `#RRGGBB[,#RRGGBB]`), refuses a wrong one with exit 1 and a suggestion, applies a `set` of several pairs all or nothing, and tells a running Colophon through a distributed notification so that open windows follow at once. Verbs are not Quarto's whole list: `preview`, `create`/`use` (kits), `publish` are not built (queue entry). The link into the PATH is not made by `build.sh --install` (it prints the `ln -s`).
+- The pdfmd found is now remembered in `~/Library/Caches/<bundle id>/pdfmd-found.json` as well as in memory, for `toolCacheSeconds` (600, a setting: it was a constant 120 s), so a new process does not start a shell for two seconds.
+- **About box**: one line, `pdfmd 3.32.29  more…`; the link (a `colophon://pdfmd` URL, the app now owns the `colophon` scheme) opens a small panel with which pdfmd is used, how it was chosen, where it is, and every other one found.
+- **SVG**: an `.svg` file opens in the HTML window (WebKit draws it; JavaScript is off for it); the document type lists `public.svg-image`.
+- `--smoke-cli`: 28 checks (the command as a real subprocess on a scratch domain); `--smoke-html` +3.
+
 ## v3.32.29k — 2026-11-04
 
 Pre-edit state: commit `ef6f5bb`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.10: the first sketch of the studio, an editor window with a preview pane.** The author: "let's empower colophon to both read and render html so the first studio mode could have a fast option to preview in html. you can sketch the studio mode along the way which is i guess slower and therefore not the default startup window (tho settable)". (0.3.0 stays reserved for a studio the author calls working.)

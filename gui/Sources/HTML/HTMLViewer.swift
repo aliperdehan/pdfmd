@@ -1,8 +1,8 @@
 import Cocoa
 import WebKit
 
-/// True for a file that is a web page, by its name.
-func isHTMLFile(_ url: URL) -> Bool { ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) }
+/// True for a file that is a web page or a drawing (SVG: WebKit draws it as it does a page), by its name.
+func isHTMLFile(_ url: URL) -> Bool { ["html", "htm", "xhtml", "svg"].contains(url.pathExtension.lowercased()) }
 
 /// A web page in a view: one `WKWebView` that can be loaded again without a blink and without losing the place on the page. The old
 /// picture of the page stays on top of the view while the new one loads (a web view is blank in between), and the scroll position is
@@ -217,11 +217,12 @@ final class HTMLViewerDocument: NSDocument {
 }
 
 final class HTMLWindowController: NSWindowController, NSToolbarDelegate, NSMenuItemValidation {
-    let page = HTMLPageView(javaScript: true)
+    let page: HTMLPageView
     private var searchItem: NSSearchToolbarItem?
     private var lastQuery = ""
 
     init(document: HTMLViewerDocument) {
+        page = HTMLPageView(javaScript: document.fileURL?.pathExtension.lowercased() != "svg")   // a drawing needs no scripts
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: min(860, screenHeight - 90)),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)

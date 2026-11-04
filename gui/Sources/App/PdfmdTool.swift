@@ -7,13 +7,13 @@ import Foundation
 /// Everything is asked of a login shell, because an app started from the Dock has almost no PATH: `whence -ap pdfmd` lists every
 /// `pdfmd` on the shell's PATH, `alias pdfmd` the terminal's own alias.
 enum PdfmdTool {
-    struct Found {
+    struct Found: Codable {
         let command: String   // as a shell runs it
         let version: String
         let shown: String     // where it is, for people: a path with ~, or the alias's command
     }
 
-    struct Resolved {
+    struct Resolved: Codable {
         var best: Found?
         var others: [Found] = []
         var explicit = false
@@ -80,24 +80,61 @@ enum PdfmdTool {
     private static let lock = NSLock()
     private static var cache: (when: Date, setting: String, resolved: Resolved)?
 
-    /// `resolve()` remembered for two minutes (it starts a shell and runs every pdfmd: about two seconds), and forgotten when the
-    /// setting changes. Started once at launch, so the About box opens at once.
+    /// How long an answer is kept (`toolCacheSeconds`).
+    private static var keep: Double { Settings.number("toolCacheSeconds") }
+
+    private struct OnDisk: Codable { let when: Date; let setting: String; let resolved: Resolved }
+    private static var cacheFile: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("io.github.aliperdehan.pdfmdedit/pdfmd-found.json")
+    }
+
+    /// `resolve()` remembered (it starts a shell and runs every pdfmd: about two seconds), in memory and in a file, so that the
+    /// command line (`colophon render`, a new process every time) does not ask again; forgotten when the setting changes.
+    /// The app asks once at launch, so the About box opens at once.
     static func cachedResolve() -> Resolved {
         lock.lock(); defer { lock.unlock() }
-        if let c = cache, c.setting == setting, Date().timeIntervalSince(c.when) < 120 { return c.resolved }
+        if let c = cache, c.setting == setting, Date().timeIntervalSince(c.when) < keep { return c.resolved }
+        if let data = try? Data(contentsOf: cacheFile), let d = try? JSONDecoder().decode(OnDisk.self, from: data),
+           d.setting == setting, Date().timeIntervalSince(d.when) < keep {
+            cache = (d.when, d.setting, d.resolved)
+            return d.resolved
+        }
         let r = resolve()
-        cache = (Date(), setting, r)
+        let now = Date()
+        cache = (now, setting, r)
+        if r.best != nil, let data = try? JSONEncoder().encode(OnDisk(when: now, setting: setting, resolved: r)) {
+            try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: cacheFile, options: .atomic)
+        }
         return r
+    }
+
+    /// Where programs are, for `colophon check`: the first of each name on the login shell's PATH.
+    static func locate(_ names: [String]) -> [String: String] {
+        let out = run(names.map { "print -r -- \($0)=$(whence -p \($0) 2>/dev/null)" }.joined(separator: "; "), command: "", interactive: true, timeout: 8)
+        var found: [String: String] = [:]
+        for line in out.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2, parts[1].hasPrefix("/") { found[parts[0]] = parts[1] }
+        }
+        return found
+    }
+
+    /// The first line of `program --version`, for `colophon check`.
+    static func versionLine(_ path: String) -> String {
+        let out = run("\"$PDFMD_CMD\" --version 2>&1 | head -1", command: path, interactive: false, timeout: 8)
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static var pandocCache: (when: Date, setting: String, path: String?)?
 
     /// The pandoc the live preview runs (the setting `pandocCommand`, a path; else the first `pandoc` on the login shell's PATH), as an
-    /// absolute path. Cached for two minutes like `cachedResolve`; the first answer starts a shell, so not on the main thread.
+    /// absolute path. Cached like `cachedResolve`; the first answer starts a shell, so not on the main thread.
     static func pandoc() -> String? {
         let named = Settings.string("pandocCommand").trimmingCharacters(in: .whitespacesAndNewlines)
         lock.lock(); defer { lock.unlock() }
-        if let c = pandocCache, c.setting == named, Date().timeIntervalSince(c.when) < 120 { return c.path }
+        if let c = pandocCache, c.setting == named, Date().timeIntervalSince(c.when) < keep { return c.path }
         var path: String?
         if !named.isEmpty {
             let expanded = (named as NSString).expandingTildeInPath
@@ -110,13 +147,27 @@ enum PdfmdTool {
         return path
     }
 
-    /// The lines the About box shows under the app's name.
-    static func aboutLines() -> [String] {
+    /// The one line the About box shows: which pdfmd Colophon uses.
+    static func aboutHead() -> String {
         let r = cachedResolve()
-        if let failed = r.failedCommand { return ["pdfmd: the command in Settings does not answer:", failed] }
-        guard let best = r.best else { return ["pdfmd: not found", "(name its command in Settings, General)"] }
-        var lines = ["pdfmd \(best.version)" + (r.explicit ? "  (set in Settings)" : "  (the newest found)"), best.shown]
-        for o in r.others { lines.append("also found: \(o.version)  \(o.shown)") }
+        if r.failedCommand != nil { return "pdfmd: the command in Settings does not answer" }
+        guard let best = r.best else { return "pdfmd: not found" }
+        return "pdfmd \(best.version)"
+    }
+
+    /// What "more" shows: which pdfmd, how it was chosen, where it is, and every other one that was found.
+    static func detailLines() -> [String] {
+        let r = cachedResolve()
+        if let failed = r.failedCommand { return ["The pdfmd command in Settings does not answer:", failed, "", "Settings, General, pdfmd command (empty = the newest found)."] }
+        guard let best = r.best else { return ["No pdfmd was found on the login shell's PATH or as its alias.", "", "Name its command in Settings, General, pdfmd command."] }
+        var lines = ["pdfmd \(best.version)" + (r.explicit ? "  (named in Settings)" : "  (the newest found)"), best.shown]
+        if !r.others.isEmpty {
+            lines.append("")
+            lines.append("Also found:")
+            for o in r.others { lines.append("  \(o.version)  \(o.shown)") }
+        }
+        lines.append("")
+        lines.append(r.explicit ? "Settings, General, pdfmd command is set; empty it to use the newest found." : "Settings, General, pdfmd command names one explicitly.")
         return lines
     }
 

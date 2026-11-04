@@ -13,7 +13,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/pdfmdedit "$APP/Contents/MacOS/pdfmdedit"
 cp -R Themes "$APP/Contents/Resources/Themes"
-cp Resources/pdfmd.icns "$APP/Contents/Resources/pdfmd.icns"   # made by ../scripts/build_brand.py --render
+cp Resources/pdfmd.icns "$APP/Contents/Resources/pdfmd.icns"
+cp Resources/colophon "$APP/Contents/Resources/colophon"   # the command line: ln -s it into a folder on the PATH
+chmod +x "$APP/Contents/Resources/colophon"   # made by ../scripts/build_brand.py --render
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -29,6 +31,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+<key>CFBundleURLTypes</key><array>
+ <dict>
+  <key>CFBundleURLName</key><string>Colophon</string>
+  <key>CFBundleURLSchemes</key><array><string>colophon</string></array>
+ </dict>
+</array>
 <key>CFBundleDocumentTypes</key><array>
  <dict>
   <key>CFBundleTypeName</key><string>Markdown and text</string>
@@ -52,9 +60,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSDocumentClass</key><string>HTMLViewerDocument</string>
   <key>LSItemContentTypes</key><array>
    <string>public.html</string>
+   <string>public.svg-image</string>
   </array>
   <key>CFBundleTypeExtensions</key><array>
-   <string>html</string><string>htm</string><string>xhtml</string>
+   <string>html</string><string>htm</string><string>xhtml</string><string>svg</string>
   </array>
  </dict>
  <dict>
@@ -82,4 +91,5 @@ if [[ "$1" == "--install" ]]; then
     rm -rf "$DEST/Colophon.app"
     cp -R "$APP" "$DEST/Colophon.app"
     echo "installed $DEST/Colophon.app (not started)"
+    echo "command line: ln -s \"$DEST/Colophon.app/Contents/Resources/colophon\" ~/.local/bin/colophon   (colophon help)"
 fi

@@ -93,8 +93,15 @@ enum PDFLive {
             Settings.set("pdfThumbnails", 0); spin(0.5); frames("hidden again")
         }
         if steps == "about" {
-            AppDelegate().showAbout(nil)
+            let delegate = AppDelegate()
+            delegate.showAbout(nil)
             spin(6)   // the first answer starts a shell and runs every pdfmd
+            delegate.showPdfmdVersions(nil)
+            spin(5)
+            if let more = NSApp.windows.first(where: { $0.title == "pdfmd" && $0.isVisible }), let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] {
+                let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(more.windowNumber), out + "versions.png"]
+                try? p.run(); p.waitUntilExit(); print("versions panel \(more.frame.size) saved")
+            }
             if let panel = NSApp.windows.first(where: { $0 !== window && $0.isVisible && $0.title.isEmpty && $0.frame.width < 500 }), let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] {
                 let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(panel.windowNumber), out + "about.png"]
                 try? p.run(); p.waitUntilExit(); print("about panel \(panel.frame.size) saved")

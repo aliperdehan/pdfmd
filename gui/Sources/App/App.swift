@@ -3,8 +3,14 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var launchedWithFiles = false
 
+    func applicationWillFinishLaunching(_ note: Notification) {
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
+                                                     forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
+
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMenus()
+        LiveSettings.install(domain: Bundle.main.bundleIdentifier ?? "io.github.aliperdehan.pdfmdedit")
         let paths = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0) }
         launchedWithFiles = !paths.isEmpty
         for p in paths {
@@ -28,18 +34,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldOpenUntitledFile(_ app: NSApplication) -> Bool { !launchedWithFiles && CommandLine.arguments.count < 2 }
 
-    /// The standard About panel with the app's own words: what it is, how early it is, and which pdfmd it works with (asked of the
-    /// shell off the main thread, so the panel opens a moment later).
+    /// The standard About panel with the app's own words: what it is, how early it is, and the pdfmd it works with: one line, and a "more"
+    /// link that opens the details (asked of the shell off the main thread, so the panel opens a moment later).
     @objc func showAbout(_ sender: Any?) {
         DispatchQueue.global().async {
-            let lines = PdfmdTool.aboutLines()
+            let head = PdfmdTool.aboutHead()
             DispatchQueue.main.async {
                 let style = NSMutableParagraphStyle()
                 style.alignment = .center
-                let credits = NSMutableAttributedString(string: "the pdfmd workbench\n", attributes: [
+                let credits = NSMutableAttributedString(string: "the pdfmd workbench\n\n", attributes: [
                     .font: NSFont.boldSystemFont(ofSize: 12), .paragraphStyle: style, .foregroundColor: NSColor.labelColor])
-                credits.append(NSAttributedString(string: "\n" + lines.joined(separator: "\n") + "\n", attributes: [
-                    .font: NSFont.systemFont(ofSize: 11), .paragraphStyle: style, .foregroundColor: NSColor.secondaryLabelColor]))
+                let small: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .paragraphStyle: style, .foregroundColor: NSColor.secondaryLabelColor]
+                credits.append(NSAttributedString(string: head + "  ", attributes: small))
+                var link = small
+                link[.link] = URL(string: "colophon://pdfmd")!
+                link[.foregroundColor] = NSColor.linkColor
+                credits.append(NSAttributedString(string: "more…", attributes: link))
                 NSApp.orderFrontStandardAboutPanel(options: [
                     .applicationName: "Colophon",
                     .applicationVersion: "\(appVersion) (early alpha)",
@@ -49,6 +59,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+    }
+
+    private var versionsPanel: NSPanel?
+
+    /// The details behind the About box's "more": which pdfmd is used, why, and every other one found.
+    @objc func showPdfmdVersions(_ sender: Any?) {
+        DispatchQueue.global().async {
+            let text = PdfmdTool.detailLines().joined(separator: "\n")
+            DispatchQueue.main.async {
+                let panel = self.versionsPanel ?? NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 200),
+                                                         styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: true)
+                panel.isReleasedWhenClosed = false
+                panel.title = "pdfmd"
+                let field = NSTextField(wrappingLabelWithString: text)
+                field.isSelectable = true
+                field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+                field.frame = NSRect(x: 16, y: 14, width: 488, height: 0)
+                let fit = field.sizeThatFits(NSSize(width: 488, height: 10_000))
+                field.frame = NSRect(x: 16, y: 14, width: 488, height: ceil(fit.height))
+                panel.setContentSize(NSSize(width: 520, height: ceil(fit.height) + 28))
+                panel.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: ceil(fit.height) + 28))
+                panel.contentView?.addSubview(field)
+                self.versionsPanel = panel
+                panel.center()
+                panel.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+
+    /// `colophon://pdfmd` (the About box's "more").
+    @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue, let url = URL(string: text) else { return }
+        if url.host == "pdfmd" { showPdfmdVersions(nil) }
     }
 
     @objc func showPreferences(_ sender: Any?) { PreferencesController.shared.show() }

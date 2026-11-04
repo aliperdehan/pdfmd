@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.10"
+let appVersion = "0.2.11"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -55,6 +55,7 @@ enum Settings {
         Item(key: "highlightDelayMs", value: 120, label: "Pause after typing (ms)", help: "pause after typing before the visible text is recoloured", tab: "Performance"),
         Item(key: "scrollDelayMs", value: 20, label: "Pause after scrolling (ms)", help: "pause after scrolling out of the coloured range before it is recoloured", tab: "Performance"),
         Item(key: "highlightMaxMB", value: 0, label: "Colours off above (MB)", help: "above this size the colours are off (0 = never)", tab: "Performance"),
+        Item(key: "toolCacheSeconds", value: 600, label: "Remember the tools found for (s)", help: "how long the pdfmd found on this Mac (and pandoc) is remembered before the shell is asked again; the command line (colophon render) and the app share the answer", tab: "General"),
         Item(key: "quitAfterLastWindow", value: 0, label: "Quit when the last window closes", help: "1 = closing the last window quits the app (the Windows way); 0 = the app stays open and the Dock icon opens a new window (the Mac way). A launch from the command line (pdfmd --editor) always quits, because the command waits for it", tab: "General", kind: .flag),
         Item(key: "htmlOpenAs", value: 0, label: "Open .html files as", help: "0 = the web page (View > Show Source opens the code), 1 = text, in an editor window", tab: "HTML", kind: .choice([0, 1])),
         Item(key: "htmlAutoReload", value: 1, label: "Reload when the file changes", help: "1 = an HTML window shows a rewritten file by itself (same place on the page); 0 = it only says \"file changed\" and waits for View > Reload (command R)", tab: "HTML", kind: .flag),
