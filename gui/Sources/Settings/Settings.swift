@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.2.9"
+let appVersion = "0.2.10"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -61,6 +61,15 @@ enum Settings {
         Item(key: "htmlReloadDebounceMs", value: 300, label: "Reload pause (ms)", help: "when the HTML file changes on disk it is shown again after it has stayed unchanged for this long", tab: "HTML"),
         Item(key: "htmlCoverMs", value: 150, label: "Keep the old page for (ms)", help: "after a reload the old picture of the page stays on the screen this long after the new one has loaded (0 = at once: the page may blink)", tab: "HTML"),
         Item(key: "htmlZoomStepPercent", value: 10, label: "Zoom step (%)", help: "each Zoom In or Zoom Out changes the size of the page by this many percent", tab: "HTML"),
+        Item(key: "startupWindow", value: 0, label: "A new editor window starts as", help: "0 = the plain editor; 1 = the studio: the editor with the preview beside the text (slower to open and to type in: pandoc runs after every pause in the typing)", tab: "Studio", kind: .choice([0, 1])),
+        Item(key: "studioPaneMode", value: 0, label: "The preview shows", help: "0 = the HTML page (pandoc, fast, follows the typing); 1 = the PDF of the last build (command R). The pane's switch sets it", tab: "Studio", kind: .choice([0, 1])),
+        Item(key: "studioPreviewDelayMs", value: 300, label: "Pause before the preview updates (ms)", help: "the HTML preview is made again after the typing has paused this long", tab: "Studio"),
+        Item(key: "studioFollow", value: 1, label: "Preview follows the text", help: "1 = the preview scrolls to the same fraction of the page as the text (the heights differ, so it is near, not exact)", tab: "Studio", kind: .flag),
+        Item(key: "studioScrollDelayMs", value: 80, label: "Pause before the preview follows a scroll (ms)", help: "the preview follows the text's scrolling after it has paused this long", tab: "Studio"),
+        Item(key: "studioRenderTimeout", value: 20, label: "Stop pandoc after (s)", help: "a preview that takes longer than this is stopped (a filter that hangs); 0 = never", tab: "Studio"),
+        Item(key: "studioPaneWidth", value: 520, label: "Preview width (pt)", help: "the width of the preview when it opens; it is set to the width the pane had when it was last hidden", tab: "Studio"),
+        Item(key: "studioMinEditorWidth", value: 300, label: "Least width of the text (pt)", help: "the divider cannot be dragged to make the text narrower than this", tab: "Studio"),
+        Item(key: "studioMinPaneWidth", value: 200, label: "Least width of the preview (pt)", help: "the divider cannot be dragged to make the preview narrower than this", tab: "Studio"),
         Item(key: "buildTimeout", value: 600, label: "Stop a build after (s)", help: "a build (command R in an editor window) that has not ended after this many seconds is stopped, with everything it started; 0 = never", tab: "Build"),
         Item(key: "buildOpensPDF", value: 1, label: "Open the PDF after a build", help: "1 = a build whose PDF is not open yet opens it in a window (the editor keeps the keyboard); a PDF that is open is always shown again", tab: "Build", kind: .flag),
         Item(key: "buildWhenWatched", value: 0, label: "Build although pdfmd is watching", help: "0 = when a pdfmd --watch (pdfmd -w, or the one that pdfmd --edit --editor starts) is already rebuilding this file on every save, command R only saves; 1 = build as well", tab: "Build", kind: .flag),
@@ -102,6 +111,9 @@ enum Settings {
     static let texts: [Text] = [
         Text(key: "pdfmdCommand", value: "", label: "pdfmd command", help: "the command that runs pdfmd, as typed in a shell (for example python3 ~/dev/py/pdfmd/pdfmd.py); empty = the newest pdfmd that the shell knows (the terminal's alias and every pdfmd on its PATH). The About box shows which one is used", tab: "General"),
         Text(key: "buildArguments", value: "", label: "pdfmd options for a build", help: "words added to the pdfmd command that command R runs, as typed in a shell (for example --engine typst, or -t html to build something else; the file is added last). Empty = pdfmd's own defaults, including the folder's pdfmd --setup", tab: "Build"),
+        Text(key: "pandocCommand", value: "", label: "pandoc for the preview", help: "the path of the pandoc that makes the HTML preview; empty = the first pandoc on the login shell's PATH", tab: "Studio"),
+        Text(key: "htmlPreviewArguments", value: "", label: "pandoc options for the preview", help: "words added to the pandoc command of the preview, as typed in a shell (for example --citeproc --number-sections, or --lua-filter ~/x.lua); the page is made from the text of the window, in its folder", tab: "Studio"),
+        Text(key: "htmlPreviewCSS", value: "", label: "Style sheet for the preview", help: "the path of a .css file that is added to the preview's own style (empty = none)", tab: "Studio"),
         Text(key: "fontName", value: "JetBrains Mono", label: "Font", help: "editor font: a font family (monospaced fonts are listed by --fonts); if it is not installed the system monospaced font is used", tab: "Editor", kind: .fonts),
         Text(key: "theme", value: "Anura", label: "Theme (light appearance)", help: "colour theme in a light appearance: the name of a .cottheme file (CotEditor's format), see --themes", tab: "Colours", kind: .themes),
         Text(key: "pdfFindColor", value: "#FFEB3B", label: "Colour of the found text", help: "the colour (#RRGGBB) that the matches of a search are marked with in a PDF", tab: "PDF"),

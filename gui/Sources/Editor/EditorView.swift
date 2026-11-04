@@ -180,6 +180,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     private(set) var content: EditorContent!
     private(set) var ruler: LineNumberRuler!
     let builder = BuildController()
+    let studio = StudioController()
 
     init(document: EditorDocument) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
@@ -209,9 +210,11 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         load(document.text, document: document)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: Settings.changed, object: nil)
         builder.owner = self
+        studio.owner = self
         NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: parts.textView, queue: .main) { [weak self] _ in
             self?.builder.textEdited()
         }
+        if Settings.int("startupWindow") == 1 { studio.show(growWindow: false) }
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
@@ -275,10 +278,16 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     /// Command R in an editor window: save, run pdfmd, show the PDF (in a PDF window the same menu item reloads the file).
     @objc func reloadFile(_ sender: Any?) { builder.request() }
     @objc func showBuildLog(_ sender: Any?) { builder.showLog() }
+    @objc func togglePreview(_ sender: Any?) { studio.toggle() }
+    @objc func previewAsHTML(_ sender: Any?) { studio.setMode(pdf: false) }
+    @objc func previewAsPDF(_ sender: Any?) { studio.setMode(pdf: true) }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(reloadFile(_:)) { item.title = "Build PDF" }
         if item.action == #selector(showBuildLog(_:)) { return builder.hasLog }
+        if item.action == #selector(togglePreview(_:)) { item.title = studio.isShown ? "Hide Preview" : "Show Preview" }
+        if item.action == #selector(previewAsHTML(_:)) { item.state = studio.isShown && !studio.showsPDF ? .on : .off; return studio.isShown }
+        if item.action == #selector(previewAsPDF(_:)) { item.state = studio.isShown && studio.showsPDF ? .on : .off; return studio.isShown }
         if item.action == #selector(toggleLineNumbers(_:)) { item.title = Settings.flag("lineNumbers") ? "Hide Line Numbers" : "Show Line Numbers" }
         if item.action == #selector(toggleStatusBar(_:)) { item.title = Settings.flag("statusBar") ? "Hide Status Bar" : "Show Status Bar" }
         return true

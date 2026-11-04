@@ -32,9 +32,11 @@ if let i = args.firstIndex(of: "--smoke"), i + 1 < args.count { Smoke.run(args[i
 if let i = args.firstIndex(of: "--smoke-prefs"), i + 1 < args.count { PrefsSmoke.run(args[i + 1]); exit(0) }
 if let i = args.firstIndex(of: "--smoke-pdf"), i + 1 < args.count { PDFSmoke.run(args[i + 1]); exit(0) }
 if let i = args.firstIndex(of: "--smoke-build"), i + 1 < args.count { BuildSmoke.run(args[i + 1], real: args.contains("--real")); exit(0) }
+if args.contains("--smoke-studio") { StudioSmoke.run(); exit(0) }
 if args.contains("--smoke-html") { HTMLSmoke.run(); exit(0) }
 if let i = args.firstIndex(of: "--bench-pdf"), i + 1 < args.count { PDFSmoke.bench(args[i + 1]); exit(0) }
 if args.contains("--live-pdf") { PDFLive.run(args) }
+if args.contains("--live-studio") { StudioLive.run(args) }
 if let i = args.firstIndex(of: "--smoke-save"), i + 1 < args.count { Smoke.save(args[i + 1]); exit(0) }
 
 let delegate = AppDelegate()

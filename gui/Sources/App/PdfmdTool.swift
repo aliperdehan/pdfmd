@@ -90,6 +90,26 @@ enum PdfmdTool {
         return r
     }
 
+    private static var pandocCache: (when: Date, setting: String, path: String?)?
+
+    /// The pandoc the live preview runs (the setting `pandocCommand`, a path; else the first `pandoc` on the login shell's PATH), as an
+    /// absolute path. Cached for two minutes like `cachedResolve`; the first answer starts a shell, so not on the main thread.
+    static func pandoc() -> String? {
+        let named = Settings.string("pandocCommand").trimmingCharacters(in: .whitespacesAndNewlines)
+        lock.lock(); defer { lock.unlock() }
+        if let c = pandocCache, c.setting == named, Date().timeIntervalSince(c.when) < 120 { return c.path }
+        var path: String?
+        if !named.isEmpty {
+            let expanded = (named as NSString).expandingTildeInPath
+            path = FileManager.default.isExecutableFile(atPath: expanded) ? expanded : nil
+        } else {
+            let out = run("whence -p pandoc 2>/dev/null", command: "", interactive: true, timeout: 8)
+            path = out.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { $0.hasPrefix("/") }
+        }
+        pandocCache = (Date(), named, path)
+        return path
+    }
+
     /// The lines the About box shows under the app's name.
     static func aboutLines() -> [String] {
         let r = cachedResolve()

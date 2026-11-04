@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.29k — 2026-11-04
+
+Pre-edit state: commit `ef6f5bb`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.10: the first sketch of the studio, an editor window with a preview pane.** The author: "let's empower colophon to both read and render html so the first studio mode could have a fast option to preview in html. you can sketch the studio mode along the way which is i guess slower and therefore not the default startup window (tho settable)". (0.3.0 stays reserved for a studio the author calls working.)
+
+- View > Show Preview (⌥⌘P): `StudioController` splits the editor window; the pane has an HTML | PDF switch and a status line. HTML: `HTMLRender` runs pandoc directly on the text of the window (stdin, so an unsaved edit shows), in the file's folder; measured 0.15 s a page against 3 s for `pdfmd -t html` and 20 s for the PDF, which is why the preview does not go through pdfmd (its own HTML stays the faithful, slower route: `pdfmd -t html` through the build setting `buildArguments`). The page is a file in `~/Library/Caches/<bundle id>/preview/` with a `<base href>` of the document's folder (so pictures beside it load; an `#anchor` link is caught and scrolled to, as the base would send it to the folder), math as MathML (`--math-method=mathml`, or `--mathml` for an older pandoc: the new pandoc warns about the old flag on every run), JavaScript off in that web view.
+- Made again after the typing pauses (`studioPreviewDelayMs` 300; one render at a time, a burst of keys is one or two renders), following the text's scroll (`studioFollow`, `studioScrollDelayMs` 80: the same fraction of the page), the old page stays on screen until the new one is drawn and keeps its place (`HTMLPageView`, shared with the HTML window). An error of pandoc (or `studioRenderTimeout` 20 s) is in the status line, the old page stays.
+- PDF mode: ⌘R builds; while the pane is open the PDF is shown in it (no window), on the same page after a rebuild; a PDF beside the file is shown when the pane opens.
+- `startupWindow` (0 = plain editor, the default; 1 = every new editor window is a studio), `studioPaneMode`, `studioPaneWidth` (remembered), `studioMinEditorWidth`/`studioMinPaneWidth` (the divider's limits), `pandocCommand`, `htmlPreviewArguments`, `htmlPreviewCSS`; Settings > Studio. pandoc is looked up (login shell) at launch, in the background.
+- `--smoke-studio` (29 checks against the real pandoc), `--live-studio FILE.md [FILE.pdf]` with screenshots (looked at: the pane beside the text, the PDF in the pane, the page in an HTML window).
+
 ## v3.32.29j — 2026-11-04
 
 Pre-edit state: commit `0f4262e`. Entry 3do; `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.2.9 reads HTML.** The author: "let's empower colophon to both read and render html so the first studio mode could have a fast option to preview in html" (this is the reading half; the rendering is the next entry).

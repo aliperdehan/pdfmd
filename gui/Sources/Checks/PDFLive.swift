@@ -159,3 +159,44 @@ enum PDFLive {
         exit(0)
     }
 }
+
+/// `pdfmdedit --live-studio FILE.md [FILE.pdf]`: the editor with its preview pane in a real, shown window that never takes focus, a screenshot
+/// of each state (`PDFLIVE_SHOT=PREFIX`: PREFIX-html.png, PREFIX-pdf.png, PREFIX-htmlwindow.png), and the timings of the first and the later render.
+enum StudioLive {
+    static func shot(_ window: NSWindow, _ name: String) {
+        guard let out = ProcessInfo.processInfo.environment["PDFLIVE_SHOT"] else { return }
+        let p = Process(); p.launchPath = "/usr/sbin/screencapture"; p.arguments = ["-x", "-o", "-l", String(window.windowNumber), out + name]
+        try? p.run(); p.waitUntilExit()
+    }
+
+    static func run(_ args: [String]) {
+        guard let i = args.firstIndex(of: "--live-studio"), i + 1 < args.count else { exit(2) }
+        NSApplication.shared.setActivationPolicy(.accessory)
+        guard let doc = Smoke.open(URL(fileURLWithPath: args[i + 1])), let c = doc.controller, let window = c.window else { print("FAIL open"); exit(1) }
+        window.setFrameOrigin(NSPoint(x: 40, y: 60))
+        doc.showWindows()
+        window.orderFrontRegardless()
+        PDFSmoke.spin(0.8)
+        c.studio.show(growWindow: true)
+        _ = PDFSmoke.wait(20) { c.studio.renders >= 1 && (c.studio.pane?.html.loads ?? 0) >= 1 }
+        PDFSmoke.spin(0.8)
+        print("window \(Int(window.frame.width)) x \(Int(window.frame.height)), first render \(String(format: "%.2f", c.studio.lastOutput?.seconds ?? -1)) s, error '\(c.studio.lastOutput?.error ?? "")'")
+        shot(window, "-html.png")
+        c.parts.textView.insertText("\n", replacementRange: NSRange(location: 0, length: 0))
+        _ = PDFSmoke.wait(10) { c.studio.renders >= 2 }
+        print("second render \(String(format: "%.2f", c.studio.lastOutput?.seconds ?? -1)) s")
+        if i + 2 < args.count, !args[i + 2].hasPrefix("-") {
+            c.studio.showBuilt(URL(fileURLWithPath: args[i + 2]))
+            PDFSmoke.spin(1.0)
+            shot(window, "-pdf.png")
+        }
+        if let file = c.studio.pane?.html.url, let html = Smoke.openHTML(file), let w = html.controller?.window {
+            w.setFrameOrigin(NSPoint(x: 120, y: 40))
+            html.showWindows(); w.orderFrontRegardless()
+            _ = PDFSmoke.wait(15) { html.controller?.page.loads ?? 0 >= 1 }
+            PDFSmoke.spin(1.0)
+            shot(w, "-htmlwindow.png")
+        }
+        exit(0)
+    }
+}

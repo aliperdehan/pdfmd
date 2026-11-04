@@ -11,6 +11,7 @@ final class HTMLPageView: NSView, WKNavigationDelegate {
     let web: WKWebView
     private let cover = NSImageView()
     private var place: (x: Double, y: Double)?
+    private var fraction: Double?
     private var generation = 0
     /// How many loads have finished (the self-test waits for it).
     private(set) var loads = 0
@@ -43,17 +44,19 @@ final class HTMLPageView: NSView, WKNavigationDelegate {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     /// Shows a file; `readAccess` is the folder the page may read from (pictures, style sheets).
-    func load(_ file: URL, readAccess folder: URL) {
+    func load(_ file: URL, readAccess folder: URL, fraction: Double? = nil) {
         url = file
         readAccess = folder
         place = nil
+        self.fraction = fraction
         generation += 1
         web.loadFileURL(file, allowingReadAccessTo: folder)
     }
 
-    /// The same file again, on the same place of the page.
-    func reload() {
+    /// The same file again, on the same place of the page (or `fraction` of the way down, when the owner knows better).
+    func reload(fraction: Double? = nil) {
         guard let file = url, let folder = readAccess else { return }
+        self.fraction = fraction
         generation += 1
         let mine = generation
         web.evaluateJavaScript("[window.scrollX, window.scrollY]") { [weak self] result, _ in
@@ -75,13 +78,23 @@ final class HTMLPageView: NSView, WKNavigationDelegate {
         let uncover = { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(max(0, Settings.int("htmlCoverMs")))) { self?.cover.isHidden = true; self?.cover.image = nil }
         }
-        if let p = place {
+        if let f = fraction {
+            fraction = nil; place = nil
+            webView.evaluateJavaScript(Self.scrollScript(f)) { _, _ in uncover() }
+        } else if let p = place {
             place = nil
             webView.evaluateJavaScript("window.scrollTo(\(p.x), \(p.y))") { _, _ in uncover() }
         } else {
             uncover()
         }
     }
+
+    private static func scrollScript(_ f: Double) -> String {
+        "window.scrollTo(0, \(f) * Math.max(0, document.documentElement.scrollHeight - window.innerHeight))"
+    }
+
+    /// Scrolls to this fraction of the way down the page.
+    func scroll(toFraction f: Double) { web.evaluateJavaScript(Self.scrollScript(f), completionHandler: nil) }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { cover.isHidden = true }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { cover.isHidden = true }

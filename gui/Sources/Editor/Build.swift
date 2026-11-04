@@ -287,6 +287,10 @@ final class BuildController: NSObject {
     /// The file that was made: an open window of it shows it again (once: nothing happens when the automatic reload was quicker),
     /// otherwise it is opened, if the setting says so, and the keyboard stays in the editor.
     private func showMade(_ made: URL) {
+        if made.pathExtension.lowercased() == "pdf", let studio = owner?.studio, studio.isShown {
+            studio.showBuilt(made)   // the pane beside the text shows it: no window of its own
+            return
+        }
         let target = made.resolvingSymlinksInPath().standardizedFileURL
         let controller = NSDocumentController.shared
         if let open = controller.documents.first(where: { $0.fileURL?.resolvingSymlinksInPath().standardizedFileURL == target }) as? PDFViewerDocument {

@@ -7,7 +7,7 @@ import Cocoa
 final class PreferencesController: NSWindowController, NSTabViewDelegate {
     static let shared = PreferencesController()
 
-    static let tabs = ["General", "Editor", "Status bar", "PDF", "HTML", "Build", "Colours", "Performance"]
+    static let tabs = ["General", "Editor", "Status bar", "PDF", "HTML", "Studio", "Build", "Colours", "Performance"]
 
     /// Every control by name, for refreshing it and for the smoke test: a setting's key, `category.<role>`,
     /// `color.<role>.light`, `color.<role>.dark`, `reset.<role>`, `restore.<tab>`.

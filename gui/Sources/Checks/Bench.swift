@@ -197,6 +197,15 @@ enum Smoke {
         return result
     }
 
+    static func openHTML(_ url: URL) -> HTMLViewerDocument? {
+        var result: HTMLViewerDocument?
+        var done = false
+        NSDocumentController.shared.openDocument(withContentsOf: url, display: false) { doc, _, _ in result = doc as? HTMLViewerDocument; done = true }
+        while !done { spin(0.05) }
+        if let doc = result, doc.windowControllers.isEmpty { doc.makeWindowControllers() }
+        return result
+    }
+
     /// Pixels that are neither the background, nor the plain text, nor an anti-aliased blend of the two: the syntax colours.
     /// (A saturation threshold cannot do it: a light theme has dark, nearly grey syntax colours on a pale background.)
     /// The distance is measured from the straight line in RGB between the background and the text colour, in 0...255 units.

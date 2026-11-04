@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.global(qos: .utility).async { _ = PdfmdTool.cachedResolve() }   // so that the About box has its answer
+        DispatchQueue.global(qos: .utility).async { _ = PdfmdTool.cachedResolve(); _ = PdfmdTool.pandoc() }   // so that the About box and the preview have their answer
     }
 
     // A command-line launch with a file (pdfmd's --editor) always quits with its last window: the command that started it waits for
@@ -122,6 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(view, "Show Source", "showSource:", "u", [.command, .option])
         add(view, "Reload", "reloadFile:", "r")   // "Build PDF" in an editor window (the window's validation renames it)
         add(view, "Show Build Log", "showBuildLog:", "r", [.command, .option])
+        add(view, "Show Preview", "togglePreview:", "p", [.command, .option])
+        add(view, "Preview as HTML", "previewAsHTML:")
+        add(view, "Preview as PDF", "previewAsPDF:")
         add(view, "Reload Automatically", "toggleAutoReload:")
         view.addItem(.separator())
         add(view, "Zoom In", "zoomIn:", "=")
