@@ -43,7 +43,10 @@ wait for an answer before any code.
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 
-- [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine
+- [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine; absolute widths (`3cm`) of the attribute line are drawn in LaTeX only (HTML has percentages) [3fa]
+- [ ] Cell tags: vertical alignment and heights in Typst, Word and ODT; an exact row height (tabularray's `ht` is a minimum); `j` (justify) [3fa]
+- [ ] Cell tags: a table rebuilt as `longtblr` is raw LaTeX to later filters (`table-keep`, `labtabular`, Beamer untested); the native tier and grid tables read no tags [3fa]
+- [ ] nulabreport: its table writer ignores `row_span` (a covered cell is missing, the row shifts) and forces a spanned cell to centre; emit `\multirow` (loaded) and keep the cell's alignment, in all three writers, plus a smoke-test case (nulabreport repository) [3fa]
 - [ ] Chatter ladder: `--chatter`, `-q`, `--mute ID`, `--log`, `--summary`; one `emit`; per document and in `--setup`
 - [ ] Revise the thin features of this line (table pre-pass kinds, line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]
 - [ ] Table pre-pass: dash look-alikes, `+` and `=` separators, `table-colons`, `table-repair` modes, "not a table" warning, `--fix-tables`
@@ -51,7 +54,7 @@ wait for an answer before any code.
 - [ ] CSV `widths`: repair a wrong count, `*` for a free column, never drop data
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
-- [ ] Width modes beyond auto/keep/force: combinations, per column, more per-table spellings [3dl]
+- [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]
 - [ ] A true width estimator for math, raw HTML and typography instead of character counts; then delete the raw-TeX kludge (`column-count-raw-tex`) [3dl]
 - [ ] Cache the balanced widths per table by content hash [3dl]
 
@@ -69,7 +72,7 @@ wait for an answer before any code.
 - [ ] A page-numbers setting (`pdfmd-options: {page-numbers: off}`, a flag and a `--setup` row), written per engine without replacing the document's `header-includes` (LaTeX `\pagestyle{empty}`, Typst `numbering: none`, the built-in renderer, Word); `--crop` of a Markdown source then builds without them
 - [ ] `--image-background`; webp (Pillow, pypdfium2 or ImageMagick); `--to pdf,docx` for formats that are not pictures (a loop of runs)
 - [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`lib/pdfmd_office/fragments.py` has the pieces)
-- [ ] eqpop calls `pdfmd --crop`, its own AppKit crop stays as the fallback (eqpop repository)
+- [ ] The equation popup (Colophon `Pop/`, once eqpop) calls `pdfmd --crop` when it can; its own AppKit crop stays as the fallback
 
 ## Chemical structures, carried inside 3.31 [smiles] [3ec]
 
@@ -123,6 +126,13 @@ is low priority. [3di]
 
 - [ ] pdfmd-gui: an Overleaf-like project view; one local web UI plus thin native wrappers, a client of the CLI, never obligatory; its foundation (emit, `--json`, the split, the generated reference) ships in 3.x before 4.0 [3do]
 - [ ] pdfmd-gui window shell, open: native wrapper vs an optional chromium window (`--install chromium`, a `--setup` row to toggle); no Node needed [3do]
+- [ ] Colophon web UI and JSON core (`pdfmd --serve`, `--api`, settings as a JSON schema checked by each client, panels around the native editor, a live HTML view with render modes); the design is answered (CodeMirror 6, per-client validators, panels, `platforms`); a UI prototype from fixtures comes first, then S1-S6; Tauri postponed [3do]
+- [ ] Colophon: a Format popup in the Save As panel, so the export is noticed (an Export panel stays proposed) [3do]
+- [ ] Colophon: one History panel, two lanes (git for edits: log, diff, restore; `.hst` and the build record for builds); a setting that offers `git init`, also into a NEW folder, never silently; a proper diff view [3do]
+- [ ] Source jump: a click in the render opens the source line (SyncTeX, Typst's `typst-ide` jump, our own block map for other engines); later [3do]
+- [ ] Colophon: check that a login launch opens no untitled window (only a real login shows it); a non-activating equation popup (showing it may lift every editor window) [3do]
+- [ ] A `.calc` file kind: `::: {.calc file=NAME.calc}` imports it as it is and it works with the document like any calc block; a syntax map in Colophon, carried by `--merge` and `--check` [3ez]
+- [ ] More input kinds in Colophon: HTML documents with a render, and Pandoc's plain-text readers (rst, org, textile ...) by extension, `--from` or a YAML key [3do]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
 - [ ] docx output and raw LaTeX multicols: nulabreport 1.29.1 writes tables between a raw `\begin{multicols}` and `\end{multicols}` as plain `tabular`; check what the docx (office) path does with those raw fences and the tables inside, since it parses raw LaTeX too
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
