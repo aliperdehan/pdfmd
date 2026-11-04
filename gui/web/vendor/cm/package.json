@@ -1,0 +1,19 @@
+{
+  "name": "app-web-codemirror-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Builds codemirror.js, the one vendored editor component of the web UI prototype (CodeMirror 6, MIT). Run ./build.sh; nothing here is needed to USE the UI.",
+  "license": "MIT",
+  "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/search": "6.7.2",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@lezer/highlight": "1.2.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,3 @@
+pdfmd-options:
+  engine: auto
+  toc: false

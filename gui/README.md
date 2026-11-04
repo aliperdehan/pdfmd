@@ -62,6 +62,7 @@ this is **not tested yet** in this alpha.
 
 - **Tabs** (0.2.15): File > New Tab (⌘T) opens a new empty document as a tab of the window you are in; ⌘N is still a new window and nothing becomes a tab by itself
   (macOS's "Prefer tabs when opening documents" still applies). The Window menu has Show Tab Bar, Merge All Windows, Move Tab to New Window and the tab switchers.
+- **Web UI prototype** (`web/`, not part of the app): the Overleaf-like window of the coming `pdfmd --serve`, from fixtures, behind two contracts (data and editor); see `web/README.md`.
 - **Export As** (0.2.14): File > Export As writes the document in another format through pdfmd: **Markdown (standalone)** (`--merge`: the parts, the
   metadata, the preamble, the pictures in one file that builds anywhere), **PDF** (Auto, or an engine: LaTeX > lualatex, xelatex, pdflatex, latexmk,
   tectonic; Typst; HTML > WeasyPrint, wkhtmltopdf, Paged.js, Prince, Chrome, Chromium, Edge, Brave; Others > LibreOffice, Calibre, ConTeXt,

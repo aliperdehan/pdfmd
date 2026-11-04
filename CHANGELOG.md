@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.32.35a — 2026-11-04
+
+Pre-edit state: commit `97a6523`. Entry 3do; `gui/web/` only (new), no shipped pdfmd code, so no `PDFMD_VERSION` bump. **The web UI prototype.** The author: "let's prototype the webui interface then".
+
+- A UI-only prototype of the window that `pdfmd --serve` will show in a browser (S3) and that the Mac app will frame with native panels (0.3.0): rail (files and outline, search, checks, history, settings), tabs, a toolbar (B, I, heading, code, link, list, table, Ω symbols, an Insert menu with comment, code block, `:::` div, `::: calc`, image, math, footnote, citation), a Live / PDF / Log pane, Build with an engine dropdown, Export As as a nested menu (the 111 rows of `colophon export --list --json`; the dialog shows the exact pdfmd command), five layouts, a draggable splitter, light and dark from one set of CSS variables.
+- The live view has the render modes auto / instant / watch / manual (their numbers are settings: `renderAutoMaxLines`, `renderDelayMs`), closes an unfinished `**bold` for display, and mirrors a source selection into the preview (and a preview block into its source lines) through pandoc's `sourcepos`.
+- Behind two contracts, so the core and the native editor can replace the parts: `js/api.js` (one function per planned endpoint, today fixtures) and `js/editor.js` (setText, getText, onChange, selection, scrollTo, decorate, focus ...; the vendored CodeMirror 6 or a plain text box, switchable). Settings are drawn from the schema and checked by a schema-driven validator; rows without `browser` in `platforms` are hidden.
+- `vendor/cm/`: the CodeMirror 6 bundle (MIT, 537 KB, 188 KB gzipped) with exact versions, a `build.sh` and the licences. `tools/make_fixtures.py` builds the fixtures from a demo project, never from anyone's documents.
+- `js/selftest.js` (open `index.html#selftest`): 38 checks driving the page headlessly (Edge, headless): all pass. Not seen on a real screen yet; the light theme was not looked at (the headless browser follows the dark system setting).
+- Findings for S1: pandoc's source positions exist only for the `commonmark` and `gfm` readers (not pdfmd's `markdown` reader) and the live view of `[@key]` shows the key as typed; a list item has no position and a list's end position runs on to the next block.
+
 ## v3.32.35 — 2026-11-04
 
 Pre-edit state: commit `c4a694f`. `[tables]`, entry 3fa. **A covered cell's text is a real line break in LaTeX; `tablestyle: grid` rules a rebuilt table.** Found by the author's screenshot of a merged table in a nulabreport document.

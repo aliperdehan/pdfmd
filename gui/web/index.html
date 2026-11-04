@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APP (prototype)</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<!-- One window, one chrome: a top bar, a rail, panels that share one background and one hairline. Nothing here is logic: api.js is the
+     only thing that knows where data comes from (today: fixtures/fixtures.js; at S3: pdfmd --serve). -->
+<div id="app">
+  <header id="topbar">
+    <div id="menus">
+      <button class="menu" data-menu="file">File</button>
+      <button class="menu" data-menu="edit">Edit</button>
+      <button class="menu" data-menu="insert">Insert</button>
+      <button class="menu" data-menu="view">View</button>
+      <button class="menu" data-menu="format">Format</button>
+      <button class="menu" data-menu="help">Help</button>
+    </div>
+    <div id="title"><span id="projectName"></span><span class="dim"> / </span><span id="mainName"></span></div>
+    <div id="actions">
+      <div class="seg" id="layoutSeg" title="Layout">
+        <button data-layout="split" title="Split: editor and preview">&#9707;</button>
+        <button data-layout="editor" title="Editor only">&#9636;</button>
+        <button data-layout="preview" title="Preview only">&#9638;</button>
+        <button data-layout="tab" title="Preview in a separate browser tab">&#8599;</button>
+        <button data-layout="focus" title="Focus mode (Esc leaves)">&#9711;</button>
+      </div>
+      <button id="exportBtn" class="btn" title="Export As">Export &#9662;</button>
+      <div class="split-btn">
+        <button id="buildBtn" class="btn primary" title="Build (Mod+Enter)">Build</button><button id="buildMore" class="btn primary more" title="Engine and options">&#9662;</button>
+      </div>
+    </div>
+  </header>
+
+  <nav id="rail">
+    <button data-panel="files" title="Files and outline">&#128196;</button>
+    <button data-panel="search" title="Search">&#128269;</button>
+    <button data-panel="checks" title="Checks (pdfmd --check)">&#9888;<span id="checkBadge" class="badge"></span></button>
+    <button data-panel="history" title="History">&#8635;</button>
+    <span class="grow"></span>
+    <button data-panel="settings" title="Settings">&#9881;</button>
+  </nav>
+
+  <aside id="side"></aside>
+  <div class="splitter v" id="splitSide" title="Drag to resize"></div>
+
+  <main id="work">
+    <section id="editorPane">
+      <div id="tabs"></div>
+      <div id="toolbar">
+        <button data-do="undo" title="Undo">&#8630;</button>
+        <button data-do="redo" title="Redo">&#8631;</button>
+        <span class="sep"></span>
+        <select id="headingSel" title="Heading level">
+          <option value="">Normal</option><option value="1">Heading 1</option><option value="2">Heading 2</option><option value="3">Heading 3</option><option value="4">Heading 4</option>
+        </select>
+        <button data-do="bold" title="Bold (Mod+B)"><b>B</b></button>
+        <button data-do="italic" title="Italic (Mod+I)"><i>I</i></button>
+        <button data-do="code" title="Code (Mod+E)"><code>&lt;/&gt;</code></button>
+        <button data-do="link" title="Link (Mod+K)">&#128279;</button>
+        <button data-do="list" title="Bullet list">&#8226;&#8801;</button>
+        <button data-do="table" title="Table">&#9638;</button>
+        <button data-do="symbols" title="Symbols (Greek letters, math, chemistry)">&#937;</button>
+        <button data-do="insertMenu" title="Insert: comment, block, div, image, calc ...">Insert &#9662;</button>
+      </div>
+      <div id="editor"></div>
+    </section>
+    <div class="splitter v" id="splitWork" title="Drag to resize"></div>
+    <section id="previewPane">
+      <div id="previewHead">
+        <div class="seg" id="viewSeg">
+          <button data-view="html">Live</button>
+          <button data-view="pdf">PDF</button>
+          <button data-view="log">Log</button>
+        </div>
+        <span class="grow"></span>
+        <label class="small dim" title="When the live view renders: auto picks by speed, instant after every edit, watch on save, manual on Mod+R">Render
+          <select id="renderMode"><option>auto</option><option>instant</option><option>watch</option><option>manual</option></select>
+        </label>
+      </div>
+      <div id="previewBody">
+        <div id="liveView" class="view"><div id="liveBanner" class="banner" hidden></div><article id="live"></article></div>
+        <div id="pdfView" class="view" hidden><iframe id="pdfFrame" title="PDF"></iframe></div>
+        <div id="logView" class="view" hidden><pre id="log"></pre></div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="status">
+    <span id="stPos">1:1</span><span id="stWords"></span><span id="stKind"></span><span id="stEditor"></span>
+    <span class="grow"></span>
+    <span id="stBuild"></span><span id="stCore" class="dim" title="Where the data comes from">core: fixtures (prototype)</span>
+  </footer>
+</div>
+<div id="toast" hidden></div>
+<dialog id="dialog"></dialog>
+
+<script src="vendor/cm/codemirror.js"></script>
+<script src="fixtures/fixtures.js"></script>
+<script src="js/api.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
