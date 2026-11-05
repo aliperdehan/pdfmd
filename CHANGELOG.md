@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.46 — 2026-11-05
+
+Pre-edit state: commit `76a2558`. Entry 3do. **A new document is saved as `Untitled.md`, and its name is a setting.** The save panel of a new, unsaved document in the plain editor proposed `Untitled` with no extension, and the file was saved under that name. It now proposes `Untitled.md` with the extension showing; the panel selects the name without it, so typing a name replaces `Untitled` and keeps `.md`. A name typed without an extension gets `.md`, one typed with another (`notes.txt`) keeps its own.
+
+- Settings > Editor: `newFileName` (default `Untitled`: the window's title of a new document and the panel's proposal; a second one is "name 2") and `newFileExtension` (default `md`, with or without the dot; the word `none` saves the name as typed; empty is the default, like every text setting).
+- `--smoke-untitled` has 5 new checks (the title, the proposal, the type the panel allows, both settings, `none`). The selection of the name cannot be read by a test: the panel is a view service in another process, so that part is AppKit's own behaviour and was looked at by hand only when the author tries it.
+- Not changed: the web studio's new tab is still `untitled.md`, `untitled-2.md` (the page's own name; a setting for it is a separate step).
+
 ## v3.32.45 — 2026-11-05
 
 Pre-edit state: commit `cb25ac3`. Entry 3do. **The syntax table learns pdfmd's own syntax, the languages inside a fenced block, and the file types.** The second step of the table, after the colours of today moved into it (3.32.44).

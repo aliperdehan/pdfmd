@@ -1,4 +1,5 @@
 import Cocoa
+import UniformTypeIdentifiers
 
 struct EditorParts {
     let scroll: NSScrollView
@@ -204,7 +205,47 @@ final class EditorDocument: NSDocument {
     }
 
     override func fileNameExtension(forType typeName: String, saveOperation: NSDocument.SaveOperationType) -> String? {
-        fileURL?.pathExtension.isEmpty == false ? fileURL!.pathExtension : "md"
+        fileURL?.pathExtension.isEmpty == false ? fileURL!.pathExtension : Self.stubExtension()
+    }
+
+    // MARK: the name of a new document
+
+    /// The name a new, unsaved document has (its window's title and the save panel's proposal): the setting `newFileName`.
+    static func stubName() -> String {
+        let name = Settings.string("newFileName").trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Untitled" : name
+    }
+
+    /// The extension it gets when it is saved (`newFileExtension`, with or without the dot; the word none = no extension, the name is saved as typed;
+    /// an empty setting is the default, md, like every text setting).
+    static func stubExtension() -> String {
+        let ext = Settings.string("newFileExtension").trimmingCharacters(in: CharacterSet(charactersIn: ". \t\n"))
+        return ext.lowercased() == "none" ? "" : ext
+    }
+
+    /// "Untitled" and "Untitled 2" of the system, with the stub name in place of the first word.
+    override var displayName: String! {
+        get {
+            let name: String = super.displayName
+            guard fileURL == nil, name.hasPrefix("Untitled") else { return name }
+            return Self.stubName() + name.dropFirst("Untitled".count)
+        }
+        set { super.displayName = newValue }
+    }
+
+    /// The save panel of a new document proposes `Untitled.md` with the extension showing, which the panel selects without (typing replaces
+    /// `Untitled` and keeps `.md`); a name typed without an extension gets it, one typed with another (`.txt`) keeps its own.
+    override func prepareSavePanel(_ panel: NSSavePanel) -> Bool {
+        guard super.prepareSavePanel(panel) else { return false }
+        guard fileURL == nil else { return true }
+        let ext = Self.stubExtension()
+        panel.allowsOtherFileTypes = true
+        panel.isExtensionHidden = false
+        panel.canSelectHiddenExtension = false
+        if let type = ext.isEmpty ? nil : UTType(filenameExtension: ext) { panel.allowedContentTypes = [type] } else { panel.allowedContentTypes = [] }
+        let base: String = displayName
+        panel.nameFieldStringValue = ext.isEmpty ? base : base + "." + ext
+        return true
     }
 }
 
