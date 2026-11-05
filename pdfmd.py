@@ -1478,7 +1478,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.40"
+PDFMD_VERSION = "3.32.41"
 import argparse
 import atexit
 import csv
@@ -4523,6 +4523,35 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         args += ["--lua-filter", str(diagram_filter)]
     if smiles:
         args += ["--lua-filter", str(smiles_filter)]
+    return args
+
+
+def document_filter_args(inputs: Path | list[Path], md_path: Path, metadata_files: list[Path], no_auto: list[str] | None,
+                         csv_filter: Path, pandoc_options: list[str], crossref_sources: Path | list[Path] | None = None,
+                         flat_pictures: Path | None = None, preamble: list[Path] | None = None, flat_text: bool = False,
+                         cellalign_early: bool = False) -> list[str]:
+    """The filters pdfmd puts on what a document SAYS (its own syntax: the metadata that appends, `\\md{}`, calc, the CSV tables, page
+    breaks, indent, callouts and the other markup, table captions, line breaks, the title, the cover, raw pieces and diagrams, the
+    cross-references), in the order they run. Every build writes this one list, whatever the writer is, and so does the live view of
+    `--serve` (entry 3do): a syntax added here shows in both, and the live view needs no list of its own.
+
+    `inputs` are the files whose text is searched for the syntax (the document, or all the files of a joined build), `md_path` the
+    document itself; `cellalign_early` puts the cell filter here (the office route), where the others put it after the writer's own."""
+    args = metadata_append_args(inputs, metadata_files)
+    args += md_macro_args(inputs, metadata_files)
+    args += calc_filter_args(inputs, metadata_files)
+    args += csv_table_filter_args(inputs, no_auto, csv_filter, metadata_files)
+    args += pagebreak_filter_args(md_path, metadata_files)
+    args += indent_filter_args(inputs, metadata_files)
+    args += markup_filter_args(md_path, metadata_files)
+    args += table_caption_args(md_path, metadata_files)
+    args += linebreak_args(md_path, metadata_files)
+    if cellalign_early:
+        args += cellalign_args(md_path, metadata_files)
+    args += title_filter_args(md_path, metadata_files)
+    args += cover_filter_args(md_path, metadata_files)
+    args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
+    args += crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, str(md_path))
     return args
 
 
@@ -13659,10 +13688,15 @@ def serve_discovered(folder: Path, main: Path | None) -> list[dict]:
 
 
 @contextmanager
-def serve_live_filters() -> Iterator[list]:
-    """The Lua filters the live view runs besides Pandoc: the `.csv` blocks of a document are tables there too."""
+def serve_live_filters(source: Path, metadata_files: list[Path]) -> Iterator[list]:
+    """The Pandoc arguments the live view of ``source`` gets: document_filter_args(), the list every build writes, so the document's own
+    syntax (CSV tables, calc, callouts, page breaks, ...) is what it is in a build and a new one needs nothing here. Only one filter is
+    the live view's own, and it runs first: pdfmd_lua/sourcepos.lua puts back what the position-marking reader changed in the document."""
+    import pdfmd_lua
+    first = pdfmd_lua.path("sourcepos")
     with csv_table_filter() as csv_filter:
-        yield [csv_filter]
+        yield (["--lua-filter", str(first)] if first is not None else []) + document_filter_args(
+            source, source, metadata_files, effective_no_auto(source, None), csv_filter, [])
 
 
 def serve_core(folder: Path):
@@ -23692,20 +23726,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
-            cmd += metadata_append_args(md_path, metadata_files)
-            cmd += md_macro_args(md_path, metadata_files)
-            cmd += calc_filter_args(md_path, metadata_files)
-            cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
-            cmd += pagebreak_filter_args(md_path, metadata_files)
-            cmd += indent_filter_args(md_path, metadata_files)
-            cmd += markup_filter_args(md_path, metadata_files)
-            cmd += table_caption_args(md_path, metadata_files)
-            cmd += linebreak_args(md_path, metadata_files)
-            cmd += cellalign_args(md_path, metadata_files)
-            cmd += title_filter_args(md_path, metadata_files)
-            cmd += cover_filter_args(md_path, metadata_files)
-            cmd += raw_filter_args(md_path, no_auto, metadata_files)
-            cmd += crossref_filter_args([md_path, *part_files], pandoc_options, no_auto, str(md_path))
+            cmd += document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
+                                        crossref_sources=[md_path, *part_files], cellalign_early=True)
             cmd += select_filter_args(selection)
             if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                 cmd.append("--citeproc")
@@ -24215,19 +24237,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             # docstring for the 2026-09-20 fix this is part of).
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
-            cmd += metadata_append_args(md_path, metadata_files)
-            cmd += md_macro_args(md_path, metadata_files)
-            cmd += calc_filter_args(md_path, metadata_files)
-            cmd += csv_table_filter_args(md_path, no_auto, csv_filter, metadata_files)
-            cmd += pagebreak_filter_args(md_path, metadata_files)
-            cmd += indent_filter_args(md_path, metadata_files)
-            cmd += markup_filter_args(md_path, metadata_files)
-            cmd += table_caption_args(md_path, metadata_files)
-            cmd += linebreak_args(md_path, metadata_files)
-            cmd += title_filter_args(md_path, metadata_files)
-            cmd += cover_filter_args(md_path, metadata_files)
-            cmd += raw_filter_args(md_path, no_auto, metadata_files)
-            cmd += crossref_filter_args(md_path, pandoc_options, no_auto, str(md_path))
+            cmd += document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
             if fonts_filter is not None:
@@ -24716,22 +24726,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 # document_header_includes()'s own docstring.
                 if header_file is not None:
                     cmd += ["--include-in-header", str(header_file)]
-                cmd += metadata_append_args(all_inputs or md_path, metadata_files)
-                cmd += md_macro_args(all_inputs or md_path, metadata_files)
-                cmd += calc_filter_args(all_inputs or md_path, metadata_files)
-                cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
-                cmd += pagebreak_filter_args(md_path, metadata_files)
-                cmd += indent_filter_args(all_inputs or md_path, metadata_files)
-                cmd += markup_filter_args(md_path, metadata_files)
-                cmd += table_caption_args(md_path, metadata_files)
-                cmd += linebreak_args(md_path, metadata_files)
-                cmd += title_filter_args(md_path, metadata_files)
-                cmd += cover_filter_args(md_path, metadata_files)
-                cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files,
-                                       flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
-                                       preamble=list(preamble_files or []) if flat_markdown else None,
-                                       flat_text=target_format == "txt")
-                cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                cmd += document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
+                                            flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
+                                            preamble=list(preamble_files or []) if flat_markdown else None,
+                                            flat_text=target_format == "txt")
                 cmd += select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
@@ -24986,19 +24984,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
-                    cmd += metadata_append_args(all_inputs or md_path, metadata_files)
-                    cmd += md_macro_args(all_inputs or md_path, metadata_files)
-                    cmd += calc_filter_args(all_inputs or md_path, metadata_files)
-                    cmd += csv_table_filter_args(all_inputs or md_path, no_auto, csv_filter, metadata_files)
-                    cmd += pagebreak_filter_args(md_path, metadata_files)
-                    cmd += indent_filter_args(all_inputs or md_path, metadata_files)
-                    cmd += markup_filter_args(md_path, metadata_files)
-                    cmd += table_caption_args(md_path, metadata_files)
-                    cmd += linebreak_args(md_path, metadata_files)
-                    cmd += title_filter_args(md_path, metadata_files)
-                    cmd += cover_filter_args(md_path, metadata_files)
-                    cmd += raw_filter_args(all_inputs or md_path, no_auto, metadata_files)
-                    cmd += crossref_filter_args(all_inputs or md_path, pandoc_options, no_auto, str(md_path))
+                    cmd += document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
                     cmd += select_filter_args(selection)
                     if any_citations and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
                         cmd.append("--citeproc")

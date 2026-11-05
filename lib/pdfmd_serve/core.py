@@ -11,11 +11,13 @@ in by pdfmd.py as functions, so this package imports nothing from it.
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -38,6 +40,7 @@ RAW_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", "
              ".webp": "image/webp", ".pdf": "application/pdf"}
 SKIPPED_DIRS = {"__pycache__", "node_modules"}
 # a position from pandoc reading standard input has no file name (`5:1-6:1`); the page's source mirror wants `name@5:1-6:1`
+HIDDEN_COPY = re.compile(r"[^\s:]*\.pdfmd-live-")      # the name of the copy of an unsaved text (see document_file): a note names the document instead
 POSITION = re.compile(r'data-pos="(\d+:\d+-\d+:\d+)"')      # beside every name that starts with a dot
 
 
@@ -88,8 +91,8 @@ def headings(text: str) -> list[dict]:
 
 class Core:
     """One project folder. `pick_main(root)` -> (relative path or None, why); `discover(root, main)` -> [{"role", "file"}];
-    `write_bytes(path, data)` is an atomic write; `filters()` is a context manager that yields the Lua filters (paths) the live view runs
-    (pdfmd's own: the CSV tables)."""
+    `write_bytes(path, data)` is an atomic write; `filters(source, metadata)` is a context manager that yields the Pandoc arguments (the
+    filters) pdfmd puts on the document in ``source``, a file holding the text being rendered: the very list a build writes (entry 3do)."""
 
     def __init__(self, root: Path, pick_main: Optional[Callable] = None, discover: Optional[Callable] = None,
                  write_bytes: Optional[Callable] = None, which: Callable = shutil.which, display: Optional[Callable] = None,
@@ -100,7 +103,7 @@ class Core:
         self.write_bytes = write_bytes or self._write_bytes
         self.which = which
         self.display = display or str
-        self.filters = filters or contextlib.nullcontext
+        self.filters = filters or self._no_filters
         self.lock = threading.Lock()
 
     # ---- dispatch ---------------------------------------------------------------------------------------------------------------
@@ -245,8 +248,10 @@ class Core:
 
     def render(self, query: dict, body: dict) -> tuple[int, dict]:
         """The live view: pandoc (CommonMark with source positions) on the text as it is now, in the folder of the file, with the
-        metadata files that pdfmd finds there. Citations are NOT resolved: pandoc's `commonmark_x` has `sourcepos` but no `citations`
-        (the markdown reader has the other way round), so `[@key]` stays as typed until the core renders it by another route (entry 3do)."""
+        metadata files that pdfmd finds there and the filters pdfmd runs on its own syntax (`filters`: the list a build writes, so CSV tables,
+        calc, callouts and the rest show as they do in a build). What the CommonMark reader cannot read stays as typed: citations (`[@key]`:
+        pandoc's `commonmark_x` has `sourcepos` but no `citations`, the markdown reader has the other way round) and the markdown reader's
+        table captions (`: caption`), until the core renders them by another route (entry 3do)."""
         text = body.get("text")
         if not isinstance(text, str):
             raise ApiError(400, "text", "`text` (what to render) is needed")
@@ -259,16 +264,23 @@ class Core:
             folder = path.parent if path.parent.is_dir() else self.root
         command = [pandoc, "-f", "commonmark_x+sourcepos+tex_math_dollars", "-t", "html", "--mathml", "--wrap=none"]
         main, _ = self.pick_main(self.root)
+        metadata = []
         for item in self.discover(self.root, Path(main) if main else None):
             if item["role"] == "metadata" and not item.get("outside"):
-                command += ["--metadata-file", str(self.root / item["file"])]
+                metadata.append(self.root / item["file"])
+                command += ["--metadata-file", str(metadata[-1])]
         # what a build finds: a file named in the text (a CSV, a picture) is looked for beside the document and in the project's folder
         command += ["--resource-path", os.pathsep.join(dict.fromkeys([".", str(folder), str(self.root)]))]
         started = time.monotonic()
         try:
-            with self.filters() as lua:
-                for path in (lua or []):
-                    command += ["--lua-filter", str(path)]
+            with self.document_file(path if body.get("path") else None, folder, text) as document, contextlib.ExitStack() as stack:
+                # the filters pdfmd runs on a document's own syntax come from pdfmd, the same list as a build's (not a copy of it here);
+                # what pdfmd has to say about them (a filter it did not run, and why) is a warning of this render, not a line on the server's console
+                said = io.StringIO()
+                with contextlib.redirect_stderr(said):
+                    arguments = stack.enter_context(self.filters(document, metadata))
+                notes = [HIDDEN_COPY.sub("", line) for line in said.getvalue().splitlines() if line.strip()]
+                command += [str(item) for item in (arguments or [])]
                 done = subprocess.run(command, input=text.encode("utf-8"), capture_output=True, cwd=str(folder), timeout=RENDER_TIMEOUT)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "timeout", f"pandoc did not answer in {RENDER_TIMEOUT} s") from None
@@ -281,10 +293,41 @@ class Core:
                            log=errors, seconds=seconds)
         html = strip_wrappers(done.stdout.decode("utf-8", "replace"))
         html = POSITION.sub(lambda m: f'data-pos="{source}@{m.group(1)}"', html)
-        warnings = [line for line in errors.splitlines() if "Deprecated: --mathml" not in line]   # pandoc 3.13 prefers --math-method; older ones do not know it
+        warnings = notes + [line for line in errors.splitlines() if "Deprecated: --mathml" not in line]   # pandoc 3.13 prefers --math-method; older ones do not know it
         return 200, {"html": html, "seconds": seconds, "engine": "pandoc", "warnings": warnings}
 
     # ---- helpers ----------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _no_filters(source: Path, metadata: list):
+        yield []
+
+    @contextlib.contextmanager
+    def document_file(self, path: Optional[Path], folder: Path, text: str):
+        """A file that holds ``text``, for what reads a document's own file to find out what it needs (pdfmd's filters and its settings
+        read the document and the folders above it). The file itself when it already says this; otherwise a hidden copy beside it, gone
+        when the render is done: the folder's own settings only apply to a file that sits in the folder."""
+        if path is not None and path.is_file():
+            try:
+                if path.read_bytes().decode("utf-8-sig").replace("\r\n", "\n") == text.replace("\r\n", "\n"):
+                    yield path
+                    return
+            except (OSError, UnicodeDecodeError):
+                pass
+        copy = folder / f".pdfmd-live-{path.name if path is not None else 'document.md'}"
+        try:
+            copy.write_text(text, encoding="utf-8")
+        except OSError:
+            with tempfile.TemporaryDirectory(prefix="pdfmd-live-") as scratch:      # a folder that cannot be written to: its settings are lost
+                copy = Path(scratch) / (path.name if path is not None else "document.md")
+                copy.write_text(text, encoding="utf-8")
+                yield copy
+            return
+        try:
+            yield copy
+        finally:
+            copy.unlink(missing_ok=True)
 
     @staticmethod
     def _write_bytes(path: Path, data: bytes) -> None:

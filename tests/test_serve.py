@@ -147,19 +147,58 @@ class Render(Folder):
         self.assertEqual(answer["warnings"], [])
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
-    def test_a_csv_block_is_a_table_when_the_core_is_given_the_filter(self):
-        import contextlib
+    def test_a_csv_block_is_a_table_when_the_core_is_given_pdfmds_filters(self):
         import pdfmd
         (self.root / "tables").mkdir()
         (self.root / "tables" / "t.csv").write_text("a,b\n1,2\n", encoding="utf-8")
         (self.root / "parts").mkdir()
-        core = Core(self.root, filters=lambda: contextlib.nullcontext([]))
         text = '::: {#tbl:t .csv file="tables/t.csv" caption="Cap"}\n:::\n'
-        _, plain = core.handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
+        _, plain = Core(self.root).handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
         self.assertNotIn("<table", plain["html"])                                 # the core alone is pandoc: no pdfmd syntax
         _, with_filter = Core(self.root, filters=pdfmd.serve_live_filters).handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
         self.assertIn("<th>a</th>", with_filter["html"])                          # the file is found at the project's folder, from a part in parts/
         self.assertIn("<caption>Cap</caption>", with_filter["html"])
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_the_live_view_shows_pdfmds_syntax_as_a_build_does(self):
+        """Calc (an inline `{=}` and a `::: calc` div: both need the document as the reader gives it, which `sourcepos` changes), callouts and
+        page breaks come from the one list every build uses, and what is not saved yet is read from the text, not from the file."""
+        import pdfmd
+        core = Core(self.root, filters=pdfmd.serve_live_filters)
+        (self.root / "parts").mkdir()
+        saved = "A half is `1/2`{=}.\n\n::: calc\nV = 7 - 2 = {ans} mL\n:::\n"
+        (self.root / "parts" / "p.md").write_text(saved, encoding="utf-8")
+        for text in (saved, saved + "\n> [!NOTE]\n> Careful.\n\n<!-- pagebreak -->\n"):          # the second is not on disk
+            with self.subTest(unsaved=text != saved):
+                status, answer = core.handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
+                self.assertEqual(status, 200, answer)
+                self.assertIn("A half is 0.5.", answer["html"])
+                self.assertIn("V = 7 - 2 = 5 mL", answer["html"])
+                self.assertNotIn("{ans}", answer["html"])
+                self.assertNotIn("data-wrapper", answer["html"])
+        self.assertIn('class="callout', answer["html"])
+        self.assertIn("page-break-after", answer["html"])
+        self.assertEqual(sorted(p.name for p in (self.root / "parts").iterdir()), ["p.md"], "no copy of the text is left in the folder")
+
+    def test_every_build_and_the_live_view_take_the_filters_from_one_list(self):
+        """Entry 3do: a syntax of pdfmd's own is added to document_filter_args() once and shows in every writer and in the live view. A
+        build site that writes the filters out itself again would be the second list this guards against."""
+        import ast
+        tree = ast.parse((ROOT / "pdfmd.py").read_text(encoding="utf-8"))
+        helpers = {"metadata_append_args", "md_macro_args", "csv_table_filter_args", "pagebreak_filter_args", "indent_filter_args",
+                   "markup_filter_args", "table_caption_args", "linebreak_args", "title_filter_args", "cover_filter_args",
+                   "raw_filter_args", "crossref_filter_args"}
+        callers: dict[str, set] = {name: set() for name in helpers}
+        for function in ast.walk(tree):
+            if isinstance(function, ast.FunctionDef):
+                for call in ast.walk(function):
+                    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in callers:
+                        callers[call.func.id].add(function.name)
+        self.assertEqual({name: sorted(where) for name, where in callers.items()},
+                         {name: ["document_filter_args"] for name in helpers})
+        live = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "serve_live_filters")
+        self.assertIn("document_filter_args", {call.func.id for call in ast.walk(live)
+                                               if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)})
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_render_of_what_is_not_written_yet(self):
