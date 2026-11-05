@@ -29,6 +29,8 @@
  {"name": "display math", "syntax": "markdown", "text": "$$x+y$$", "runs": [[0, 7, "math"]]},
  {"name": "BibTeX: the entry type, the key, the fields and their values", "syntax": "bibtex", "text": "@article{key1,\n  title = {A B},\n  year = 2020\n}", "runs": [[0, 8, "entry"], [9, 13, "cite"], [17, 22, "key"], [25, 30, "string"], [34, 38, "key"]]},
  {"name": "CSV: a quoted field wins over the comma inside it", "syntax": "csv", "text": "a,\"b,c\",1.5", "runs": [[1, 2, "punct"], [2, 7, "string"], [7, 8, "punct"], [8, 11, "number"]]},
- {"name": "TeX: commands, an environment's name, math and a comment", "syntax": "tex", "text": "\\begin{document} % c\n$x$", "runs": [[0, 6, "tex"], [7, 15, "entry"], [17, 20, "comment"], [21, 24, "math"]]}
+ {"name": "TeX: commands, an environment's name, math and a comment", "syntax": "tex", "text": "\\begin{document} % c\n$x$", "runs": [[0, 6, "tex"], [7, 15, "entry"], [17, 20, "comment"], [21, 24, "math"]]},
+ {"name": "italic with stars and with underscores", "syntax": "markdown", "text": "a *b* and _c_ d", "runs": [[2, 5, "italic"], [10, 13, "italic"]]},
+ {"name": "a star list marker, bold and snake_case are not italic", "syntax": "markdown", "text": "* item\n**b** snake_case_x", "runs": [[0, 2, "list"], [7, 12, "emphasis"]]}
 ]
 }

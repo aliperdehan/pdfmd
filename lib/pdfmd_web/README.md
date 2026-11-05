@@ -28,7 +28,7 @@ The placeholder `APP` stands for the product name (undecided).
 - **A render costs what changed**: the live view keeps every block that an edit did not touch (pandoc's own HTML, found again by the source text of the block) and renders
   only the edited ones; an unfinished `**bold`, `*italic`, `` `code ``, `$math` or `<!-- comment` is closed for display.
 - **The editor is switchable**: CodeMirror 6 (vendored, MIT, `vendor/cm/`, 539 KB, 188 KB gzipped) or a plain text box, behind one contract.
-- **One syntax table** (`syntax/syntaxes.json`, v3.32.44; more rules, languages and file types in 3.32.45): what is coloured (rules: a pattern and a role) and the roles with their colours, written once and read by this editor (`syntax/engine.js`, inside `codemirror.js`) and by the Mac app's. `syntax/cases.json` holds the expected colours; `tests/test_syntax_table.py` (a Python copy of the engine, and `engine.js` under node) and `pdfmdedit --smoke-syntax` run them, so the three engines (ICU, JavaScript, Python) cannot drift. The file's header lists the common subset of regular expressions.
+- **One syntax table** (`syntax/syntaxes.json`, v3.32.44; more rules, languages and file types in 3.32.45; italic and a role's `style` in 3.32.47): what is coloured (rules: a pattern and a role) and the roles with their colours, written once and read by this editor (`syntax/engine.js`, inside `codemirror.js`) and by the Mac app's. `syntax/cases.json` holds the expected colours; `tests/test_syntax_table.py` (a Python copy of the engine, and `engine.js` under node) and `pdfmdedit --smoke-syntax` run them, so the three engines (ICU, JavaScript, Python) cannot drift. The file's header lists the common subset of regular expressions.
 
 ## What is real and what is a stand-in
 Real: the export table, the settings schema, the pandoc render of the demo, `fixtures/report.pdf` (made by pdfmd). Stand-in (marked "sample"): the build run, the history,
@@ -41,7 +41,7 @@ the checks, the live render of an edited text. Not here: files on disk, git, cli
 - `syntax/`: the table, its engine and its cases (see above); after editing the table run `python3 tools/sync_syntax_fixture.py` (a page opened from disk reads the table from `fixtures.js`, and a test fails until it is current). `vendor/cm/`: `entry.js` (the CodeMirror implementation of the editor contract), `package.json` (exact versions), `build.sh` (needs node, only to rebuild
   `codemirror.js`), `LICENSES.txt`.
 - `js/selftest.js`: open `index.html#selftest`; it drives the page like a person and writes `ok` / `FAIL` lines into `#selftest`. Headless:
-  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (60 checks).
+  `Edge --headless=new --virtual-time-budget=20000 --dump-dom 'file://.../index.html#selftest'` (61 checks).
 
 ## Findings that the core (S1) must answer
 - Pandoc's source positions exist only for the `commonmark` and `gfm` readers, **not** for pdfmd's own `markdown` reader, and then without citations: the live view

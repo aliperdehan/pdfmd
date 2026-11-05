@@ -123,6 +123,7 @@ class Table(unittest.TestCase):
         for role in TABLE["roles"]:
             self.assertTrue(re.fullmatch(r"#[0-9A-Fa-f]{6}", role["light"]) and re.fullmatch(r"#[0-9A-Fa-f]{6}", role["dark"]), role["key"])
             self.assertTrue(role["category"] and role["help"], role["key"])
+            self.assertTrue(set(role.get("style", "").split()) <= {"bold", "italic"}, f'{role["key"]}: a style is bold, italic or both')
         for name, syntax in TABLE["syntaxes"].items():
             used = {rule["role"] for rule in syntax["rules"] if "role" in rule} | {role for rule in syntax["rules"] for role in rule.get("groups", {}).values()} \
                 | ({syntax["fences"]["role"]} if syntax.get("fences") else set())

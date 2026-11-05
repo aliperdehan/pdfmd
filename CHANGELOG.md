@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.47 — 2026-11-05
+
+Pre-edit state: commit `0e11cf4`. Entry 3do. **`*italic*` and `_italic_` are coloured, and a role can have a style.** The table coloured `**bold**` but not italics, and the editor before the table (CodeMirror's own Markdown colours) slanted italics and comments; both are back, as roles of the table.
+
+- New role `italic` (CotEditor's category `attributes`, which is also what CotEditor's own Markdown colours `*x*` with; light `#862753`, dark `#C76090` when no theme is found). Its rule comes before the bold one, so where they meet the bold rule wins. A star list marker (`* item`), `**bold**` and `snake_case_name` are not italic (two new cases in `cases.json`: 31, agreeing in Python, `engine.js` under node and the Mac app's ICU).
+- A role may carry `style` (`bold`, `italic` or both words): `heading` and `emphasis` are bold, `comment` and `italic` are italic. The page makes the CSS from it (it was written into the page's code for two roles, the heading's weight 600 is now the same 700 as bold). The Mac editor still paints colours only and does not apply `style` yet; the table says so in its header.
+- `tests/test_syntax_table.py` rejects a style that is neither word; the page's self-test has a check that italics and comments are slanted and bold is heavier (61 checks).
+
 ## v3.32.46 — 2026-11-05
 
 Pre-edit state: commit `76a2558`. Entry 3do. **A new document is saved as `Untitled.md`, and its name is a setting.** The save panel of a new, unsaved document in the plain editor proposed `Untitled` with no extension, and the file was saved under that name. It now proposes `Untitled.md` with the extension showing; the panel selects the name without it, so typing a name replaces `Untitled` and keeps `.md`. A name typed without an extension gets `.md`, one typed with another (`notes.txt`) keeps its own.
