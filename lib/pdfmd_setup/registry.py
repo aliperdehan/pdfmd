@@ -480,7 +480,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.backup.format", "Backup file names",
              "compact, dashed, stem, suffix, short, or a template with {name} {stem} {ext} and strftime codes.",
              "Backups"),
-        text("options.backup.keep", "Backups kept per document", "The newest n; 0 keeps all.", "Backups",
+        text("options.backup.keep", "Backups kept per document", "The newest n; 0 keeps none; a negative number keeps every one (the default).", "Backups",
              "config", "number"),
         text("options.backup.pdfs", "Built PDFs kept per document",
              "Copied into the backup folder after each PDF build (a rebuilt source cannot give an old PDF back). The newest n; "

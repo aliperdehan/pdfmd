@@ -1417,10 +1417,10 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
         ---
         pdfmd-options:
           backup:
-            dir: backup      # relative to the document; default `backup`
+            dir: backup      # relative to the document; default `.backups`
             format: dashed   # see below; default `compact`
-            keep: 30         # newest N plain snapshots; default 0 = all
-            pdfs: 5          # newest N built PDFs; default 0 = none, -1 = all (v3.32.42)
+            keep: 30         # newest N plain snapshots; 0 = none, negative = all (the default)
+            pdfs: 5          # newest N built PDFs; 0 = none (the default), negative = all (v3.32.42)
         ---
 
     `format:` (or --backup-format for one run) is a preset or a template:
@@ -1447,7 +1447,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     have changed since. After each successful PDF build the file is copied into the same folder as `report_20260924-091500.pdf`
     (the stamp of the source copy of that run, so the two pair up; a collision gets `-2`), unless the newest copy is the very
     same file. `pdfs: N` sets how many: the newest N; `0` none (the default: off unless asked for); a negative number every
-    one. (`keep:` counts source copies, and 0 there means all: the two numbers do not share a meaning.) A partial build's PDF
+    one. (`keep:` counts the source copies the same way; before v3.32.43 its 0 meant all.) A partial build's PDF
     (`report.results.pdf`) is kept under its own name. A PDF with another name (`report_submitted_...pdf`) is a milestone: never
     counted, never removed. `--setup` has the row ("Built PDFs kept per document").
 
@@ -1487,7 +1487,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.42"
+PDFMD_VERSION = "3.32.43"
 import argparse
 import atexit
 import csv
@@ -17047,12 +17047,13 @@ DEFAULT_BACKUP_OPTIONS = {
     # Relative to the document's own directory (absolute also accepted). Empty is the default
     # place, see backup_directory(): ".backups", or a folder of the older spellings that is already there.
     "dir": "",
-    # Newest N plain-timestamp snapshots of this one file kept; 0 keeps all.
+    # Newest N plain-timestamp snapshots of this one file kept; 0 keeps none (no copy is made, nothing already there is
+    # deleted); a negative number keeps every one (the default; v3.32.43: 0 used to mean all, now it means what it says).
     # Never counts or deletes tagged ones -- see backup_snapshots().
-    "keep": 0,
+    "keep": -1,
     "format": "compact",
     # The built PDFs kept beside the sources (v3.32.42): the newest n; 0 keeps none (the default: a build keeps what it always
-    # kept, the source); a negative number keeps every one.
+    # kept, the source); a negative number keeps every one. Same meaning as `keep`.
     "pdfs": 0,
 }
 # strftime codes -> what they render as, for recognizing a format's own
@@ -17251,19 +17252,21 @@ def backup_fields(value, implied_on: bool = True) -> dict:
             options["dir"] = str(value["dir"])
         if value.get("format"):
             options["format"] = str(value["format"])
-        if "keep" in value:
-            try:
-                options["keep"] = max(0, int(value["keep"] or 0))
-            except (TypeError, ValueError):
-                raise SystemExit(f"pdfmd-options.backup.keep must be a whole number, got {value['keep']!r}")
-        if "pdfs" in value:
-            words = {"all": -1, "none": 0, "off": 0, "true": -1, "false": 0}
-            given = value["pdfs"]
-            try:
-                options["pdfs"] = words[str(given).strip().lower()] if str(given).strip().lower() in words else int(given)
-            except (TypeError, ValueError):
-                raise SystemExit(f"pdfmd-options.backup.pdfs must be a whole number (negative: all, 0: none) or all/none, got {given!r}")
+        for name in ("keep", "pdfs"):
+            if name in value:
+                options[name] = backup_count(name, value[name])
     return options
+
+
+def backup_count(name: str, given) -> int:
+    """How many copies `backup: {keep}` (sources) or `{pdfs}` (built PDFs) keeps: a whole number, the newest N; 0 none; negative
+    every one (v3.32.43: the two share this meaning). The words all/none/off/true/false are taken too."""
+    words = {"all": -1, "none": 0, "off": 0, "true": -1, "false": 0}
+    word = str(given).strip().lower()
+    try:
+        return words[word] if word in words else int(given)
+    except (TypeError, ValueError):
+        raise SystemExit(f"pdfmd-options.backup.{name} must be a whole number (negative: all, 0: none) or all/none, got {given!r}")
 
 
 def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
@@ -17274,9 +17277,10 @@ def resolve_backup_options(md_path: Path, metadata_files: list[Path], cli_enable
     """
     merged: dict = {}
     for where, own in option_sources(md_path, metadata_files):       # field by field since v3.27.1
-        if "backup" in own:
-            for key, value in backup_fields(own["backup"], implied_on=not is_setup_layer(where)).items():
-                merged.setdefault(key, value)
+        for name in ("backup", "backups"):                           # both spellings (v3.32.43); `backup` first where both are set
+            if name in own:
+                for key, value in backup_fields(own[name], implied_on=not is_setup_layer(where)).items():
+                    merged.setdefault(key, value)
     options = {**DEFAULT_BACKUP_OPTIONS, **merged}
     if cli_enabled is not None:
         options["enabled"] = cli_enabled
@@ -17316,13 +17320,16 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
     """Snapshot md_path into its backup directory if --backup/
     pdfmd-options.backup says to -- skipped when the newest existing
     snapshot, in any recognized naming form (backup_snapshots), is already
-    identical ignoring --stamp's own lines; then pruned to ``keep`` if set.
+    identical ignoring --stamp's own lines; then pruned to ``keep`` (a negative ``keep`` prunes nothing, 0 makes no copy).
     Best-effort: an OSError warns rather than failing a compile that
     already succeeded. ``collect``: the snapshot is added to this list instead of announced (a parts build announces its
     files in one line, see backup_summary()).
     """
     options = resolve_backup_options(md_path, metadata_files, cli_enabled, cli_format)
     if not options["enabled"]:
+        return
+    if options["keep"] == 0:
+        vprint(verbose, f"AUTO BACKUP  {display_path(md_path)}: keep is 0; no copy made")
         return
     template = backup_template(options["format"])
     backup_dir = backup_directory(md_path, options)
@@ -17341,7 +17348,7 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         else:
             collect.append(target)
         prunable.append(target)
-        if options["keep"] and len(prunable) > options["keep"]:
+        if options["keep"] > 0 and len(prunable) > options["keep"]:
             for old in prunable[:-options["keep"]]:
                 old.unlink()
                 vprint(verbose, f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")

@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.43 — 2026-11-05
+
+Pre-edit state: commit `81eac86`. Entry 3do. **`backup: {keep: N}` means what `pdfs: N` means, and `backups:` is a second spelling of `backup:`.** The author: "keep: 0 keeps all? then we shall make it consistent so 0 is now indeed 0 and negative is all; it will change current behaviour, but that is fine", and "backup: also has alias backups: right, to not frustrate anyone?".
+
+- **`keep`: the newest N source copies; 0 none; a negative number every one** (also the words `all`, `none`, `off`). **The default is now negative (all), so a document that never sets `keep` behaves as before.** Only an explicit `keep: 0` changes: it meant all, it now means none. With 0 pdfmd makes no source copy and **deletes nothing that is already there** (setting a number to 0 must not destroy what was kept); the PDFs follow the same rule through `pdfs: 0`. `keep` and `pdfs` share one parser (`backup_count`), and a wrong value names its key (`pdfmd-options.backup.keep`).
+- **`backups:`** is read wherever `backup:` is (front matter, metadata files, folder settings, the config file), field by field; where both are set in one place, `backup` wins.
+- The `--setup` row, the `--help` text and `tests/test_backup_keep.py` (7 checks) say so.
+
 ## v3.32.42 — 2026-11-05
 
 Pre-edit state: commit `4f36de3`. Entry 3do. **`backup` can keep the built PDF too: `pdfs: N` (off by default).** The author, on finding that `.backups/` held only sources: the compiled PDFs "are one of the main reasons .backups even exist ... a rebuild after pdfmd or nulabreport changes can't reproduce an old PDF"; keep the newest N, "negative number = inf, 0 = never keep any, positive = keep last N"; "yes, pdfmd itself"; and, told that a default of "all" would change what `backup: true` does for every user: "let's set `pdfs: 0` by default, and offer it as an option somewhere" (the `report_STAMP.pdf` + `.md` pairs in his folders were not written by any pdfmd).
