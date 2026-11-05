@@ -12,7 +12,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
     /// What is coloured, and in which role, is the syntax table's business (`SyntaxTable`, lib/pdfmd_web/syntax/syntaxes.json, read by the page's
     /// editor too); a colour is looked up when the pass paints, so the theme is never baked into the rules.
     private let table = SyntaxTable.shared
-    private let syntax: SyntaxTable.Syntax?
+    private(set) var syntax: SyntaxTable.Syntax?
 
     private weak var textView: NSTextView?
     private var fences: [Int] = []        // offsets of the fence lines (``` or ~~~), sorted
@@ -162,6 +162,17 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         passSeconds.append(Double(DispatchTime.now().uptimeNanoseconds - started) / 1e9)
     }
 
+    /// Colours by the syntax of this file name (`SyntaxTable.name(forFileName:)`): the extension decides; a file no syntax claims is Markdown.
+    func use(fileName: String?) {
+        let wanted = table.syntaxes[table.name(forFileName: fileName)]
+        guard wanted?.name != syntax?.name, let tv = textView, let storage = tv.textStorage else { return }
+        syntax = wanted
+        let ns = storage.mutableString
+        fences = Highlighter.fenceLines(in: ns, from: 0, to: ns.length, markers: wanted?.fences?.markers ?? [])
+        colored = NSRange(location: NSNotFound, length: 0)
+        highlightNow()
+    }
+
     /// End offset of a front matter at the very top of the text (0 if there is none): its first line is `open`, it ends with the first line after
     /// that starts with one of `close`, looked for within `scan` characters (the table's `frontMatter`).
     static func frontMatterEnd(_ ns: NSString, _ fm: SyntaxTable.FrontMatter) -> Int {
@@ -199,15 +210,22 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         let base = lowerBound(fences, frontEnd)
         var i = lowerBound(fences, cursor)
         var inCode = (i - base) % 2 == 1
+        var opener: Int? = inCode ? fences[i - 1] : nil
         func segment(_ r: NSRange) {
             guard r.length > 0 else { return }
-            if inCode { put(fencing.role, r) } else { apply(syntax.rules, to: r, ns, put) }
+            guard inCode else { apply(syntax.rules, to: r, ns, put); return }
+            // a fenced block: the rules of its language, else one role
+            if let at = opener,
+               let language = table.language(of: ns.substring(with: ns.lineRange(for: NSRange(location: at, length: 0))), in: syntax) {
+                apply(language.rules, to: r, ns, put)
+            } else { put(fencing.role, r) }
         }
         while i < fences.count && fences[i] < hi {
             let f = fences[i]
             segment(NSRange(location: cursor, length: f - cursor))
             let lineEnd = min(hi, NSMaxRange(ns.lineRange(for: NSRange(location: f, length: 0))))
             put(fencing.role, NSRange(location: f, length: lineEnd - f))
+            if !inCode { opener = f }
             inCode.toggle()
             cursor = lineEnd
             i += 1
@@ -221,8 +239,12 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         let whole = NSRange(location: 0, length: (sub as NSString).length)
         for rule in rules {
             rule.regex.enumerateMatches(in: sub, options: [], range: whole) { match, _, _ in
-                guard let m = match?.range, m.length > 0 else { return }
-                put(rule.role, NSRange(location: seg.location + m.location, length: m.length))
+                guard let match, match.range.length > 0 else { return }
+                if let role = rule.role { put(role, NSRange(location: seg.location + match.range.location, length: match.range.length)) }
+                for (number, role) in rule.groups where number < match.numberOfRanges {
+                    let g = match.range(at: number)
+                    if g.location != NSNotFound && g.length > 0 { put(role, NSRange(location: seg.location + g.location, length: g.length)) }
+                }
             }
         }
     }

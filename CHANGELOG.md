@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.45 — 2026-11-05
+
+Pre-edit state: commit `cb25ac3`. Entry 3do. **The syntax table learns pdfmd's own syntax, the languages inside a fenced block, and the file types.** The second step of the table, after the colours of today moved into it (3.32.44).
+
+- **Markdown colours what pdfmd reads beyond CommonMark:** citations `[@key; @other]` and `@key` (not an e-mail address) and footnote references `[^1]`; attribute blocks `{#id .class key=value}` (after a heading too); `::: div` lines; the calculator's `{=}` and `{ans}`; display math `$$..$$`; TeX commands (`\cref`, `\newpage`; math still wins inside `$..$`); HTML tags next to the comments it already coloured.
+- **A fenced block takes the rules of its language:** the word after the fence (```` ```tex ````, ```` ```{=latex} ````, ```` ```bibtex ````, `yaml`, `csv`) picks the syntax; the fence lines keep their own role and a block whose language no syntax claims is one role, as before.
+- **Syntaxes by file extension:** BibTeX (`bib`: the entry type, the key, the field names, the values), TeX (`tex`, `sty`, `cls`, `ltx`: commands, environment names, math, comments), CSV and TSV (separators, numbers, quoted fields), the build history (`hst`: the date, the kind of an entry, the separators, `key=value`), YAML (`yaml`, `yml`) and Markdown (`md`, `markdown`, `mdown`, `qmd`); a file no syntax claims (`.txt`, `.typ`) is coloured as Markdown, as before. The page picks the syntax when a file opens; the app when a window opens, reloads or is saved under another name.
+- **Table format:** a rule may colour groups of its match (`"groups": {"2": "cite"}`, with or without a `role` for the whole match), a syntax lists its `extensions` and the `languages` that name it, and `fences.language` is the pattern that reads the word off the opening line. Ten new roles (`cite`, `attribute`, `div`, `calc`, `tex`, `tag`, `entry`, `string`, `number`, `punct`) with their CotEditor categories and light and dark colours; the app's Colours settings list them. The table's header says all of it.
+- **Checked as before, now with 29 cases** (`syntax/cases.json`): a Python copy of the engine, the page's `engine.js` under node and the app (`pdfmdedit --smoke-syntax`) agree on every one; the page's self-test has two more checks (60) and the app's pixel smoke test colours more of the demo (20833 to 22250 px: the new roles); `--bench --mb 10` is unchanged (colour pass median 5.8 ms). A test fails when `fixtures.js` (what a page opened from disk reads) holds an old table; `tools/sync_syntax_fixture.py` brings it up to date.
+
 ## v3.32.44 — 2026-11-05
 
 Pre-edit state: commit `7ee6c81`. Entry 3do. **One syntax table for the page's editor and the Mac app's: `lib/pdfmd_web/syntax/syntaxes.json`.** The author, on the editor: "one JSON table read by the page and the native highlighter"; the table is the first step, with the colours of today and nothing else, so the move can be checked by eye and by pixel before any rule is added.

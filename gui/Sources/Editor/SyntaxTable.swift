@@ -17,7 +17,9 @@ struct SyntaxTable {
 
     struct Rule {
         let regex: NSRegularExpression
-        let role: String
+        /// The role of the whole match, if the rule has one; `groups` are painted over it (group number, role).
+        let role: String?
+        let groups: [(Int, String)]
     }
 
     struct FrontMatter {
@@ -30,6 +32,8 @@ struct SyntaxTable {
     struct Fences {
         let markers: [String]
         let role: String
+        /// Tried on the opening line of a block; its group 1 is the language word.
+        let language: NSRegularExpression?
     }
 
     struct Syntax {
@@ -37,10 +41,29 @@ struct SyntaxTable {
         let rules: [Rule]
         let frontMatter: FrontMatter?
         let fences: Fences?
+        let extensions: [String]
+        let languages: [String]
     }
 
     let roles: [Role]
     let syntaxes: [String: Syntax]
+
+    /// The syntax of a file: the one whose `extensions` has the file's (lower case, no dot); markdown for a file no syntax claims.
+    func name(forFileName fileName: String?) -> String {
+        let ext = ((fileName ?? "") as NSString).pathExtension.lowercased()
+        if !ext.isEmpty, let hit = syntaxes.first(where: { $0.value.extensions.contains(ext) }) { return hit.key }
+        return "markdown"
+    }
+
+    /// The syntax that colours a fenced block, from the block's opening line (nil: none does, the block is one role).
+    func language(of openingLine: String, in syntax: Syntax) -> Syntax? {
+        guard let regex = syntax.fences?.language else { return nil }
+        let ns = openingLine as NSString
+        guard let m = regex.firstMatch(in: openingLine, options: [], range: NSRange(location: 0, length: ns.length)), m.numberOfRanges > 1,
+              m.range(at: 1).location != NSNotFound else { return nil }
+        let word = ns.substring(with: m.range(at: 1)).lowercased()
+        return syntaxes.values.first { $0.languages.contains(word) }
+    }
 
     static let shared: SyntaxTable = {
         guard let root = WebStudioController.webRoot() else {
@@ -74,13 +97,14 @@ struct SyntaxTable {
         var built: [String: Syntax] = [:]
         for (name, raw) in syntaxMap {
             // every client sets the multiline option: ^ and $ are a line's start and end
-            let rules: [Rule] = (raw["rules"] as? [[String: String]] ?? []).compactMap { r in
-                guard let match = r["match"], let role = r["role"],
+            let rules: [Rule] = (raw["rules"] as? [[String: Any]] ?? []).compactMap { r in
+                guard let match = r["match"] as? String,
                       let regex = try? NSRegularExpression(pattern: match, options: [.anchorsMatchLines]) else {
                     FileHandle.standardError.write(Data("pdfmdedit: syntax \(name): a pattern does not compile and is left out: \(r["match"] ?? "?")\n".utf8))
                     return nil
                 }
-                return Rule(regex: regex, role: role)
+                let groups = (r["groups"] as? [String: String] ?? [:]).compactMap { k, v in Int(k).map { ($0, v) } }.sorted { $0.0 < $1.0 }
+                return Rule(regex: regex, role: r["role"] as? String, groups: groups)
             }
             var front: FrontMatter?
             if let f = raw["frontMatter"] as? [String: Any], let syntax = f["syntax"] as? String, let open = f["open"] as? String,
@@ -89,9 +113,10 @@ struct SyntaxTable {
             }
             var fences: Fences?
             if let f = raw["fences"] as? [String: Any], let markers = f["markers"] as? [String], let role = f["role"] as? String {
-                fences = Fences(markers: markers, role: role)
+                fences = Fences(markers: markers, role: role, language: (f["language"] as? String).flatMap { try? NSRegularExpression(pattern: $0, options: []) })
             }
-            built[name] = Syntax(name: name, rules: rules, frontMatter: front, fences: fences)
+            built[name] = Syntax(name: name, rules: rules, frontMatter: front, fences: fences,
+                                 extensions: raw["extensions"] as? [String] ?? [], languages: raw["languages"] as? [String] ?? [])
         }
         syntaxes = built
     }

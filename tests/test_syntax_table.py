@@ -24,7 +24,16 @@ FORBIDDEN = [(re.compile(r"(?<!\\)(?:\\\\)*\\[wWdDsSbBpPhHRXzZAG]"), "a shorthan
 
 
 def rules_of(syntax: dict):
-    return [(re.compile(rule["match"], re.MULTILINE), rule["role"]) for rule in syntax["rules"]]
+    return [(re.compile(rule["match"], re.MULTILINE), rule.get("role"), rule.get("groups", {})) for rule in syntax["rules"]]
+
+
+def language_of(syntax: dict, opening_line: str) -> str | None:
+    """The syntax that colours a fenced block: the one whose `languages` has the word the opening line names."""
+    found = re.search(syntax["fences"]["language"], opening_line) if syntax.get("fences", {}).get("language") else None
+    if not found:
+        return None
+    word = found.group(1).lower()
+    return next((name for name, other in TABLE["syntaxes"].items() if word in other.get("languages", [])), None)
 
 
 def utf16(text: str, index: int) -> int:
@@ -38,10 +47,16 @@ def reference_runs(name: str, text: str) -> list[list]:
 
     def paint(syntax_name: str, start: int, end: int) -> None:
         segment = text[start:end]
-        for pattern, role in rules_of(TABLE["syntaxes"][syntax_name]):
+        for pattern, role, groups in rules_of(TABLE["syntaxes"][syntax_name]):
             for match in pattern.finditer(segment):
-                if match.end() > match.start():
+                if match.end() == match.start():
+                    continue
+                if role:
                     owner[start + match.start():start + match.end()] = [role] * (match.end() - match.start())
+                for number, group_role in groups.items():
+                    a, b = match.span(int(number))
+                    if b > a:
+                        owner[start + a:start + b] = [group_role] * (b - a)
 
     front = 0
     fm = syntax.get("frontMatter")
@@ -58,6 +73,15 @@ def reference_runs(name: str, text: str) -> list[list]:
     def fill(start: int, end: int) -> None:
         owner[start:end] = [fences["role"]] * (end - start)
 
+    opener = 0
+
+    def code(start: int, end: int) -> None:
+        if end <= start:
+            return
+        newline = text.find("\n", opener)
+        language = language_of(syntax, text[opener:len(text) if newline < 0 else newline])
+        paint(language, start, end) if language else fill(start, end)
+
     def body(start: int, end: int) -> None:
         if end > start:
             paint(name, start, end)
@@ -73,12 +97,14 @@ def reference_runs(name: str, text: str) -> list[list]:
                 starts.append(position)
             position = end + 1
         for start in starts:
-            (fill if in_code else body)(cursor, start)
+            (code if in_code else body)(cursor, start)
             newline = text.find("\n", start)
             end = len(text) if newline < 0 else newline + 1
             fill(start, end)
+            if not in_code:
+                opener = start
             in_code, cursor = not in_code, end
-    (fill if in_code else body)(cursor, len(text))
+    (code if in_code else body)(cursor, len(text))
     runs: list[list] = []
     at = 0
     while at < len(text):
@@ -98,10 +124,22 @@ class Table(unittest.TestCase):
             self.assertTrue(re.fullmatch(r"#[0-9A-Fa-f]{6}", role["light"]) and re.fullmatch(r"#[0-9A-Fa-f]{6}", role["dark"]), role["key"])
             self.assertTrue(role["category"] and role["help"], role["key"])
         for name, syntax in TABLE["syntaxes"].items():
-            used = {rule["role"] for rule in syntax["rules"]} | ({syntax["fences"]["role"]} if syntax.get("fences") else set())
+            used = {rule["role"] for rule in syntax["rules"] if "role" in rule} | {role for rule in syntax["rules"] for role in rule.get("groups", {}).values()} \
+                | ({syntax["fences"]["role"]} if syntax.get("fences") else set())
             self.assertLessEqual(used, roles, f"{name}: a role the table does not define")
             if syntax.get("frontMatter"):
                 self.assertIn(syntax["frontMatter"]["syntax"], TABLE["syntaxes"], name)
+            for rule in syntax["rules"]:
+                self.assertTrue("role" in rule or rule.get("groups"), f"{name}: a rule that colours nothing: {rule['match']}")
+                pattern = re.compile(rule["match"])
+                for number in rule.get("groups", {}):
+                    self.assertLessEqual(int(number), pattern.groups, f"{name}: a group the pattern does not have: {rule['match']}")
+
+    def test_an_extension_belongs_to_one_syntax_and_a_language_word_too(self):
+        extensions = [ext for syntax in TABLE["syntaxes"].values() for ext in syntax.get("extensions", [])]
+        words = [word for syntax in TABLE["syntaxes"].values() for word in syntax.get("languages", [])]
+        self.assertEqual(len(extensions), len(set(extensions)))
+        self.assertEqual(len(words), len(set(words)))
 
     def test_every_pattern_uses_the_subset_the_engines_share(self):
         for name, syntax in TABLE["syntaxes"].items():
@@ -118,6 +156,15 @@ class Table(unittest.TestCase):
         text = " ".join(TABLE["about"])
         for needle in ("LATER rule wins", "UTF-16", "frontMatter.scan", "ANY fence line"):
             self.assertIn(needle, text)
+
+
+class Fixtures(unittest.TestCase):
+    def test_the_page_opened_from_disk_carries_the_current_table(self):
+        text = (SYNTAX.parent / "fixtures" / "fixtures.js").read_text(encoding="utf-8")
+        head = "// generated by tools/make_fixtures.py: do not edit\nwindow.FIXTURES = "
+        self.assertTrue(text.startswith(head))
+        carried = json.loads(text[len(head):-2]).get("syntaxes")
+        self.assertEqual(carried, TABLE, "fixtures.js holds an old table: run python3 lib/pdfmd_web/tools/sync_syntax_fixture.py")
 
 
 class Cases(unittest.TestCase):

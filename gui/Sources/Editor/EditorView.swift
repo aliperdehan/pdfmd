@@ -127,6 +127,7 @@ final class EditorDocument: NSDocument {
     override var fileURL: URL? {
         didSet {
             guard fileURL != oldValue else { return }
+            controller?.parts.highlighter?.use(fileName: fileURL?.lastPathComponent)      // a new name (Save As) can mean another syntax
             watcher?.stop(); watcher = nil
             if let url = fileURL, Settings.flag("reloadOnDiskChange") { watcher = DiskWatcher(url: url) { [weak self] in self?.diskChanged() } }
         }
@@ -252,6 +253,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         parts.scroll.verticalRulerView = ruler
         parts.scroll.hasVerticalRuler = true
         statusBar.fileURL = document.fileURL
+        parts.highlighter?.use(fileName: document.fileURL?.lastPathComponent)
         content.editor = parts.scroll
         content.bar = statusBar
         content.addSubview(parts.scroll)
@@ -312,6 +314,7 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
         ruler.reset()
         parts.textView.setSelectedRange(NSRange(location: 0, length: 0))
         parts.textView.undoManager?.removeAllActions()
+        parts.highlighter?.use(fileName: document.fileURL?.lastPathComponent)
         parts.highlighter?.highlightNow()
     }
 

@@ -9,12 +9,26 @@
  {"name": "the later rule wins where two overlap", "syntax": "markdown", "text": "# **b**", "runs": [[0, 7, "heading"]]},
  {"name": "an HTML comment", "syntax": "markdown", "text": "<!-- hi --> text", "runs": [[0, 11, "comment"]]},
  {"name": "a front matter is YAML, the body is Markdown", "syntax": "markdown", "text": "---\ntitle: T\n# c\n---\n# H\n", "runs": [[4, 9, "key"], [13, 16, "comment"], [21, 24, "heading"]]},
- {"name": "a fenced block is one role, rules do not reach into it", "syntax": "markdown", "text": "a\n```tex\n# not heading\n```\n# H", "runs": [[2, 27, "fence"], [27, 30, "heading"]]},
+ {"name": "a fenced block with no language is one role, rules do not reach into it", "syntax": "markdown", "text": "a\n```\n# not heading\n```\n# H", "runs": [[2, 24, "fence"], [24, 27, "heading"]]},
  {"name": "an unclosed fence runs to the end", "syntax": "markdown", "text": "```\ncode # x", "runs": [[0, 12, "fence"]]},
  {"name": "an indented fence is not a fence (four spaces)", "syntax": "markdown", "text": "    ```\n# H", "runs": [[8, 11, "heading"]]},
  {"name": "a text with an emoji: offsets are UTF-16 units", "syntax": "markdown", "text": "😀 # no\n# H", "runs": [[8, 11, "heading"]]},
  {"name": "Cyrillic text next to bold (no \\w anywhere)", "syntax": "markdown", "text": "Привет **мир**", "runs": [[7, 14, "emphasis"]]},
  {"name": "a front matter that never closes is no front matter", "syntax": "markdown", "text": "---\nkey: v\n# H", "runs": [[11, 14, "heading"]]},
- {"name": "YAML on its own", "syntax": "yaml", "text": "name: x # c\n- k: 1", "runs": [[0, 4, "key"], [8, 11, "comment"], [12, 15, "key"]]}
+ {"name": "YAML on its own", "syntax": "yaml", "text": "name: x # c\n- k: 1", "runs": [[0, 4, "key"], [8, 11, "comment"], [12, 15, "key"]]},
+ {"name": "a fenced block takes the rules of its language (tex), its fence lines stay fence", "syntax": "markdown", "text": "```tex\n\\cmd{x} % c\n```\n# H", "runs": [[0, 7, "fence"], [7, 11, "tex"], [15, 18, "comment"], [19, 23, "fence"], [23, 26, "heading"]]},
+ {"name": "a language no syntax claims leaves the block one role", "syntax": "markdown", "text": "```python\n# x\n```", "runs": [[0, 17, "fence"]]},
+ {"name": "a Pandoc raw block names its language after =", "syntax": "markdown", "text": "```{=latex}\n\\x\n```", "runs": [[0, 12, "fence"], [12, 14, "tex"], [15, 18, "fence"]]},
+ {"name": "citations (in brackets, with a semicolon) but not an e-mail address", "syntax": "markdown", "text": "see [@a; @b] and a@b.com", "runs": [[5, 7, "cite"], [9, 11, "cite"]]},
+ {"name": "a footnote reference", "syntax": "markdown", "text": "x[^1] y", "runs": [[1, 5, "cite"]]},
+ {"name": "an attribute block after a heading", "syntax": "markdown", "text": "# H {#sec:x .c}", "runs": [[0, 4, "heading"], [4, 15, "attribute"]]},
+ {"name": "a div fence and the calculator's {ans}", "syntax": "markdown", "text": "::: calc\nx = {ans}\n:::", "runs": [[0, 8, "div"], [13, 18, "calc"], [19, 22, "div"]]},
+ {"name": "an inline calculation: the code span and the {=} after it", "syntax": "markdown", "text": "`2+2`{=} cm", "runs": [[0, 5, "code"], [5, 8, "calc"]]},
+ {"name": "a TeX command in Markdown, and math winning over it", "syntax": "markdown", "text": "\\cref{fig} and $\\alpha$", "runs": [[0, 5, "tex"], [15, 23, "math"]]},
+ {"name": "an HTML tag and an HTML comment", "syntax": "markdown", "text": "a <br/> b <!-- c -->", "runs": [[2, 7, "tag"], [10, 20, "comment"]]},
+ {"name": "display math", "syntax": "markdown", "text": "$$x+y$$", "runs": [[0, 7, "math"]]},
+ {"name": "BibTeX: the entry type, the key, the fields and their values", "syntax": "bibtex", "text": "@article{key1,\n  title = {A B},\n  year = 2020\n}", "runs": [[0, 8, "entry"], [9, 13, "cite"], [17, 22, "key"], [25, 30, "string"], [34, 38, "key"]]},
+ {"name": "CSV: a quoted field wins over the comma inside it", "syntax": "csv", "text": "a,\"b,c\",1.5", "runs": [[1, 2, "punct"], [2, 7, "string"], [7, 8, "punct"], [8, 11, "number"]]},
+ {"name": "TeX: commands, an environment's name, math and a comment", "syntax": "tex", "text": "\\begin{document} % c\n$x$", "runs": [[0, 6, "tex"], [7, 15, "entry"], [17, 20, "comment"], [21, 24, "math"]]}
 ]
 }

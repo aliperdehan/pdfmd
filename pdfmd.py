@@ -1487,7 +1487,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.44"
+PDFMD_VERSION = "3.32.45"
 import argparse
 import atexit
 import csv
