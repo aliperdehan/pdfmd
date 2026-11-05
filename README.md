@@ -3281,7 +3281,9 @@ All are off by default.
 - **`--backup`** saves a timestamped copy of the source into `.backups/` (a hidden folder; an existing `backup/` is kept
   using, and pdfmd says where the first copy went)
   after every successful build. A copy is skipped when nothing changed,
-  and `keep: 30` limits how many are kept.
+  and `keep: 30` limits how many are kept. With `pdfs: 5` the built PDF is copied beside it too (`report_20260924-091500.pdf`,
+  the same stamp), because a rebuilt source cannot give an old PDF back: the newest five are kept, `pdfs: -1` keeps every one,
+  and `pdfs: 0` (the default) none; `pdfmd --setup` has the row.
 
 Both can be turned on for a whole folder from `metadata.yaml`:
 

@@ -58,7 +58,7 @@ UNSET = {
     "options.office.reference-doc": "one beside the document, else Pandoc's",
     "options.keep-source": "off",
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
-    "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them",
+    "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them", "options.backup.pdfs": "none (only the source is kept)",
     "options.bundle-packages": "off", "options.cache.plots": "off",
     "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.table-tag-brackets": "angle, amp", "options.table-align": "the column's own", "options.table-valign": "top (the baseline of the row)", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
@@ -91,7 +91,7 @@ FOLDER_OPTIONS = frozenset({
     "options.keep-source", "options.hybrid",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
     "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note", "options.stamp.partial",
-    "options.backup.enabled", "options.backup.format", "options.backup.keep",
+    "options.backup.enabled", "options.backup.format", "options.backup.keep", "options.backup.pdfs",
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
     "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.palette", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
@@ -482,6 +482,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Backups"),
         text("options.backup.keep", "Backups kept per document", "The newest n; 0 keeps all.", "Backups",
              "config", "number"),
+        text("options.backup.pdfs", "Built PDFs kept per document",
+             "Copied into the backup folder after each PDF build (a rebuilt source cannot give an old PDF back). The newest n; "
+             "0 keeps none (the default); a negative number keeps every one.", "Backups", "config", "number"),
         # -- the source inside the PDF
         choice("options.attach-source", "Attach the source to the PDF", on_off, "",
                "Anyone can read it back from the PDF (pdfmd --restore).", "Source inside the PDF"),

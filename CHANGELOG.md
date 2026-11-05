@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.42 — 2026-11-05
+
+Pre-edit state: commit `4f36de3`. Entry 3do. **`backup` can keep the built PDF too: `pdfs: N` (off by default).** The author, on finding that `.backups/` held only sources: the compiled PDFs "are one of the main reasons .backups even exist ... a rebuild after pdfmd or nulabreport changes can't reproduce an old PDF"; keep the newest N, "negative number = inf, 0 = never keep any, positive = keep last N"; "yes, pdfmd itself"; and, told that a default of "all" would change what `backup: true` does for every user: "let's set `pdfs: 0` by default, and offer it as an option somewhere" (the `report_STAMP.pdf` + `.md` pairs in his folders were not written by any pdfmd).
+
+- **After each successful PDF build, when `backup` is on and `pdfs` is not 0**, the PDF is copied into the backup folder as `STEM_YYYYMMDD-HHMMSS.pdf` (the stamp of the source copy of the same run, so the two pair up; `-2` on a collision), unless the newest copy is byte for byte the same file. A partial build's `report.results.pdf` is kept under its own stem. **The default is 0, so nothing changes for anyone who does not set it** (a PDF is about 1 MB a build for a lab report: the author chooses N, or -1 for every one, in `--setup` or with `pdfs:`). `pdfs: 5` keeps the newest five.
+- **`backup: {pdfs: N}`** (also `all` and `none`): the newest N; 0 none; a negative number every one. `keep:` is a separate setting for the source copies and 0 means all there; the PDF's number is the author's (0 = none; its default), so it has its own key rather than two numbers with opposite zeros. A PDF named otherwise (`report_submitted_...pdf`) is a milestone and is never counted or removed; the source pruning and `--history`'s source versions do not see the PDFs.
+- `--setup` has the row ("Built PDFs kept per document", also per folder); the `--help` text, the README and `tests/test_backup_pdfs.py` (11 checks) describe and test it.
+- Measured on 11 real builds of one lab report (8.6 MB): zipping each PDF saves 7 %, one solid `tar.xz` of them 51 %, a git pack 39 %; the 29 versions of its source (3.1 MB) become 184 KB in a git pack: the number of PDFs is what costs, not their compression.
+
 ## v3.32.41 — 2026-11-05
 
 Pre-edit state: commit `5b428f3`. Entry 3do. **The live view of `--serve` runs the same filters a build runs on pdfmd's own syntax, from one list.** The author, after the CSV blocks had no tables in the live view (fixed in 3.32.39 by adding that one filter to the view): "it is just an example, there might be other pdfmd flavour only functionality, which will only increase in number as we grow; can we fix the issue at its root instead of building double kludges later on?"

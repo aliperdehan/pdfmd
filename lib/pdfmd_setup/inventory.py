@@ -141,7 +141,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "attach-links": "options.attach-links",
     "attach-source": "options.attach-source", "embed-source": "options.attach-source",
     "backup.enabled": "options.backup.enabled", "backup.dir": "options.backup.dir",
-    "backup.format": "options.backup.format", "backup.keep": "options.backup.keep",
+    "backup.format": "options.backup.format", "backup.keep": "options.backup.keep", "backup.pdfs": "options.backup.pdfs",
     "bookmarks": "options.bookmarks",
     "bundle": "options.bundle", "bundle-max-mb": "options.bundle-max-mb", "bundle-packages": "options.bundle-packages",
     "cache.aux": "options.cache.aux", "cache.plots": "options.cache.plots", "cache.location": "options.cache.location",

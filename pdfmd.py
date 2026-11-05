@@ -1420,6 +1420,7 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
             dir: backup      # relative to the document; default `backup`
             format: dashed   # see below; default `compact`
             keep: 30         # newest N plain snapshots; default 0 = all
+            pdfs: 5          # newest N built PDFs; default 0 = none, -1 = all (v3.32.42)
         ---
 
     `format:` (or --backup-format for one run) is a preset or a template:
@@ -1441,6 +1442,14 @@ Automatic source backups (--backup, v3.8.0; formats v3.9.0):
     extra label) is a deliberate milestone and is never deleted. A .qmd
     only reads its own front matter (no metadata.yaml, same as the rest
     of the Quarto path).
+
+    The built PDF is kept too (v3.32.42): a rebuilt source cannot give an old PDF back, because pdfmd, a package or a kit may
+    have changed since. After each successful PDF build the file is copied into the same folder as `report_20260924-091500.pdf`
+    (the stamp of the source copy of that run, so the two pair up; a collision gets `-2`), unless the newest copy is the very
+    same file. `pdfs: N` sets how many: the newest N; `0` none (the default: off unless asked for); a negative number every
+    one. (`keep:` counts source copies, and 0 there means all: the two numbers do not share a meaning.) A partial build's PDF
+    (`report.results.pdf`) is kept under its own name. A PDF with another name (`report_submitted_...pdf`) is a milestone: never
+    counted, never removed. `--setup` has the row ("Built PDFs kept per document").
 
 Kits (--kit, --kits, --install kit:SOURCE; v3.31.34 on):
     A kit is a folder with a `.kit` (or `NAME.kit`) file that packs a pipeline: a LaTeX class or package, its Lua filter,
@@ -1478,7 +1487,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.41"
+PDFMD_VERSION = "3.32.42"
 import argparse
 import atexit
 import csv
@@ -17042,6 +17051,9 @@ DEFAULT_BACKUP_OPTIONS = {
     # Never counts or deletes tagged ones -- see backup_snapshots().
     "keep": 0,
     "format": "compact",
+    # The built PDFs kept beside the sources (v3.32.42): the newest n; 0 keeps none (the default: a build keeps what it always
+    # kept, the source); a negative number keeps every one.
+    "pdfs": 0,
 }
 # strftime codes -> what they render as, for recognizing a format's own
 # output again (dedupe/pruning). Anything unlisted matches loosely.
@@ -17244,6 +17256,13 @@ def backup_fields(value, implied_on: bool = True) -> dict:
                 options["keep"] = max(0, int(value["keep"] or 0))
             except (TypeError, ValueError):
                 raise SystemExit(f"pdfmd-options.backup.keep must be a whole number, got {value['keep']!r}")
+        if "pdfs" in value:
+            words = {"all": -1, "none": 0, "off": 0, "true": -1, "false": 0}
+            given = value["pdfs"]
+            try:
+                options["pdfs"] = words[str(given).strip().lower()] if str(given).strip().lower() in words else int(given)
+            except (TypeError, ValueError):
+                raise SystemExit(f"pdfmd-options.backup.pdfs must be a whole number (negative: all, 0: none) or all/none, got {given!r}")
     return options
 
 
@@ -17328,6 +17347,51 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
                 vprint(verbose, f"AUTO BACKUP  pruned {display_path(old)} (keep: {options['keep']})")
     except OSError as error:
         print(f"WARN  {display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+
+
+def backup_pdf_pattern(pdf: Path) -> re.Pattern:
+    """The names the PDF copies of ``pdf`` have in the backup folder: `report_20261105-101500.pdf` (a collision counter after the stamp).
+    A copy named otherwise (`report_submitted_...pdf`) is a milestone: never counted, never pruned."""
+    return re.compile(rf"^{re.escape(pdf.stem)}_\d{{8}}-\d{{6}}{_COUNTER}\.pdf$")
+
+
+@timed("backup")
+def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path], cli_enabled: bool | None,
+                             verbose: bool, when: datetime | None = None) -> Path | None:
+    """Copy the PDF a build made into the backup folder of ``md_path`` (v3.32.42), when `backup` is on and `backup: {pdfs: N}` is not 0:
+    a rebuilt document cannot give an old PDF back (pdfmd, a package or a kit may have changed since), so the PDF is the one thing a
+    source copy cannot replace. Named `STEM_YYYYMMDD-HHMMSS.pdf`, the stamp of the source copy of the same run (``when``) so the two pair
+    up. Skipped when the newest copy is byte for byte this PDF; then the oldest copies beyond N are removed (N negative: none is).
+    Best-effort like the source copy: an OSError warns and the build stands."""
+    options = resolve_backup_options(md_path, metadata_files, cli_enabled)
+    keep = options["pdfs"]
+    if not options["enabled"] or keep == 0 or not pdf.is_file():
+        return None
+    backup_dir = backup_directory(md_path, options)
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_notice(backup_dir, options)
+        pattern = backup_pdf_pattern(pdf)
+        kept = sorted((path for path in backup_dir.iterdir() if path.is_file() and pattern.match(path.name)), key=backup_sort_key)
+        if kept and filecmp.cmp(kept[-1], pdf, shallow=False):
+            vprint(verbose, f"AUTO BACKUP  {display_path(pdf)}: the same PDF as {display_path(kept[-1])}; skipped")
+            return None
+        stamp = (when or datetime.now()).strftime("%Y%m%d-%H%M%S")
+        target, counter = backup_dir / f"{pdf.stem}_{stamp}.pdf", 2
+        while target.exists():
+            target = backup_dir / f"{pdf.stem}_{stamp}-{counter}.pdf"
+            counter += 1
+        shutil.copy2(pdf, target)
+        print(f"BACKUP  {display_path(target)}")
+        kept.append(target)
+        if keep > 0 and len(kept) > keep:
+            for old in kept[:-keep]:
+                old.unlink()
+                vprint(verbose, f"AUTO BACKUP  pruned {display_path(old)} (pdfs: {keep})")
+        return target
+    except OSError as error:
+        print(f"WARN  {display_path(pdf)}: PDF backup failed: {error}", file=sys.stderr)
+        return None
 
 
 def backup_summary(md_path: Path, saved: list[Path], when: datetime | None = None) -> str:
@@ -28167,6 +28231,10 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             if len(saved) > 1:
                 for target in saved:
                     vprint(verbose, f"  BACKUP  {display_path(target)}")
+        if target_format == "pdf":
+            made_pdf = output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf"))
+            backup_pdf_after_success(md_path, made_pdf, metadata_files, backup,
+                                     verbose, datetime.fromtimestamp(backup_sort_key(saved[0])[0]) if saved else None)
         if target_format == "pdf" and source_override is None and not partial:
             polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
                        [md_path, *(extra_inputs or [])], verbose)
