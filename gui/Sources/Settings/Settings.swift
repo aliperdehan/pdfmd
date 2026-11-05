@@ -124,7 +124,6 @@ enum Settings {
         Item(key: "popInkScale", value: 4, label: "Crop measuring scale (px per pt)", help: "the page is drawn at this many pixels per point to find where the ink is; more is more exact and slower", tab: "Popup"),
         Item(key: "popLogLookahead", value: 12, label: "Error line look-ahead (lines)", help: "after a TeX error the line number (l.N) is looked for in this many lines of the log", tab: "Popup"),
         Item(key: "popWarmWaitS", value: 60, label: "colophon eq --warm waits at most (s)", help: "with --warm the command waits for the cached preamble to finish, this long at most", tab: "Popup"),
-        Item(key: "frontMatterScanChars", value: 20000, label: "Front matter scan (characters)", help: "how far from the top the closing --- of a YAML front matter is looked for", tab: "Performance"),
     ]
 
     enum TextKind {

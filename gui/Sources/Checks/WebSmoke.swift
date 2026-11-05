@@ -173,6 +173,7 @@ enum WebSmoke {
         _ = PDFSmoke.wait(60) { (js(t, "document.title") as? String).map { $0 == "OK" || $0 == "FAILED" } ?? false }
         let report = (js(t, "(document.querySelector('#selftest')||{}).textContent||''") as? String) ?? ""
         let fails = report.components(separatedBy: "\n").filter { $0.hasPrefix("FAIL") }
+        if report.isEmpty { print("  no report; title: \((js(t, "document.title") as? String) ?? "")  errors: \((js(t, "(window.__errors||[]).join(' | ')") as? String) ?? "")  body: \((js(t, "document.body.innerText.slice(0,200)") as? String) ?? "")") }
         for f in fails { print(f) }
         if !fails.isEmpty {   // what the page shows, for the failure
             print("  live view ends: \((js(t, "document.querySelector('#live').textContent.slice(-120)") as? String) ?? "")")

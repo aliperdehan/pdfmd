@@ -9,28 +9,10 @@ import Cocoa
 /// Known limits (alpha): a fence is closed by any fence line (parity), not by a matching one; inline rules are
 /// line-local; the colour pass runs on the main thread, bounded by the margin, not on a background queue.
 final class Highlighter: NSObject, NSTextStorageDelegate {
-    /// Each rule names a ROLE; the colour is looked up when the pass paints, so the theme is never baked into the rules.
-    private static func rules(_ list: [(String, String)]) -> [(NSRegularExpression, String)] {
-        list.map { (try! NSRegularExpression(pattern: $0.0, options: [.anchorsMatchLines]), $0.1) }
-    }
-
-    /// Later rules win over earlier ones where they overlap.
-    private static let markdownRules = rules([
-        (#"^>+"#, "quote"),
-        (#"^[ \t]*(?:[-*+]|\d+[.)])[ \t]"#, "list"),
-        (#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, "emphasis"),
-        (#"\[[^\]\n]*\](?=[(\[])"#, "link"),
-        (#"(?<=\])\([^)\n]*\)"#, "url"),
-        (#"\$[^$\n]+\$"#, "math"),
-        (#"`[^`\n]+`"#, "code"),
-        (#"^#{1,6}[ \t].*$"#, "heading"),
-        (#"<!--.*?-->"#, "comment"),
-    ])
-
-    private static let yamlRules = rules([
-        (#"^[ \t]*-?[ \t]*[A-Za-z0-9_.-]+(?=:)"#, "key"),
-        (#"#[^\n]*"#, "comment"),
-    ])
+    /// What is coloured, and in which role, is the syntax table's business (`SyntaxTable`, lib/pdfmd_web/syntax/syntaxes.json, read by the page's
+    /// editor too); a colour is looked up when the pass paints, so the theme is never baked into the rules.
+    private let table = SyntaxTable.shared
+    private let syntax: SyntaxTable.Syntax?
 
     private weak var textView: NSTextView?
     private var fences: [Int] = []        // offsets of the fence lines (``` or ~~~), sorted
@@ -40,7 +22,8 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
     /// Seconds each colour pass took, for the benchmark.
     var passSeconds: [Double] = []
 
-    init(_ tv: NSTextView) {
+    init(_ tv: NSTextView, syntax name: String = "markdown") {
+        syntax = SyntaxTable.shared.syntaxes[name]
         super.init()
         textView = tv
         tv.textStorage?.delegate = self
@@ -65,7 +48,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         let b = max(a, lowerBound(oldEnd))
         for i in b..<fences.count { fences[i] += delta }
         fences.removeSubrange(a..<b)
-        fences.insert(contentsOf: Highlighter.fenceLines(in: ns, from: newStart, to: newEnd), at: a)
+        fences.insert(contentsOf: Highlighter.fenceLines(in: ns, from: newStart, to: newEnd, markers: syntax?.fences?.markers ?? []), at: a)
 
         // keep the "already coloured" range roughly right so scrolling decides correctly
         if colored.location != NSNotFound {
@@ -79,10 +62,11 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         schedule(afterMs: Settings.int("highlightDelayMs"))
     }
 
-    /// Offsets of the lines in `from..<to` that open or close a code fence (up to three spaces, then ``` or ~~~).
-    static func fenceLines(in ns: NSString, from: Int, to: Int) -> [Int] {
+    /// Offsets of the lines in `from..<to` that open or close a code fence (up to three spaces, then one of the table's markers).
+    static func fenceLines(in ns: NSString, from: Int, to: Int, markers: [String]) -> [Int] {
         var found = Set<Int>()
-        for marker in ["```", "~~~"] {
+        for marker in markers {
+            let width = (marker as NSString).length
             var p = from
             while p < to {
                 let hit = ns.range(of: marker, options: .literal, range: NSRange(location: p, length: to - p))
@@ -91,14 +75,16 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
                 var spaces = 0
                 while q > 0 && spaces < 3 && ns.character(at: q - 1) == 0x20 { q -= 1; spaces += 1 }
                 if q == 0 || ns.character(at: q - 1) == 0x0A || ns.character(at: q - 1) == 0x0D { found.insert(q) }
-                p = hit.location + 3
+                p = hit.location + width
             }
         }
         return found.sorted()
     }
 
     /// Index of the first fence at or after `offset`.
-    private func lowerBound(_ offset: Int) -> Int {
+    private func lowerBound(_ offset: Int) -> Int { Highlighter.lowerBound(fences, offset) }
+
+    private static func lowerBound(_ fences: [Int], _ offset: Int) -> Int {
         var lo = 0, hi = fences.count
         while lo < hi {
             let mid = (lo + hi) / 2
@@ -148,7 +134,7 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
 
     func highlightNow() {
         pending?.cancel()
-        guard enabled, let tv = textView, let storage = tv.textStorage else { return }
+        guard enabled, let syntax, let tv = textView, let storage = tv.textStorage else { return }
         let ns = storage.mutableString
         let n = ns.length
         let maxMB = Settings.number("highlightMaxMB")
@@ -170,37 +156,75 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
         let range = NSRange(location: lo, length: hi - lo)
 
         removeColors(range)
-        let frontEnd = frontMatterEnd(ns)
-
-        var inCode = lowerBound(lo) % 2 == 1
-        var cursor = lo
-        var i = lowerBound(lo)
-        while i < fences.count && fences[i] < hi {
-            let f = fences[i]
-            emit(NSRange(location: cursor, length: f - cursor), code: inCode, frontEnd: frontEnd, ns)
-            let lineEnd = min(hi, NSMaxRange(ns.lineRange(for: NSRange(location: f, length: 0))))
-            color(Palette.color("fence"), NSRange(location: f, length: lineEnd - f))
-            inCode.toggle()
-            cursor = lineEnd
-            i += 1
-        }
-        emit(NSRange(location: cursor, length: hi - cursor), code: inCode, frontEnd: frontEnd, ns)
+        Highlighter.pass(ns, lo: lo, hi: hi, fences: fences, syntax: syntax, table: table) { role, r in self.color(Palette.color(role), r) }
 
         colored = range
         passSeconds.append(Double(DispatchTime.now().uptimeNanoseconds - started) / 1e9)
     }
 
-    /// End offset of a YAML front matter at the very top of the document (0 if there is none).
-    private func frontMatterEnd(_ ns: NSString) -> Int {
-        let n = ns.length
-        guard n >= 4, ns.substring(with: NSRange(location: 0, length: 3)) == "---",
-              ns.character(at: 3) == 0x0A || ns.character(at: 3) == 0x0D else { return 0 }
-        let limit = min(n, 3 + Settings.int("frontMatterScanChars"))
-        for closer in ["\n---", "\n..."] {
-            let hit = ns.range(of: closer, options: .literal, range: NSRange(location: 3, length: limit - 3))
-            if hit.location != NSNotFound { return NSMaxRange(ns.lineRange(for: NSRange(location: hit.location + 1, length: 0))) }
+    /// End offset of a front matter at the very top of the text (0 if there is none): its first line is `open`, it ends with the first line after
+    /// that starts with one of `close`, looked for within `scan` characters (the table's `frontMatter`).
+    static func frontMatterEnd(_ ns: NSString, _ fm: SyntaxTable.FrontMatter) -> Int {
+        let n = ns.length, open = (fm.open as NSString).length
+        guard n > open, ns.substring(with: NSRange(location: 0, length: open)) == fm.open,
+              ns.character(at: open) == 0x0A || ns.character(at: open) == 0x0D else { return 0 }
+        let limit = min(n, open + fm.scan)
+        var best = NSNotFound
+        for closer in fm.close {
+            let hit = ns.range(of: "\n" + closer, options: .literal, range: NSRange(location: open, length: limit - open))
+            if hit.location != NSNotFound && (best == NSNotFound || hit.location < best) { best = hit.location }
         }
-        return 0
+        guard best != NSNotFound else { return 0 }
+        return NSMaxRange(ns.lineRange(for: NSRange(location: best + 1, length: 0)))
+    }
+
+    /// The colouring of the lines `lo..<hi` of `ns` (both at line starts) as (role, range) pairs, in the order they are painted: where two
+    /// overlap the later one wins. `fences` are the offsets of the fence lines of the whole text. The editor paints these; the conformance smoke
+    /// test (`--smoke-syntax`) collects them for the whole text and compares them with syntax/cases.json.
+    static func pass(_ ns: NSString, lo: Int, hi: Int, fences: [Int], syntax: SyntaxTable.Syntax, table: SyntaxTable,
+                     put: (String, NSRange) -> Void) {
+        let frontEnd = syntax.frontMatter.map { frontMatterEnd(ns, $0) } ?? 0
+        var cursor = lo
+        if lo < frontEnd, let front = syntax.frontMatter, let inner = table.syntaxes[front.syntax] {
+            let end = min(hi, frontEnd)
+            apply(inner.rules, to: NSRange(location: lo, length: end - lo), ns, put)
+            cursor = end
+        }
+        guard cursor < hi else { return }
+        guard let fencing = syntax.fences else {
+            apply(syntax.rules, to: NSRange(location: cursor, length: hi - cursor), ns, put)
+            return
+        }
+        // fences are looked for after the front matter: the ones above it do not count (a fence line in a YAML value)
+        let base = lowerBound(fences, frontEnd)
+        var i = lowerBound(fences, cursor)
+        var inCode = (i - base) % 2 == 1
+        func segment(_ r: NSRange) {
+            guard r.length > 0 else { return }
+            if inCode { put(fencing.role, r) } else { apply(syntax.rules, to: r, ns, put) }
+        }
+        while i < fences.count && fences[i] < hi {
+            let f = fences[i]
+            segment(NSRange(location: cursor, length: f - cursor))
+            let lineEnd = min(hi, NSMaxRange(ns.lineRange(for: NSRange(location: f, length: 0))))
+            put(fencing.role, NSRange(location: f, length: lineEnd - f))
+            inCode.toggle()
+            cursor = lineEnd
+            i += 1
+        }
+        segment(NSRange(location: cursor, length: hi - cursor))
+    }
+
+    private static func apply(_ rules: [SyntaxTable.Rule], to seg: NSRange, _ ns: NSString, _ put: (String, NSRange) -> Void) {
+        guard seg.length > 0 else { return }
+        let sub = ns.substring(with: seg)   // a few tens of KB, whatever the document's size
+        let whole = NSRange(location: 0, length: (sub as NSString).length)
+        for rule in rules {
+            rule.regex.enumerateMatches(in: sub, options: [], range: whole) { match, _, _ in
+                guard let m = match?.range, m.length > 0 else { return }
+                put(rule.role, NSRange(location: seg.location + m.location, length: m.length))
+            }
+        }
     }
 
     // MARK: where the colours go: layout-manager temporary attributes (TextKit 1) or rendering attributes (TextKit 2)
@@ -229,30 +253,6 @@ final class Highlighter: NSObject, NSTextStorageDelegate {
             if let tr = textRange(r, tlm) { tlm.addRenderingAttribute(.foregroundColor, value: c, for: tr) }
         } else {
             tv.layoutManager?.addTemporaryAttribute(.foregroundColor, value: c, forCharacterRange: r)
-        }
-    }
-
-    private func emit(_ r: NSRange, code: Bool, frontEnd: Int, _ ns: NSString) {
-        guard r.length > 0 else { return }
-        if code {
-            color(Palette.color("fence"), r)
-            return
-        }
-        let front = NSIntersectionRange(r, NSRange(location: 0, length: frontEnd))
-        if front.length > 0 { apply(Highlighter.yamlRules, to: front, ns) }
-        let restStart = max(r.location, frontEnd)
-        if NSMaxRange(r) > restStart { apply(Highlighter.markdownRules, to: NSRange(location: restStart, length: NSMaxRange(r) - restStart), ns) }
-    }
-
-    private func apply(_ rules: [(NSRegularExpression, String)], to seg: NSRange, _ ns: NSString) {
-        let sub = ns.substring(with: seg)   // a few tens of KB, whatever the document's size
-        let whole = NSRange(location: 0, length: (sub as NSString).length)
-        for (re, role) in rules {
-            let colour = Palette.color(role)
-            re.enumerateMatches(in: sub, options: [], range: whole) { match, _, _ in
-                guard let m = match?.range else { return }
-                self.color(colour, NSRange(location: seg.location + m.location, length: m.length))
-            }
         }
     }
 }

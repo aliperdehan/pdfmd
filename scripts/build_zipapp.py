@@ -35,7 +35,8 @@ SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}
 SKIP_SUFFIXES = (".so", ".pyd", ".dylib", ".pyc", ".pyo")
 # the web UI's page is the files `pdfmd --serve` sends (package-data in pyproject.toml); the rest of its folder is for the maintainer
 SKIP_PATHS = ("pdfmd_web/demo/", "pdfmd_web/tools/", "pdfmd_web/README.md", "pdfmd_web/vendor/cm/node_modules/", "pdfmd_web/vendor/cm/build.sh",
-              "pdfmd_web/vendor/cm/entry.js", "pdfmd_web/vendor/cm/package.json", "pdfmd_web/vendor/cm/package-lock.json")
+              "pdfmd_web/vendor/cm/entry.js", "pdfmd_web/vendor/cm/package.json", "pdfmd_web/vendor/cm/package-lock.json",
+              "pdfmd_web/syntax/engine.js", "pdfmd_web/syntax/cases.json")      # engine.js is inside codemirror.js already
 
 LAUNCHER = '''\
 """pdfmd.pyz: unpack once, then run the real pdfmd.py."""

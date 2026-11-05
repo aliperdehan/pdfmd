@@ -1,0 +1,20 @@
+{
+"about": "Expected colours for syntaxes.json: [from, to, role] runs, offsets in UTF-16 units. tests/test_syntax_table.py (Python copy of the engine and the page's engine.js under node) and the Mac app's --smoke-syntax read this file.",
+"cases": [
+ {"name": "a heading", "syntax": "markdown", "text": "# Title\ntext", "runs": [[0, 7, "heading"]]},
+ {"name": "a quote marker and bold", "syntax": "markdown", "text": "> a **b** c", "runs": [[0, 1, "quote"], [4, 9, "emphasis"]]},
+ {"name": "list markers", "syntax": "markdown", "text": "- item\n12. x", "runs": [[0, 2, "list"], [7, 11, "list"]]},
+ {"name": "a link and its target", "syntax": "markdown", "text": "see [text](http://x) now", "runs": [[4, 10, "link"], [10, 20, "url"]]},
+ {"name": "math and a code span", "syntax": "markdown", "text": "a $x$ and `y`", "runs": [[2, 5, "math"], [10, 13, "code"]]},
+ {"name": "the later rule wins where two overlap", "syntax": "markdown", "text": "# **b**", "runs": [[0, 7, "heading"]]},
+ {"name": "an HTML comment", "syntax": "markdown", "text": "<!-- hi --> text", "runs": [[0, 11, "comment"]]},
+ {"name": "a front matter is YAML, the body is Markdown", "syntax": "markdown", "text": "---\ntitle: T\n# c\n---\n# H\n", "runs": [[4, 9, "key"], [13, 16, "comment"], [21, 24, "heading"]]},
+ {"name": "a fenced block is one role, rules do not reach into it", "syntax": "markdown", "text": "a\n```tex\n# not heading\n```\n# H", "runs": [[2, 27, "fence"], [27, 30, "heading"]]},
+ {"name": "an unclosed fence runs to the end", "syntax": "markdown", "text": "```\ncode # x", "runs": [[0, 12, "fence"]]},
+ {"name": "an indented fence is not a fence (four spaces)", "syntax": "markdown", "text": "    ```\n# H", "runs": [[8, 11, "heading"]]},
+ {"name": "a text with an emoji: offsets are UTF-16 units", "syntax": "markdown", "text": "😀 # no\n# H", "runs": [[8, 11, "heading"]]},
+ {"name": "Cyrillic text next to bold (no \\w anywhere)", "syntax": "markdown", "text": "Привет **мир**", "runs": [[7, 14, "emphasis"]]},
+ {"name": "a front matter that never closes is no front matter", "syntax": "markdown", "text": "---\nkey: v\n# H", "runs": [[11, 14, "heading"]]},
+ {"name": "YAML on its own", "syntax": "yaml", "text": "name: x # c\n- k: 1", "runs": [[0, 4, "key"], [8, 11, "comment"], [12, 15, "key"]]}
+]
+}

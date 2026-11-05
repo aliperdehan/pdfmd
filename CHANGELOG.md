@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.44 — 2026-11-05
+
+Pre-edit state: commit `7ee6c81`. Entry 3do. **One syntax table for the page's editor and the Mac app's: `lib/pdfmd_web/syntax/syntaxes.json`.** The author, on the editor: "one JSON table read by the page and the native highlighter"; the table is the first step, with the colours of today and nothing else, so the move can be checked by eye and by pixel before any rule is added.
+
+- **The table** holds the roles (a name for what the text is, with its CotEditor theme category and a light and a dark colour) and the syntaxes: Markdown (its nine rules, a front matter in YAML, fenced blocks) and YAML. Its header says what every client must do and which regular expressions are allowed: the subset the three engines (ICU, JavaScript, Python) agree on (explicit classes, no `\w \d \s \b`, no flags, no pattern across a line).
+- **The page** colours by it (`syntax/engine.js`, bundled into `codemirror.js`; the roles become CSS custom properties, light and dark) instead of CodeMirror's Markdown tags, so the page and the app show the same things in the same roles; CodeMirror's Markdown language stays for folding. The page's headings are still bold. **The Mac app** reads the same file (`SyntaxTable`, `Highlighter.pass`; `Palette.roles` is the table's role list). The app's `frontMatterScanChars` setting is gone: the scan length is the table's `frontMatter.scan` (20000, as it was), so the two clients cannot differ.
+- **Two small differences from before, both from writing the rules down once:** a fence line inside a YAML front matter no longer toggles code, and of two closing lines for a front matter (`---` and `...`) the first one counts (the app took `---` first wherever it was).
+- **Checked three ways.** `syntax/cases.json` (15 cases: every rule, the later rule winning, fences, an unclosed fence, an indented line that is no fence, an emoji and Cyrillic text for the UTF-16 offsets) runs through a Python copy of the engine and `engine.js` under node (`tests/test_syntax_table.py`, 5 checks, which also reject a pattern outside the common subset) and through the app (`pdfmdedit --smoke-syntax`); the page's self-test has 3 new checks (58). The app's own numbers are unchanged: the smoke test counts 20833 / 19954 / 20833 coloured pixels before and after, and `--bench --mb 10` gives the same colour-pass times (median 5.6 to 6.8 ms).
+- The table ships in the wheel (`pdfmd_web` package data); the engine and the cases are left out of the zipapp (the engine is inside `codemirror.js`). A page opened from disk gets the table from `fixtures.js`.
+
 ## v3.32.43 — 2026-11-05
 
 Pre-edit state: commit `81eac86`. Entry 3do. **`backup: {keep: N}` means what `pdfs: N` means, and `backups:` is a second spelling of `backup:`.** The author: "keep: 0 keeps all? then we shall make it consistent so 0 is now indeed 0 and negative is all; it will change current behaviour, but that is fine", and "backup: also has alias backups: right, to not frustrate anyone?".

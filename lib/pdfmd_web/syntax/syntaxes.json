@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "about": [
+    "THE SYNTAX TABLE: what the page's editor (CodeMirror 6) and the Mac app's editor (TextKit 2) colour, written once.",
+    "A syntax is a list of RULES; a rule is a regular expression and a ROLE (a name for what the text is: a heading, a link, a key...).",
+    "A client turns a role into a colour: the page through the CSS custom properties it makes from `roles` below, the Mac app through its theme",
+    "(`category` is the CotEditor theme category the role takes its colour from; `light` and `dark` are the colours when no theme is found).",
+    "ENGINE, the same in every client (tests/test_syntax_table.py runs cases.json through a Python copy, the page and the app run the same file):",
+    "  1. A markdown document may start with a front matter: a first line `frontMatter.open`, then lines up to one of `frontMatter.close`; it is coloured by the syntax named in `frontMatter.syntax`.",
+    "  2. Lines that open or close a fenced block (up to three spaces, then one of `fences.markers`, three characters) toggle code: the text between two fence lines, and the fence lines, take the role `fences.role` (a closing fence is ANY fence line: parity).",
+    "  3. Everything else gets the rules of the syntax, in order; where two rules colour the same characters the LATER rule wins. A rule matches inside one line.",
+    "THE REGULAR EXPRESSIONS are read by three engines (ICU, JavaScript, Python), so they use a common subset, and tests/test_syntax_table.py rejects the rest:",
+    "  explicit classes only (no \\w \\d \\s \\b, no \\p{..}: they differ between the engines for non-ASCII text); `^` and `$` mean the start and end of a LINE;",
+    "  no flags (the engines set the multiline one), no named groups, lookbehind only with a fixed width; no rule may match a line break; offsets in cases.json are UTF-16 units (the page's and the Mac's own).",
+    "`frontMatter.scan` is how many characters from the top are searched for the closing line (a front matter is short; a stray --- at the top of a long file is not one)."
+  ],
+  "roles": [
+    {"key": "heading", "category": "types", "light": "#3B5F99", "dark": "#8AA9D6", "help": "# headings"},
+    {"key": "key", "category": "keywords", "light": "#3B5F99", "dark": "#8AA9D6", "help": "keys of a YAML front matter"},
+    {"key": "list", "category": "keywords", "light": "#A0693A", "dark": "#C9A27A", "help": "list markers"},
+    {"key": "emphasis", "category": "commands", "light": "#7C5A96", "dark": "#B49CC8", "help": "**bold**"},
+    {"key": "link", "category": "values", "light": "#3F7F86", "dark": "#86B5BA", "help": "[text] of a link"},
+    {"key": "url", "category": "characters", "light": "#5B7F52", "dark": "#9FBA93", "help": "(target) of a link"},
+    {"key": "math", "category": "numbers", "light": "#A05A72", "dark": "#CF99AB", "help": "$math$"},
+    {"key": "code", "category": "strings", "light": "#5B7F52", "dark": "#9FBA93", "help": "`code spans`"},
+    {"key": "fence", "category": "strings", "light": "#5B7F52", "dark": "#9FBA93", "help": "fenced code blocks"},
+    {"key": "comment", "category": "comments", "light": "#8C8C8C", "dark": "#8E8E93", "help": "<!-- comments --> and # comments in YAML"},
+    {"key": "quote", "category": "keywords", "light": "#8C8C8C", "dark": "#8E8E93", "help": "> quote markers"}
+  ],
+  "syntaxes": {
+    "markdown": {
+      "title": "Markdown",
+      "frontMatter": {"syntax": "yaml", "open": "---", "close": ["---", "..."], "scan": 20000},
+      "fences": {"markers": ["```", "~~~"], "role": "fence"},
+      "rules": [
+        {"match": "^>+", "role": "quote"},
+        {"match": "^[ \\t]*(?:[-*+]|[0-9]+[.)])[ \\t]", "role": "list"},
+        {"match": "\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__", "role": "emphasis"},
+        {"match": "\\[[^\\]\\n]*\\](?=[(\\[])", "role": "link"},
+        {"match": "(?<=\\])\\([^)\\n]*\\)", "role": "url"},
+        {"match": "\\$[^$\\n]+\\$", "role": "math"},
+        {"match": "`[^`\\n]+`", "role": "code"},
+        {"match": "^#{1,6}[ \\t].*$", "role": "heading"},
+        {"match": "<!--.*?-->", "role": "comment"}
+      ]
+    },
+    "yaml": {
+      "title": "YAML",
+      "rules": [
+        {"match": "^[ \\t]*-?[ \\t]*[A-Za-z0-9_.-]+(?=:)", "role": "key"},
+        {"match": "#[^\\n]*", "role": "comment"}
+      ]
+    }
+  }
+}

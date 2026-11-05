@@ -19,22 +19,13 @@ enum Palette {
         let help: String
     }
 
-    // Categories follow CotEditor's own Markdown and YAML syntaxes (headings = types, **bold** = commands, list markers and
+    // Categories (in the table) follow CotEditor's own Markdown and YAML syntaxes (headings = types, **bold** = commands, list markers and
     // quotes = keywords, link text = values, link targets = characters, code = strings, YAML keys = keywords), so a CotEditor
     // theme looks the same here. Math has no CotEditor colour; it takes `numbers` (CotEditor uses it for images).
-    static let roles: [Role] = [
-        Role(key: "heading", category: "types", light: "#3B5F99", dark: "#8AA9D6", help: "# headings"),
-        Role(key: "key", category: "keywords", light: "#3B5F99", dark: "#8AA9D6", help: "keys of a YAML front matter"),
-        Role(key: "list", category: "keywords", light: "#A0693A", dark: "#C9A27A", help: "list markers"),
-        Role(key: "emphasis", category: "commands", light: "#7C5A96", dark: "#B49CC8", help: "**bold**"),
-        Role(key: "link", category: "values", light: "#3F7F86", dark: "#86B5BA", help: "[text] of a link"),
-        Role(key: "url", category: "characters", light: "#5B7F52", dark: "#9FBA93", help: "(target) of a link"),
-        Role(key: "math", category: "numbers", light: "#A05A72", dark: "#CF99AB", help: "$math$"),
-        Role(key: "code", category: "strings", light: "#5B7F52", dark: "#9FBA93", help: "`code spans`"),
-        Role(key: "fence", category: "strings", light: "#5B7F52", dark: "#9FBA93", help: "fenced code blocks"),
-        Role(key: "comment", category: "comments", light: "#8C8C8C", dark: "#8E8E93", help: "<!-- comments --> and # comments in YAML"),
-        Role(key: "quote", category: "keywords", light: "#8C8C8C", dark: "#8E8E93", help: "> quote markers"),
-    ]
+    /// The roles are the syntax table's (`lib/pdfmd_web/syntax/syntaxes.json`): one list for this editor and the page's.
+    static let roles: [Role] = SyntaxTable.shared.roles.map {
+        Role(key: $0.key, category: $0.category, light: $0.light, dark: $0.dark, help: $0.help)
+    }
 
     static func parse(_ hex: String) -> NSColor? { Theme.parseHex(hex) }
 
@@ -81,7 +72,7 @@ enum Palette {
 
     static func color(_ key: String) -> NSColor {
         if let c = cache[key] { return c }
-        let role = roles.first { $0.key == key }!
+        guard let role = roles.first(where: { $0.key == key }) else { return text }   // a role the table does not define: plain text
         let builtIn = dynamic(parse(role.light)!, parse(role.dark)!)
         var result = themed({ $0.categories[category(of: role)] ?? ($0.text) }, fallback: builtIn)
         if category(of: role) == "text" { result = text }

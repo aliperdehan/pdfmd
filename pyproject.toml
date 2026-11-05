@@ -109,7 +109,7 @@ pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]
 pdfmd_mhchem = ["LICENSE"]
 pdfmd_office = ["*.lua"]
 pdfmd_templates = ["data/*/*", "data/*/*/*"]
-pdfmd_web = ["index.html", "css/*.css", "js/*.js", "fixtures/*.js", "fixtures/*.pdf", "vendor/cm/codemirror.js", "vendor/cm/LICENSES.txt"]
+pdfmd_web = ["index.html", "css/*.css", "js/*.js", "fixtures/*.js", "fixtures/*.pdf", "vendor/cm/codemirror.js", "vendor/cm/LICENSES.txt", "syntax/syntaxes.json"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pdfmd.PDFMD_VERSION" }
