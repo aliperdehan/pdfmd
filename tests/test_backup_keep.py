@@ -79,6 +79,12 @@ class Keep(unittest.TestCase):
             self.options()
         self.assertIn("backup.keep", str(raised.exception))
 
+    def test_an_empty_value_is_no_setting(self):
+        for given in ("{enabled: true, keep: }", "{enabled: true, keep: ~}", "{enabled: true, pdfs: ~}"):
+            self.document(given)
+            options = self.options()
+            self.assertEqual((options["keep"], options["pdfs"]), (-1, 0), given)
+
     def test_backups_is_a_second_spelling_of_backup(self):
         self.document("{keep: 7, pdfs: 3}", key="backups")
         options = self.options()

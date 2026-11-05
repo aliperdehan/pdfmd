@@ -25,7 +25,7 @@ Pre-edit state: commit `81eac86`. Entry 3do. **`backup: {keep: N}` means what `p
 
 - **`keep`: the newest N source copies; 0 none; a negative number every one** (also the words `all`, `none`, `off`). **The default is now negative (all), so a document that never sets `keep` behaves as before.** Only an explicit `keep: 0` changes: it meant all, it now means none. With 0 pdfmd makes no source copy and **deletes nothing that is already there** (setting a number to 0 must not destroy what was kept); the PDFs follow the same rule through `pdfs: 0`. `keep` and `pdfs` share one parser (`backup_count`), and a wrong value names its key (`pdfmd-options.backup.keep`).
 - **`backups:`** is read wherever `backup:` is (front matter, metadata files, folder settings, the config file), field by field; where both are set in one place, `backup` wins.
-- The `--setup` row, the `--help` text and `tests/test_backup_keep.py` (7 checks) say so.
+- An empty `keep:` (or `keep: ~`) is no setting, as before (it must not read as `none`). The `--setup` row, the `--help` text and `tests/test_backup_keep.py` (8 checks) say so.
 
 ## v3.32.42 — 2026-11-05
 

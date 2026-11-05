@@ -17253,7 +17253,7 @@ def backup_fields(value, implied_on: bool = True) -> dict:
         if value.get("format"):
             options["format"] = str(value["format"])
         for name in ("keep", "pdfs"):
-            if name in value:
+            if value.get(name) is not None:                      # an empty `keep:` is no setting (it was "all" before v3.32.43, too)
                 options[name] = backup_count(name, value[name])
     return options
 
