@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.48 — 2026-11-06
+
+Pre-edit state: commit `ae0d31e`. Entry 3fe. **A `$...$` that is not math is a WARN.** Pandoc reads `$...$` as math only when the closing `$` is not directly followed by a digit, so `$\geq$3 batches` and `within $\pm$10 mV` are text: the dollars are printed, and under Pandoc's Markdown the `\geq` runs in text mode, where the main font has no U+2265 (the build then looked fine, or was silently rebuilt in another font, see 3.32.49). Nothing said so.
+
+- Before the build (every output, every Markdown source of a parts build), pdfmd asks Pandoc to read the file with the reader the build uses (`resolve_from_format`, so `--from`, a flavour and `--no-auto reader` count) and looks in the AST at each stretch of plain words and raw TeX: a `$` + text + `$` + digit left there is a failed span. The WARN names the file and line (the line is found in the source with code spans and fenced blocks left out), what was written and the fix: ``WARN  d.md:5: `$\geq$3` is not math (Pandoc needs the closing $ not followed by a digit); write $\geq 3$``. It is a normal WARN line, so `--strict` fails the build (the output is kept).
+- No false positives by construction: a real `Math` node, code spans and blocks, an escaped `\$`, and prices (`$5 and $10`, `$5/$10`, `$5-$10`, `C$3 ... US$4`) never reach the warning: the text between the dollars must have no space before the closing `$` and must look like math (a TeX command, `^`, `_`, a brace, or a single letter). A span broken across lines is found too. A reader without dollar math (`commonmark`, `-tex_math_dollars`) and a build with no Pandoc say nothing.
+- One extra Pandoc parse per Markdown source (cached per file state); the label scan, which builds the document again, does not repeat the warning. No new setting: the span is always a mistake, and `\$` says "a dollar sign" outright.
+- `tests/test_nonmath_dollars.py` (6 tests): both readers, the lines, the skipped cases, a soft break inside the span, a build with `--strict`.
+
 ## v3.32.47 — 2026-11-05
 
 Pre-edit state: commit `0e11cf4`. Entry 3do. **`*italic*` and `_italic_` are coloured, and a role can have a style.** The table coloured `**bold**` but not italics, and the editor before the table (CodeMirror's own Markdown colours) slanted italics and comments; both are back, as roles of the table.

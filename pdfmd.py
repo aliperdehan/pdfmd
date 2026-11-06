@@ -1487,7 +1487,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.47"
+PDFMD_VERSION = "3.32.48"
 import argparse
 import atexit
 import csv
@@ -22906,6 +22906,106 @@ def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[
                       f"{limit:g} MB asset budget (--max-asset-mb, pdfmd-options.max-asset-mb)", file=sys.stderr)
 
 
+# -- A `$...$` that is not math: the closing `$` is followed by a digit (v3.32.48) ----------------------------------
+# Pandoc reads `$...$` as math only when the closing `$` has no space before it and no digit after it (so that
+# "costs $5 or $10" stays text). `$\geq$3` and `$\pm$10` are therefore text, with the dollars printed (the gfm
+# reader) or the dollars printed and the command run in text mode (Pandoc's Markdown), and nothing says so; in
+# a LaTeX build the text-mode `\geq` then lacks a glyph in the main font. The leftover is found in the AST
+# the reader gave, where a failed `$...$` is plain Str / raw TeX and a real one is Math.
+NONMATH_DOLLAR_RE = re.compile(r"(?<![\\$])\$(?=[^\s$])([^$]*?)(?<=\S)\$(?=\d)(\d+(?:[.,]\d+)?)")
+# a text between two dollars that looks like math: a TeX command, a script or brace, or a single letter; "$5/$10" is no math
+MATH_LOOKING_RE = re.compile(r"\\[A-Za-z]+|[\^_{}]|^[A-Za-z]$")
+NONMATH_DOLLAR_READERS = ("markdown", "gfm", "commonmark_x")
+_NONMATH_DOLLARS: dict[tuple, list[tuple[int, str, str]]] = {}
+
+
+def inline_text_runs(document) -> Iterator[str]:
+    """The text of each stretch of plain words and raw TeX in a Pandoc JSON document (math, code and any
+    formatting end a stretch): where a `$...$` that Pandoc did not take for math is still to be seen."""
+    stack = [document]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+            if not any(isinstance(item, dict) and item.get("t") in ("Str", "RawInline") for item in node):
+                continue
+            run: list[str] = []
+            for item in node:
+                kind = item.get("t") if isinstance(item, dict) else None
+                content = item.get("c") if isinstance(item, dict) else None
+                if kind == "Str" and isinstance(content, str):
+                    run.append(content)
+                elif kind in ("Space", "SoftBreak"):
+                    run.append(" ")
+                elif (kind == "RawInline" and isinstance(content, list) and len(content) == 2
+                        and content[0] in ("tex", "latex")):
+                    run.append(content[1])
+                else:
+                    if run:
+                        yield "".join(run)
+                    run = []
+            if run:
+                yield "".join(run)
+
+
+def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, str]]:
+    """(line, the text as written, the way to write it) for each `$...$` of a Markdown file that Pandoc reads
+    as text because the closing `$` is followed by a digit. Empty when Pandoc is not there or the reader has no
+    dollar math; a `$` the author escaped, or a price, is not one."""
+    base = (reader or "markdown").split("+")[0].split("-")[0]
+    if base not in NONMATH_DOLLAR_READERS or "-tex_math_dollars" in (reader or ""):
+        return []
+    pandoc = which("pandoc")
+    try:
+        stat = md_path.stat()
+        key = (str(md_path), stat.st_mtime_ns, stat.st_size, reader)
+    except OSError:
+        return []
+    if key in _NONMATH_DOLLARS:
+        return _NONMATH_DOLLARS[key]
+    found: list[tuple[int, str, str]] = []
+    if pandoc:
+        try:
+            raw = md_path.read_text(encoding="utf-8-sig")
+            text = EMBED_BLOCK_RE.sub("", obsidian_source(raw, md_path, show=False))
+            done = subprocess.run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
+                                  text=True, encoding="utf-8", timeout=120)
+            if done.returncode == 0:
+                seen: set[str] = set()
+                prose = strip_code_text(raw)
+                for run in inline_text_runs(json.loads(done.stdout)):
+                    for match in NONMATH_DOLLAR_RE.finditer(run):
+                        inner = match.group(1)
+                        if not MATH_LOOKING_RE.search(inner) or match.group(0) in seen:
+                            continue
+                        seen.add(match.group(0))
+                        # where it stands in the file, as written: a soft break is any white space, and an escaped `$` does not match
+                        written = re.compile(r"(?<!\\)" + r"\s+".join(re.escape(word) for word in match.group(0).split(" ")))
+                        for position in written.finditer(prose):
+                            found.append((prose.count("\n", 0, position.start()) + 1, match.group(0),
+                                          f"${inner} {match.group(2)}$"))
+        except (OSError, ValueError, subprocess.SubprocessError, UnicodeDecodeError):
+            found = []
+    found.sort()
+    _NONMATH_DOLLARS[key] = found
+    return found
+
+
+def check_nonmath_dollars(sources: list[Path], cli_from: str | None, metadata_files: list[Path], fixed_reader: bool) -> None:
+    """WARN `file:line` for each `$...$` the sources write as math that Pandoc reads as text (before the build)."""
+    if BUILD.get("scanning"):                           # the label scan builds the same document again: say it once
+        return
+    for source in sources:
+        if source.suffix.lower() not in (".md", ".markdown"):
+            continue
+        reader = cli_from if fixed_reader else resolve_from_format(source, cli_from, metadata_files)[0]   # --no-auto reader: no pick of pdfmd's
+        for line, written, instead in nonmath_dollars(source, reader):
+            print(f"WARN  {display_path(source)}:{line}: `{written}` is not math (Pandoc needs the closing $ not "
+                  f"followed by a digit); write {instead}", file=sys.stderr)
+
+
 @timed("size budget")
 def check_output_budget(output: Path | None, sources: list[Path], md_path: Path, metadata_files: list[Path]) -> None:
     """WARN when the output is over the output budget, with the largest images behind it."""
@@ -24433,6 +24533,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         BUILD["root"] = parts_root
     if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
         check_asset_budget(BUILD["sources"], md_path, metadata_files)
+        check_nonmath_dollars(BUILD["sources"], from_format, metadata_files, auto_disabled(no_auto, "reader"))
     for source_file in (md_path, *parts_inputs):
         try:
             clash = output.exists() and source_file.exists() and output.samefile(source_file)
