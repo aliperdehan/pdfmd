@@ -64,6 +64,15 @@ class FindingThem(unittest.TestCase):
         path = self.document(FRONT + "Some words $\\alpha\n+\\beta$2 end\n")
         self.assertEqual([line for line, _, _ in pdfmd.nonmath_dollars(path, None)], [5])
 
+    def test_no_candidate_no_pandoc_pass(self):
+        from unittest import mock
+        for text in ("Plain text, $x^2$ and $5 and $10 and `$\\geq$3`.\n", "A $\\geq 3$ b.\n"):
+            path = self.document(FRONT + text)
+            with mock.patch.object(pdfmd.subprocess, "run", side_effect=AssertionError("Pandoc was asked")):
+                self.assertEqual(pdfmd.nonmath_dollars(path, None), [])
+        path = self.document(FRONT + "a $\\geq$3 b\n")                  # a candidate: Pandoc is asked, and agrees
+        self.assertEqual([line for line, _, _ in pdfmd.nonmath_dollars(path, None)], [5])
+
     def test_prices_alone_say_nothing(self):
         path = self.document(FRONT + "It costs $5 and $10, or $5-$10, or C$3 and US$4.\n")
         self.assertEqual(pdfmd.nonmath_dollars(path, None), [])

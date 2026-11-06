@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.50"
+PDFMD_VERSION = "3.32.51"
 import argparse
 import atexit
 import csv
@@ -22952,6 +22952,9 @@ NONMATH_DOLLAR_RE = re.compile(r"(?<![\\$])\$(?=[^\s$])([^$]*?)(?<=\S)\$(?=\d)(\
 # a text between two dollars that looks like math: a TeX command, a script or brace, or a single letter; "$5/$10" is no math
 MATH_LOOKING_RE = re.compile(r"\\[A-Za-z]+|[\^_{}]|^[A-Za-z]$")
 NONMATH_DOLLAR_READERS = ("markdown", "gfm", "commonmark_x")
+# the source-text scan that decides whether Pandoc is asked at all: any `$` + text + `$` + digit (a span may run over lines; the
+# AST has the last word, so this only has to find every candidate, and "costs $5 and $10" is none: a space comes before the 2nd $)
+NONMATH_DOLLAR_CANDIDATE_RE = re.compile(r"(?<![\\$])\$(?=[^\s$])([^$]*)(?<=\S)\$\d")
 _NONMATH_DOLLARS: dict[tuple, list[tuple[int, str, str]]] = {}
 
 
@@ -23005,6 +23008,9 @@ def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, s
     if pandoc:
         try:
             raw = md_path.read_text(encoding="utf-8-sig")
+            if not any(MATH_LOOKING_RE.search(candidate.group(1)) for candidate in NONMATH_DOLLAR_CANDIDATE_RE.finditer(strip_code_text(raw))):
+                _NONMATH_DOLLARS[key] = found                   # nothing that could be one: no Pandoc pass for it
+                return found
             text = EMBED_BLOCK_RE.sub("", obsidian_source(raw, md_path, show=False))
             done = subprocess.run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
                                   text=True, encoding="utf-8", timeout=120)

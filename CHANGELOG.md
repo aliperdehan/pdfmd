@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.32.51 — 2026-11-06
+
+Pre-edit state: commit `5e0050c`. Entry 3fe. **The `$...$` warning of 3.32.48 no longer costs a Pandoc pass in the usual case.** It parsed every Markdown source with one more Pandoc run before the build, to read the AST: measured 0.25 s for a one-line file and 0.9 s for a 50,000-word one, for a mistake almost no document has. The build's own Pandoc run cannot be shared (it writes the PDF or HTML, and pdfmd never sees its AST; a Lua filter in that run would have to be injected into every route: PDF, direct `.tex`, bibliography, soffice bridge, parts, report).
+
+- A scan of the source text (code left out) comes first: only a `$` + text + `$` + digit whose text looks like math (the same test) is a candidate, and only then is Pandoc asked, to confirm it with the reader's own rules and to give the line. "costs $5 and $10", `$x^2$` and a file with no such span never start Pandoc. The scan is meant to be a superset of what the AST finds (a span over several lines counts), so no warning is lost.
+- `tests/test_nonmath_dollars.py`: a test that fails when Pandoc is run for a document with no candidate (7 tests now).
+
 ## v3.32.50 — 2026-11-06
 
 Pre-edit state: commit `4cbe9a9`. Entry 3fe (the author asked for it, "go ahead with this small follow up"). **`--check` finds the `$...$` that is not math.** The 3.32.48 warning needs Pandoc and a build; `pdfmd --check` now reports the same mistake statically, as the new warning `math-digit`, with the file, the line and the fix: ``d.md:7: warning: `$\geq$3` is not math (Pandoc needs the closing $ not followed by a digit); write $\geq 3$  [math-digit]``.
