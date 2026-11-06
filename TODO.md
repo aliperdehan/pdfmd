@@ -32,6 +32,7 @@ wait for an answer before any code.
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Check that `lof` / `lot` (lists of figures and tables) work through pdfmd; then a recipe [3en, 3dg]
+- [ ] Agent-friendly pdfmd, low priority (when there is spare time): stale PDF after a failed build, `--explain CODE`, `--help agent`, a `--json` result shared with `--api` and `--doctor --json`, `--profile agent` (no guessing, no fallback, per-code `--strict`, tiny output), `--fix`, raw TeX and front matter under `--security`, a tool schema or MCP front-end last; exit code 3 for "degraded" is the author's call [3ff]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
@@ -120,6 +121,7 @@ is low priority. [3di]
 - [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
 - [ ] Bare `--install` prints the table of every kind (size, source, target, removal) instead of usage; bare `diagram` lists, `diagram:d2|dot` installs [3ei]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
+- [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
 - [ ] 4.0
 
 ## Investigate first, no commitment
