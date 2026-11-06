@@ -354,11 +354,22 @@ Output formats:
 
     A document with no `mainfont:` and no -f/--font is first tried with
     STIX Two Text (better Unicode/math coverage than LaTeX's own Latin
-    Modern for most prose); if that run reports missing glyphs, it's
-    silently retried with DejaVu Serif instead, which has near-total
+    Modern for most prose); if that run reports missing glyphs, the WHOLE
+    document is rebuilt with DejaVu Serif instead, which has near-total
     coverage of the arrows/comparison-operator/Greek symbols that plain
-    Unicode notes tend to use in running text. -f/--font, or the
-    document's own `mainfont:`, always wins outright over both.
+    Unicode notes tend to use in running text. A WARN line says so, naming
+    the font, the code points and the new font (`STIX Two Text lacks U+2265;
+    rebuilt in DejaVu Serif (set mainfont: to keep your own)`). That retry is
+    for what the per-word fallback below cannot see: it reads literal
+    characters, so a TeX command set in text mode (`\\geq` from a `$...$` that
+    Pandoc did not take for math) only shows up as a missing-glyph line of
+    the build. -f/--font, or the document's own `mainfont:`, always wins
+    outright over both and is never retried.
+
+    A `$...$` whose closing `$` is directly followed by a digit (`$\\geq$3`,
+    `$\\pm$10`) is not math to Pandoc (it keeps "costs $5 and $10" as text);
+    pdfmd says so before the build, WARN `file:line`, and what to write
+    instead (`$\\geq 3$`). It is the usual cause of the retry above.
 
 Text in other scripts (v3.23.0, lualatex/xelatex):
     No main font draws everything a multilingual document says. pdfmd reads
@@ -1487,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.48"
+PDFMD_VERSION = "3.32.49"
 import argparse
 import atexit
 import csv
@@ -7357,7 +7368,9 @@ CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a l
 options:
   # What to do about characters the main font cannot draw:
   #   char      set just those characters in another installed font
-  #   word      set the whole word in another font, so no word mixes fonts (default)
+  #   word      set the whole word in another font, so no word mixes fonts (default); it sees literal
+  #             characters only: a missing glyph that comes from a TeX command (`\\geq` in text mode) still
+  #             rebuilds the whole document in DejaVu Serif, with a WARN naming the font and the code points
   #   document  use the one installed font that draws most of the document as the main font
   #   off       nothing: what Pandoc and TeX do without pdfmd (missing glyphs vanish or print boxes)
   #   box       no fallback; each missing character is drawn as a black box
@@ -14386,15 +14399,38 @@ UNICODE_UNCOVERED: set[int] = set()
 UNICODE_CODE_FONTS: list[str] = []
 
 
+MISSING_GLYPH_LINE_RE = re.compile(r"missing character|Missing character|Unicode character .* not set|font .* not found")
+
+
 def missing_glyph_warning(output: str) -> bool:
     for line in output.splitlines():
-        if not re.search(r"missing character|Missing character|Unicode character .* not set|font .* not found",
-                         line):
+        if not MISSING_GLYPH_LINE_RE.search(line):
             continue
         codes = {int(code, 16) for code in re.findall(r"U\+([0-9A-Fa-f]{4,6})", line)}
         if not codes or not codes <= UNICODE_UNCOVERED:
             return True
     return False
+
+
+def missing_glyph_codes(output: str) -> list[int]:
+    """The code points a build's missing-glyph lines name (LuaLaTeX and XeLaTeX print `There is no ≥ (U+2265) in font`),
+    in order; characters no installed font draws are left out (script_fallback has warned about them). A count of the lines
+    is no count of the uses: LuaLaTeX prints each missing character three times."""
+    codes: dict[int, None] = {}
+    for line in output.splitlines():
+        if MISSING_GLYPH_LINE_RE.search(line):
+            for code in re.findall(r"U\+([0-9A-Fa-f]{4,6})", line):
+                if int(code, 16) not in UNICODE_UNCOVERED:
+                    codes[int(code, 16)] = None
+    return sorted(codes)
+
+
+def retry_font_note(md_path: Path, tried: str, instead: str, codes: list[int]) -> str:
+    """The WARN line for the missing-glyph retry that rebuilds the whole document in another font."""
+    lacks = (f"lacks {', '.join(f'U+{code:04X}' for code in codes)}" if codes
+             else "lacked glyphs the build did not name (--verbose shows the log)")
+    return (f"WARN  {display_path(md_path)}: {tried} {lacks}; rebuilt in {instead} "
+            "(set mainfont: to keep your own)")
 
 
 # What a Markdown document really contains, asked of Pandoc's own reader: a `@key` in a code span, an e-mail
@@ -22983,9 +23019,8 @@ def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, s
                         seen.add(match.group(0))
                         # where it stands in the file, as written: a soft break is any white space, and an escaped `$` does not match
                         written = re.compile(r"(?<!\\)" + r"\s+".join(re.escape(word) for word in match.group(0).split(" ")))
-                        for position in written.finditer(prose):
-                            found.append((prose.count("\n", 0, position.start()) + 1, match.group(0),
-                                          f"${inner} {match.group(2)}$"))
+                        for line in sorted({prose.count("\n", 0, position.start()) + 1 for position in written.finditer(prose)}):
+                            found.append((line, match.group(0), f"${inner} {match.group(2)}$"))
         except (OSError, ValueError, subprocess.SubprocessError, UnicodeDecodeError):
             found = []
     found.sort()
@@ -25255,7 +25290,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 combined_output = result.stdout + result.stderr
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and missing_glyph_warning(combined_output)):
-                    result = run(font or fallback_font())
+                    retry_font = font or fallback_font()
+                    print(retry_font_note(md_path, first_font or PREFERRED_FONT, retry_font,
+                                          missing_glyph_codes(combined_output)), file=sys.stderr)
+                    result = run(retry_font)
             if result.returncode == 0:
                 record_engine(engine, failed_engines)
                 break

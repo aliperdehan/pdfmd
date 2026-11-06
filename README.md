@@ -2754,7 +2754,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `READER` | a Markdown file with no YAML front matter (and no `metadata.yaml` beside it; the global metadata of `--setup` does not count) | reads the file as GitHub-flavoured Markdown (content-sized table columns, relaxed blank-line rules). What gfm can take as an extension is added to it when the file uses it (`+subscript` for `H~2~O`, `+superscript`, `+attributes` and `+bracketed_spans` for `{#id .class}`, `+fenced_divs`, `+definition_lists`, `+fancy_lists` for `a.` `b.` lists, `+raw_attribute`). What gfm cannot read at all (`^[inline footnotes]`, raw LaTeX such as `\textbf{..}` or `\begin{..}`, grid and simple tables, `(@)` example lists, `@citations`) switches the file to Pandoc's Markdown. Code blocks, inline code, math and HTML comments are not looked at, so an example of the syntax in one changes nothing. `--verbose` says which syntax decided; `--from markdown`, a front-matter block, or `flavour:` (alias `reader:`) below changes it |
 | `TITLE` | a Markdown file with no front matter, first line is `# Title` | that heading becomes the document title, and the remaining headings move up one level |
 | `MARGIN` | no margin or geometry set anywhere | 1-inch margins instead of LaTeX's wide defaults |
-| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); retried with DejaVu Serif if a glyph is still missing. A font you name is never changed except by `fallback: document` |
+| `MAINFONT` | no `mainfont:` and no `-f` | STIX Two Text (Times New Roman if it isn't installed), or a serif that has the letters when the document is mostly in a script STIX Two Text lacks (Kazakh Cyrillic, say); rebuilt as a whole in DejaVu Serif if a glyph is still missing, with a WARN that names the font, the code points and the new font (`STIX Two Text lacks U+2265; rebuilt in DejaVu Serif`). A font you name is never changed except by `fallback: document` |
 | `MATHFONT` | pdfmd chose the main font itself (no `-f`, no `mainfont:`/`mathfont:` in the document or its metadata), the engine is LuaLaTeX, XeLaTeX, Tectonic or Typst (Pandoc 3.12+), and the companion is installed | the math font that goes with the text font: STIX Two Math for STIX Two Text, DejaVu Math TeX Gyre for DejaVu Serif, Libertinus Math, New Computer Modern Math, TeX Gyre Termes/Pagella Math; without it formulas are set in Latin Modern Math (Typst: New Computer Modern Math). `--no-auto mathfont` (or `font`) stops it |
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
@@ -2786,8 +2786,9 @@ OK    lecture.md > lecture.pdf  (lualatex)
 ```
 
 The second `CMD` line is the font fallback at work: STIX Two Text was
-missing a glyph, so the document was rebuilt with DejaVu Serif. (Temporary
-file paths are shortened here.)
+missing a glyph, so the document was rebuilt with DejaVu Serif; a `WARN` line before it names the
+glyphs (`lecture.md: STIX Two Text lacks U+2265; rebuilt in DejaVu Serif (set mainfont: to keep your own)`).
+(Temporary file paths are shortened here.)
 
 **When a PDF doesn't look the way the Markdown suggests, run `-v` first.**
 The cause is usually one of these automatic decisions, and `-v` names it.

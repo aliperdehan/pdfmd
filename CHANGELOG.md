@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.32.49 — 2026-11-06
+
+Pre-edit state: commit `5313bef`. Entry 3fe. **The missing-glyph retry says what it did.** A document with no `mainfont:` and no `-f` is built in STIX Two Text; when the build reports a missing glyph, the whole document is rebuilt in DejaVu Serif (and its math font). The only trace was an `AUTO MATHFONT` line, so a table cell `$\geq$3` (a `\geq` in text mode, which the per-word fallback cannot see: it reads literal characters) turned 33 pages into 39 in another font with no word about it.
+
+- One WARN line before the rebuild: ``WARN  d.md: STIX Two Text lacks U+2265; rebuilt in DejaVu Serif (set mainfont: to keep your own)``. It names the font that was tried (the one pdfmd chose, a script's serif for Kazakh Cyrillic included), the code points of the build's missing-glyph lines (each once, in order; the characters no installed font draws are left out, `script_fallback` has warned about them) and the new font. When the log names no code point (a font that did not load) the line says the build did not name them. It is a normal WARN, so `--strict` fails the build.
+- No count, unlike the wish's example `(x3)`: LuaLaTeX prints each missing character three times, so a count of lines would say three uses for one.
+- Docs: the module docstring and the README's `MAINFONT` row say the retry swaps the WHOLE document and warns, and that it is for what `fallback: word` cannot see; the config template's comment on `fallback:` says the same; the README's `-v` example mentions the WARN. The docstring also names the 3.32.48 warning as the usual cause.
+- `tests/test_font_retry_note.py` (6 tests): the code points out of a LuaLaTeX log, the uncovered ones left out, the line, and two builds (the swap is announced; a font of the document's own is not retried and says nothing).
+- Not done, item 3 of the wish (a per-character retry that keeps the main font): the per-word fallback (`lib/pdfmd_unicode/plan.py`, its Lua filter) wraps the literal characters of `Str` words that a `Plan` read from the source; the log of the retry gives a code point (U+2265) but the source holds a control sequence (`\geq`, a `RawInline`), and nothing in pdfmd maps a TeX command to its code point (that is unicode-math's table, with its aliases). Wrapping every bare command instead would put `\pm` and the rest in a second font. The wish's own caveat holds too (`mainfontfallback` crashes lualatex here). So the whole-document rebuild stays, now announced, and the cause is attacked at its source by the 3.32.48 warning (`$\geq 3$` is math and needs no fallback).
+
 ## v3.32.48 — 2026-11-06
 
 Pre-edit state: commit `ae0d31e`. Entry 3fe. **A `$...$` that is not math is a WARN.** Pandoc reads `$...$` as math only when the closing `$` is not directly followed by a digit, so `$\geq$3 batches` and `within $\pm$10 mV` are text: the dollars are printed, and under Pandoc's Markdown the `\geq` runs in text mode, where the main font has no U+2265 (the build then looked fine, or was silently rebuilt in another font, see 3.32.49). Nothing said so.
