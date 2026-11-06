@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.50 — 2026-11-06
+
+Pre-edit state: commit `4cbe9a9`. Entry 3fe (the author asked for it, "go ahead with this small follow up"). **`--check` finds the `$...$` that is not math.** The 3.32.48 warning needs Pandoc and a build; `pdfmd --check` now reports the same mistake statically, as the new warning `math-digit`, with the file, the line and the fix: ``d.md:7: warning: `$\geq$3` is not math (Pandoc needs the closing $ not followed by a digit); write $\geq 3$  [math-digit]``.
+
+- It reads what is left of the text once code, comments, display math and the real inline math are blanked (the linter's own `INLINE_MATH_RE` decides what is real), so code spans and fences, `$$...$$`, an escaped `\$`, and prices (`$5 and $10`, `$5/$10`, `$5-$10`) are never reported. The text between the dollars must look like math, as in 3.32.48 (a TeX command, `^`, `_`, a brace or one letter).
+- Unlike the build's warning it reads one line at a time (a span broken across lines is not found) and it does not know the reader (`commonmark` has no dollar math), so it can differ from the build on those two. `--check-ignore math-digit`, `pdfmd-options: {check-ignore: [...]}` and `<!-- pdfmd-check: ignore math-digit -->` silence it; `--strict` makes it fail like any warning.
+- README: a row in the `--check` table. `tests/test_check.py`: one more test (the lines, the message, the skipped cases, the ignore comment).
+
 ## v3.32.49 — 2026-11-06
 
 Pre-edit state: commit `5313bef`. Entry 3fe. **The missing-glyph retry says what it did.** A document with no `mainfont:` and no `-f` is built in STIX Two Text; when the build reports a missing glyph, the whole document is rebuilt in DejaVu Serif (and its math font). The only trace was an `AUTO MATHFONT` line, so a table cell `$\geq$3` (a `\geq` in text mode, which the per-word fallback cannot see: it reads literal characters) turned 33 pages into 39 in another font with no word about it.

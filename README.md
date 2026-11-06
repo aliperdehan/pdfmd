@@ -697,6 +697,7 @@ and prints compiler-style lines
 | `anchor-missing` | `[x](#methods)` with no heading or `{#id}` of that name (the ids Pandoc and GitHub make from a heading count) |
 | `id-duplicate`, `crossref-missing`, `ref-missing` | the same `{#id}` twice; a `@fig:x`, `@tbl:x`, `@eq:x`, `@sec:x`, `@lst:x` or `\ref{x}` nothing defines |
 | `cite-missing`, `cite-no-bibliography`, `bibliography-missing` | a `@key` the `.bib`, CSL JSON or `references:` lacks (with a "did you mean"), citations with no bibliography set, a bibliography file that is missing |
+| `math-digit` | `$\geq$3`, `$\pm$10`: Pandoc reads `$...$` as math only when the closing `$` is not followed by a digit, so this is text with the dollars printed (a build says the same as a WARN, and a `\geq` left in text mode rebuilds the document in another font); write `$\geq 3$` |
 | `footnote-missing`, `footnote-unused` | `[^1]` with no text, a `[^1]:` nobody uses |
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |

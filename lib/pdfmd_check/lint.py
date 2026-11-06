@@ -23,6 +23,7 @@ CODES: dict[str, tuple[str, str]] = {
     "div-open": ("warning", "a fenced div (:::) is never closed"),
     "div-stray": ("warning", "a closing ::: with no div open"),
     "math-open": ("warning", "an odd number of $$ (a display formula is never closed)"),
+    "math-digit": ("warning", "a $...$ that is not math because its closing $ is followed by a digit ($\\geq$3)"),
     "image-missing": ("error", "an image file is not there"),
     "file-missing": ("error", "a file= of a csv div is not there"),
     "link-missing": ("warning", "a link to a local file that is not there"),
@@ -77,6 +78,10 @@ FENCE_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 INLINE_TOKEN_RE = re.compile(r"<!--|(`+)")
 DISPLAY_MATH_RE = re.compile(r"\$\$.*?\$\$", re.DOTALL)
 INLINE_MATH_RE = re.compile(r"(?<![\\$\w])\$(?![\s$])(?:[^$\n\\]|\\.)+?(?<![\s\\])\$(?!\d)")
+# what is left of a `$...$` once the real math is blanked: no space before the closing $, a digit after it (Pandoc then reads
+# text, as it does for "costs $5 and $10"); only text that looks like math counts: a TeX command, ^, _, a brace or one letter
+DIGIT_MATH_RE = re.compile(r"(?<![\\$\w])\$(?=[^\s$])((?:[^$\n\\]|\\.)+?)(?<![\s\\])\$(?=\d)(\d+(?:[.,]\d+)?)")
+MATH_LOOKING_RE = re.compile(r"\\[A-Za-z]+|[\^_{}]|^[A-Za-z]$")
 LINK_TARGET_RE = re.compile(r"(?<=\])\([^)\n]*\)")
 URL_RE = re.compile(r"https?://[^\s<>)\]]+|<[^>\s]+@[^>\s]+>|<[A-Za-z/!][^>\n]*>")
 DEFINITION_LINE_RE = re.compile(r"(?m)^ {0,3}\[[^\]^][^\]]*\]:.*$")
@@ -339,6 +344,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
         images_and_files(analysis, findings, places, asset_limit)
         links(analysis, findings, places, ids)
         structure(analysis, findings)
+        digit_math(analysis, findings)
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
     citations(analyses, findings, bibliography)
@@ -517,6 +523,15 @@ def structure(analysis: Analysis, findings: Findings) -> None:
     if count % 2:
         last = [found.start() for found in re.finditer(r"\$\$", analysis.masked)][-1]
         findings.add(analysis, analysis.line(last), "math-open", "an odd number of $$ in this file; one is never closed")
+
+
+def digit_math(analysis: Analysis, findings: Findings) -> None:
+    """A `$\\geq$3` or `$\\pm$10`: Pandoc takes it for text, with the dollars printed (the usual cause of a missing glyph)."""
+    for found in DIGIT_MATH_RE.finditer(analysis.plain):
+        if MATH_LOOKING_RE.search(found.group(1)):
+            findings.add(analysis, analysis.line(found.start()), "math-digit",
+                         f"`{found.group(0)}` is not math (Pandoc needs the closing $ not followed by a digit); "
+                         f"write ${found.group(1)} {found.group(2)}$")
 
 
 def cross_references(analyses: list[Analysis], findings: Findings, ids: set[str]) -> None:

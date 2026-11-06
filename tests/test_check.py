@@ -47,6 +47,15 @@ class Reading(unittest.TestCase):
         self.assertEqual(codes("# A\n\nThe `$for(a)$$a.b$\nand `$x` text, $$ is fine\n"), ["math-open"])
         self.assertEqual(codes("# A\n\nWrap `code $$\nacross` lines.\n"), [])
 
+    def test_dollars_closed_before_a_digit_are_not_math(self):
+        text = "# A\n\na $\\geq$3 and $\\pm$10, but $\\geq 3$ is math\n\n| c |\n|--|\n| $\\geq$3 |\n"
+        self.assertEqual(codes(text), ["math-digit", "math-digit", "math-digit"])
+        found = lint([Source("d.md", None, text)])
+        self.assertEqual([(problem.line, problem.code) for problem in found], [(3, "math-digit"), (3, "math-digit"), (7, "math-digit")])
+        self.assertIn("write $\\geq 3$", found[0].message)
+        self.assertEqual(codes("# A\n\nprices $5 and $10, $5/$10, $5-$10, `$\\geq$3`, \\$\\geq\\$3\n\n$$\\geq$3$$\n\n```\n$\\geq$3\n```\n"), [])
+        self.assertEqual(codes("# A\n\n$\\geq$3 <!-- pdfmd-check: ignore math-digit -->\n"), [])
+
     def test_things_never_closed(self):
         self.assertEqual(codes("# A\n\n```\nopen\n"), ["fence-open"])
         self.assertEqual(codes("# A\n\ntext <!-- never\n\nmore\n"), ["comment-open"])
