@@ -83,6 +83,14 @@ wait for an answer before any code.
 
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
 
+## Making the main `pdfmd.py` main code more manageable [N/A]
+
+- [ ] Review, verify, and execute `SPLIT.md`. Chosen names for "or" cases: _assemble, _parts, _attach, _tex, _pdfimages, _compat, _routing. Subject to change, discuss.
+
+## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
+
+- [ ] Paths inside an `\input`-ed `.tex` resolve against that file's folder; `pdfmd x.tex` with a project macro gives a clear message or builds with the preamble; `--from md` on a `.tex`; a `.md` that is one multi-line raw `\labplot` fails; `--crop` as a build mode plus a `pdfmd-options` key and a `--setup` row [3fg]
+
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
 - [ ] Working `[[wikilinks]]`: `[[#Heading]]` as a link to the heading, `[[Note]]` as a cross-reference between the parts of one build or a link to the note's built file; today they are only written as their text (3.32.26) [3ee]
