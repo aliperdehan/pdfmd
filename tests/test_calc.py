@@ -83,7 +83,7 @@ class Detection(unittest.TestCase):
             marked = Path(directory) / "marked.md"
             marked.write_text("It is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(plain, []), [])
-            self.assertEqual(pdfmd.calc_filter_args([plain, marked], []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-noindent=true",
+            self.assertEqual(pdfmd.calc_filter_args([plain, marked], []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-noindent=lines",
                                                                                     "-M", "pdfmd-calc-space=0.75em", "--lua-filter", str(CALC_LUA)])
 
     def test_calc_off_in_the_options_or_a_metadata_file_leaves_the_span_alone(self):
@@ -101,7 +101,7 @@ class Detection(unittest.TestCase):
             digits = Path(directory) / "digits.md"
             digits.write_text("---\npdfmd-options:\n  calc:\n    digits: 4sf\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
             self.assertEqual(pdfmd.calc_filter_args(digits, []), ["-M", "pdfmd-calc-round=even", "-M", "pdfmd-calc-digits=4sf",
-                                                                   "-M", "pdfmd-calc-noindent=true", "-M", "pdfmd-calc-space=0.75em",
+                                                                   "-M", "pdfmd-calc-noindent=lines", "-M", "pdfmd-calc-space=0.75em",
                                                                    "--lua-filter", str(CALC_LUA)])
             on = Path(directory) / "on.md"
             on.write_text("---\npdfmd-options:\n  calc: on\n---\n\nIt is `2+2`{=}.\n", encoding="utf-8")
@@ -479,6 +479,33 @@ class Switches(unittest.TestCase):
         self.assertEqual(latex("--calc-noindent", header=off).count("\\begingroup"), 3)
         self.assertEqual(latex(env={"PDFMD_CALC_NOINDENT": "false"}).count("\\begingroup"), 2)
         self.assertEqual(latex("--no-calc").count("\\begingroup"), 2)                                               # no calculator: the explicit divs only
+
+    def test_lines_takes_the_indent_off_calculation_lines_and_leaves_the_prose(self):
+        # 3.33.18: `calc: {noindent: lines}`, the default. A paragraph that holds a calculation line gets a group of its own; a
+        # paragraph of prose keeps the document's indent; one inside a nested `::: noindent` div follows that div.
+        source = ("---\nindent: true\n---\n\n```{=calc}\nm = 4\n```\n\n::: calc\nx = m * 2 = {ans}\n\nProse in the div.\n\n"
+                  "::: noindent\nFlush prose.\n:::\n\ny = m / 2 = {ans}\n:::\n")
+
+        def latex(*arguments):
+            (self.directory / "doc.md").write_text(source, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", *arguments],
+                                  cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            return (self.directory / "doc.tex").read_text(encoding="utf-8")
+        group = "\\begingroup\\setlength{\\parindent}{0pt}\n\n"
+        lines = latex()
+        self.assertIn(group + "x = m * 2 = 8\n\n\\endgroup", lines)
+        self.assertIn(group + "y = m / 2 = 2\n\n\\endgroup", lines)
+        self.assertIn(group + "Flush prose.\n\n\\endgroup", lines)
+        self.assertNotIn(group + "Prose in the div.", lines)
+        self.assertIn("\\endgroup\n\nProse in the div.", lines)
+        self.assertEqual(lines.count("\\begingroup"), 3)
+        self.assertEqual(latex("--calc-noindent", "lines"), lines)
+        every = latex("--calc-noindent")                                                      # all: one group around the div
+        self.assertEqual(every.count("\\begingroup"), 2)
+        self.assertLess(every.find("\\begingroup"), every.find("x = m * 2 = 8"))
+        self.assertLess(every.find("Prose in the div."), every.rfind("\\endgroup"))
+        self.assertEqual(latex("--no-calc-noindent").count("\\begingroup"), 1)                  # the nested div's only
 
     def test_a_calc_div_has_room_around_it_and_can_be_centred(self):
         source = "---\ntitle: T\n---\n\nBefore.\n\n::: calc\nx = 2 * 3 = {ans}\n:::\n\nAfter.\n"

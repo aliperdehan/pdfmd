@@ -47,7 +47,7 @@ UNSET = {
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
     "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "color", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
-    "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "on", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
+    "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "lines", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
@@ -608,10 +608,14 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.calc.typeset-italic", "Name pieces a typeset calculation sets italic",
              "Comma separated pieces: el makes V_el an italic word, DNA makes k_DNA an italic DNA. Empty: none. "
              "Per run: --calc-typeset-italic.", "Calculations"),
-        choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div", on_off, "",
-               "A block of calculation lines reads better flush left, so a `::: calc` div has no paragraph indent even when the "
-               "document has one. Off gives it the document's own. An `indent=` on the div wins. On unless set to off. "
-               "Per run: --calc-noindent / --no-calc-noindent.", "Calculations"),
+        choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div",
+               (("lines", "off the calculation lines; the prose between them keeps the document's (the default)"),
+                ("on", "off every paragraph of the div"),
+                ("off", "the whole div keeps the document's indent")), "",
+               "Calculation lines read better flush left, so in a `::: calc` div the paragraphs that hold one have no first-line "
+               "indent even when the document has one, and a paragraph of prose keeps it. An `indent=` on the div wins, and so "
+               "does a nested `::: indent` / `::: noindent` div. Empty: lines. "
+               "Per run: --calc-noindent [lines|all] / --no-calc-noindent.", "Calculations"),
         text("options.calc.space", "Room above and below a ::: calc div",
              "A length (0.75em, 6pt, 2mm; units pt, mm, cm, in, em) or off. The default 0.75em keeps a block of calculation lines "
              "apart from the paragraphs around it (LaTeX, Typst and HTML). Empty: 0.75em. Per run: --calc-space.", "Calculations"),

@@ -212,8 +212,11 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   characters, `?` one, `#` a run of digits are patterns). With a caption: a line `Table: Student's *t*` in the div; with a label to cite too:
   `::: {#tbl:t .calc-table}`; also `head="Symbol; Value"`, `labels="t1=$t_{1}$"`, `digits="3dp"` as attributes. The braces take only
   `.class`, `#id` and `key=value`, so `{.calc-table t*}` does not work.
-- A `::: calc` div has no first-line indent, even in a document that indents (`calc: {noindent: false}` or `--no-calc-noindent` gives it
-  the document's own; `indent=2em` on the div wins). Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
+- In a `::: calc` div the paragraphs that hold a calculation line have no first-line indent, even in a document that indents, and the
+  prose between them keeps the document's (`calc: {noindent: lines}`, the default since 3.33.18). `calc: {noindent: true}` or
+  `--calc-noindent` takes the indent off every paragraph of the div (the default before 3.33.18); `false` or `--no-calc-noindent`
+  gives the whole div the document's own. `indent=2em` on the div wins, and a nested `::: indent` or `::: noindent` div sets the
+  paragraphs inside it. Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
 - A `::: calc` div has `0.75em` of room above and below it (LaTeX, Typst and HTML; `calc: {space: 6pt}`, `--calc-space off` for none) and
   its lines flush left (`calc: {align: center}` or `--calc-align center` centres them). The room joins the paragraph spacing around it
   instead of adding to it, so two calc divs in a row are not twice as far apart.

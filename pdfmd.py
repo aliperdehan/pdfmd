@@ -133,11 +133,13 @@ Inline calculator (v3.30.4, names and `::: calc` v3.30.6, {subs} v3.30.8):
     names replaced by their values (the digits each was defined with; the computation keeps the full value), and
     `calc: {subs: true}` does that before every {ans} ({nosubs} on a line turns it off). A ```{=calc} block (``` ```{=} ``` is read again
     from the source), a `::: {.calc .hide}` div and `calc: {constants: file.csv}` hold statements, one per line, that print nothing
-    unless they carry an {ans}; `code`{=calc} is `code`{=}. A `::: calc` div has no first-line
-    indent (`calc: {noindent: true}`, the default; false gives it the document's own; an `indent=` on the div wins). Added by
+    unless they carry an {ans}; `code`{=calc} is `code`{=}. In a `::: calc` div the paragraphs
+    that hold a calculation line have no first-line indent and its prose keeps the document's (`calc: {noindent: lines}`, the
+    default since 3.33.18; true takes it off every paragraph of the div, false gives the whole div the document's own; an `indent=`
+    on the div, or a nested `::: indent` / `::: noindent` div, wins). Added by
     `calc_filter_args()` only for a document that has such a span or div. The settings are
     `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, typeset: true|display, noindent, space, align}}` (`calc: off` is the short form), --calc /
-    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-typeset-upright, --calc-typeset-italic, --calc-noindent / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
+    --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-typeset-upright, --calc-typeset-italic, --calc-noindent [lines|all] / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
     even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
     docs/recipes.md 1.11.
 
@@ -1498,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.17"
+PDFMD_VERSION = "3.33.18"
 import argparse
 import atexit
 import csv
@@ -3909,7 +3911,7 @@ def contains_indent_div(md_path: Path) -> bool:
 def calc_div_wants_indent_filter(files: list[Path], metadata_files: list[Path]) -> bool:
     if not files or not any(CALC_DIV_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
         return False
-    return not calc_is_off(files[0], metadata_files) and calc_noindent_on(files[0], metadata_files)
+    return not calc_is_off(files[0], metadata_files) and calc_noindent_mode(files[0], metadata_files) != "off"
 
 
 def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = ()) -> list[str]:
@@ -4049,17 +4051,22 @@ def calc_typeset_styles(md_path: Path, metadata_files: list[Path]) -> dict[str, 
     return found
 
 
-def calc_noindent_on(md_path: Path, metadata_files: list[Path]) -> bool:
-    """`calc: {noindent: false}` gives a `::: calc` div the document's paragraph indent; on (the default) the div has none."""
+def calc_noindent_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """`calc: {noindent: ...}`: "lines" (the default, 3.33.18; a `::: calc` div's calculation lines have no first-line indent, its
+    prose keeps the document's), "all" (true, all: no paragraph of the div is indented, 3.30.9) or "off" (false: the document's
+    indent everywhere)."""
     value = os.environ.get(CALC_NOINDENT_ENV)
     if value is None:
         value = calc_option(md_path, metadata_files, "noindent")
     if value is None:
-        return True
+        return "lines"
+    word = str(value).strip().lower()
+    if word in ("lines", "all"):
+        return word
     flag = option_flag(value)
     if flag is None:
-        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.noindent must be true or false, not {value!r}")
-    return flag
+        raise SystemExit(f"{display_path(md_path)}: pdfmd-options.calc.noindent must be lines, true (all) or false, not {value!r}")
+    return "all" if flag else "off"
 
 
 def calc_space(md_path: Path, metadata_files: list[Path]) -> str | None:
@@ -4334,8 +4341,9 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
         for style, pieces in calc_typeset_styles(files[0], metadata_files).items():
             if pieces:
                 arguments += ["-M", f"pdfmd-calc-typeset-{style}=" + ",".join(pieces)]
-    if calc_noindent_on(files[0], metadata_files):
-        arguments += ["-M", "pdfmd-calc-noindent=true"]
+    noindent = calc_noindent_mode(files[0], metadata_files)
+    if noindent != "off":
+        arguments += ["-M", "pdfmd-calc-noindent=" + ("true" if noindent == "all" else noindent)]
     space = calc_space(files[0], metadata_files)
     if space:
         arguments += ["-M", "pdfmd-calc-space=" + space]
@@ -26626,10 +26634,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calc-typeset-italic", metavar="PIECES", default=None,
                         help="pieces of a name a typeset calculation sets italic, comma separated: el for V_el, DNA for k_DNA (a word of "
                              "several letters is one italic word, \\mathit). Also `pdfmd-options: {calc: {typeset-italic: [el]}}`, or --setup")
-    parser.add_argument("--calc-noindent", action=argparse.BooleanOptionalAction, default=None,
-                        help="a `::: calc` div has no first-line indent, whatever the document does (the default; --no-calc-noindent "
-                             "gives it the document's own). An `indent=` on the div wins. Also "
-                             "`pdfmd-options: {calc: {noindent: false}}`, or --setup")
+    parser.add_argument("--calc-noindent", nargs="?", const="all", choices=("lines", "all"), default=None, metavar="lines|all",
+                        help="the first-line indent in a `::: calc` div: `lines` (the default) takes it off the paragraphs that hold a "
+                             "calculation line and leaves the document's on the prose between them; `--calc-noindent` (all) takes it off "
+                             "every paragraph of the div; --no-calc-noindent gives the whole div the document's own. An `indent=` on the "
+                             "div wins, and so does a nested `::: indent` / `::: noindent` div. Also "
+                             "`pdfmd-options: {calc: {noindent: lines|true|false}}`, or --setup")
+    parser.add_argument("--no-calc-noindent", dest="calc_noindent", action="store_const", const="false",
+                        help="a `::: calc` div keeps the document's first-line indent, calculation lines included")
     parser.add_argument("--calc-space", metavar="LENGTH", default=None,
                         help="the room above and below a `::: calc` div: a length (0.75em, 6pt, 2mm; pt mm cm in em) or off. "
                              "Default 0.75em. Also `pdfmd-options: {calc: {space: 0.75em}}`, or --setup")
@@ -27276,7 +27288,7 @@ def run_main() -> None:
         if getattr(args, "calc_typeset_" + style) is not None:
             os.environ[env] = getattr(args, "calc_typeset_" + style)
     if args.calc_noindent is not None:
-        os.environ[CALC_NOINDENT_ENV] = "true" if args.calc_noindent else "false"
+        os.environ[CALC_NOINDENT_ENV] = args.calc_noindent
     if args.calc_space is not None:
         os.environ[CALC_SPACE_ENV] = args.calc_space
     if args.calc_align is not None:

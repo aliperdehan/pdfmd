@@ -612,7 +612,7 @@ end
 local DEFAULT_FMT = nil
 local AUTO_SUBS = false
 local SPACE, CENTER = nil, false                         -- pdfmd-calc-space / pdfmd-calc-align (3.30.14), see framed
-local NOINDENT = false                                  -- set from pdfmd-calc-noindent (3.30.9), see indent_for_div
+local NOINDENT = false                                  -- "lines" or "all", from pdfmd-calc-noindent (3.30.9, lines 3.33.18), see attributes_of
 local STATEMENTS = {}          -- every statement, in document order (id = position)
 local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
@@ -1667,19 +1667,42 @@ local INDENTS = {latex = true, beamer = true, typst = true, html = true, html4 =
   epub2 = true, epub3 = true, revealjs = true, slidy = true, slideous = true, s5 = true, dzslides = true,
   chunkedhtml = true}
 
--- The attributes of the finished div. A calc div carries no first-line indent (3.30.9, `calc: {noindent: true}`, the
--- default): it becomes `indent=false` for indent.lua, unless the div says something about the indent itself.
+-- Whether a calc div's first-line indent is pdfmd's to set: a writer indent.lua serves, and a div that says nothing about
+-- the indent itself (no `indent=`, no `.indent` / `.noindent` class).
+local function indent_is_ours(div)
+  if not NOINDENT or not INDENTS[FORMAT:lower():gsub("[+-].*$", "")] or div.attributes.indent ~= nil then return false end
+  for _, class in ipairs(div.classes) do
+    if class == "indent" or class == "noindent" then return false end
+  end
+  return true
+end
+
+-- The attributes of the finished div. With `calc: {noindent: true}` (3.30.9) a calc div carries no first-line indent at
+-- all: it becomes `indent=false` for indent.lua. With `lines` (3.33.18, the default) the div keeps the document's indent
+-- and its calculation lines lose theirs (lines_without_indent).
 local function attributes_of(div, classes)
   local attributes = {}
   for key, value in pairs(div.attributes) do attributes[key] = value end
-  if NOINDENT and INDENTS[FORMAT:lower():gsub("[+-].*$", "")] and attributes.indent == nil then
-    local own = false
-    for _, class in ipairs(classes) do
-      if class == "indent" or class == "noindent" then own = true end
-    end
-    if not own then attributes.indent = "false" end
-  end
+  if NOINDENT == "all" and indent_is_ours(div) then attributes.indent = "false" end
   return attributes
+end
+
+-- `calc: {noindent: lines}` (3.33.18, the default): each paragraph of the div that holds a calculation line (a `{ans}`,
+-- `{subs}`, `{upright:..}` marker) goes into a div of its own with `indent=false`, and a paragraph of prose keeps the
+-- document's indent. Only the div's own paragraphs: one inside a nested `::: indent` / `::: noindent` div follows that div.
+local function lines_without_indent(div)
+  if NOINDENT ~= "lines" or not indent_is_ours(div) then return div.content end
+  local blocks = pandoc.Blocks({})
+  for _, block in ipairs(div.content) do
+    local calculation = false
+    if block.t == "Para" or block.t == "Plain" then
+      for _, item in ipairs(block.content) do
+        if has_marker(item) then calculation = true; break end
+      end
+    end
+    blocks:insert(calculation and pandoc.Div({block}, pandoc.Attr("", {}, {indent = "false"})) or block)
+  end
+  return blocks
 end
 
 -- Room above and below a finished calc div and, with `calc: {align: center}`, centred lines (3.30.14). Written for the writers
@@ -2055,7 +2078,8 @@ calc_div = function(div)
     if pass == 1 then return div, false end
     return pandoc.Blocks({}), false
   end
-  local content = div.content:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
+  local own = pass == 2 and lines_without_indent(div) or div.content
+  local content = own:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
     Div = inner_div, RawBlock = raw_block})
   if pass == 1 then return div, false end
   local classes = pandoc.List({})
@@ -2089,7 +2113,8 @@ return {{Pandoc = function(doc)
   end
   TYPESET = MATH_WRITERS[writer] == true and ((typeset == "display" and "display") or ((typeset == "true" or typeset == "inline") and "inline")) or false
   local noindent = doc.meta["pdfmd-calc-noindent"]
-  NOINDENT = noindent ~= nil and pandoc.utils.stringify(noindent):lower() == "true"
+  noindent = noindent and pandoc.utils.stringify(noindent):lower()
+  NOINDENT = (noindent == "lines" and "lines") or (noindent == "true" and "all") or false
   local space = doc.meta["pdfmd-calc-space"]
   space = space and pandoc.utils.stringify(space):lower() or nil
   SPACE = space and space:match("^[%d.]+%a%a$") and space or nil           -- 0.75em, 6pt: nothing else is written into raw output

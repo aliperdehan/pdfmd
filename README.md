@@ -1155,14 +1155,15 @@ pdfmd-options:
     typeset: false    # true: each calculation as inline maths (names with subscripts, a centred dot); display: a centred formula per line
     typeset-upright: []   # pieces of names a typeset calculation sets upright, e.g. [V, s]
     typeset-italic: []    # pieces it sets italic, e.g. [el, DNA]
-    noindent: true    # a ::: calc div has no first-line indent; false gives it the document's
+    noindent: lines   # the calculation lines of a ::: calc div have no first-line indent, its prose keeps the document's;
+                      # true: no paragraph of the div is indented; false: the whole div gets the document's
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
     align: left       # or center: the lines of a ::: calc div centred
     constants:        # a CSV of named values (name,value[,digits[,note]]), see 6
     export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
 
-On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset [inline|display]` / `--no-calc-typeset`, `--calc-typeset-upright V,s`, `--calc-typeset-italic el,DNA`, `--calc-noindent` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
+On the command line: `--calc` / `--no-calc`, `--calc-digits 4sf`, `--calc-round away`, `--calc-subs` / `--no-calc-subs`, `--calc-typeset [inline|display]` / `--no-calc-typeset`, `--calc-typeset-upright V,s`, `--calc-typeset-italic el,DNA`, `--calc-noindent [lines|all]` / `--no-calc-noindent`, `--calc-space 0.75em|off`, `--calc-align left|center`, `--calc-constants FILE`, `--calc-export FILE` (the command
 line wins over the document).
 
 **When it cannot calculate** (an unknown name, `1/0`, `asin(2)`, a name that depends on itself, `{ans}` without an `=` before it, a
