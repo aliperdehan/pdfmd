@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.9 — 2026-11-09
+
+Pre-edit state: commit `c9d1e22`. Entry 3fi. **`pdfmd --doc` lives in `pdfmd_docs.reader`.** Move 8 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `document_file`, `document_headings`, `document_section`, `search_documents`, `render_document` and `doc_command`, with the constants `DOCUMENTS` and `DOC_URL`, are in the new module `lib/pdfmd_docs/reader.py` of the existing package, text and docstrings unchanged (`webbrowser` is still imported inside `doc_command`, and `import pdfmd_docs` inside `document_file`). `pdfmd_docs/__init__.py` is untouched. `pdfmd.py` keeps the section comment with a pointer line.
+- `pdfmd_docs` is not loaded at start, so the move is deferred: `pdfmd.py` gets a stand-in for each of the six functions (`doc_command` is called by `main()`; the other five are read by `test_doc`, `test_docs_consistency` and `test_sections`) and `DEFERRED_NAMES.update(DOCUMENTS="pdfmd_docs.reader")` (read by `test_doc` and `test_packaging`). `DOC_URL` is used only by the module.
+- `fence_after` (with `FENCE_LINE_RE`, other code uses both) and `PDFMD_VERSION` stay in `pdfmd.py`; the module reads `core.fence_after`, `core.PDFMD_VERSION`, `core.cache_root` and `core.which("pandoc")` (both patched by tests) when it runs. `document_file` finds the checkout's copy of a document beside `Path(core.__file__)` (`pdfmd.py`, so the folder is the repository's root, as before); the bundled copy is still found beside `pdfmd_docs.__file__`, unchanged.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_docs` module; `scripts/split_check.py` with the extra builds `--doc`, `--doc search stamp`, `--doc recipes 2`, `--doc agents --print` and `--doc nosuch` (each prints to the terminal, not to a browser: the output there is not a terminal): all 35 checks the same. The browser branch of `doc_command` (output on a terminal) was deliberately not run; `test_doc` covers `render_document` with a patched `cache_root`. `scripts/pdfmd --version` is no slower: fifteen interleaved runs of each give best / median 134 / 152 ms before and 133 / 141 ms after. Tests: `test_compat`, `test_doc`, `test_docs_consistency`, `test_doctor`, `test_docx_tables`, `test_packaging`, `test_sections`, `test_setup`, `test_probes`, `test_serve`, `test_split`, `test_launcher` and `test_jobs`: 231 tests pass (one skipped).
+
 ## v3.33.8 — 2026-11-09
 
 Pre-edit state: commit `5b7fbdd`. Entry 3fi. **Flat Markdown and ASCII text (`--to gfm`, `--to txt`, `--to ascii`) build in `pdfmd_flat.build`.** Move 7 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).

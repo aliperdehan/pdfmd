@@ -184,13 +184,15 @@ Note: `GFM_CLI` and `ASCII_CLI` (settings main() fills) stay in `pdfmd.py` and a
 
 Tests: `test_ascii`, `test_flat`, `test_keep_source`, `test_probes`, `test_setup`.
 
-#### 8. `pdfmd_docs` (existing package): 6 definitions, ~164 lines
+#### 8. `pdfmd_docs` (existing package): 6 definitions, ~164 lines; done in 3.33.9
 
 Definitions: `document_file`, `document_headings`, `document_section`, `search_documents`, `render_document`, `doc_command`.
 
 Constants that move with it (only this package reads them): `DOCUMENTS`, `DOC_URL`.
 
 Facts: 1 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
+
+Note: `document_file` reads `core.__file__` for the checkout's copy and leaves `pdfmd_docs.__file__` (the bundled copy) as it was. `fence_after` stays (other code reads it); `cache_root` and `which` are patched by tests, so they are `core.` calls. `DOCUMENTS` is a `DEFERRED_NAMES` entry.
 
 Tests: `test_compat`, `test_doc`, `test_docs_consistency`, `test_doctor`, `test_docx_tables`, `test_packaging`, `test_sections`.
 
