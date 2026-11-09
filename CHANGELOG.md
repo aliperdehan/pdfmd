@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.7 — 2026-11-09
+
+Pre-edit state: commit `52c669d`. Entry 3fi. **`--serve` and `--api` live in `pdfmd_serve.commands`.** Move 6 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `serve_main_document`, `serve_discovered`, `serve_live_filters` (a context manager), `serve_core`, `serve_command` and `api_command` are in the new module `lib/pdfmd_serve/commands.py` of the existing package, text and docstrings unchanged. `pdfmd_serve/__init__.py`, `core.py` and `shell.py` are untouched. The module's global `core` is the `pdfmd` module and has nothing to do with the package's own `core.py` (`from pdfmd_serve import Core, run` inside the functions is as it was). The function-local imports (`pdfmd_web`, `pdfmd_lua`, the ranking classes) stay inside the functions. `pdfmd.py` keeps a pointer comment where they were.
+- `pdfmd_serve` brings `http.server` and `ssl`, so it is not loaded at start: `pdfmd.py` gets stand-ins `serve_command` and `api_command` (called from `main()`) and `serve_live_filters` (`tests/test_serve.py` passes `pdfmd.serve_live_filters` to `Core(filters=...)`; the stand-in returns the real context manager). No `DEFERRED_NAMES` entry: no constant moved. `serve_main_document`, `serve_discovered` and `serve_core` are used only by the module.
+- The module reads `core.AUTO_METADATA_DISABLED`, `core.atomic_write_bytes`, `core.csv_table_filter`, `core.display_path`, `core.document_filter_args`, `core.effective_no_auto`, `core.find_metadata`, `core.priority_candidates`, `core.priority_enabled`, `core.ranking_clashes`, `core.ranking_layers` and `core.source_markdown` when it runs. No test patches any of them.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_serve` module; `scripts/split_check.py` with the extra builds `--serve nofolder`, `--api GET` (the usage error) and `--api GET /api/file?path=nope.md` (the error answer through `serve_core`): all 34 checks the same. The successful answers cannot go through `split_check`: `/api/file` carries the file's mtime, `/api/render` its seconds, and `/api/project` depends on which files the two copies of `examples/` hold, so by hand, in a scratch folder, `--api GET /api/project`, `--api POST /api/render` (a `{=}` inline calc, which needs the live filters) and `--api POST /api/render` with a `::: calc` div give byte-identical JSON from HEAD and from the move (the mtime and seconds fields removed), and `--serve .` run from both under `gtimeout 12` listens, and `curl` of `/api/project` returns the same JSON. `scripts/pdfmd --version`: fifteen interleaved runs of each give best / median 136 / 145 ms before and 135 / 148 ms after (the median is within the run-to-run spread; nothing of `pdfmd_serve` loads at start). Tests: `test_serve`, `test_split` and the always-run set: 141 tests pass (one skipped).
+
 ## v3.33.6 — 2026-11-09
 
 Pre-edit state: commit `0013c41`. Entry 3fi. **The terminal reader's command-line side (`--to ansi`, `--view`) lives in `pdfmd_ansi.cli`.** Move 5 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).

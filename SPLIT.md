@@ -160,13 +160,15 @@ Note: `ANSI_*_ENV`, `ANSI_FALLBACK_WIDTH` and `ANSI_LINK_TERMINALS` stay in `pdf
 
 Tests: `test_ansi`.
 
-#### 6. `pdfmd_serve` (existing package): 6 definitions, ~89 lines
+#### 6. `pdfmd_serve` (existing package): 6 definitions, ~89 lines; done in 3.33.7
 
 Definitions: `serve_main_document`, `serve_discovered`, `serve_live_filters`, `serve_core`, `serve_command`, `api_command`.
 
 Facts: 1 callers stay in pdfmd.py (re-exported); 12 pdfmd names read through `core`.
 
 Note: `serve_live_filters` is read by `test_serve` (one filter list); that test already finds it in `lib/`.
+
+Note: the module's global `core` is pdfmd; `lib/pdfmd_serve/core.py` (the JSON core) is a different thing. `serve_live_filters` is a context manager: its stand-in returns the real one, which is what `Core(filters=...)` calls. The successful `--api` answers carry an mtime or seconds, so `split_check` proves the error paths and a by-hand run proves the rest (see the changelog entry).
 
 Tests: `test_serve`.
 
