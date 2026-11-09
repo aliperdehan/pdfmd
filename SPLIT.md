@@ -498,7 +498,7 @@ Note: CLAUDE.md's "Vendored inkmd and the native tier" names pdfmd.py's section 
 
 Tests: `test_calibre_markdown`, `test_csv_switch`, `test_csv_table`, `test_native`, `test_pagebreak`.
 
-#### 37. `pdfmd_args` (new package): 7 definitions, ~957 lines
+#### 37. `pdfmd_args` (new package): 7 definitions, ~957 lines; done in 3.33.40 (`build_parser` is re-exported plainly; `type=` reads `core.install_kind`, `core.uninstall_kind` and `core.ansi_width_argument`, the same function objects; the comments on the build log and the stages stayed beside `BUILD_LOG_CLI` and `ASSEMBLED_FORMAT`; the last move of phase 1)
 
 Definitions: `csv_note_argument`, `csv_count_argument`, `table_keep_argument`, `calc_round_argument`, `calc_digits_argument`, `pdfmd_labels_modes`, `build_parser`.
 

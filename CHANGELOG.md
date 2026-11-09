@@ -19,6 +19,60 @@ same commit as the change.
 
 ---
 
+## v3.33.40 — 2026-11-10
+
+Pre-edit state: commit `a357030`. Entry 3fi. **The command line (`build_parser`, the whole argparse tree with every option, its
+help text and the `--help TOPIC` topics, and the `type=` checks of its options) lives in the new package `pdfmd_args`**
+(`lib/pdfmd_args/__init__.py`); `pdfmd.py` loads it at start beside the other new packages. Move 37 of SPLIT.md, the last of
+phase 1.
+
+- The 7 definitions (`csv_note_argument`, `csv_count_argument`, `table_keep_argument`, `calc_round_argument`,
+  `calc_digits_argument`, `pdfmd_labels_modes`, `build_parser`) and 2 constants (`BUILD_LOG_MODES`, `STOP_STAGES`) moved from 8
+  places; `pdfmd.py` keeps 8 pointer comments. The comment blocks above the two constants stay in `pdfmd.py`: they explain
+  `BUILD_LOG_CLI` and `ASSEMBLED_FORMAT` as well, which stay. By the AST, no code that stays reads `BUILD_LOG_MODES` or
+  `STOP_STAGES` (a comment in `run_main` names `STOP_STAGES`).
+- `pdfmd.py` re-exports `build_parser` (`main` and its helpers call it, `lib/pdfmd_compat` and `lib/pdfmd_setup` read it as
+  `core.build_parser`, and `test_doc`, `test_help`, `test_ranking_generated` and `test_setup` as `pdfmd.build_parser`); the six
+  helpers and the two constants are read by the package alone. `bind_core(...)` gets the package; it is in `pyproject.toml`
+  (`packages` and `package-dir`) and in `PACKAGES` of `scripts/build_zipapp.py`.
+- Changes to the text that are not moves: 23 pdfmd names are read as `core.X` when `build_parser` runs (`ASSEMBLED_SUFFIX`,
+  `BOPEN_HELP`, `BUNDLE_MAX_MB`, `CACHE_LOCATIONS`, `CALC_ALIGNS`, `CALC_ROUNDS`, `CSS_SCOPES`, `LUA_MODES`,
+  `METADATA_PRECEDENCES`, `PATH_STYLES`, `PDFMD_VERSION` (the `--version` string), `SEED_CALC_MODES`, `STAMP_MODES`,
+  `STAMP_SCOPES`, `STAMP_STORES`, `UNCLOSED_WORDS`, `ansi_width_argument`, `calc_digits_value`, `csv_count`, `csv_note_mode`,
+  `install_kind`, `table_keep_count`, `uninstall_kind`). `type=core.install_kind` and `type=core.uninstall_kind` are
+  `pdfmd_install`'s functions, re-exported by `pdfmd.py`, and `type=core.ansi_width_argument` is the stand-in there that loads
+  `pdfmd_ansi.cli`: the same objects as before, so argparse's messages are unchanged. `from pdfmd_help import TieredHelp` and
+  `import pdfmd_labels` stay inside the functions. No help string was edited. No moved name is used by `pdfmd.py` when it loads,
+  the moved code has no `global` line, no `@timed` and no local variable named `core` (ruff F823/F821 clean), and no test patches
+  a moved name. The comment on `pdfmd.py`'s `pdfmd_install` re-export says that `install_kind` and `uninstall_kind` serve
+  `lib/pdfmd_args` now.
+- Checked: ruff is clean. By the AST: the 9 moved definitions are the ones at HEAD with `core.X` read back as `X`, the 1,158 other
+  top-level nodes of `pdfmd.py` are unchanged (the binding block's two new imports, the longer `bind_core(...)` and the `PDFMD_VERSION` line aside), every
+  `core.X` exists on `pdfmd`, and `pdfmd.build_parser` is the package's own. `import pdfmd` brings in none of the deferred
+  packages the start-up check lists, nor `pdfmd_ansi`, `pdfmd_help` or `pdfmd_labels`, and pypdf stays the lazy loader; the
+  package's import costs about 0.4 ms (`python3 -X importtime`, five runs: 0.33 to 0.49 ms). Hand runs through HEAD and through
+  the move, each in a fresh copy of `examples/` with `XDG_CONFIG_HOME`, `XDG_CACHE_HOME` and `XDG_DATA_HOME` in a scratch folder,
+  `PDFMD_NO_PROMPT=1`, an empty `PDFMD_CONFIG`, `COLUMNS=100` and standard input from `/dev/null`, 22 runs: `--version` (exit 0);
+  `--install moon`, `--uninstall moon`, `--seed-labels nosuch`, `--csv-note nosuch`, `--csv-rows 0`, `--csv-cols x`,
+  `--table-keep x`, `--calc-round 2`, `--calc-digits x`, `--stop-at nosuch`, `--build-log nosuch` and `--view results.md --width
+  x` (each exit 2, argparse's message; standard error byte for byte the same); an unknown flag (`--no-such-flag`, which pdfmd
+  hands to Pandoc: exit 1 after every engine, the same); `results.md` with `--calc-round even --calc-digits 4sf --csv-rows 3
+  --csv-cols 2 --csv-note full --table-keep 2 --seed-labels off --build-log on` to PDF (same text), `--stop-at tex` (the same
+  `.tex`, byte for byte) and `--stop-at markdown`, `--to html` with `--calc-round away --csv-note off --table-keep 0`, `--view
+  --width 60 --color never`, and `--setup` and `--setup .` with the config on in the scratch folder (the menu read end of input:
+  "Nothing saved", exit 0; with `PDFMD_CONFIG` empty it says the config file is switched off, exit 1). Every output is the same
+  but times and the build-record folder (a hash of each copy's path). A kit document (`pdfmd-options: kit: apa7:stu`) with a
+  `preamble.tex` beside it, `-t latex`, in two copies of its folder: the same `.tex` before and after (the kit's front matter,
+  `\authorsnames` to `\keywords`, is in both), and the Pandoc command lines are the same but the checkout's path; an output
+  without that front matter came from the older Homebrew copy of pdfmd (3.31.46), not from this tree. `scripts/split_check.py`,
+  standard input from `/dev/null` and `XDG_DATA_HOME` in a scratch folder, with 17 extras (`argsbuild`, `argstex`, `argsmd`,
+  `argshtml`, `viewargs`, `versionflag`, and eleven of the argparse errors above, all but `--csv-cols x`, as `badinstall` to
+  `badwidth`; each hand-run first, without `--verbose`): all 47 checks the same, every `--help` topic byte for byte. `scripts/pdfmd --version`, interleaved (`ab.py`, at a
+  load average of 10 to 18): before 117 / 149 ms and after 113 / 150 (best / median), then 113 / 129 and 116 / 131, then
+  122 / 148 and 135 / 153; `split_check` read 130 / 149 before and 168 / 192 after. Noise at that load.
+- Tests: `python3 -m unittest test_doc test_help test_ranking_generated test_setup` and the always-run set (with `test_split`):
+  182 tests OK (1 skipped). `test_ranking_generated` alone: 19 tests OK. The full suite was not run.
+
 ## v3.33.39b — 2026-11-10
 
 Pre-edit state: commit `030d7b8`. Entry 3fi. A script only, no version bump. **`scripts/split_spec.py` finds the last section of
