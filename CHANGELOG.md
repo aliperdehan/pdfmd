@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.11 — 2026-11-09
+
+Pre-edit state: commit `a09edca`. Entry 3fi. **The picture command (`--crop`, `--to png` and the other picture formats, `--to png,docx,tex`) lives in `pdfmd_crop.targets`.** Move 10 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `picture_target`, `picture_build`, `picture_sources`, `picture_page_folder`, `picture_targets`, `picture_one`, `multi_target_command` and `picture_command`, with the constants `PICTURE_OPTIONS` and `TARGET_ONLY_OPTIONS`, are in the new module `lib/pdfmd_crop/targets.py` of the existing package, text and docstrings unchanged (the function-local imports of `pdfmd_crop` and `pdfmd_crop.images` stay inside the functions). `pdfmd_crop/__init__.py` and `images.py` are untouched. `pdfmd.py` keeps a pointer comment where they were.
+- `pdfmd_crop` is not loaded at start, so the move is deferred: `pdfmd.py` gets stand-ins `picture_target`, `multi_target_command` and `picture_command` (the three that `main()` calls); the other five functions are used only by the module. No `DEFERRED_NAMES` entry: no test or `lib/` module reads a moved constant.
+- `PICTURE_FORMATS` stays in `pdfmd.py`, next to `PICTURE_ONLY`, although SPLIT.md lists it with the move: it is defined as `("pdf", *PICTURE_ONLY)`, and a module that is imported before `core` is bound cannot read `core.PICTURE_ONLY` at import time. The module reads `core.PICTURE_FORMATS` and `core.PICTURE_ONLY` when it runs, with `core.config_options` (patched by tests, so the call goes through `core`), `core.display_path`, `core.find_markdown`, `core.first_pdfmd_option`, `core.format_from_output` and `core.option_flag`.
+- The two builds that start pdfmd again (`picture_build`, `multi_target_command`) name the script by `Path(core.__file__)` (`pdfmd.py`), as `run_watch` does since 3.33.3; the module's own file would be the wrong script.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_crop` module; `scripts/split_check.py` with the extra builds `lecture.md -o x.png`, `results.pdf --crop -o rc.pdf`, `lecture.md --to png,docx -o outd` and `lecture.md --crop --to png,pdf -o out2`: all 34 checks the same. By hand, the same four commands run from the working tree exit 0 and write the files named (x.png, rc.pdf, outd/lecture.png and .docx, out2/lecture.png and .pdf). `scripts/pdfmd --version`: the machine was loaded (load average about 9), so the numbers are noisy: 155 / 204 ms before and 154 / 171 ms after (best / median of ten) in `split_check`, and 150 / 198 against 155 / 208 ms in fifteen interleaved runs; nothing of `pdfmd_crop` loads at start. Tests: `test_crop`, `test_split` and the always-run set: 171 tests pass (one skipped).
+
 ## v3.33.10 — 2026-11-09
 
 Pre-edit state: commit `38ec7df`. Entry 3fi. **The style sheets of a document (`--css`, `css-scope`) are applied in `pdfmd_css.latex`.** Move 9 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).

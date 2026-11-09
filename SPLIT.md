@@ -206,7 +206,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 16 pdfmd names read through `co
 
 Tests: `test_css`, `test_css_v2`.
 
-#### 10. `pdfmd_crop` (existing package): 8 definitions, ~192 lines
+#### 10. `pdfmd_crop` (existing package): 8 definitions, ~192 lines; done in 3.33.11 (`PICTURE_FORMATS` stayed in `pdfmd.py`: it is built from `PICTURE_ONLY`)
 
 Definitions: `picture_target`, `picture_build`, `picture_sources`, `picture_page_folder`, `picture_targets`, `picture_one`, `multi_target_command`, `picture_command`.
 
