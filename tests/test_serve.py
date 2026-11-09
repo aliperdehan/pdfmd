@@ -158,7 +158,9 @@ class Render(Folder):
         self.assertNotIn("<table", plain["html"])                                 # the core alone is pandoc: no pdfmd syntax
         _, with_filter = Core(self.root, filters=pdfmd.serve_live_filters).handle("POST", "/api/render", {"path": "parts/p.md", "text": text})
         self.assertIn("<th>a</th>", with_filter["html"])                          # the file is found at the project's folder, from a part in parts/
-        self.assertIn("<caption>Cap</caption>", with_filter["html"])
+        # `#tbl:t` is pandoc-crossref's: where it is installed, the live view numbers the caption as a build does
+        caption = "Table 1: Cap" if shutil.which("pandoc-crossref") else "Cap"
+        self.assertIn(f"<caption>{caption}</caption>", with_filter["html"])
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_view_shows_pdfmds_syntax_as_a_build_does(self):

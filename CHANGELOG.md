@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.52b — 2026-11-09
+
+No shipped code (one test); `PDFMD_VERSION` stays 3.32.52. Entry 3fi. `test_serve`'s live-view CSV test expected the caption `Cap`; it was written the day before pandoc-crossref was installed on the author's machine, and with pandoc-crossref the `#tbl:t` table is numbered (`Table 1: Cap`), in the live view as in a build, which is right. The test now expects the number when pandoc-crossref is on PATH and the bare caption when it is not; both checked (the second with a PATH holding Pandoc alone).
+
 ## v3.32.52 — 2026-11-09
 
 Pre-edit state: commit `5d58045`. Entry 3fi (a bug found by the wider source checks of v3.32.51b; the author authorised fixing such bugs on the way). **Every probe reads its answer as UTF-8.** `run_probe()` (Pandoc's version, kpsewhich, fc-list, soffice and the other probes) asked for `text=True` without an encoding, so on Windows the answer was decoded with the console's code page: a path with letters outside that page (a Cyrillic user name) came back wrong, or a byte the page cannot decode ended the read (issue 13, which v3.30.x fixed for the calls that name their keywords). The source test could not see it, because the keywords are set with `setdefault`.
