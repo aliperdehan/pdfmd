@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
 from pandoc_support import tex_tree_env  # noqa: E402
+from source_support import source_text  # noqa: E402
 
 # A stand-in for lualatex: it makes the job's PDF and the .dim file the job opens, and notes each run.
 FAKE_ENGINE = """#!/bin/sh
@@ -37,7 +38,7 @@ printf '\\\\gdef\\\\x{1}' > "$out/$dim"
 class Names(unittest.TestCase):
     def test_the_handshake_is_neutral_and_no_package_is_named(self):
         self.assertEqual(pdfmd.CACHE_HANDSHAKE, "pdfmdCacheDir")
-        source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
+        source = source_text()
         for word in ("LabPlot", "Lab@pc"):
             self.assertNotIn(word, source, word)                   # the first package's names are its helper's, not pdfmd's
 

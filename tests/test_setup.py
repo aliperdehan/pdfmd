@@ -11,8 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
+from source_support import source_text  # noqa: E402
 from pdfmd_setup import fancy, inventory, registry, settings_for  # noqa: E402
 
 try:
@@ -511,7 +513,7 @@ class Completeness(unittest.TestCase):
 
     def test_the_keys_pdfmd_reads_are_accounted_for(self):
         import re
-        source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
+        source = source_text()                         # pdfmd.py and lib/: a function that moved to a package still counts
         found: set[str] = set()
         # A call with nested parentheses (`list(metadata_files)`) escapes this scan; the recorder run of 3.27.0 (every key
         # read during the whole suite) found nothing missing, but a key added that way must be listed by hand.

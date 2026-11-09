@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
 from pandoc_support import tex_tree_env  # noqa: E402
+from source_support import source_text  # noqa: E402
 
 
 def write(path: Path, text: str) -> Path:
@@ -129,7 +130,7 @@ class Helper(unittest.TestCase):
         self.assertLessEqual({"kit", "kpsewhich"}, pdfmd.NO_AUTO_KINDS)
 
     def test_nothing_in_pdfmd_names_the_first_package(self):
-        source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
+        source = source_text()
         for word in ("DOCUMENT_LATEX_KEYS", '"nulabreport.lua"', '"nulabreport-office.lua"', "LEGACY_CACHE_NAMES"):
             self.assertNotIn(word, source)
 

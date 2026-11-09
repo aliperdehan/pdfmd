@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.51b — 2026-11-09
+
+No shipped code (tests and a development script); `PDFMD_VERSION` stays 3.32.51. Entry 3fi: the first step of the split of `pdfmd.py` into packages under `lib/`. **The tests that read pdfmd's code as text read `lib/` too**, so a function keeps being checked after it moves out of `pdfmd.py`.
+
+- New `tests/source_support.py`: `python_sources()` lists `pdfmd.py` and every `.py` file under `lib/` (the vendored inkmd only when asked); `source_text()` joins them for word and pattern scans.
+- `test_probes` (a probe has a timeout, a build command has none, a text-mode subprocess names its encoding) and `test_compat` (every source compiles without a warning) looked for `pdfmd_*/` folders in the repository root, empty since 3.32.28 moved them into `lib/`, and so checked `pdfmd.py` alone. `test_setup` (every pdfmd-options key read is in the inventory) and the negative word checks of `test_picture_cache_protocol` and `test_package_helper` read `pdfmd.py` alone. Over `lib/` today they find nothing new, except `lib/pdfmd_web/tools/make_fixtures.py` (a development script, not shipped), whose `subprocess.run` now names `encoding="utf-8"`.
+- `test_serve` (one list of filters, `document_filter_args`, for every build and the live view) reads `lib/` as well and accepts `core.x(...)` calls; `serve_live_filters` may be defined in a package. It found a second list that had been out of its sight: report mode (`lib/pdfmd_report`, moved out of `pdfmd.py` in 3.32.13, before 3.32.41 brought in the one list) still writes the filters out itself. The lists hold the same filters today; the test names that one exception, so no new one appears, and fails when it is gone, so the exception is then removed.
+- Not changed, failing before and after this commit: `test_probes.SubprocessDecoding` (`pdfmd.py`'s `kpsewhich tabularray.sty` probe uses `text=True` without `encoding=`) and `test_serve.Render.test_a_csv_block_is_a_table_when_the_core_is_given_pdfmds_filters` (with pandoc-crossref 0.3.26 and Pandoc 3.13 the caption reads `Table 1: Cap`).
+
 ## v3.32.51 — 2026-11-06
 
 Pre-edit state: commit `5e0050c`. Entry 3fe. **The `$...$` warning of 3.32.48 no longer costs a Pandoc pass in the usual case.** It parsed every Markdown source with one more Pandoc run before the build, to read the AST: measured 0.25 s for a one-line file and 0.9 s for a 50,000-word one, for a mistake almost no document has. The build's own Pandoc run cannot be shared (it writes the PDF or HTML, and pdfmd never sees its AST; a Lua filter in that run would have to be injected into every route: PDF, direct `.tex`, bibliography, soffice bridge, parts, report).

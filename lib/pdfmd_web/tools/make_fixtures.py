@@ -14,7 +14,7 @@ HOME = str(Path.home())
 
 
 def run(*cmd, stdin=None):
-    r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, cwd=DEMO)
+    r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", cwd=DEMO)
     if r.returncode:
         sys.exit(f"{cmd[0]} failed: {r.stderr.strip()[:300]}")
     return r.stdout.replace(HOME, "~")

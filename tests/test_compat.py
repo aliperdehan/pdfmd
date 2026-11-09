@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 from cache_support import cache_env  # noqa: E402
+from source_support import python_sources  # noqa: E402
 
 import pdfmd  # noqa: E402
 
@@ -25,7 +26,7 @@ class Sources(unittest.TestCase):
     def test_every_source_compiles_without_a_warning(self):
         # a docstring with `\newpage` in it (v3.27.13) made Python warn about `\p` on every run
         import warnings
-        for path in [ROOT / "pdfmd.py", *sorted(ROOT.glob("pdfmd_*/**/*.py"))]:
+        for path in python_sources(vendored=True):
             with self.subTest(path=path.relative_to(ROOT).as_posix()), warnings.catch_warnings():
                 warnings.simplefilter("error")
                 compile(path.read_text(encoding="utf-8"), str(path), "exec")

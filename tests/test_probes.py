@@ -17,6 +17,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from source_support import python_sources, shown  # noqa: E402
 
 os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
@@ -157,28 +159,26 @@ class Source(unittest.TestCase):
 
     def test_every_version_or_capability_probe_has_a_timeout(self):
         missing = []
-        for path in [ROOT / "pdfmd.py", *sorted(ROOT.glob("pdfmd_*/*.py"))]:
-            if "pdfmd_inkmd" in path.parts:
-                continue
+        for path in python_sources():
             for node in calls_of_subprocess_run(path):
                 if not node.args or not isinstance(node.args[0], (ast.List, ast.Tuple)):
                     continue
                 if words_of(node.args[0]) & PROBE_WORDS and not any(keyword.arg == "timeout" for keyword in node.keywords):
-                    missing.append(f"{path.name}:{node.lineno}")
+                    missing.append(f"{shown(path)}:{node.lineno}")
         self.assertEqual(missing, [], "a probe without timeout= (use pdfmd.run_probe)")
 
     def test_no_build_command_has_one(self):
         # the functions that run Pandoc or a LaTeX engine to make the document
         wanted = {"run_tex_engine", "run_engine_command", "run_pandoc", "convert_one", "run_latex_pass"}
-        tree = ast.parse((ROOT / "pdfmd.py").read_text(encoding="utf-8"))
         checked = 0
-        for function in ast.walk(tree):
-            if isinstance(function, ast.FunctionDef) and function.name in wanted:
-                checked += 1
-                for node in ast.walk(function):
-                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run" \
-                            and any(keyword.arg == "timeout" for keyword in node.keywords):
-                        self.fail(f"{function.name}:{node.lineno}: a build command must not have a timeout")
+        for path in python_sources():
+            for function in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(function, ast.FunctionDef) and function.name in wanted:
+                    checked += 1
+                    for node in ast.walk(function):
+                        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run" \
+                                and any(keyword.arg == "timeout" for keyword in node.keywords):
+                            self.fail(f"{shown(path)}: {function.name}:{node.lineno}: a build command must not have a timeout")
         self.assertGreaterEqual(checked, 2)
 
 
@@ -187,16 +187,13 @@ class SubprocessDecoding(unittest.TestCase):
         """issue 13: `text=True` decodes with the ANSI code page on Windows; fc-list, Pandoc and TeX write UTF-8, and a byte
         the page cannot decode ended the reader thread and made `.stdout` None. Every call names its encoding."""
         import ast
-        sources = [ROOT / "pdfmd.py", *sorted(ROOT.glob("pdfmd_*/*.py"))]
         bad = []
-        for path in sources:
-            if "pdfmd_inkmd" in path.parts:
-                continue
+        for path in python_sources():
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in ("run", "Popen", "check_output"):
                     names = {keyword.arg for keyword in node.keywords}
                     if ("text" in names or "universal_newlines" in names) and "encoding" not in names:
-                        bad.append(f"{path.name}:{node.lineno}")
+                        bad.append(f"{shown(path)}:{node.lineno}")
         self.assertEqual(bad, [])
 
 

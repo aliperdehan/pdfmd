@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "lib"))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from pdfmd_serve import API_VERSION, Core, Server  # noqa: E402
 
@@ -184,21 +185,42 @@ class Render(Folder):
         """Entry 3do: a syntax of pdfmd's own is added to document_filter_args() once and shows in every writer and in the live view. A
         build site that writes the filters out itself again would be the second list this guards against."""
         import ast
-        tree = ast.parse((ROOT / "pdfmd.py").read_text(encoding="utf-8"))
+        from source_support import python_sources
+
+        def called(call: ast.Call) -> str:
+            # `x(...)` in pdfmd.py, `core.x(...)` in a package that was handed the pdfmd module (entry 3fi: the split)
+            if isinstance(call.func, ast.Name):
+                return call.func.id
+            if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "core":
+                return call.func.attr
+            return ""
+
+        trees = [ast.parse(path.read_text(encoding="utf-8")) for path in python_sources()]
         helpers = {"metadata_append_args", "md_macro_args", "csv_table_filter_args", "pagebreak_filter_args", "indent_filter_args",
                    "markup_filter_args", "table_caption_args", "linebreak_args", "title_filter_args", "cover_filter_args",
                    "raw_filter_args", "crossref_filter_args"}
+        # Report mode (lib/pdfmd_report, moved out of pdfmd.py in 3.32.13, before document_filter_args existed in 3.32.41) still
+        # writes the list out itself; this test read only pdfmd.py and did not see it (found 2026-11-09, entry 3fi). The one
+        # known second list, named so that no new one appears; when report mode takes document_filter_args, the entry goes.
+        known = {"lib/pdfmd_report/__init__.py:run"}
         callers: dict[str, set] = {name: set() for name in helpers}
-        for function in ast.walk(tree):
-            if isinstance(function, ast.FunctionDef):
-                for call in ast.walk(function):
-                    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in callers:
-                        callers[call.func.id].add(function.name)
+        seen_known: set[str] = set()
+        for path, tree in zip(python_sources(), trees):
+            for function in ast.walk(tree):
+                if isinstance(function, ast.FunctionDef):
+                    where = f"{path.relative_to(ROOT).as_posix()}:{function.name}"
+                    for call in ast.walk(function):
+                        if isinstance(call, ast.Call) and called(call) in callers:
+                            if where in known:
+                                seen_known.add(where)
+                            else:
+                                callers[called(call)].add(function.name)
         self.assertEqual({name: sorted(where) for name, where in callers.items()},
                          {name: ["document_filter_args"] for name in helpers})
-        live = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "serve_live_filters")
-        self.assertIn("document_filter_args", {call.func.id for call in ast.walk(live)
-                                               if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)})
+        self.assertEqual(seen_known, known, "a known second list is gone: take it out of `known`")
+        live = [node for tree in trees for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "serve_live_filters"]
+        self.assertEqual(len(live), 1, "serve_live_filters is defined once, in pdfmd.py or a package")
+        self.assertIn("document_filter_args", {called(call) for call in ast.walk(live[0]) if isinstance(call, ast.Call)})
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_render_of_what_is_not_written_yet(self):
