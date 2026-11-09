@@ -26,6 +26,10 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
 
 ## The pattern for every move
 
+0. **The spec first.** `python3 scripts/split_spec.py pdfmd_x` reads the package's section below and the source as it is
+   now, and prints where each name is, the pdfmd names to read as `core.X`, the re-exports, the test patches that matter
+   and the names bound twice at the top level of `pdfmd.py`. A name bound twice stays where its binding in force is (the
+   later one), whatever the table says; the earlier, dead binding is removed in a commit of its own.
 1. **One package per commit, a pure move.** The tree is clean first. The first move is 3.33.0, each later one 3.33.x,
    with its own changelog entry and `PDFMD_VERSION` bump. A move changes no behaviour; a bug found on the way is fixed in
    a commit of its own (the author's leave, 2026-11-09).
@@ -33,7 +37,11 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    what is there (`lib/pdfmd_x/<role>.py`), unless the moved code is small. The text is moved as it is; only names change.
 3. **How it reaches pdfmd.** The package has a module global `core = None`; `pdfmd.py` sets it right after the import,
    and the first binding wins, so a second copy of pdfmd (a script run imports nothing as `pdfmd`, but a stray
-   `import pdfmd` would make one) never re-points it. Every pdfmd name the moved code uses (a helper, a constant, state)
+   `import pdfmd` would make one) never re-points it. The binding is one line in the block after
+   `pypdf = lazy_import("pypdf")`: `import pdfmd_x`, the re-exports, `bind_core(pdfmd_x)`. `pdfmd.py` needs its packages
+   (the author, 2026-11-09): the block starts with a check that stops a copy without `lib/` with one line, so a new package
+   needs no fallback for a missing import. The new `__init__.py` starts
+   with `from __future__ import annotations` (Python 3.9 reads the moved signatures' `str | None` only with it). Every pdfmd name the moved code uses (a helper, a constant, state)
    is read as `core.NAME` when it runs: never `import pdfmd`, never a copy taken at import time. Calls between moved
    functions are direct, except calls to a name that a test patches (`mock.patch.object(pdfmd, ...)`): those go through
    `core.`, so the patch still reaches them. Each package's section lists them.
@@ -51,7 +59,7 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    - `--help` and every `--help TOPIC` byte-identical before and after.
    - `--verbose` output identical before and after (temporary names, times and the build-record folder aside) on a fixed
      set: one document to PDF, `--to html`, `--to docx`, `-r` on `examples/book`, `-b -j 2`, and the documents that use
-     the package's feature.
+     the package's feature. The baseline is taken before the first edit, with the tree clean.
    - The full suite once, after the last move (the author, 2026-11-09), not per move.
 8. **Docs** that say where code lives (CLAUDE.md, README, docstrings) change in the same commit.
 9. **Progress.** When a package is done, its heading here gets "done in 3.33.x (commit)". When all are done, phase 2 is
@@ -71,7 +79,7 @@ its feature, run in addition to the always-run set.
 
 ### Wave 1: the pattern (Opus)
 
-#### 1. `pdfmd_comments` (new package): 8 definitions, ~244 lines
+#### 1. `pdfmd_comments` (new package): 8 definitions, ~244 lines; done in 3.33.0
 
 Definitions: `scan_comment_line`, `strip_markdown_comments`, `CommentPolicy`, `comment_kind_set`, `parse_comment_policy`, `tex_comment_start`, `strip_tex_comments`, `strip_xml_comments`.
 
@@ -80,8 +88,12 @@ Constants that move with it (only this package reads them): `COMMENT_KIND_NAMES`
 Facts: 8 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
 
 Note: Leaf: nothing it calls is in another group. Sets the pattern for a NEW package (binding, re-exports, packaging in three places).
+`FENCE_RE` was bound twice (v3.20.0 and, in this block, v3.22.0); the second binding, with named groups, is the one in
+force for every user, so it stays in `pdfmd.py` and the package reads `core.FENCE_RE`. The two explanatory comment
+blocks moved with the code.
 
-Tests: `test_attach`, `test_pagebreak`, `test_show_comments`, `test_tables`.
+Tests: `test_attach`, `test_pagebreak`, `test_show_comments`, `test_tables`, and for the binding itself
+`test_ranking_generated` (a second copy of `pdfmd.py` in one process) and `test_lua_missing` (a script run in-process).
 
 #### 2. `pdfmd_templates` (existing package): 3 definitions, ~63 lines
 
@@ -242,6 +254,10 @@ Constants that move with it (only this package reads them): `FOLDER_SETTINGS`, `
 Facts: 4 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `core`.
 
 Tests: `test_ranking_bare`, `test_ranking_generated`, `test_ranking_layers`, `test_ranking_lists`, `test_ranking_rules`, `test_ranking_which`.
+
+Hazard: `test_ranking_generated` loads `pdfmd.py` a second time as `pdfmd_under_test`. The package's `core` is the copy
+loaded first, so a patch on the second copy does not reach the moved code; the test imports `pdfmd` instead, or patches
+through `pdfmd_ranking.core`.
 
 #### 18. `pdfmd_lookup` (new package): 13 definitions, ~228 lines
 

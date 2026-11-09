@@ -267,8 +267,8 @@ Office files.
 <details>
 <summary>Without pipx</summary>
 
-`pdfmd.py` needs Python 3.9+ and runs straight from a clone, with the folders beside it
-(`lib/pdfmd_inkmd/` for the no-Pandoc fallback, `lib/pdfmd_office/`, `lib/pdfmd_setup/`, `lib/pdfmd_unicode/`). It also runs
+`pdfmd.py` needs Python 3.9+ and runs straight from a clone, with the `lib/` folder beside it (the `pdfmd_*` packages
+it is split into; a copy of `pdfmd.py` without them stops and says so). It also runs
 directly, and `pyyaml`/`pypdf` are optional (features that need them are
 skipped with a warning):
 

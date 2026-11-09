@@ -1,4 +1,5 @@
-"""Without the pdfmd_lua package (a lone copy of pdfmd.py) the Lua filters of pdfmd do nothing; one WARN per run says so."""
+"""Without the pdfmd_lua package the Lua filters of pdfmd do nothing; one WARN per run says so. A copy of pdfmd.py with no
+packages at all stops and says why (3.33.0: pdfmd.py needs its lib/ folder)."""
 
 from __future__ import annotations
 
@@ -77,23 +78,42 @@ class InProcess(unittest.TestCase):
         self.assertEqual(seen.getvalue(), "")                                  # a document that needs none is not bothered
 
 
+def copy_without(directory: Path, hidden: tuple[str, ...]) -> str:
+    """pdfmd.py in ``directory`` with the lib/ packages it builds with, minus ``hidden``; the program that runs it as a script
+    with ``hidden`` blocked (an installed pdfmd -- `pip install .` in CI -- has them on the path too: None in sys.modules)."""
+    shutil.copy(ROOT / "pdfmd.py", directory / "pdfmd.py")
+    skip = {*hidden, "pdfmd_web", "__pycache__", "node_modules"}
+    shutil.copytree(ROOT / "lib", directory / "lib", ignore=lambda folder, names: [name for name in names if name in skip])
+    return "import runpy, sys; " + "".join("sys.modules[%r] = None; " % name for name in hidden)
+
+
 @unittest.skipUnless(PANDOC and ENGINES, "needs Pandoc and a PDF engine")
 class LoneCopy(unittest.TestCase):
-    def test_a_lone_pdfmd_py_builds_and_warns_once(self):
-        directory = Path(tempfile.mkdtemp(prefix="pdfmd-lone-"))
-        self.addCleanup(shutil.rmtree, directory, True)
-        shutil.copy(ROOT / "pdfmd.py", directory / "pdfmd.py")
-        (directory / "d.md").write_text("---\ntitle: T\n---\n\nHello.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
-        # (an installed pdfmd -- `pip install .` in CI -- has pdfmd_lua on the path too, so it is hidden: None in sys.modules)
-        program = ("import runpy, sys; sys.modules['pdfmd_lua'] = None; sys.argv = ['pdfmd.py', 'd.md', '-e', %r, '--no-backup', "
-                   "'--no-stamp']; runpy.run_path('pdfmd.py', run_name='__main__')" % ENGINES[0])
-        done = subprocess.run([sys.executable, "-c", program], cwd=directory, capture_output=True, text=True, encoding="utf-8",
-                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
-        self.assertTrue((directory / "d.pdf").is_file(), done.stdout + done.stderr)
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-lone-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "d.md").write_text("---\ntitle: T\n---\n\nHello.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
+
+    def run_copy(self, program: str) -> subprocess.CompletedProcess:
+        program += ("sys.argv = ['pdfmd.py', 'd.md', '-e', %r, '--no-backup', '--no-stamp']; "
+                    "runpy.run_path('pdfmd.py', run_name='__main__')" % ENGINES[0])
+        return subprocess.run([sys.executable, "-c", program], cwd=self.directory, capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+
+    def test_without_pdfmd_lua_it_builds_and_warns_once(self):
+        done = self.run_copy(copy_without(self.directory, ("pdfmd_lua",)))
+        self.assertTrue((self.directory / "d.pdf").is_file(), done.stdout + done.stderr)
         said = done.stdout + done.stderr
         self.assertEqual(said.count("the pdfmd_lua package is not installed"), 1, said)
         self.assertRegex(said, r"WARN  lua: ")
 
+    def test_without_its_packages_it_stops_and_says_why(self):
+        shutil.copy(ROOT / "pdfmd.py", self.directory / "pdfmd.py")
+        done = self.run_copy("import runpy, sys; sys.modules['pdfmd_comments'] = None; ")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("has no lib/ folder beside it", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertFalse((self.directory / "d.pdf").exists())
 
 if __name__ == "__main__":
     unittest.main()
