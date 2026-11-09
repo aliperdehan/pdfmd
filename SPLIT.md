@@ -320,7 +320,7 @@ Facts: 12 callers stay in pdfmd.py (re-exported); 18 pdfmd names read through `c
 
 Tests: `test_kit_carry`, `test_kit_install`, `test_kit_no_auto`, `test_kit_preamble`, `test_kit_selection`, `test_kit_texinputs`, `test_kits`, `test_package_helper`, `test_probes`.
 
-#### 21. `pdfmd_buildinfo` (existing package): 12 definitions, ~224 lines
+#### 21. `pdfmd_buildinfo` (existing package): 12 definitions, ~224 lines; done in 3.33.23 (in `build.py`; `timed` and `timing_module` stayed: 15 definitions apply `timed` as a decorator when the file is loaded, so a stand-in would load the package at every start, and `pdfmd.py` calls `timing_module` itself, while `lib/pdfmd_polish` keeps its own `_timed`; `BuildRecorder` is started through `load_package("pdfmd_buildinfo.build").BuildRecorder.start(...)`, as a stand-in is a function and has no class attribute; stand-ins for `begin_timer`, `attach_time`, `time_breakdown` and `last_build_command`)
 
 Definitions: `begin_timer`, `timed`, `resolve_build_time`, `attach_time`, `time_breakdown`, `record_module`, `_RecordTee`, `build_log_mode_word`, `resolve_build_log`, `build_record_folders`, `BuildRecorder`, `last_build_command`.
 
