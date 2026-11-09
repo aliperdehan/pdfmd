@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.10 — 2026-11-09
+
+Pre-edit state: commit `38ec7df`. Entry 3fi. **The style sheets of a document (`--css`, `css-scope`) are applied in `pdfmd_css.latex`.** Move 9 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `css_scope`, `css_names`, `css_sources`, `css_additions`, `css_heading_latex` and `css_heading_args`, with the constants `CSS_COLOURS`, `CSS_HEADING_COMMANDS`, `CSS_HEADING_DEFAULTS` and `CSS_HEADING_OWN_RE`, are in the new module `lib/pdfmd_css/latex.py` of the existing package, text and docstrings unchanged (`import pdfmd_css` stays inside the functions). `pdfmd_css/__init__.py` is untouched. `pdfmd.py` keeps a pointer comment where they were.
+- `pdfmd_css` is not loaded at start, so the move is deferred: `pdfmd.py` gets stand-ins `css_scope` (called by `main()`), `css_additions` and `css_heading_args` (called by `pdfmd.py` and by `lib/pdfmd_report` through its core) and `css_heading_latex` (read by `test_css_v2`). `css_names` and `css_sources` are used only by the module; no constant needs a `DEFERRED_NAMES` entry.
+- `CSS_CLI`, `CSS_SCOPES` and `CSS_SCOPE_CLI` (rebound by `main()`) stay in `pdfmd.py`; the module reads them and `core.accessory_directories`, `core.auto_disabled`, `core.cache_root` (patched by tests, so the call goes through `core`), `core.display_path`, `core.document_font_setting`, `core.document_preambles`, `core.effective_metadata`, `core.first_pdfmd_option`, `core.front_matter_dict`, `core.has_geometry`, `core.metadata_file_yaml`, `core.pandoc_header_includes` and `core.read_text_best_effort` when it runs.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_css` module; `scripts/split_check.py` with the extra builds `lecture.md --css site.css --css-scope all -o css.pdf` (a style sheet with `@page`, body, link and `h1`-`h3`/`h6` rules, so the LaTeX headings are applied), `--css site.css -o css.html` and `--css site.css --css-scope all -o css.docx`: all 33 checks the same. By hand, the PDF build prints the `CSS` notes (the variables the sheet sets, the headings via titlesec) from both HEAD and the move with the same log; the HTML and docx builds exit 0. `scripts/pdfmd --version` is no slower: best / median 127 / 138 ms before and 124 / 131 ms after in `split_check`, 124 / 133 against 127 / 150 ms in fifteen interleaved runs (the median varies more than the difference). Tests: `test_css`, `test_css_v2`, `test_report_build`, `test_split` and the always-run set: 187 tests pass (one skipped).
+
 ## v3.33.9 — 2026-11-09
 
 Pre-edit state: commit `c9d1e22`. Entry 3fi. **`pdfmd --doc` lives in `pdfmd_docs.reader`.** Move 8 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).

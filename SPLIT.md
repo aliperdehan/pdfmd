@@ -196,7 +196,7 @@ Note: `document_file` reads `core.__file__` for the checkout's copy and leaves `
 
 Tests: `test_compat`, `test_doc`, `test_docs_consistency`, `test_doctor`, `test_docx_tables`, `test_packaging`, `test_sections`.
 
-#### 9. `pdfmd_css` (existing package): 6 definitions, ~191 lines
+#### 9. `pdfmd_css` (existing package): 6 definitions, ~191 lines; done in 3.33.10
 
 Definitions: `css_scope`, `css_names`, `css_sources`, `css_additions`, `css_heading_latex`, `css_heading_args`.
 
