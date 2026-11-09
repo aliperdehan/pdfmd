@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.39b — 2026-11-10
+
+Pre-edit state: commit `030d7b8`. Entry 3fi. A script only, no version bump. **`scripts/split_spec.py` finds the last section of
+SPLIT.md:** its pattern ended a section at the next heading, so section 37 (`pdfmd_args`), which has none after it, gave "no
+section in SPLIT.md". A section now also ends at the end of the file. Checked: `python3 scripts/split_spec.py pdfmd_args` prints
+the spec, and `pdfmd_native` prints the same as before.
+
 ## v3.33.39 — 2026-11-10
 
 Pre-edit state: commit `95b51aa`. Entry 3fi. **The native tier (Markdown to PDF with no Pandoc: the text normalised for the

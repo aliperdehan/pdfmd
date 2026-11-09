@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def section(package: str) -> tuple[list[str], list[str], list[str]]:
     """The definitions, constants and test modules that SPLIT.md lists for ``package``."""
     text = (ROOT / "SPLIT.md").read_text(encoding="utf-8")
-    match = re.search(r"^#### \d+\. `%s`.*?(?=^#{2,4} )" % re.escape(package), text, re.MULTILINE | re.DOTALL)
+    match = re.search(r"^#### \d+\. `%s`.*?(?=^#{2,4} |\Z)" % re.escape(package), text, re.MULTILINE | re.DOTALL)
     if not match:
         raise SystemExit(f"{package}: no section in SPLIT.md")
     body = match.group(0)
