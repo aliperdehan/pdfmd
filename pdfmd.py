@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.43"
+PDFMD_VERSION = "3.33.44"
 import argparse
 import atexit
 import contextlib
@@ -1765,8 +1765,8 @@ from pdfmd_install import (GRAPHVIZ_COMMANDS, GRAPHVIZ_SHA256, GRAPHVIZ_VERSION,
 import pdfmd_tex  # noqa: E402
 from pdfmd_tex import (MAX_TEX_DIRECT_PASSES, PLOT_CTX_PLAIN, PLOT_CTX_TWICE, compile_tex_direct,  # noqa: E402, F401 -- MAX_TEX_DIRECT_PASSES is named in the docstring only; PLOT_CTX_PLAIN, PLOT_CTX_TWICE, latex_engine_command, plot_recorded_inputs and run_tex_engine are read by tests or lib/
                        document_latex_definitions, engine_failure_reason, is_latex_preamble, latex_engine_command,
-                       package_latex_keys, plot_preamble, plot_recorded_inputs, render_plot_requests, run_tex_engine,
-                       tex_failure_cause, tex_tree_stamp, wrap_latex_header_includes)
+                       package_latex_keys, pandoc_refused_command, plot_preamble, plot_recorded_inputs, render_plot_requests,
+                       run_tex_engine, tex_failure_cause, tex_tree_stamp, wrap_latex_header_includes)
 import pdfmd_attach  # noqa: E402
 from pdfmd_attach import (ATTACH_FORMAT_PLAIN, add_deflated_attachment, attach_source_after_success,  # noqa: E402, F401 -- all but attach_source_after_success, bundle_files, keep_source_after_success, read_pdf_attachments and referenced_images are read by tests or lib/
                           attached_bundle_mode, block_places, bundle_files, drop_blocks, drop_duplicate_blocks, find_in_tex_tree,
@@ -15157,6 +15157,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 break
             failed_families.add(family)
             failed_engines.append(engine)
+            if pandoc_refused_command(result):      # an option Pandoc does not take: every engine would fail on it (v3.33.44)
+                break
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
             report_engine_failure(str(md_path), engine, result, remaining, debug)
         if result is None:

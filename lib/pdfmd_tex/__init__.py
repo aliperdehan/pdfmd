@@ -1,7 +1,8 @@
 """LaTeX itself: the preamble files pdfmd accepts (`is_latex_preamble`, `top_level_tikzpicture`), a front matter's literal
 `header-includes:` kept as raw LaTeX (`wrap_latex_header_includes`), the front-matter keys a LaTeX package asks for as macros
 (`package_latex_keys`, `document_latex_definitions`), why an engine failed (`engine_failure_reason`, `tex_failure_cause` with
-`TEX_CAUSES` and `TEX_PACKAGES`, `tex_log_failure_reason`, `tex_log_dewrap`), the direct compile of a `.tex` without Pandoc with its
+`TEX_CAUSES` and `TEX_PACKAGES`, `tex_log_failure_reason`, `tex_log_dewrap`; `pandoc_refused_command` for a command line Pandoc
+refuses, which no other engine changes, v3.33.44), the direct compile of a `.tex` without Pandoc with its
 reruns and bibtex/biber pass (`compile_tex_direct`, `run_tex_engine`, `latex_engine_command`, `tex_bibliography_tool`,
 `tex_wants_rerun`), and the standalone jobs of the picture cache (`render_plot_requests`, `plot_recorded_inputs`, `plot_preamble`,
 `tex_tree_stamp`).
@@ -180,6 +181,20 @@ def engine_failure_reason(stderr: str) -> str | None:
         if line.startswith(("Error", "pandoc:", "pandoc.exe:")):
             return line
     return lines[-1] if lines else None
+
+
+# Pandoc's exit code for a command line it refuses (PandocOptionError): an unknown option, one without its argument, a value it
+# does not take. A fact of Pandoc's, not a setting.
+PANDOC_OPTION_ERROR = 6
+
+
+def pandoc_refused_command(result: subprocess.CompletedProcess) -> bool:
+    """True when Pandoc stopped on its own command line, before any engine ran (`pdfmd doc.md --no-such-flag`): the next
+    engine gets the same options and would fail the same way. A refused `--pdf-engine` value is the exception (an older
+    Pandoc that does not know this engine): the next engine may be one it knows. An unknown option is never that, even
+    one whose name starts with it (`--pdf-engines`)."""
+    stderr = result.stderr or ""
+    return result.returncode == PANDOC_OPTION_ERROR and ("Unknown option" in stderr or "--pdf-engine" not in stderr)
 
 
 # What a failed TeX run's text says about WHY, for the causes whose log signature is known (signatures from

@@ -115,5 +115,39 @@ class Probed(unittest.TestCase):
         self.assertIn("not writable", found[0])
 
 
+class Refused(unittest.TestCase):
+    """v3.33.44: a command line Pandoc refuses (exit 6) stops the engine chain at once; a refused --pdf-engine does not."""
+
+    def test_which_failures_count(self):
+        self.assertTrue(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 6, "", "Unknown option --no-such-flag.\nTry pandoc --help for more information.\n")))
+        self.assertTrue(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 6, "", "--wrap must be auto, none, or preserve\n")))
+        self.assertFalse(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 6, "", "Argument of --pdf-engine must be one of\n\tlualatex\n")))   # an older Pandoc without this engine
+        self.assertTrue(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 6, "", "Unknown option --pdf-engines.\nTry pandoc --help for more information.\n")))
+        self.assertFalse(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 43, "", "Error producing PDF.\n")))
+        self.assertFalse(pdfmd.pandoc_refused_command(subprocess.CompletedProcess(
+            ["pandoc"], 4, "", "pdf-engine typst is not compatible with output format beamer\n")))
+
+    @unittest.skipUnless(shutil.which("pandoc") and (shutil.which("lualatex") or shutil.which("typst")),
+                         "needs Pandoc and a PDF engine")
+    def test_an_unknown_option_is_said_once_and_no_other_engine_is_tried(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "doc.md").write_text("---\ntitle: T\n---\n\nHello.\n", encoding="utf-8")
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1", "PDFMD_BUILD_LOG": "off",
+                   **{name: str(folder / name.lower()) for name in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+            done = subprocess.run([sys.executable, str(Path(pdfmd.__file__)), "doc.md", "--no-such-flag"], cwd=folder,
+                                  env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+        shown = done.stdout + done.stderr
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(shown.count("Unknown option --no-such-flag."), 1, shown)
+        self.assertNotIn("trying", shown)
+        self.assertNotIn(" failed", shown)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.44 — 2026-11-10
+
+Pre-edit state: commit `29a31a0`. **An option Pandoc does not take stops the build once, with Pandoc's message.** `pdfmd doc.md
+--no-such-flag` passes the option on to Pandoc (as it does every option pdfmd does not know), and Pandoc refused it; the engine
+chain took that for an engine failure and tried every other engine (xelatex, pdflatex, typst, weasyprint, groff, edge, calibre,
+soffice), each with a `WARN ... failed (Try pandoc --help ...); trying ...` line, before the same `FAIL`.
+
+- Pandoc exits with 6 (its `PandocOptionError`) for a command line it refuses: an unknown option, one without its argument, a value
+  it does not take (`--wrap=bogus`). `pandoc_refused_command` (`lib/pdfmd_tex`, beside `engine_failure_reason`) says so, and the
+  engine loop stops there without a WARN; the `FAIL` line shows Pandoc's own message, as `--to html` always did. A refused
+  `--pdf-engine` value (an older Pandoc that does not know the engine; also exit 6) still falls through to the next engine; an
+  unknown option whose name starts with it (`--pdf-engines`) does not. An engine that does not suit the output format is exit 4
+  in Pandoc 3.13, not 6. The other options pdfmd adds for one engine only are either `--pdf-engine-opt` values (Pandoc does not
+  check them) or chosen by the Pandoc version (`--embed-resources`, the math option), so one engine's refusal is every engine's.
+  Valid Pandoc options pass through as before (`--toc` builds; `--pdf-engine-opt=--nosuch` reaches lualatex, which only warns).
+  `PANDOC_OPTION_ERROR = 6` is a constant: Pandoc's exit code, not a threshold.
+- Checked through pdfmd: `doc.md --no-such-flag` printed ten WARN/SKIP lines at HEAD, now only `FAIL` with `Unknown option
+  --no-such-flag.`, exit 1; `--wrap=bogus` and `--pdf-engines` the same with Pandoc's line.
+- Tests: a new `test_tex_cause` class (which exit codes count; an end-to-end run, which fails at HEAD); `test_tex_cause
+  test_direct test_split test_packaging test_docs_consistency`: 57 OK.
+
 ## v3.33.43 — 2026-11-10
 
 Pre-edit state: commit `90cc89b`. **A nested build of another document gives the outer document's embedded resources back.**
