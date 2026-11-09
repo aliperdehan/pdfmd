@@ -1,13 +1,13 @@
 """The bridges to LibreOffice, Calibre and a browser: a document turned into a PDF (or another format) by a program that is not a
 PDF engine of Pandoc's. LibreOffice (`run_soffice_convert`, `convert_office_direct` for an office file, `convert_via_soffice_bridge`
-for the "soffice" engine, `start_soffice_job` for an odt, rtf or doc target), Calibre (`calibre_html_command`, `calibre_page_options`,
-`run_calibre` for the "calibre" engine, `run_calibre_convert` for its targets) and a headless browser (`browser_page_css`,
-`run_browser_print`).
+for the "soffice" engine, `start_soffice_job` for an odt, rtf or doc target), Calibre (`calibre_html_command`, `calibre_page_options`
+with `calibre_author_options`, `run_calibre` for the "calibre" engine, `run_calibre_convert` for its targets) and a headless browser
+(`browser_page_css`, `run_browser_print`).
 
 Moved out of `pdfmd.py` unchanged (v3.33.26, SPLIT.md), with `CALIBRE_TABLE_CSS` and `PANDOC_TABLE_STYLE_RE`. `core` is the `pdfmd`
 module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`BROWSER_ENGINES`, `CALIBRE_CSS`,
 `CALIBRE_OPTIONS`, `CITEPROC_DISABLED`, `DEFAULT_MARGIN`, `HTML_MATH_OPTIONS`, `PARTIAL_METADATA`, `SOFFICE_SHARED_FORMATS`,
-`contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `metadata_cwd`,
+`author_names`, `contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `metadata_cwd`,
 `office_finish`, `office_module`, `office_reference`, `pandoc_metadata_order`, `pandoc_version`, `pandoc_working_directory`,
 `prepared_latex_inputs`, `report_engine_failure`, `resolve_calibre`, `resolve_soffice`, `resource_path_option`, `run_office_pandoc`,
 `run_soffice`, `select_filter_args`, `table_keep_metadata`, `vprint` and `which`) are read as `core.X` when it runs.
@@ -195,14 +195,28 @@ def calibre_html_command(cmd: list[str], engine: str) -> Iterator[tuple[list[str
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def calibre_author_options(metadata: dict) -> list[str]:
+    """`--authors "A & B"` when the page Pandoc writes would not name every author: its `<meta name="author">` tags
+    (`author-meta`) hold the authors written as text and drop one written as a mapping (`- name: B`), so Calibre kept only
+    the others, or wrote `Unknown`. Authors that are all text are left to Pandoc (it writes their markup as plain text), and a
+    document's own `author-meta` is left alone."""
+    value = metadata.get("author")
+    if "author-meta" in metadata or not any(isinstance(item, dict) for item in (value if isinstance(value, list) else [value])):
+        return []
+    names = core.author_names(value)
+    return ["--authors", " & ".join(names)] if names else []
+
+
 def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: list[str]) -> list[str]:
-    """ebook-convert's page: the paper and margins the document asks for (papersize, geometry, margin,
-    classoption, read as for a Word file), else Letter and DEFAULT_MARGIN like the LaTeX engines; and its
-    language. In points."""
+    """ebook-convert's options from the document's metadata: the page, i.e. the paper and margins the document asks for
+    (papersize, geometry, margin, classoption, read as for a Word file), else Letter and DEFAULT_MARGIN like the LaTeX
+    engines, in points; its language; and its authors where Pandoc's page leaves some out (calibre_author_options)."""
+    metadata = core.effective_metadata(md_path, metadata_files, variables)
+    authors = calibre_author_options(metadata)
     module = core.office_module()
     if module is None:
-        return []
-    spec = module.spec_from_metadata(core.effective_metadata(md_path, metadata_files, variables), None, "exact")
+        return authors
+    spec = module.spec_from_metadata(metadata, None, "exact")
     width, height = spec.page_size()
     default = module.length_to_twips(core.DEFAULT_MARGIN) or 1440
     points = lambda twips: f"{twips / 20:g}"
@@ -211,7 +225,7 @@ def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: l
         options += [f"--pdf-page-margin-{side}", points(spec.margins.get(side, default))]
     if spec.lang:
         options += ["--language", spec.lang]
-    return options
+    return options + authors
 
 
 @_timed("calibre")

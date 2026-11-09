@@ -117,6 +117,22 @@ class Commands(unittest.TestCase):
                                    "--pdf-page-margin-right", "72", "--pdf-page-margin-top", "72",
                                    "--pdf-page-margin-bottom", "72"])
 
+    def test_every_author_when_one_is_a_mapping(self):
+        # v3.33.53: Pandoc's <meta name="author"> drops an author written as `- name: B`, so Calibre kept only the others
+        cases = {"author:\n  - name: Alice Able\n  - name: Bob Baker\n": ["--authors", "Alice Able & Bob Baker"],
+                 "author:\n  - Alice Able\n  - name: Bob Baker\n    affiliation: X\n": ["--authors", "Alice Able & Bob Baker"],
+                 "author:\n  name: Alice Able\n": ["--authors", "Alice Able"],
+                 "author:\n  - Alice Able\n  - Bob Baker\n": [],             # Pandoc names them itself
+                 "author:\n  - name: Alice Able\nauthor-meta: Mine\n": [],      # the document's own
+                 "": []}
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "doc.md"
+            for front, expected in cases.items():
+                document.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+                options = pdfmd.calibre_page_options(document, [], [])
+                self.assertEqual(options[options.index("--authors"):] if "--authors" in options else [], expected, front)
+                self.assertEqual(options[:4], ["--custom-size", "612x792", "--unit", "point"], front)
+
 
 NARROW_TABLE = "| a |\n|---|\n| 1 |\n\n: A rather long caption for a narrow table, set whole\n"
 
@@ -161,6 +177,22 @@ class Builds(unittest.TestCase):
             text = "".join(page.extract_text() for page in reader.pages)
             self.assertIn("More words.", text)
             self.assertEqual(len(reader.pages), 1)      # no page break before each section, 12pt text
+
+    def test_every_author_reaches_the_pdf(self):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "doc.md").write_text("---\ntitle: Trial\nauthor:\n  - Alice Able\n  - name: Bob Baker\n---\n\nWords.\n",
+                                         encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
+                                  cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                  env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
+                                       "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(pypdf.PdfReader(str(root / "doc.pdf")).metadata.get("/Author"), "Alice Able & Bob Baker")
 
     def test_a_caption_is_not_cut_off_at_its_tables_width(self):
         # v3.28.3: it read "Table 1: A rather / long / caption / for a / narrow" and the rest of each line was gone

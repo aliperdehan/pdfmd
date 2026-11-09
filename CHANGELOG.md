@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.53 — 2026-11-10
+
+Pre-edit state: commit `b13d1fb`. **`-e calibre` names every author in the PDF.** A document with `author: [ - name: A,
+- name: B ]` got `/Author: Unknown` from the Pandoc-to-Calibre route, and one with a string and a mapping (`- A`, `- name: B`)
+got only `A`. Calibre reads the authors from the `<meta name="author">` tags of the page Pandoc writes, and Pandoc fills those
+(`author-meta`) from the authors written as text only: an author given as a mapping is dropped.
+
+- `calibre_page_options` (`lib/pdfmd_bridge`), the options both Calibre routes (and `-r`) hand to `ebook-convert`, now adds
+  `--authors "A & B"` (the join the native Calibre route already uses) through a new `calibre_author_options`, when any
+  author is a mapping. Authors that are all text are left to Pandoc, which writes their markup as plain text, and a
+  document's own `author-meta` is left alone. The names come from `author_names` (`lib/pdfmd_native`), as on the native route.
+- Checked through pdfmd (`-e calibre`, PDF `/Author`): two mappings `Unknown` at HEAD, now `Alice Able & Bob Baker`; a string
+  and a mapping `Alice Able`, now both; two strings unchanged (no `--authors` passed); no author still `Unknown` (see below);
+  `author-meta: Custom` kept; authors from a discovered `metadata.yaml` (`- Carol`, `- name: Dan`) give `Carol & Dan`.
+- Not changed: a document with no author still gets Calibre's `/Author: Unknown`. `ebook-convert --authors ""` (and `" "`)
+  writes `Unknown` too, so there is no empty author to pass.
+- Tests: two new `test_calibre` cases (the options for six author forms; a build's `/Author`; both fail at HEAD);
+  `test_paper test_doctor test_calibre test_calibre_targets test_native test_engine_chain test_office_latex
+  test_calibre_markdown test_install_calibre test_split test_packaging test_docs_consistency`: 272 OK (3 skipped).
+
 ## v3.33.52 — 2026-11-10
 
 Pre-edit state: commit `8d5c21a`. **The time breakdown of `--verbose` names each step once.** A build with `backup` on listed
