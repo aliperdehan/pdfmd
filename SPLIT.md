@@ -332,7 +332,7 @@ Note: 18 callers outside: re-exports carry them. The lazy loaders `timing_module
 
 Tests: `test_build_log`, `test_build_time`.
 
-#### 22. `pdfmd_tables` (existing package): 5 definitions, ~245 lines
+#### 22. `pdfmd_tables` (existing package): 5 definitions, ~245 lines; done in 3.33.24 (in `command.py`; stand-ins for `csv_defaults`, `csv_table_filter_args`, `table_keep_metadata` and `tables_command`; `spreadsheet_args` is called only from `csv_table_filter_args`)
 
 Definitions: `csv_defaults`, `table_keep_metadata`, `spreadsheet_args`, `csv_table_filter_args`, `tables_command`.
 
