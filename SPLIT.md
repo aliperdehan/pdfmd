@@ -226,7 +226,7 @@ Facts: 4 callers stay in pdfmd.py (re-exported); 5 pdfmd names read through `cor
 
 Tests: `test_embeds`, `test_newline`, `test_obsidian`, `test_wikilinks`.
 
-#### 12. `pdfmd_polish` (new package): 11 definitions, ~270 lines
+#### 12. `pdfmd_polish` (new package): 11 definitions, ~270 lines; done in 3.33.13 (`polish_pdf`'s `@timed` is a `_timed` that looks `core.timed` up at call time)
 
 Definitions: `parse_hf_template`, `fill_hf_field`, `markdown_headings`, `search_form`, `locate_headings`, `outline_entries`, `hf_text`, `hf_overlay`, `local_file_of_link`, `polish_wanted`, `polish_pdf`.
 
