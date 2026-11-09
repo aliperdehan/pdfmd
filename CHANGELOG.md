@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.54c — 2026-11-09
+
+No shipped code (CLAUDE.md); `PDFMD_VERSION` stays 3.32.54. Entry 3fi. CLAUDE.md has a section "pdfmd.py holds only the core": the author's rule that `pdfmd.py` keeps only its imports and the core Pandoc call, that new code goes into packages under `lib/`, and how a package reaches pdfmd's helpers (`core`, never `import pdfmd`).
+
 ## v3.32.54b — 2026-11-09
 
 No shipped code (a development script, a test, CLAUDE.md); `PDFMD_VERSION` stays 3.32.54. Entry 3fi. **`scripts/pdfmd` runs the checkout's pdfmd with Python's bytecode cache.** `python3 pdfmd.py` runs the file as a script, which Python compiles from source on every run; an imported module is compiled once and cached. Measured on `--version` (best / median of ten): `python3 pdfmd.py` 518 / 580 ms, `python3 scripts/pdfmd` 237 / 286 ms.

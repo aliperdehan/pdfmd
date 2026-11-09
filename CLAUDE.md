@@ -51,6 +51,15 @@ and the zipapp get the packages from `[tool.setuptools.package-dir]` in `pyproje
 `scripts/build_zipapp.py`. A new package goes into all three (`packages`, `package-dir`, `PACKAGES`);
 `tests/test_packaging.py` fails until it does. A test that reads a shipped file builds the path as `ROOT / "lib" / "pdfmd_x" / ...`.
 
+## pdfmd.py holds only the core
+
+The author's rule (2026-11-09): `pdfmd.py` keeps only its imports and the very core, "like just shelling out to pandoc with
+some basic stuff so pdfmd.py can work like in its early days"; everything else lives in packages under `lib/`. New code goes
+into a package, never into `pdfmd.py`, even when the feature it belongs to still sits there: put the new part in a package and
+call it. The split of what is in `pdfmd.py` today is planned in `SPLIT.md`. A package that needs pdfmd's own helpers or state
+gets the module passed in (`core`, as `pdfmd_report` and `pdfmd_batch` do) and reads `core.X` when it runs, never
+`import pdfmd` (run as a script, the file is `__main__`, and a second import is a second copy with its own state).
+
 ## Debugging
 
 `pdfmd --version` prints the current version. `--verbose` prints pdfmd's
