@@ -364,7 +364,7 @@ Facts: 6 callers stay in pdfmd.py (re-exported); 32 pdfmd names read through `co
 
 Tests: `test_browser_engine`, `test_calibre`, `test_calibre_targets`, `test_soffice_timeout`.
 
-#### 25. `pdfmd_office` (existing package): 15 definitions, ~414 lines
+#### 25. `pdfmd_office` (existing package): 15 definitions, ~414 lines; done in 3.33.27 (`lib/pdfmd_office/build.py`; `OfficeArguments` has a stand-in, `office_module()` stayed)
 
 Definitions: `office_package_folders`, `office_defaults_sources`, `find_office_profile`, `find_reference_doc`, `OfficeArguments`, `office_properties`, `office_finish`, `run_office_pandoc`, `build_office_pandoc`, `describe_fragment`, `print_office_check`, `check_docx_command`, `office_render_fragments`, `office_convert_asset`, `init_reference`.
 
