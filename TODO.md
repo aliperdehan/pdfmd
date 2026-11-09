@@ -86,6 +86,7 @@ wait for an answer before any code.
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
 - [ ] The split of `pdfmd.py`: phase 1 (37 packages, 3.33.x; pattern and order in `SPLIT.md`), then phase 2 [3fi]
+- [ ] After phase 1: the gathered oddities and bugs (split_check's weaknesses, Typst `indent: true`, cache-location words, a real `--install` check), then the full suite [3fi]
 - [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 
 ## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
