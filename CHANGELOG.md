@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.32 — 2026-11-09
+
+Pre-edit state: commit `337032f`. Entry 3fi. **The dead first binding of `DIV_FENCE_RE` is gone** (found while moving `pdfmd_parts`;
+the same case as `FENCE_RE` in 3.33.1).
+
+- `pdfmd.py` bound `DIV_FENCE_RE` twice with different patterns: `^\s*:{3,}(?:\s.*)?$` beside the native tier (v3.20.0) and
+  ` {0,3}(:{3,})(.*)$` beside the section code (v3.21.2). The later binding replaced the first at import, so since v3.21.2 every
+  user, the native tier's dropping of `:::` lines included, has had the later pattern. The first is deleted; nothing changes.
+- The later pattern is also the right one for the native tier: it drops `:::{.x}` and `:::warning` fences, which Pandoc accepts
+  and the first pattern missed, and it does not take a line indented four spaces (code) for a fence, which the first did.
+- `python3 -m unittest test_native test_direct test_sections` and the always-run set: 284 tests OK (3 skipped); ruff F clean.
+
 ## v3.33.31 — 2026-11-09
 
 Pre-edit state: commit `3dd7451`. Entry 3fi. **`--doctor` and the shell completions (`tool_note`, `user_path_hint`, `pandoc_limits`, `folder_size`, `deep_checks`, `foreign_commands`, `doctor_report`, `completion_options`, `completion_script`) live in the new package `lib/pdfmd_doctor/__init__.py`.** Move 29 of SPLIT.md; a pure move into a new package, re-exported plainly.

@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.31"
+PDFMD_VERSION = "3.33.32"
 import argparse
 import atexit
 import csv
@@ -5311,7 +5311,6 @@ def native_lose(kind: str, count: int = 1) -> None:
     NATIVE_LOST[kind] = NATIVE_LOST.get(kind, 0) + count
 
 
-DIV_FENCE_RE = re.compile(r"^\s*:{3,}(?:\s.*)?$")
 HEADING_ATTR_RE = re.compile(r"^(#{1,6}\s+.*?)\s*\{(?:[#.][^{}\n]*|[A-Za-z][\w-]*=[^{}\n]*)\}\s*$")
 IMAGE_ATTR_RE = re.compile(r"(!\[[^\]\n]*\]\([^)\n]*\))\{[^{}\n]*\}")
 PAGE_BREAK_RE = re.compile(r"^\s*\\(?:newpage|pagebreak|clearpage|cleardoublepage)(?:\[\d\])?(?:\{\})?\s*$")
