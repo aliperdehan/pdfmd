@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.25"
+PDFMD_VERSION = "3.33.26"
 import argparse
 import atexit
 import csv
@@ -1744,8 +1744,13 @@ import pdfmd_routing  # noqa: E402
 from pdfmd_routing import (BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, find_batchocr,  # noqa: E402, F401 -- BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, install_ocr_tools and tessdata_environment are read by tests
                            install_ocr_tools, route_ebook_input, route_pdf_input, route_text_input, tessdata_environment)
 
+import pdfmd_bridge  # noqa: E402
+from pdfmd_bridge import (CALIBRE_TABLE_CSS, PANDOC_TABLE_STYLE_RE, browser_page_css, calibre_html_command,  # noqa: E402, F401 -- CALIBRE_TABLE_CSS and PANDOC_TABLE_STYLE_RE are read by tests, run_calibre_convert and run_soffice_convert are patched or read by tests and lib/
+                          calibre_page_options, convert_office_direct, convert_via_soffice_bridge, run_browser_print,
+                          run_calibre, run_calibre_convert, run_soffice_convert, start_soffice_job)
+
 bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
-          pdfmd_lookup, pdfmd_routing)
+          pdfmd_lookup, pdfmd_routing, pdfmd_bridge)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # move 5 (v3.33.6)
@@ -20769,119 +20774,7 @@ OFFICE_INPUT_EXTENSIONS = frozenset({
 })
 
 
-@timed("soffice")
-def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: str = "pdf") -> tuple[bool, str]:
-    """Convert one file to PDF (or ``target``: doc, rtf, odt, txt, epub: v3.29.1) via headless LibreOffice, into ``output``.
-
-    Runs entirely in a scratch directory (both the conversion's own
-    output and its throwaway --env:UserInstallation profile), deleted
-    afterward regardless of outcome -- soffice leaves no equivalent of a
-    LaTeX engine's .aux/.log, but the scratch profile itself would
-    otherwise accumulate under /tmp across every call.
-    """
-    binary = resolve_soffice()
-    if binary is None:
-        return False, "soffice/LibreOffice not found (checked PATH, 'libreoffice', and the standard macOS app bundle)"
-    scratch = Path(mkdtemp(prefix="pdfmd-soffice-"))
-    try:
-        profile_dir = scratch / "profile"
-        cmd = [binary, "--headless", "--norestore",
-              f"-env:UserInstallation={profile_dir.as_uri()}",       # a real file URL: on Windows LibreOffice hangs on file://C:\...
-              "--convert-to", "txt:Text" if target == "txt" else target, "--outdir", str(scratch), str(input_path)]
-        log_cmd(cmd, input_path.parent, verbose)
-        result = run_soffice(cmd, cwd=input_path.parent)
-        produced = scratch / f"{input_path.stem}.{target}"
-        if result.returncode != 0 or not produced.exists():
-            reason = result.stderr.strip() or result.stdout.strip() or f"soffice failed to produce a {target}"
-            return False, reason.splitlines()[-1]
-        output.parent.mkdir(parents=True, exist_ok=True)
-        if produced.resolve() != output.resolve():
-            shutil.copy2(produced, output)
-        return True, ""
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-
-
-def convert_office_direct(input_path: Path, output: Path, verbose: bool, debug: bool) -> tuple[bool, str]:
-    """Convert an office document straight to PDF -- no Pandoc involved."""
-    ok, reason = run_soffice_convert(input_path, output, verbose)
-    if ok:
-        vprint(verbose, f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)")
-    else:
-        fake_result = subprocess.CompletedProcess(args=["soffice"], returncode=1, stdout="", stderr=reason)
-        report_engine_failure(str(input_path), "soffice", fake_result, [], debug)
-    return ok, reason
-
-
-def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str | None,
-                               metadata_files: list[Path], variables: list[str],
-                               pandoc_options: list[str], lua_filters: list[Path],
-                               csv_filter: Path, no_auto: list[str] | None,
-                               verbose: bool, labels: str = "off", title_source: Path | None = None,
-                               part_files: list[Path] | tuple = (), partial: bool = False,
-                               selection=None) -> tuple[bool, str]:
-    """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
-    LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
-    for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
-    convert_one's own per-engine run() closure applies for a real engine
-    (geometry/mainfont/monofont/preamble/table-width filter) -- none of
-    it means anything for an ODT target. Citeproc and a document's own
-    auto-discovered Lua filters still apply, same as every other engine.
-
-    The input is what every other engine gets: `title_source` (the document with its title promoted, or cut
-    down to the sections asked for), `part_files` (the parts of a split document, joined after it) and
-    `partial` (a build of some parts only), so parts mode and `doc#section` work here as everywhere else.
-    """
-    scratch = Path(mkdtemp(prefix="pdfmd-soffice-src-"))
-    try:
-        odt = scratch / f"{md_path.stem}.docx"
-        pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
-
-        def note(kind: str, detail: str) -> None:
-            vprint(verbose, f"AUTO {kind}  {detail}")
-        with prepared_latex_inputs([title_source or md_path, *pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True) as prepared:
-            source, *prepared_metadata = prepared
-            cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
-            if effective_from:
-                cmd += ["-f", effective_from]
-            for metadata in prepared_metadata:
-                cmd += ["--metadata-file", str(metadata)]
-            if partial:
-                cmd += PARTIAL_METADATA
-            cmd += table_keep_metadata(md_path, metadata_files)
-            cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-            for variable in variables:
-                cmd += ["-V", variable]
-            cmd += document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
-                                        crossref_sources=[md_path, *part_files], cellalign_early=True)
-            cmd += select_filter_args(selection)
-            if contains_citations(md_path) and "--citeproc" not in pandoc_options and not CITEPROC_DISABLED:
-                cmd.append("--citeproc")
-            if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                cmd += csl_args([md_path], metadata_files, pandoc_options, no_auto)
-            # pandoc_options after --citeproc: any --lua-filter/--filter a caller
-            # passes through needs resolved citations already in the AST, same
-            # invariant as the auto-discovered lua_filters below (see run()'s
-            # matching comment in convert_one).
-            # the LaTeX the document uses is made native or drawn (no PDF build for its numbers here: LaTeX is what failed)
-            with office_reference(md_path, metadata_files, variables, "docx", odt, pandoc_options, no_auto, note,
-                                  labels=labels, force_filter=True) as office_arguments:
-                cmd += office_arguments
-                cmd += pandoc_options
-                for lua_filter in lua_filters:
-                    cmd += ["--lua-filter", str(lua_filter)]
-                cmd += office_arguments.filter_arguments
-                if office_arguments.filter_arguments:
-                    result = run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
-                else:
-                    log_cmd(cmd, pandoc_cwd, verbose)
-                    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
-                office_finish(office_arguments, md_path, verbose)
-        if result.returncode != 0 or not odt.exists():
-            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"
-        return run_soffice_convert(odt, output, verbose)
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+# run_soffice_convert, convert_office_direct and convert_via_soffice_bridge: lib/pdfmd_bridge/__init__.py (v3.33.26)
 
 
 # "calibre" as a PDF engine (`-e calibre`, `pdf-engine: calibre`; never part of the automatic chain): Pandoc
@@ -20902,84 +20795,7 @@ CALIBRE_OPTIONS = ("--disable-font-rescaling", "--pdf-default-font-size", "16", 
 # near-black text on an off-white page, which Calibre prints as a grey tint (it does not apply `@media print`)
 CALIBRE_CSS = ("html { color-scheme: light; color: black; background-color: white; }\n"
                "body { max-width: none; margin: 0; padding: 0; background-color: transparent; }\n")
-# and its tables are full-width blocks that scroll sideways (`display: block; overflow-x: auto`): on paper a caption was
-# cut off at the width of a narrow table ("Table 1: Labe"). While that style is in, a table is a table at its natural
-# width, centred, and its caption up to 4in wide, as LaTeX's longtable sets them (v3.28.3). A numbered equation (the
-# LaTeX filter's three-cell table) spans the line, its number at the margin, without the rules of a table.
-PANDOC_TABLE_STYLE_RE = re.compile(r"\btable\s*\{[^{}]*overflow-x:\s*auto")
-CALIBRE_TABLE_CSS = ("table { display: table; width: auto; overflow: visible; margin-left: auto; margin-right: auto; }\n"
-                     "table caption { width: max-content; max-width: 4in; margin-left: auto; margin-right: auto; }\n"
-                     'table[data-custom-style="PdfmdEquation"] { width: 100%; }\n'
-                     'table[data-custom-style="PdfmdEquation"] tbody { border: none; }\n')
-
-
-@contextmanager
-def calibre_html_command(cmd: list[str], engine: str) -> Iterator[tuple[list[str], Path | None]]:
-    """The Pandoc command of one engine run, and for "calibre" where it writes instead of the PDF: the same
-    command (filters, citations, metadata, fonts) with `--pdf-engine=calibre` turned into a standalone,
-    self-contained HTML5 page with MathML, in a scratch folder that is gone afterwards."""
-    if engine != "calibre" and engine not in BROWSER_ENGINES:
-        yield cmd, None
-        return
-    scratch = Path(mkdtemp(prefix="pdfmd-calibre-"))
-    try:
-        html = scratch / "document.html"
-        command = list(cmd)
-        position = command.index(f"--pdf-engine={engine}")
-        command[position:position + 1] = ["-t", "html5", "--standalone",
-                                          "--embed-resources" if pandoc_version() >= (2, 19) else "--self-contained"]
-        command[command.index("-o") + 1] = str(html)
-        command += ["-M", "pdfmd-no-named-pages=1"]          # Calibre's PDF cannot name page types: markup: landscape says so
-        if not any(item.startswith(HTML_MATH_OPTIONS) for item in command):
-            command += html_math_args("mathml")
-        yield command, html
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-
-
-def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: list[str]) -> list[str]:
-    """ebook-convert's page: the paper and margins the document asks for (papersize, geometry, margin,
-    classoption, read as for a Word file), else Letter and DEFAULT_MARGIN like the LaTeX engines; and its
-    language. In points."""
-    module = office_module()
-    if module is None:
-        return []
-    spec = module.spec_from_metadata(effective_metadata(md_path, metadata_files, variables), None, "exact")
-    width, height = spec.page_size()
-    default = module.length_to_twips(DEFAULT_MARGIN) or 1440
-    points = lambda twips: f"{twips / 20:g}"
-    options = ["--custom-size", f"{points(width)}x{points(height)}", "--unit", "point"]
-    for side in ("left", "right", "top", "bottom"):
-        options += [f"--pdf-page-margin-{side}", points(spec.margins.get(side, default))]
-    if spec.lang:
-        options += ["--language", spec.lang]
-    return options
-
-
-@timed("calibre")
-def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool) -> subprocess.CompletedProcess:
-    """`ebook-convert` the HTML page into `output` (written beside the page first, so a failed run leaves no
-    half-written PDF). Qt runs offscreen on macOS and Linux: no window, and no display needed on a server."""
-    binary = resolve_calibre()
-    if binary is None:
-        return subprocess.CompletedProcess(["ebook-convert"], 1, "", "Calibre's ebook-convert was not found")
-    css = html.with_name("pdfmd-calibre.css")
-    head = html.read_text(encoding="utf-8", errors="replace").split("</head>", 1)[0]
-    css.write_text(CALIBRE_CSS + (CALIBRE_TABLE_CSS if PANDOC_TABLE_STYLE_RE.search(head) else ""), encoding="utf-8")
-    produced = html.with_name("document.pdf")
-    cmd = [binary, str(html), str(produced), *CALIBRE_OPTIONS, "--extra-css", str(css), *page_options]
-    environment = dict(os.environ)
-    if sys.platform != "win32":
-        environment.setdefault("QT_QPA_PLATFORM", "offscreen")
-    log_cmd(cmd, html.parent, verbose)
-    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=html.parent, env=environment)
-    if result.returncode != 0 or not produced.is_file():
-        said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
-        return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
-                                           "ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
-    output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(produced, output)
-    return subprocess.CompletedProcess(cmd, 0, "", "")
+# PANDOC_TABLE_STYLE_RE, CALIBRE_TABLE_CSS, calibre_html_command, calibre_page_options and run_calibre: lib/pdfmd_bridge/__init__.py (v3.33.26)
 
 
 # Calibre as a WRITER (v3.29.0). `pdfmd book.md -o book.azw3` (or `--to azw3`) makes the ebook Calibre makes from the
@@ -21108,24 +20924,7 @@ def start_calibre_job(args, goal: str, target_format: str, pandoc_options: list[
     return job
 
 
-def start_soffice_job(args, goal: str, target_format: str) -> dict:
-    """The same for a LibreOffice target (v3.29.1): `args` pointed at the Word file Pandoc writes in a scratch folder."""
-    if args.batch or args.report or args.presentation:
-        raise SystemExit(f"{goal} is made through LibreOffice one document at a time: not with "
-                         f"{'-b' if args.batch else '-r' if args.report else '-p'} (yet)")
-    if resolve_soffice() is None:
-        raise SystemExit(f"{target_format} is written by LibreOffice, which was not found (checked PATH, 'libreoffice' and the "
-                         "standard macOS app bundle). Install it: `brew install --cask libreoffice`, "
-                         "`winget install TheDocumentFoundation.LibreOffice`, your package manager, or libreoffice.org.")
-    if goal in SOFFICE_SHARED_FORMATS:
-        print(f"NOTE  -e soffice: {goal} is made by LibreOffice from the Word file Pandoc writes; without -e soffice Pandoc "
-              "writes it from the document itself", file=sys.stderr)
-    scratch = Path(mkdtemp(prefix="pdfmd-soffice-target-"))
-    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
-    job = {"tool": "soffice", "goal": goal, "final": args.out, "scratch": scratch, "open": args.open,
-           "intermediate": "document.docx"}
-    args.to, args.out, args.engine, args.open = "docx", scratch / "document.docx", None, False
-    return job
+# start_soffice_job: lib/pdfmd_bridge/__init__.py (v3.33.26)
 
 
 def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
@@ -21157,68 +20956,7 @@ def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
     return [Built((source, True, error), tool, output=final)]          # what Pandoc and its filters said stays
 
 
-def run_calibre_convert(source: Path, output: Path, verbose: bool, extra: list[str] | None = None) -> subprocess.CompletedProcess:
-    """`ebook-convert source output`, written into a scratch folder first (so a failed run leaves nothing half-written, and
-    nothing lands beside `source`). Qt runs offscreen as for the PDF route."""
-    binary = resolve_calibre()
-    if binary is None:
-        return subprocess.CompletedProcess(["ebook-convert"], 1, "", "Calibre's ebook-convert was not found")
-    scratch = Path(mkdtemp(prefix="pdfmd-ebook-convert-"))
-    try:
-        produced = scratch / ("calibre-output" + output.suffix)
-        cmd = [binary, str(source), str(produced), *(extra or [])]
-        environment = dict(os.environ)
-        if sys.platform != "win32":
-            environment.setdefault("QT_QPA_PLATFORM", "offscreen")
-        log_cmd(cmd, source.parent, verbose)
-        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch, env=environment)
-        if result.returncode != 0 or not produced.is_file():
-            said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
-            return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
-                                               "ebook-convert failed: " + " | ".join(said[-3:] or ["no file written"]))
-        output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(produced, output)
-        return subprocess.CompletedProcess(cmd, 0, "", "")
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
-
-
-def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[str]) -> str:
-    """The page a browser prints, as CSS: `@page` with the paper and margins the document asks for (papersize, geometry,
-    margin, classoption, read as for a Word file), else Letter and DEFAULT_MARGIN like the LaTeX engines. In points."""
-    module = office_module()
-    if module is None:
-        return ""
-    spec = module.spec_from_metadata(effective_metadata(md_path, metadata_files, variables), None, "exact")
-    width, height = spec.page_size()
-    default = module.length_to_twips(DEFAULT_MARGIN) or 1440
-    points = lambda twips: f"{twips / 20:g}pt"
-    margins = " ".join(points(spec.margins.get(side, default)) for side in ("top", "right", "bottom", "left"))
-    return (f"@page {{ size: {points(width)} {points(height)}; margin: {margins}; }}\n"
-            f"@page landscape {{ size: {points(height)} {points(width)} !important; }}\n")        # for markup: landscape, the same paper turned
-
-
-@timed("browser print")
-def run_browser_print(html: Path, output: Path, engine: str, page_css: str, verbose: bool) -> subprocess.CompletedProcess:
-    """Print the page with headless `engine` (chrome, chromium, edge, brave) into `output`: the page gets the paper and
-    margins as `@page` and the print style of CALIBRE_CSS (Pandoc's own is for a screen). The browser writes into a scratch
-    folder first, so a failed run leaves no half-written PDF."""
-    try:
-        import pdfmd_direct as direct
-    except ImportError:
-        return subprocess.CompletedProcess(["browser"], 1, "", "pdfmd_direct, the folder of pdfmd's browser support, is missing")
-    executable = direct.find_browser(engine, which)
-    if executable is None:
-        return subprocess.CompletedProcess([engine], 1, "", f"{engine} was not found")
-    text = html.read_text(encoding="utf-8", errors="replace")
-    head = text.split("</head>", 1)[0]
-    style = CALIBRE_CSS + (CALIBRE_TABLE_CSS if PANDOC_TABLE_STYLE_RE.search(head) else "") + page_css
-    page = html.with_name("document-print.html")
-    page.write_text(text.replace("</head>", f"<style>\n{style}</style>\n</head>", 1) if "</head>" in text
-                    else f"<style>\n{style}</style>\n{text}", encoding="utf-8")
-    ok, reason, _ = direct.render_html(page, output, [(engine, executable)],
-                                       log=lambda command, cwd: log_cmd(command, cwd, verbose))
-    return subprocess.CompletedProcess([engine], 0 if ok else 1, "", "" if ok else f"{engine} failed: {reason}")
+# run_calibre_convert, browser_page_css and run_browser_print: lib/pdfmd_bridge/__init__.py (v3.33.26)
 
 
 # WeasyPrint's CSS parser names each property and media query it ignores. Pandoc's page style and KaTeX's stylesheet

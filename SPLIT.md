@@ -354,7 +354,7 @@ Facts: 4 callers stay in pdfmd.py (re-exported); 23 pdfmd names read through `co
 
 Tests: `test_ebook_input`, `test_install_ocr`, `test_pdf_input`, `test_tessdata`.
 
-#### 24. `pdfmd_bridge` (new package): 10 definitions, ~248 lines
+#### 24. `pdfmd_bridge` (new package): 10 definitions, ~248 lines; done in 3.33.26 (`CITEPROC_DISABLED` stayed, rebound with `global`; the three `@timed` functions use `_timed`)
 
 Definitions: `run_soffice_convert`, `convert_office_direct`, `convert_via_soffice_bridge`, `calibre_html_command`, `calibre_page_options`, `run_calibre`, `start_soffice_job`, `run_calibre_convert`, `browser_page_css`, `run_browser_print`.
 
