@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.2"
+PDFMD_VERSION = "3.33.3"
 import argparse
 import atexit
 import csv
@@ -1689,8 +1689,10 @@ from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_polic
                             strip_markdown_comments, strip_tex_comments, strip_xml_comments)
 import pdfmd_templates  # noqa: E402
 from pdfmd_templates import init_command  # noqa: E402
+import pdfmd_watch  # noqa: E402
+from pdfmd_watch import pinned_watch_argv, run_watch  # noqa: E402
 
-bind_core(pdfmd_comments, pdfmd_templates)
+bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch)
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -29438,82 +29440,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 WATCH_INTERVAL = 1.0
-
-
-def watch_signature(source: Path) -> float:
-    """Max mtime across ``source``'s own directory and its ``metadata/``
-    subfolder (if present) -- the same two locations pdfmd's own metadata/
-    preamble/Lua-filter auto-discovery already searches
-    (accessory_directories()), reused as a cheap, dependency-free,
-    non-recursive proxy for "has anything --watch should react to
-    changed". Non-recursive is deliberate: an unbounded directory tree
-    scan polled every WATCH_INTERVAL seconds would be a real cost in a
-    large project directory, for no real benefit -- pdfmd's own auto-
-    discovery never looks any deeper than these two directories either.
-    """
-    latest = 0.0
-    for directory in accessory_directories(source.parent, source.stem):
-        for path in directory.glob("*"):
-            if path.is_file():
-                try:
-                    latest = max(latest, path.stat().st_mtime)
-                except OSError:
-                    continue
-    # A parts-mode document's parts live one level down (and deeper): watch
-    # those too. Only the conventional folder names -- a custom
-    # `parts: <folder>` is not followed, to keep this scan cheap and bounded.
-    for name in PARTS_DIR_ALIASES:
-        directory = source.parent / name
-        if directory.is_dir():
-            for path in directory.rglob("*.md"):
-                try:
-                    latest = max(latest, path.stat().st_mtime)
-                except OSError:
-                    continue
-    return latest
-
-
-def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list[str]:
-    """The command line a watch re-runs, with the document it chose pinned (v3.32.13): `pdfmd -w` in a folder of several
-    Markdown files chose one by priority or age, and a later run must not choose again (the choice would move to whichever file
-    was saved last). ``given`` is the paths the command line named: none, or only a `#section`/`@section` request, which the
-    chosen document is put in front of. `--newest` is dropped, since the pinned path names the file."""
-    argv = [arg for arg in argv if arg != "--newest"]
-    if not given:
-        return [*argv, "--", str(chosen)]
-    token = str(given[0])
-    if len(given) == 1 and token[:1] in ("#", "@") and token in argv:
-        argv[argv.index(token)] = f"{chosen}{token}"
-    return argv
-
-
-def run_watch(source: Path, argv: list[str]) -> None:
-    """Recompile ``source`` immediately, then again on each later change.
-
-    Deliberately a thin wrapper that re-execs the whole, already-tested
-    CLI as a fresh subprocess (the original argv, minus -w/--watch) on
-    every recompile, rather than threading a rebuild loop through main()'s
-    own batch/report/single-file branching -- disproportionate
-    engineering for a feature expected to see light use (a convenience
-    feature the author expects to use rarely). Polling a directory's own file mtimes (watch_signature(), not a
-    filesystem-events library like watchdog) keeps this dependency-free,
-    matching every other part of pdfmd. The signature is re-snapshotted
-    AFTER each recompile, not just before, so the compile's own output
-    file (and a --stamp write back into the source itself) never falsely
-    re-triggers another immediate recompile.
-    """
-    rerun_argv = [arg for arg in argv if arg not in ("-w", "--watch")]
-    script = str(Path(__file__).resolve())
-    print(f"WATCH  {source}: watching {source.parent} for changes (Ctrl+C to stop)")
-    try:
-        while True:
-            subprocess.run([sys.executable, script, *rerun_argv])
-            signature = watch_signature(source)
-            while watch_signature(source) == signature:
-                time.sleep(WATCH_INTERVAL)
-            print(f"WATCH  change detected, recompiling {source}...")
-    except KeyboardInterrupt:
-        print("\nWATCH  stopped")
 
 
 # What main() keeps in module globals from the command line: every *_CLI name, and these. -j workers are fresh processes

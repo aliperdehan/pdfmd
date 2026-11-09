@@ -112,11 +112,14 @@ Tests: `test_templates`.
 
 ### Wave 2: small and self-contained (Sonnet, reviewed)
 
-#### 3. `pdfmd_watch` (new package): 3 definitions, ~70 lines
+#### 3. `pdfmd_watch` (new package): 3 definitions, ~70 lines; done in 3.33.3
 
 Definitions: `watch_signature`, `pinned_watch_argv`, `run_watch`.
 
 Facts: 1 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
+
+Note: `run_watch` re-runs the script it was started from, found with `__file__`; inside the package that would be
+`lib/pdfmd_watch/__init__.py`, so it reads `core.__file__` (`pdfmd.py`). `WATCH_INTERVAL` stays in `pdfmd.py` (two other polling loops read it).
 
 Tests: `test_ranking_generated`.
 

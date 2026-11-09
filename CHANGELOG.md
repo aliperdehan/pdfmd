@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.3 — 2026-11-09
+
+Pre-edit state: commit `1bc4b27`. Entry 3fi. **`pdfmd --watch` lives in its own package, `pdfmd_watch`.** Move 3 of SPLIT.md; a pure move.
+
+- `watch_signature`, `pinned_watch_argv` and `run_watch` are in the new `lib/pdfmd_watch/__init__.py`, text and docstrings unchanged. `pdfmd.py` re-exports `pinned_watch_argv` and `run_watch` (`main()` and `tests/test_ranking_generated.py` use them; `watch_signature` is used only by the package) and binds the package with `bind_core()`. The package reads `core.WATCH_INTERVAL` (which stays: two other polling loops in `pdfmd.py` read it), `core.PARTS_DIR_ALIASES` and `core.accessory_directories` when it runs. The package is added to `pyproject.toml` (`packages`, `package-dir`) and to `PACKAGES` in `scripts/build_zipapp.py`.
+- `run_watch` re-runs the script it was started from. It found it with `__file__`, which inside the package would be `lib/pdfmd_watch/__init__.py`; it now reads `core.__file__`, which is `pdfmd.py` as before.
+- Checked: ruff is clean; `scripts/split_check.py`: all 30 checks the same (`--help` and its topics, the `--verbose` builds, the stripped outputs); `scripts/pdfmd --version` no slower (best of ten, three interleaved runs: HEAD 134 / 140 / 145 ms, the move 139 / 141 / 139 ms). `split_check.py` cannot run a watch (it loops), so `pdfmd -w results.md -o watched.pdf` was run by hand on a copy of `examples/`, through `pdfmd.py` and through `scripts/pdfmd`, under a 20 s timeout: both print the `WATCH` line, build the PDF through the re-run (so `core.__file__` found the script) and stop only at the timeout. Tests: `test_ranking_generated` and the always-run set pass (156 tests, one skipped).
+
 ## v3.33.2 — 2026-11-09
 
 Pre-edit state: commit `7f34e07`. Entry 3fi. **`pdfmd --init` lives in its package, `pdfmd_templates`.** Move 2 of SPLIT.md, the first into a package that already existed; a pure move.
