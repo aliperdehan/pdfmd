@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.25b — 2026-11-09
+
+Pre-edit state: commit `c4fd227`. Entry 3fi. Tests only, no version bump. **`tests/test_table_widths.py`'s two packaging tests follow
+the `lib/` layout.**
+
+- The lone-copy test copied `pdfmd.py` alone and expected a build, which 3.33.0 stopped by design (a copy with no `lib/` beside it
+  stops and says why); it passed only where an installed pdfmd put the packages on the path (CI's `pip install .`) and failed in a
+  checkout. Now, like `test_lua_missing.LoneCopy`, the copy carries `lib/` without `pdfmd_lua`, blocks `pdfmd_lua` as well, and checks
+  that the table still reaches the LaTeX output.
+- The test that the filters ship as files put the repository root on the path to import `pdfmd_lua`, which lives in `lib/`: it passed
+  only after another test had imported pdfmd (which adds `lib/`). It puts `lib/` on the path.
+- `python3 -m unittest test_table_widths` (30 tests) and `test_table_widths.Packaging` alone: OK.
+
 ## v3.33.25 — 2026-11-09
 
 Pre-edit state: commit `5c86d7e`. Entry 3fi. **Reading a PDF, an ebook or a text file into Markdown (`route_pdf_input`, `route_ebook_input`, `route_text_input`, finding and installing batchocr, Tesseract's language folder) lives in the new package `lib/pdfmd_routing/__init__.py`.** Move 23 of SPLIT.md; a pure move into a new package, re-exported plainly.

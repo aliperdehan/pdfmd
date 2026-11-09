@@ -285,7 +285,7 @@ class RawTex(unittest.TestCase):
 
 class Packaging(unittest.TestCase):
     def test_the_filters_ship_as_files_in_a_package(self):
-        sys.path.insert(0, str(ROOT))
+        sys.path.insert(0, str(ROOT / "lib"))
         try:
             import pdfmd_lua
         finally:
@@ -299,15 +299,22 @@ class Packaging(unittest.TestCase):
         self.assertTrue((pdfmd_lua.FILTERS / "katex.cjs").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
-    def test_a_lone_pdfmd_py_still_builds_without_the_package(self):
+    def test_a_copy_without_the_package_still_builds_a_table(self):
+        """Since 3.33.0 pdfmd.py needs its lib/ folder, so the copy carries lib/ and only pdfmd_lua is missing; it is blocked
+        as well, since an installed pdfmd (`pip install .` in CI) has it on the path too."""
         import tempfile
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-lone-"))
         self.addCleanup(shutil.rmtree, directory, True)
         shutil.copy(ROOT / "pdfmd.py", directory / "pdfmd.py")
+        skip = {"pdfmd_lua", "pdfmd_web", "__pycache__", "node_modules"}
+        shutil.copytree(ROOT / "lib", directory / "lib", ignore=lambda folder, names: [name for name in names if name in skip])
         (directory / "d.md").write_text("| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
-        done = subprocess.run([sys.executable, str(directory / "pdfmd.py"), "d.md", "--to", "latex", "-o", "o.tex"],
-                              cwd=directory, capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
-        self.assertEqual(done.returncode, 0, done.stderr)
+        program = ("import runpy, sys; sys.modules['pdfmd_lua'] = None; "
+                   "sys.argv = ['pdfmd.py', 'd.md', '--to', 'latex', '-o', 'o.tex']; runpy.run_path('pdfmd.py', run_name='__main__')")
+        done = subprocess.run([sys.executable, "-c", program], cwd=directory, capture_output=True, text=True, encoding="utf-8",
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("longtable", (directory / "o.tex").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
