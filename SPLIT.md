@@ -258,7 +258,7 @@ Note: `mdpdf_main`, `md2pdf_main` are console entry points in `pyproject.toml` (
 
 Tests: `test_compat`, `test_pan_tec`, `test_polish`.
 
-#### 15. `pdfmd_view` (new package): 9 definitions, ~197 lines
+#### 15. `pdfmd_view` (new package): 9 definitions, ~197 lines; done in 3.33.16 (`__file__` is `core.__file__`: the child it starts is pdfmd.py; `which` is `core.which`; `split_command` stays)
 
 Definitions: `view_child_arguments`, `view_stdin_file`, `view_sources`, `stdin_build`, `view_wants_pager`, `view_pager_setting`, `pager_command`, `run_pager`, `terminal_view`.
 

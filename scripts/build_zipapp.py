@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "lib"
 PACKAGES = ("pdfmd_ansi", "pdfmd_batch", "pdfmd_buildinfo", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_kits", "pdfmd_labels", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_obsidian", "pdfmd_office", "pdfmd_pdfimages", "pdfmd_polish", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report",
-            "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode", "pdfmd_watch", "pdfmd_web")      # = pyproject.toml's packages (test_packaging)
+            "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web")      # = pyproject.toml's packages (test_packaging)
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's lib/pdfmd_docs/ holds no .md
 # file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
