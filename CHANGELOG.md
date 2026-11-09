@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.33.54 — 2026-11-10
+
+Pre-edit state: commit `cea90ba`. **The PDF built for reference numbers is a step of `--verbose`'s times.** A `-e calibre`
+build of a document with `\ref`/`\eqref`/`\label` spent most of its time under `TIME    the rest (files, settings,
+pre-passes)` (13 of 20 s for a one-page test document; most likely also the 46 s of the run that showed this): that was `office_label_data` (`AUTO OFFICE
+... building the PDF once for its equation, figure and table numbers`), a whole LaTeX build of the document run as a
+pdfmd subprocess before the Calibre step, for the numbers its `.aux` gives. It is real work, not waste: a second build with
+nothing changed reuses the `.aux` and skips it (`the rest` 0.4 s). The same build runs for a Word output with LaTeX references, and
+for a Typst or WeasyPrint PDF that goes through the office filter.
+
+- `office_label_data` (`pdfmd.py`) runs that build as a step, `PDF for reference numbers`, with the existing `timed`; no new
+  code. It shows only when the build runs, not when the `.aux` is reused.
+- Checked through pdfmd: the document above with `-e calibre --verbose --build-time`: `PDF for reference numbers 13.2 s`,
+  `the rest` 0.64 s (13.0 s at HEAD); a second run has no such line; `--to docx` the same (`13.4 s`, `the rest` 1.8 s), and
+  `-e typst` (`14.5 s`, `the rest` 0.48 s).
+- Tests: a new `test_build_time` case (`office_label_data` with the build stubbed is one step; fails at HEAD);
+  `test_office_latex test_build_time test_build_record test_split test_packaging test_docs_consistency`: 115 OK.
+
 ## v3.33.53 — 2026-11-10
 
 Pre-edit state: commit `b13d1fb`. **`-e calibre` names every author in the PDF.** A document with `author: [ - name: A,

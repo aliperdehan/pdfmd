@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.53"
+PDFMD_VERSION = "3.33.54"
 import argparse
 import atexit
 import contextlib
@@ -6085,7 +6085,9 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
             note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
             command = office_pdfmd_command(md_path, metadata_files, variables, no_auto,
                                            "-o", str(scratch / f"{md_path.stem}.pdf"), "--cache")
-            done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
+            # a whole LaTeX build: a step of its own in the times of --verbose (v3.33.54), not part of "the rest"
+            done = timed("PDF for reference numbers")(subprocess.run)(command, capture_output=True, encoding="utf-8",
+                                                                       errors="replace")
             if done.returncode != 0:
                 print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
                       "instead (build the PDF to see why)", file=sys.stderr)

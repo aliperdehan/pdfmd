@@ -105,6 +105,26 @@ class Steps(unittest.TestCase):
             pdfmd.backup_pdf_after_success(Path("d.md"), Path("d.pdf"), [], None, False)
         self.assertEqual([step.name for step in timer.steps], ["backup (source)", "backup (PDF)"])
 
+    def test_the_pdf_built_for_reference_numbers_is_a_step(self):
+        # v3.33.54: the LaTeX build a Calibre, Typst or Word build runs for its \ref numbers was under "the rest"
+        import contextlib
+        import io
+        import os
+        from unittest import mock
+        sys.path.insert(0, str(ROOT / "tests"))
+        from cache_support import cache_env
+        timer = Timer()
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "d.md"
+            document.write_text("---\ntitle: T\n---\n\n$$ x \\label{eq:a} $$\n\nSee \\eqref{eq:a}.\n", encoding="utf-8")
+            scratch = Path(folder) / "scratch"
+            scratch.mkdir()
+            with mock.patch.dict(pdfmd.BUILD, {"timer": timer}), mock.patch.dict(os.environ, cache_env(Path(folder) / "cache")), \
+                    mock.patch.object(pdfmd.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "")), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                pdfmd.office_label_data(document, [], [], None, lambda *args: None, scratch, None)
+        self.assertEqual([step.name for step in timer.steps], ["PDF for reference numbers"])
+
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class OnTheClosingLine(unittest.TestCase):
