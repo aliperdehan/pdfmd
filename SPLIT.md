@@ -302,7 +302,7 @@ Facts: 11 callers stay in pdfmd.py (re-exported); 16 pdfmd names read through `c
 
 Tests: `test_lookup`, `test_translit`.
 
-#### 19. `pdfmd_setup` (existing package): 8 definitions, ~184 lines
+#### 19. `pdfmd_setup` (existing package): 8 definitions, ~184 lines; done in 3.33.21 (in `command.py`; stand-ins for `user_path_command`, `maybe_hint_setup`, `setup_command` and `flag_names`)
 
 Definitions: `user_path_command`, `setup_actions`, `setup_hint_state`, `maybe_hint_setup`, `flag_topics`, `flag_names`, `setup_sources`, `setup_command`.
 
