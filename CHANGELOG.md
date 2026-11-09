@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.32.53 — 2026-11-09
+
+Pre-edit state: commit `cf5c726`. Entry 3fi (found by v3.32.51b's wider `test_serve` check). **Report mode takes its filters from the one list, `document_filter_args()`.** Report mode moved out of `pdfmd.py` into `lib/pdfmd_report` in 3.32.13; 3.32.41 then made every build and the live view take the filters for pdfmd's own syntax from one list (entry 3do), but report mode's two build sites, out of sight of the test that guards the rule, kept writing the thirteen filter calls out themselves. The lists were still the same, so nothing changed in the output; a filter added later would have been missing from reports.
+
+- `document_filter_args()` takes the report's files as `md_path` (the filters that read the document read all of them, as report mode did) and a `label` for the cross-reference warnings (`REPORT`). Every other caller is unchanged.
+- `lib/pdfmd_report`: both build sites call it; the thirteen helpers it no longer binds, and two bindings nothing used (`default_output_path`, `output_extension_for`, which ruff flagged), are gone.
+- `test_serve` no longer names report mode as an exception: there is one list again, in `pdfmd.py` and `lib/`.
+- Checked as a pure change: `-r --verbose` on `examples/book` (PDF) and on a two-file report with a cross-reference, a callout, `==highlight==`, `\newpage`, an equation and a hard line break (PDF through both build sites, `--to tex`, `--to html`), before and after: the same lines (temporary names, times and the record folder aside), the `.tex` and `.html` byte-identical. `test_serve` and `test_report_build` pass; `ruff check --select F` is clean on the changed files.
+
 ## v3.32.52b — 2026-11-09
 
 No shipped code (one test); `PDFMD_VERSION` stays 3.32.52. Entry 3fi. `test_serve`'s live-view CSV test expected the caption `Cap`; it was written the day before pandoc-crossref was installed on the author's machine, and with pandoc-crossref the `#tbl:t` table is numbered (`Table 1: Cap`), in the live view as in a build, which is right. The test now expects the number when pandoc-crossref is on PATH and the bare caption when it is not; both checked (the second with a PATH holding Pandoc alone).

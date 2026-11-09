@@ -27,15 +27,15 @@ def run(core, *,
     LATEX_ENGINES, TEX_STANDALONE_FORMATS = core.LATEX_ENGINES, core.TEX_STANDALONE_FORMATS
     announce_preambles, attach_source_after_success = core.announce_preambles, core.attach_source_after_success
     attach_time, auto_disabled, backup_after_success = core.attach_time, core.auto_disabled, core.backup_after_success
-    begin_timer, browser_page_css, calc_filter_args = core.begin_timer, core.browser_page_css, core.calc_filter_args
+    begin_timer, browser_page_css = core.begin_timer, core.browser_page_css
     calibre_page_options, cellalign_args = core.calibre_page_options, core.cellalign_args
     check_asset_budget, check_output_budget = core.check_asset_budget, core.check_output_budget
     chem_filter_args, code_filter_args = core.chem_filter_args, core.code_filter_args
-    contains_citations, cover_filter_args = core.contains_citations, core.cover_filter_args
-    cover_header_args, crossref_filter_args = core.cover_header_args, core.crossref_filter_args
+    contains_citations, document_filter_args = core.contains_citations, core.document_filter_args
+    cover_header_args = core.cover_header_args
     csl_args, css_additions, css_heading_args = core.csl_args, core.css_additions, core.css_heading_args
-    csv_table_filter, csv_table_filter_args = core.csv_table_filter, core.csv_table_filter_args
-    default_monofont, default_output_path = core.default_monofont, core.default_output_path
+    csv_table_filter = core.csv_table_filter
+    default_monofont = core.default_monofont
     discovery_disabled, display_path = core.discovery_disabled, core.display_path
     document_font_args, document_font_setting = core.document_font_args, core.document_font_setting
     document_header_file, document_preambles = core.document_header_file, core.document_preambles
@@ -48,20 +48,19 @@ def run(core, *,
     has_geometry, has_mainfont, has_monofont = core.has_geometry, core.has_mainfont, core.has_monofont
     has_standalone_option, hoist_code_header = core.has_standalone_option, core.hoist_code_header
     html_pandoc_args, image_filter_args = core.html_pandoc_args, core.image_filter_args
-    indent_filter_args, is_assembled_document = core.indent_filter_args, core.is_assembled_document
+    is_assembled_document = core.is_assembled_document
     keep_header_includes, kit_no_auto_kinds = core.keep_header_includes, core.kit_no_auto_kinds
-    linebreak_args, log_cmd, mainfont_choice = core.linebreak_args, core.log_cmd, core.mainfont_choice
-    managed_fonts_css, markup_filter_args = core.managed_fonts_css, core.markup_filter_args
-    markup_header_args, mathfont_args, md_macro_args = core.markup_header_args, core.mathfont_args, core.md_macro_args
-    metadata_append_args, metadata_cwd = core.metadata_append_args, core.metadata_cwd
+    log_cmd, mainfont_choice = core.log_cmd, core.mainfont_choice
+    managed_fonts_css = core.managed_fonts_css
+    markup_header_args, mathfont_args = core.markup_header_args, core.mathfont_args
+    metadata_cwd = core.metadata_cwd
     office_fallback_wanted, office_finish = core.office_fallback_wanted, core.office_finish
     office_reference, open_file, option_names = core.office_reference, core.open_file, core.option_names
-    output_extension_for, pagebreak_filter_args = core.output_extension_for, core.pagebreak_filter_args
     pandoc_metadata_order, pandoc_working_directory = core.pandoc_metadata_order, core.pandoc_working_directory
     paper_kind, paper_variables = core.paper_kind, core.paper_variables
     pdf_metadata_header_file, pdf_metadata_snippet = core.pdf_metadata_header_file, core.pdf_metadata_snippet
     polish_pdf, prepared_latex_inputs = core.polish_pdf, core.prepared_latex_inputs
-    raw_filter_args, record_engine = core.raw_filter_args, core.record_engine
+    record_engine = core.record_engine
     report_common_folder, report_engine_failure = core.report_common_folder, core.report_engine_failure
     report_sources, resolve_attach, resolve_embed = core.report_sources, core.resolve_attach, core.resolve_embed
     resolve_engines, resolve_from_format = core.resolve_engines, core.resolve_from_format
@@ -70,9 +69,9 @@ def run(core, *,
     run_engine_command, run_office_pandoc = core.run_engine_command, core.run_office_pandoc
     script_fallback, stamp_after_success = core.script_fallback, core.stamp_after_success
     stamp_scope_matches, strict_message = core.stamp_scope_matches, core.strict_message
-    table_caption_args, table_width_filter = core.table_caption_args, core.table_width_filter
+    table_width_filter = core.table_width_filter
     tex_package_args, tex_search_env, time_breakdown = core.tex_package_args, core.tex_search_env, core.time_breakdown
-    time_label, title_filter_args, typst_filter_args = core.time_label, core.title_filter_args, core.typst_filter_args
+    time_label, typst_filter_args = core.time_label, core.typst_filter_args
     warning_capture, weasyprint_math_args = core.warning_capture, core.weasyprint_math_args
     width_filter_args, write_assembled_markdown = core.width_filter_args, core.write_assembled_markdown
 
@@ -290,19 +289,8 @@ def run(core, *,
                 if target_format in HTML_TARGETS:
                     cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                             args.self_contained, report_note)
-                cmd += metadata_append_args(files, metadata_files)
-                cmd += md_macro_args(files, metadata_files)
-                cmd += calc_filter_args(files, metadata_files)
-                cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
-                cmd += pagebreak_filter_args(files, metadata_files)
-                cmd += indent_filter_args(files, metadata_files)
-                cmd += markup_filter_args(files, metadata_files)
-                cmd += table_caption_args(files, metadata_files)
-                cmd += linebreak_args(files, metadata_files)
-                cmd += title_filter_args(files, metadata_files)
-                cmd += cover_filter_args(files, metadata_files)
-                cmd += raw_filter_args(files, report_no_auto, metadata_files)
-                cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
+                cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
+                                            label="REPORT")
                 if (any(contains_citations(file) for file in files)
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
@@ -432,19 +420,8 @@ def run(core, *,
                         cmd += ["--include-in-header", str(report_fonts_header or report_fonts_css)]
                     if report_header_file is not None:          # last, as in the branch above
                         cmd += ["--include-in-header", str(report_header_file)]
-                    cmd += metadata_append_args(files, metadata_files)
-                    cmd += md_macro_args(files, metadata_files)
-                    cmd += calc_filter_args(files, metadata_files)
-                    cmd += csv_table_filter_args(files, report_no_auto, csv_filter, metadata_files)
-                    cmd += pagebreak_filter_args(files, metadata_files)
-                    cmd += indent_filter_args(files, metadata_files)
-                    cmd += markup_filter_args(files, metadata_files)
-                    cmd += table_caption_args(files, metadata_files)
-                    cmd += linebreak_args(files, metadata_files)
-                    cmd += title_filter_args(files, metadata_files)
-                    cmd += cover_filter_args(files, metadata_files)
-                    cmd += raw_filter_args(files, report_no_auto, metadata_files)
-                    cmd += crossref_filter_args(files, pandoc_options, report_no_auto, "REPORT")
+                    cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
+                                                label="REPORT")
                     if (any(contains_citations(file) for file in files)
                             and "--citeproc" not in pandoc_options
                             and not core.CITEPROC_DISABLED):

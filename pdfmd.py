@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.52"
+PDFMD_VERSION = "3.32.53"
 import argparse
 import atexit
 import csv
@@ -4547,17 +4547,18 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     return args
 
 
-def document_filter_args(inputs: Path | list[Path], md_path: Path, metadata_files: list[Path], no_auto: list[str] | None,
+def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], metadata_files: list[Path], no_auto: list[str] | None,
                          csv_filter: Path, pandoc_options: list[str], crossref_sources: Path | list[Path] | None = None,
                          flat_pictures: Path | None = None, preamble: list[Path] | None = None, flat_text: bool = False,
-                         cellalign_early: bool = False) -> list[str]:
+                         cellalign_early: bool = False, label: str | None = None) -> list[str]:
     """The filters pdfmd puts on what a document SAYS (its own syntax: the metadata that appends, `\\md{}`, calc, the CSV tables, page
     breaks, indent, callouts and the other markup, table captions, line breaks, the title, the cover, raw pieces and diagrams, the
     cross-references), in the order they run. Every build writes this one list, whatever the writer is, and so does the live view of
     `--serve` (entry 3do): a syntax added here shows in both, and the live view needs no list of its own.
 
     `inputs` are the files whose text is searched for the syntax (the document, or all the files of a joined build), `md_path` the
-    document itself; `cellalign_early` puts the cell filter here (the office route), where the others put it after the writer's own."""
+    document itself (a report's files, for report mode); `cellalign_early` puts the cell filter here (the office route), where the
+    others put it after the writer's own. `label` names the document in a message (report mode: `REPORT`); `md_path` by default."""
     args = metadata_append_args(inputs, metadata_files)
     args += md_macro_args(inputs, metadata_files)
     args += calc_filter_args(inputs, metadata_files)
@@ -4572,7 +4573,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path, metadata_file
     args += title_filter_args(md_path, metadata_files)
     args += cover_filter_args(md_path, metadata_files)
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
-    args += crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, str(md_path))
+    args += crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))
     return args
 
 

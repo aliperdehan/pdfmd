@@ -201,25 +201,16 @@ class Render(Folder):
         helpers = {"metadata_append_args", "md_macro_args", "csv_table_filter_args", "pagebreak_filter_args", "indent_filter_args",
                    "markup_filter_args", "table_caption_args", "linebreak_args", "title_filter_args", "cover_filter_args",
                    "raw_filter_args", "crossref_filter_args"}
-        # Report mode (lib/pdfmd_report, moved out of pdfmd.py in 3.32.13, before document_filter_args existed in 3.32.41) still
-        # writes the list out itself; this test read only pdfmd.py and did not see it (found 2026-11-09, entry 3fi). The one
-        # known second list, named so that no new one appears; when report mode takes document_filter_args, the entry goes.
-        known = {"lib/pdfmd_report/__init__.py:run"}
+        # pdfmd.py and lib/: report mode (lib/pdfmd_report) wrote the list out itself until 3.32.53, out of this test's sight
         callers: dict[str, set] = {name: set() for name in helpers}
-        seen_known: set[str] = set()
-        for path, tree in zip(python_sources(), trees):
+        for tree in trees:
             for function in ast.walk(tree):
                 if isinstance(function, ast.FunctionDef):
-                    where = f"{path.relative_to(ROOT).as_posix()}:{function.name}"
                     for call in ast.walk(function):
                         if isinstance(call, ast.Call) and called(call) in callers:
-                            if where in known:
-                                seen_known.add(where)
-                            else:
-                                callers[called(call)].add(function.name)
+                            callers[called(call)].add(function.name)
         self.assertEqual({name: sorted(where) for name, where in callers.items()},
                          {name: ["document_filter_args"] for name in helpers})
-        self.assertEqual(seen_known, known, "a known second list is gone: take it out of `known`")
         live = [node for tree in trees for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "serve_live_filters"]
         self.assertEqual(len(live), 1, "serve_live_filters is defined once, in pdfmd.py or a package")
         self.assertIn("document_filter_args", {called(call) for call in ast.walk(live[0]) if isinstance(call, ast.Call)})
