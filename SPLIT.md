@@ -246,7 +246,7 @@ Facts: 3 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `cor
 
 Tests: `test_attach`, `test_standalone_source`.
 
-#### 14. `pdfmd_compat` (new package): 12 definitions, ~250 lines
+#### 14. `pdfmd_compat` (new package): 12 definitions, ~250 lines; done in 3.33.15 (the comments above the constants moved with them; `expand_glob` is imported by the package, so `pdfmd.py` lost its own import)
 
 Definitions: `mdpdf_npm_file`, `mdpdf_npm_length`, `mdpdf_translate`, `mdpdf_main`, `md2pdf_translate`, `md2pdf_main`, `inkmd_translate`, `inkmd_main`, `batchmd_translate`, `batchmd_main`, `pan_tec_translate`, `pan_tec_main`.
 
