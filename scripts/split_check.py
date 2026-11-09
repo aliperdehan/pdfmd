@@ -1,27 +1,41 @@
 #!/usr/bin/env python3
 """The proof of a pure move (SPLIT.md, step 7): the checkout's pdfmd before and after the move must say and make the same.
 
-    python3 scripts/split_check.py [--extra 'NAME:ARGS'] ... [--keep]
+    python3 scripts/split_check.py [--extra 'NAME:ARGS'] [--extra 'NAME!:ARGS'] ... [--real-data] [--keep]
 
 "Before" is HEAD, checked out into a temporary git worktree; "after" is the working tree with the move not yet committed.
-Both run the same fixed set in a scratch folder of their own, with an empty config and a cache of their own:
+Both run the same fixed set, one after the other, in the same scratch folder (moved aside when its run is done, so every name
+pdfmd derives from a path, such as the global cache folder's hash or the raw pictures map's, is the same in both), with an
+empty config and a cache of their own:
 
 - `--help` and every `--help TOPIC` (the topics are read from `--help`): byte for byte;
 - `--verbose` builds: a document to PDF, `--to html`, `--to docx`, `-r` on examples/book, `-b -j 2`, and a document with
   comments of every kind (Markdown, LaTeX preamble, .bib, CSL) through `--assemble-only`, `--merge` and `--attach-source`:
-  the logs line for line with times, dates, temporary names and the build-record folder masked, and the assembled,
-  merged and attached text byte for byte;
+  the logs line for line with the trees' own paths, times, dates, durations, time stamps in file names, temporary names and
+  the mtimes and seconds of `--api` answers masked (a run with `-j` compares its lines sorted, as parallel workers print in
+  any order), and the assembled, merged and attached text byte for byte;
 - `--extra 'NAME:ARGS'` adds a build of the package's own feature, run in the scratch copy of examples/ (`{root}` in ARGS is
-  the tree being run);
+  the tree being run); NAME may not be a default build's. A build that fails in both trees proves nothing: it is reported
+  (BOTH FAILED) and the result is not SAME, unless it is declared an intended failure, `--extra 'NAME!:ARGS'`, which must
+  then fail in both (DID NOT FAIL otherwise);
 - `scripts/pdfmd --version`, best and median of ten: told, not judged (a slower start is for the author to see).
 
-Exit status 0 when everything is the same. `--keep` keeps the scratch folders and prints where they are.
+The scratch copies hold the files git knows in examples/ (tracked, or untracked and not ignored) with their modification
+times. The checkout gives HEAD's files its own time, so each file of the worktree whose content equals the working tree's
+gets the working tree's modification time, and a choice by age (a tie between documents) goes the same way in both; the
+files the move changed keep the checkout time. (The commit time for every file would make the documents tie in "before"
+only, as "after" runs with their real times.)
+
+XDG_DATA_HOME (pdfmd's installed tools: KaTeX, d2, Graphviz launchers) is a scratch folder both runs share, or with
+`--real-data` the one the environment sets, for builds that need installed tools; the run says which. Builds read standard
+input from /dev/null. Exit status 0 when everything is the same. `--keep` keeps the scratch folders and prints where they are.
 """
 
 from __future__ import annotations
 
 import argparse
 import difflib
+import filecmp
 import os
 import re
 import shlex
@@ -80,10 +94,30 @@ RUNS = [  # name, folder of the scratch copy, arguments
 OUTPUTS = ["fixture/comments.assembled.md", "fixture/comments.merged.md"]
 
 
+def git_files(tree: Path, *arguments: str) -> list[str]:
+    listed = subprocess.run(["git", "-C", str(tree), "ls-files", "-z", *arguments], capture_output=True, check=True).stdout
+    return [name for name in listed.decode("utf-8").split("\0") if name]
+
+
+def same_times(head: Path) -> None:
+    """The worktree's files whose content is the working tree's get its modification times (see the docstring)."""
+    for name in git_files(head):
+        old, new = head / name, ROOT / name
+        if old.is_symlink() or new.is_symlink() or not old.is_file() or not new.is_file():
+            continue
+        if filecmp.cmp(old, new, shallow=False):
+            stat = new.stat()
+            os.utime(old, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+
 def scratch(tree: Path, out: Path) -> Path:
     """The documents, copied: a build writes beside its source, and neither tree may be touched."""
     work = out / "work"
-    shutil.copytree(tree / "examples", work / "examples", ignore=shutil.ignore_patterns("*.pdf"))
+    for name in git_files(tree, "--cached", "--others", "--exclude-standard", "--", "examples"):
+        source, target = tree / name, work / name
+        if source.is_file() and source.suffix != ".pdf":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
     fixture = work / "fixture"
     fixture.mkdir()
     (fixture / "comments.md").write_text(COMMENTS_MD, encoding="utf-8")
@@ -93,8 +127,8 @@ def scratch(tree: Path, out: Path) -> Path:
                            encoding="utf-8", check=True).stdout
     (fixture / "style.csl").write_text(style.replace("<info>", "<!-- a CSL comment -->\n<info>", 1), encoding="utf-8")
     (work / "batch").mkdir()
-    shutil.copy(tree / "examples" / "results.md", work / "batch" / "a.md")
-    shutil.copy(tree / "examples" / "lecture.md", work / "batch" / "b.md")
+    shutil.copy2(work / "examples" / "results.md", work / "batch" / "a.md")
+    shutil.copy2(work / "examples" / "lecture.md", work / "batch" / "b.md")
     return work
 
 
@@ -103,20 +137,37 @@ def version(tree: Path) -> str:
     return found.group(1) if found else "?"
 
 
+def spellings(path: Path) -> list[str]:
+    """Every way a log may spell ``path``: as given, resolved, and from `~` (pdfmd's display_path); the longest first."""
+    found, home = {str(path), str(path.resolve())}, Path.home()
+    found |= {"~/" + Path(form).relative_to(home).as_posix() for form in found
+              if Path(form).is_relative_to(home) and Path(form) != home}
+    return sorted(found, key=len, reverse=True)
+
+
 def mask(text: str, tree: Path, out: Path) -> str:
     """Only what differs between two runs of the same code: places, times, random names, the version."""
-    places = [(out, "OUT"), (tree, "TREE"), (Path.home(), "~"), (Path(tempfile.gettempdir()), "TMP")]
-    for path, name in places:
-        for form in sorted({str(path), str(path.resolve())}, key=len, reverse=True):
+    for path, name in [(out, "OUT"), (tree, "TREE"), (Path.home(), "~"), (Path(tempfile.gettempdir()), "TMP")]:
+        for form in spellings(path):
             text = text.replace(form, name)
     text = text.replace(version(tree), "VERSION")
     text = re.sub(r"(?:/private)?/(?:var/folders|tmp)/\S*", "TMP", text)
-    text = re.sub(r"\d+\.\d+ s\b", "N s", text)
-    text = re.sub(r"\d+ ms\b", "N ms", text)
-    text = re.sub(r"builds/[^/\s]*-[0-9a-f]{8}/\d{8}-\d{6}(?:-\d+)?-(\w+)\.log", r"builds/RECORD-\1.log", text)
     text = re.sub(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:\d{2})?", "DATE", text)
-    # tempfile's names: a prefix such as `.b.pdfmd-title-` and eight random characters
-    return re.sub(r"(pdfmd-[a-z]+(?:-[a-z]+)*-)[a-z0-9_]{8}(?![A-Za-z0-9_])", r"\1RANDOM", text)
+    # time stamps in file names (snapshots 20261110091500, 20261110-091500 or 11-10_09-15-00; build records), with the
+    # collision counter (-2) a second name in the same second gets
+    text = re.sub(r"(?<!\d)(?:\d{8}-?\d{6}|\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-\d{1,3})?(?!\d)", "STAMP", text)
+    # durations: 12.3 s, and from a minute on 1:06, 1:01:06 or 2 d 01:01:06, one token for all (a build may cross 60 s)
+    text = re.sub(r"\d+\.\d+ s\b", "N s", text)
+    text = re.sub(r"(?<![\w:.])(?:\d+ d )?\d{1,2}(?::\d{2}){1,2}(?![\w:])", "N s", text)
+    text = re.sub(r"\d+ ms\b", "N ms", text)
+    text = re.sub(r'"(mtime|seconds)": ("?)[\d.]+\2', r'"\1": N', text)  # --api answers
+    # tempfile's names: a prefix (`.b.pdfmd-title-`, `.results.pdfmd-`) and eight random characters; a bare `pdfmd-` only
+    # after a dot, so that fixed names such as `pdfmd-manifest` stay
+    return re.sub(r"((?<=\.)pdfmd-|pdfmd-[a-z]+(?:-[a-z]+)*-)[a-z0-9_]{8}(?![A-Za-z0-9_])", r"\1RANDOM", text)
+
+
+def parallel(arguments: list[str]) -> bool:
+    return any(re.fullmatch(r"-j\d*|--jobs(?:=.*)?", argument) for argument in arguments)
 
 
 def attachments(pdf: Path, tree: Path) -> dict[str, bytes]:
@@ -135,10 +186,12 @@ def attachments(pdf: Path, tree: Path) -> dict[str, bytes]:
     return found
 
 
-def run_tree(tree: Path, out: Path, extra: list[tuple[str, str]]) -> dict[str, object]:
+def run_tree(tree: Path, out: Path, extra: list[tuple[str, str]], data_home: Path | None) -> dict[str, object]:
     out.mkdir(parents=True)
     environment = {**os.environ, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(out / "config"),
                    "XDG_CACHE_HOME": str(out / "cache")}
+    if data_home:
+        environment["XDG_DATA_HOME"] = str(data_home)
     pdfmd = [sys.executable, str(tree / "pdfmd.py")]
     result: dict[str, object] = {}
     main_help = subprocess.run([*pdfmd, "--help"], capture_output=True, env=environment).stdout
@@ -149,10 +202,16 @@ def run_tree(tree: Path, out: Path, extra: list[tuple[str, str]]) -> dict[str, o
         result[f"help {topic}"] = done.stdout + done.stderr
     work = scratch(tree, out)
     runs = RUNS + [(name, "examples", shlex.split(arguments.replace("{root}", str(tree)))) for name, arguments in extra]
+    exits = {}
     for name, folder, arguments in runs:
         done = subprocess.run([*pdfmd, "--verbose", "--no-backup", *arguments], cwd=work / folder, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace", env=environment)
-        result[f"log {name}"] = mask(done.stdout + done.stderr, tree, out) + f"exit {done.returncode}\n"
+                              stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", env=environment)
+        log = mask(done.stdout + done.stderr, tree, out)
+        if parallel(arguments):
+            log = "".join(line + "\n" for line in sorted(log.splitlines()))
+        result[f"log {name}"] = log + f"exit {done.returncode}\n"
+        exits[name] = done.returncode
+    result["exits"] = exits
     for name in OUTPUTS:
         path = work / name
         result[f"file {name}"] = path.read_bytes() if path.is_file() else b"(missing)"
@@ -171,48 +230,74 @@ def run_tree(tree: Path, out: Path, extra: list[tuple[str, str]]) -> dict[str, o
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--extra", action="append", default=[], metavar="NAME:ARGS",
-                        help="one more --verbose build, run in the scratch copy of examples/")
+                        help="one more --verbose build, run in the scratch copy of examples/; NAME!:ARGS for one that "
+                             "must fail in both trees")
+    parser.add_argument("--real-data", action="store_true",
+                        help="use XDG_DATA_HOME as the environment sets it (installed tools), not a scratch one")
     parser.add_argument("--keep", action="store_true", help="keep the scratch folders")
     options = parser.parse_args()
-    extra = []
+    extra, failing = [], set()
     for item in options.extra:
         name, _, arguments = item.partition(":")
+        if name.endswith("!"):
+            name = name[:-1]
+            failing.add(name)
         if not name or not arguments:
-            parser.error(f"--extra {item!r}: NAME:ARGS")
+            parser.error(f"--extra {item!r}: NAME:ARGS or NAME!:ARGS")
+        if name in {default for default, _, _ in RUNS} or name in {given for given, _ in extra}:
+            parser.error(f"--extra {item!r}: {name} is the name of a default build or of an earlier --extra")
         extra.append((name, arguments))
     if not shutil.which("pandoc"):
         raise SystemExit("split_check needs Pandoc")
     base = Path(tempfile.mkdtemp(prefix="pdfmd-split-check-")).resolve()
-    before_tree = base / "head"
+    data = None if options.real_data else base / "data"
+    if data:
+        data.mkdir()
+        print(f"data: a scratch XDG_DATA_HOME both runs share ({data})", flush=True)
+    else:
+        real = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        print(f"data: the environment's XDG_DATA_HOME ({real.replace(str(Path.home()), '~', 1)})", flush=True)
+    before_tree, run = base / "head", base / "run"
     subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", "--quiet", str(before_tree), "HEAD"], check=True)
     try:
+        same_times(before_tree)
         print("before: HEAD ...", flush=True)
-        before = run_tree(before_tree, base / "before", extra)
+        before = run_tree(before_tree, run, extra, data)
+        run.rename(base / "before")
         print("after: the working tree ...", flush=True)
-        after = run_tree(ROOT, base / "after", extra)
+        after = run_tree(ROOT, run, extra, data)
+        run.rename(base / "after")
     finally:
         subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(before_tree)], check=False)
-    same = True
-    for key in sorted(set(before) | set(after)):
-        if key == "startup":
-            continue
+    keys = sorted((set(before) | set(after)) - {"startup", "exits"})
+    differ = set()
+    for key in keys:
         old, new = before.get(key), after.get(key)
         if old == new:
             continue
-        same = False
+        differ.add(key)
         print(f"DIFFERENT: {key}")
         if isinstance(old, str) and isinstance(new, str):
             sys.stdout.writelines(list(difflib.unified_diff(old.splitlines(True), new.splitlines(True), "before", "after", n=1))[:40])
+    for name in [name for name, _, _ in RUNS] + [name for name, _ in extra]:
+        old, new = before["exits"][name], after["exits"][name]
+        codes = f"exit {old}" if old == new else f"exit {old} before, {new} after"
+        if name in failing and (old == 0 or new == 0):
+            print(f"DID NOT FAIL: {name} ({codes})")
+            differ.add(f"log {name}")
+        elif name not in failing and old and new:
+            print(f"BOTH FAILED: {name} ({codes})")
+            differ.add(f"log {name}")
     (b_best, b_median), (a_best, a_median) = before["startup"], after["startup"]
     print(f"startup (scripts/pdfmd --version): before {b_best:.0f} / {b_median:.0f} ms, after {a_best:.0f} / {a_median:.0f} ms "
           "(best / median of ten)")
-    checked = sum(1 for key in before if key != "startup")
-    print(f"SAME: {checked} checks (help, logs, outputs)" if same else "NOT THE SAME (see above)")
+    print(f"NOT THE SAME: {len(differ)} of {len(keys)} checks differ" if differ else
+          f"SAME: {len(keys)} checks (help, logs, outputs)")
     if options.keep:
         print(f"kept: {base}")
     else:
         shutil.rmtree(base, ignore_errors=True)
-    return 0 if same else 1
+    return 1 if differ else 0
 
 
 if __name__ == "__main__":

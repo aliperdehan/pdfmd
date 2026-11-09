@@ -19,6 +19,56 @@ same commit as the change.
 
 ---
 
+## v3.33.41b — 2026-11-10
+
+Pre-edit state: commit `9d1da7e`. Entry 3fi. A script only, no version bump. **`scripts/split_check.py` says SAME only when
+the two trees behaved the same, and the noise of its two scratch copies no longer shows as a difference** (the weaknesses
+gathered in phase 1 of the split):
+
+1. An extra that fails in both trees proved nothing and counted as the same: it is now reported, `BOTH FAILED: NAME (exit N)`,
+   and the run is not SAME. An intended failure is declared as `--extra 'NAME!:ARGS'` and must fail in both (`DID NOT FAIL`
+   otherwise). A default build that fails in both is reported the same way.
+2. An extra named like a default build (`pdf`, `batch`...) or like an earlier extra replaced it silently: a parser error now.
+3. Both trees run at the same scratch path (`run/`, moved to `before/` and `after/` when each is done), so the names pdfmd
+   hashes from a path are the same: the global cache folder (`<hash>-results`), the raw pictures map
+   (`raw/maps/<hash>.yaml`), the build-record folder (no longer masked).
+4. The HEAD worktree's files whose content equals the working tree's get the working tree's modification times (`os.utime`),
+   and the scratch copies keep them (`copy2`, also for the batch folder's two documents); the files the move changed keep the
+   checkout time. The commit time for every file would make the documents tie in "before" only.
+5. The tree's path is masked in every spelling: as given, resolved, and from `~` (the record's CMD line showed the working
+   tree as `~/...`).
+6. Time stamps in file names (`report.md.bak.20261110091500`, `-091500`, `11-10_09-15-00`, the build records'
+   `20261110-091500-2-ok.log`, with the collision counter) become `STAMP`.
+7. Durations of a minute and more (`1:06`, `1:01:06`, `2 d 01:01:06`) are masked, to the same token as `12.3 s`.
+8. A temporary name with no word between `pdfmd-` and the random part (`.results.pdfmd-ab12cd34.md`) is masked; a bare
+   `pdfmd-` only after a dot, so fixed names such as `pdfmd-manifest` stay.
+9. A build with `-j`/`--jobs` compares its log lines sorted (parallel workers print in any order).
+10. The `"mtime"` and `"seconds"` fields of `--api` answers are masked.
+11. A run that is not the same says `NOT THE SAME: k of n checks differ`.
+12. XDG_DATA_HOME is a scratch folder both runs share; `--real-data` keeps the environment's (for builds that need
+    installed tools). The run's first line says which.
+
+Also: the scratch copy of `examples/` holds only the files git knows (tracked, or untracked and not ignored), so an ignored
+`lecture.html` in the working tree no longer appears in "after" only; builds read standard input from `/dev/null`. SPLIT.md's
+step 7 and its notes on `pdfmd_serve` (the `--api` fields) and `pdfmd_flat` (the raw map's hash) say so.
+
+Checked on the clean tree. The old script with the extras `cacheg` (`results.md --cache -o r.pdf`), `gfm` (`lecture.md --to
+gfm`), `bj` (`-b ../batch -j 2`), `doctor`, `api` (`--api GET /api/project`), `apifile` (`--api GET /api/file?path=results.md`),
+`initbk`, `hist` and `bad` (`--no-such-flag`): `cacheg` and `gfm` differed in the hashed names, `api` in `lecture.html`,
+`apifile` in the mtime, and `bad` passed as the same. A second old run with `which` (`--which`), `newest` (`--newest --which`)
+and `asm` (a bare `--assemble-only`): all three differed, the tie broken towards `slides.md` before and `scripts.md` after.
+The new script with all of them (and `initbk`/`hist` as `results.md --init-backups` and `--history`, whose snapshot
+`results.md.bak.<stamp>` carries a different second in each tree, and `badok!:--no-such-flag`): `BOTH FAILED: bad (exit 1)`,
+`NOT THE SAME: 1 of 43 checks differ`, every other check the same; a first run had also caught `initbk` on `lecture.md`
+(`BOTH FAILED`, exit 1: no front matter). `--extra 'pdf:results.md'`, a repeated name and `batch!:` are refused (exit 2). With
+a throwaway full stop added to the MATHFONT note in `pdfmd.py`, `--real-data` (XDG_DATA_HOME set to a scratch folder) and
+`okfail!:--version`: `DIFFERENT` for `pdf`, `batch`, `report`, `attach` and `bad`, `DID NOT FAIL: okfail (exit 0)`,
+`NOT THE SAME: 6 of 32 checks differ`; reverted. Item 6 is proven by `hist` (the snapshot's name in `--history`) and by the
+build records; items 5, 7, 8, 9 and 10 rest on the masks run over sample lines and on construction: no compared log spelt
+the tree as `~/...` (the CMD lines read `TREE/...` in both), no build here lasts a minute, no bare `pdfmd-` name showed up,
+`apifile`'s two mtimes came out equal through item 4 before the mask could matter, and `bj` and `batch` were the same before
+the change too (as was `doctor`).
+
 ## v3.33.41 — 2026-11-10
 
 Pre-edit state: commit `fcbcd3d`. Entry 3fi. **Three pointers that phase 1 of the split left stale are corrected** (the moves kept

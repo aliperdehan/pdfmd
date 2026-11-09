@@ -71,10 +71,12 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    - The package's tests (below) and the always-run set: `test_packaging`, `test_setup`, `test_docs_consistency`,
      `test_compat`, `test_probes`, `test_serve`, `test_launcher`, `test_jobs`.
    - `python3 scripts/split_check.py` does the next two checks in one run: "before" is HEAD in a temporary worktree,
-     "after" the working tree with the move uncommitted (`--extra 'NAME:ARGS'` adds a build of the package's feature).
-     Nothing in `pdfmd.py` or `lib/` is edited while it runs.
+     "after" the working tree with the move uncommitted (`--extra 'NAME:ARGS'` adds a build of the package's feature,
+     `--extra 'NAME!:ARGS'` one that must fail; any other build that fails in both trees is reported, BOTH FAILED, and the
+     result is not SAME; `--real-data` for builds that need installed tools). Nothing in `pdfmd.py` or `lib/` is edited
+     while it runs.
    - `--help` and every `--help TOPIC` byte-identical before and after.
-   - `--verbose` output identical before and after (temporary names, times and the build-record folder aside) on a fixed
+   - `--verbose` output identical before and after (the trees' paths, temporary names, times and time stamps aside; a `-j` run's lines in any order) on a fixed
      set: one document to PDF, `--to html`, `--to docx`, `-r` on `examples/book`, `-b -j 2`, and the documents that use
      the package's feature. The baseline is taken before the first edit, with the tree clean.
    - The full suite once, after the last move (the author, 2026-11-09), not per move.
@@ -168,7 +170,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 12 pdfmd names read through `co
 
 Note: `serve_live_filters` is read by `test_serve` (one filter list); that test already finds it in `lib/`.
 
-Note: the module's global `core` is pdfmd; `lib/pdfmd_serve/core.py` (the JSON core) is a different thing. `serve_live_filters` is a context manager: its stand-in returns the real one, which is what `Core(filters=...)` calls. The successful `--api` answers carry an mtime or seconds, so `split_check` proves the error paths and a by-hand run proves the rest (see the changelog entry).
+Note: the module's global `core` is pdfmd; `lib/pdfmd_serve/core.py` (the JSON core) is a different thing. `serve_live_filters` is a context manager: its stand-in returns the real one, which is what `Core(filters=...)` calls. The successful `--api` answers carry an mtime or seconds, so `split_check` proved the error paths and a by-hand run the rest (see the changelog entry); it masks those fields since v3.33.41b.
 
 Tests: `test_serve`.
 
@@ -180,7 +182,7 @@ Constants that move with it (only this package reads them): `_PANDOC_EXTENSIONS`
 
 Facts: 2 callers stay in pdfmd.py (re-exported); 9 pdfmd names read through `core`.
 
-Note: `GFM_CLI` and `ASCII_CLI` (settings main() fills) stay in `pdfmd.py` and are read as `core.X`. `_PANDOC_EXTENSIONS` is a `DEFERRED_NAMES` entry (`test_probes` patches it with `mock.patch.dict`). `ascii_filter_args` reads `core.__file__`. split_check's extras need `--no-auto raw`: the raw map's file name hashes the cache path, which differs between its two copies.
+Note: `GFM_CLI` and `ASCII_CLI` (settings main() fills) stay in `pdfmd.py` and are read as `core.X`. `_PANDOC_EXTENSIONS` is a `DEFERRED_NAMES` entry (`test_probes` patches it with `mock.patch.dict`). `ascii_filter_args` reads `core.__file__`. The raw map's file name hashes the cache path, which differed between split_check's two copies (`--no-auto raw`, tried against it, is not a kind; see v3.33.13b); since v3.33.41b both run at one path.
 
 Tests: `test_ascii`, `test_flat`, `test_keep_source`, `test_probes`, `test_setup`.
 
