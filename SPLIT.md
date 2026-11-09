@@ -123,13 +123,16 @@ Note: `run_watch` re-runs the script it was started from, found with `__file__`;
 
 Tests: `test_ranking_generated`.
 
-#### 4. `pdfmd_hybrid` (new package): 4 definitions, ~84 lines
+#### 4. `pdfmd_hybrid` (new package): 4 definitions, ~84 lines; done in 3.33.4
 
 Definitions: `resolve_hybrid`, `odf_source_for`, `attach_hybrid`, `hybrid_after_success`.
 
 Constants that move with it (only this package reads them): `HYBRID_DESCRIPTION`, `HYBRID_FAMILY`.
 
 Facts: 1 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `core`.
+
+Note: `HYBRID_CLI` (rebound by `main()`) and `HYBRID_MIME` (also read by the attachment readers) stay in `pdfmd.py`. `pypdf` there is a
+lazy loader, so the package reads `core.pypdf` and never imports pypdf at its top.
 
 Tests: `test_embedding`.
 

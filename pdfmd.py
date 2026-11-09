@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.3"
+PDFMD_VERSION = "3.33.4"
 import argparse
 import atexit
 import csv
@@ -1692,7 +1692,10 @@ from pdfmd_templates import init_command  # noqa: E402
 import pdfmd_watch  # noqa: E402
 from pdfmd_watch import pinned_watch_argv, run_watch  # noqa: E402
 
-bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch)
+import pdfmd_hybrid  # noqa: E402
+from pdfmd_hybrid import attach_hybrid, hybrid_after_success, resolve_hybrid  # noqa: E402, F401 -- attach_hybrid is read by tests/test_embedding.py
+
+bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid)
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -28108,109 +28111,11 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     return result
 
 
-# --- The hybrid PDF (v3.25.10) -----------------------------------------------------------------------------
-# LibreOffice's "hybrid PDF" (Export as PDF > Embed OpenDocument file): the PDF carries the document it was made from
-# as an attachment named Original.odt (.odp, .ods), described as "Embedded original document of this PDF file" with the
-# ODF mime type as its subtype; opening such a PDF in LibreOffice opens the attachment as a document you can edit, not the
-# pages in Draw. Checked: LibreOffice goes by that attachment, not by what the pages show, so any PDF can carry one.
+# The hybrid PDF (v3.25.10): lib/pdfmd_hybrid (its explanation is there). These two stay: main() rebinds the first,
+# the attachment readers above read the second.
 HYBRID_CLI: bool | None = None
 HYBRID_MIME = {"odt": "application/vnd.oasis.opendocument.text", "odp": "application/vnd.oasis.opendocument.presentation",
                "ods": "application/vnd.oasis.opendocument.spreadsheet"}
-HYBRID_FAMILY = {".docx": "odt", ".doc": "odt", ".odt": "odt", ".ott": "odt", ".rtf": "odt",
-                 ".pptx": "odp", ".ppt": "odp", ".odp": "odp", ".xlsx": "ods", ".xls": "ods", ".ods": "ods"}
-HYBRID_DESCRIPTION = "Embedded original document of this PDF file"
-
-
-def resolve_hybrid(path: Path, metadata_files: list[Path]) -> bool:
-    """Whether the PDF built from ``path`` carries an editable ODF copy: --hybrid / --no-hybrid, else the document's
-    `pdfmd-options.hybrid` (then its metadata files', then the config's). An office file has no front matter to ask."""
-    if HYBRID_CLI is not None:
-        return HYBRID_CLI
-    if path.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
-        return bool(option_flag(config_options().get("hybrid")))
-    return bool(option_flag(first_pdfmd_option(path, metadata_files, "hybrid")))
-
-
-def odf_source_for(path: Path, metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
-                   verbose: bool) -> tuple[bytes, str] | None:
-    """(the bytes of an ODF file for ``path``, its extension), or None. An office document is converted by LibreOffice
-    (an .odt/.odp/.ods is taken as it is); anything else is built to .odt by pdfmd itself, with the same metadata."""
-    family = HYBRID_FAMILY.get(path.suffix.lower())
-    with tempfile.TemporaryDirectory(prefix="pdfmd-hybrid-") as scratch:
-        scratch_dir = Path(scratch)
-        if family is not None:
-            if path.suffix.lower() == f".{family}":
-                return path.read_bytes(), family
-            binary = resolve_soffice()
-            if binary is None:
-                return None
-            command = [binary, "--headless", "--norestore", f"-env:UserInstallation={(scratch_dir / 'profile').as_uri()}",
-                       "--convert-to", family, "--outdir", str(scratch_dir), str(path)]
-            log_cmd(command, path.parent, verbose)
-            run_soffice(command, cwd=path.parent)
-            made = scratch_dir / f"{path.stem}.{family}"
-            return (made.read_bytes(), family) if made.is_file() else None
-        target = scratch_dir / f"{path.stem}.odt"
-        command = office_pdfmd_command(path, metadata_files, variables, no_auto, "-o", str(target), "--no-hybrid",
-                                       "--no-attach-source")
-        log_cmd(command, path.parent, verbose)
-        done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=path.parent,
-                              env={**os.environ, "PDFMD_NO_PROMPT": "1"})
-        return (target.read_bytes(), "odt") if done.returncode == 0 and target.is_file() else None
-
-
-def attach_hybrid(pdf_path: Path, data: bytes, extension: str) -> bool:
-    """Put ``data`` (an ODF file) into the PDF as LibreOffice's hybrid PDF has it. False when the PDF already has one."""
-    from pypdf.generic import NameObject, NumberObject, DictionaryObject, TextStringObject
-    name = f"Original.{extension}"
-    pypdf_logger = logging.getLogger("pypdf")
-    previous_level = pypdf_logger.level
-    pypdf_logger.setLevel(logging.ERROR)
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            writer = pypdf.PdfWriter(clone_from=pdf_path)
-            if any(existing.startswith("Original.") and existing[9:] in HYBRID_MIME for existing in writer.attachments):
-                return False
-            attachment = writer.add_attachment(name, data)
-            embedded = attachment._embedded_file
-            embedded[NameObject("/Subtype")] = NameObject("/" + HYBRID_MIME[extension])
-            embedded.set_data(zlib.compress(data, 9))
-            embedded[NameObject("/Filter")] = NameObject("/FlateDecode")
-            embedded[NameObject("/Params")] = DictionaryObject({NameObject("/Size"): NumberObject(len(data))})
-            filespec = attachment.pdf_object
-            filespec[NameObject("/UF")] = TextStringObject(name)
-            filespec[NameObject("/Desc")] = TextStringObject(HYBRID_DESCRIPTION)
-            atomic_write_pdf(writer, pdf_path)
-    finally:
-        pypdf_logger.setLevel(previous_level)
-    return True
-
-
-def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path], variables: list[str],
-                         no_auto: list[str] | None, verbose: bool) -> None:
-    """--hybrid: make the PDF just built open as an editable document in LibreOffice."""
-    if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
-        return
-    if pypdf is None:
-        print("WARN  hybrid: pypdf is not installed (pip install pypdf); nothing was attached", file=sys.stderr)
-        return
-    try:
-        found = odf_source_for(path, metadata_files, variables, no_auto, verbose)
-        if found is None:
-            print(f"WARN  hybrid: could not make an OpenDocument copy of {display_path(path)}"
-                  + ("" if path.suffix.lower() not in OFFICE_INPUT_EXTENSIONS else " (LibreOffice was not found)")
-                  + "; the PDF itself was built", file=sys.stderr)
-            return
-        data, extension = found
-        if attach_hybrid(pdf_path, data, extension):
-            print(f"HYBRID    {display_path(pdf_path)}: carries {display_path(path)} as Original.{extension} "
-                  f"({len(data) // 1024 or 1} KB); LibreOffice opens the PDF as an editable document")
-        else:
-            vprint(verbose, f"HYBRID    {display_path(pdf_path)}: already carries its OpenDocument source")
-    except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
-        print(f"WARN  hybrid: could not attach the OpenDocument copy to {display_path(pdf_path)} ({error}); "
-              "the PDF itself was built", file=sys.stderr)
 
 
 def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: list[str],

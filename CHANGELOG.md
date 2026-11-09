@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.4 — 2026-11-09
+
+Pre-edit state: commit `727d465`. Entry 3fi. **The hybrid PDF (`--hybrid`) lives in its own package, `pdfmd_hybrid`.** Move 4 of SPLIT.md; a pure move.
+
+- `resolve_hybrid`, `odf_source_for`, `attach_hybrid` and `hybrid_after_success`, with the constants `HYBRID_FAMILY` and `HYBRID_DESCRIPTION` and the section's explanatory comment, are in the new `lib/pdfmd_hybrid/__init__.py`, text and docstrings unchanged. `pdfmd.py` re-exports `resolve_hybrid`, `hybrid_after_success` (both called from `pdfmd.py`) and `attach_hybrid` (`tests/test_embedding.py` calls `pdfmd.attach_hybrid`; the re-export line carries `F401` for that reason) and binds the package with `bind_core()`. `odf_source_for` is used only by the package. The package is added to `pyproject.toml` (`packages`, `package-dir`) and to `PACKAGES` in `scripts/build_zipapp.py`.
+- `HYBRID_CLI` and `HYBRID_MIME` stay in `pdfmd.py`: `main()` rebinds `HYBRID_CLI` with `global`, and `HYBRID_MIME` is also read by the attachment readers in `pdfmd.py`. The package reads them as `core.HYBRID_CLI` and `core.HYBRID_MIME`, together with `core.OFFICE_INPUT_EXTENSIONS`, `core.atomic_write_pdf`, `core.config_options`, `core.display_path`, `core.first_pdfmd_option`, `core.log_cmd`, `core.office_pdfmd_command`, `core.option_flag`, `core.resolve_soffice`, `core.run_soffice`, `core.vprint` and `core.pypdf`, when it runs (tests patch `config_options` and `resolve_soffice` on `pdfmd`, and the calls go through `core`, so the patches still reach them).
+- `pypdf` in `pdfmd.py` is a lazy loader (`lazy_import("pypdf")`), so the package never imports it at its top: `hybrid_after_success` tests `core.pypdf is None` and `attach_hybrid` builds the writer with `core.pypdf.PdfWriter(...)` (its function-local `from pypdf.generic import ...` is unchanged). `python3 -X importtime scripts/pdfmd --version` lists no pypdf import.
+- Checked: ruff is clean; `scripts/split_check.py` with the extra build `results.md --hybrid -o hybrid.pdf`: all 31 checks the same (`--help` and its topics, the `--verbose` builds, the stripped outputs). `scripts/pdfmd --version` is no slower: fifteen interleaved runs of each give best / median 168 / 201 ms before and 176 / 194 ms after, and `-X importtime` puts the new package at 0.17 ms (every module it imports is loaded by `pdfmd.py` already). By hand, on a copy of `examples/`, `pdfmd.py r.docx --hybrid -o r.pdf --no-backup` (a .docx made from `results.md`, converted by LibreOffice) prints the same `HYBRID` line from HEAD and from the move (`carries r.docx as Original.odt (12 KB)`), and both PDFs carry an `Original.odt` attachment of the same size. Tests: `test_embedding` and the always-run set pass (151 tests, one skipped).
+
 ## v3.33.3 — 2026-11-09
 
 Pre-edit state: commit `1bc4b27`. Entry 3fi. **`pdfmd --watch` lives in its own package, `pdfmd_watch`.** Move 3 of SPLIT.md; a pure move.
