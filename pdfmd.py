@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.51"
+PDFMD_VERSION = "3.32.52"
 import argparse
 import atexit
 import csv
@@ -3816,7 +3816,8 @@ def tabularray_available() -> bool:
     if not kpsewhich:
         return False
     try:
-        found = subprocess.run([kpsewhich, "tabularray.sty"], capture_output=True, text=True, timeout=20).stdout
+        found = subprocess.run([kpsewhich, "tabularray.sty"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return False
     return bool(found.strip())
@@ -22362,9 +22363,12 @@ PROBE_TIMEOUT = 10
 
 def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
     """``subprocess.run`` of a probe: output captured as text, PROBE_TIMEOUT s. None when the program cannot be started or does
-    not answer in time."""
+    not answer in time. The text is read as UTF-8 (what kpsewhich, Pandoc and fc-list write), a byte that is not UTF-8
+    replaced: left to `text=True` alone, Windows would decode with the console's code page (issue 13)."""
     options.setdefault("capture_output", True)
     options.setdefault("text", True)
+    options.setdefault("encoding", "utf-8")
+    options.setdefault("errors", "replace")
     try:
         return subprocess.run(command, timeout=PROBE_TIMEOUT, **options)
     except subprocess.TimeoutExpired:

@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.52 — 2026-11-09
+
+Pre-edit state: commit `5d58045`. Entry 3fi (a bug found by the wider source checks of v3.32.51b; the author authorised fixing such bugs on the way). **Every probe reads its answer as UTF-8.** `run_probe()` (Pandoc's version, kpsewhich, fc-list, soffice and the other probes) asked for `text=True` without an encoding, so on Windows the answer was decoded with the console's code page: a path with letters outside that page (a Cyrillic user name) came back wrong, or a byte the page cannot decode ended the read (issue 13, which v3.30.x fixed for the calls that name their keywords). The source test could not see it, because the keywords are set with `setdefault`.
+
+- `run_probe()` reads UTF-8 and replaces a byte that is not UTF-8; a caller that names its own `encoding` keeps it.
+- The `kpsewhich tabularray.sty` probe (a direct `subprocess.run`, which `test_probes.SubprocessDecoding` flagged once it read `lib/` too) names the same encoding. Its 20 s timeout is unchanged.
+- `tests/test_probes.py`: a probe that writes a Cyrillic path and a stray byte reads both, and a caller's own encoding wins. Checked through `python3 pdfmd.py` on a Cyrillic document (lualatex) and with `--doctor`; `test_doctor`, `test_package_helper`, `test_unicode`, `test_compat` and `test_probes` pass.
+
 ## v3.32.51b — 2026-11-09
 
 No shipped code (tests and a development script); `PDFMD_VERSION` stays 3.32.51. Entry 3fi: the first step of the split of `pdfmd.py` into packages under `lib/`. **The tests that read pdfmd's code as text read `lib/` too**, so a function keeps being checked after it moves out of `pdfmd.py`.

@@ -62,6 +62,12 @@ class Helper(unittest.TestCase):
     def test_a_program_that_is_not_there_is_none(self):
         self.assertIsNone(pdfmd.run_probe(["pdfmd-no-such-program-anywhere", "--version"]))
 
+    def test_the_answer_is_read_as_utf8_whatever_the_console_code_page(self):
+        # v3.32.52: a path with Cyrillic in it, then a byte that is not UTF-8 (replaced, never an exception)
+        writes = [sys.executable, "-c", r"import sys; sys.stdout.buffer.write(b'C:\\\xd0\x9f\xd1\x83\xd1\x82\xff\n')"]
+        self.assertEqual(pdfmd.run_probe(writes).stdout, "C:\\Пут\ufffd\n")
+        self.assertEqual(pdfmd.run_probe(writes, encoding="latin-1").stdout[:4], "C:\\Ð")    # a caller's own encoding wins
+
     def test_a_probe_that_does_not_answer_is_none_after_the_timeout_with_a_verbose_line(self):
         with mock.patch.object(pdfmd, "PROBE_TIMEOUT", 1), mock.patch.object(pdfmd, "VERBOSE_OUTPUT", True):
             started = time.monotonic()
