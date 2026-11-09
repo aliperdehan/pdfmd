@@ -374,7 +374,7 @@ Note: `pdfmd_office` costs about 10 ms to import: keep heavy imports inside func
 
 Tests: `test_docx_tables`, `test_indent_office`, `test_markup_word`, `test_office`, `test_office_latex`, `test_old_python_syntax`, `test_paper`, `test_raw`.
 
-#### 26. `pdfmd_history` (existing package): 26 definitions, ~680 lines
+#### 26. `pdfmd_history` (existing package): 26 definitions, ~680 lines; done in 3.33.28 (`lib/pdfmd_history/backups.py`; the two `@timed` functions use `_timed`; `history_module()` stayed)
 
 Definitions: `entry_line`, `notes_to_entries`, `entries_to_notes`, `backup_folders`, `document_versions`, `version_text`, `version_differs`, `restore_version`, `history_documents`, `linked_metadata`, `history_view_command`, `history_act`, `history_interactive`, `init_backups_command`, `history_command`, `backup_directory`, `backup_template`, `fill_backup_template`, `backup_name_regex`, `_plain_backup_patterns`, `backup_snapshots`, `backup_unchanged`, `backup_after_success`, `backup_pdf_pattern`, `backup_pdf_after_success`, `backup_summary`.
 
