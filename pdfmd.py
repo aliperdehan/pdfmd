@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.32"
+PDFMD_VERSION = "3.33.33"
 import argparse
 import atexit
 import csv
@@ -1758,9 +1758,12 @@ from pdfmd_parts import (ATX_HEADING_RE, Heading, NoPartMatches, ScaffoldPlan, S
 import pdfmd_doctor  # noqa: E402
 from pdfmd_doctor import (DEEP_SAMPLE, PANDOC_FEATURES, completion_options, completion_script, deep_checks,  # noqa: E402, F401 -- DEEP_SAMPLE, PANDOC_FEATURES, completion_options, deep_checks, foreign_commands, pandoc_limits and tool_note are read by tests
                           doctor_report, foreign_commands, pandoc_limits, tool_note)
+import pdfmd_cache  # noqa: E402
+from pdfmd_cache import (TEMPORARY_PLACES, adopt_moved_cache, cache_directory, cache_location, cache_root,  # noqa: E402, F401 -- TEMPORARY_PLACES and cache_location are read by tests or lib/; adopt_moved_cache is named in a docstring only
+                         document_cache_root, folder_is_writable, source_fingerprint, temporary_place)
 
 bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
-          pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor)
+          pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor, pdfmd_cache)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # move 5 (v3.33.6)
@@ -16946,12 +16949,7 @@ CACHE_DEFAULTS = {"aux": False, "plots": False}
 LAST_SEEDED = 0   # labels a partial cache build took from the last full build
 
 
-def cache_root() -> Path:
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    else:
-        base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    return base / "pdfmd"
+# cache_root: lib/pdfmd_cache/__init__.py (v3.33.33)
 
 
 # -- Probes: a version or a capability asked of a program ----------------------------------------------------------------
@@ -16986,30 +16984,10 @@ def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
 # tools it starts may write in their working folder. When one of those places cannot be written the build goes on with a
 # temporary folder in its place, removed when the run ends, and says so once (a NOTE): the first run in such a place is slower
 # (the cache starts empty, LuaTeX indexes the fonts again), nothing else differs.
-TEMPORARY_PLACES: dict[str, Path] = {}
 NOTED_PLACES: set[str] = set()
 
 
-def folder_is_writable(path: Path) -> bool:
-    """Whether a file can be created in ``path`` -- or, when it is not there yet, in the nearest folder above it that is."""
-    folder = Path(path)
-    try:
-        while not folder.exists():
-            if folder.parent == folder:
-                return False
-            folder = folder.parent
-        return folder.is_dir() and os.access(folder, os.W_OK | os.X_OK)
-    except OSError:
-        return False
-
-
-def temporary_place(kind: str) -> Path:
-    """A folder for ``kind`` of this run only, made once and removed when the run ends."""
-    if kind not in TEMPORARY_PLACES:
-        folder = Path(mkdtemp(prefix=f"pdfmd-{kind}-"))
-        TEMPORARY_PLACES[kind] = folder
-        atexit.register(shutil.rmtree, folder, True)
-    return TEMPORARY_PLACES[kind]
+# TEMPORARY_PLACES, folder_is_writable and temporary_place: lib/pdfmd_cache/__init__.py (v3.33.33)
 
 
 def note_place_once(key: str, message: str) -> None:
@@ -17077,45 +17055,13 @@ def pandoc_working_directory(folder: Path) -> Path:
 
 
 CACHE_LOCATIONS = ("global", "document")
-CACHE_LOCATION_NAMES = {"root": "global", "user": "global", "home": "global", "central": "global",
-                        "local": "document", "folder": "document", "here": "document", "doc": "document",
-                        "self-contained": "document"}
+# CACHE_LOCATION_NAMES: lib/pdfmd_cache/__init__.py (v3.33.33)
 CACHE_LOCATION_CLI: str | None = None     # --cache-location (set in main)
 CACHE_MANIFEST = ".pdfmd-source.json"
 LOCAL_CACHE_DIRNAME = Path(".cache") / "pdfmd"
 
 
-def cache_location(md_path: Path, metadata_files: list[Path]) -> str:
-    """Where this document's cache lives: `global` (cache_root(): ~/.cache/pdfmd) or `document` (a
-    `.cache/pdfmd` folder beside it, so the folder carries its cache wherever it is moved). The command
-    line, else `pdfmd-options: {cache: {location: ...}}` (or `cache-location:`) of the document, its
-    metadata files and the config file, else global."""
-    value = CACHE_LOCATION_CLI
-    if value is None:
-        sources = [frontmatter_pdfmd_options(md_path)]
-        for metadata_file in metadata_files_by_priority(metadata_files):
-            found = metadata_file_yaml(metadata_file).get("pdfmd-options")
-            sources.append(found if isinstance(found, dict) else {})
-        sources.append(config_options(md_path))
-        for options in sources:
-            nested = options.get("cache")
-            value = (nested.get("location") if isinstance(nested, dict) else None) or options.get("cache-location")
-            if value is not None:
-                break
-    if value is None:
-        return "global"
-    text = str(value).strip().casefold()
-    text = CACHE_LOCATION_NAMES.get(text, text)
-    if text not in CACHE_LOCATIONS:
-        raise SystemExit(f"{md_path}: cache location {value!r} is not one of {', '.join(CACHE_LOCATIONS)}")
-    return text
-
-
-def document_cache_root(md_path: Path, metadata_files: list[Path]) -> Path:
-    """The folder this document's cache entries go in (made, with its CACHEDIR.TAG, when first used)."""
-    if cache_location(md_path, metadata_files) == "global":
-        return cache_root()
-    return md_path.resolve().parent / LOCAL_CACHE_DIRNAME
+# cache_location and document_cache_root: lib/pdfmd_cache/__init__.py (v3.33.33)
 
 
 def prepare_cache_root(root: Path) -> None:
@@ -17133,11 +17079,7 @@ def prepare_cache_root(root: Path) -> None:
         pass
 
 
-def source_fingerprint(source: Path) -> str | None:
-    try:
-        return hashlib.sha256(source.read_bytes()).hexdigest()
-    except OSError:
-        return None
+# source_fingerprint: lib/pdfmd_cache/__init__.py (v3.33.33)
 
 
 def write_cache_manifest(folder: Path, source: Path) -> None:
@@ -17151,54 +17093,7 @@ def write_cache_manifest(folder: Path, source: Path) -> None:
         pass
 
 
-def adopt_moved_cache(source: Path, target: Path, root: Path, note=None) -> bool:
-    """A document moved to another folder (a lab report from Downloads into OneDrive) has no cache
-    under its new path. Find the folder of the same document by what it recorded: a cache whose
-    original no longer exists, with the same stem and the same content (SHA-256), or else the same
-    stem and the same folder name when only one such cache is left. The folder is renamed to this
-    document's, so the cross-reference files carry on. A copy (the original still there) never
-    takes the original's cache."""
-    import json
-    here = str(source.resolve())
-    fingerprint = source_fingerprint(source)
-    exact, by_name = [], []
-    for candidate in root.glob(f"*-{source.stem}"):
-        try:
-            manifest = json.loads((candidate / CACHE_MANIFEST).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if (candidate == target or manifest.get("stem") != source.stem or manifest.get("path") == here
-                or Path(str(manifest.get("path", ""))).exists()):
-            continue
-        if fingerprint and manifest.get("sha256") == fingerprint:
-            exact.append(candidate)
-        elif manifest.get("folder") == source.resolve().parent.name:
-            by_name.append(candidate)
-    chosen = exact[0] if len(exact) >= 1 else (by_name[0] if len(by_name) == 1 else None)
-    if chosen is None:
-        return False
-    try:
-        chosen.rename(target)
-    except OSError:
-        return False
-    write_cache_manifest(target, source)
-    if note:
-        note("CACHE", f"{source}: the cache of the document it was moved from is reused")
-    return True
-
-
-def cache_directory(source: Path, root: Path | None = None, note=None) -> Path:
-    """One folder per document. In the global cache it is keyed by the document's absolute path (two
-    reports both called report.md must not share an .aux), and a moved document finds its folder again
-    by what the folder recorded; in a document's own `.cache/pdfmd` the stem is enough."""
-    root = root or cache_root()
-    if root != cache_root():
-        return root / source.stem
-    digest = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:10]
-    target = root / f"{digest}-{source.stem}"
-    if not target.exists() and root.is_dir():
-        adopt_moved_cache(source, target, root, note)
-    return target
+# adopt_moved_cache and cache_directory: lib/pdfmd_cache/__init__.py (v3.33.33)
 
 
 def cache_settings(md_path: Path, metadata_files: list[Path], cli: bool | None) -> dict:

@@ -418,7 +418,7 @@ Tests: `test_compat`, `test_completion`, `test_doctor`, `test_install_python`, `
 
 ### Wave 4: the hard ones (Opus)
 
-#### 30. `pdfmd_cache` (new package): 8 definitions, ~104 lines
+#### 30. `pdfmd_cache` (new package): 8 definitions, ~104 lines; done in 3.33.33 (`CACHE_LOCATIONS` (the parser's choices), `CACHE_MANIFEST`, `LOCAL_CACHE_DIRNAME` and `NOTED_PLACES` stayed, read by code that stays; `CACHE_LOCATION_CLI` stayed, rebound with `global`; `cache_root` is called as `core.cache_root()` inside the package)
 
 Definitions: `cache_root`, `folder_is_writable`, `temporary_place`, `cache_location`, `document_cache_root`, `source_fingerprint`, `adopt_moved_cache`, `cache_directory`.
 
