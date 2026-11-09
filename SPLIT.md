@@ -236,7 +236,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 7 pdfmd names read through `cor
 
 Tests: `test_polish`, `test_sections`.
 
-#### 13. `pdfmd_pdfimages` (new package): 10 definitions, ~268 lines
+#### 13. `pdfmd_pdfimages` (new package): 10 definitions, ~268 lines; done in 3.33.14 (`restored_image_paths` stays: it is not on the list)
 
 Definitions: `png_chunk`, `encode_png`, `file_picture_size`, `pdf_pictures`, `match_images_to_pdf`, `samples_to_png`, `form_to_pdf`, `extract_pdf_images`, `rewrite_tex_image_paths`, `rewrite_image_paths`.
 
