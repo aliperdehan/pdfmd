@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.0"
+PDFMD_VERSION = "3.33.1"
 import argparse
 import atexit
 import csv
@@ -5947,7 +5947,6 @@ def native_lose(kind: str, count: int = 1) -> None:
     NATIVE_LOST[kind] = NATIVE_LOST.get(kind, 0) + count
 
 
-FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*(.*)$")
 DIV_FENCE_RE = re.compile(r"^\s*:{3,}(?:\s.*)?$")
 HEADING_ATTR_RE = re.compile(r"^(#{1,6}\s+.*?)\s*\{(?:[#.][^{}\n]*|[A-Za-z][\w-]*=[^{}\n]*)\}\s*$")
 IMAGE_ATTR_RE = re.compile(r"(!\[[^\]\n]*\]\([^)\n]*\))\{[^{}\n]*\}")
@@ -19829,7 +19828,8 @@ def mark_assembled(text: str, no_auto: list[str] | None = None, partial: bool = 
 
 # -- Comments: lib/pdfmd_comments (v3.22.0, v3.22.4) ---------------------------
 # Stripping `<!-- -->`, LaTeX `%` and CSL comments, and the strip-comments policy, live in pdfmd_comments. It reads
-# the three names below as core.X. FENCE_RE is also bound earlier in this file; this later binding is the one in force.
+# the three names below as core.X. FENCE_RE (a code fence: its run of backticks or tildes, and the rest) also serves
+# the native converter's line scan.
 FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
 COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata")
 # --strip-comments-in / --keep-comments-in (kind sets); --strip-comments / --keep-comments is STRIP_COMMENTS_CLI.

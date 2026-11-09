@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.1 — 2026-11-09
+
+Pre-edit state: commit `817f90a`. Entry 3fi (a find of the split, fixed in a commit of its own). **`FENCE_RE` is bound once.** `pdfmd.py` bound it twice: the native converter's pattern (v3.20.0, groups by number, `\s*` before the rest) and, further down, the comment stripper's (v3.22.0, named groups `fence` and `rest`). The later binding replaced the first as the module loaded, so since 3.22.0 `normalise_gfm()` has run with the later pattern too, and the first was dead code. It is removed; nothing changes at run time (`normalise_gfm()` reads only whether a line matches, group 1 and group 2 stripped, which are the same with both patterns). `scripts/split_spec.py` found it. ruff is clean; `test_native`, `test_tables`, `test_attach`, `test_packaging` and `test_docs_consistency` pass.
+
 ## v3.33.0 — 2026-11-09
 
 Pre-edit state: commit `5a977e0`. Entry 3fi. **The split of `pdfmd.py` begins (the 3.33 line; the author approved the bump, 2026-11-09): the comment stripping is the package `pdfmd_comments`.** The first of the 37 moves of SPLIT.md, a pure move but for one thing: **`pdfmd.py` needs its `lib/` folder now** (the author chose it, 2026-11-09). A copy of `pdfmd.py` alone used to build a PDF without its extras; it stops with one line that says why (no `lib/` beside it, the packages not installed: keep them together, or `pipx install pdfmd-cli`). Every way pdfmd is shipped (pip and pipx, Homebrew, Scoop, the zipapp, the containers, a clone) has the packages, and later moves (the option parser, assembly, attachments) would have ended a lone copy anyway.
