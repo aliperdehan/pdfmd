@@ -278,7 +278,7 @@ Note: The lazy loader `check_module()` goes.
 
 Tests: `test_check`, `test_check_source`.
 
-#### 17. `pdfmd_ranking` (existing package): 9 definitions, ~173 lines
+#### 17. `pdfmd_ranking` (existing package): 9 definitions, ~173 lines; done in 3.33.19 (in `choice.py`; the test that loads a second pdfmd copy needed no change; `FOLDER_SETTINGS` has a `DEFERRED_NAMES` entry only)
 
 Definitions: `ranking_inherit_off`, `read_ranking_file`, `ranking_of_options`, `ranking_for_document`, `ranking_layers`, `ranking_clashes`, `bare_ranking`, `priority_candidates`, `which_command`.
 
