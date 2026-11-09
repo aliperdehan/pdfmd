@@ -386,7 +386,7 @@ Note: The lazy loader `history_module()` goes where nothing else needs it.
 
 Tests: `test_atomic`, `test_backup_keep`, `test_backup_pdfs`, `test_backup_summary`, `test_history`, `test_partial_history`, `test_tables`, `test_versions`.
 
-#### 27. `pdfmd_restore` (new package): 16 definitions, ~518 lines
+#### 27. `pdfmd_restore` (new package): 16 definitions, ~518 lines; done in 3.33.29 (`VERBOSE_OUTPUT` stayed, rebound with `global`; `pypdf` is `core.pypdf`; `yaml` is imported by the package)
 
 Definitions: `folder_counts`, `restored_image_paths`, `restore_chain`, `restore_target_name`, `check_source_command`, `restore_from_pdf`, `restore_attachments`, `restore_attachments_in_place`, `restore_from_markdown`, `restore_front_matter`, `original_metadata_text`, `without_parts`, `text_holds_parts`, `is_global_layout_entry`, `assembled_origin`, `layout_from_source`.
 
