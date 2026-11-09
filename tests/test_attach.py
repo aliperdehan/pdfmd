@@ -200,6 +200,35 @@ class AttachAndRestore(unittest.TestCase):
             pdfmd.restore_from_pdf(self.root / "citing.pdf", self.root / "back")
         self.assertIn("NOTE  the citation style style.csl is not in the source", shown.getvalue())
 
+    def test_the_comments_note_names_only_what_the_source_holds(self):
+        """v3.33.48: every kind of the policy was named, a CSL and a preamble the document did not have too."""
+        (self.root / "style.csl").write_text('<?xml version="1.0"?>\n<style xmlns="http://purl.org/net/xbiblio/csl"/>\n',
+                                             encoding="utf-8")
+        (self.root / "refs.bib").write_text("@book{smith, title={T}, author={Smith, A}, year=2020}\n", encoding="utf-8")
+        citing = self.root / "citing.md"
+        citing.write_text("---\ntitle: T\ncsl: style.csl\nbibliography: refs.bib\n---\n\nSee [@smith].\n", encoding="utf-8")
+        (self.root / "preamble.tex").write_text("\\usepackage{xcolor} % colour\n", encoding="utf-8")
+
+        def notes(**keywords) -> tuple[str, str]:
+            pdf = blank_pdf(citing.with_suffix(".pdf"))
+            attached, listed = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(attached):
+                pdfmd.attach_source_after_success(citing, pdf, [], [], keywords.get("preamble", []), None, False)
+            with contextlib.redirect_stdout(listed), contextlib.redirect_stderr(io.StringIO()):
+                pdfmd.restore_from_pdf(pdf, self.root / "l", list_only=True)
+            kind = "(?:bibliography|csl|markdown|metadata|preamble)"
+            said = rf"comments (?:kept|stripped from {kind}(?:, {kind})*)"
+            return re.search(said, attached.getvalue()).group(0), re.search(said, listed.getvalue()).group(0)
+
+        pdfmd.STRIP_COMMENTS_CLI = True
+        try:
+            self.assertEqual(notes(), ("comments stripped from bibliography, markdown, metadata",) * 2)   # no CSL: it is left out
+            pdfmd.CSL_ATTACH_CLI = True
+            self.assertEqual(notes(preamble=[self.root / "preamble.tex"]),
+                             ("comments stripped from bibliography, csl, markdown, metadata, preamble",) * 2)
+        finally:
+            pdfmd.STRIP_COMMENTS_CLI = pdfmd.CSL_ATTACH_CLI = None
+
     def test_single_file_round_trip_with_metadata_and_preamble(self):
         (self.root / "metadata").mkdir()
         (self.root / "metadata" / "metadata.yaml").write_text("author: A. Author\n", encoding="utf-8")

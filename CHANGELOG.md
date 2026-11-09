@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.48 — 2026-11-10
+
+Pre-edit state: commit `ff5bd7d`. **The comments note of an attached source names only what the source holds.** `--restore
+--list` (and the `ATTACHED` / `KEPT` lines of `--attach-source` / `--keep-source`) said `comments stripped from bibliography,
+csl, markdown, metadata, preamble` for a document with no CSL and no preamble: the manifest's `comments_stripped` is the
+stripping policy (every kind, by default and with --strip-comments), and the note printed it as it is.
+
+- `held_comments_note` (`lib/pdfmd_attach`, re-exported for `lib/pdfmd_restore`) cuts the list to the kinds the attached text
+  holds before `comments_note` words it: the Markdown always, the metadata when there is front matter or a metadata file, a
+  preamble when one is in the manifest's layout, the bibliography and the CSL when the text carries them as blocks (a CSL left
+  out, as by default, is not named). The manifest is unchanged, so a PDF made before this lists the right kinds too.
+- Checked through pdfmd: a document with a bibliography and no CSL, built with `--attach-source --strip-comments`, said `bibliography,
+  csl, markdown, metadata, preamble` at HEAD and now `bibliography, markdown, metadata` (`--restore --list` of the PDF built at
+  HEAD too); with `csl:` and `--attach-csl` the CSL is named; with a `preamble.tex` beside the document, the preamble; the `KEPT`
+  line of `--keep-source --to gfm` the same.
+- Tests: a new `test_attach` case (attach and `--list`, without and with a CSL and a preamble; fails at HEAD); `test_attach
+  test_attach_layers test_attach_format test_standalone_source test_kit_carry test_pdf_input test_embedding test_keep_source
+  test_split test_packaging test_docs_consistency`: 172 OK.
+
 ## v3.33.47 — 2026-11-10
 
 Pre-edit state: commit `b00472b`. **A direct `.tex` compile's verbose line counts every run of the engine.** `run_tex_engine`

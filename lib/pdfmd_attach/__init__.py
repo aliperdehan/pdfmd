@@ -5,7 +5,8 @@ text points at: `referenced_images`), the user's own TeX tree a rebuild needs (`
 `tex_tree_graphics`, `package_companions`, `attachment_requirements`), the text files kept as blocks of the source
 (`inline_candidates`, `inline_blocks`, `drop_blocks`, `csv_block_files`), the bibliography and citation style it takes along
 (`resolve_bibliography_pruning`, `resolve_csl_attach`), the folder settings in force (`folder_options_in_force`), and the PDF's
-attachments themselves (`write_pdf_attachments`, `read_pdf_attachments`, `add_deflated_attachment`).
+attachments themselves (`write_pdf_attachments`, `read_pdf_attachments`, `add_deflated_attachment`). `held_comments_note` (v3.33.48)
+names the kinds of source whose comments were stripped that the attached text holds.
 
 Moved out of `pdfmd.py` unchanged (v3.33.37, SPLIT.md), with the constants only this code reads (`ATTACH_FORMAT_PLAIN`,
 `GLOBAL_LAYOUT_PATH`, `RAW_REFERENCE_RES`, `BUNDLE_SKIP_SUFFIXES`, `PATH_TOKEN_RE`, `REFERENCE_EXTENSIONS`, `SCANNED_SUFFIXES`,
@@ -594,6 +595,23 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "core.EmbedPlan 
             **({"front_matter_text": front_text} if front_text else {})}
 
 
+def held_comments_note(manifest: dict, merged: str) -> str:
+    """`comments_note` for the kinds of source the attached text holds (v3.33.48). The manifest's `comments_stripped` is the
+    policy, every kind for --strip-comments; the note names only what is there: the Markdown always, the metadata when there is
+    front matter or a metadata file, a preamble file, and the bibliography and CSL the text carries as blocks."""
+    stripped = manifest.get("comments_stripped")
+    if not isinstance(stripped, list):
+        return core.comments_note(manifest)
+    layout = {item.get("kind") for item in manifest.get("layout") or []}
+    blocks = {block["type"] for block in core.parse_embedded_blocks(merged)}
+    held = {"markdown", *(kind for kind in ("bibliography", "csl") if kind in blocks)}
+    if "metadata" in layout or any(chunk.get("front_matter") for chunk in manifest.get("chunks") or []):
+        held.add("metadata")
+    if "preamble" in layout:
+        held.add("preamble")
+    return core.comments_note({**manifest, "comments_stripped": [kind for kind in stripped if kind in held]})
+
+
 def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
                     preamble_files: list[Path] | None, no_auto: list[str] | None,
                     strip: frozenset[str], prune_bibliography: bool = True,
@@ -889,7 +907,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
-    note = core.comments_note(manifest)
+    note = held_comments_note(manifest, merged)
     kept = manifest.get("extras") or []
     print(f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"
           + (f" and {len(parts)} more" if report and parts else "")
@@ -945,7 +963,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
     kept = manifest.get("extras") or []
     print(f"KEPT      {core.display_path(output)}: source of {core.display_path(md_path)}"
           + (f" and {len(parts)} more" if parts else "")
-          + f" ({len(merged.splitlines())} lines, {core.comments_note(manifest)}"
+          + f" ({len(merged.splitlines())} lines, {held_comments_note(manifest, merged)}"
           + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}" if kept else "")
           + f"; {mode}, {len(trailer) / 1024:.0f} KB); `pdfmd --restore {output.name}` writes it back")
     if len(trailer.encode("utf-8")) > keep.WARN_BYTES:

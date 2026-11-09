@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.47"
+PDFMD_VERSION = "3.33.48"
 import argparse
 import atexit
 import contextlib
@@ -1770,8 +1770,8 @@ from pdfmd_tex import (MAX_TEX_DIRECT_PASSES, PLOT_CTX_PLAIN, PLOT_CTX_TWICE, co
 import pdfmd_attach  # noqa: E402
 from pdfmd_attach import (ATTACH_FORMAT_PLAIN, add_deflated_attachment, attach_source_after_success,  # noqa: E402, F401 -- all but attach_source_after_success, bundle_files, keep_source_after_success, read_pdf_attachments and referenced_images are read by tests or lib/
                           attached_bundle_mode, block_places, bundle_files, drop_blocks, drop_duplicate_blocks, find_in_tex_tree,
-                          graphic_names_in, inline_blocks, inline_candidates, keep_source_after_success, layout_path,
-                          read_pdf_attachments, referenced_images, source_attachments, tex_distribution_roots,
+                          graphic_names_in, held_comments_note, inline_blocks, inline_candidates, keep_source_after_success,
+                          layout_path, read_pdf_attachments, referenced_images, source_attachments, tex_distribution_roots,
                           write_pdf_attachments)
 import pdfmd_assemble  # noqa: E402
 from pdfmd_assemble import (EmbedPlan, assemble_markdown_text, embedded_resources, filter_bibliography,  # noqa: E402, F401 -- filter_bibliography, remember_trusted, render_embedded_block, render_embedded_file, trust_store_path and used_citation_keys are read by tests or lib/

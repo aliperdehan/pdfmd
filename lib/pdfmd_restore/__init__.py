@@ -208,7 +208,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
     chunks = manifest.get("chunks") or []
     print(f"SOURCE    {manifest.get('name', '?')}  (pdfmd {manifest.get('pdfmd', '?')}, "
           f"{len(chunks)} file{'s' if len(chunks) != 1 else ''}, "
-          f"{core.comments_note(manifest)})")
+          f"{core.held_comments_note(manifest, merged)})")
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
     if manifest.get("csl_left"):
