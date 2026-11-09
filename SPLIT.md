@@ -344,7 +344,7 @@ Tests: `test_cellalign`, `test_celltags`, `test_csv_switch`, `test_csv_table`, `
 
 ### Wave 3: medium (Sonnet, reviewed)
 
-#### 23. `pdfmd_routing` (new package): 10 definitions, ~287 lines
+#### 23. `pdfmd_routing` (new package): 10 definitions, ~287 lines; done in 3.33.25 (`tessdata_environment` moved too, from far above the rest; `PDF_TO_STDOUT_CLI` stayed, rebound with `global`; `BATCHOCR_MIN` stayed, read as `core.BATCHOCR_MIN`)
 
 Definitions: `tessdata_environment`, `batchocr_spec`, `find_batchocr`, `install_ocr_tools`, `batchocr_missing_message`, `pdf_read_target`, `route_ebook_input`, `route_pdf_input`, `text_to_markdown_mode`, `route_text_input`.
 
