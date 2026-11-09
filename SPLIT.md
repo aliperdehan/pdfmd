@@ -172,13 +172,15 @@ Note: the module's global `core` is pdfmd; `lib/pdfmd_serve/core.py` (the JSON c
 
 Tests: `test_serve`.
 
-#### 7. `pdfmd_flat` (existing package): 8 definitions, ~112 lines
+#### 7. `pdfmd_flat` (existing package): 8 definitions, ~112 lines; done in 3.33.8
 
 Definitions: `pandoc_extensions`, `flat_settings`, `flat_writer`, `flat_filter_args`, `split_ascii_target`, `ascii_missing`, `ascii_filter_args`, `ascii_finish`.
 
 Constants that move with it (only this package reads them): `_PANDOC_EXTENSIONS`.
 
 Facts: 2 callers stay in pdfmd.py (re-exported); 9 pdfmd names read through `core`.
+
+Note: `GFM_CLI` and `ASCII_CLI` (settings main() fills) stay in `pdfmd.py` and are read as `core.X`. `_PANDOC_EXTENSIONS` is a `DEFERRED_NAMES` entry (`test_probes` patches it with `mock.patch.dict`). `ascii_filter_args` reads `core.__file__`. split_check's extras need `--no-auto raw`: the raw map's file name hashes the cache path, which differs between its two copies.
 
 Tests: `test_ascii`, `test_flat`, `test_keep_source`, `test_probes`, `test_setup`.
 

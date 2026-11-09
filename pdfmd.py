@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.7"
+PDFMD_VERSION = "3.33.8"
 import argparse
 import atexit
 import csv
@@ -1733,6 +1733,15 @@ ansi_without_pandoc = deferred("pdfmd_ansi.cli", "ansi_without_pandoc")
 serve_live_filters = deferred("pdfmd_serve.commands", "serve_live_filters")     # move 6 (v3.33.7); read by tests/test_serve.py
 serve_command = deferred("pdfmd_serve.commands", "serve_command")
 api_command = deferred("pdfmd_serve.commands", "api_command")
+pandoc_extensions = deferred("pdfmd_flat.build", "pandoc_extensions")           # move 7 (v3.33.8); read by tests
+flat_settings = deferred("pdfmd_flat.build", "flat_settings")
+flat_writer = deferred("pdfmd_flat.build", "flat_writer")
+flat_filter_args = deferred("pdfmd_flat.build", "flat_filter_args")
+split_ascii_target = deferred("pdfmd_flat.build", "split_ascii_target")
+ascii_missing = deferred("pdfmd_flat.build", "ascii_missing")
+ascii_filter_args = deferred("pdfmd_flat.build", "ascii_filter_args")
+ascii_finish = deferred("pdfmd_flat.build", "ascii_finish")
+DEFERRED_NAMES.update(_PANDOC_EXTENSIONS="pdfmd_flat.build")                      # tests patch it with mock.patch.dict
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -4714,64 +4723,7 @@ RELATIVE_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((?!https?:|data:|/|<)[^)\s]+\)")
 # pdfmd_lua/flat.lua); `--to gfm+raw` is Pandoc's own gfm writer. --gfm-scripts / --gfm-math fill GFM_CLI in main();
 # `pdfmd-options.gfm` is the document's way ({scripts: unicode|html|drop|ascii, math: dollars|fenced, title: true}).
 GFM_CLI: dict = {"scripts": None, "math": None, "title": None}
-_PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
-
-
-def pandoc_extensions(name: str) -> frozenset[str]:
-    """The extensions this Pandoc knows for format `name` (on or off), for building a writer string it will accept."""
-    if name not in _PANDOC_EXTENSIONS:
-        done = run_probe(["pandoc", f"--list-extensions={name}"])
-        listing = done.stdout if done else ""
-        _PANDOC_EXTENSIONS[name] = frozenset(line.strip().lstrip("+-") for line in listing.splitlines() if line.strip())
-    return _PANDOC_EXTENSIONS[name]
-
-
-def flat_settings(md_path: Path, metadata_files: list[Path], target: str = "gfm") -> dict:
-    try:
-        import pdfmd_flat
-    except ImportError:
-        raise SystemExit(f"--to {target} needs the pdfmd_flat package (install pdfmd-cli; a lone copy of pdfmd.py has "
-                         f"only Pandoc's own writer: --to {'plain' if target == 'txt' else 'gfm+raw'})")
-    try:
-        chosen = pdfmd_flat.settings(cascaded_option(md_path, metadata_files, target), target=target, **GFM_CLI)
-    except pdfmd_flat.FlatError as error:
-        raise SystemExit(f"{display_path(md_path)}: {error}")
-    if ASCII_CLI["on"] and chosen["scripts"] != "drop":       # --to ascii: H_2O, x^2 (`drop` is a choice of its own)
-        chosen["scripts"] = "ascii"
-    return chosen
-
-
-def flat_writer(target_format: str, settings: dict | None) -> str:
-    """The Pandoc writer of a target: the flat writer for `gfm`, plain `gfm` for `gfm+raw`, `plain` for `txt`, else the
-    target itself."""
-    try:
-        import pdfmd_flat
-    except ImportError:
-        return {"gfm+raw": "gfm", "txt": "plain"}.get(target_format, target_format)
-    if not pdfmd_flat.is_family(target_format):
-        return target_format
-    return pdfmd_flat.writer(target_format, (settings or pdfmd_flat.DEFAULTS)["math"], pandoc_extensions("gfm"))
-
-
-def flat_filter_args(settings: dict, target: str = "gfm") -> list[str]:
-    """The arguments that make a build flat: its settings (a metadata file) and pdfmd_lua/flat.lua, which must be last."""
-    try:
-        import pdfmd_lua
-        filter_path = pdfmd_lua.path("flat")
-    except ImportError:
-        filter_path = None
-    if filter_path is None:
-        raise SystemExit(f"--to {target} needs pdfmd_lua/flat.lua (install pdfmd-cli; a lone copy of pdfmd.py has only "
-                         f"Pandoc's own writer: --to {'plain' if target == 'txt' else 'gfm+raw'})")
-    config = {"pdfmd-flat": {"scripts": settings["scripts"], "title": bool(settings["title"]), "target": target}}
-    digest = hashlib.sha1(json.dumps(config, sort_keys=True).encode("utf-8")).hexdigest()[:16]
-    map_file = cache_root() / "flat" / f"{digest}.yaml"
-    if not map_file.is_file():
-        map_file.parent.mkdir(parents=True, exist_ok=True)
-        map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
-    return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
-
-
+# _PANDOC_EXTENSIONS, pandoc_extensions, flat_settings, flat_writer and flat_filter_args: lib/pdfmd_flat/build.py (v3.33.8)
 # -- ASCII text: --to ascii (v3.26.8) -----------------------------------------------
 # `--to ascii` (txt) and `--to ascii:FORMAT` (gfm, markdown, commonmark, rst, org, asciidoc ...) build that format with
 # no character above 127 in it: pdfmd_lua/ascii.lua maps the words before the writer sees them (pdfmd_flat/asciify.py, run
@@ -4780,79 +4732,7 @@ def flat_filter_args(settings: dict, target: str = "gfm") -> list[str]:
 ASCII_CLI: dict = {"on": False, "missing": None}
 ASCII_FORMATS = frozenset({"txt", "gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict", "plain",
                            "rst", "org", "asciidoc"})
-
-
-def split_ascii_target(name: str) -> tuple[str, bool]:
-    """(the format, True) for `ascii` and `ascii:FORMAT`; (name, False) for any other target."""
-    lowered = name.strip().casefold()
-    if lowered != "ascii" and not lowered.startswith("ascii:"):
-        return name, False
-    base = lowered.partition(":")[2].strip().lstrip(".") or "txt"
-    base = DEFAULT_OUTPUT_ALIASES.get(base, base)
-    if base not in ASCII_FORMATS:
-        raise SystemExit(f"--to {name}: ASCII applies to text formats ({', '.join(sorted(ASCII_FORMATS))}); "
-                         f"{base} is not one of them")
-    return base, True
-
-
-def ascii_missing(md_path: Path, metadata_files: list[Path]) -> str:
-    """What a character with no ASCII form becomes: --ascii-missing, else `pdfmd-options.ascii.missing`, else `question`."""
-    option = cascaded_option(md_path, metadata_files, "ascii")
-    value = ASCII_CLI["missing"] or (option.get("missing") if isinstance(option, dict) else None) or "question"
-    value = str(value).strip().casefold()
-    if value not in ("question", "escape", "drop", "fail"):
-        raise SystemExit(f"{display_path(md_path)}: ascii missing {value!r}: choose one of question, escape, drop, fail")
-    return value
-
-
-def ascii_filter_args(scratch: Path, missing: str, smart: bool = False) -> list[str]:
-    """The arguments that add pdfmd_lua/ascii.lua, which must run after every other filter."""
-    try:
-        import pdfmd_lua
-        filter_path = pdfmd_lua.path("ascii")
-        import pdfmd_flat.asciify  # noqa: F401 -- the helper process needs it; fail here, not in the middle of a build
-    except ImportError:
-        filter_path = None
-    if filter_path is None:
-        raise SystemExit("--to ascii needs pdfmd_lua/ascii.lua and pdfmd_flat (install pdfmd-cli; a lone copy of "
-                         "pdfmd.py cannot make ASCII text)")
-    config = {"pdfmd-ascii": {"command": Path(sys.executable).as_posix(), "script": Path(__file__).resolve().as_posix(),
-                              "missing": missing, "report": (scratch / "report.json").as_posix(), "smart": "keep" if smart else "all"}}
-    map_file = scratch / "ascii.yaml"
-    map_file.write_text(json.dumps(config) + "\n", encoding="utf-8")
-    return ["--metadata-file", str(map_file), "--lua-filter", str(filter_path)]
-
-
-def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> str | None:
-    """After the build: map what the writer made itself (math in the plain writer, say), count the characters that
-    have no ASCII form, and say so; with `fail` the output is removed and the reason returned (the file failed, and
-    a batch goes on with the next)."""
-    import pdfmd_flat.asciify as asciify
-    lost: dict[str, int] = {}
-    try:
-        lost = json.loads((scratch / "report.json").read_text(encoding="utf-8")).get("lost", {})
-    except (OSError, ValueError):
-        pass
-    if output.is_file():
-        data = output.read_bytes()
-        if not data.isascii():
-            asciifier = asciify.Asciifier(missing)
-            atomic_write_bytes(output, asciifier.text(data.decode("utf-8")).encode("ascii"))
-            lost = asciify.merge(lost, asciifier.lost)
-    if not lost:
-        return None
-    count = sum(lost.values())
-    shown = asciify.describe(lost)
-    if missing == "fail":
-        output.unlink(missing_ok=True)
-        return (f"{display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
-                f"({shown}); nothing was written. --ascii-missing question|escape|drop writes the file anyway; "
-                "`pdfmd --install translit` adds the scripts it can spell")
-    written = {"question": "?", "escape": "a \\u escape", "drop": "nothing"}[missing]
-    print(f"WARN  ascii: {display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
-          f"({shown}) {'was' if count == 1 else 'were'} written as {written}; `pdfmd --install translit` adds the "
-          "scripts it can spell, --ascii-missing escape|drop|fail changes this", file=sys.stderr)
-    return None
+# split_ascii_target, ascii_missing, ascii_filter_args and ascii_finish: lib/pdfmd_flat/build.py (v3.33.8)
 
 
 # -- A styled terminal reader: --to ansi and --view (v3.30.3) ---------------------------------------------------------

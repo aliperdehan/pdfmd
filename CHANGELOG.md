@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.8 — 2026-11-09
+
+Pre-edit state: commit `5b7fbdd`. Entry 3fi. **Flat Markdown and ASCII text (`--to gfm`, `--to txt`, `--to ascii`) build in `pdfmd_flat.build`.** Move 7 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `pandoc_extensions`, `flat_settings`, `flat_writer`, `flat_filter_args`, `split_ascii_target`, `ascii_missing`, `ascii_filter_args` and `ascii_finish`, with the constant `_PANDOC_EXTENSIONS`, are in the new module `lib/pdfmd_flat/build.py` of the existing package, text and docstrings unchanged (the function-local imports of `pdfmd_flat`, `pdfmd_flat.asciify` and `pdfmd_lua` stay inside the functions). `pdfmd_flat/__init__.py`, `asciify.py` and `keep.py` are untouched. `pdfmd.py` keeps a pointer comment at each of its two sections.
+- `pdfmd_flat` is not loaded at start, so the move is deferred: `pdfmd.py` gets a stand-in for each of the eight functions (all are called by `pdfmd.py`; `pandoc_extensions` is also read by `test_flat` and `test_probes`) and `DEFERRED_NAMES.update(_PANDOC_EXTENSIONS="pdfmd_flat.build")`, so `mock.patch.dict(pdfmd._PANDOC_EXTENSIONS)` in `test_probes` patches the module's own dict, which `pandoc_extensions` writes to.
+- `GFM_CLI`, `ASCII_CLI` (rebound or filled by `main()`), `ASCII_FORMATS` and `DEFAULT_OUTPUT_ALIASES` stay in `pdfmd.py`; the module reads them and `core.atomic_write_bytes`, `core.cascaded_option`, `core.display_path`, `core.cache_root` and `core.run_probe` (the last two are patched by tests, so the calls go through `core`) when it runs. `ascii_filter_args` names the script the Lua filter's helper process runs by `Path(core.__file__)` (`pdfmd.py`), as `run_watch` does since 3.33.3; `pdfmd_flat/build.py`'s own file would be the wrong script.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_flat` module; `scripts/split_check.py` with the extra builds `lecture.md --to ascii`, `--to ascii:gfm`, `--to gfm` and `--to txt`, each with `--no-auto raw`: all 34 checks the same. Without `--no-auto raw` the four logs differ in one thing only: the name of the raw-pictures map file (`cache/pdfmd/raw/maps/<digest>.yaml`), whose digest covers the cache folder's path, which `split_check` sets differently for its two copies (with that digest normalised the logs are identical); the extras therefore carry the flag. `scripts/pdfmd --version` is no slower: fifteen interleaved runs of each give best / median 130 / 144 ms before and 130 / 152 ms after, and 129 / 155 against 129 / 139 ms in a second run (the medians vary by more than the difference between the trees). Tests: `test_ascii`, `test_flat`, `test_keep_source`, `test_probes`, `test_setup`, `test_split` and the always-run set: 216 tests pass (five skipped).
+
 ## v3.33.7 — 2026-11-09
 
 Pre-edit state: commit `52c669d`. Entry 3fi. **`--serve` and `--api` live in `pdfmd_serve.commands`.** Move 6 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
