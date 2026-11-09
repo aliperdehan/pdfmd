@@ -17,6 +17,12 @@
 -- a4,landscape`, `geometry: landscape`, `classoption: landscape`) and `#set page(flipped: true)` goes into
 -- `header-includes`, ahead of the template's own page rule, which leaves the flip alone. An --include-in-header replaces
 -- it, as it replaces the document's own header-includes.
+--
+-- The document's own indent (v3.33.42). `indent: true` in the front matter gives LaTeX a first-line indent (Pandoc's
+-- LaTeX template drops its parskip); Pandoc's Typst template has no such variable, so Typst printed no indent at all.
+-- `#set par(first-line-indent: 1.5em)` goes into `header-includes` the same way (1.5em, what `indent=true` means for an
+-- indent div, indent.lua). Typst, like LaTeX, leaves the first paragraph after a heading unindented. An indent div
+-- inside the document still sets its own stretch.
 
 if not FORMAT:match("^typst") then return {} end
 
@@ -104,9 +110,8 @@ end
 
 local variables = PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.variables or {}
 
-local function flipped_page(meta)
-  if variables["pdfmd-page-flipped"] == nil then return nil end
-  local rule = pandoc.MetaBlocks({pandoc.RawBlock("typst", "#set page(flipped: true)")})
+local function add_header(meta, text)
+  local rule = pandoc.MetaBlocks({pandoc.RawBlock("typst", text)})
   local includes = meta["header-includes"]
   if includes == nil then
     meta["header-includes"] = pandoc.MetaList({rule})
@@ -116,7 +121,30 @@ local function flipped_page(meta)
   else
     meta["header-includes"] = pandoc.MetaList({includes, rule})
   end
-  return meta
 end
 
-return {{Meta = flipped_page, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}
+local INDENT_DEFAULT = "1.5em"   -- indent.lua's DEFAULT: what `indent=true` means for a div
+
+-- `indent: true` (a YAML boolean, or the words true/yes/on): Pandoc's LaTeX template indents; the Typst one does not
+local function indent_on(value)
+  if value == nil then return false end
+  if pandoc.utils.type(value) == "boolean" then return value end
+  local word = pandoc.utils.stringify(value):lower()
+  return word == "true" or word == "yes" or word == "on"
+end
+
+local function page_rules(meta)
+  local changed = false
+  if variables["pdfmd-page-flipped"] ~= nil then
+    add_header(meta, "#set page(flipped: true)")
+    changed = true
+  end
+  if indent_on(meta.indent) then
+    add_header(meta, "#set par(first-line-indent: " .. INDENT_DEFAULT .. ")")
+    changed = true
+  end
+  if changed then return meta end
+  return nil
+end
+
+return {{Meta = page_rules, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}

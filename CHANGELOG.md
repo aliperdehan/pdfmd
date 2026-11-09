@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.42 — 2026-11-10
+
+Pre-edit state: commit `4207c87`. **`indent: true` indents in Typst too.** Found while checking `calc: {noindent: lines}`
+(3.33.18): the document's own `indent: true` gave LaTeX a first-line indent (Pandoc's LaTeX template drops its parskip), but
+Pandoc's Typst template has no such variable, so a Typst PDF had no indent at all; only an indent div reached Typst.
+
+- `lib/pdfmd_lua/typst.lua` (which pdfmd adds for every Typst build) puts `#set par(first-line-indent: 1.5em)` into
+  `header-includes` when the front matter says `indent: true` (or the words yes/on), the same way it adds the landscape page
+  rule. 1.5em is what `indent=true` means for an indent div (indent.lua). Typst, like LaTeX, leaves the first paragraph after a
+  heading unindented; an indent div (and `calc: {noindent: lines}`) still sets its own stretch. `-t typst` without `-s` writes a
+  fragment with no template, as before.
+- Checked through pdfmd: a Typst PDF of a document with `indent: true` (`pdftotext -layout`) indents the second paragraph and not
+  the first after the heading; the filter at HEAD added no rule. `docs/recipes.md` says it.
+- Tests: a new `test_engine_filters` case (true, "yes", false, absent); `test_engine_filters test_paper test_calc test_docs_consistency test_packaging test_split`: 176 OK (4 skipped).
+
 ## v3.33.41b — 2026-11-10
 
 Pre-edit state: commit `9d1da7e`. Entry 3fi. A script only, no version bump. **`scripts/split_check.py` says SAME only when

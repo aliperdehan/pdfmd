@@ -87,6 +87,22 @@ class Filter(unittest.TestCase):
         self.assertEqual(done.stderr.count("WARN"), 1)
         self.assertIn("3 links to anchors that are not in the document (#c, #nope)", done.stderr)
 
+    def standalone_typst(self, front: str) -> str:
+        source = self.directory / "indent.md"
+        source.write_text(f"---\ntitle: T\n{front}---\n\n# H\n\nOne.\n\nTwo.\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-s", "-t", "typst", "--lua-filter", str(TYPST_LUA)], capture_output=True,
+                              text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def test_the_documents_indent_reaches_typst(self):
+        """v3.33.42: `indent: true` indents in LaTeX; Pandoc's Typst template has no such variable, so typst.lua sets it."""
+        rule = "#set par(first-line-indent: 1.5em)"
+        self.assertIn(rule, self.standalone_typst("indent: true\n"))
+        self.assertIn(rule, self.standalone_typst("indent: \"yes\"\n"))
+        self.assertNotIn(rule, self.standalone_typst("indent: false\n"))
+        self.assertNotIn(rule, self.standalone_typst(""))
+
     def test_other_writers_are_untouched(self):
         done = self.convert("html")
         self.assertIn('href="#nope"', done.stdout)

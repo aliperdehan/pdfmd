@@ -144,7 +144,8 @@ div's `#id` stays. LaTeX and Beamer set `\parindent` in a group, Typst a `first-
 style for each length (`pdfmd-indent-0pt`, `pdfmd-indent-2em`; an em is 12 pt there) on the plain paragraphs of the div; its lists,
 quotes, code and tables keep their own styles. The other formats have no per-block indent: the text stays, the setting is dropped,
 with a NOTE. The document's own indent is Pandoc's
-`indent: true` in the front matter (none is the default).
+`indent: true` in the front matter (none is the default): LaTeX indents the first line of each paragraph, and since 3.33.42
+Typst does too (1.5em; Pandoc's Typst template has no such variable, so pdfmd sets it).
 
 Pandoc reads `::: indent=3in` as a div whose one class is `indent=3in`; only the braced form carries attributes. So the
 value is also understood in the class word, with the same values: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`,
