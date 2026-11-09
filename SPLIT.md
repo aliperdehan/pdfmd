@@ -454,7 +454,7 @@ Note: Tests patch eight of its functions (`download_file`, `github_release_asset
 
 Tests: `test_engine_filters`, `test_formula`, `test_install_calibre`, `test_install_core_tex`, `test_install_diagram`, `test_install_ocr`, `test_install_python`, `test_kit_install`, `test_mathjax`, `test_native`, `test_packaging`, `test_tessdata`.
 
-#### 33. `pdfmd_tex` (new package): 18 definitions, ~494 lines
+#### 33. `pdfmd_tex` (new package): 18 definitions, ~494 lines; done in 3.33.36 (the comments above `package_latex_keys`, `TEX_CAUSES` and `TEX_LOG_WRAP_WIDTH` and the banner of the direct `.tex` compile moved with them; the picture cache's protocol comment stayed above `CACHE_HANDSHAKE`; `render_plot_requests` and `compile_tex_direct` use `_timed`; `run_probe` and `which` are `core.X`)
 
 Definitions: `is_latex_preamble`, `top_level_tikzpicture`, `wrap_latex_header_includes`, `package_latex_keys`, `document_latex_definitions`, `engine_failure_reason`, `tex_failure_cause`, `tex_wants_rerun`, `tex_log_dewrap`, `tex_log_failure_reason`, `tex_bibliography_tool`, `latex_engine_command`, `run_tex_engine`, `tex_tree_stamp`, `plot_preamble`, `plot_recorded_inputs`, `render_plot_requests`, `compile_tex_direct`.
 
