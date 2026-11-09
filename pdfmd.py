@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.33"
+PDFMD_VERSION = "3.33.34"
 import argparse
 import atexit
 import csv
@@ -1856,9 +1856,20 @@ init_backups_command = deferred("pdfmd_history.backups", "init_backups_command")
 notes_to_entries = deferred("pdfmd_history.backups", "notes_to_entries")
 version_differs = deferred("pdfmd_history.backups", "version_differs")
 version_text = deferred("pdfmd_history.backups", "version_text")
+font_missing = deferred("pdfmd_unicode.fonts_choice", "font_missing")                # move 31 (v3.33.34); read by lib/pdfmd_doctor too
+system_font_missing = deferred("pdfmd_unicode.fonts_choice", "system_font_missing")  # tests patch it with mock.patch.object
+default_monofont = deferred("pdfmd_unicode.fonts_choice", "default_monofont")        # read by lib/pdfmd_report too
+fallback_font = deferred("pdfmd_unicode.fonts_choice", "fallback_font")
+preferred_font = deferred("pdfmd_unicode.fonts_choice", "preferred_font")            # tests replace it
+font_args = deferred("pdfmd_unicode.fonts_choice", "font_args")                      # read by lib/pdfmd_report too
+unicode_forced = deferred("pdfmd_unicode.fonts_choice", "unicode_forced")            # read by tests/test_setup.py
+managed_fonts_css = deferred("pdfmd_unicode.fonts_choice", "managed_fonts_css")      # read by lib/pdfmd_report too
+check_fonts = deferred("pdfmd_unicode.fonts_choice", "check_fonts")
+script_fallback = deferred("pdfmd_unicode.fonts_choice", "script_fallback")          # read by lib/pdfmd_report too
+# a function, but pdfmd.py never calls it and tests call its .cache_clear(), which a stand-in does not have
+DEFERRED_NAMES.update(installed_font_families="pdfmd_unicode.fonts_choice")
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
-DEFAULT_FONT = "DejaVu Serif"
 # Tried first, when neither the document nor -f/--font names a mainfont:
 # better Unicode/math coverage and typography than LaTeX's own Latin Modern
 # for most prose. DEFAULT_FONT (DejaVu) is the deliberate fallback for
@@ -1869,103 +1880,8 @@ DEFAULT_FONT = "DejaVu Serif"
 # detect-then-retry-with-a-different-mainfont path is what actually works.
 PREFERRED_FONT = "STIX Two Text"
 DEFAULT_MONOFONT = "JetBrains Mono"
-# Installed-by-default stand-ins, tried in order when one of the three fonts
-# above isn't installed (a fresh machine rarely has JetBrains Mono or, on
-# macOS, DejaVu Serif). Without this, every LaTeX engine failed with a
-# fontspec error and the build silently fell through to typst/HTML engines.
-MONOFONT_STAND_INS = ("Menlo", "DejaVu Sans Mono", "Liberation Mono", "Courier New")
-# For DEFAULT_FONT's missing-glyph retry: system serifs that, like DejaVu,
-# cover the arrows/comparison/Greek that STIX Two Text lacks (it has no ≥).
-SERIF_STAND_INS = ("Times New Roman", "Liberation Serif", "Georgia")
+# DEFAULT_FONT, MONOFONT_STAND_INS, SERIF_STAND_INS and installed_font_families to preferred_font: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
-
-@lru_cache(maxsize=None)
-def installed_font_families() -> frozenset[str] | None:
-    """Lower-cased font family names from fontconfig, or None without fc-list."""
-    fc_list = shutil.which("fc-list")
-    if not fc_list:
-        return None
-    try:
-        done = subprocess.run([fc_list, ":", "family"], capture_output=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    # decoded here: with text=True a Windows fc-list whose output the console code page cannot decode came back as None
-    out = (done.stdout or b"").decode("utf-8", "replace")
-    return frozenset(name.strip().casefold() for line in out.splitlines() for name in line.split(","))
-
-
-def font_missing(family: str) -> bool:
-    """True only when a font is known NOT to be installed -- anywhere, pdfmd's own fonts
-    folder (`pdfmd --install fonts`) included."""
-    return system_font_missing(family) and managed_face(family) is None
-
-
-@lru_cache(maxsize=None)
-def system_font_missing(family: str) -> bool:
-    """True only when a font is known NOT to be installed.
-
-    Asks fontconfig (fc-list) first, then luaotfload-tool (ships with TeX
-    Live/MacTeX, so it's there whenever lualatex is). If neither tool is
-    available the answer is False -- "assume it's there", exactly the
-    behavior before this check existed.
-    """
-    families = installed_font_families()
-    if families is not None:
-        return family.casefold() not in families
-    tool = shutil.which("luaotfload-tool")
-    if not tool:
-        # No fontconfig and no TeX: pdfmd's own scan of the system font folders (Windows, mostly)
-        index = font_index()
-        if index is None:
-            return False
-        return not any(not face.managed for face in index._by_name.get(family.casefold(), []))
-    try:
-        result = subprocess.run([tool, f"--find={family}"], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return "Cannot find" in (result.stdout or "") + (result.stderr or "")
-
-
-@lru_cache(maxsize=None)
-def default_monofont() -> str:
-    """DEFAULT_MONOFONT, or the first installed MONOFONT_STAND_INS entry."""
-    for family in (DEFAULT_MONOFONT, *MONOFONT_STAND_INS):
-        if not font_missing(family):
-            if family != DEFAULT_MONOFONT:
-                print(f"WARN  font: {DEFAULT_MONOFONT} is not installed; using {family} for code "
-                      "(install it, or set monofont:, to change this)", file=sys.stderr)
-            return family
-    return DEFAULT_MONOFONT
-
-
-@lru_cache(maxsize=None)
-def fallback_font() -> str:
-    """DEFAULT_FONT for the missing-glyph retry, else an installed stand-in.
-
-    Retrying with a font that isn't installed turned a render with a few
-    missing glyphs into a failed build (every LaTeX engine hits the same
-    fontspec error). With no stand-in either, PREFERRED_FONT is returned,
-    so the retry repeats the first attempt instead of failing.
-    """
-    for family in (DEFAULT_FONT, *SERIF_STAND_INS):
-        if not font_missing(family):
-            if family != DEFAULT_FONT:
-                print(f"WARN  font: {DEFAULT_FONT} is not installed; using {family} for "
-                      "missing-glyph fallback", file=sys.stderr)
-            return family
-    return PREFERRED_FONT
-
-
-@lru_cache(maxsize=None)
-def preferred_font() -> str:
-    """PREFERRED_FONT, or the fallback font when it isn't installed."""
-    if font_missing(PREFERRED_FONT):
-        replacement = fallback_font()
-        if replacement != PREFERRED_FONT:
-            print(f"WARN  font: {PREFERRED_FONT} is not installed; using {replacement} instead "
-                  "(install it, or set mainfont:/-f, to change this)", file=sys.stderr)
-            return replacement
-    return PREFERRED_FONT
 DEFAULT_MARGIN = "1in"
 DEFAULT_VARS = []
 AUTO_METADATA_DISABLED = object()
@@ -9078,8 +8994,11 @@ def install_ocr_languages(names: str, remove: bool = False) -> bool:
 def reset_font_caches() -> None:
     global _FONT_INDEX, _MANAGED_INDEX
     _FONT_INDEX = _MANAGED_INDEX = None
-    for cached in (font_missing, system_font_missing, default_monofont, fallback_font, preferred_font):
-        clear = getattr(cached, "cache_clear", None)
+    # the cached functions are in pdfmd_unicode.fonts_choice (v3.33.34), whose stand-ins here have no cache_clear;
+    # before that module is loaded nothing is cached
+    fonts = sys.modules.get("pdfmd_unicode.fonts_choice")
+    for name in ("font_missing", "system_font_missing", "default_monofont", "fallback_font", "preferred_font"):
+        clear = getattr(getattr(fonts, name, None), "cache_clear", None)
         if clear:
             clear()
 
@@ -10047,11 +9966,7 @@ def tablewidth_note(md_path, note) -> None:
 # A document that has set up its own scripts (ucharclasses, \newfontfamily, xeCJK,
 # \babelfont, a font fallback variable) keeps its own way: --no-auto unicode
 # switches this off, and `pdfmd-options: {unicode: true}` forces it on regardless.
-# What Typst and Pandoc's HTML put code in by default (the first of these that is installed).
-CODE_FONTS_TYPST = ("DejaVu Sans Mono",)
-CODE_FONTS_HTML = ("Menlo", "Monaco", "Consolas", "Lucida Console", "DejaVu Sans Mono")
-EMOJI_FAMILIES = ("Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twemoji Mozilla", "Noto Emoji")
-UNICODE_ENGINES = ("lualatex", "xelatex", "typst", "weasyprint")
+# CODE_FONTS_TYPST, CODE_FONTS_HTML, EMOJI_FAMILIES and UNICODE_ENGINES: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 OWN_SCRIPT_SETUP_RE = re.compile(r"ucharclasses|\\newfontfamily|\\babelfont|xeCJK|luatexja|CJKutf8|\\setCJK"
                                  r"|add_fallback|\\setTransition|\\setmainfontfallback")
 OWN_SCRIPT_VARIABLES = ("CJKmainfont", "CJKsansfont", "CJKmonofont", "mainfontfallback")
@@ -10091,20 +10006,7 @@ def managed_face(family: str):
     return face if face is not None and face.managed else None
 
 
-def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
-    """`-V` arguments that select ``family`` as mainfont/monofont. One only found in pdfmd's own
-    folder (not installed system-wide) is named by file, with the folder as its Path, which
-    is how fontspec loads a font it cannot find by name."""
-    face = managed_face(family) if latex else None
-    if face is None or not system_font_missing(family):
-        return ["-V", f"{kind}={family}"]
-    directory = str(Path(face.path).parent).replace("\\", "/") + "/"
-    args = ["-V", f"{kind}={Path(face.path).name}", "-V", f"{kind}options=Path={{{directory}}}"]
-    for style, option in (("bold", "BoldFont"), ("italic", "ItalicFont"), ("bolditalic", "BoldItalicFont")):
-        other = managed_index().styles(face).get(style)
-        if other is not None:
-            args += ["-V", f"{kind}options={option}={{{Path(other.path).name}}}"]
-    return args
+# font_args: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
 
 # The math font that goes with a text font (v3.28.24). unicode-math sets formulas in Latin Modern Math (Typst: New
@@ -10237,19 +10139,7 @@ def document_font_setting(key: str, md_paths: list[Path], metadata_files: list[P
     return None
 
 
-def unicode_code_text(md_paths: list[Path]) -> str:
-    """The code of the Markdown files: the content of fenced blocks and inline code spans."""
-    pieces: list[str] = []
-    for path in md_paths:
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-        except (OSError, UnicodeDecodeError):
-            continue
-        text = EMBED_BLOCK_RE.sub("", text)
-        pieces += [match.group(2) for match in re.finditer(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)^[ \t]*\1[ \t]*$", text)]
-        text = re.sub(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", "", text)
-        pieces += re.findall(r"`([^`\n]+)`", text)
-    return "\n".join(pieces)
+# unicode_code_text: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
 
 def own_script_setup(md_paths: list[Path], preamble_files: list[Path], variables: list[str],
@@ -10265,9 +10155,7 @@ def own_script_setup(md_paths: list[Path], preamble_files: list[Path], variables
     return any(OWN_SCRIPT_SETUP_RE.search(text) for text in texts)
 
 
-def unicode_forced(md_path: Path) -> bool:
-    value = frontmatter_pdfmd_options(md_path).get("unicode", config_options().get("unicode", ""))
-    return str(value).casefold() in ("true", "yes", "on", "force")
+# unicode_forced: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
 
 # What to do about characters the main font cannot draw (`pdfmd-options: {fallback: ..., missing: ...}`,
@@ -10356,237 +10244,7 @@ def mainfont_choice(md_paths: list[Path], metadata_files: list[Path], variables:
     return None if document_font else base
 
 
-@contextmanager
-def managed_fonts_css(engine: str | None) -> Iterator[Path | None]:
-    """For WeasyPrint, which finds fonts through fontconfig: an @font-face rule for every font in
-    pdfmd's own folder, so a document can name them like installed ones."""
-    index = managed_index() if engine == "weasyprint" else None
-    rules = []
-    if engine == "weasyprint" and UNICODE_CODE_FONTS:
-        # code: the fonts it already used, then the ones for its other characters, then any monospace
-        stack = ", ".join(f'"{family}"' for family in UNICODE_CODE_FONTS)
-        rules.append(f"code, pre, pre code, code span {{ font-family: {stack}, monospace; }}")
-    if not rules and (index is None or not index.faces):
-        yield None
-        return
-    for face in (index.faces if index is not None else []):
-        if "emoji" in face.family.casefold():
-            continue  # WeasyPrint draws bitmap colour fonts (Noto Color Emoji) badly
-        style = face.style.casefold()
-        rules.append('@font-face { font-family: "%s"; src: url("%s"); font-weight: %s; font-style: %s; }' % (
-            face.family, Path(face.path).as_uri(), "bold" if "bold" in style else "normal",
-            "italic" if "italic" in style or "oblique" in style else "normal"))
-    with NamedTemporaryFile("w", encoding="utf-8", suffix=".html", prefix="pdfmd-fontface-",
-                            delete=False) as temporary:
-        temporary.write("<style>\n" + "\n".join(rules) + "\n</style>\n")
-        temporary_path = Path(temporary.name)
-    try:
-        yield temporary_path
-    finally:
-        temporary_path.unlink(missing_ok=True)
-
-
-def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) -> bool:
-    """`--check-fonts`: what the fonts would do for one document, without building it. True when
-    every character can be drawn."""
-    module, index = unicode_module(), font_index()
-    if module is None or index is None:
-        print("The fonts check is part of the pdfmd_unicode package, which is not installed here.")
-        return False
-    found = find_metadata(md_path.parent, None, document_stem=md_path.stem, document=md_path)
-    metadata_files = ([found] if isinstance(found, Path) else found if isinstance(found, list) else [])
-    paths = [md_path]
-    mode, missing_mode = fallback_settings(md_path, metadata_files)
-    notes: list[tuple] = []
-    document_font = has_mainfont(md_path, variables, metadata_files)
-    main = (mainfont_choice(paths, metadata_files, variables, None, document_font,
-                            not auto_disabled(no_auto, "mainfont"), no_auto, lambda *a: notes.append(a))
-            or document_font_setting("mainfont", paths, metadata_files, variables)
-            or preferred_font())
-    print(f"{md_path}")
-    print(f"  fallback: {mode}   missing: {missing_mode}"
-          + ("   (switched off by --no-auto unicode)" if auto_disabled(no_auto, "unicode") else ""))
-    for _kind, detail in notes:
-        print(f"  note: {detail.split(': ', 1)[-1]}")
-    face = index.regular(main)
-    print(f"  main font: {main}" + ("" if face else "   (not installed: pdfmd cannot tell what it lacks)"))
-    if face is None:
-        return False
-    if own_script_setup(paths, [], variables, metadata_files) and not unicode_forced(md_path):
-        print("  the document sets up its own fonts for other scripts; pdfmd leaves them to it")
-        return True
-    text = unicode_source_text(paths, metadata_files)
-    language = document_font_setting("lang", paths, metadata_files, variables)
-    plan = module.plan_text(text, main, index, language, fonts=mode in ("char", "word", "document"))
-    undrawn = dict(plan.uncovered)
-    for line in plan.describe():
-        print(f"  {line.replace('->', 'takes')}")
-    if not plan.choices and not plan.emoji and not plan.uncovered:
-        print(f"  every character of the text is in {main}")
-    code_text = unicode_code_text(paths)
-    if code_text.strip():
-        mono = document_font_setting("monofont", paths, metadata_files, variables) or default_monofont()
-        code = module.plan_text(code_text, mono, index, language, fonts=mode in ("char", "word", "document"))
-        if code is not None:
-            for line in code.describe():
-                print(f"  code in {mono}: {line.replace('->', 'takes')}")
-            undrawn.update(code.uncovered)
-            undrawn.update({code_point: 1 for code_point in code.emoji})
-    if plan.emoji:
-        picture = (managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
-                   or index.regular("Apple Color Emoji"))
-        print(f"  {len(plan.emoji)} emoji character(s): LaTeX sets them as pictures from "
-              + (picture.family if picture else "a colour emoji font (not installed: pdfmd --install emoji)")
-              + "; Typst draws them itself")
-        if picture is None:
-            undrawn.update({code_point: 1 for code_point in plan.emoji})
-    if undrawn:
-        from pdfmd_unicode import install as installer
-        wanted = installer.packages_for(undrawn, language)
-        print(f"  no installed font draws: {describe_code_points(undrawn)}")
-        print("  install: " + (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
-              + f"   (until then: missing: {missing_mode})")
-        return False
-    print("  everything can be drawn")
-    return True
-
-
-def describe_code_points(code_points, limit: int = 12) -> str:
-    shown = []
-    for code_point in sorted(code_points)[:limit]:
-        try:
-            name = unicodedata.name(chr(code_point))
-        except ValueError:
-            name = "unnamed"
-        shown.append(f"U+{code_point:04X} {chr(code_point)} {name}")
-    more = len(code_points) - len(shown)
-    return "; ".join(shown) + (f"; and {more} more" if more > 0 else "")
-
-
-@contextmanager
-def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables: list[str],
-                    preamble_files: list[Path], main_font: str | None, engine: str | None,
-                    no_auto: list[str] | None, note) -> Iterator[tuple[Path | None, Path | None]]:
-    """(header, filter) temp files that set the text ``main_font`` cannot draw in other fonts,
-    or (None, None) when there is nothing to do, or no way to know what is missing."""
-    module = unicode_module()
-    index = font_index()
-    skip = (module is None or index is None or auto_disabled(no_auto, "unicode")
-            or (engine is not None and engine not in UNICODE_ENGINES))
-    mode, missing_mode = fallback_settings(md_paths[0], metadata_files) if not skip else ("char", "warn")
-    skip = skip or mode == "off"
-    if not skip and not unicode_forced(md_paths[0]) and own_script_setup(md_paths, preamble_files, variables,
-                                                                       metadata_files):
-        note("UNICODE", f"{md_paths[0]}: sets up its own fonts for other scripts; leaving them to it "
-                        "(pdfmd-options: {unicode: true} adds pdfmd's)")
-        skip = True
-    main = main_font or (document_font_setting("mainfont", md_paths, metadata_files, variables)
-                         if not skip else None)
-    if skip or not main:
-        yield None, None
-        return
-    text = unicode_source_text(md_paths, metadata_files)
-    language = document_font_setting("lang", md_paths, metadata_files, variables)
-    fonts_on = mode in ("char", "word", "document")
-    plan = module.plan_text(text, main, index, language, fonts=fonts_on, words=mode == "word")
-    UNICODE_UNCOVERED.clear()
-    UNICODE_CODE_FONTS.clear()
-    code_uncovered: set[int] = set()
-    code_emoji: set[int] = set()
-    code_text = ""
-    if plan is not None:
-        # Code is set in the monofont, which lacks other characters than the main font does.
-        code_text = unicode_code_text(md_paths)
-        latex = engine is None or engine in LATEX_ENGINES
-        mono = (document_font_setting("monofont", md_paths, metadata_files, variables)
-                or (default_monofont() if latex else next(
-                    (family for family in (CODE_FONTS_TYPST if engine == "typst" else CODE_FONTS_HTML)
-                     if index.has(family)), "DejaVu Sans Mono")))
-        code_plan = module.plan_text(code_text, mono, index, language, fonts=fonts_on) if code_text.strip() else None
-        if code_plan is not None:
-            code_uncovered = set(code_plan.uncovered)
-            if latex:
-                code_emoji = set(code_plan.emoji)   # LaTeX sets these as pictures, like those in the text
-                plan.add_code(code_plan)
-            elif code_plan.choices:
-                UNICODE_CODE_FONTS.extend(dict.fromkeys(choice.family for choice in code_plan.choices.values()))
-                UNICODE_CODE_FONTS.insert(0, mono)
-            if code_plan.choices:
-                for line in code_plan.describe():
-                    note("UNICODE", f"{md_paths[0]}: code in {mono} lacks {line}")
-    if plan is None:
-        note("UNICODE", f"{md_paths[0]}: {main} is not among the installed fonts, so what it lacks "
-                        "cannot be told")
-        yield None, None
-        return
-    if plan.emoji or code_emoji:
-        # WeasyPrint draws Noto Color Emoji (bitmaps) badly, so it only counts the others for it.
-        usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:4]
-        emoji_font = next((family for family in usable if index.has(family)), None)
-        if engine in ("typst", "weasyprint") and emoji_font is None:
-            print(f"WARN  {md_paths[0]}: the document has emoji and no colour emoji font {engine} can use is "
-                  "installed (" + ("-e typst, with pdfmd --install emoji" if engine == "weasyprint"
-                                   else "pdfmd --install emoji") + ")", file=sys.stderr)
-        elif engine in LATEX_ENGINES or engine is None:
-            # LaTeX cannot draw a colour font: each emoji becomes the picture the font holds for it.
-            # Noto's bitmaps first (the managed copy, then a system one), else Apple's.
-            face = (managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
-                    or index.regular("Apple Color Emoji"))
-            if face is not None:
-                from pdfmd_unicode import colorfont
-                stat = Path(face.path).stat()
-                digest = hashlib.sha1(f"{face.path}{face.index}{stat.st_size}{stat.st_mtime_ns}".encode()
-                                      ).hexdigest()[:8]
-                plan.pictures = colorfont.write_pictures(
-                    text + "\n" + code_text, plan.emoji | code_emoji, face.path,
-                    document_cache_root(md_paths[0], metadata_files) / "emoji" / digest, face.index)
-            drawn = {ord(character) for sequence in plan.pictures for character in sequence}
-            left = plan.emoji - drawn
-            if plan.pictures:
-                note("UNICODE", f"{md_paths[0]}: {len(plan.pictures)} emoji set as pictures from {face.family}")
-            code_uncovered |= code_emoji - drawn
-            if left:
-                plan.uncovered.update({code_point: 1 for code_point in left})
-    undrawn = {**plan.uncovered, **{code_point: 1 for code_point in code_uncovered}}
-    if undrawn:
-        # Nothing installed draws these: warn, draw a black box, or stop, as `missing:` says.
-        UNICODE_UNCOVERED.update(undrawn)
-        if missing_mode == "error":
-            raise SystemExit(f"{md_paths[0]}: the fonts do not draw "
-                             f"{describe_code_points(undrawn)} (pdfmd-options: {{missing: warn}} "
-                             "to build anyway)")
-        elif missing_mode == "box":
-            plan.boxes = set(plan.uncovered)
-            plan.code_boxes = code_uncovered
-            note("UNICODE", f"{md_paths[0]}: {len(undrawn)} character(s) no font draws are set as black boxes")
-        else:
-            from pdfmd_unicode import install as installer
-            wanted = installer.packages_for(undrawn, language)
-            hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
-            print(f"WARN  {md_paths[0]}: no installed font draws {describe_code_points(undrawn)} "
-                  f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them)",
-                  file=sys.stderr)
-    if not plan:
-        yield None, None
-        return
-    for line in plan.describe():
-        note("UNICODE", f"{md_paths[0]}: {main} lacks {line}")
-    header = filter_file = None
-    try:
-        if engine is None or engine in LATEX_ENGINES:
-            with NamedTemporaryFile("w", encoding="utf-8", suffix=".tex", prefix="pdfmd-fonts-",
-                                    delete=False) as temporary:
-                temporary.write(plan.latex_header())
-                header = Path(temporary.name)
-        with NamedTemporaryFile("w", encoding="utf-8", suffix=".lua", prefix="pdfmd-fonts-",
-                                delete=False) as temporary:
-            temporary.write(plan.lua_filter())
-            filter_file = Path(temporary.name)
-        yield header, filter_file
-    finally:
-        for temporary_path in (header, filter_file):
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
+# managed_fonts_css, check_fonts, describe_code_points and script_fallback: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
 
 # latin_candidates, cyrillic_candidates, strip_lookup_suffix, find_wildcard_markdown, lookup_key, lookup_query_keys, LookupAmbiguous,

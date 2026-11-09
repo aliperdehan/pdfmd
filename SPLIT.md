@@ -430,7 +430,7 @@ Note: 33 callers outside. Tests patch `pdfmd.cache_root` (5 files): inside the p
 
 Tests: `test_cache_location`, `test_config`, `test_css_v2`, `test_doc`, `test_header_includes`, `test_markup_callouts`, `test_markup_highlight`, `test_picture_cache_protocol`, `test_plot_cache`, `test_readonly_home`, `test_sections`, `test_show_comments`.
 
-#### 31. `pdfmd_unicode` (existing package): 13 definitions, ~332 lines
+#### 31. `pdfmd_unicode` (existing package): 13 definitions, ~332 lines; done in 3.33.34 (in `fonts_choice.py`, deferred; `installed_font_families` is in `DEFERRED_NAMES`, as tests call its `.cache_clear()`; `reset_font_caches` stayed, rebinding `global`s, and clears the moved caches by name; `unicode_module()` stayed: `managed_index`, `install_fonts`, `uninstall_fonts` and others in `pdfmd.py`, `lib/pdfmd_lookup`, `lib/pdfmd_doctor` and `lib/pdfmd_routing` call it)
 
 Definitions: `installed_font_families`, `font_missing`, `system_font_missing`, `default_monofont`, `fallback_font`, `preferred_font`, `font_args`, `unicode_code_text`, `unicode_forced`, `managed_fonts_css`, `check_fonts`, `describe_code_points`, `script_fallback`.
 
