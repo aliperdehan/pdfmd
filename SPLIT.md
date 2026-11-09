@@ -486,7 +486,7 @@ Note: `embedded_resources` rebinds the global `_RESOURCE_OWNER`: it becomes `cor
 
 Tests: `test_attach`, `test_config`, `test_embedding`, `test_standalone_source`.
 
-#### 36. `pdfmd_native` (new package): 40 definitions, ~1166 lines
+#### 36. `pdfmd_native` (new package): 40 definitions, ~1166 lines; done in 3.33.39 (`NATIVE_LOST` stayed as state, written as `core.NATIVE_LOST`; `PAPER_CLI` stayed, rebound with `global`; `Chunk`, `MATH_LINE_BREAK` and `math_lines` stayed, read by `lib/pdfmd_ansi`; the comment on math without a typesetter moved too; `MathText.command`'s local `core` is `under_root`)
 
 Definitions: `csv_cut_advice`, `native_note`, `native_lose`, `escape_markup`, `MathText`, `chunks_markup`, `chunks_width`, `centred_math`, `inline_math`, `stacked_math`, `mathtext_form`, `NativeSource`, `author_names`, `csv_extension_delimiter`, `csv_guess_delimiter`, `csv_keep`, `csv_alignments`, `csv_separator_alignments`, `csv_div_table`, `strip_html_comments`, `convert_math_items`, `protect_dollars`, `normalise_gfm`, `title_block`, `ignored_front_matter_keys`, `native_page`, `native_paper`, `native_landscape`, `native_paper_note`, `native_font_size`, `native_order`, `load_inkmd`, `set_pdf_info`, `captured_logs`, `report_messages`, `render_native`, `calibre_page_options_for`, `render_calibre_markdown`, `convert_native`, `describe_native_changes`.
 

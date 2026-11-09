@@ -19,6 +19,83 @@ same commit as the change.
 
 ---
 
+## v3.33.39 — 2026-11-10
+
+Pre-edit state: commit `95b51aa`. Entry 3fi. **The native tier (Markdown to PDF with no Pandoc: the text normalised for the
+built-in renderers, math set as text, a `.csv` div as a pipe table, the paper, inkmd, md2pdf and Calibre's Markdown reader,
+`convert_native`) lives in the new package `pdfmd_native`** (`lib/pdfmd_native/__init__.py`); `pdfmd.py` loads it at start
+beside the other new packages. Move 36 of SPLIT.md, the largest so far.
+
+- The 40 definitions (`csv_cut_advice`, `native_note`, `native_lose`, `escape_markup`, `MathText`, `chunks_markup`,
+  `chunks_width`, `centred_math`, `inline_math`, `stacked_math`, `mathtext_form`, `NativeSource`, `author_names`,
+  `csv_extension_delimiter`, `csv_guess_delimiter`, `csv_keep`, `csv_alignments`, `csv_separator_alignments`, `csv_div_table`,
+  `strip_html_comments`, `convert_math_items`, `protect_dollars`, `normalise_gfm`, `title_block`, `ignored_front_matter_keys`,
+  `native_page`, `native_paper`, `native_landscape`, `native_paper_note`, `native_font_size`, `native_order`, `load_inkmd`,
+  `set_pdf_info`, `captured_logs`, `report_messages`, `render_native`, `calibre_page_options_for`, `render_calibre_markdown`,
+  `convert_native`, `describe_native_changes`) and 46 constants (`NATIVE_SOURCE_SUFFIXES`, `NATIVE_READERS`, `NATIVE_META_KEYS`,
+  the 18 patterns and tables from `HEADING_ATTR_RE` to `PAPER_SIZES`, the 16 tables of the math converter from `MATH_GREEK` to
+  `MARKDOWN_ESCAPE_RE` but `MATH_LINE_BREAK`, `NO_BREAK_SPACE`, `MATHTEXT_REWRITES`, `CSV_DIV_LINE_RE`, `DIV_CLOSE_RE`,
+  `DIV_ATTRIBUTE_RE`, `CSV_ALIGNMENTS`, `CSV_SEPARATOR_CELL_RE`, `CALIBRE_MARKDOWN_EXTENSIONS` and `NATIVE_PAPER_NOTED`) moved
+  from 13 places, with the comments that are theirs alone: the banner "math without a typesetter" (`MathText`'s docstring says
+  "see the comment above"), and the comments on `NATIVE_META_KEYS` and `MATHTEXT_REWRITES`. `pdfmd.py` keeps 13 pointer
+  comments.
+- `pdfmd.py` re-exports 19 names: `MathText` (which `math_lines` calls) and `convert_native` are read by `pdfmd.py`;
+  `CALIBRE_MARKDOWN_EXTENSIONS`, `CSV_DIV_LINE_RE`, `PAGE_BREAK_COMMENT_RE`, `PAGE_BREAK_RE`, `PAPER_SIZES`, `author_names`,
+  `csv_div_table`, `csv_guess_delimiter`, `csv_keep`, `ignored_front_matter_keys`, `inline_math`, `native_font_size`,
+  `native_landscape`, `native_order`, `native_page`, `native_paper` and `normalise_gfm` by tests. `bind_core(...)` gets the
+  package; it is in `pyproject.toml` (`packages` and `package-dir`) and in `PACKAGES` of `scripts/build_zipapp.py`.
+- Stayed in `pdfmd.py`: `NATIVE_LOST` (what the tier left out, read after the build for the prompt that offers the missing
+  tools) as state, which `native_lose` (called by `describe_native_changes`) fills as `core.NATIVE_LOST`; `PAPER_CLI`, rebound with
+  `global` in `main`; `math_lines` with `Chunk` and `MATH_LINE_BREAK`, as `lib/pdfmd_ansi` reads `math_lines`; `scalar_text`,
+  `split_front_matter`, `NATIVE_PAPER_POINTS`, `PAPER_NAME_ALIASES`, `CSV_DELIMITER_NAMES`, `CSV_DELIMITER_WORDS`, `INKMD_CLI`
+  and the other names code that stays reads; `native_possible`, `NATIVE_ENGINES`, `NATIVE_ALIASES` and `native_run_note`, which
+  SPLIT.md leaves there. No moved name is used by `pdfmd.py` when it loads (no default argument, decorator or module-level
+  expression), no moved constant is built from a pdfmd name, and the moved code has no `global` line and no `@timed`.
+- Changes to the text that are not moves: 37 pdfmd names are read as `core.X` when the code runs (`CALIBRE_CSS`,
+  `CALIBRE_OPTIONS`, `CSV_DEFAULTS`, `CSV_DELIMITER_NAMES`, `CSV_DELIMITER_WORDS`, `CSV_DIV_RE`, `Chunk`, `DEFAULT_MARGIN`,
+  `DIV_FENCE_RE`, `FENCE_RE`, `INKMD_CLI`, `MATH_LINE_BREAK`, `NATIVE_LOST`, `NATIVE_PAPER_POINTS`, `PAPER_CLI`,
+  `PAPER_NAME_ALIASES`, `atomic_write_bytes`, `atomic_write_pdf`, `csv_defaults`, `csv_is_off`, `csv_note_mode`, `display_path`,
+  `inkmd_emoji_font`, `log_cmd`, `math_lines`, `matplotlib_available`, `metadata_file_yaml`, `obsidian_source`, `office_module`,
+  `pandoc_metadata_order`, `pypdf`, `record_engine`, `resolve_calibre`, `scalar_text`, `split_front_matter`, `vprint`, `yaml`);
+  tests patch `matplotlib_available` and `resolve_calibre` as `pdfmd.X`; `csv_defaults` is `pdfmd_tables`'s deferred stand-in,
+  `pypdf` pdfmd's lazy loader and `yaml` its own optional import. `MathText.command` had a local variable `core` (the radicand of
+  `\sqrt` as it prints), which would hide the module's `core` in the whole method (ruff F823 on the `core.MATH_LINE_BREAK` above
+  it): it is `under_root`. The annotations `list[Chunk]` read `list[core.Chunk]` (never evaluated: the package starts with
+  `from __future__ import annotations`). The imports of the vendored inkmd (`pdfmd_inkmd`), md2pdf, matplotlib's `mathtext` and
+  `traceback` stay inside the functions, as they were. `pdfmd.py` lost its `csv` and `math` imports, which only the moved code
+  used (ruff; `csv` now loads from the package at start, as it loaded from `pdfmd.py` before). CLAUDE.md's "Vendored inkmd and
+  the native tier" says where the code is now and what stayed.
+- Checked: ruff is clean. By the AST: the 86 moved definitions are the ones at HEAD with `core.X` read back as `X` and
+  `under_root` as `core`, the 1,075 top-level definitions that stayed are unchanged, every `core.X` of the package exists on
+  `pdfmd`, the package reads none of those names bare, and every re-export is the package's own object. `import pdfmd` brings
+  in none of `pdfmd_inkmd`, md2pdf, matplotlib or the deferred packages the start-up check lists (`pdfmd_office`,
+  `pdfmd_history`, `pdfmd_direct`, `pdfmd_buildinfo`, `pdfmd_tables`, `pdfmd_unicode`, `pdfmd_setup`, `pdfmd_flat`), and pypdf stays the lazy loader; the package's own
+  import costs about 3 ms (5.5 ms on a busy run; `python3 -X importtime`, five runs) plus `csv`, most of it the regular
+  expressions `pdfmd.py` compiled itself before. Hand runs through HEAD and through the move, each in a fresh copy of
+  `examples/` with `XDG_CONFIG_HOME`, `XDG_CACHE_HOME` and `XDG_DATA_HOME` in a scratch folder, `PDFMD_NO_PROMPT=1`, an empty
+  `PDFMD_CONFIG` and standard input from `/dev/null`, 14 runs, 10 of them with an empty `PATH` (no Pandoc): `examples/results.md`
+  (its `.csv` div) through Calibre's Markdown reader (found in the app bundle with no `PATH`), through inkmd (`PDFMD_CALIBRE`
+  empty) and with `-e inkmd`; a document with a title, two authors (one a `name:` mapping), `papersize: a5`, a footnote, a
+  citation, an emoji, inline and display math (`\sqrt`, `\sqrt[3]`, `\frac`, a `pmatrix`, `align`), `\newpage` and
+  `<!-- pagebreak -->`, heading and image attributes, a fenced div, a `.csv` div with `rows=2` and `align=`, a pipe table and an
+  unused front-matter key, through inkmd, Calibre's reader, `-e inkmd`, `-e calibre` (with Pandoc: its HTML route) and
+  `--paper a4,landscape`; `--paper a5` on `results.md`; a `classoption: landscape` letter document through inkmd and Calibre; an
+  unknown `papersize: b9` (one NOTE, A4) alone and as two files of a `-b` folder (one NOTE each); and `-e md2pdf` (md2pdf is not
+  installed here: exit 1, "not available", the same before and after). Every other run exits 0, through the renderer it names;
+  the logs are the same with times, temporary names and the build-record folder (a hash of each copy's path) masked, and the
+  PDFs have the same text (pypdf), page sizes and metadata but the build time. In process, `convert_native` with inkmd on that
+  document fills `pdfmd.NATIVE_LOST` (`citations`, `emoji`, `keys`, `latex`, `math`) the same at HEAD and after the move, and
+  `core.NATIVE_LOST` is `pdfmd.NATIVE_LOST`. `scripts/split_check.py`, standard input from `/dev/null` and `XDG_DATA_HOME` in a
+  scratch folder, with six extras through the normal `PATH` (`natink`, `resink`, `landink`, `paperink` and `oddink` with
+  `-e inkmd`, `md2pdfabsent` with `-e md2pdf`, each hand-run through the move first: exit 0, and 1 for md2pdf): all 36 checks the
+  same; the extras' PDFs, compared by hand from the folders `--keep` left, have the same text and page sizes. Not run: md2pdf
+  itself and its matplotlib math (not installed), the prompt that reads `NATIVE_LOST` (it needs a terminal). `scripts/pdfmd
+  --version`, interleaved (`ab.py`, at a load average of 13 to 17): before 150 / 191 ms and after 162 / 192 (best / median),
+  then in the other order 158 / 199 and 160 / 205, then 157 / 181 and 156 / 196; `split_check` read 231 / 333 before and
+  171 / 314 after. Noise at that load.
+- Tests: `python3 -m unittest test_calibre_markdown test_csv_switch test_csv_table test_native test_pagebreak` and the always-run
+  set (with `test_split`): 278 tests OK (3 skipped).
+
 ## v3.33.38 — 2026-11-10
 
 Pre-edit state: commit `a363711`. Entry 3fi. **Assembling a document (`--assemble-only`, `--merge`, the embedded metadata, filters
