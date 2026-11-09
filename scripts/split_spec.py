@@ -13,7 +13,8 @@ For the package's definitions and constants (from its section in SPLIT.md) it pr
   them from the moved code goes through `core.`, so the patch reaches it;
 - names that pdfmd.py binds at the top level more than once (the later binding wins at run time, so moving one of them
   changes what the rest of pdfmd.py sees);
-- names rebound with `global`, which stay in pdfmd.py.
+- names rebound with `global`, which stay in pdfmd.py;
+- the test modules to run (the package's and the always-run set) and the proof command.
 
 It reads files and prints; it changes nothing.
 """
@@ -29,8 +30,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def section(package: str) -> tuple[list[str], list[str]]:
-    """The definitions and constants that SPLIT.md lists for ``package``."""
+def section(package: str) -> tuple[list[str], list[str], list[str]]:
+    """The definitions, constants and test modules that SPLIT.md lists for ``package``."""
     text = (ROOT / "SPLIT.md").read_text(encoding="utf-8")
     match = re.search(r"^#### \d+\. `%s`.*?(?=^#{2,4} )" % re.escape(package), text, re.MULTILINE | re.DOTALL)
     if not match:
@@ -41,7 +42,8 @@ def section(package: str) -> tuple[list[str], list[str]]:
         found = re.search(r"^%s[^:]*:(.*)$" % re.escape(label), body, re.MULTILINE)
         return re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", found.group(1)) if found else []
 
-    return names("Definitions"), names("Constants")
+    tests = re.search(r"^Tests:(.*?)(?:\n\n|\Z)", body, re.MULTILINE | re.DOTALL)
+    return names("Definitions"), names("Constants"), (re.findall(r"`(test_\w+)`", tests.group(1)) if tests else [])
 
 
 def bound_names(node: ast.stmt) -> list[str]:
@@ -74,6 +76,8 @@ def loaded(node: ast.AST) -> set[str]:
             (reads if isinstance(child.ctx, ast.Load) else own).add(child.id)
         elif isinstance(child, ast.arg):
             own.add(child.arg)
+        elif isinstance(child, ast.ExceptHandler) and child.name:
+            own.add(child.name)
         elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and child is not node:
             own.add(child.name)
         elif isinstance(child, (ast.Global, ast.Nonlocal)):
@@ -95,7 +99,7 @@ def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__.strip().splitlines()[2].strip())
     package = sys.argv[1]
-    definitions, constants = section(package)
+    definitions, constants, test_modules = section(package)
     moving = set(definitions) | set(constants)
     source = (ROOT / "pdfmd.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -178,6 +182,10 @@ def main() -> int:
         print("- none that the move touches")
 
     print(f"\nMoved lines: {ranges(sorted(moved_lines))}")
+    always = ["test_packaging", "test_setup", "test_docs_consistency", "test_compat", "test_probes", "test_serve",
+              "test_launcher", "test_jobs"]
+    print("\n## Tests to run (from tests/)\npython3 -m unittest -v " + " ".join(dict.fromkeys([*test_modules, *always])))
+    print("\n## The proof\npython3 scripts/split_check.py   (add --extra 'NAME:ARGS' for the package's own feature)")
     return 0
 
 

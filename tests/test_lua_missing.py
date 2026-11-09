@@ -107,13 +107,26 @@ class LoneCopy(unittest.TestCase):
         self.assertEqual(said.count("the pdfmd_lua package is not installed"), 1, said)
         self.assertRegex(said, r"WARN  lua: ")
 
+
+class NoPackages(unittest.TestCase):
+    """Needs neither Pandoc nor an engine: pdfmd.py stops before it looks for them."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-lone-"))
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        (self.directory / "d.md").write_text("Hello.\n", encoding="utf-8")
+
     def test_without_its_packages_it_stops_and_says_why(self):
         shutil.copy(ROOT / "pdfmd.py", self.directory / "pdfmd.py")
-        done = self.run_copy("import runpy, sys; sys.modules['pdfmd_comments'] = None; ")
+        program = ("import runpy, sys; sys.modules['pdfmd_comments'] = None; sys.argv = ['pdfmd.py', 'd.md']; "
+                   "runpy.run_path('pdfmd.py', run_name='__main__')")
+        done = subprocess.run([sys.executable, "-c", program], cwd=self.directory, capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertIn("has no lib/ folder beside it", done.stderr)
         self.assertNotIn("Traceback", done.stderr)
         self.assertFalse((self.directory / "d.pdf").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

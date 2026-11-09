@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.2 — 2026-11-09
+
+Pre-edit state: commit `7f34e07`. Entry 3fi. **`pdfmd --init` lives in its package, `pdfmd_templates`.** Move 2 of SPLIT.md, the first into a package that already existed; a pure move.
+
+- `init_command` (`pdfmd --init [TEMPLATE] [NAME]`) and `git_user_name` are at the end of `lib/pdfmd_templates/__init__.py` and call the package's own functions directly. The lazy loader `templates_module()` is gone, and with it the message "--init needs the pdfmd_templates package next to pdfmd.py", which can no longer be reached (since 3.33.0 a copy without `lib/` stops at start). The command reads `core.config_root` (a test patches it) and `core.display_path`; `pdfmd.py` re-exports `init_command` and binds the package with `bind_core()`. The package now loads at every start: about 0.5 ms.
+- `scripts/split_check.py` is the proof of a move in one command (SPLIT.md step 7): "before" is HEAD in a temporary git worktree, "after" the working tree; both run `--help` and its topics, the `--verbose` builds of the fixed set and a document with comments of every kind (`--assemble-only`, `--merge`, `--attach-source`), and compare them with places, times, random names and the version masked; `--extra 'NAME:ARGS'` adds the package's own feature; it also times `scripts/pdfmd --version`. It replaces the session's scratch scripts, so a subagent can prove a move. `scripts/split_spec.py` also prints the test modules to run and the proof command, and no longer takes an `except ... as name` for a pdfmd name.
+- `tests/test_lua_missing.py`: the test of a copy without its packages is in a class of its own, so it runs where there is no Pandoc or engine.
+- Checked with `split_check.py --extra 'init-list:--init'`: all 31 checks the same (`--help` and its 17 topics, 9 `--verbose` logs, the stripped outputs and the attached source); `scripts/pdfmd --version` no slower (three interleaved runs of HEAD and the move: best 143 / 144, 156 / 156, 172 / 157 ms). ruff is clean. Tests: `test_templates`, `test_lua_trust` (it patches `config_root`), `test_lua_missing` and the always-run set pass (162 tests).
+
 ## v3.33.1 — 2026-11-09
 
 Pre-edit state: commit `817f90a`. Entry 3fi (a find of the split, fixed in a commit of its own). **`FENCE_RE` is bound once.** `pdfmd.py` bound it twice: the native converter's pattern (v3.20.0, groups by number, `\s*` before the rest) and, further down, the comment stripper's (v3.22.0, named groups `fence` and `rest`). The later binding replaced the first as the module loaded, so since 3.22.0 `normalise_gfm()` has run with the later pattern too, and the first was dead code. It is removed; nothing changes at run time (`normalise_gfm()` reads only whether a line matches, group 1 and group 2 stripped, which are the same with both patterns). `scripts/split_spec.py` found it. ruff is clean; `test_native`, `test_tables`, `test_attach`, `test_packaging` and `test_docs_consistency` pass.

@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.1"
+PDFMD_VERSION = "3.33.2"
 import argparse
 import atexit
 import csv
@@ -1687,8 +1687,10 @@ if importlib.util.find_spec("pdfmd_comments") is None:
 import pdfmd_comments  # noqa: E402
 from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_policy,  # noqa: E402
                             strip_markdown_comments, strip_tex_comments, strip_xml_comments)
+import pdfmd_templates  # noqa: E402
+from pdfmd_templates import init_command  # noqa: E402
 
-bind_core(pdfmd_comments)
+bind_core(pdfmd_comments, pdfmd_templates)
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -9710,79 +9712,6 @@ def check_command(args) -> int:
         if errors or (warnings and strict):
             status = 1
     return status
-
-
-# --- pdfmd --init: a new document from a template (v3.26.17) -----------------------------------------------
-#
-# The templates are in the pdfmd_templates package (built in) and in `templates/` of the config folder (yours).
-
-def templates_module():
-    try:
-        import pdfmd_templates
-    except ImportError:
-        return None
-    return pdfmd_templates
-
-
-def git_user_name() -> str:
-    try:
-        done = subprocess.run(["git", "config", "user.name"], capture_output=True, encoding="utf-8", errors="replace", timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return done.stdout.strip() if done.returncode == 0 else ""
-
-
-def init_command(args) -> int:
-    """`pdfmd --init [TEMPLATE] [NAME]`: list the templates, or copy one into a new folder (a new .md file for a template
-    that is one file). Nothing that exists is overwritten."""
-    module = templates_module()
-    if module is None:
-        print("--init needs the pdfmd_templates package next to pdfmd.py", file=sys.stderr)
-        return 1
-    folder = config_root() / "templates"
-    mine = module.user_templates(folder)
-    spec = args.init
-    if not spec:
-        print("Templates (pdfmd --init TEMPLATE [NAME]):")
-        for name, path in module.builtin().items():
-            print(f"  {name:<10} {module.describe(path)}")
-        for name, path in mine.items():
-            print(f"  {name:<10} {module.describe(path)}  (yours)")
-        print(f"\nYour own: a folder, or one .md file, in {display_path(folder)}; or name any folder or .md file by path.")
-        return 0
-    template = module.find(spec, folder)
-    if template is None:
-        names = ", ".join([*module.builtin(), *mine])
-        print(f"No template called '{spec}'. The templates are: {names}. A folder or .md file can be named by its path.",
-              file=sys.stderr)
-        return 1
-    given = args.path[0] if args.path else None
-    default = template.stem if template.is_file() else template.name
-    target = Path(given) if given is not None else Path(default)
-    if template.is_file() and target.suffix.lower() not in (".md", ".markdown"):
-        target = target.with_name(target.name + ".md")
-    name = re.sub(r"[^\w.-]+", "-", (target.stem if template.is_file() else target.name) or default).strip("-") or "document"
-    variables = {}
-    for variable in args.variable or []:
-        match = re.match(r"^([^:=]+)[:=](.*)$", variable)
-        if match:
-            variables[match.group(1)] = match.group(2)
-    now = datetime.now()
-    values = {"name": name, "title": variables.get("title") or re.sub(r"[-_]+", " ", name).strip().title(),
-              "author": variables.get("author") or git_user_name() or "Your Name",
-              "date": variables.get("date") or now.strftime("%Y-%m-%d"), "year": str(now.year)}
-    try:
-        written = module.create(template, target, values)
-    except module.TemplateError as error:
-        print(f"--init: {error}", file=sys.stderr)
-        return 1
-    for path in written:
-        print(f"CREATED  {display_path(path)}")
-    step = module.next_step(template, values)
-    if template.is_dir() and target.resolve() != Path.cwd().resolve():
-        step = step if step.startswith("cd ") else f"cd {target} && {step}"
-    print(f"NEXT     {step}")
-    return 0
 
 
 def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verbose: bool,

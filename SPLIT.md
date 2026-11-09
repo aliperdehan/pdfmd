@@ -56,6 +56,9 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    - `ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py lib/ scripts/ tests/` (the CI line).
    - The package's tests (below) and the always-run set: `test_packaging`, `test_setup`, `test_docs_consistency`,
      `test_compat`, `test_probes`, `test_serve`, `test_launcher`, `test_jobs`.
+   - `python3 scripts/split_check.py` does the next two checks in one run: "before" is HEAD in a temporary worktree,
+     "after" the working tree with the move uncommitted (`--extra 'NAME:ARGS'` adds a build of the package's feature).
+     Nothing in `pdfmd.py` or `lib/` is edited while it runs.
    - `--help` and every `--help TOPIC` byte-identical before and after.
    - `--verbose` output identical before and after (temporary names, times and the build-record folder aside) on a fixed
      set: one document to PDF, `--to html`, `--to docx`, `-r` on `examples/book`, `-b -j 2`, and the documents that use
@@ -95,13 +98,15 @@ blocks moved with the code.
 Tests: `test_attach`, `test_pagebreak`, `test_show_comments`, `test_tables`, and for the binding itself
 `test_ranking_generated` (a second copy of `pdfmd.py` in one process) and `test_lua_missing` (a script run in-process).
 
-#### 2. `pdfmd_templates` (existing package): 3 definitions, ~63 lines
+#### 2. `pdfmd_templates` (existing package): 3 definitions, ~63 lines; done in 3.33.2
 
 Definitions: `templates_module`, `git_user_name`, `init_command`.
 
 Facts: 1 callers stay in pdfmd.py (re-exported); 2 pdfmd names read through `core`.
 
 Note: Sets the pattern for an EXISTING package: the lazy loader `templates_module()` goes, the package calls itself directly.
+Its "the package is missing" branch went with it: a copy without `lib/` stops at start. `config_root` is patched by
+`test_lua_trust`, so the package reads `core.config_root`. The eager import costs about 0.5 ms.
 
 Tests: `test_templates`.
 

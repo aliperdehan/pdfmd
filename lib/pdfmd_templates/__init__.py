@@ -4,14 +4,23 @@ A template is a folder of files (or one Markdown file). Copying it into a new fo
 `{{author}}`, `{{date}}` and `{{year}}` in the text files and `__name__` in file names; any other `{{...}}` stays as it
 is. `description.txt` (one line, for the list) and `next.txt` (what to type next) belong to the template and are not
 copied. The templates that come with pdfmd are in `data/`; your own go in a `templates/` folder of pdfmd's config folder
-(one folder or one .md file each), or anywhere, named by path. pdfmd.py works without this package.
+(one folder or one .md file each), or anywhere, named by path.
+
+`init_command` is `pdfmd --init` itself, moved out of `pdfmd.py` unchanged (v3.33.2, SPLIT.md). `core` is the `pdfmd`
+module, bound by `pdfmd.py` when it loads (the first binding wins); the command reads `core.config_root` and
+`core.display_path` when it runs.
 """
 
 from __future__ import annotations
 
 import re
 import shutil
+import subprocess
+import sys
+from datetime import datetime
 from pathlib import Path
+
+core = None
 
 DATA = Path(__file__).resolve().parent / "data"
 TEXT_SUFFIXES = {".md", ".markdown", ".txt", ".yaml", ".yml", ".bib", ".tex", ".csv", ".tsv", ".json", ".lua", ".css",
@@ -117,3 +126,62 @@ def next_step(template: Path, values: dict[str, str]) -> str:
     if hint is not None and hint.is_file():
         return fill(hint.read_text(encoding="utf-8").strip(), values)
     return f"pdfmd {values['name']}"
+
+
+# --- pdfmd --init: a new document from a template (v3.26.17) -----------------------------------------------
+
+def git_user_name() -> str:
+    try:
+        done = subprocess.run(["git", "config", "user.name"], capture_output=True, encoding="utf-8", errors="replace", timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def init_command(args) -> int:
+    """`pdfmd --init [TEMPLATE] [NAME]`: list the templates, or copy one into a new folder (a new .md file for a template
+    that is one file). Nothing that exists is overwritten."""
+    folder = core.config_root() / "templates"
+    mine = user_templates(folder)
+    spec = args.init
+    if not spec:
+        print("Templates (pdfmd --init TEMPLATE [NAME]):")
+        for name, path in builtin().items():
+            print(f"  {name:<10} {describe(path)}")
+        for name, path in mine.items():
+            print(f"  {name:<10} {describe(path)}  (yours)")
+        print(f"\nYour own: a folder, or one .md file, in {core.display_path(folder)}; or name any folder or .md file by path.")
+        return 0
+    template = find(spec, folder)
+    if template is None:
+        names = ", ".join([*builtin(), *mine])
+        print(f"No template called '{spec}'. The templates are: {names}. A folder or .md file can be named by its path.",
+              file=sys.stderr)
+        return 1
+    given = args.path[0] if args.path else None
+    default = template.stem if template.is_file() else template.name
+    target = Path(given) if given is not None else Path(default)
+    if template.is_file() and target.suffix.lower() not in (".md", ".markdown"):
+        target = target.with_name(target.name + ".md")
+    name = re.sub(r"[^\w.-]+", "-", (target.stem if template.is_file() else target.name) or default).strip("-") or "document"
+    variables = {}
+    for variable in args.variable or []:
+        match = re.match(r"^([^:=]+)[:=](.*)$", variable)
+        if match:
+            variables[match.group(1)] = match.group(2)
+    now = datetime.now()
+    values = {"name": name, "title": variables.get("title") or re.sub(r"[-_]+", " ", name).strip().title(),
+              "author": variables.get("author") or git_user_name() or "Your Name",
+              "date": variables.get("date") or now.strftime("%Y-%m-%d"), "year": str(now.year)}
+    try:
+        written = create(template, target, values)
+    except TemplateError as error:
+        print(f"--init: {error}", file=sys.stderr)
+        return 1
+    for path in written:
+        print(f"CREATED  {core.display_path(path)}")
+    step = next_step(template, values)
+    if template.is_dir() and target.resolve() != Path.cwd().resolve():
+        step = step if step.startswith("cd ") else f"cd {target} && {step}"
+    print(f"NEXT     {step}")
+    return 0
