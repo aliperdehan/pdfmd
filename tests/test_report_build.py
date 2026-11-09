@@ -4,7 +4,6 @@ titles of its files are chapter headings (`report-titles`). Real builds through 
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys

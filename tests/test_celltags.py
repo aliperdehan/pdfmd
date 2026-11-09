@@ -5,7 +5,6 @@ The pre-pass is tested as plain text in and out; the spans through real builds o
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -22,7 +21,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 
 import pdfmd  # noqa: E402
 from pandoc_support import needs_pandoc  # noqa: E402
-from pdfmd_tables.celltags import DEFAULT_KINDS, find_tags, normalise, parse_attribute_line, parse_tokens  # noqa: E402
+from pdfmd_tables.celltags import DEFAULT_KINDS, normalise, parse_attribute_line, parse_tokens  # noqa: E402
 
 HEAD = "| h | i | j |\n|---|---|---|\n"
 

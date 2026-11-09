@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.54 — 2026-11-09
+
+Pre-edit state: commit `e1775ef`. Entry 3fi. **Unused imports removed, so CI's lint step (`ruff check --select F`) passes again.** It would have failed on the next push: the local commits since the last push had left seven unused imports.
+
+- `pdfmd.py`: `ProcessPoolExecutor` and `as_completed`, unused since batch mode (and its worker pool) moved to `lib/pdfmd_batch` in 3.32.13; nothing reached them as `pdfmd.x`.
+- `lib/pdfmd_serve/shell.py`: `sys`. Not shipped: `lib/pdfmd_web/tools/make_fixtures.py` (`os`); tests: `test_celltags` (`re`, `find_tags`), `test_report_build` (`re`).
+- Checked with ruff 0.17.4 over the paths CI checks (`pdfmd.py lib/ scripts/ tests/`, inkmd excluded): no finding. `test_serve`, `test_celltags`, `test_report_build` and `test_jobs` pass.
+
 ## v3.32.53 — 2026-11-09
 
 Pre-edit state: commit `cf5c726`. Entry 3fi (found by v3.32.51b's wider `test_serve` check). **Report mode takes its filters from the one list, `document_filter_args()`.** Report mode moved out of `pdfmd.py` into `lib/pdfmd_report` in 3.32.13; 3.32.41 then made every build and the live view take the filters for pdfmd's own syntax from one list (entry 3do), but report mode's two build sites, out of sight of the test that guards the rule, kept writing the thirteen filter calls out themselves. The lists were still the same, so nothing changed in the output; a filter added later would have been missing from reports.

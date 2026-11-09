@@ -5,7 +5,7 @@ Everything here is made from the demo project in ../demo and from the real progr
 `colophon settings list --json`, pandoc), never from anyone's own documents. The history and the checks are written by hand
 (marked "sample") until pdfmd can say them in JSON (S1). Run: python3 tools/make_fixtures.py
 """
-import json, os, re, subprocess, sys
+import json, re, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent

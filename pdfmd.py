@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.53"
+PDFMD_VERSION = "3.32.54"
 import argparse
 import atexit
 import csv
@@ -1545,7 +1545,6 @@ if sys.version_info < (3, 9):
                      "which picks a suitable Python, or run pdfmd.py with a newer python3.")
 import unicodedata
 import warnings
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import inspect
 from contextlib import contextmanager
 from datetime import datetime

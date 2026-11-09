@@ -10,7 +10,6 @@ from __future__ import annotations
 import hmac
 import json
 import secrets
-import sys
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
