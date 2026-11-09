@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.33.47 — 2026-11-10
+
+Pre-edit state: commit `b00472b`. **A direct `.tex` compile's verbose line counts every run of the engine.** `run_tex_engine`
+(`lib/pdfmd_tex`) said `pdflatex, 2 pass(es) + bibtex` for a document with a bibliography that ran pdflatex three times (once,
+bibtex, again, and once more for the references): its counter starts at the run after bibtex, which caps the reruns, and the
+run before bibtex was left out of the message.
+
+- The message adds that first run when there is a bibliography tool. The counter and the cap (`MAX_TEX_DIRECT_PASSES` reruns
+  after the run that follows bibtex) are unchanged, so no build runs more or fewer times.
+- Checked through pdfmd: `doc.tex -e pdflatex --verbose` with `\bibliography{refs}` shows three `CMD  pdflatex` lines and now
+  `3 pass(es) + bibtex` (2 at HEAD); a `.tex` with no bibliography still says `1 pass(es)`.
+- Tests: a new `test_tex_cause` class (the engine faked, with and without bibtex; fails at HEAD); `test_tex_cause test_probes
+  test_kit_texinputs test_split test_packaging test_docs_consistency`: 60 OK.
+
 ## v3.33.46 — 2026-11-10
 
 Pre-edit state: commit `73eb08c`. **The native tier says a cut `.csv` table once per build.** `convert_native` prepares the text

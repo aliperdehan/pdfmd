@@ -115,6 +115,38 @@ class Probed(unittest.TestCase):
         self.assertIn("not writable", found[0])
 
 
+class DirectPasses(unittest.TestCase):
+    """v3.33.47: the verbose line of a direct .tex compile counts every run of the engine, the one before bibtex too."""
+
+    def passes(self, text, logs):
+        runs = []
+
+        def fake(cmd, **_):
+            if cmd[0] == "pdflatex":
+                runs.append(cmd)
+                (out / "doc.log").write_text(logs[len(runs) - 1], encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            tex, out = folder / "doc.tex", folder / "out"
+            out.mkdir()
+            tex.write_text(text, encoding="utf-8")
+            shown = io.StringIO()
+            with mock.patch.object(subprocess, "run", fake), mock.patch("sys.stdout", shown):
+                self.assertEqual(pdfmd.run_tex_engine("pdflatex", tex, out, True), (True, ""))
+        line = next(line for line in shown.getvalue().splitlines() if "AUTO TEXDIRECT" in line)
+        return len(runs), line.split(": pdflatex, ", 1)[1]
+
+    def test_with_bibtex_and_a_rerun(self):
+        text = "\\documentclass{article}\\begin{document}\\cite{k}\\bibliography{refs}\\end{document}\n"
+        self.assertEqual(self.passes(text, ["", "Rerun to get cross-references right.", ""]), (3, "3 pass(es) + bibtex"))
+
+    def test_without_a_bibliography(self):
+        text = "\\documentclass{article}\\begin{document}Hi\\end{document}\n"
+        self.assertEqual(self.passes(text, ["Rerun to get cross-references right.", ""]), (2, "2 pass(es)"))
+
+
 class Refused(unittest.TestCase):
     """v3.33.44: a command line Pandoc refuses (exit 6) stops the engine chain at once; a refused --pdf-engine does not."""
 
