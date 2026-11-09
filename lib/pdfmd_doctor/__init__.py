@@ -7,8 +7,8 @@ Moved out of `pdfmd.py` unchanged (v3.33.31, SPLIT.md), with `DEEP_SAMPLE` and `
 when it loads (the first binding wins); the pdfmd names the code uses are read as `core.X` when it runs, including the state that `main`
 rebinds (`TEX_FOUND_AT`, `TRANSLIT_PACKS`: they stay in `pdfmd.py`) and the functions that tests patch as `pdfmd.X` (`cache_root`, `data_root`,
 `engine_executable`, `katex_runtime`, `mathjax_fonts`, `mathjax_runtime`, `pandoc_version`, `resolve_calibre`, `resolve_soffice`,
-`system_font_missing`, `which`). `core.__file__` is `pdfmd.py` itself (`--doctor` prints where pdfmd is and `--doctor --deep` runs it on a
-sample). Nothing heavy is imported at the top: `importlib.metadata`, `platform`, `pdfmd_direct`, `pdfmd_images`, `pdfmd_unicode`,
+`system_font_missing`, `which`); `find_batchocr` too, pdfmd_routing's, which this module imported directly until v3.33.49.
+`core.__file__` is `pdfmd.py` itself (`--doctor` prints where pdfmd is and `--doctor --deep` runs it on a sample). Nothing heavy is imported at the top: `importlib.metadata`, `platform`, `pdfmd_direct`, `pdfmd_images`, `pdfmd_unicode`,
 `pdfmd_setup` and `pdfmd_inkmd` stay inside the functions, as they were, so none of them loads at start.
 """
 
@@ -23,8 +23,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-
-from pdfmd_routing import find_batchocr
 
 core = None
 
@@ -286,7 +284,7 @@ def doctor_report(deep: bool = False) -> bool:
         line(None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "") + hint)
 
     print("\nReading PDFs (PDF to Markdown):")
-    reader = find_batchocr()
+    reader = core.find_batchocr()
     reader_version = core.batchocr_version(reader) if reader else None
     line(bool(reader_version and reader_version >= core.BATCHOCR_MIN),
          "batchocr" + (f" {'.'.join(map(str, reader_version))}" if reader_version else ""),

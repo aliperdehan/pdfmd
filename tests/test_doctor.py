@@ -86,6 +86,24 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result[:2], ("calibre:azw3", True))
 
 
+class ReaderThroughCore(unittest.TestCase):
+    def test_a_patch_of_pdfmd_find_batchocr_reaches_the_doctor(self):
+        """v3.33.49: pdfmd_doctor imported find_batchocr from pdfmd_routing itself, so a patch of pdfmd.find_batchocr missed it."""
+        sys.path.insert(0, str(ROOT))
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        import pdfmd
+        shown = io.StringIO()
+        with tempfile.TemporaryDirectory() as home, \
+                mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "XDG_CACHE_HOME": home, "XDG_DATA_HOME": home,
+                                             "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}), \
+                mock.patch.object(pdfmd, "find_batchocr", lambda: "/nowhere/batchocr"), \
+                mock.patch.object(pdfmd, "batchocr_version", lambda reader: (9, 9, 9) if reader == "/nowhere/batchocr" else None), \
+                redirect_stdout(shown), redirect_stderr(io.StringIO()):
+            pdfmd.doctor_report()
+        self.assertIn("batchocr 9.9.9", shown.getvalue())
+
+
 class ForeignCommands(unittest.TestCase):
     """v3.30.41: `--doctor` names a command of pdfmd's (`mdpdf`, `md2pdf` ...) that another program answers on the PATH."""
 

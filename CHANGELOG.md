@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.49 — 2026-11-10
+
+Pre-edit state: commit `907d251`. **`pdfmd_doctor` reads `find_batchocr` through pdfmd, like every other pdfmd name.** It had
+`from pdfmd_routing import find_batchocr` at its top, so a patch of `pdfmd.find_batchocr` (a test's, or anything that rebinds it)
+never reached `--doctor`. No behaviour change.
+
+- `lib/pdfmd_doctor` calls `core.find_batchocr()` and no longer imports `pdfmd_routing`; its docstring says so.
+- Checked: `pdfmd --doctor` prints the same before and after (`diff` of the two outputs, scratch config and cache); a script
+  that patches `pdfmd.find_batchocr` and runs `doctor_report` saw no call at HEAD, one now.
+- Tests: a new `test_doctor` case (the patched reader and its version show in the report; fails at HEAD); `test_doctor
+  test_pdf_input test_diagrams test_install_python test_split test_packaging test_docs_consistency`: 72 OK.
+
 ## v3.33.48 — 2026-11-10
 
 Pre-edit state: commit `ff5bd7d`. **The comments note of an attached source names only what the source holds.** `--restore
