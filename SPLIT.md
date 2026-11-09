@@ -396,7 +396,7 @@ Facts: 4 callers stay in pdfmd.py (re-exported); 30 pdfmd names read through `co
 
 Tests: `test_attach`, `test_attach_format`, `test_attach_layers`, `test_kit_carry`, `test_standalone_source`.
 
-#### 28. `pdfmd_parts` (new package): 32 definitions, ~699 lines
+#### 28. `pdfmd_parts` (new package): 32 definitions, ~699 lines; done in 3.33.30 (`FUZZY_LOOKUP` and both `DIV_FENCE_RE` bindings stayed; `Heading` moved; the banner above the section code moved with it)
 
 Definitions: `chapter_order`, `parts_directory`, `collect_parts`, `part_slug`, `part_keys`, `NoPartMatches`, `NoHeadingMatches`, `select_parts`, `select_parts_and_sections`, `ScaffoldPlan`, `warn_shared_parts_folder`, `plan_scaffold`, `wrap_part`, `wrap_runs`, `scaffold_inputs`, `split_top_level_sections`, `slug_of`, `heading_parts`, `scan_headings`, `block_ids`, `scan_labelled_blocks`, `scan_items`, `parse_section_request`, `describe_heading`, `item_label`, `find_heading`, `outermost_headings`, `section_label`, `SectionPlan`, `section_source`, `plan_sections`, `split_into_parts`.
 
