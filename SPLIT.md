@@ -312,7 +312,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 19 pdfmd names read through `co
 
 Tests: `test_ansi`, `test_atomic`, `test_auto_states`, `test_presets`, `test_setup`, `test_setup_folder`, `test_user_path`.
 
-#### 20. `pdfmd_kits` (existing package): 11 definitions, ~217 lines
+#### 20. `pdfmd_kits` (existing package): 11 definitions, ~217 lines; done in 3.33.22 (in `locate.py`; ten stand-ins; `kit_package_folders` is called only from `package_helper`, which stays)
 
 Definitions: `package_places`, `kpsewhich_locate`, `read_package_helper`, `kit_package_folders`, `kit_install_record`, `kits_report`, `kit_header_insert`, `kit_header_settle`, `kit_cache_tex`, `kit_header_resolve`, `kit_carried_files`.
 
