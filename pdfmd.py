@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.50"
+PDFMD_VERSION = "3.33.51"
 import argparse
 import atexit
 import contextlib

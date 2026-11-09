@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.51 — 2026-11-10
+
+Pre-edit state: commit `91a0046`. **`--embed-metadata all` embeds a bibliography once.** A document with `bibliography: refs.bib`
+got the file twice in its assembled text: a `type: file` block (the `files` kind, which looks for every file the text points at)
+and a `type: bibliography` block. `--unpack` wrote `refs.bib` and `refs-2.bib`, and a build of the assembled file wrote both to
+the same path in its resource folder, the second over the first.
+
+- `embed_into_text` (`lib/pdfmd_assemble`) now gathers the `files` kind after the bibliography and CSL, and leaves out a file
+  embedded there as its own block. The `bibliography`/`csl` block owns it: the build writes it from that block at the path
+  the metadata names, `--unpack` lists it as `BIBLIO`/`CSL`, `--slim` drops it with the bibliography, and only that block
+  carries `--attach-bibliography used` (the entries the text cites) and a stripped comment policy, which a second, whole copy
+  undid on `--unpack`. The blocks stay in the same order in the text (filters, files, history, bibliography). With
+  `--embed-metadata files` alone (no `bibliography` kind) the file is embedded as a file, as before.
+- Checked through pdfmd: a document with `refs.bib`, an image and a citation, `--assemble-only --embed-metadata all`: `EMBEDDED
+  files refs.bib; bibliography refs.bib` and two blocks at HEAD, now `files pic.png; bibliography refs.bib`; `--unpack` of it
+  writes `refs.bib` alone (`refs-2.bib` at HEAD), and the assembled file, copied alone, builds to HTML with its reference.
+- Tests: a new `test_embedding` case (`all` gives one bibliography block and no `refs-2.bib`; `files` alone still embeds
+  `refs.bib`; fails at HEAD); `test_embedding test_calc test_edit_pdf test_history test_metadata_append test_rawcode
+  test_standalone_source test_attach test_split test_packaging test_docs_consistency`: 283 OK.
+
 ## v3.33.50 — 2026-11-10
 
 Pre-edit state: commit `5141d76`. **Documents with no priority set are no longer called a tie.** A bare `pdfmd` (and `--which`) in a

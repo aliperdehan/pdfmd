@@ -202,6 +202,28 @@ class FilesEndToEnd(Env):
             self.assertEqual((source / "one.unpacked" / name).read_bytes(), (source / name).read_bytes(), name)
         self.assertNotIn("{=pdfmd}", (source / "one.md").read_text(encoding="utf-8"))
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_a_bibliography_embedded_as_one_is_not_a_file_too(self):
+        source = self.make_source()
+        (source / "refs.bib").write_text("@article{smith2020,\n  author = {Smith, John},\n  title = {A paper},\n"
+                                         "  journal = {J},\n  year = {2020}\n}\n", encoding="utf-8")
+        doc = source / "doc.md"
+        doc.write_text(doc.read_text(encoding="utf-8").replace("title: Embedded\n", "title: Embedded\nbibliography: refs.bib\n")
+                       + "\nAs shown [@smith2020].\n", encoding="utf-8")
+        every = self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "all", "-o", "every.md", cwd=source)
+        self.assertEqual(every.returncode, 0, every.stdout + every.stderr)
+        text = (source / "every.md").read_text(encoding="utf-8")
+        self.assertEqual(text.count("type: file"), 3, every.stdout)
+        self.assertEqual(text.count("type: bibliography"), 1, every.stdout)
+        named = next(line for line in every.stdout.splitlines() if line.startswith("EMBEDDED"))
+        self.assertNotIn("refs.bib", next(part for part in named.split("; ") if "files " in part))   # not named among the files
+        done = self.run_pdfmd("--unpack", "every.md", cwd=source)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertTrue((source / "every.unpacked" / "refs.bib").is_file())
+        self.assertFalse((source / "every.unpacked" / "refs-2.bib").exists())
+        files = self.run_pdfmd("doc.md", "--assemble-only", "--embed-metadata", "files", "-o", "files.md", cwd=source)
+        self.assertEqual((source / "files.md").read_text(encoding="utf-8").count("type: file"), 4, files.stdout)
+
     @unittest.skipUnless(PANDOC and LATEX and shutil.which("pdfimages"), "needs Pandoc, a LaTeX engine and pdfimages")
     def test_the_single_file_builds_alone_with_its_table_and_both_images(self):
         source = self.make_source()

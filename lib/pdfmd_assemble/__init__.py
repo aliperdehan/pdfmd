@@ -825,26 +825,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         if plan.lua_mode == "ref":
             lua_refs = [relative_filter_path(item, plan.output) for item in plan.lua_filters]
     file_names: list[str] = []
-    if "files" in kinds and plan.sources:
-        base = Path(os.path.abspath(first.parent))
-        represented = {Path(os.path.abspath(item)) for item in [*plan.sources, *plan.metadata_files,
-                                                                   *plan.preamble_files, *plan.lua_filters]}
-        found, outside_files = core.bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
-                                            plan.output or (base / "_assembled.md"), [], base)
-        core.add_calc_constants(first, plan.metadata_files, base, represented, found, outside_files)
-        core.drop_calc_export(first, list(plan.sources), plan.metadata_files, found, outside_files)
-        limit = float(core.option_flag_number(core.first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
-                      or core.BUNDLE_MAX_MB) * 1024 * 1024
-        if sum(item.stat().st_size for item in found) > limit:
-            print(f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
-                  f"over the {limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); none was embedded", file=sys.stderr)
-            found = []
-        for item in found:
-            blocks_text = render_embedded_file(item.name, core.relative_posix(base, item), item.read_bytes())
-            blocks += "\n" + blocks_text
-            file_names.append(core.relative_posix(base, item))
-        for name in outside_files:
-            print(f"WARN  embed files: {name} is outside the document's folder; not embedded", file=sys.stderr)
+    files_at = len(blocks)               # the file blocks go here, made after the bibliography (see below)
     history_text = None
     if "hst" in kinds and plan.hst_file is not None:
         try:
@@ -927,6 +908,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             if "://" not in name and (key, name) not in references:
                 references.append((key, name))
     bib_embedded: list[str] = []
+    data_found: list[Path] = []                # the files behind them, which the `files` kind then leaves out
     bib_problems: list[str] = []
     renamed: dict[str, str] = {}
     if references and ("bibliography" in kinds or "csl" in kinds):
@@ -986,10 +968,35 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             blocks += "\n" + render_embedded_block("csl" if key == "csl" else "bibliography",
                                                    found.name, source, path=safe)
             bib_embedded.append(name)
+            data_found.append(found)
             if safe != name:
                 # An absolute or `../` name cannot be written back as it is: the
                 # metadata then names the embedded file by its safe path.
                 renamed[name] = safe
+    # ---- files the text and the preamble point at: one block each, but not a bibliography or CSL file embedded above as
+    # its own block (the build writes it from that block, --unpack writes it once, by its name in the metadata)
+    file_blocks = ""
+    if "files" in kinds and plan.sources:
+        base = Path(os.path.abspath(first.parent))
+        represented = {Path(os.path.abspath(item)) for item in [*plan.sources, *plan.metadata_files,
+                                                                   *plan.preamble_files, *plan.lua_filters, *data_found]}
+        found, outside_files = core.bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
+                                            plan.output or (base / "_assembled.md"), [], base)
+        core.add_calc_constants(first, plan.metadata_files, base, represented, found, outside_files)
+        core.drop_calc_export(first, list(plan.sources), plan.metadata_files, found, outside_files)
+        limit = float(core.option_flag_number(core.first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
+                      or core.BUNDLE_MAX_MB) * 1024 * 1024
+        if sum(item.stat().st_size for item in found) > limit:
+            print(f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
+                  f"over the {limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); none was embedded", file=sys.stderr)
+            found = []
+        for item in found:
+            blocks_text = render_embedded_file(item.name, core.relative_posix(base, item), item.read_bytes())
+            file_blocks += "\n" + blocks_text
+            file_names.append(core.relative_posix(base, item))
+        for name in outside_files:
+            print(f"WARN  embed files: {name} is outside the document's folder; not embedded", file=sys.stderr)
+    blocks = blocks[:files_at] + file_blocks + blocks[files_at:]
     for key in ("bibliography", "csl"):
         value = merged.get(key)
         if renamed and isinstance(value, str):
