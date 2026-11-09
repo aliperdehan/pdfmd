@@ -4,7 +4,8 @@
 is argparse's complete list; `--help TOPIC` is that list cut to one subject (`pdfmd --help tables`). Every option
 belongs to a topic below (a test checks it); one that is left out still shows under "other" and in `--help all`.
 
-pdfmd.py works without this package (a lone copy of the script): it then keeps argparse's single long page.
+Without this package argparse keeps its single long page. Since 3.33.0 that is not a shipped case: pdfmd.py stops at start
+when its lib/ folder is missing.
 """
 
 from __future__ import annotations

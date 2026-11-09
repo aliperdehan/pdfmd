@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.41 — 2026-11-10
+
+Pre-edit state: commit `fcbcd3d`. Entry 3fi. **Three pointers that phase 1 of the split left stale are corrected** (the moves kept
+every text unchanged, so these waited for the last one).
+
+- `pdfmd.py`'s docstring, Picture cache: the protocol is described above `CACHE_HANDSHAKE` (in `pdfmd.py`), not above
+  `PLOT_CTX_TWICE`, which moved to `lib/pdfmd_tex` in 3.33.36 while the protocol comment stayed.
+- `pdfmd.py`'s docstring, native tier: `normalise_gfm()` is in `lib/pdfmd_native` (3.33.39); the "native tier" section is in `pdfmd.py`.
+- `lib/pdfmd_args` (the comment beside the `pdfmd_help` import) and `lib/pdfmd_help`'s docstring said a lone `pdfmd.py` keeps
+  argparse's single long page; since 3.33.0 a `pdfmd.py` without `lib/` stops at start, so they say the fallback is not a shipped case.
+- No behaviour changes. Tests: `test_help test_doc test_docs_consistency test_packaging test_split test_native`: 108 OK (2 skipped).
+
 ## v3.33.40 — 2026-11-10
 
 Pre-edit state: commit `a357030`. Entry 3fi. **The command line (`build_parser`, the whole argparse tree with every option, its

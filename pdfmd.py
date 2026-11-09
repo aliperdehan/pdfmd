@@ -229,7 +229,7 @@ No Pandoc, or no PDF engine (v3.20.0):
     kind, title/author/date become a title block and the PDF's own metadata,
     other front-matter keys are listed as unused. Not available there: filters,
     preambles, citations, slides, parts/report mode, non-Markdown input.
-    See normalise_gfm() and the "native tier" section.
+    See normalise_gfm() in lib/pdfmd_native and the "native tier" section of pdfmd.py.
 
 Finding a document by name:
     `pdfmd report` looks for report.md. When no file has exactly that name
@@ -1147,7 +1147,7 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     --clear-cache` first, when verifying a change to the package itself.
 
     Picture cache (`cache: {plots: true}`, --cache-plots; LuaLaTeX; a package opts in by mentioning `pdfmdCacheDir`
-    in its style file, the protocol is described above PLOT_CTX_TWICE; nulabreport >= 1.26.0 is the first): the
+    in its style file, the protocol is described above CACHE_HANDSHAKE; nulabreport >= 1.26.0 is the first): the
     package's whole pictures (plots, chemical schemes) are stored as PDFs in the
     document's cache folder after the build that first typesets them, and the
     next build (a part built alone too, unless its preamble differs by more
@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.40"
+PDFMD_VERSION = "3.33.41"
 import argparse
 import atexit
 import contextlib

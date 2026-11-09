@@ -71,7 +71,7 @@ def pdfmd_labels_modes() -> tuple[str, ...]:
 
 def build_parser() -> argparse.ArgumentParser:
     try:
-        from pdfmd_help import TieredHelp           # a lone pdfmd.py keeps argparse's one long page
+        from pdfmd_help import TieredHelp           # without pdfmd_help argparse keeps its one long page (since 3.33.0 not a shipped case)
     except ImportError:
         TieredHelp = None
     parser = argparse.ArgumentParser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.",
