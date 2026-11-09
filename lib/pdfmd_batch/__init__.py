@@ -2,13 +2,19 @@
 
 Moved out of `pdfmd.py`'s `run_main()` unchanged (v3.32.13). `core` is the `pdfmd` module itself (the file may be running as
 `__main__`, so it is passed in, never imported: a second import would be a second copy with its own state). `run` returns
-the list of results that `run_main()` prints."""
+the list of results that `run_main()` prints; `check_paths` is the check of its one folder, which `run_main()` makes first."""
 
 from __future__ import annotations
 
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+
+
+def check_paths(paths: list[Path]) -> None:
+    """The one folder -b builds; checked by `run_main()` before anything is printed (v3.33.45) and again here."""
+    if len(paths) != 1 or not paths[0].is_dir():
+        raise SystemExit("Batch mode requires one directory path")
 
 
 def run(core, *,
@@ -23,8 +29,7 @@ def run(core, *,
     is_assembled_document, resolve_engines = core.is_assembled_document, core.resolve_engines
     restore_worker_state, skip_never, worker_state = core.restore_worker_state, core.skip_never, core.worker_state
 
-    if len(paths) != 1 or not paths[0].is_dir():
-        raise SystemExit("Batch mode requires one directory path")
+    check_paths(paths)
     # .resolve() for the same reason as find_markdown(): a relative batch
     # directory plus a file in a subdirectory would otherwise make Pandoc's
     # cwd and its source-file argument both relative, and doubling up.

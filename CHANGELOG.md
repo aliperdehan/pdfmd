@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.45 — 2026-11-10
+
+Pre-edit state: commit `355660d`. **`pdfmd -b a.md b.md` says only that -b takes one folder.** Batch mode checked its paths when
+it began building (`pdfmd_batch.run`), after the run had printed what it found: with no Pandoc, the `NOTE  Pandoc was not found:
+building with ...` line came before `Batch mode requires one directory path`.
+
+- The check is `pdfmd_batch.check_paths`, which `run_main()` now calls right after the PDF, text and ebook routes (they keep their
+  own messages for -b) and before the Pandoc check and every note; `run` still calls it. The message is unchanged.
+- Checked through pdfmd (PATH holding only an empty folder): `-b a.md b.md` printed the NOTE and the error at HEAD, now the error
+  alone, exit 1. `-b dir` and a bare `-b` in a folder build as before; `-b a.pdf` keeps its own message.
+- Tests: a new `test_native` case (fails at HEAD); `test_native test_jobs test_launcher test_bopen test_autolog test_build_record
+  test_ranking_lists test_split test_packaging test_docs_consistency`: 137 OK (2 skipped).
+
 ## v3.33.44 — 2026-11-10
 
 Pre-edit state: commit `29a31a0`. **An option Pandoc does not take stops the build once, with Pandoc's message.** `pdfmd doc.md

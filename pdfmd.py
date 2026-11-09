@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.44"
+PDFMD_VERSION = "3.33.45"
 import argparse
 import atexit
 import contextlib
@@ -16511,6 +16511,9 @@ def run_main() -> None:
     if routed is not None:
         raise SystemExit(routed)
     route_ebook_input(args)
+    if args.batch:                      # before any note (Pandoc missing, the native tier) is printed
+        from pdfmd_batch import check_paths
+        check_paths(args.path or [Path.cwd()])
     if not which("pandoc") and not native_possible(args):
         raise SystemExit(PANDOC_MISSING)
     paths = args.path or [Path.cwd()]
