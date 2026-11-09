@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.51"
+PDFMD_VERSION = "3.33.52"
 import argparse
 import atexit
 import contextlib
@@ -9770,14 +9770,16 @@ def timing_module():
 
 
 def timed(name):
-    """Decorator: the call is a step of the build's timer. ``name`` is the step's name, or a function of (args, kwargs)."""
+    """Decorator: the call is a step of the build's timer. ``name`` is the step's name, or a function of (args, kwargs) that
+    gives it, or None for a call that does no work of its own (it is then not a step)."""
     def decorate(function):
         @functools.wraps(function)
         def wrapper(*args, **kwargs):
             timer = BUILD.get("timer")
-            if timer is None:
+            step = name(args, kwargs) if callable(name) and timer is not None else name
+            if timer is None or step is None:
                 return function(*args, **kwargs)
-            with timer.step(name(args, kwargs) if callable(name) else name):
+            with timer.step(step):
                 return function(*args, **kwargs)
         return wrapper
     return decorate
@@ -10400,7 +10402,7 @@ def record_partial_history(md_path: Path, metadata_files: list[Path], preamble_f
     vprint(verbose, f"AUTO HISTORY  {display_path(path)}: {entry.when} partial ({shown})")
 
 
-@timed("stamp and history")
+@timed(lambda args, kwargs: None if args[1] else "stamp and history")    # `skip`: the cache route's .tex, no step
 def stamp_build(partial: bool, skip: bool, md_path: Path, *args, **kwargs) -> None:
     """stamp_after_success for a finished build. A partial parts-mode build isn't the report, so it writes no BUILD NOTES
     stamp into the source (it would claim the report was built) -- but its PDF still says what made it (Creator,

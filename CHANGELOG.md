@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.52 — 2026-11-10
+
+Pre-edit state: commit `8d5c21a`. **The time breakdown of `--verbose` names each step once.** A build with `backup` on listed
+`TIME    backup` twice, and the `--cache` route `TIME    stamp and history` twice. The two backups are two steps: the copy of the
+source (`backup_after_success`) and the copy of the PDF (`backup_pdf_after_success`, v3.32.42), both timed as `backup`. The
+first `stamp and history` was the cache route's intermediate `.tex` stage, which `stamp_build` skips (the final stage stamps)
+but timed all the same, at 0.00 s.
+
+- `lib/pdfmd_history/backups.py`: the steps are `backup (source)` and `backup (PDF)`.
+- `timed` (`pdfmd.py`): a name given as a function may return None, and the call is then not a step; `stamp_build` gives None
+  when it skips. The total and `the rest` are unchanged: the skipped call did no work, and any time it took falls under `the
+  rest` as it does for everything outside a step.
+- Checked through pdfmd: a document with `backup: {enabled: true}`, `--verbose --build-time` to PDF: `backup (source)` and
+  `backup (PDF)` (two `backup` lines at HEAD); with `--cache`: one `stamp and history`, after `LaTeX (direct)` (one before it
+  too at HEAD).
+- Tests: a new `test_build_time` case (the step names of a skipped stamp and the two backups; fails at HEAD);
+  `test_backup_pdfs test_build_log test_backup_keep test_build_time test_backup_summary test_build_record test_split
+  test_packaging test_docs_consistency`: 91 OK.
+
 ## v3.33.51 — 2026-11-10
 
 Pre-edit state: commit `91a0046`. **`--embed-metadata all` embeds a bibliography once.** A document with `bibliography: refs.bib`

@@ -92,6 +92,19 @@ class Steps(unittest.TestCase):
                 raise ValueError
         self.assertEqual(timer.steps[0].seconds, 1.5)
 
+    def test_two_steps_do_not_share_a_name_and_a_skipped_stamp_is_no_step(self):
+        # v3.33.52: the source's and the PDF's backup were both `backup`; the cache route's .tex stage (skip) was a
+        # `stamp and history` of 0.00 s before the real one
+        from unittest import mock
+        timer = Timer()
+        off = {"enabled": False, "pdfs": 0, "keep": 0}
+        with mock.patch.dict(pdfmd.BUILD, {"timer": timer}), \
+                mock.patch.object(pdfmd, "resolve_backup_options", lambda *args, **kwargs: off):
+            pdfmd.stamp_build(False, True, Path("d.md"))
+            pdfmd.backup_after_success(Path("d.md"), [], None, False)
+            pdfmd.backup_pdf_after_success(Path("d.md"), Path("d.pdf"), [], None, False)
+        self.assertEqual([step.name for step in timer.steps], ["backup (source)", "backup (PDF)"])
+
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class OnTheClosingLine(unittest.TestCase):

@@ -731,7 +731,7 @@ def backup_unchanged(previous: Path, current: Path) -> bool:
     return BACKUP_IGNORED_LINE_RE.sub("", old_text) == BACKUP_IGNORED_LINE_RE.sub("", new_text)
 
 
-@_timed("backup")
+@_timed("backup (source)")
 def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
                          verbose: bool, cli_format: str | None = None, collect: "list[Path] | None" = None) -> None:
     """Snapshot md_path into its backup directory if --backup/
@@ -779,7 +779,7 @@ def backup_pdf_pattern(pdf: Path) -> re.Pattern:
     return re.compile(rf"^{re.escape(pdf.stem)}_\d{{8}}-\d{{6}}{_COUNTER}\.pdf$")
 
 
-@_timed("backup")
+@_timed("backup (PDF)")
 def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path], cli_enabled: bool | None,
                              verbose: bool, when: datetime | None = None) -> Path | None:
     """Copy the PDF a build made into the backup folder of ``md_path`` (v3.32.42), when `backup` is on and `backup: {pdfs: N}` is not 0:
