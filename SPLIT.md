@@ -292,7 +292,7 @@ Hazard: `test_ranking_generated` loads `pdfmd.py` a second time as `pdfmd_under_
 loaded first, so a patch on the second copy does not reach the moved code; the test imports `pdfmd` instead, or patches
 through `pdfmd_ranking.core`.
 
-#### 18. `pdfmd_lookup` (new package): 13 definitions, ~228 lines
+#### 18. `pdfmd_lookup` (new package): 13 definitions, ~228 lines; done in 3.33.20 (`LOOKUP_TIERS` and `LOOKUP_FIELD_WORDS` moved too, as default arguments of `rank_lookup`; `CYRILLIC_LOOSE` stayed, built from `CYRILLIC_STRICT`)
 
 Definitions: `latin_candidates`, `cyrillic_candidates`, `strip_lookup_suffix`, `find_wildcard_markdown`, `lookup_key`, `lookup_query_keys`, `LookupAmbiguous`, `lookup_field_matches`, `rank_lookup`, `lookup_fields`, `priority_enabled`, `source_markdown`, `document_priority`.
 
