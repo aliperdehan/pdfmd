@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.32.54b — 2026-11-09
+
+No shipped code (a development script, a test, CLAUDE.md); `PDFMD_VERSION` stays 3.32.54. Entry 3fi. **`scripts/pdfmd` runs the checkout's pdfmd with Python's bytecode cache.** `python3 pdfmd.py` runs the file as a script, which Python compiles from source on every run; an imported module is compiled once and cached. Measured on `--version` (best / median of ten): `python3 pdfmd.py` 518 / 580 ms, `python3 scripts/pdfmd` 237 / 286 ms.
+
+- The launcher puts the checkout's root first on the import path, imports `pdfmd` and calls `main()`, as the installed `pdfmd` command does; a symlink to it works. It is not `python3 -m pdfmd`, which puts the current folder (the document's) on the import path, so a `json.py` beside a document would replace the standard module.
+- `main()` runs only under `if __name__ == "__main__"`: `-b -j N` starts worker processes that run the launcher again as `__mp_main__`, and without the guard each would start pdfmd over (checked: the batch test fails with the guard removed).
+- `tests/test_launcher.py` (4 tests: the version, a hostile `json.py` in the document's folder, a symlinked launcher, `-b -j 2`). CLAUDE.md's Location section names it.
+
 ## v3.32.54 — 2026-11-09
 
 Pre-edit state: commit `e1775ef`. Entry 3fi. **Unused imports removed, so CI's lint step (`ruff check --select F`) passes again.** It would have failed on the next push: the local commits since the last push had left seven unused imports.

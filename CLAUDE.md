@@ -99,6 +99,11 @@ A pipx-installed `pdfmd` is a separate copy: edits here don't reach it until
 When testing an edit, run `python3 pdfmd.py` from this folder so you know
 which copy ran.
 
+`scripts/pdfmd` runs the same checkout copy, but imports `pdfmd.py` instead of running it as a script, so
+Python caches its bytecode: about 0.25 s less per run (a script is compiled from source every time). It is meant
+for the author's shell alias (`alias pdfmd='python3 ~/dev/py/pdfmd/scripts/pdfmd'`); `tests/test_launcher.py`
+covers it, including the `__main__` guard that `-b -j` worker processes need.
+
 ## Releasing to PyPI
 
 Automatic. Every push to `main` runs `.github/workflows/publish.yml`: the

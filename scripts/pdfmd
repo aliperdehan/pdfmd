@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""pdfmd from this checkout, with Python's bytecode cache (entry 3fi).
+
+`python3 pdfmd.py` runs the file as a script, and Python compiles a script from source on every run (about 0.25-0.4 s for
+pdfmd.py); a module that is imported is compiled once and cached in __pycache__. This launcher imports pdfmd.py, as the
+installed `pdfmd` command does, and calls its main(). For a shell alias:
+
+    alias pdfmd='python3 ~/dev/py/pdfmd/scripts/pdfmd'
+
+Not `python3 -m pdfmd`: that puts the current folder (the document's) on the import path, so a `json.py` beside a
+document would be imported in place of the standard one.
+"""
+
+import os
+import sys
+
+# The checkout's root in place of this script's folder: nothing in scripts/ is meant to be imported by pdfmd.
+sys.path[0] = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+import pdfmd  # noqa: E402
+
+# The guard matters: `-b -j N` starts worker processes, which on macOS and Windows run this file again as __mp_main__.
+if __name__ == "__main__":
+    pdfmd.main()
