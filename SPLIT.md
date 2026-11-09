@@ -464,7 +464,7 @@ Facts: 10 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `c
 
 Tests: `test_header_includes`, `test_install_core_tex`, `test_kit_texinputs`, `test_package_helper`, `test_picture_cache_protocol`, `test_plot_cache`, `test_probes`, `test_tex_bin`, `test_tex_cause`, `test_texpackages`, `test_text_input`.
 
-#### 34. `pdfmd_attach` (new package): 32 definitions, ~773 lines
+#### 34. `pdfmd_attach` (new package): 32 definitions, ~773 lines; done in 3.33.37 (`BIB_ATTACH_CLI`, `BUNDLE_CLI`, `BUNDLE_PACKAGES_CLI` and `CSL_ATTACH_CLI` stayed, rebound with `global`; `pypdf` is `core.pypdf`; `attach_source_after_success` uses `_timed`; the three `@lru_cache` functions are re-exported plainly; `pdfmd.py` lost its own `import zlib`)
 
 Definitions: `folder_options_in_force`, `block_places`, `drop_blocks`, `drop_duplicate_blocks`, `inline_candidates`, `inline_blocks`, `attached_bundle_mode`, `layout_path`, `referenced_images`, `tex_distribution_roots`, `graphic_names_in`, `graphics_named_in`, `tex_tree_graphics`, `find_in_tex_tree`, `tex_names`, `tex_tree_dependencies`, `package_companions`, `bundle_reach`, `bundle_files`, `attachment_manifest`, `attached_source`, `resolve_bibliography_pruning`, `resolve_csl_attach`, `add_deflated_attachment`, `write_pdf_attachments`, `read_pdf_attachments`, `resolve_bundle_packages`, `attachment_requirements`, `csv_block_files`, `source_attachments`, `attach_source_after_success`, `keep_source_after_success`.
 
