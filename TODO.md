@@ -83,9 +83,10 @@ wait for an answer before any code.
 
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
 
-## Making the main `pdfmd.py` main code more manageable [N/A]
+## Making the main `pdfmd.py` main code more manageable [3fi]
 
-- [ ] Review, verify, and execute `SPLIT.md`. Chosen names for "or" cases: _assemble, _parts, _attach, _tex, _pdfimages, _compat, _routing. Subject to change, discuss.
+- [ ] The split of `pdfmd.py`: phase 1 (37 packages, 3.33.x; pattern and order in `SPLIT.md`), then phase 2 [3fi]
+- [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 
 ## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
 
@@ -124,7 +125,7 @@ is low priority. [3di]
 - [ ] Windows guide (16 sections): the Windows session adds it to the repo as a docs file; wire it into `pdfmd --doc` with the documentation programme [3dg, 3dp]
 - [ ] Tag a batchocr release (the remote ends at v1.2.4, the checkout is 1.2.6) and move `BATCHOCR_TAG`: `--install batchocr` gives a version that cannot read `.txt` [3di]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
-- [ ] `pdfmd.py` split into the `pdfmd_cli` namespace, one event log [3bh]
+- [ ] The `pdfmd_cli` namespace for 4.0 and one event log; the split itself is [3fi] [3bh]
 - [ ] Lean install: a core distribution plus extras (`pdfmd-cli` stays the full default); optional packages survive their absence with one message; a CI leg for the core only [3dx]
 - [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
 - [ ] Bare `--install` prints the table of every kind (size, source, target, removal) instead of usage; bare `diagram` lists, `diagram:d2|dot` installs [3ei]
