@@ -474,7 +474,7 @@ Facts: 10 callers stay in pdfmd.py (re-exported); 62 pdfmd names read through `c
 
 Tests: `test_atomic`, `test_attach`, `test_attach_format`, `test_attach_layers`, `test_check_source`, `test_edit_pdf`, `test_embedding`, `test_kit_carry`, `test_pdf_input`, `test_polish`, `test_standalone_source`.
 
-#### 35. `pdfmd_assemble` (new package): 23 definitions, ~995 lines
+#### 35. `pdfmd_assemble` (new package): 23 definitions, ~995 lines; done in 3.33.38 (`_RESOURCE_OWNER` stayed as state, read and written as `core._RESOURCE_OWNER`; `write_assembled_markdown` uses `_timed`; the `base64` and `binascii` imports left `pdfmd.py`)
 
 Definitions: `mark_assembled`, `used_citation_keys`, `filter_bibliography`, `assemble_markdown_text`, `write_assembled_markdown`, `EmbedPlan`, `render_embedded_block`, `render_embedded_file`, `safe_relative_path`, `parse_embedded_blocks`, `trust_store_path`, `trusted_hashes`, `remember_trusted`, `split_preamble_parts`, `unpack_assembled`, `slim_assembled`, `embedded_resources`, `literal_block`, `strip_embedded_option_names`, `relative_filter_path`, `lua_checks_format`, `apply_lua_filters`, `embed_into_text`.
 

@@ -19,6 +19,42 @@ same commit as the change.
 
 ---
 
+## v3.33.38 — 2026-11-10
+
+Pre-edit state: commit `a363711`. Entry 3fi. **Assembling a document (`--assemble-only`, `--merge`, the embedded metadata, filters
+and files, the trust store of embedded Lua filters, unpacking an assembled file, the bibliography a kept source carries) lives in
+the new package `pdfmd_assemble`** (`lib/pdfmd_assemble/__init__.py`); `pdfmd.py` loads it at start beside the other new packages.
+
+- The 23 definitions (`mark_assembled`, `used_citation_keys`, `filter_bibliography`, `assemble_markdown_text`,
+  `write_assembled_markdown`, `EmbedPlan`, `render_embedded_block`, `render_embedded_file`, `safe_relative_path`,
+  `parse_embedded_blocks`, `trust_store_path`, `trusted_hashes`, `remember_trusted`, `split_preamble_parts`, `unpack_assembled`,
+  `slim_assembled`, `embedded_resources`, `literal_block`, `strip_embedded_option_names`, `relative_filter_path`,
+  `lua_checks_format`, `apply_lua_filters`, `embed_into_text`) and 7 constants (`PARTIAL_KEY`, `ASSEMBLED_COMMENT`, `BIB_LINK_RE`,
+  `BIB_SUFFIXES`, `PANDOC_CITE_RE`, `LATEX_CITE_RE`, `FILE_ONLY_OPTION_KEYS`) moved with the comments that belong only to them;
+  `pdfmd.py` keeps 14 pointer comments.
+- `pdfmd.py` re-exports 13 names: `EmbedPlan`, `assemble_markdown_text`, `embedded_resources`, `filter_bibliography`,
+  `parse_embedded_blocks`, `remember_trusted`, `render_embedded_block`, `render_embedded_file`, `trust_store_path`,
+  `trusted_hashes`, `unpack_assembled`, `used_citation_keys`, `write_assembled_markdown` (read by `pdfmd.py`, tests,
+  `lib/pdfmd_attach`, `lib/pdfmd_report` and `lib/pdfmd_restore`). `pyproject.toml` and `scripts/build_zipapp.py` list the package.
+- `_RESOURCE_OWNER` (the document whose embedded resources are registered, the guard against a nested `embedded_resources` for the
+  same document) stays in `pdfmd.py` as state: the package has no `global` line and reads and writes `core._RESOURCE_OWNER`.
+  `write_assembled_markdown` is timed through `_timed` (the pattern of `pdfmd_bridge`); `TIME assemble text` still shows.
+- Changes to the text that are not moves: 53 pdfmd names are read as `core.X` when the code runs (among them `VERBOSE_OUTPUT`,
+  `cache_root`, `config_root` and `pandoc_user_data_dir`, which tests patch, and `is_global_metadata`, `yaml`, `bundle_files` and
+  the `strip_*_comments`). `pdfmd.py` lost its `base64` and `binascii` imports (only the moved code used them), and its
+  `pdfmd_comments` import line notes that the `strip_*_comments` are now read by `lib/` and tests only.
+- Checked: ruff is clean; by the AST, the 30 moved definitions are the ones at HEAD with `core.X` read back as `X` (and the `global`
+  line taken out), and `pdfmd.py` lost exactly those; `import pdfmd` loads no deferred package and not pypdf. The nesting guard
+  behaves the same at HEAD and after the move, called directly and through the real re-entry of a `--cache` build of an assembled
+  file (the resource folder is in `--resource-path` once). Twelve extra builds (embedded metadata, an embedded Lua filter and its
+  trust store, `--cache`, a reference document, `--strip-comments` on a .bib, `--keep-source readable` keeping only the cited
+  entry, `--unpack`, a slimmed source, `-b -j 2 --assemble-only --embed-metadata`) exit 0. `split_check`: every file output the same;
+  four logs differ only where the two scratch copies differ (the cache folder's and the raw map's hash of each copy's path, a
+  temporary name `pdfmd-XXXXXXXX` that the mask misses, and the order in which the two `-j 2` workers printed).
+- Start (`--version`, interleaved, the machine at a load average of about 11): before 284/429 ms, after 221/512 ms (best/median),
+  noise at this load; the package's own import is 1.6-7 ms, most of it regexes `pdfmd.py` compiled itself before.
+- Tests: `python3 -m unittest test_attach test_config test_embedding test_standalone_source` and the always-run set (with `test_split`): 255 tests OK (1 skipped).
+
 ## v3.33.37 — 2026-11-10
 
 Pre-edit state: commit `0af9d45`. Entry 3fi. **The source a build carries (what `--attach-source` attaches to a PDF and `--keep-source` puts at the end of a Markdown output, the files a bundle stores beside it, the user's own TeX tree a rebuild needs, the text files kept as blocks of the source, the bibliography and citation style it takes along, the folder settings in force, and the PDF's attachments themselves) lives in the new package `lib/pdfmd_attach/__init__.py`.** Move 34 of SPLIT.md; a pure move into a new package, re-exported plainly.
