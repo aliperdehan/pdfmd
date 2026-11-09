@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.6 — 2026-11-09
+
+Pre-edit state: commit `0013c41`. Entry 3fi. **The terminal reader's command-line side (`--to ansi`, `--view`) lives in `pdfmd_ansi.cli`.** Move 5 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `ansi_width_argument`, `ansi_columns`, `ansi_colour_on`, `ansi_math`, `ansi_document_text`, `ansi_finish` and `ansi_without_pandoc` are in the new module `lib/pdfmd_ansi/cli.py` of the existing package, text and docstrings unchanged (their function-local imports of `pdfmd_ansi.render` and `pdfmd_ansi.native` are as they were). `pdfmd_ansi/__init__.py` and the package's other modules are untouched. `pdfmd.py` keeps a pointer comment where they were.
+- `pdfmd_ansi` is not loaded at start, so the move is deferred: `pdfmd.py` gets stand-ins `ansi_width_argument`, `ansi_columns`, `ansi_finish` and `ansi_without_pandoc` (`deferred("pdfmd_ansi.cli", ...)`), the four functions `pdfmd.py` itself calls (`--width`'s `type=`, the `--view` rule, the build's `ansi_finish` and `ansi_without_pandoc`). `ansi_colour_on`, `ansi_math` and `ansi_document_text` are used only by the module. No `DEFERRED_NAMES` entry: no constant moved.
+- `ANSI_WIDTH_ENV`, `ANSI_COLOR_ENV` and `ANSI_LINKS_ENV` (one tuple assignment), `ANSI_FALLBACK_WIDTH` and `ANSI_LINK_TERMINALS` stay in `pdfmd.py`, which reads them too. The module reads `core.ANSI_WIDTH_ENV`, `core.ANSI_COLOR_ENV`, `core.ANSI_LINKS_ENV`, `core.ANSI_FALLBACK_WIDTH`, `core.PANDOC_MISSING`, `core.display_path`, `core.inkmd_vendored` (patched by `test_calibre_markdown`), `core.math_lines`, `core.read_text_best_effort`, `core.vprint` and `core.write_text_lf` when it runs.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_ansi` module; `scripts/split_check.py` with the extra builds `results.md -t ansi --width 60 --color always -o ansi60.txt` and `lecture.md -t ansi --width 90 -o ansi90.txt`: all 32 checks the same. By hand, `pdfmd.py results.md -t ansi --width 60 -o o.txt --no-backup` builds the file through the moved `ansi_finish`. `scripts/pdfmd --version` is no slower: fifteen interleaved runs of each give best / median 129 / 140 ms before and 126 / 133 ms after. Tests: `test_ansi`, `test_split` and the always-run set: 203 tests pass (one skipped); `test_calibre_markdown`, which patches `inkmd_vendored`, passes separately (9 tests).
+
 ## v3.33.5 — 2026-11-09
 
 Pre-edit state: commit `0dec23f`. Entry 3fi. **Deferred re-exports, so the split does not slow pdfmd's start.** No change in what pdfmd does.

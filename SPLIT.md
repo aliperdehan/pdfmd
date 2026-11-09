@@ -150,11 +150,13 @@ lazy loader, so the package reads `core.pypdf` and never imports pypdf at its to
 
 Tests: `test_embedding`.
 
-#### 5. `pdfmd_ansi` (existing package): 7 definitions, ~77 lines
+#### 5. `pdfmd_ansi` (existing package): 7 definitions, ~77 lines; done in 3.33.6
 
 Definitions: `ansi_width_argument`, `ansi_columns`, `ansi_colour_on`, `ansi_math`, `ansi_document_text`, `ansi_finish`, `ansi_without_pandoc`.
 
 Facts: 3 callers stay in pdfmd.py (re-exported); 11 pdfmd names read through `core`.
+
+Note: `ANSI_*_ENV`, `ANSI_FALLBACK_WIDTH` and `ANSI_LINK_TERMINALS` stay in `pdfmd.py`; the module reads them as `core.X`. `inkmd_vendored` is patched by `test_calibre_markdown`, so it is called as `core.inkmd_vendored`.
 
 Tests: `test_ansi`.
 
