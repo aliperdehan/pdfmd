@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.request
 import warnings
 from pathlib import Path
 from unittest import mock
@@ -508,7 +509,7 @@ class InstallToolsTests(unittest.TestCase):
             def __exit__(self, *exc):
                 return False
 
-        return mock.patch.object(pdfmd.urllib.request, "urlopen", lambda *a, **k: Response(payload))
+        return mock.patch.object(urllib.request, "urlopen", lambda *a, **k: Response(payload))
 
     def install(self, name: str, sha256: str | None):
         payload = self.archive(name)
@@ -570,7 +571,7 @@ class InstallToolsTests(unittest.TestCase):
         def offline(*args, **kwargs):
             raise OSError("no network")
 
-        with mock.patch.object(pdfmd.urllib.request, "urlopen", offline):
+        with mock.patch.object(urllib.request, "urlopen", offline):
             url, digest = pdfmd.github_release_asset("typst/typst", "typst-x.tar.xz")
         self.assertEqual(url, "https://github.com/typst/typst/releases/latest/download/typst-x.tar.xz")
         self.assertIsNone(digest)
@@ -586,7 +587,7 @@ class InstallToolsTests(unittest.TestCase):
             def __exit__(self, *exc):
                 return False
 
-        with mock.patch.object(pdfmd.urllib.request, "urlopen", lambda *a, **k: Response(release)):
+        with mock.patch.object(urllib.request, "urlopen", lambda *a, **k: Response(release)):
             self.assertEqual(pdfmd.github_release_asset("typst/typst", "typst-x.tar.xz"), ("https://e/x", "abc123"))
 
     def test_managed_tools_come_after_the_users_own_path(self):

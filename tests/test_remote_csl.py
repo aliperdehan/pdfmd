@@ -13,6 +13,8 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
+import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -118,7 +120,6 @@ class Certificates(unittest.TestCase):
     def test_a_python_without_certificates_retries_with_the_systems(self):
         # a python.org Python on macOS before "Install Certificates": every https fetch failed (found on prelab1)
         import ssl
-        import urllib.error
         calls = []
 
         def urlopen(request, timeout=None, context=None):
@@ -130,15 +131,14 @@ class Certificates(unittest.TestCase):
         bundle = next((path for path in pdfmd.CA_BUNDLES if os.path.isfile(path)), None)
         if bundle is None:
             self.skipTest("no system CA bundle here")
-        with mock.patch.object(pdfmd.urllib.request, "urlopen", urlopen):
+        with mock.patch.object(urllib.request, "urlopen", urlopen):
             text, why = pdfmd.fetch_csl(URL)
         self.assertEqual((text, why), (STYLE, ""))
         self.assertEqual(len(calls), 2)
         self.assertIsInstance(calls[1], ssl.SSLContext)
 
     def test_another_error_is_not_retried(self):
-        import urllib.error
-        with mock.patch.object(pdfmd.urllib.request, "urlopen", side_effect=urllib.error.URLError("refused")) as opened:
+        with mock.patch.object(urllib.request, "urlopen", side_effect=urllib.error.URLError("refused")) as opened:
             self.assertEqual(pdfmd.fetch_csl(URL), (None, "refused"))
         self.assertEqual(opened.call_count, 1)
 

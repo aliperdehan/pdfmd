@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.32.54"
+PDFMD_VERSION = "3.32.55"
 import argparse
 import atexit
 import csv
@@ -1509,16 +1509,12 @@ import difflib
 import base64
 import binascii
 import hashlib
-import importlib.metadata
 import io
 import importlib.util
 import json
 import platform
 import tarfile
-import ssl
-import urllib.error
 import urllib.parse
-import urllib.request
 import struct
 import zipfile
 import zlib
@@ -1643,10 +1639,33 @@ try:
 except ImportError:
     yaml = None
 
-try:
-    import pypdf
-except ImportError:
-    pypdf = None
+def lazy_import(name: str):
+    """The module `name`, loaded when it is first used, or None when it is not installed. pypdf alone took about half of
+    every start (v3.32.55), and most runs never touch a PDF's insides. A loader that cannot load lazily (zipimport before
+    Python 3.10) loads it now."""
+    if name in sys.modules:
+        return sys.modules[name]
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None or spec.loader is None:
+        return None
+    try:
+        loader = importlib.util.LazyLoader(spec.loader)
+    except TypeError:
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            return None
+    spec.loader = loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    loader.exec_module(module)
+    return module
+
+
+pypdf = lazy_import("pypdf")
 
 PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 DEFAULT_FONT = "DejaVu Serif"
@@ -5814,6 +5833,7 @@ def inkmd_vendored() -> bool:
 
 def md2pdf_available() -> bool:
     """pymd2pdf (not the unrelated WeasyPrint-based `md2pdf`) is installed."""
+    import importlib.metadata  # here, not at the top: only this needs it (start-up time, v3.32.55)
     if sys.version_info < (3, 11):
         return False
     try:
@@ -7527,6 +7547,7 @@ def foreign_commands() -> list[tuple[str, str]]:
     """The commands this install provides (``pdfmd``, ``mdpdf``, ``md2pdf``, ``inkmd`` ...) whose name another program answers on the
     PATH: (name, path). Several tools share those names and the one installed last owns each. Empty when pdfmd is not installed as
     a package (a checkout, a lone pdfmd.py) or when every name is its own."""
+    import importlib.metadata  # here, not at the top: only this needs it (start-up time, v3.32.55)
     try:
         dist = importlib.metadata.distribution("pdfmd-cli")
     except importlib.metadata.PackageNotFoundError:
@@ -10017,6 +10038,7 @@ def github_release_asset(repository: str, name: str) -> tuple[str, str | None]:
     """(download URL, SHA-256 or None) of a release asset of the latest release.
     GitHub lists a digest for each asset; without the API (offline, rate limit)
     the stable `latest/download` link is used and nothing can be checked."""
+    import urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
     if os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
@@ -10036,6 +10058,7 @@ def github_release_asset(repository: str, name: str) -> tuple[str, str | None]:
 
 def download_file(url: str, destination: Path, sha256: str | None) -> None:
     """Download url to destination, refusing a file whose SHA-256 is not the expected one."""
+    import urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
     digest = hashlib.sha256()
     with open_url(request, 120) as response, destination.open("wb") as handle:
@@ -10172,6 +10195,7 @@ def node_asset_name(version: str, system: str | None = None, machine: str | None
 def install_node() -> bool:
     """node's newest long-term-support release for this machine into tools_directory(), checked against the SHA-256
     nodejs.org lists for it."""
+    import urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     headers = {"User-Agent": f"pdfmd/{PDFMD_VERSION}"}
     try:
         with open_url(urllib.request.Request(f"{NODE_DIST}/index.json", headers=headers), 30) as response:
@@ -10524,6 +10548,7 @@ def d2_asset_name(tag: str, system: str | None = None, machine: str | None = Non
 
 def github_latest_release(repository: str) -> dict:
     """The latest release of a GitHub repository as the API gives it (tag_name, assets with their digests)."""
+    import urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
     if os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
@@ -10708,6 +10733,7 @@ def release_asset_matching(repository: str, pattern: str, release: dict | None =
     """(file name, URL, SHA-256) of the latest release's file matching `pattern`, None when GitHub lists no such file or
     no digest for it (the API is the only source of the checksum: no download is made without one). For releases whose
     file names carry the version."""
+    import urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     if release is None:
         headers = {"Accept": "application/vnd.github+json", "User-Agent": f"pdfmd/{PDFMD_VERSION}"}
         if os.environ.get("GITHUB_TOKEN"):
@@ -19280,6 +19306,7 @@ def open_url(request, timeout: float):
     """urllib's urlopen, and once more with the system's CA bundle (else certifi's) when this Python has no certificates
     of its own: a python.org Python on macOS has none until its "Install Certificates" step runs, and every https fetch
     failed with CERTIFICATE_VERIFY_FAILED (v3.27.27; found fetching a csl: style)."""
+    import ssl, urllib.error, urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     try:
         return urllib.request.urlopen(request, timeout=timeout)
     except urllib.error.URLError as error:
@@ -19319,6 +19346,7 @@ def csl_fallback(md_path: Path, metadata_files: list[Path]) -> str:
 
 def fetch_csl(url: str) -> tuple[str | None, str]:
     """(the style's text, "") or (None, why)."""
+    import urllib.error, urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
     try:
         request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
         with open_url(request, 20) as response:

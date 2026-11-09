@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import os
 import subprocess
 import sys
@@ -97,7 +98,7 @@ class ForeignCommands(unittest.TestCase):
     def found(self, root: Path, on_path: dict[str, Path]):
         sys.path.insert(0, str(ROOT))
         import pdfmd
-        with mock.patch.object(pdfmd.importlib.metadata, "distribution", lambda name: self.distribution(root)), \
+        with mock.patch.object(importlib.metadata, "distribution", lambda name: self.distribution(root)), \
                 mock.patch.object(pdfmd, "which", lambda name: str(on_path[name]) if name in on_path else None):
             return pdfmd.foreign_commands()
 
@@ -126,9 +127,9 @@ class ForeignCommands(unittest.TestCase):
         import pdfmd
 
         def missing(name):
-            raise pdfmd.importlib.metadata.PackageNotFoundError(name)
+            raise importlib.metadata.PackageNotFoundError(name)
 
-        with mock.patch.object(pdfmd.importlib.metadata, "distribution", missing):
+        with mock.patch.object(importlib.metadata, "distribution", missing):
             self.assertEqual(pdfmd.foreign_commands(), [])
 
 
