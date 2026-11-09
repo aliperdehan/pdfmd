@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.43 — 2026-11-10
+
+Pre-edit state: commit `90cc89b`. **A nested build of another document gives the outer document's embedded resources back.**
+Found during the split: `embedded_resources` (`lib/pdfmd_assemble`) set `core._RESOURCE_OWNER` to None when it ended, so after a
+nested call for another document the outer document had no owner any more, and its own next nested call (the cache route re-enters
+the converter) wrote its embedded bibliography/CSL/files into a second temporary folder and registered them a second time.
+
+- The call remembers the owner it found and puts it back on exit (None at the top level, as before).
+- Checked: a script nesting `embedded_resources(a)`, `(b)` inside it, then `(a)` again: two folders registered at HEAD, one now,
+  and the owner after the inner call is `a.md` instead of None.
+- Tests: a new `test_standalone_source` case (fails at HEAD); `test_standalone_source test_split test_packaging
+  test_docs_consistency`: 48 OK.
+
 ## v3.33.42 — 2026-11-10
 
 Pre-edit state: commit `4207c87`. **`indent: true` indents in Typst too.** Found while checking `calc: {noindent: lines}`

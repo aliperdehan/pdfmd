@@ -244,6 +244,27 @@ class Outside(unittest.TestCase):
             self.assertEqual(shown.getvalue(), "")
             self.assertEqual((root / "schemes" / "x.tex").read_text(), "real\n")      # never overwritten
 
+    def test_a_nested_build_of_another_document_gives_the_outer_one_back(self):
+        """v3.33.43: the inner call for b.md used to leave no owner behind, so a.md's next nested call registered its
+        files a second time."""
+        blocks = pdfmd.inline_blocks({"refs.bib": b"@misc{a,title={A}}\n"})
+        with tempfile.TemporaryDirectory() as folder:
+            a, b = Path(folder) / "a.md", Path(folder) / "b.md"
+            for path in (a, b):
+                path.write_text("---\ntitle: T\nbibliography: refs.bib\n---\n\nText.\n\n" + blocks, encoding="utf-8")
+            before = list(pdfmd.EMBEDDED_RESOURCE_DIRS)
+            with pdfmd.embedded_resources(a):
+                outer = list(pdfmd.EMBEDDED_RESOURCE_DIRS)
+                with pdfmd.embedded_resources(b):
+                    self.assertEqual(pdfmd._RESOURCE_OWNER, b)
+                    self.assertEqual(len(pdfmd.EMBEDDED_RESOURCE_DIRS), len(outer) + 1)
+                self.assertEqual(pdfmd._RESOURCE_OWNER, a)
+                self.assertEqual(pdfmd.EMBEDDED_RESOURCE_DIRS, outer)
+                with pdfmd.embedded_resources(a):                       # the same document again: a no-op
+                    self.assertEqual(pdfmd.EMBEDDED_RESOURCE_DIRS, outer)
+            self.assertIsNone(pdfmd._RESOURCE_OWNER)
+            self.assertEqual(pdfmd.EMBEDDED_RESOURCE_DIRS, before)
+
 
 class Again(unittest.TestCase):
     """v3.28.44: a source edited as one file (--edit) already holds its files as blocks; building it again does not repeat them."""

@@ -628,7 +628,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
     names them by, and register that folder (and the document's
     ``NAME.unpacked/``, if there is one) in EMBEDDED_RESOURCE_DIRS. A nested
     call for the same document (the cache route re-enters the converter) is a
-    no-op. These are data, not code, so -- unlike filters -- no trust is asked."""
+    no-op; one for another document gives the outer one back on exit. These are data, not code, so -- unlike filters -- no trust is asked."""
     if core._RESOURCE_OWNER == md_path or md_path.suffix.lower() not in (".md", ".markdown"):
         yield
         return
@@ -667,6 +667,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
     if not added:
         yield
         return
+    outer_owner = core._RESOURCE_OWNER          # a nested call for another document hands the outer one back on exit
     core._RESOURCE_OWNER = md_path
     core.EMBEDDED_RESOURCE_DIRS.extend(added)
     try:
@@ -675,7 +676,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
         for item in added:
             if item in core.EMBEDDED_RESOURCE_DIRS:
                 core.EMBEDDED_RESOURCE_DIRS.remove(item)
-        core._RESOURCE_OWNER = None
+        core._RESOURCE_OWNER = outer_owner
         if folder is not None:
             shutil.rmtree(folder, ignore_errors=True)
 
