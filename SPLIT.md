@@ -406,7 +406,7 @@ Facts: 9 callers stay in pdfmd.py (re-exported); 22 pdfmd names read through `co
 
 Tests: `test_ansi`, `test_calc`, `test_css_v2`, `test_direct`, `test_labels`, `test_native`, `test_office`, `test_partial_history`, `test_partial_provenance`, `test_sections`, `test_soffice_parts`, `test_symlinked_parts`, `test_typst_input`, `test_wikilinks`.
 
-#### 29. `pdfmd_doctor` (new package): 9 definitions, ~377 lines
+#### 29. `pdfmd_doctor` (new package): 9 definitions, ~377 lines; done in 3.33.31 (`TEX_FOUND_AT` and `TRANSLIT_PACKS` stayed, rebound with `global`; `__file__` is `core.__file__`)
 
 Definitions: `tool_note`, `user_path_hint`, `pandoc_limits`, `folder_size`, `deep_checks`, `foreign_commands`, `doctor_report`, `completion_options`, `completion_script`.
 
