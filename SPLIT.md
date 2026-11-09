@@ -47,11 +47,25 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    `core.`, so the patch still reaches them. Each package's section lists them.
 4. **pdfmd.py.** The moved code is deleted. A re-export (`from pdfmd_x import a, b`, beside the binding) brings back every
    moved name that `pdfmd.py` itself, a test or a `lib/` module reads, so `pdfmd.a` keeps working. A lazy loader
-   (`x_module()`) that only served the moved code goes.
+   (`x_module()`) that only served the moved code goes. For a package that `pdfmd.py` does not load at start, the
+   re-export is deferred (step 6).
 5. **Packaging.** A new package goes into `pyproject.toml` (`packages` and `[tool.setuptools.package-dir]`) and into
    `PACKAGES` in `scripts/build_zipapp.py`; `test_packaging` fails until it does.
-6. **Start-up time.** A re-export makes the package load at every start. Heavy imports stay inside functions;
-   `python3 scripts/pdfmd --version` must not get slower (best of ten, before and after).
+6. **Start-up time.** A plain re-export makes the package load at every start. Heavy imports stay inside functions;
+   `python3 scripts/pdfmd --version` must not get slower (interleaved runs of HEAD and the move, best and median).
+   - **New packages** hold only the moved code, cost a fraction of a millisecond, and are re-exported plainly.
+   - **An existing package that `pdfmd.py` does not load at start today** is deferred, whatever it costs: the moved
+     code goes into `lib/pdfmd_x/<role>.py`, and importing that runs the package's `__init__`, which loads the rest of
+     the package (measured 2026-11-09 on top of pdfmd's own start: `pdfmd_serve` 17 ms, as it brings `http.server` and
+     `ssl`; `pdfmd_office` 21 ms; the other fourteen 0.2 to 3.5 ms each, about 25 ms together). In the binding
+     block, each moved function that `pdfmd.py` calls or a test reads gets a stand-in,
+     `serve_command = deferred("pdfmd_serve.commands", "serve_command")`, which loads the module on its first call,
+     hands it `core` (`bind_core`) and calls the real function; `pdfmd.py`'s own calls keep their bare names. A moved
+     constant or class that a test or `lib/` reads as `pdfmd.X` goes into `DEFERRED_NAMES` instead
+     (`DEFERRED_NAMES.update(_PANDOC_EXTENSIONS="pdfmd_flat.probe")`): the module's `__getattr__` (PEP 562) loads the
+     module on the first read and returns the package's own object, so `mock.patch.dict(pdfmd.X)` still reaches it.
+     `split_check`'s default builds may never reach a deferred call, so each deferred move adds an `--extra` build (or a
+     timed hand run) that goes through the real call site.
 7. **Proof.**
    - `ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py lib/ scripts/ tests/` (the CI line).
    - The package's tests (below) and the always-run set: `test_packaging`, `test_setup`, `test_docs_consistency`,

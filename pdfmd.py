@@ -1498,7 +1498,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.4"
+PDFMD_VERSION = "3.33.5"
 import argparse
 import atexit
 import csv
@@ -1677,6 +1677,34 @@ def bind_core(*packages) -> None:
     for package in packages:
         if package.core is None:
             package.core = sys.modules[__name__]
+
+
+def load_package(name: str):
+    """The module `name` (a package or one module of it), imported now and bound to this module as its `core`."""
+    module = importlib.import_module(name)
+    bind_core(module)
+    return module
+
+
+def deferred(module: str, name: str):
+    """A stand-in for the function `name` of `module`, a package that pdfmd.py does not load at start (SPLIT.md, step 6):
+    the first call loads it, and every call goes to the real function. pdfmd.py's own calls keep their bare names."""
+    def stand_in(*args, **kwargs):
+        return getattr(load_package(module), name)(*args, **kwargs)
+    stand_in.__name__ = stand_in.__qualname__ = name
+    stand_in.__doc__ = f"`{module}.{name}`, loaded on its first call."
+    return stand_in
+
+
+# The names other than functions that a test or lib/ reads as `pdfmd.X` from a deferred package: name -> its module.
+DEFERRED_NAMES: dict[str, str] = {}
+
+
+def __getattr__(name: str):
+    """`pdfmd.X` for a name in DEFERRED_NAMES (PEP 562): the package's own object, its module loaded on the first read."""
+    if name in DEFERRED_NAMES:
+        return getattr(load_package(DEFERRED_NAMES[name]), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # pdfmd.py needs its packages from 3.33 on (the author, 2026-11-09): a copy without lib/ stops here and says why.

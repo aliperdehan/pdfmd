@@ -58,7 +58,7 @@ some basic stuff so pdfmd.py can work like in its early days"; everything else l
 into a package, never into `pdfmd.py`, even when the feature it belongs to still sits there: put the new part in a package and
 call it. The split of what is in `pdfmd.py` today is planned in `SPLIT.md`. A package that needs pdfmd's own helpers or state
 gets the module as its `core` (a module global that `bind_core()` sets when `pdfmd.py` loads, as `pdfmd_comments`
-has; `pdfmd_report` and `pdfmd_batch` take it as an argument) and reads `core.X` when it runs, never
+has; `pdfmd_report` and `pdfmd_batch` take it as an argument; a package that does not load at start is reached through `deferred()`, SPLIT.md step 6) and reads `core.X` when it runs, never
 `import pdfmd` (run as a script, the file is `__main__`, and a second import is a second copy with its own state).
 
 ## Debugging

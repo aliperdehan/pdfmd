@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.5 — 2026-11-09
+
+Pre-edit state: commit `0dec23f`. Entry 3fi. **Deferred re-exports, so the split does not slow pdfmd's start.** No change in what pdfmd does.
+
+- Seventeen of the split's moves go into packages that already exist, and none of them loads at start today: importing the module the moved code goes into runs the package's `__init__`, which loads the rest of it. On top of pdfmd's own start that costs 17 ms for `pdfmd_serve` (it brings `http.server` and `ssl`), 21 ms for `pdfmd_office`, and 0.2 to 3.5 ms for each of the other fourteen, about 25 ms together on a start of about 140 ms (measured in fresh processes, best of seven).
+- `pdfmd.py` gets `load_package()` (import a module and bind it with `bind_core()`), `deferred(module, name)` (a stand-in function that loads its module on the first call and calls the real one, so `pdfmd.py`'s own calls keep their bare names) and `DEFERRED_NAMES` with a module `__getattr__` (PEP 562: `pdfmd.X` for a moved constant that a test or `lib/` reads returns the package's own object, loaded on the first read). Nothing uses them yet; the next moves do.
+- SPLIT.md, steps 4 and 6: a new package is re-exported plainly (it holds only the moved code); an existing package that does not load at start is deferred, and its move adds a build through the real call site to `split_check.py`, whose default builds may never reach it. `scripts/split_spec.py` reads tuple bindings (`ANSI_WIDTH_ENV, ANSI_COLOR_ENV, ANSI_LINKS_ENV = ...` showed as "not found").
+- New `tests/test_split.py` (4 tests): the stand-in loads its module only on the first call and binds `core`; a deferred name is the package's own object; an unknown name is still an `AttributeError`; `import pdfmd` loads neither `pdfmd_serve`, `pdfmd_office`, `http.server` nor `ssl`. With `test_lua_missing` and the always-run set: 147 tests pass (one skipped). ruff is clean.
+
 ## v3.33.4 — 2026-11-09
 
 Pre-edit state: commit `727d465`. Entry 3fi. **The hybrid PDF (`--hybrid`) lives in its own package, `pdfmd_hybrid`.** Move 4 of SPLIT.md; a pure move.

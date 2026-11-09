@@ -49,8 +49,8 @@ def section(package: str) -> tuple[list[str], list[str], list[str]]:
 def bound_names(node: ast.stmt) -> list[str]:
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         return [node.name]
-    if isinstance(node, ast.Assign):
-        return [target.id for target in node.targets if isinstance(target, ast.Name)]
+    if isinstance(node, ast.Assign):  # `A, B = 1, 2` binds both
+        return [name.id for target in node.targets for name in ast.walk(target) if isinstance(name, ast.Name)]
     if isinstance(node, (ast.AnnAssign, ast.AugAssign)) and isinstance(node.target, ast.Name):
         return [node.target.id]
     return []
