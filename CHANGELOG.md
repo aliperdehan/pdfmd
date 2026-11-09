@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.12 — 2026-11-09
+
+Pre-edit state: commit `7924cdd`. Entry 3fi. **The vault side of Obsidian notes (the vault's root and settings, the single-newline mode, picture embeds) lives in `pdfmd_obsidian.vault`.** Move 11 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).
+
+- `vault_app_setting`, `single_newline_mode`, `vault_root`, `embed_settings`, `_embed_folder_index`, `find_embedded_image`, `embed_source` and `embed_filter_args`, with the constants `EMBED_FIT_WORDS`, `EMBED_SEARCH_WORDS`, `NEWLINE_WORDS`, `_EMBED_INDEX`, `_EMBED_SKIP_FOLDERS` and `_VAULT_ROOTS`, are in the new module `lib/pdfmd_obsidian/vault.py` of the existing package, text and docstrings unchanged (`pdfmd_obsidian.embeds` and `pdfmd_lua` are still imported inside the functions). The package's other modules and `__init__.py` are untouched. `pdfmd.py` keeps a pointer comment where the two groups were.
+- `pdfmd_obsidian` is not loaded at start, so the move is deferred: `pdfmd.py` gets stand-ins `vault_root`, `single_newline_mode`, `find_embedded_image`, `embed_source` and `embed_filter_args` (the first, second, fourth and fifth are called by `pdfmd.py`; `find_embedded_image` is read by `test_embeds`), and `DEFERRED_NAMES.update(_VAULT_ROOTS=..., _EMBED_INDEX=...)`: the tests empty the two caches with `pdfmd._VAULT_ROOTS.clear()`, which reaches the module's own dicts. Nothing rebinds either cache (no `global` and no assignment anywhere in `pdfmd.py` or `lib/`, checked before the move). `vault_app_setting`, `embed_settings` and `_embed_folder_index` are used only by the module.
+- `FLAVOUR_PRESETS`, `_FLAVOUR_TOLD` (a set the module only adds to), `display_path`, `first_pdfmd_option` and `flavour_of` stay in `pdfmd.py` (the flavour code that calls the moved functions stays with them); the module reads them as `core.X` when it runs. No test patches a moved name.
+- Checked: ruff is clean; `import pdfmd` loads no `pdfmd_obsidian` module; `scripts/split_check.py` with the extra builds of a scratch vault (`.obsidian/app.json` with `strictLineBreaks` and an attachment folder; a note with `![[pic.png|300]]`, a picture beside it, a missing picture and `[[wiki links]]`, to PDF and to HTML; a second note with `single-newline: hard`, `embed-search: folder` and `embed-fit: none`, to PDF and to HTML): all 34 checks the same. By hand, the four builds exit 0 and print the missing-picture warning. `scripts/pdfmd --version` is no slower (the machine was loaded, load average 9 to 11): best / median 131 / 167 ms before and 134 / 174 ms after in `split_check`, 128 / 134 against 129 / 147 ms in fifteen interleaved runs. Tests: `test_embeds`, `test_newline`, `test_obsidian`, `test_wikilinks`, `test_split` and the always-run set: 198 tests pass (one skipped).
+
 ## v3.33.11 — 2026-11-09
 
 Pre-edit state: commit `a09edca`. Entry 3fi. **The picture command (`--crop`, `--to png` and the other picture formats, `--to png,docx,tex`) lives in `pdfmd_crop.targets`.** Move 10 of SPLIT.md; a pure move, deferred (SPLIT.md, step 6).

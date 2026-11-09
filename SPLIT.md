@@ -216,7 +216,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 7 pdfmd names read through `cor
 
 Tests: `test_crop`.
 
-#### 11. `pdfmd_obsidian` (existing package): 8 definitions, ~157 lines
+#### 11. `pdfmd_obsidian` (existing package): 8 definitions, ~157 lines; done in 3.33.12 (the two caches are in `DEFERRED_NAMES`; `FLAVOUR_PRESETS` is read as `core.FLAVOUR_PRESETS`)
 
 Definitions: `vault_app_setting`, `single_newline_mode`, `vault_root`, `embed_settings`, `_embed_folder_index`, `find_embedded_image`, `embed_source`, `embed_filter_args`.
 
