@@ -35,6 +35,7 @@ _os.environ["PDFMD_CONFIG"] = ""
 _os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
 
 import pdfmd  # noqa: E402
+import pdfmd_native  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 GOLDEN = ROOT / "tests" / "golden"
@@ -151,6 +152,23 @@ class NormaliseTests(unittest.TestCase):
             self.assertIn("| Column 1 | Column 2 | Column 3 |", full.text)
             self.assertIn("| n | square | text |", full.text)
             self.assertIn("| 12 | 144 |", full.text)
+
+    def test_a_cut_csv_is_said_once_per_build_with_two_renderers(self):
+        """v3.33.46: the text is prepared once per renderer in the list (calibre and inkmd), and the note was printed each time."""
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "data.csv").write_text("k,v\n1,a\n2,b\n3,c\n", encoding="utf-8")
+            document = folder / "doc.md"
+            document.write_text('A\n\n::: {.csv file="data.csv" rows=2}\n:::\n', encoding="utf-8")
+            for build in (1, 2):                                   # a second build says it again
+                shown = io.StringIO()
+                with contextlib.redirect_stderr(shown), contextlib.redirect_stdout(io.StringIO()), \
+                        mock.patch.object(pdfmd_native, "render_native", return_value=[]), \
+                        mock.patch.object(pdfmd, "record_engine"):
+                    self.assertEqual(pdfmd.convert_native(document, folder / "doc.pdf", ["calibre", "inkmd"], [], None,
+                                                          False, False), (True, ""))
+                self.assertEqual(shown.getvalue().count("showing 2 of 3 rows"), 1, (build, shown.getvalue()))
+            self.assertIsNone(pdfmd_native.NATIVE_NOTED)
 
     def test_csv_div_with_its_data_inside_and_alignment(self):
         source, counts = pdfmd.normalise_gfm(

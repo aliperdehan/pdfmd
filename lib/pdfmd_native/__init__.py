@@ -71,7 +71,17 @@ NATIVE_META_KEYS = frozenset({"title", "subtitle", "author", "date", "subject", 
 
 def native_note(engine: str, message: str, source: Path | None = None) -> None:
     where = f"{core.display_path(source)}: " if source is not None else ""
-    print(f"WARN  native ({engine}): {where}{message}", file=sys.stderr)
+    line = f"WARN  native ({engine}): {where}{message}"
+    if NATIVE_NOTED is not None:
+        if line in NATIVE_NOTED:
+            return
+        NATIVE_NOTED.add(line)
+    print(line, file=sys.stderr)
+
+
+# The notes printed so far while convert_native prepares the text once per renderer (v3.33.46): a `.csv` table cut short is
+# said once, not once per renderer in the list. None outside that loop.
+NATIVE_NOTED: set[str] | None = None
 
 
 def native_lose(kind: str, count: int = 1) -> None:
@@ -1365,10 +1375,15 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
     text = core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files)
     attempts: list[str] = []
     prepared: dict[str, tuple[NativeSource, dict[str, int]]] = {}
-    for engine in engines:
-        # Calibre's Markdown reader is told what inkmd is: no math, endnotes, no Pandoc syntax (v3.29.1)
-        prepared[engine] = normalise_gfm(text, "inkmd" if engine == "calibre" else engine, metadata_files,
-                                         md_path.resolve().parent, md_path)
+    global NATIVE_NOTED
+    NATIVE_NOTED = set()
+    try:
+        for engine in engines:
+            # Calibre's Markdown reader is told what inkmd is: no math, endnotes, no Pandoc syntax (v3.29.1)
+            prepared[engine] = normalise_gfm(text, "inkmd" if engine == "calibre" else engine, metadata_files,
+                                             md_path.resolve().parent, md_path)
+    finally:
+        NATIVE_NOTED = None
     order = native_order(engines, prepared[engines[0]][0])
     for position, engine in enumerate(order):
         source, counts = prepared[engine]

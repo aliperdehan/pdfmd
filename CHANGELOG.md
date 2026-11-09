@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.33.46 — 2026-11-10
+
+Pre-edit state: commit `73eb08c`. **The native tier says a cut `.csv` table once per build.** `convert_native` prepares the text
+once for each renderer in its list (Calibre's Markdown reader and inkmd with no Pandoc), and each preparation printed the notes of
+`normalise_gfm`: `WARN  native (csv): doc.md: showing 2 of 3 rows -- ...` came twice (and so would the delimiter guess, a missing
+file and the other `.csv` notes).
+
+- `native_note` (`lib/pdfmd_native`) keeps the lines it printed in `NATIVE_NOTED` while `convert_native` prepares the text, and
+  prints a line it printed already in that loop no more. The set is emptied for each build (a second document of a batch, or a
+  watch rebuild, says its notes again) and is None outside the loop, so the notes after the build and any other caller are as
+  before. The paper note keeps its own set (once per file and paper).
+- Checked through pdfmd (PATH holding only an empty folder, Calibre installed): `doc.md` with a 3-row CSV and `rows=2` printed the
+  line twice at HEAD, now once; `-b` of a folder with two such documents (`-j 2`, and with Calibre hidden) says it once for each.
+- Tests: a new `test_native` case (two renderers, two builds; fails at HEAD); `test_native test_csv_switch test_split
+  test_packaging test_docs_consistency`: 105 OK (2 skipped).
+
 ## v3.33.45 — 2026-11-10
 
 Pre-edit state: commit `355660d`. **`pdfmd -b a.md b.md` says only that -b takes one folder.** Batch mode checked its paths when
