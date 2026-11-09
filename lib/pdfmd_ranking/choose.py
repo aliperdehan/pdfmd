@@ -167,12 +167,21 @@ def choose(candidates: Sequence[Candidate], ranking: Ranking, by: Sequence[str] 
             return None
         reason = {"newest": f"the newest ({_stamp(winner.cand.mtime_ns)})", "oldest": f"the oldest ({_stamp(winner.cand.mtime_ns)})",
                   "name": "the last by name"}[how]
-        choice.warnings.append(f"WARN  {len(pool)} Markdown files tie ({what}): {names}; using {show(winner.cand.path)}, {reason}. "
-                               "Give one a `priority:`, or set `ranking: {by: [priority]}` to make a tie an error.")
+        if what == "no priority":
+            # nothing set on any of them (v3.33.50): no tie the author made, their age (or name) decides
+            choice.warnings.append(f"WARN  {len(pool)} Markdown files have no priority set: {names}; using {show(winner.cand.path)}, "
+                                   f"{reason}. Give one a `priority:`, or set `ranking: {{by: [priority]}}` to make this an error.")
+        else:
+            choice.warnings.append(f"WARN  {len(pool)} Markdown files tie ({what}): {names}; using {show(winner.cand.path)}, {reason}. "
+                                   "Give one a `priority:`, or set `ranking: {by: [priority]}` to make a tie an error.")
         choice.settled_by = how
         for item in pool:
             if item is not winner:
-                choice.skipped.append((item.cand.path, f"tie, not the {how}" if how in ("newest", "oldest") else "tie, earlier by name"))
+                if what == "no priority":
+                    left = {"newest": "no priority set, older", "oldest": "no priority set, newer"}.get(how, "no priority set, earlier by name")
+                else:
+                    left = f"tie, not the {how}" if how in ("newest", "oldest") else "tie, earlier by name"
+                choice.skipped.append((item.cand.path, left))
         return winner
 
     if "priority" not in chain:

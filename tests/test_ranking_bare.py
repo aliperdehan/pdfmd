@@ -84,8 +84,9 @@ class Bare(unittest.TestCase):
         done = self.run_pdfmd()
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.built(), ["new.assembled.md"])
-        self.assertIn("WARN  2 Markdown files tie", done.stderr)
+        self.assertIn("WARN  2 Markdown files have no priority set", done.stderr)
         self.assertIn("using new.md", done.stderr)
+        self.assertIn("[no priority set, older]", done.stdout)
 
     def test_the_same_modification_time_cannot_be_settled(self):
         first, second = self.doc("a.md"), self.doc("b.md")

@@ -19,6 +19,23 @@ same commit as the change.
 
 ---
 
+## v3.33.50 — 2026-11-10
+
+Pre-edit state: commit `5141d76`. **Documents with no priority set are no longer called a tie.** A bare `pdfmd` (and `--which`) in a
+folder of documents none of which sets a `priority:` said `WARN  4 Markdown files tie (no priority): ...` and listed the others as
+`[tie, not the newest]`, when nothing was tied by anyone: their age (or, with `ranking: {by: [priority, name]}`, their name)
+decides, as the rules say.
+
+- `lib/pdfmd_ranking/choose.py`: when the documents share only "no priority", the WARN says `N Markdown files have no priority
+  set: a.md, b.md; using b.md, the newest (...)`, ending `... to make this an error`, and the others are left as `no priority set,
+  older` (`newer` for `by: oldest`, `earlier by name` for `by: name`), the words the rules without `priority` already use. Equal
+  priorities the author wrote (`priority: 2` twice) are still a tie, worded as before, and so is the error when nothing settles it.
+- Checked through pdfmd: four documents with nothing set, `--which` and a bare `pdfmd --to html`: the new WARN, `left: no
+  priority set, older` and `AUTO MD d.md (over a.md [no priority set, older], ...)`.
+- Tests: `test_ranking_which` (a new case for nothing set, fails at HEAD; the tie case now writes `priority: 2` and checks its
+  words) and `test_ranking_bare` (the new WARN and reason); `test_ranking_bare test_ranking_generated test_ranking_layers
+  test_ranking_lists test_ranking_rules test_ranking_which test_split test_packaging test_docs_consistency`: 136 OK.
+
 ## v3.33.49 — 2026-11-10
 
 Pre-edit state: commit `907d251`. **`pdfmd_doctor` reads `find_batchocr` through pdfmd, like every other pdfmd name.** It had

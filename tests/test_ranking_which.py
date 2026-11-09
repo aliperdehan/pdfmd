@@ -58,11 +58,23 @@ class Which(unittest.TestCase):
         self.assertLess(out.index("fruit "), out.index("final "))
 
     def test_a_tie_is_shown_with_the_warning(self):
+        self.doc("a.md", 2)
+        self.doc("b.md", 2)
+        done = self.which()
+        self.assertIn("WARN  2 Markdown files tie (priority: 2)", done.stderr)
+        self.assertIn("b.md  BUILT", done.stdout)
+        self.assertIn("a.md  left: tie, not the newest", done.stdout)
+
+    def test_no_priority_on_either_says_so_and_that_the_newest_wins(self):
+        """v3.33.50: a folder of documents with nothing set was called a tie."""
         self.doc("a.md")
         self.doc("b.md")
         done = self.which()
-        self.assertIn("WARN  2 Markdown files tie", done.stderr)
+        self.assertIn("WARN  2 Markdown files have no priority set: a.md, b.md; using b.md, the newest", done.stderr)
+        for old in ("files tie", "[tie", "left: tie"):
+            self.assertNotIn(old, done.stderr + done.stdout)
         self.assertIn("b.md  BUILT", done.stdout)
+        self.assertIn("a.md  left: no priority set, older", done.stdout)
 
     def test_a_tie_that_cannot_be_settled_says_it_would_stop(self):
         paths = [self.doc(name, 2) for name in ("a.md", "b.md")]
