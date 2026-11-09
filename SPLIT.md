@@ -1,149 +1,462 @@
-A comprehensive survey of [`pdfmd.py`](file://~/dev/py/pdfmd/pdfmd.py) (currently **30,868 lines**, ~1.75 MB, 1,047 functions/classes) was conducted to identify all candidate code blocks that can be extracted to [`lib/`](file://~/dev/py/pdfmd/lib), matching the precedent set when modules like `pdfmd_report`, `pdfmd_batch`, `pdfmd_tables`, etc., were extracted.
+# Splitting pdfmd.py into packages under lib/
 
-In total, **~17,700 lines (>57% of `pdfmd.py`)** can be cleanly moved into `lib/`:
-1. **~5,550 lines** can be absorbed directly into **existing packages** in `lib/` that currently hold only partial implementations.
-2. **~12,150 lines** form cohesive, decoupled subsystems that can become **new packages** in `lib/`.
+Entry 3fi. Verified on 2026-11-09 against pdfmd 3.32.54 (`pdfmd.py`: 30,872 lines, 1,047 top-level definitions). This
+replaces the first survey (2026-11-08), whose line ranges overlapped, mixed topics and left out about 85 definitions.
+The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
 
----
+## Numbers
 
-## 1. Code to Move into Existing Packages in `lib/`
+- **Phase 1 (this file):** 37 packages (20 new, 17 existing), 476 definitions, about 12,800 lines of definitions and 380
+  lines of constants. `pdfmd.py` goes from about 30,900 to about 17,700 lines, 1,470 of them the module docstring.
+- **Phase 2 (not planned yet):** the 571 definitions (about 11,700 lines) that phase 1 leaves. Most of them are helpers that
+  several packages call. They are planned from a fresh audit after phase 1, because phase 1 changes who calls whom.
 
-Many packages under `lib/` were previously introduced, but their high-level commands, CLI integrations, or data processing pipelines were left inside `pdfmd.py`.
+## How the table was made
 
-| Target Package | Line Range in `pdfmd.py` | Lines | Key Functions / Classes | What Can Be Moved |
-| :--- | :--- | :--- | :--- | :--- |
-| [`lib/pdfmd_history/`](file://~/dev/py/pdfmd/lib/pdfmd_history) | [15956–17456](file://~/dev/py/pdfmd/pdfmd.py#L15956-L17456) | **~1,500** | `backup_directory`, `backup_template`, `fill_backup_template`, `backup_snapshots`, `backup_after_success`, `backup_pdf_after_success`, `backup_summary`, `history_view_command`, `history_act`, `history_interactive`, `init_backups_command`, `history_command` | Snapshot creation, template formatting, backup rotation, and interactive CLI history commands (`--history`, `--history-diff`, `--history-restore`, `--init-backups`). |
-| [`lib/pdfmd_office/`](file://~/dev/py/pdfmd/lib/pdfmd_office) | [8504–9224](file://~/dev/py/pdfmd/pdfmd.py#L8504-L9224), [9744–9871](file://~/dev/py/pdfmd/pdfmd.py#L9744-L9871) | **~845** | `office_package_folders`, `office_defaults_sources`, `find_office_profile`, `find_reference_doc`, `OfficeArguments`, `office_properties`, `office_finish`, `run_office_pandoc`, `build_office_pandoc`, `check_docx_command`, `office_render_fragments`, `init_reference` | Office Pandoc command runner, Word/ODT reference document resolution, fragment rendering, and `--check-docx` / `--init-reference`. |
-| [`lib/pdfmd_kits/`](file://~/dev/py/pdfmd/lib/pdfmd_kits) | [7886–8476](file://~/dev/py/pdfmd/pdfmd.py#L7886-L8476) | **~590** | `package_places`, `kpsewhich_locate`, `read_package_helper`, `kit_package_folders`, `kits_report`, `kit_header_insert`, `kit_header_settle`, `kit_header_resolve`, `kit_carried_files`, `kit_cache_tex` | Kit header resolution, TeX search path setup, package helper integration, and the `--kits` report runner. |
-| [`lib/pdfmd_unicode/`](file://~/dev/py/pdfmd/lib/pdfmd_unicode) | [1675–1760](file://~/dev/py/pdfmd/pdfmd.py#L1675-L1760), [12519–13046](file://~/dev/py/pdfmd/pdfmd.py#L12519-L13046) | **~614** | `installed_font_families`, `font_missing`, `system_font_missing`, `default_monofont`, `fallback_font`, `preferred_font`, `font_args`, `script_fallback`, `check_fonts`, `managed_fonts_css` | Fontconfig queries, font stand-in resolution, per-script fallback filter/header generation, and `--check-fonts`. |
-| [`lib/pdfmd_tables/`](file://~/dev/py/pdfmd/lib/pdfmd_tables) | [2746–2995](file://~/dev/py/pdfmd/pdfmd.py#L2746-L2995), [17474–17598](file://~/dev/py/pdfmd/pdfmd.py#L17474-L17598) | **~370** | `csv_defaults`, `csv_table_filter_args`, `table_keep_metadata`, `spreadsheet_args`, `tables_command` | CSV block argument generation, table keep metadata, and `--extract-tables` / `--expand-tables` rewriting commands. |
-| [`lib/pdfmd_buildinfo/`](file://~/dev/py/pdfmd/lib/pdfmd_buildinfo) | [15628–15931](file://~/dev/py/pdfmd/pdfmd.py#L15628-L15931) | **~304** | `begin_timer`, `timed`, `attach_time`, `time_breakdown`, `_RecordTee`, `BuildRecorder`, `last_build_command` | Build step timing, `--verbose` time breakdown reporting, log tees, build log recording, and `--last-build`. |
-| [`lib/pdfmd_obsidian/`](file://~/dev/py/pdfmd/lib/pdfmd_obsidian) | [3116–3385](file://~/dev/py/pdfmd/pdfmd.py#L3116-L3385) | **~270** | `vault_app_setting`, `single_newline_mode`, `vault_root`, `find_embedded_image`, `embed_source`, `embed_filter_args` | Obsidian vault configuration parsing (`app.json`), embed image search indexing, and embed filter arguments. |
-| [`lib/pdfmd_ranking/`](file://~/dev/py/pdfmd/lib/pdfmd_ranking) | [13446–13640](file://~/dev/py/pdfmd/pdfmd.py#L13446-L13640) | **~195** | `ranking_layers`, `ranking_clashes`, `bare_ranking`, `priority_candidates`, `which_command` | Multi-layer ranking resolution, clash detection, and `--which` CLI runner. |
-| [`lib/pdfmd_check/`](file://~/dev/py/pdfmd/lib/pdfmd_check) | [9480–9668](file://~/dev/py/pdfmd/pdfmd.py#L9480-L9668) | **~189** | `bibliography_file_keys`, `check_bibliography`, `calc_check_records`, `check_documents`, `check_command` | High-level `--check` linter dispatch, bibliography key validation, and calculator syntax verification. |
-| [`lib/pdfmd_crop/`](file://~/dev/py/pdfmd/lib/pdfmd_crop) | [9255–9418](file://~/dev/py/pdfmd/pdfmd.py#L9255-L9418) | **~164** | `picture_target`, `picture_build`, `picture_sources`, `picture_one`, `multi_target_command`, `picture_command` | Picture export pipeline and format dispatch (`--crop` and `--to png,svg,tiff,jpg`). |
-| [`lib/pdfmd_setup/`](file://~/dev/py/pdfmd/lib/pdfmd_setup) | [5380–5404](file://~/dev/py/pdfmd/pdfmd.py#L5380-L5404), [11541–11700](file://~/dev/py/pdfmd/pdfmd.py#L11541-L11700) | **~185** | `setup_sources`, `setup_command`, `user_path_command`, `maybe_hint_setup` | Interactive `--setup` runner, Windows user path manager (`--user-path`), and setup hint triggers. |
-| [`lib/pdfmd_docs/`](file://~/dev/py/pdfmd/lib/pdfmd_docs) | [11349–11477](file://~/dev/py/pdfmd/pdfmd.py#L11349-L11477) | **~129** | `document_file`, `document_headings`, `document_section`, `search_documents`, `render_document`, `doc_command` | Built-in documentation search, heading indexer, HTML documentation cache, and `--doc` CLI runner. |
-| [`lib/pdfmd_css/`](file://~/dev/py/pdfmd/lib/pdfmd_css) | [19512–19637](file://~/dev/py/pdfmd/pdfmd.py#L19512-L19637) | **~126** | `css_additions`, `css_heading_latex`, `css_heading_args` | Translating CSS heading rules (`font-family`, `font-weight`, `color`) into LaTeX `titlesec` definitions. |
-| [`lib/pdfmd_flat/`](file://~/dev/py/pdfmd/lib/pdfmd_flat) | [4642–4739](file://~/dev/py/pdfmd/pdfmd.py#L4642-L4739) | **~98** | `flat_settings`, `flat_writer`, `flat_filter_args`, `split_ascii_target`, `ascii_missing`, `ascii_filter_args`, `ascii_finish` | CLI argument synthesis for flat Markdown and ASCII builds (`--to ascii`, `-o x.ascii.txt`). |
-| [`lib/pdfmd_serve/`](file://~/dev/py/pdfmd/lib/pdfmd_serve) | [13670–13753](file://~/dev/py/pdfmd/pdfmd.py#L13670-L13753) | **~84** | `serve_main_document`, `serve_discovered`, `serve_live_filters`, `serve_command`, `api_command` | Dispatcher glue connecting CLI `--serve` and `--api` to `pdfmd_serve.core.Core`. |
-| [`lib/pdfmd_ansi/`](file://~/dev/py/pdfmd/lib/pdfmd_ansi) | [4783–4864](file://~/dev/py/pdfmd/pdfmd.py#L4783-L4864) | **~82** | `ansi_width_argument`, `ansi_columns`, `ansi_colour_on`, `ansi_document_text`, `ansi_finish`, `ansi_without_pandoc` | Pandoc JSON AST to styled terminal text translation and fallback parser when Pandoc is unavailable. |
-| [`lib/pdfmd_templates/`](file://~/dev/py/pdfmd/lib/pdfmd_templates) | [9675–9740](file://~/dev/py/pdfmd/pdfmd.py#L9675-L9740) | **~66** | `git_user_name`, `init_command` | Document template listing and scaffolding (`pdfmd --init [TEMPLATE] [NAME]`). |
+- The seeds are the names of the first survey. A definition joins a package when every definition that uses it is in that
+  package, repeated until nothing changes. A definition used by two packages, or by code that stays, stays.
+- Never moved: `main`, `run_main`, `convert_one`, `_convert_one_core`, `convert_file`, `convert_text`, `PdfmdError`.
+- A constant moves with a package only when that package alone reads it and nothing rebinds it. State rebound with
+  `global` (the `*_CLI` settings, `LAST_*`, `VERBOSE_OUTPUT`, the probe caches) stays in `pdfmd.py`.
+- The lists are names, not line numbers, because lines shift with every move. A change to the table during the moves is made
+  here, in the commit of the move it concerns.
+- SPLIT.md's `pdfmd_cli_parser` is `pdfmd_args` (the `pdfmd_cli` namespace is a 4.0 question). The other names are the
+  ones chosen on 2026-11-08: `pdfmd_assemble`, `pdfmd_parts`, `pdfmd_attach`, `pdfmd_tex`, `pdfmd_pdfimages`,
+  `pdfmd_compat`, `pdfmd_routing`.
 
-*Subtotal:* **~5,550 lines**
+## The pattern for every move
 
----
+1. **One package per commit, a pure move.** The tree is clean first. The first move is 3.33.0, each later one 3.33.x,
+   with its own changelog entry and `PDFMD_VERSION` bump. A move changes no behaviour; a bug found on the way is fixed in
+   a commit of its own (the author's leave, 2026-11-09).
+2. **Where the code goes.** A new package: `lib/pdfmd_x/__init__.py`. An existing package: a module of its own beside
+   what is there (`lib/pdfmd_x/<role>.py`), unless the moved code is small. The text is moved as it is; only names change.
+3. **How it reaches pdfmd.** The package has a module global `core = None`; `pdfmd.py` sets it right after the import,
+   and the first binding wins, so a second copy of pdfmd (a script run imports nothing as `pdfmd`, but a stray
+   `import pdfmd` would make one) never re-points it. Every pdfmd name the moved code uses (a helper, a constant, state)
+   is read as `core.NAME` when it runs: never `import pdfmd`, never a copy taken at import time. Calls between moved
+   functions are direct, except calls to a name that a test patches (`mock.patch.object(pdfmd, ...)`): those go through
+   `core.`, so the patch still reaches them. Each package's section lists them.
+4. **pdfmd.py.** The moved code is deleted. A re-export (`from pdfmd_x import a, b`, beside the binding) brings back every
+   moved name that `pdfmd.py` itself, a test or a `lib/` module reads, so `pdfmd.a` keeps working. A lazy loader
+   (`x_module()`) that only served the moved code goes.
+5. **Packaging.** A new package goes into `pyproject.toml` (`packages` and `[tool.setuptools.package-dir]`) and into
+   `PACKAGES` in `scripts/build_zipapp.py`; `test_packaging` fails until it does.
+6. **Start-up time.** A re-export makes the package load at every start. Heavy imports stay inside functions;
+   `python3 scripts/pdfmd --version` must not get slower (best of ten, before and after).
+7. **Proof.**
+   - `ruff check --select F --force-exclude --exclude pdfmd_inkmd pdfmd.py lib/ scripts/ tests/` (the CI line).
+   - The package's tests (below) and the always-run set: `test_packaging`, `test_setup`, `test_docs_consistency`,
+     `test_compat`, `test_probes`, `test_serve`, `test_launcher`, `test_jobs`.
+   - `--help` and every `--help TOPIC` byte-identical before and after.
+   - `--verbose` output identical before and after (temporary names, times and the build-record folder aside) on a fixed
+     set: one document to PDF, `--to html`, `--to docx`, `-r` on `examples/book`, `-b -j 2`, and the documents that use
+     the package's feature.
+   - The full suite once, after the last move (the author, 2026-11-09), not per move.
+8. **Docs** that say where code lives (CLAUDE.md, README, docstrings) change in the same commit.
+9. **Progress.** When a package is done, its heading here gets "done in 3.33.x (commit)". When all are done, phase 2 is
+   planned and this file is rewritten for it.
 
-## 2. Code to Move into NEW Packages in `lib/`
+## Phase 2 clusters (for later; read from where the remaining definitions sit)
 
-These represent substantial, self-contained subsystems that do not fit neatly into existing packages and can be spun off into new `pdfmd_*` modules in `lib/`:
+Configuration, paths and document discovery; the filter-argument glue for `lib/pdfmd_lua`; markup and metadata layers;
+engine and tool resolution; preamble and Lua-filter discovery; stamps and PDF metadata; labels and calc seeding; output
+naming; the direct and cached routes; `run_main` itself (about 1,000 lines of dispatch).
 
-### A. Core External & Secondary Feature Packages
+## Phase 1: the packages, in order
 
-1. **`lib/pdfmd_install/`** ([lines 9900–11200](file://~/dev/py/pdfmd/pdfmd.py#L9900-L11200), **~1,300 lines**)
-   - **Functions**: `download_file`, `extract_executable`, `github_release_asset`, `github_latest_release`, `install_typst`, `install_node`, `ensure_node`, `install_katex`, `install_mathjax`, `install_d2`, `install_graphviz`, `install_calibre` (and macOS DMG handling), `install_tectonic`, `install_extra`, `install_kind`, `uninstall_kind`.
-   - **Rationale**: Completely independent network/archive tool downloader and verifier (SHA-256 validation). Has zero runtime dependencies on document parsing or PDF compilation.
+The order goes from the smallest risk to the largest. Wave 1 sets the pattern for a new and for an existing package; the
+hard packages come last, when the pattern is proven. "Tests" are the test modules that name the package's definitions or
+its feature, run in addition to the always-run set.
 
-2. **`lib/pdfmd_native/`** ([lines 5809–7316](file://~/dev/py/pdfmd/pdfmd.py#L5809-L7316), **~1,508 lines**)
-   - **Functions / Classes**: `MathText` (252-line class converting LaTeX math to readable Unicode text/matplotlib), `normalise_gfm` (225-line AST normalizer), `NativeSource`, `centred_math`, `inline_math`, `stacked_math`, `mathtext_form`, `csv_div_table`, `strip_html_comments`, `convert_math_items`, `protect_dollars`, `render_native`, `render_calibre_markdown`, `convert_native`.
-   - **Rationale**: The entire Pandoc-less fallback rendering tier. `pdfmd_inkmd` is vendored, but all AST transformation and math formatting logic currently sits in `pdfmd.py`.
+### Wave 1: the pattern (Opus)
 
-3. **`lib/pdfmd_assemble/`** or **`lib/pdfmd_embed/`** ([lines 19692–21450](file://~/dev/py/pdfmd/pdfmd.py#L19692-L21450), **~1,759 lines**)
-   - **Functions / Classes**: `assemble_markdown_text`, `write_assembled_markdown`, `EmbedPlan`, `render_embedded_block`, `render_embedded_file`, `parse_embedded_blocks`, `trust_store_path`, `trusted_hashes`, `remember_trusted`, `unpack_assembled` (196 lines), `slim_assembled`, `embedded_resources`, `embed_into_text` (349 lines).
-   - **Rationale**: The `--stop-at markdown`, `--embed-metadata`, and `--unpack` pipeline. Implements fenced `{=pdfmd}` block rendering, trust stores for embedded Lua filters, and unbundling.
+#### 1. `pdfmd_comments` (new package): 8 definitions, ~244 lines
 
-4. **`lib/pdfmd_scaffold/`** or **`lib/pdfmd_parts/`** ([lines 18027–19200](file://~/dev/py/pdfmd/pdfmd.py#L18027-L19200), **~1,174 lines**)
-   - **Functions / Classes**: `chapter_order`, `parts_directory`, `collect_parts`, `part_slug`, `select_parts`, `select_parts_and_sections`, `ScaffoldPlan`, `plan_scaffold`, `wrap_part`, `wrap_runs`, `scaffold_inputs`, `split_top_level_sections`, `scan_headings`, `scan_items`, `find_heading`, `section_source`, `plan_sections`, `split_into_parts`.
-   - **Rationale**: Multi-part document assembly, scaffold division, and section targeting (`pdfmd doc#section`). Complements `pdfmd_report` and `pdfmd_batch`.
+Definitions: `scan_comment_line`, `strip_markdown_comments`, `CommentPolicy`, `comment_kind_set`, `parse_comment_policy`, `tex_comment_start`, `strip_tex_comments`, `strip_xml_comments`.
 
-5. **`lib/pdfmd_attach/`** or **`lib/pdfmd_bundle/`** ([lines 25454–26399](file://~/dev/py/pdfmd/pdfmd.py#L25454-L26399), **~946 lines**)
-   - **Functions**: `referenced_images`, `tex_distribution_roots`, `graphic_names_in`, `tex_tree_dependencies`, `bundle_files`, `attachment_manifest`, `attached_source`, `add_deflated_attachment`, `write_pdf_attachments`, `read_pdf_attachments`, `source_attachments`, `attach_source_after_success`, `keep_source_after_success`.
-   - **Rationale**: Post-build packaging that attaches the source code and dependency tree into the generated PDF (`--attach-source`, `--bundle`).
+Constants that move with it (only this package reads them): `COMMENT_KIND_NAMES`, `KEEP_COMMENT_RE`, `LIST_ITEM_RE`, `TEX_KEEP_COMMENT_RE`, `TEX_VERBATIM_BEGIN_RE`.
 
-6. **`lib/pdfmd_tex/`** or **`lib/pdfmd_latex/`** ([lines 11711–12231](file://~/dev/py/pdfmd/pdfmd.py#L11711-L12231), [21951–22251](file://~/dev/py/pdfmd/pdfmd.py#L21951-L22251), [23505–23758](file://~/dev/py/pdfmd/pdfmd.py#L23505-L23758), **~809 lines**)
-   - **Functions**: `wrap_latex_header_includes`, `document_latex_definitions`, `is_latex_preamble`, `latex_engine_command`, `run_tex_engine`, `compile_tex_direct`, `engine_failure_reason`, `tex_failure_cause`, `tex_log_dewrap`, `tex_log_failure_reason`, `tex_tree_stamp`, `plot_preamble`, `render_plot_requests`.
-   - **Rationale**: Direct TeX engine compilation, TeX `.log` un-wrapping / error diagnostics, and standalone plot cache management.
+Facts: 8 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
 
-7. **`lib/pdfmd_restore/`** ([lines 27099–27619](file://~/dev/py/pdfmd/pdfmd.py#L27099-L27619), **~521 lines**)
-   - **Functions**: `restore_chain`, `restore_target_name`, `check_source_command`, `restore_from_pdf`, `restore_attachments_in_place`, `restore_from_markdown`, `restore_front_matter`, `layout_from_source`.
-   - **Rationale**: Reconstructs Markdown sources, preambles, and sibling files from compiled PDFs (`pdfmd --restore`).
+Note: Leaf: nothing it calls is in another group. Sets the pattern for a NEW package (binding, re-exports, packaging in three places).
 
-8. **`lib/pdfmd_bridge/`** ([lines 23859–24319](file://~/dev/py/pdfmd/pdfmd.py#L23859-L24319), **~461 lines**)
-   - **Functions**: `run_soffice_convert`, `convert_office_direct`, `convert_via_soffice_bridge`, `start_soffice_job`, `calibre_html_command`, `calibre_page_options`, `run_calibre`, `run_calibre_convert`, `browser_page_css`, `run_browser_print`.
-   - **Rationale**: Headless converter bridges that invoke LibreOffice, Calibre `ebook-convert`, or headless Chrome/Chromium/Edge for printing.
+Tests: `test_attach`, `test_pagebreak`, `test_show_comments`, `test_tables`.
 
-9. **`lib/pdfmd_lookup/`** ([lines 13049–13443](file://~/dev/py/pdfmd/pdfmd.py#L13049-L13443), **~395 lines**)
-   - **Functions / Classes**: `latin_candidates`, `cyrillic_candidates`, `strip_lookup_suffix`, `find_wildcard_markdown`, `lookup_key`, `lookup_query_keys`, `LookupAmbiguous`, `rank_lookup`, `lookup_fields`, `priority_enabled`, `source_markdown`, `document_priority`.
-   - **Rationale**: Bare document name fuzzy matching, transliteration cross-matching, and wildcard resolution.
+#### 2. `pdfmd_templates` (existing package): 3 definitions, ~63 lines
 
-10. **`lib/pdfmd_pdfimages/`** or **`lib/pdfmd_extract/`** ([lines 26416–26715](file://~/dev/py/pdfmd/pdfmd.py#L26416-L26715), **~300 lines**)
-    - **Functions**: `png_chunk`, `encode_png`, `file_picture_size`, `pdf_pictures`, `match_images_to_pdf`, `samples_to_png`, `form_to_pdf`, `extract_pdf_images`, `rewrite_tex_image_paths`, `rewrite_image_paths`.
-    - **Rationale**: Low-level PDF stream parsing to extract raster and vector figures back into image files.
+Definitions: `templates_module`, `git_user_name`, `init_command`.
 
-11. **`lib/pdfmd_polish/`** ([lines 27640–27929](file://~/dev/py/pdfmd/pdfmd.py#L27640-L27929), **~290 lines**)
-    - **Functions**: `parse_hf_template`, `fill_hf_field`, `markdown_headings`, `search_form`, `locate_headings`, `outline_entries`, `hf_overlay`, `local_file_of_link`, `polish_pdf`.
-    - **Rationale**: Post-processing PDF modifications: running header/footer overlay via `pypdf`, outline/bookmark injection, and hyperlink path normalization.
+Facts: 1 callers stay in pdfmd.py (re-exported); 2 pdfmd names read through `core`.
 
-12. **`lib/pdfmd_foreign/`** or **`lib/pdfmd_compat/`** ([lines 27946–28234](file://~/dev/py/pdfmd/pdfmd.py#L27946-L28234), **~289 lines**)
-    - **Functions**: `mdpdf_translate`, `mdpdf_main`, `md2pdf_translate`, `md2pdf_main`, `inkmd_translate`, `inkmd_main`, `batchmd_translate`, `batchmd_main`, `pan_tec_translate`, `pan_tec_main`.
-    - **Rationale**: Compatibility CLI entrypoints that simulate external tools (`mdpdf`, `md2pdf`, `pan-tec`).
+Note: Sets the pattern for an EXISTING package: the lazy loader `templates_module()` goes, the package calls itself directly.
 
-13. **`lib/pdfmd_comments/`** ([lines 19793–20080](file://~/dev/py/pdfmd/pdfmd.py#L19793-L20080), **~288 lines**)
-    - **Functions / Classes**: `scan_comment_line`, `strip_markdown_comments`, `CommentPolicy`, `comment_kind_set`, `parse_comment_policy`, `tex_comment_start`, `strip_tex_comments`, `strip_xml_comments`.
-    - **Rationale**: Multi-format comment stripping (Markdown HTML comments, TeX `%` comments, XML/CSL comments).
+Tests: `test_templates`.
 
-14. **`lib/pdfmd_routing/`** or **`lib/pdfmd_ocr/`** ([lines 26733–27092](file://~/dev/py/pdfmd/pdfmd.py#L26733-L27092), **~360 lines**)
-    - **Functions**: `batchocr_spec`, `find_batchocr`, `install_ocr_tools`, `route_ebook_input`, `route_pdf_input`, `route_text_input`.
-    - **Rationale**: OCR pre-processing and input format routing for non-Markdown formats.
+### Wave 2: small and self-contained (Sonnet, reviewed)
 
-15. **`lib/pdfmd_doctor/`** ([lines 7525–7778](file://~/dev/py/pdfmd/pdfmd.py#L7525-L7778), **~254 lines**)
-    - **Functions**: `foreign_commands`, `doctor_report`, `deep_checks`, `completion_options`, `completion_script`.
-    - **Rationale**: `--doctor` diagnostic report generator and shell completion script generators for bash, zsh, and fish.
+#### 3. `pdfmd_watch` (new package): 3 definitions, ~70 lines
 
-16. **`lib/pdfmd_cache/`** ([lines 22347–22599](file://~/dev/py/pdfmd/pdfmd.py#L22347-L22599), **~253 lines**)
-    - **Functions**: `cache_root`, `folder_is_writable`, `temporary_place`, `cache_location`, `document_cache_root`, `source_fingerprint`, `adopt_moved_cache`, `cache_directory`.
-    - **Rationale**: Global vs. local document cache management, CACHEDIR.TAG handling, and adoption of moved project directories.
+Definitions: `watch_signature`, `pinned_watch_argv`, `run_watch`.
 
-17. **`lib/pdfmd_view/`** ([lines 4885–5037](file://~/dev/py/pdfmd/pdfmd.py#L4885-L5037), **~153 lines**)
-    - **Functions**: `view_child_arguments`, `view_stdin_file`, `view_sources`, `stdin_build`, `view_wants_pager`, `run_pager`, `terminal_view`.
-    - **Rationale**: Terminal viewer (`--view`) and pager integration.
+Facts: 1 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
 
-18. **`lib/pdfmd_hybrid/`** ([lines 28432–28521](file://~/dev/py/pdfmd/pdfmd.py#L28432-L28521), **~90 lines**)
-    - **Functions**: `resolve_hybrid`, `odf_source_for`, `attach_hybrid`, `hybrid_after_success`.
-    - **Rationale**: Embedding editable LibreOffice ODF files into the output PDF (`--hybrid`).
+Tests: `test_ranking_generated`.
 
-19. **`lib/pdfmd_cli_parser/`** ([lines 28821–29747](file://~/dev/py/pdfmd/pdfmd.py#L28821-L29747), **~927 lines**)
-    - **Functions**: `build_parser`.
-    - **Rationale**: The huge `argparse` tree configuring all command-line flags and help text.
+#### 4. `pdfmd_hybrid` (new package): 4 definitions, ~84 lines
 
-20. **`lib/pdfmd_watch/`** ([lines 29753–29826](file://~/dev/py/pdfmd/pdfmd.py#L29753-L29826), **~74 lines**)
-    - **Functions**: `watch_signature`, `pinned_watch_argv`, `run_watch`.
-    - **Rationale**: Continuous re-compilation file watcher.
+Definitions: `resolve_hybrid`, `odf_source_for`, `attach_hybrid`, `hybrid_after_success`.
 
-*Subtotal:* **~12,150 lines**
+Constants that move with it (only this package reads them): `HYBRID_DESCRIPTION`, `HYBRID_FAMILY`.
 
----
+Facts: 1 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `core`.
 
-## 3. What Should REMAIN in `pdfmd.py`
+Tests: `test_embedding`.
 
-To preserve `pdfmd`'s role as the central CLI entry point, executable script, and public Python API, the following components should remain in `pdfmd.py`:
+#### 5. `pdfmd_ansi` (existing package): 7 definitions, ~77 lines
 
-1. **Module Docstring & Version** ([lines 1–1674](file://~/dev/py/pdfmd/pdfmd.py#L1-L1674)): The comprehensive authoritative guide, changelog reference, and `PDFMD_VERSION`.
-2. **Path Setup**: Ensuring `lib/` is on `sys.path` when running from checkout.
-3. **Core Pipeline Orchestrator**: `convert_one` and the core Pandoc command execution loop `_convert_one_core` ([lines 24491–25340](file://~/dev/py/pdfmd/pdfmd.py#L24491-L25340)), coordinating which filters and engines to invoke.
-4. **Main CLI Dispatch**: `main()` and `run_main()` ([lines 29906–30766](file://~/dev/py/pdfmd/pdfmd.py#L29906-L30766)), directing traffic to the respective modules.
-5. **Public Python API**: `convert_file`, `convert_text`, `PdfmdError` ([lines 30784–30864](file://~/dev/py/pdfmd/pdfmd.py#L30784-L30864)).
-6. **Backward-Compatibility Re-exports**: Over 550 tests directly access `pdfmd.<function_name>`; keeping lightweight aliases in `pdfmd.py` ensures zero breakage across the 182-file test suite.
+Definitions: `ansi_width_argument`, `ansi_columns`, `ansi_colour_on`, `ansi_math`, `ansi_document_text`, `ansi_finish`, `ansi_without_pandoc`.
 
----
+Facts: 3 callers stay in pdfmd.py (re-exported); 11 pdfmd names read through `core`.
 
-## 4. Migration & Architecture Guidelines
+Tests: `test_ansi`.
 
-When extracting these modules in future commits, follow the architectural conventions established in `CHANGELOG.md` (commit `e308bde` / entry 3ev):
+#### 6. `pdfmd_serve` (existing package): 6 definitions, ~89 lines
 
-- **The `core` pattern**: Pass the `pdfmd` module instance to extracted functions (e.g., `run(core, ...)`) rather than having submodules re-import `pdfmd`. This avoids circular imports and prevents duplicate copies of module-level state (`AUTO_LOG`, `CITEPROC_DISABLED`).
-- **Packaging registration**: Each new package folder `lib/pdfmd_<name>` must be registered in:
-  1. [`pyproject.toml`](file://~/dev/py/pdfmd/pyproject.toml): `packages` list and `[tool.setuptools.package-dir]`.
-  2. [`scripts/build_zipapp.py`](file://~/dev/py/pdfmd/scripts/build_zipapp.py): `PACKAGES` tuple.
-  3. Checked by [`tests/test_packaging.py`](file://~/dev/py/pdfmd/tests/test_packaging.py) (`test_every_package_is_mapped_to_lib_and_the_root_holds_none`).
-- **Zero behavior change**: Retain exact signatures and behavior so `pdfmd` CLI invocations and tests produce byte-identical output.
+Definitions: `serve_main_document`, `serve_discovered`, `serve_live_filters`, `serve_core`, `serve_command`, `api_command`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 12 pdfmd names read through `core`.
+
+Note: `serve_live_filters` is read by `test_serve` (one filter list); that test already finds it in `lib/`.
+
+Tests: `test_serve`.
+
+#### 7. `pdfmd_flat` (existing package): 8 definitions, ~112 lines
+
+Definitions: `pandoc_extensions`, `flat_settings`, `flat_writer`, `flat_filter_args`, `split_ascii_target`, `ascii_missing`, `ascii_filter_args`, `ascii_finish`.
+
+Constants that move with it (only this package reads them): `_PANDOC_EXTENSIONS`.
+
+Facts: 2 callers stay in pdfmd.py (re-exported); 9 pdfmd names read through `core`.
+
+Tests: `test_ascii`, `test_flat`, `test_keep_source`, `test_probes`, `test_setup`.
+
+#### 8. `pdfmd_docs` (existing package): 6 definitions, ~164 lines
+
+Definitions: `document_file`, `document_headings`, `document_section`, `search_documents`, `render_document`, `doc_command`.
+
+Constants that move with it (only this package reads them): `DOCUMENTS`, `DOC_URL`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
+
+Tests: `test_compat`, `test_doc`, `test_docs_consistency`, `test_doctor`, `test_docx_tables`, `test_packaging`, `test_sections`.
+
+#### 9. `pdfmd_css` (existing package): 6 definitions, ~191 lines
+
+Definitions: `css_scope`, `css_names`, `css_sources`, `css_additions`, `css_heading_latex`, `css_heading_args`.
+
+Constants that move with it (only this package reads them): `CSS_COLOURS`, `CSS_HEADING_COMMANDS`, `CSS_HEADING_DEFAULTS`, `CSS_HEADING_OWN_RE`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 16 pdfmd names read through `core`.
+
+Tests: `test_css`, `test_css_v2`.
+
+#### 10. `pdfmd_crop` (existing package): 8 definitions, ~192 lines
+
+Definitions: `picture_target`, `picture_build`, `picture_sources`, `picture_page_folder`, `picture_targets`, `picture_one`, `multi_target_command`, `picture_command`.
+
+Constants that move with it (only this package reads them): `PICTURE_FORMATS`, `PICTURE_OPTIONS`, `TARGET_ONLY_OPTIONS`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 7 pdfmd names read through `core`.
+
+Tests: `test_crop`.
+
+#### 11. `pdfmd_obsidian` (existing package): 8 definitions, ~157 lines
+
+Definitions: `vault_app_setting`, `single_newline_mode`, `vault_root`, `embed_settings`, `_embed_folder_index`, `find_embedded_image`, `embed_source`, `embed_filter_args`.
+
+Constants that move with it (only this package reads them): `EMBED_FIT_WORDS`, `EMBED_SEARCH_WORDS`, `NEWLINE_WORDS`, `_EMBED_INDEX`, `_EMBED_SKIP_FOLDERS`, `_VAULT_ROOTS`.
+
+Facts: 4 callers stay in pdfmd.py (re-exported); 5 pdfmd names read through `core`.
+
+Tests: `test_embeds`, `test_newline`, `test_obsidian`, `test_wikilinks`.
+
+#### 12. `pdfmd_polish` (new package): 11 definitions, ~270 lines
+
+Definitions: `parse_hf_template`, `fill_hf_field`, `markdown_headings`, `search_form`, `locate_headings`, `outline_entries`, `hf_text`, `hf_overlay`, `local_file_of_link`, `polish_wanted`, `polish_pdf`.
+
+Constants that move with it (only this package reads them): `HF_FIELDS`, `HF_FONT`, `HF_MARGIN`, `HF_SIZE`, `LINKED_FILE_LIMIT`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 7 pdfmd names read through `core`.
+
+Tests: `test_polish`, `test_sections`.
+
+#### 13. `pdfmd_pdfimages` (new package): 10 definitions, ~268 lines
+
+Definitions: `png_chunk`, `encode_png`, `file_picture_size`, `pdf_pictures`, `match_images_to_pdf`, `samples_to_png`, `form_to_pdf`, `extract_pdf_images`, `rewrite_tex_image_paths`, `rewrite_image_paths`.
+
+Constants that move with it (only this package reads them): `DECODE_LIMIT`, `SVG_UNITS`.
+
+Facts: 3 callers stay in pdfmd.py (re-exported); 3 pdfmd names read through `core`.
+
+Tests: `test_attach`, `test_standalone_source`.
+
+#### 14. `pdfmd_compat` (new package): 12 definitions, ~250 lines
+
+Definitions: `mdpdf_npm_file`, `mdpdf_npm_length`, `mdpdf_translate`, `mdpdf_main`, `md2pdf_translate`, `md2pdf_main`, `inkmd_translate`, `inkmd_main`, `batchmd_translate`, `batchmd_main`, `pan_tec_translate`, `pan_tec_main`.
+
+Constants that move with it (only this package reads them): `INKMD_KEYS`, `MD2PDF_ENGINE_WORDS`, `MD2PDF_IGNORED_VALUE_KEYS`, `MD2PDF_VALUE_KEYS`, `MDPDF_KEYS`, `MDPDF_NPM_FLAGS`, `MDPDF_NPM_VALUE_KEYS`.
+
+Facts: 0 callers stay in pdfmd.py (re-exported); 2 pdfmd names read through `core`.
+
+Note: `mdpdf_main`, `md2pdf_main` are console entry points in `pyproject.toml` (`pdfmd:mdpdf_main`): the re-export keeps them; check `pip install` metadata is unchanged.
+
+Tests: `test_compat`, `test_pan_tec`, `test_polish`.
+
+#### 15. `pdfmd_view` (new package): 9 definitions, ~197 lines
+
+Definitions: `view_child_arguments`, `view_stdin_file`, `view_sources`, `stdin_build`, `view_wants_pager`, `view_pager_setting`, `pager_command`, `run_pager`, `terminal_view`.
+
+Constants that move with it (only this package reads them): `ANSI_LINK_TERMINALS`, `BINARY_TARGETS`, `VIEW_DROPPED`, `VIEW_PAGER`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 12 pdfmd names read through `core`.
+
+Tests: `test_ansi`, `test_command_words`, `test_ranking_lists`.
+
+#### 16. `pdfmd_check` (existing package): 7 definitions, ~177 lines
+
+Definitions: `check_module`, `bibliography_names`, `bibliography_file_keys`, `check_bibliography`, `calc_check_records`, `check_documents`, `check_command`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 22 pdfmd names read through `core`.
+
+Note: The lazy loader `check_module()` goes.
+
+Tests: `test_check`, `test_check_source`.
+
+#### 17. `pdfmd_ranking` (existing package): 9 definitions, ~173 lines
+
+Definitions: `ranking_inherit_off`, `read_ranking_file`, `ranking_of_options`, `ranking_for_document`, `ranking_layers`, `ranking_clashes`, `bare_ranking`, `priority_candidates`, `which_command`.
+
+Constants that move with it (only this package reads them): `FOLDER_SETTINGS`, `RANKING_DOCUMENT_KEYS`, `RANKING_FILE`.
+
+Facts: 4 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `core`.
+
+Tests: `test_ranking_bare`, `test_ranking_generated`, `test_ranking_layers`, `test_ranking_lists`, `test_ranking_rules`, `test_ranking_which`.
+
+#### 18. `pdfmd_lookup` (new package): 13 definitions, ~228 lines
+
+Definitions: `latin_candidates`, `cyrillic_candidates`, `strip_lookup_suffix`, `find_wildcard_markdown`, `lookup_key`, `lookup_query_keys`, `LookupAmbiguous`, `lookup_field_matches`, `rank_lookup`, `lookup_fields`, `priority_enabled`, `source_markdown`, `document_priority`.
+
+Constants that move with it (only this package reads them): `CYRILLIC_LOOSE`, `GENERATED_MARKDOWN_ENDINGS`, `LOOKUP_HEAD_BYTES`, `LOOKUP_MIN_PREFIX`.
+
+Facts: 11 callers stay in pdfmd.py (re-exported); 16 pdfmd names read through `core`.
+
+Tests: `test_lookup`, `test_translit`.
+
+#### 19. `pdfmd_setup` (existing package): 8 definitions, ~184 lines
+
+Definitions: `user_path_command`, `setup_actions`, `setup_hint_state`, `maybe_hint_setup`, `flag_topics`, `flag_names`, `setup_sources`, `setup_command`.
+
+Constants that move with it (only this package reads them): `FOLDER_HEADER`, `FOLDER_METADATA_HEADER`, `METADATA_HEADER`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 19 pdfmd names read through `core`.
+
+Tests: `test_ansi`, `test_atomic`, `test_auto_states`, `test_presets`, `test_setup`, `test_setup_folder`, `test_user_path`.
+
+#### 20. `pdfmd_kits` (existing package): 11 definitions, ~217 lines
+
+Definitions: `package_places`, `kpsewhich_locate`, `read_package_helper`, `kit_package_folders`, `kit_install_record`, `kits_report`, `kit_header_insert`, `kit_header_settle`, `kit_cache_tex`, `kit_header_resolve`, `kit_carried_files`.
+
+Facts: 12 callers stay in pdfmd.py (re-exported); 18 pdfmd names read through `core`.
+
+Tests: `test_kit_carry`, `test_kit_install`, `test_kit_no_auto`, `test_kit_preamble`, `test_kit_selection`, `test_kit_texinputs`, `test_kits`, `test_package_helper`, `test_probes`.
+
+#### 21. `pdfmd_buildinfo` (existing package): 12 definitions, ~224 lines
+
+Definitions: `begin_timer`, `timed`, `resolve_build_time`, `attach_time`, `time_breakdown`, `record_module`, `_RecordTee`, `build_log_mode_word`, `resolve_build_log`, `build_record_folders`, `BuildRecorder`, `last_build_command`.
+
+Constants that move with it (only this package reads them): `BUILD_LOG_KEEP`, `BUILD_LOG_KILOBYTES`.
+
+Facts: 18 callers stay in pdfmd.py (re-exported); 22 pdfmd names read through `core`.
+
+Note: 18 callers outside: re-exports carry them. The lazy loaders `timing_module()`/`record_module()` go where nothing else needs them.
+
+Tests: `test_build_log`, `test_build_time`.
+
+#### 22. `pdfmd_tables` (existing package): 5 definitions, ~245 lines
+
+Definitions: `csv_defaults`, `table_keep_metadata`, `spreadsheet_args`, `csv_table_filter_args`, `tables_command`.
+
+Constants that move with it (only this package reads them): `CSV_CUTS`.
+
+Facts: 5 callers stay in pdfmd.py (re-exported); 27 pdfmd names read through `core`.
+
+Tests: `test_cellalign`, `test_celltags`, `test_csv_switch`, `test_csv_table`, `test_docx_tables`, `test_serve`, `test_spreadsheets`, `test_syntax_table`, `test_table_ascii`, `test_table_captions`, `test_table_keep`, `test_table_widths`, `test_tables`.
+
+### Wave 3: medium (Sonnet, reviewed)
+
+#### 23. `pdfmd_routing` (new package): 10 definitions, ~287 lines
+
+Definitions: `tessdata_environment`, `batchocr_spec`, `find_batchocr`, `install_ocr_tools`, `batchocr_missing_message`, `pdf_read_target`, `route_ebook_input`, `route_pdf_input`, `text_to_markdown_mode`, `route_text_input`.
+
+Constants that move with it (only this package reads them): `BATCHOCR_REPOSITORY`, `BATCHOCR_TAG`, `BATCHOCR_TEXT_MIN`, `EBOOK_INPUT_EXTENSIONS`, `PDF_READ_FORMATS`.
+
+Facts: 4 callers stay in pdfmd.py (re-exported); 23 pdfmd names read through `core`.
+
+Tests: `test_ebook_input`, `test_install_ocr`, `test_pdf_input`, `test_tessdata`.
+
+#### 24. `pdfmd_bridge` (new package): 10 definitions, ~248 lines
+
+Definitions: `run_soffice_convert`, `convert_office_direct`, `convert_via_soffice_bridge`, `calibre_html_command`, `calibre_page_options`, `run_calibre`, `start_soffice_job`, `run_calibre_convert`, `browser_page_css`, `run_browser_print`.
+
+Constants that move with it (only this package reads them): `CALIBRE_TABLE_CSS`, `PANDOC_TABLE_STYLE_RE`.
+
+Facts: 6 callers stay in pdfmd.py (re-exported); 32 pdfmd names read through `core`.
+
+Tests: `test_browser_engine`, `test_calibre`, `test_calibre_targets`, `test_soffice_timeout`.
+
+#### 25. `pdfmd_office` (existing package): 15 definitions, ~414 lines
+
+Definitions: `office_package_folders`, `office_defaults_sources`, `find_office_profile`, `find_reference_doc`, `OfficeArguments`, `office_properties`, `office_finish`, `run_office_pandoc`, `build_office_pandoc`, `describe_fragment`, `print_office_check`, `check_docx_command`, `office_render_fragments`, `office_convert_asset`, `init_reference`.
+
+Facts: 6 callers stay in pdfmd.py (re-exported); 18 pdfmd names read through `core`.
+
+Note: `pdfmd_office` costs about 10 ms to import: keep heavy imports inside functions, so the re-export does not slow every start.
+
+Tests: `test_docx_tables`, `test_indent_office`, `test_markup_word`, `test_office`, `test_office_latex`, `test_old_python_syntax`, `test_paper`, `test_raw`.
+
+#### 26. `pdfmd_history` (existing package): 26 definitions, ~680 lines
+
+Definitions: `entry_line`, `notes_to_entries`, `entries_to_notes`, `backup_folders`, `document_versions`, `version_text`, `version_differs`, `restore_version`, `history_documents`, `linked_metadata`, `history_view_command`, `history_act`, `history_interactive`, `init_backups_command`, `history_command`, `backup_directory`, `backup_template`, `fill_backup_template`, `backup_name_regex`, `_plain_backup_patterns`, `backup_snapshots`, `backup_unchanged`, `backup_after_success`, `backup_pdf_pattern`, `backup_pdf_after_success`, `backup_summary`.
+
+Constants that move with it (only this package reads them): `BACKUP_FORMATS`, `BACKUP_IGNORED_LINE_RE`, `HISTORY_SHOWN`, `LEGACY_BACKUP_DIRS`, `_COUNTER`, `_STRFTIME_PATTERNS`.
+
+Facts: 5 callers stay in pdfmd.py (re-exported); 32 pdfmd names read through `core`.
+
+Note: The lazy loader `history_module()` goes where nothing else needs it.
+
+Tests: `test_atomic`, `test_backup_keep`, `test_backup_pdfs`, `test_backup_summary`, `test_history`, `test_partial_history`, `test_tables`, `test_versions`.
+
+#### 27. `pdfmd_restore` (new package): 16 definitions, ~518 lines
+
+Definitions: `folder_counts`, `restored_image_paths`, `restore_chain`, `restore_target_name`, `check_source_command`, `restore_from_pdf`, `restore_attachments`, `restore_attachments_in_place`, `restore_from_markdown`, `restore_front_matter`, `original_metadata_text`, `without_parts`, `text_holds_parts`, `is_global_layout_entry`, `assembled_origin`, `layout_from_source`.
+
+Constants that move with it (only this package reads them): `RESTORE_CHAIN`.
+
+Facts: 4 callers stay in pdfmd.py (re-exported); 30 pdfmd names read through `core`.
+
+Tests: `test_attach`, `test_attach_format`, `test_attach_layers`, `test_kit_carry`, `test_standalone_source`.
+
+#### 28. `pdfmd_parts` (new package): 32 definitions, ~699 lines
+
+Definitions: `chapter_order`, `parts_directory`, `collect_parts`, `part_slug`, `part_keys`, `NoPartMatches`, `NoHeadingMatches`, `select_parts`, `select_parts_and_sections`, `ScaffoldPlan`, `warn_shared_parts_folder`, `plan_scaffold`, `wrap_part`, `wrap_runs`, `scaffold_inputs`, `split_top_level_sections`, `slug_of`, `heading_parts`, `scan_headings`, `block_ids`, `scan_labelled_blocks`, `scan_items`, `parse_section_request`, `describe_heading`, `item_label`, `find_heading`, `outermost_headings`, `section_label`, `SectionPlan`, `section_source`, `plan_sections`, `split_into_parts`.
+
+Constants that move with it (only this package reads them): `ATTRIBUTE_ID_RE`, `ATX_HEADING_RE`, `HEADING_ATTRIBUTES_RE`, `HEADING_FIELD_WORDS`, `Heading`, `PARTS_SKIP_DIRS`, `PART_FENCE`, `SETEXT_UNDERLINE_RE`, `TABLE_LINE_RE`.
+
+Facts: 9 callers stay in pdfmd.py (re-exported); 22 pdfmd names read through `core`.
+
+Tests: `test_ansi`, `test_calc`, `test_css_v2`, `test_direct`, `test_labels`, `test_native`, `test_office`, `test_partial_history`, `test_partial_provenance`, `test_sections`, `test_soffice_parts`, `test_symlinked_parts`, `test_typst_input`, `test_wikilinks`.
+
+#### 29. `pdfmd_doctor` (new package): 9 definitions, ~377 lines
+
+Definitions: `tool_note`, `user_path_hint`, `pandoc_limits`, `folder_size`, `deep_checks`, `foreign_commands`, `doctor_report`, `completion_options`, `completion_script`.
+
+Constants that move with it (only this package reads them): `DEEP_SAMPLE`, `PANDOC_FEATURES`.
+
+Facts: 1 callers stay in pdfmd.py (re-exported); 41 pdfmd names read through `core`.
+
+Tests: `test_compat`, `test_completion`, `test_doctor`, `test_install_python`, `test_setup`, `test_tool_locations`.
+
+### Wave 4: the hard ones (Opus)
+
+#### 30. `pdfmd_cache` (new package): 8 definitions, ~104 lines
+
+Definitions: `cache_root`, `folder_is_writable`, `temporary_place`, `cache_location`, `document_cache_root`, `source_fingerprint`, `adopt_moved_cache`, `cache_directory`.
+
+Constants that move with it (only this package reads them): `CACHE_LOCATION_NAMES`, `TEMPORARY_PLACES`.
+
+Facts: 33 callers stay in pdfmd.py (re-exported); 9 pdfmd names read through `core`; calls to test-patched names inside the package: `cache_directory->cache_root`, `document_cache_root->cache_root`.
+
+Note: 33 callers outside. Tests patch `pdfmd.cache_root` (5 files): inside the package, `document_cache_root` and `cache_directory` call it as `core.cache_root`.
+
+Tests: `test_cache_location`, `test_config`, `test_css_v2`, `test_doc`, `test_header_includes`, `test_markup_callouts`, `test_markup_highlight`, `test_picture_cache_protocol`, `test_plot_cache`, `test_readonly_home`, `test_sections`, `test_show_comments`.
+
+#### 31. `pdfmd_unicode` (existing package): 13 definitions, ~332 lines
+
+Definitions: `installed_font_families`, `font_missing`, `system_font_missing`, `default_monofont`, `fallback_font`, `preferred_font`, `font_args`, `unicode_code_text`, `unicode_forced`, `managed_fonts_css`, `check_fonts`, `describe_code_points`, `script_fallback`.
+
+Constants that move with it (only this package reads them): `CODE_FONTS_HTML`, `CODE_FONTS_TYPST`, `DEFAULT_FONT`, `EMOJI_FAMILIES`, `MONOFONT_STAND_INS`, `SERIF_STAND_INS`, `UNICODE_ENGINES`.
+
+Facts: 8 callers stay in pdfmd.py (re-exported); 21 pdfmd names read through `core`; calls to test-patched names inside the package: `check_fonts->preferred_font`, `font_args->system_font_missing`, `font_missing->system_font_missing`.
+
+Note: Tests patch `system_font_missing` and `preferred_font`: inside the package, calls to them go through `core.`. The lazy loader `unicode_module()` goes.
+
+Tests: `test_apple_emoji`, `test_ascii`, `test_font_retry_note`, `test_install_python`, `test_katex_scale`, `test_mathfont`, `test_probes`, `test_setup`, `test_tessdata`, `test_translit`, `test_unicode`.
+
+#### 32. `pdfmd_install` (new package): 43 definitions, ~904 lines
+
+Definitions: `typst_asset_name`, `github_release_asset`, `download_file`, `extract_executable`, `install_typst`, `node_install_hint`, `node_asset_name`, `install_node`, `unpack_katex`, `katex_works`, `install_katex`, `mathjax_package_url`, `unpack_npm`, `mathjax_keeps_source`, `mathjax_keeps_font`, `install_mathjax_files`, `mathjax_works`, `ensure_node`, `install_mathjax`, `d2_asset_name`, `github_latest_release`, `install_d2`, `unpack_graphviz`, `write_graphviz_launchers`, `install_graphviz`, `install_diagram`, `calibre_asset_pattern`, `calibre_release_asset`, `release_asset_matching`, `calibre_package_manager`, `calibre_install_hint`, `safe_unpack_tar`, `detach_disk_image`, `install_calibre_dmg`, `install_calibre`, `tectonic_asset_pattern`, `install_tectonic`, `install_kind`, `uninstall_kind`, `kit_install_settings`, `install_kits`, `install_fonts`, `install_extra`.
+
+Constants that move with it (only this package reads them): `CALIBRE_REPOSITORY`, `D2_REPOSITORY`, `D2_TARGETS`, `DIAGRAM_INSTALLS`, `GRAPHVIZ_COMMANDS`, `GRAPHVIZ_PACKAGE`, `GRAPHVIZ_SHA256`, `GRAPHVIZ_VERSION`, `INSTALL_SPECS`, `KATEX_KEPT`, `KATEX_PACKAGE`, `KATEX_SHA256`, `KIT_SOURCES_DEFAULT`, `MATHJAX_BUNDLE_FOLDERS`, `MATHJAX_BUNDLE_INPUT`, `MATHJAX_BUNDLE_KEPT`, `MATHJAX_FONT_SIZES`, `MATHJAX_REGISTRY`, `MATHJAX_SOURCE_SHA256`, `NODE_DIST`, `NODE_TARGETS`, `TECTONIC_REPOSITORY`, `TECTONIC_TARGETS`, `TYPST_REPOSITORY`, `TYPST_TARGETS`.
+
+Facts: 3 callers stay in pdfmd.py (re-exported); 27 pdfmd names read through `core`; calls to test-patched names inside the package: `install_calibre->download_file`, `install_d2->d2_asset_name`, `install_d2->download_file`, `install_d2->github_latest_release`, `install_extra->install_extra`, `install_extra->install_tectonic`, `install_extra->install_typst`, `install_graphviz->download_file`, `install_katex->download_file`, `install_kits->download_file`, `install_mathjax_files->download_file`, `install_node->download_file`, `install_tectonic->download_file`, `install_typst->download_file`, `install_typst->github_release_asset`, `install_typst->typst_asset_name`.
+
+Note: Tests patch six of its functions (`download_file`, `github_release_asset`, `github_latest_release`, `install_typst`, `install_tectonic`, `install_extra`): 16 calls inside the package go through `core.`.
+
+Tests: `test_engine_filters`, `test_formula`, `test_install_calibre`, `test_install_core_tex`, `test_install_diagram`, `test_install_ocr`, `test_install_python`, `test_kit_install`, `test_mathjax`, `test_native`, `test_packaging`, `test_tessdata`.
+
+#### 33. `pdfmd_tex` (new package): 18 definitions, ~494 lines
+
+Definitions: `is_latex_preamble`, `top_level_tikzpicture`, `wrap_latex_header_includes`, `package_latex_keys`, `document_latex_definitions`, `engine_failure_reason`, `tex_failure_cause`, `tex_wants_rerun`, `tex_log_dewrap`, `tex_log_failure_reason`, `tex_bibliography_tool`, `latex_engine_command`, `run_tex_engine`, `tex_tree_stamp`, `plot_preamble`, `plot_recorded_inputs`, `render_plot_requests`, `compile_tex_direct`.
+
+Constants that move with it (only this package reads them): `AUX_CLEAN_SUFFIXES`, `MAX_TEX_DIRECT_PASSES`, `PLOT_CTX_MARGIN`, `PLOT_CTX_PLAIN`, `PLOT_CTX_TWICE`, `TEX_CAUSES`, `TEX_LOG_WRAP_WIDTH`, `TEX_PACKAGES`, `TEX_RERUN_TRIGGERS`.
+
+Facts: 10 callers stay in pdfmd.py (re-exported); 14 pdfmd names read through `core`.
+
+Tests: `test_header_includes`, `test_install_core_tex`, `test_kit_texinputs`, `test_package_helper`, `test_picture_cache_protocol`, `test_plot_cache`, `test_probes`, `test_tex_bin`, `test_tex_cause`, `test_texpackages`, `test_text_input`.
+
+#### 34. `pdfmd_attach` (new package): 32 definitions, ~773 lines
+
+Definitions: `folder_options_in_force`, `block_places`, `drop_blocks`, `drop_duplicate_blocks`, `inline_candidates`, `inline_blocks`, `attached_bundle_mode`, `layout_path`, `referenced_images`, `tex_distribution_roots`, `graphic_names_in`, `graphics_named_in`, `tex_tree_graphics`, `find_in_tex_tree`, `tex_names`, `tex_tree_dependencies`, `package_companions`, `bundle_reach`, `bundle_files`, `attachment_manifest`, `attached_source`, `resolve_bibliography_pruning`, `resolve_csl_attach`, `add_deflated_attachment`, `write_pdf_attachments`, `read_pdf_attachments`, `resolve_bundle_packages`, `attachment_requirements`, `csv_block_files`, `source_attachments`, `attach_source_after_success`, `keep_source_after_success`.
+
+Constants that move with it (only this package reads them): `ATTACH_FORMAT_PLAIN`, `BUNDLE_IMAGE_SUFFIXES`, `BUNDLE_SKIP_SUFFIXES`, `CLASS_RE`, `FONT_KEYS`, `GLOBAL_LAYOUT_PATH`, `GRAPHIC_ARGUMENT_RE`, `GRAPHIC_SUFFIXES`, `INLINE_LIMIT`, `INLINE_ORDER`, `INLINE_SUFFIXES`, `MACRO_VALUE_RE`, `PACKAGE_RE`, `PATH_TOKEN_RE`, `PROVIDES_RE`, `RAW_REFERENCE_RES`, `REFERENCE_EXTENSIONS`, `SCANNED_SUFFIXES`, `TEX_INPUT_RE`, `TEX_SOURCE_SUFFIXES`, `TEX_TREE_SCAN_LIMIT`.
+
+Facts: 10 callers stay in pdfmd.py (re-exported); 62 pdfmd names read through `core`.
+
+Tests: `test_atomic`, `test_attach`, `test_attach_format`, `test_attach_layers`, `test_check_source`, `test_edit_pdf`, `test_embedding`, `test_kit_carry`, `test_pdf_input`, `test_polish`, `test_standalone_source`.
+
+#### 35. `pdfmd_assemble` (new package): 23 definitions, ~995 lines
+
+Definitions: `mark_assembled`, `used_citation_keys`, `filter_bibliography`, `assemble_markdown_text`, `write_assembled_markdown`, `EmbedPlan`, `render_embedded_block`, `render_embedded_file`, `safe_relative_path`, `parse_embedded_blocks`, `trust_store_path`, `trusted_hashes`, `remember_trusted`, `split_preamble_parts`, `unpack_assembled`, `slim_assembled`, `embedded_resources`, `literal_block`, `strip_embedded_option_names`, `relative_filter_path`, `lua_checks_format`, `apply_lua_filters`, `embed_into_text`.
+
+Constants that move with it (only this package reads them): `ASSEMBLED_COMMENT`, `BIB_LINK_RE`, `BIB_SUFFIXES`, `FILE_ONLY_OPTION_KEYS`, `LATEX_CITE_RE`, `PANDOC_CITE_RE`, `PARTIAL_KEY`.
+
+Facts: 13 callers stay in pdfmd.py (re-exported); 53 pdfmd names read through `core`; rebinds globals: `embedded_resources` -> _RESOURCE_OWNER.
+
+Note: `embedded_resources` rebinds the global `_RESOURCE_OWNER`: it becomes `core._RESOURCE_OWNER = ...` (the state stays in pdfmd.py).
+
+Tests: `test_attach`, `test_config`, `test_embedding`, `test_standalone_source`.
+
+#### 36. `pdfmd_native` (new package): 40 definitions, ~1166 lines
+
+Definitions: `csv_cut_advice`, `native_note`, `native_lose`, `escape_markup`, `MathText`, `chunks_markup`, `chunks_width`, `centred_math`, `inline_math`, `stacked_math`, `mathtext_form`, `NativeSource`, `author_names`, `csv_extension_delimiter`, `csv_guess_delimiter`, `csv_keep`, `csv_alignments`, `csv_separator_alignments`, `csv_div_table`, `strip_html_comments`, `convert_math_items`, `protect_dollars`, `normalise_gfm`, `title_block`, `ignored_front_matter_keys`, `native_page`, `native_paper`, `native_landscape`, `native_paper_note`, `native_font_size`, `native_order`, `load_inkmd`, `set_pdf_info`, `captured_logs`, `report_messages`, `render_native`, `calibre_page_options_for`, `render_calibre_markdown`, `convert_native`, `describe_native_changes`.
+
+Constants that move with it (only this package reads them): `CALIBRE_MARKDOWN_EXTENSIONS`, `CITATION_RE`, `CODE_SPAN_RE`, `CSV_ALIGNMENTS`, `CSV_DIV_LINE_RE`, `CSV_SEPARATOR_CELL_RE`, `DISPLAY_IN_TEXT_RE`, `DIV_ATTRIBUTE_RE`, `DIV_CLOSE_RE`, `EMOJI_RE`, `FOOTNOTE_DEF_RE`, `FOOTNOTE_REF_RE`, `HEADING_ATTR_RE`, `HTML_COMMENT_RE`, `IMAGE_ATTR_RE`, `INLINE_MATH_CAPTURE_RE`, `INLINE_MATH_RE`, `MARKDOWN_ESCAPE_RE`, `MATHTEXT_REWRITES`, `MATH_ACCENTS`, `MATH_BINARY`, `MATH_BLACKBOARD`, `MATH_BOLD_COMMANDS`, `MATH_DROP`, `MATH_DROP_ARGUMENT`, `MATH_ESCAPES`, `MATH_FUNCTIONS`, `MATH_GREEK`, `MATH_MATRICES`, `MATH_RELATIONS`, `MATH_SYMBOLS`, `MATH_TEXT_COMMANDS`, `NATIVE_META_KEYS`, `NATIVE_PAPER_NOTED`, `NATIVE_READERS`, `NATIVE_SOURCE_SUFFIXES`, `NO_BREAK_SPACE`, `PAGE_BREAK_COMMENT_RE`, `PAGE_BREAK_MARKUP`, `PAGE_BREAK_RE`, `PAPER_SIZES`, `SUBSCRIPTS`, `SUPERSCRIPTS`, `TEX_BEGIN_RE`, `TEX_COMMAND_LINE_RE`, `TEX_MATH_ENVIRONMENTS`.
+
+Facts: 2 callers stay in pdfmd.py (re-exported); 37 pdfmd names read through `core`.
+
+Note: CLAUDE.md's "Vendored inkmd and the native tier" names pdfmd.py's section after `dependency_report()`: reword it in the same commit.
+
+Tests: `test_calibre_markdown`, `test_csv_switch`, `test_csv_table`, `test_native`, `test_pagebreak`.
+
+#### 37. `pdfmd_args` (new package): 7 definitions, ~957 lines
+
+Definitions: `csv_note_argument`, `csv_count_argument`, `table_keep_argument`, `calc_round_argument`, `calc_digits_argument`, `pdfmd_labels_modes`, `build_parser`.
+
+Constants that move with it (only this package reads them): `BUILD_LOG_MODES`, `STOP_STAGES`.
+
+Facts: 7 callers stay in pdfmd.py (re-exported); 23 pdfmd names read through `core`.
+
+Note: `build_parser` (the whole argparse tree). `--help` of every topic must be byte-identical; `test_docs_consistency` and `test_help*` read it.
+
+Tests: `test_doc`, `test_help`, `test_ranking_generated`, `test_setup`.

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.32.54d — 2026-11-09
+
+No shipped code (SPLIT.md); `PDFMD_VERSION` stays 3.32.54. Entry 3fi. **SPLIT.md is the verified plan for phase 1 of the split of `pdfmd.py`.** The first survey (2026-11-08) gave line ranges that overlapped (one group's range held another whole group), mixed topics and left out about 85 definitions; most groups were in two to thirteen separate places in the file. The new table names every definition that moves (476 in 37 packages, 20 new and 17 existing; about 12,800 lines of definitions and 380 of constants, which leaves `pdfmd.py` at about 17,700 lines) and was made from the code's syntax tree: a definition joins a package when everything that uses it is in that package; constants move only with the one package that reads them; state rebound with `global` stays. It also gives the pattern for every move (`core` binding, re-exports, calls to test-patched names through `core`, packaging, start-up time, the checks of a pure move), the order in four waves, and per package the callers, the hazards and the test modules to run. Phase 2 (the 571 definitions left) is planned after phase 1. `pdfmd_cli_parser` of the first survey is `pdfmd_args`.
+
 ## v3.32.54c — 2026-11-09
 
 No shipped code (CLAUDE.md); `PDFMD_VERSION` stays 3.32.54. Entry 3fi. CLAUDE.md has a section "pdfmd.py holds only the core": the author's rule that `pdfmd.py` keeps only its imports and the core Pandoc call, that new code goes into packages under `lib/`, and how a package reaches pdfmd's helpers (`core`, never `import pdfmd`).
