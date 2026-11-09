@@ -268,7 +268,7 @@ Facts: 1 callers stay in pdfmd.py (re-exported); 12 pdfmd names read through `co
 
 Tests: `test_ansi`, `test_command_words`, `test_ranking_lists`.
 
-#### 16. `pdfmd_check` (existing package): 7 definitions, ~177 lines
+#### 16. `pdfmd_check` (existing package): 7 definitions, ~177 lines; done in 3.33.17 (in `command.py`; only `check_command` has a stand-in; `check_module()` and the `check is None` branch are gone)
 
 Definitions: `check_module`, `bibliography_names`, `bibliography_file_keys`, `check_bibliography`, `calc_check_records`, `check_documents`, `check_command`.
 
