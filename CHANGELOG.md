@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.125 — 2026-11-11
+
+Pre-edit state: commit `b64a8b6`. **Read chemistry declarations from header metadata.** Custom units declared
+in `header-includes` were ignored because the shared chemistry client rejected Pandoc's userdata nodes. It now
+collects raw LaTeX blocks and inlines with Pandoc's supported walk API, in document order. A checkout regression
+checks block-only units, inline declarations and a later redefinition in HTML, Typst and Word, and checks LaTeX
+retention; chemistry, office and repository guard tests also run. The walk API used is available in Pandoc 3.1.3.
+
 ## v3.33.124 — 2026-11-11
 
 Pre-edit state: commit `afe876a`. **[tables] Keep untagged cells when applying horizontal table defaults.** A plain pipe

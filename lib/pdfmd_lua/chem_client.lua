@@ -28,15 +28,12 @@ end
 -- the LaTeX of a metadata value (header-includes): read with the preamble for \sisetup and \DeclareSIUnit
 function M.latex_of(value)
   local parts = {}
-  local function visit(item)
-    if type(item) ~= "table" then return end
-    if (item.t == "RawBlock" or item.t == "RawInline") and (item.format == "latex" or item.format == "tex") then
-      parts[#parts + 1] = item.text
-      return
-    end
-    for _, child in ipairs(item) do visit(child) end
+  local function collect(item)
+    if item.format == "latex" or item.format == "tex" then parts[#parts + 1] = item.text end
   end
-  visit(value)
+  if value then
+    pandoc.Pandoc({}, {preamble = value}):walk({traverse = "topdown", RawBlock = collect, RawInline = collect})
+  end
   return table.concat(parts, "\n")
 end
 

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -36,6 +37,9 @@ class LuaReview(unittest.TestCase):
                               cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True,
                               text=True, timeout=180)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        if to == "docx":
+            with zipfile.ZipFile(output) as archive:
+                return archive.read("word/document.xml").decode("utf-8")
         return output.read_text(encoding="utf-8")
 
     def test_calc_signed_remainder(self):
@@ -89,3 +93,26 @@ class LuaReview(unittest.TestCase):
                     self.assertIn(r"\multicolumn{1}{c}{total}", text)
                 elif to == "html":
                     self.assertIn('<td style="text-align: center;">apples</td>', text)
+
+    def test_chem_header_declarations_include_blocks_and_inlines_in_order(self):
+        source = r"""---
+header-includes:
+  - |
+    ```{=latex}
+    \DeclareSIUnit{\widget}{OLD}
+    \DeclareSIUnit{\bolt}{blt}
+    ```
+  - '\DeclareSIUnit{\widget}{wdg} \DeclareSIUnit{\gadget}{gdt}'
+---
+
+Measure: \qty{5}{\widget}, \qty{7}{\gadget} and \qty{9}{\bolt}.
+"""
+        for to in ("latex", "typst", "html", "docx"):
+            with self.subTest(to=to):
+                text = self.build(source, to)
+                self.assertIn("Measure:", text)
+                self.assertIn("wdg", text)
+                self.assertIn("gdt", text)
+                self.assertIn("blt", text)
+                if to != "latex":
+                    self.assertNotIn("OLD", text)
