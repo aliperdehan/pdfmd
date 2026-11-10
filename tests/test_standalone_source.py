@@ -7,9 +7,12 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -246,6 +249,54 @@ class Outside(unittest.TestCase):
                 pass
             self.assertEqual(shown.getvalue(), "")
             self.assertEqual((root / "schemes" / "x.tex").read_text(), "real\n")      # never overwritten
+
+    def test_embedded_resources_refuse_windows_and_rooted_paths(self):
+        names = ("C:/escape.txt", "C:escape.txt", r"C:\escape.txt", r"\escape.txt",
+                 r"\\server\share\escape.txt", r"sub\..\escape.txt", "/escape.txt", "sub/C:/escape.txt")
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "doc.md"
+            for name in names:
+                with self.subTest(name=name):
+                    document.write_text(pdfmd.render_embedded_file("escape.txt", name, b"lost\n"), encoding="utf-8")
+                    with self.assertRaisesRegex(SystemExit, "refused"):
+                        with pdfmd.embedded_resources(document):
+                            pass
+
+    def test_embedded_resources_refuse_resolved_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            resources = base / "resources"
+            resources.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            victim = outside / "keep.txt"
+            victim.write_text("keep\n", encoding="utf-8")
+            (resources / "sub").symlink_to(outside, target_is_directory=True)
+            document = base / "doc.md"
+            document.write_text(pdfmd.render_embedded_file("keep.txt", "sub/keep.txt", b"lost\n"), encoding="utf-8")
+            with mock.patch("pdfmd_assemble.mkdtemp", return_value=str(resources)):
+                with self.assertRaisesRegex(SystemExit, "refused"):
+                    with pdfmd.embedded_resources(document):
+                        pass
+            self.assertEqual(victim.read_text(), "keep\n")
+            self.assertFalse(resources.exists())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_cli_build_refuses_windows_embedded_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            document = base / "doc.md"
+            document.write_text("# Test\n\n" + pdfmd.render_embedded_file("escape.txt", "C:/escape.txt", b"lost\n"),
+                                encoding="utf-8")
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                   **{key: str(base / key) for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(document),
+                                   "--to", "html", "-o", str(base / "out.html")],
+                                  cwd=base, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("C:/escape.txt", done.stdout + done.stderr)
+            self.assertIn("refused", done.stdout + done.stderr)
+            self.assertNotIn("Traceback", done.stdout + done.stderr)
 
     def test_a_nested_build_of_another_document_gives_the_outer_one_back(self):
         """v3.33.43: the inner call for b.md used to leave no owner behind, so a.md's next nested call registered its

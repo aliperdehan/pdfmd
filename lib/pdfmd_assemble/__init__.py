@@ -46,6 +46,8 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from tempfile import mkdtemp
 
+from .paths import confined_destination
+
 core = None
 
 
@@ -654,7 +656,11 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
                     if not (md_path.parent / name).is_file():
                         away.append(name)
                     continue
-                target = folder / safe_relative_path(name)
+                try:
+                    target = confined_destination(folder, name.replace("\\", "/"))
+                except (ValueError, OSError, RuntimeError):
+                    shutil.rmtree(folder, ignore_errors=True)
+                    raise SystemExit(f"embedded resource {name!r} leaves its build folder: refused") from None
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if block.get("bytes") is not None:
                     core.atomic_write_bytes(target, block["bytes"])

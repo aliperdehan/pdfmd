@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.78 — 2026-11-10
+
+Pre-edit state: commit `40e3840`. **Confine embedded resources to their build folder on every OS.** A `{=pdfmd}` file block
+with `path: C:/...` passed the POSIX-only path handling and could overwrite an arbitrary Windows file during an ordinary
+build. Resource writes now use the shared path-safety helper: Windows drives, rooted paths and parent traversal through
+backslashes are refused, and resolved destinations must remain inside the scratch folder. Refusal names the resource and
+cleans up its scratch folder. The existing treatment of sibling files (`../...`, read where they already sit) is retained.
+Regressions cover Windows paths on every host, a pre-existing symlink escape and an isolated `python3 scripts/pdfmd` HTML
+build; checked failing before the fix and passing afterwards. Standalone-source and kit-install area tests and the required
+split, packaging, docs-consistency, setup and isolation checks run. `pdfmd.py` stays at 17,241 lines (version only); no new
+thresholds.
+
 ## v3.33.77 — 2026-11-10
 
 Pre-edit state: commit `8060fc5`. **[kits] Confine archive extraction on Windows as well as POSIX.** A kit tarball could
