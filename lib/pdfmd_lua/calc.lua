@@ -441,7 +441,7 @@ local function tokenize(text)
         add("op", "^", i, i + 1); i = i + 2
       elseif c == "%" then
         local nextchar = text:match("^%s*(.)", i + 1)            -- an operand after it: the remainder; else a percent sign
-        if nextchar and nextchar:match("[%w_%.%(|]") then add("op", "%", i, i) end
+        if nextchar and nextchar:match("[%w_%.%(|%+%-]") then add("op", "%", i, i) end
         i = i + 1
       elseif c:match("[%+%-%*/%^%(%),|]") then
         add("op", c, i, i); i = i + 1
@@ -1078,7 +1078,7 @@ local function lex(text)
       elseif two == "**" then add("op", "^"); i = i + 2
       elseif c == "%" then
         local nextchar = text:match("^%s*(.)", i + 1)
-        add(nextchar and nextchar:match("[%w_%.%(|]") and "op" or "pct", "%"); i = i + 1
+        add(nextchar and nextchar:match("[%w_%.%(|%+%-]") and "op" or "pct", "%"); i = i + 1
       elseif c:match("[%+%-%*/%^%(%),|]") then add("op", c); i = i + 1
       else fail("'" .. c .. "' is not arithmetic") end
     end

@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.121 — 2026-11-11
+
+Pre-edit state: commit `ff873da`. **Keep remainder operators before signed divisors.** Inline calculations such as
+`7 % -3` and `7 % +3` silently became subtraction or addition because the percent lookahead excluded unary signs.
+The tokenizer now recognises signed operands; a checkout regression checks positive and negative dividends,
+signed divisors and a signed parenthesised operand in generated LaTeX, Typst and HTML.
+
 ## v3.33.120 — 2026-11-11
 
 Pre-edit state: commit `33d4237`. **[tables] Retain CSV widths when expanding tables.** Short expanded pipe tables
