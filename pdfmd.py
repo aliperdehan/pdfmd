@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.86"
+PDFMD_VERSION = "3.33.87"
 import argparse
 import atexit
 import contextlib
@@ -9760,31 +9760,7 @@ def update_build_notes(text: str, new_line: str, mode: str) -> tuple[str, str | 
         new_body = f"{indent}\n{indent}{new_line}\n\n{body}"
         return text[:match.start("body")] + new_body + text[match.end("body"):], None
 
-    demoted = current.group(0)[len(indent):]
-    remainder = body[current.end():]
-    if remainder.startswith("\n"):
-        remainder = remainder[1:]
-    blank_line = re.match(r"^[ \t]*\n", remainder)
-    if blank_line:
-        remainder = remainder[blank_line.end():]
-    # body[:current.start()] is just the leading blank line the original
-    # template put between "BUILD NOTES" and the current line -- dropped
-    # rather than kept, since the new current line gets that same leading
-    # blank fresh, further down; keeping both would double it up.
-    body_without_current = remainder
-
-    bullet = f"{indent}  - {demoted}\n"
-    history_match = history_heading_pattern(indent).search(body_without_current)
-    if history_match:
-        insert_at = history_match.end()
-        body_without_current = (body_without_current[:insert_at] + bullet
-                                + body_without_current[insert_at:])
-    else:
-        trimmed = body_without_current.rstrip("\n")
-        heading_block = f"{indent}Compile History:\n{bullet}"
-        body_without_current = f"{trimmed}\n\n{heading_block}" if trimmed else heading_block
-
-    new_body = f"{indent}\n{indent}{new_line}\n\n{body_without_current}"
+    new_body = load_package("pdfmd_history.stamping").demote(body, current, indent, new_line)
     return text[:match.start("body")] + new_body + text[match.end("body"):], None
 
 

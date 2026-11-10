@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.87 — 2026-11-10
+
+Pre-edit state: commit `a20c854`. **Keep handwritten notes during history stamping.** Notes before the live stamp were
+mistaken for disposable blank space; trailing whitespace was also stripped. History demotion now preserves the text around
+pdfmd's recognised stamp verbatim, keeping the latest stamp first and adding only its predecessor to the history list.
+The edit lives in a lazily loaded history helper. Regressions cover repeated stamping, exact note spacing and an isolated
+launcher build; checked failing before the fix and passing afterwards. History-area and required checks run.
+`pdfmd.py` shrinks from 17,241 to 17,217 lines; no new thresholds.
+
 ## v3.33.86 — 2026-11-10
 
 Pre-edit state: commit `2e743e9`. **Preserve the document catalogue when cropping.** Cropping to the source itself or

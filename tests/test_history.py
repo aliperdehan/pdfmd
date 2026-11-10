@@ -90,6 +90,18 @@ class Blocks(unittest.TestCase):
         self.assertIn("(an agent wrote this)", updated)
         self.assertIn("(an person wrote this)", updated)
 
+    def test_history_keeps_handwritten_prefix_and_suffix_verbatim(self):
+        prefix = f"{LINE}Recheck the fit.  \n\t\n{LINE}Keep this spacing.\n"
+        suffix = f"\n{LINE}After the stamp.  \n\n\n"
+        old = "Compiled with pdfmd v3.25.6 -- 2026-10-09 10:00:00"
+        text = f"<!-- {RULE}\n{LINE}BUILD NOTES\n\n{prefix}{LINE}{old}\n{suffix}{LINE}{RULE} -->\n"
+        for stamp in ("Compiled with pdfmd v3.33.87 -- today", "Compiled with pdfmd v3.33.87 -- later"):
+            text, warning = pdfmd.update_build_notes(text, stamp, "history")
+            self.assertIsNone(warning)
+            self.assertIn(prefix + suffix, text)
+            self.assertLess(text.index(stamp), text.index(prefix))
+            self.assertEqual(text.count("  - " + old), 1)
+
     def test_a_block_marked_ignore_is_never_written_into(self):
         marked = AGENT.replace(f"{LINE}{RULE} -->", f"{LINE}pdfmd: ignore\n{LINE}{RULE} -->")
         updated, _ = pdfmd.update_build_notes("Text\n\n" + marked, "Compiled with pdfmd v9 -- 2026-10-09 10:00:00", "replace")
@@ -135,6 +147,22 @@ class CommandLine(unittest.TestCase):
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,
                               capture_output=True, text=True, env=self.env)
+
+    def test_history_stamp_pipeline_keeps_notes_before_the_live_line(self):
+        prefix = f"{LINE}Handwritten before stamp.  \n\t\n"
+        text = DOCUMENT.replace(f"{LINE}Compiled with nulabreport", prefix + f"{LINE}Compiled with nulabreport", 1)
+        self.document.write_text(text, encoding="utf-8")
+        env = dict(self.env, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1", PATH="")
+        for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+            env[key] = str(self.directory / key)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "-e", "inkmd",
+                               "--stamp", "--stamp-mode", "history", "--no-backup"],
+                              cwd=self.directory, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        updated = self.document.read_text(encoding="utf-8")
+        self.assertIn(prefix, updated)
+        self.assertIn(AGENT, updated)
+        self.assertIn("My own remark: figure 2 needs a re-run of the fit.", updated)
 
     def test_to_file_and_back(self):
         done = self.run_pdfmd("doc.md", "--history-to-file", "--dry-run")
