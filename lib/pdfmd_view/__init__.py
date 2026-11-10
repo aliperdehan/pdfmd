@@ -43,13 +43,18 @@ def view_child_arguments(argv: list[str], paths: list[Path]) -> list[str]:
     wanted = list(paths)
     kept: list[str] = []
     index = 0
+    positional = False
     while index < len(argv):
         token = argv[index]
+        if token == "--" and not positional:
+            positional = True
+            index += 1
+            continue
         name, equals, _ = token.partition("=") if token.startswith("--") else (token, "", "")
-        if name in VIEW_DROPPED:
+        if not positional and name in VIEW_DROPPED:
             index += 1 if equals else 1 + VIEW_DROPPED[name]
             continue
-        if (not token.startswith("-") or token == "-") and Path(token) in wanted:
+        if (positional or not token.startswith("-") or token == "-") and Path(token) in wanted:
             wanted.remove(Path(token))
         else:
             kept.append(token)
@@ -220,7 +225,7 @@ def terminal_view(args) -> int:
             for number, source in enumerate(files):
                 built = scratch / f"{number:03d}{suffix}"
                 command = [sys.executable, str(Path(core.__file__).resolve()), *view_child_arguments(sys.argv[1:], args.path or []),
-                           "--to", target, "-o", str(built), "--no-stamp", "--no-backup", "--rewrite", str(source)]
+                           "--to", target, "-o", str(built), "--no-stamp", "--no-backup", "--rewrite", "--", str(source)]
                 done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=environment)
                 # the child's OK / DEFAULTS lines would sit above the document: shown for a failure or with --verbose
                 sys.stderr.write((done.stdout if done.returncode != 0 or args.verbose else "") + done.stderr)

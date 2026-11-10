@@ -161,6 +161,13 @@ class Pipeline(unittest.TestCase):
         self.assertNotIn("DEFAULTS", done.stdout + done.stderr)
         self.assertEqual(sorted(path.name for path in self.directory.iterdir()), ["a.md", "b.md"])     # nothing left behind
 
+    def test_view_accepts_separator_and_dash_prefixed_filename(self):
+        (self.directory / "-odd-name.md").write_text("# Odd name\n", encoding="utf-8")
+        for name in ("a.md", "-odd-name.md"):
+            done = self.run_pdfmd("--view", "--", name)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("Heading" if name == "a.md" else "Odd name", done.stdout)
+
     def test_no_color_and_color_never_strip_the_codes_and_color_always_restores_them(self):
         self.assertNotIn(ESC, self.run_pdfmd("--view", "a.md", env={"NO_COLOR": "1"}).stdout)
         self.assertNotIn(ESC, self.run_pdfmd("--view", "a.md", "--color", "never").stdout)

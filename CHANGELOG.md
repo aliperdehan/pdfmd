@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.81 — 2026-11-10
+
+Pre-edit state: commit `eb0463e`. **Preserve separated filenames in terminal viewing.** `--view -- report.md` passed the
+separator before child options, making them filenames. The child now receives options before a fresh separator and source,
+including dash-prefixed names. A pipeline regression checks both forms; the area and required checks run.
+
 ## v3.33.80b — 2026-11-10
 
 Pre-edit state: commit `2961066`. **Clarify restore's treatment of linked folders.** README and recipes said `--restore`
