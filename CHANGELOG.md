@@ -19,6 +19,34 @@ same commit as the change.
 
 ---
 
+## v3.33.60b — 2026-11-10
+
+Pre-edit state: commit `cf7d376`. Tests only, no version bump. **The tests no longer write into the machine's own cache,
+config or data folder.** A run of a few test modules (`python3 -m unittest test_x test_y`, `tests.test_x`, `discover -p`) had
+left about 1,660 build records of test documents (`a`, `b`, `d`, `doc`, `x` ...) in the real `~/.cache/pdfmd/builds` in a
+night: only a whole `discover -s tests` imported `test_00_environment` (`PDFMD_BUILD_LOG=off`), and many helpers that run
+pdfmd (`CommandLine` in `test_engine_filters`, among others) passed `os.environ` with no cache folder of their own.
+
+- A new `tests/isolation_support.py`, imported by every test module with its standard-library imports (before `import pdfmd`),
+  whatever runs it: the first import points `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `LOCALAPPDATA` and `APPDATA`
+  at one temporary folder for the whole process (the pdfmd processes the tests start inherit them), drops a `PDFMD_CONFIG`
+  that names a file, and sets `PDFMD_BUILD_LOG=off` as `test_00_environment` did (which now only imports it). A test that
+  names its own folders (`cache_env`, `config_env`) still does. Tools installed with `pdfmd --install` (the real data folder)
+  are not seen by the tests.
+- The guard: at the end of the process it compares pdfmd's real cache, config and data folders (two levels down, with their
+  times) with the start, and exits with status 1 naming what a test wrote there. A build of a document outside the tests in
+  the meantime (the author's own, in another terminal) is listed apart in a NOTE and not counted: a build record names its
+  document, a document's cache folder has its `.pdfmd-source.json`; what names no document is not counted either then.
+- A new `test_isolation`: every `tests/test_*.py` imports it before pdfmd, the variables point away from the real folders, a
+  process that writes into a watched folder ends with status 1 and names it, a build of a document elsewhere is a NOTE.
+- Checked: the real cache listed before and after a run of 20 modules that build (`test_engine_filters`, `test_tables`,
+  `test_reader`, `test_polish`, `test_pdf_input`, the five `test_ranking_*`, `test_calc`, `test_csv_table`, `test_build_log`,
+  `test_cache_location`, `test_compat`, `test_office_latex`, `test_paragraph_spacing`, `test_readonly_home`, `test_isolation`)
+  with no `XDG_*` variable set: no test record or test cache folder appeared (the one new record, `report-2cc5119f`, is a
+  document in the author's Downloads built during the run, which the guard named). The same 19 modules at HEAD with scratch
+  `XDG_*` exported by hand: 529 tests OK (4 skipped); now, with `test_isolation`, 532 OK (4 skipped), the same skips. Each way of running: `test_x`
+  from tests/, `tests.test_x` from the root and `discover -p`. `test_split test_packaging test_docs_consistency test_setup`: OK.
+
 ## v3.33.60 — 2026-11-10
 
 Pre-edit state: commit `843907f`. **`--verbose` prints the Pandoc command that writes the file on the office-filter route

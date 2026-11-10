@@ -12,6 +12,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
+import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
+
 SYNTAX = Path(__file__).resolve().parent.parent / "lib" / "pdfmd_web" / "syntax"
 TABLE = json.loads((SYNTAX / "syntaxes.json").read_text(encoding="utf-8"))
 CASES = json.loads((SYNTAX / "cases.json").read_text(encoding="utf-8"))["cases"]

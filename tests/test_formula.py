@@ -9,6 +9,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
+import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
+
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("bump_formula", ROOT / "scripts" / "bump_formula.py")
 bump = importlib.util.module_from_spec(spec)

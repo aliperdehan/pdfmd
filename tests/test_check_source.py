@@ -11,6 +11,9 @@ import time
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
+import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 

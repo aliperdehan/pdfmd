@@ -12,6 +12,9 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
+import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pdfmd  # noqa: E402
 
