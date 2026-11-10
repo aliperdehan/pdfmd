@@ -269,6 +269,19 @@ class Builds(unittest.TestCase):
         self.assertNotIn("trying it through Pandoc", said)              # the Pandoc route would drop the command and build
         self.assertIn("t.pdf kept", said)
 
+    def test_keep_aux_compiles_in_place_and_still_keeps_the_pdf(self):
+        # TeX opens the PDF itself in place and removes it when it stops: the old one is put back
+        tex = self.write("k.tex", "\\documentclass{article}\\begin{document}One.\\newpage Two.\\end{document}\n")
+        code, said = self.pdfmd("k.tex", "--keep-aux")
+        self.assertEqual(code, 0, said)
+        before = sha(self.folder / "k.pdf")
+        tex.write_text("\\documentclass{article}\\begin{document}One.\\newpage Two \\undefinedcommandxyz.\\end{document}\n",
+                       encoding="utf-8")
+        code, said = self.pdfmd("k.tex", "--keep-aux")
+        self.assertEqual(code, 1, said)
+        self.assertEqual(sha(self.folder / "k.pdf"), before)
+        self.assertEqual(sorted(path.name for path in self.folder.glob("*kept*")), [])          # nothing left beside it
+
     def test_a_batch_decides_per_document(self):
         self.write("a.md", GOOD)
         self.write("b.md", GOOD)

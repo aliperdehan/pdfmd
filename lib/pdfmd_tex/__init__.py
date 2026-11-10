@@ -28,7 +28,7 @@ import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
-from tempfile import mkdtemp
+from tempfile import mkdtemp, mkstemp
 from textwrap import dedent
 
 core = None
@@ -604,6 +604,15 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
         # settles in one pass instead of two or three. Never discarded here.
         scratch = None if (keep_aux or aux_dir) else Path(mkdtemp(prefix="pdfmd-tex-"))
         output_dir = aux_dir if aux_dir else (tex_path.parent if scratch is None else scratch)
+        # --keep-aux compiles in place: TeX opens the PDF itself and removes it when it stops, so the PDF already there
+        # is kept aside for the run and put back when it fails (v3.33.71: a stopped build leaves the old PDF as it was)
+        in_place = output_dir / f"{tex_path.stem}.pdf"
+        kept, ok = None, False
+        if scratch is None and not aux_dir and in_place.is_file():
+            handle, name = mkstemp(prefix=f".{tex_path.stem}.pdfmd-kept-", suffix=".pdf", dir=output_dir)   # beside it: os.replace
+            os.close(handle)
+            kept = Path(name)
+            shutil.copy2(in_place, kept)
         try:
             ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
             if not ok and aux_dir:
@@ -631,10 +640,15 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                 return True, ""
             last_reason = reason
             try:              # the log says whether the document or the engine failed (pdfmd_chain.failure_kind)
-                log_tail = (output_dir / f"{tex_path.stem}.log").read_text(encoding="utf-8", errors="replace")[-20000:]
+                log_tail = (output_dir / f"{tex_path.stem}.log").read_text(encoding="utf-8", errors="replace")
             except OSError:
                 pass
         finally:
+            if kept is not None:
+                if not ok:
+                    os.replace(kept, in_place)
+                else:
+                    kept.unlink(missing_ok=True)
             if scratch is not None:
                 shutil.rmtree(scratch, ignore_errors=True)
         failed_families.add(family)

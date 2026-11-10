@@ -121,7 +121,7 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
                 results.append((entry, True, f"{seconds:.1f} s"))
                 continue
             text = done.stdout + done.stderr
-            found = re.search(r"failed \((.*?)\); (?:no more engines|trying)", text)
+            found = re.search(r"failed \((.*?)\); (?:no more engines|trying|engine-fallback)", text)
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             why = found.group(1) if found else (lines[-1][:160] if lines else "no output")
             cause = re.search(r"(?m)^\s+cause: (.+)$", text)                       # the TeX cause line (v3.30.35), when there is one
