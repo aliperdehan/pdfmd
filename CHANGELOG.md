@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.132 — 2026-11-11
+
+Pre-edit state: commit `4c6ed44`. **Keep readable source names unambiguous.** A file ending in ` (base64)`
+was mistaken for an encoded binary section and could crash restoration. New readable trailers encode names and
+encodings separately; old trailers remain readable. Round-trip and checkout bundle-and-restore regressions and
+the flat-source and repository guard tests run.
+
 ## v3.33.131 — 2026-11-11
 
 Pre-edit state: commit `6935645`. **Retrieve history across renames.** Earlier commits were listed by Git's

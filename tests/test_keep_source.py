@@ -56,6 +56,11 @@ class Trailer(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.roundtrip(entries, mode=mode)
 
+    def test_readable_names_do_not_confuse_encoding_and_old_trailers_still_work(self):
+        self.roundtrip({"data (base64)": b"hello", "binary": b"\xff", "odd-->name": b"text"}, mode="readable")
+        old = "<!-- pdfmd-source 1\nencoding: readable\n\n== old (base64)\n/w==\n== text\nhello\n-->\n"
+        self.assertEqual(keep.unpack(keep.find(old)), {"old": b"\xff", "text": b"hello"})
+
     def test_a_huge_source(self):
         random.seed(7)
         words = ["alpha", "-->", "<!--", "--!>", "\\", ">", "\r\n", "\n=", "\n<", "x"]
@@ -195,6 +200,20 @@ Water is H~2~O.
                 self.assertIn("<!-- a <!-- b --> c -->", source)
                 self.assertIn("--> and --!>", source)
                 self.assertEqual((self.directory / f"{mode}.restored" / "data.csv").read_text(), "Name,Mass\nWater,18.02\n")
+
+    def test_readable_bundle_restores_a_name_ending_in_base64(self):
+        self.write("doc.md", "# Test\n")
+        self.write("data (base64)", "hello")
+        env = {**self.env, "PDFMD_NO_PROMPT": "1", **{key: str(self.directory / key) for key in
+                   ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        def run(*args):
+            return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args], cwd=self.directory,
+                                  env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        made = run("doc.md", "--to", "gfm", "--bundle", "all", "--keep-source", "readable", "-o", "flat.md")
+        self.assertEqual(made.returncode, 0, made.stdout + made.stderr)
+        restored = run("--restore", "flat.md")
+        self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
+        self.assertEqual((self.directory / "flat.restored" / "data (base64)").read_text(), "hello")
 
     def test_the_preamble_and_the_files_it_inputs_come_back_as_from_a_pdf(self):
         """v3.33.64: a Markdown output kept no preamble.tex, nor what it \\inputs (not even with --bundle sources), where a

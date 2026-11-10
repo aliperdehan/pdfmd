@@ -26,7 +26,7 @@ import re
 import zlib
 
 MARKER = "<!-- pdfmd-source"
-FORMAT = 1
+FORMAT = 2
 MODES = ("packed", "readable")
 WARN_BYTES = 1024 * 1024
 SECTION = "== "
@@ -60,7 +60,9 @@ def pack(entries: dict[str, bytes], body: str, mode: str = "packed", source: str
     """The trailing comment (ending with a newline) that carries `entries` for a Markdown file whose body is `body`."""
     if mode not in MODES:
         raise KeepError(f"keep-source mode {mode!r}: choose one of {', '.join(MODES)}")
-    header = [f"{MARKER} {FORMAT}", f"encoding: {mode}", f"body-sha256: {digest(body)}"]
+    header = [f"{MARKER} {FORMAT if mode == 'readable' else 1}", f"encoding: {mode}", f"body-sha256: {digest(body)}"]
+    if mode == "readable":
+        header.append("section-format: json")
     if source:
         header.append("source: " + source.replace("\n", " ").replace(">", ""))
     if pdfmd:
@@ -76,7 +78,8 @@ def pack(entries: dict[str, bytes], body: str, mode: str = "packed", source: str
             text, kind = data.decode("utf-8"), "text"
         except UnicodeDecodeError:
             text, kind = _wrap(base64.b64encode(data).decode("ascii")), "base64"
-        sections.append(f"{SECTION}{name}" + (f" ({kind})" if kind != "text" else "") + "\n" + escape(text))
+        label = json.dumps([name, kind], ensure_ascii=True).replace(">", "\\u003e")
+        sections.append(f"{SECTION}{label}\n" + escape(text))
     return "\n".join(header) + "\n\n" + "\n".join(sections) + "\n-->\n"
 
 
@@ -159,9 +162,17 @@ def unpack(trailer: Trailer) -> dict[str, bytes]:
             if line.startswith(SECTION):
                 close()
                 label = line[len(SECTION):]
-                kind = "text"
-                if label.endswith(" (base64)"):
-                    label, kind = label[:-len(" (base64)")], "base64"
+                if trailer.header.get("section-format") == "json":
+                    try:
+                        label, kind = json.loads(label)
+                        if not isinstance(label, str) or kind not in ("text", "base64"):
+                            raise ValueError("invalid section")
+                    except (ValueError, TypeError) as error:
+                        raise KeepError(f"the readable source in this file is damaged ({error})")
+                else:
+                    kind = "text"
+                    if label.endswith(" (base64)"):
+                        label, kind = label[:-len(" (base64)")], "base64"
                 name, buffer = label, []
             else:
                 buffer.append(line)
