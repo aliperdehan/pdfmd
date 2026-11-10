@@ -290,5 +290,72 @@ class FilesEndToEnd(Env):
         self.assertIn("Ink", text)
 
 
+class UnpackPaths(Env):
+    """Origin names and every final destination are untrusted, including preamble pieces."""
+
+    def document(self, name: str, preamble: bool = False) -> Path:
+        options = {"embedded": ["metadata"], "origin": {"files": {name: ["title"]}}}
+        data = {"pdfmd-assembled": True, "title": "T", "pdfmd-options": options}
+        if preamble:
+            part = "% a preamble"
+            options["origin"] = {"preamble": [{"name": name, "lines": 1, "sha256": pdfmd.sha256_text(part)}]}
+            data["header-includes"] = part + "\n" + pdfmd.PREAMBLE_END_MARK
+        path = self.directory / "doc.md"
+        path.write_text("---\n" + pdfmd.yaml.safe_dump(data) + "---\n\nText.\n\n"
+                        + pdfmd.render_embedded_file("valid.txt", "valid.txt", b"valid\n"), encoding="utf-8")
+        return path
+
+    def test_metadata_origins_are_refused_before_any_file_is_written(self):
+        target = self.directory / "out"
+        for name in ("../escape.yaml", "../new/escape.yaml", r"..\escape.yaml",
+                     (self.directory / "absolute.yaml").as_posix()):
+            with self.subTest(name=name):
+                document = self.document(name)
+                with self.assertRaises(SystemExit) as caught:
+                    pdfmd.unpack_assembled(document, target, slim=True)
+                self.assertIn(repr(name), str(caught.exception))
+                self.assertIn("nothing was written", str(caught.exception))
+                self.assertFalse(target.exists())
+                self.assertTrue(pdfmd.is_assembled_text(document.read_text()))
+                self.assertFalse((self.directory / "escape.yaml").exists())
+                self.assertFalse((self.directory / "absolute.yaml").exists())
+
+    def test_preamble_origins_are_refused_before_any_file_is_written(self):
+        target = self.directory / "out"
+        document = self.document("../escape.tex", preamble=True)
+        with self.assertRaisesRegex(SystemExit, "escape.tex"):
+            pdfmd.unpack_assembled(document, target)
+        self.assertFalse(target.exists())
+        self.assertFalse((self.directory / "escape.tex").exists())
+
+    def test_unpack_refuses_a_symlink_escape_without_reading_or_writing_there(self):
+        outside = self.directory / "outside"
+        outside.mkdir()
+        target = self.directory / "out"
+        target.mkdir()
+        (target / "sub").symlink_to(outside, target_is_directory=True)
+        document = self.document("sub/escape.yaml")
+        with self.assertRaisesRegex(SystemExit, "sub/escape.yaml"):
+            pdfmd.unpack_assembled(document, target)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((target / "valid.txt").exists())
+
+    def test_cli_unpack_refuses_metadata_and_preamble_origins(self):
+        target = self.directory / "out"
+        env = {**self.env, **{key: str(self.directory / key) for key in
+                              ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        for preamble, name in ((False, "../escape.yaml"), (True, "../escape.tex")):
+            with self.subTest(preamble=preamble):
+                document = self.document(name, preamble=preamble)
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--unpack", str(document),
+                                       "-o", str(target)], cwd=self.directory, env=env, stdin=subprocess.DEVNULL,
+                                      capture_output=True, text=True)
+                self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn(name, done.stdout + done.stderr)
+                self.assertIn("nothing was written", done.stdout + done.stderr)
+                self.assertNotIn("Traceback", done.stdout + done.stderr)
+                self.assertFalse(target.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

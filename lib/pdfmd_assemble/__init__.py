@@ -506,6 +506,12 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
                 notes.append("METADATA  metadata.yaml  (the merged front matter: this file records no "
                              "origin of its keys, so it can't be told from the document's own)")
             metadata_unpacked = bool(origin and origin.get("files"))
+    # Validate the complete plan before reading existing files, creating folders or slimming the source.
+    for name in files:
+        try:
+            confined_destination(target, name)
+        except (ValueError, OSError, RuntimeError):
+            raise SystemExit(f"unpack entry {name!r} leaves {core.display_path(target)}: refused; nothing was written") from None
     if not files and not global_keys:
         print(f"NOTHING   {core.display_path(path)} embeds nothing to unpack")
         return 1

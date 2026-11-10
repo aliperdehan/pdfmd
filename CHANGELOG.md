@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.79 — 2026-11-10
+
+Pre-edit state: commit `ca51b1b`. **Validate the complete unpack plan before touching its destinations.** `--unpack` trusted
+metadata and preamble origin names, so a forged `../escape.yaml` or preamble name wrote outside its output folder. Every
+planned destination now passes the shared cross-platform relative-path and resolved-containment checks before existing
+files are read, folders are created, files are written or `--slim` changes the source. A refusal names the offending entry
+and writes nothing, as for an existing-file clash. Regressions cover metadata and preamble origins, absolute and backslash
+paths, a pre-existing symlink escape, no partial output or slimming, and isolated `python3 scripts/pdfmd --unpack` runs;
+checked failing before the fix and passing afterwards. Unpack-area tests and the required split, packaging,
+docs-consistency, setup and isolation checks pass. The broader area run also attempted two unrelated LibreOffice hybrid
+integration tests: LibreOffice produced neither the requested PDF nor the extracted text in this sandbox, so those two
+could not pass here. `pdfmd.py` stays at 17,241 lines (version only); no new thresholds.
+
 ## v3.33.78 — 2026-11-10
 
 Pre-edit state: commit `40e3840`. **Confine embedded resources to their build folder on every OS.** A `{=pdfmd}` file block
