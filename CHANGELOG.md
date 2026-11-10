@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.110 — 2026-11-11
+
+Pre-edit state: commit `77d205d`. **Preserve complete abstracts when flattening.** An abstract containing several
+paragraphs lost every block after the first in GFM and plain-text output. The title block now retains all abstract
+blocks and adds its label to the first paragraph, or before a leading non-paragraph block; full-pipeline regressions
+cover both outputs and retained lists.
+
 ## v3.33.109 — 2026-11-11
 
 Pre-edit state: commit `59c8ea0`. **[tables] Retain CSV fields beyond the header.** A data row wider than its header

@@ -380,6 +380,13 @@ local function meta_inlines(value)
   return pandoc.Inlines{pandoc.Str(text)}
 end
 
+local function meta_blocks(value)
+  if value == nil then return pandoc.Blocks{} end
+  if pandoc.utils.type(value) == "Blocks" then return value end
+  local inlines = meta_inlines(value)
+  return inlines and pandoc.Blocks{pandoc.Para(inlines)} or pandoc.Blocks{}
+end
+
 local function author_names(value)
   local names = {}
   if value == nil then return names end
@@ -406,14 +413,18 @@ local function title_block(meta)
   local date = meta.date and pandoc.utils.stringify(meta.date) or ""
   if line ~= "" and date ~= "" then line = line .. " — " .. date elseif date ~= "" then line = date end
   if line ~= "" then out:insert(pandoc.Para{text_format and pandoc.Str(line) or pandoc.Emph{pandoc.Str(line)}}) end
-  local abstract = meta.abstract
-  if abstract then
-    local inlines = meta_inlines(abstract)
-    if inlines then
-      local text = pandoc.Inlines{text_format and pandoc.Str("Abstract.") or pandoc.Strong{pandoc.Str("Abstract.")}, pandoc.Space()}
-      text:extend(inlines)
-      out:insert(pandoc.Para(text))
+  local abstract = meta_blocks(meta.abstract)
+  local first = abstract[1]
+  if first then
+    local label = pandoc.Inlines{text_format and pandoc.Str("Abstract.") or pandoc.Strong{pandoc.Str("Abstract.")}}
+    local start = 1
+    if first.t == "Para" or first.t == "Plain" then
+      label:insert(pandoc.Space())
+      label:extend(first.content)
+      start = 2
     end
+    out:insert(pandoc.Para(label))
+    for index = start, #abstract do out:insert(abstract[index]) end
   end
   return out
 end

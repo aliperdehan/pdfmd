@@ -163,6 +163,13 @@ class Filter(unittest.TestCase):
         self.assertTrue(out.startswith("# The Title\n\n*A One, B Two — 2026-10-09*\n\n**Abstract.** Short.\n\nBody."), out)
         self.assertNotIn("Title", self.flatten("---\ntitle: The Title\n---\n\nBody.\n", title=False)[0])
 
+    def test_abstract_keeps_all_paragraphs_and_blocks(self):
+        out, _ = self.flatten("---\nabstract: |\n  First *paragraph*.\n\n  Second paragraph.\n\n  - An item\n  - Another item\n---\n\nBody.\n")
+        self.assertIn("**Abstract.** First *paragraph*.\n\nSecond paragraph.", out)
+        self.assertIn("An item", out)
+        self.assertIn("Another item", out)
+        self.assertLess(out.index("Another item"), out.index("Body."))
+
     def test_raw_pieces_nothing_carried_are_counted_not_silent(self):
         out, err = self.flatten("Text.\n\n```{=openxml}\n<w:p/>\n```\n\nand `\\labsetup`{=latex} then.\n", title=False)
         self.assertNotIn("<w:p/>", out)
@@ -305,6 +312,31 @@ class CommandLine(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-flat-cli-"))
         self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
         self.env = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+
+    def test_multiblock_abstract_survives_gfm_and_text_builds(self):
+        for target in ("gfm", "txt"):
+            for abstract in ("  First *paragraph*.\n\n  Second paragraph.\n\n  - List item\n\n  Third paragraph.\n",
+                             "  - Leading item\n\n  Later paragraph.\n"):
+                with self.subTest(target=target, abstract=abstract):
+                    source = self.directory / "abstract.md"
+                    source.write_text("---\ntitle: Abstract test\nabstract: |\n" + abstract + "---\n\nBody.\n")
+                    env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                           "XDG_CONFIG_HOME": str(self.directory / "config"),
+                           "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+                    done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source),
+                                           "--to", target, "-o", "abstract.out"], cwd=self.directory, env=env,
+                                          stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    out = (self.directory / "abstract.out").read_text()
+                    self.assertEqual(out.count("Abstract."), 1)
+                    if "First" in abstract:
+                        parts = ("First", "Second", "List item", "Third", "Body.")
+                    else:
+                        parts = ("Leading item", "Later paragraph.", "Body.")
+                    for part in parts:
+                        self.assertIn(part, out)
+                    positions = [out.index(part) for part in parts]
+                    self.assertEqual(positions, sorted(positions))
 
     def run_pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
