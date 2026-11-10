@@ -95,7 +95,11 @@ class TheRun(unittest.TestCase):
             self.assertIn("NOTE  pdfmd's real cache changed during the run by a build of a document outside the tests", elsewhere.stderr)
             self.assertIn("pdfmd/tex", elsewhere.stderr.replace(os.sep, "/"))
             self.assertNotIn("ERROR", elsewhere.stderr)
-            mine = run("d-1", str(base / "work" / "d.md"))                                      # a document in a temporary folder
+            if sys.platform != "win32" and os.path.realpath(tempfile.gettempdir()) != os.path.realpath("/tmp"):
+                other = run("o-1", "/tmp/another-session/o.md")                              # another program's temporary folder
+                self.assertEqual(other.returncode, 0, other.stderr)
+                self.assertIn("NOTE  ", other.stderr)
+            mine = run("d-1", str(base / "work" / "d.md"))                                      # a document in the tests' own
             self.assertEqual(mine.returncode, 1, mine.stderr)
             self.assertIn("ERROR  the test run wrote into pdfmd's real folders", mine.stderr)
 

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.62b — 2026-11-10
+
+Pre-edit state: commit `29602c2`. Tests only, no version bump. **The tests' end check (3.33.60b) counts only documents in the
+tests' own temporary folder.** It took any document under `/tmp` or `/var/folders` for a test's, and so failed a run while
+another program built documents in a folder of its own there (a session working in `/private/tmp/...`, seen in the run of
+3.33.62). A test's documents are in `tempfile.gettempdir()` (or in the checkout); a build record or document cache folder
+naming another place is listed apart in the NOTE. `test_isolation` (a document in another program's `/tmp` folder is a NOTE)
+`test_split test_packaging test_docs_consistency test_setup`: OK.
+
 ## v3.33.62 — 2026-11-10
 
 Pre-edit state: commit `76d2dc0`. **A Typst older than 0.12 is refused as an engine, with one line that says so.** v3.33.58

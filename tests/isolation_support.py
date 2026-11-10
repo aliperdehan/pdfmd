@@ -109,10 +109,9 @@ def owner(path: Path, folders: list[Path]) -> Path | None:
 
 
 def test_owned(document: Path) -> bool:
-    """A document in a temporary folder or in this checkout: one a test built."""
+    """A document in the folder the tests make their temporary ones in (tempfile's), or in this checkout: one a test built.
+    Not any temporary folder: another program's own (a session that builds in /tmp) is not the tests'."""
     places = {os.path.realpath(tempfile.gettempdir()), os.path.realpath(str(Path(__file__).resolve().parent.parent))}
-    if sys.platform != "win32":
-        places |= {os.path.realpath("/tmp"), os.path.realpath("/var/folders")}
     real = os.path.realpath(str(document))
     return any(real == place or real.startswith(place.rstrip(os.sep) + os.sep) for place in places)
 
