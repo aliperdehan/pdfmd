@@ -312,6 +312,36 @@ when none can. `pdf-engine:` in `pdfmd-options`, the front matter, a metadata fi
 A Typst older than 0.12 counts as not installed: `-e typst` stops with a line that says so and where a newer one comes
 from, a list goes on to its next engine, and the numbered chain passes it over (SKIP).
 
+**When an engine fails: `engine-fallback`** (v3.33.71; `--engine-fallback MODE`, `pdfmd-options: {engine-fallback: MODE}`, a
+`--setup` row). Falling back is pdfmd's main trick, but a fallen-back PDF is a degraded one (a Typst PDF where a LaTeX error in
+the document stopped LuaLaTeX), and it used to replace the good PDF already there with exit 0. The modes:
+
+- `auto` (the default): when the PDF does not exist yet, as `on` (there is nothing good to lose). When it does, pdfmd looks up
+  the engine that made it, first in its own build record of the document (the newest record of a build that wrote this file
+  and did not fall back: a Typst PDF made after LaTeX failed is not followed, or a degraded build would lock itself in), else
+  in the PDF's Producer and Creator (Typst, LuaTeX, XeTeX/xdvipdfmx, pdfTeX, WeasyPrint, Prince, a browser's Skia, LibreOffice,
+  Calibre, groff). The chain then **mirrors** it: it starts with that engine, or with the first engine of the chain of the same
+  family when that one is not in it (LuaTeX: lualatex, context; XeTeX: xelatex, tectonic; pdfTeX: pdflatex, latexmk; the
+  browsers are one family), and the other engines follow in their usual order; and the build behaves as `missing`. No engine
+  found (no record, a PDF of another program): as `on`.
+- `on`: any failure tries the next engine, as before 3.33.71.
+- `missing`: only an engine that cannot run here falls through, with a NOTE that says so (not installed, a Typst too old, an
+  engine that stopped without an error about the document, a broken TeX installation or one that may not write). An engine that
+  ran and reported an error in the document (TeX: a `!` error line such as `! Undefined control sequence`, a missing `.sty` or
+  `.cls`; Typst: an `error:` with its place in the source) stops the build: exit 1, the engine's message and its cause as
+  always, and the PDF already there is left byte for byte as it was (an engine writes the output only when it succeeded).
+  A failure pdfmd does not recognise as the document's counts as the engine's.
+- `off`: the first engine that fails stops the build, whatever the cause.
+
+An engine you pin is never reordered: `-e ENGINE`, `-e A,B`, `pdf-engine:` in the document, a metadata file, a folder or the
+config. `engine-fallback` still decides what a failure does, so `auto` with a pinned engine is `missing` when the PDF exists and
+`on` when it does not. A bare `-e` pins nothing. The closing line of a stopped build names the mode and the way back:
+`FAIL  report.md  (lualatex failed; engine-fallback auto stopped the build, report.pdf kept; --engine-fallback on tries the next
+engine)`; `--verbose` says which mode is in force and where the chain starts (`ENGINE  engine-fallback auto: report.pdf was made
+by lualatex (build record 2026-11-10 09:03); starting with lualatex`). `-b` decides per document, `-r` and `-p` per output.
+Outputs other than PDF (Word, HTML, EPUB ...), `.typ` and `.html` inputs built by their own engine, and the built-in renderers
+(no Pandoc) have no engine chain of this kind and are not affected.
+
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own
 MathJax) and Calibre turns it into a PDF with the document's paper, margins, `fontsize:` and

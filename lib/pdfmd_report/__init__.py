@@ -61,7 +61,7 @@ def run(core, *,
     pdf_metadata_header_file, pdf_metadata_snippet = core.pdf_metadata_header_file, core.pdf_metadata_snippet
     polish_pdf, prepared_latex_inputs = core.polish_pdf, core.prepared_latex_inputs
     record_engine = core.record_engine
-    report_common_folder, report_engine_failure = core.report_common_folder, core.report_engine_failure
+    report_common_folder = core.report_common_folder
     report_sources, resolve_attach, resolve_embed = core.report_sources, core.resolve_attach, core.resolve_embed
     resolve_engines, resolve_from_format = core.resolve_engines, core.resolve_from_format
     resolve_stamp_options, resolve_strict = core.resolve_stamp_options, core.resolve_strict
@@ -128,7 +128,7 @@ def run(core, *,
                     stamp_overrides=stamp_overrides, embed_request=embed_request, no_auto=report_no_auto,
                     chapters=report_chapters, notes=title_notes)
         return
-    BUILD["engine"], BUILD["failed"] = None, []
+    BUILD["engine"], BUILD["failed"], BUILD["chain"] = None, [], None
     begin_timer()
     report_capture = warning_capture()
     report_seen = report_capture.__enter__()       # --strict: the warnings of this build (closed before the OK lines)
@@ -366,6 +366,7 @@ def run(core, *,
             result = None
             failed_families: set[str] = set()
             failed_engines: list[str] = []
+            engines = core.pdfmd_chain.plan_build(files[0], metadata_files, engines, output, args.verbose)   # engine-fallback
             for engine_index, engine in enumerate(engines):
                 family = ENGINE_FAMILY.get(engine, engine)
                 if family in failed_families:
@@ -486,7 +487,8 @@ def run(core, *,
                 failed_families.add(family)
                 failed_engines.append(engine)
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-                report_engine_failure("REPORT", engine, result, remaining, args.debug)
+                if core.pdfmd_chain.engine_failed("REPORT", engine, result, remaining, args.debug):   # engine-fallback stops here
+                    break
     assert result is not None
     if result.returncode == 0:
         check_asset_budget(list(files), files[0], metadata_files)
@@ -525,6 +527,7 @@ def run(core, *,
     if not args.verbose:
         AUTO_LOG.flush()
     report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
+    report_built.stopped = core.pdfmd_chain.stopped()
     print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
           + time_label(report_built) + engine_label(report_built))
     if args.verbose:

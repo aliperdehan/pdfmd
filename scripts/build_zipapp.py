@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "lib"
-PACKAGES = ("pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd_batch", "pdfmd_bridge", "pdfmd_buildinfo", "pdfmd_cache", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_doctor", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid",
+PACKAGES = ("pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd_batch", "pdfmd_bridge", "pdfmd_buildinfo", "pdfmd_cache", "pdfmd_chain", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_doctor", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_install", "pdfmd_kits", "pdfmd_labels", "pdfmd_lookup", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_native", "pdfmd_obsidian", "pdfmd_office", "pdfmd_paragraph", "pdfmd_parts", "pdfmd_pdfimages", "pdfmd_polish", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_restore", "pdfmd_routing",
             "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_tex", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web")      # = pyproject.toml's packages (test_packaging)
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's lib/pdfmd_docs/ holds no .md

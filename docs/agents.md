@@ -28,6 +28,10 @@ pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the
 - The exit code is `0` when every file was built and `1` when any failed (the others in a batch are still built). With
   `--strict` a build that printed a warning (an engine that failed and was replaced, a missing glyph, a Pandoc
   `[WARNING]`) counts as failed too: the output is kept, the exit code is `1`. `--check` exits `1` on an error.
+- When an engine fails, the next one is tried only where `engine-fallback` lets it (v3.33.71). The default, `auto`, stops a
+  build whose PDF already exists at an error in the document (exit `1`, the existing PDF left as it was; the closing line says
+  `engine-fallback auto stopped the build`) and goes on only past an engine that cannot run here; a new PDF gets the whole
+  chain. `--engine-fallback on` is the old behaviour, `missing` and `off` are stricter.
 - `FOUND` lists the files pdfmd picked up beside the document (a metadata file, a preamble, a Lua filter, the folder
   settings); `DEFAULTS` what it applied because nothing said otherwise. If the output is not what the source alone
   predicts, read these first, or run `--verbose`.

@@ -1509,7 +1509,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.70"
+PDFMD_VERSION = "3.33.71"
 import argparse
 import atexit
 import contextlib
@@ -1795,10 +1795,11 @@ import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
 import pdfmd_paragraph  # noqa: E402
 from pdfmd_paragraph import latex_args as paragraph_spacing_latex_args, typst_args as paragraph_spacing_typst_args  # noqa: E402
+import pdfmd_chain  # noqa: E402
 
 bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
           pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor, pdfmd_cache, pdfmd_install, pdfmd_tex,
-          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args, pdfmd_paragraph)
+          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args, pdfmd_paragraph, pdfmd_chain)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # move 5 (v3.33.6)
@@ -12738,7 +12739,7 @@ def latex_error_location(label: str, stderr: str) -> str | None:
 
 
 def report_engine_failure(label: str, engine: str, result: subprocess.CompletedProcess,
-                          remaining: list[str], debug: bool) -> None:
+                          remaining: list[str], debug: bool, stopped: str | None = None) -> None:
     """Print why one PDF-engine attempt failed -- always, not just under --verbose.
 
     Added 2026-09-17 alongside engine_failure_reason() (see its docstring):
@@ -12753,7 +12754,13 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
     """
     reason = engine_failure_reason(result.stderr)
     hint = f" ({reason})" if reason else ""
-    if remaining:
+    if stopped:                     # engine-fallback stops the chain here (lib/pdfmd_chain)
+        print(f"WARN  {label}: {engine} failed{hint}; {stopped}", file=sys.stderr)
+        where = latex_error_location(label, result.stderr)
+        if where and (label, where) not in SHOWN_LOCATIONS:
+            SHOWN_LOCATIONS.add((label, where))
+            print(f"      {where}", file=sys.stderr)
+    elif remaining:
         print(f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
         where = latex_error_location(label, result.stderr)
         if where and (label, where) not in SHOWN_LOCATIONS:       # the next LaTeX engine fails in the same place: once
@@ -13173,7 +13180,9 @@ def safe_stem(name: str) -> str:
 # not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
 # about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": []}     # what built the file convert_one is working on
+ENGINE_CLI: str | None = None              # -e as given ("" a bare -e), for lib/pdfmd_chain's pinned engine (set in main)
+ENGINE_FALLBACK_CLI: str | None = None     # --engine-fallback MODE (lib/pdfmd_chain; set in main)
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": [], "chain": None}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -13190,12 +13199,15 @@ class Built(tuple):
         self.engine, self.failed, self.output = engine, list(failed), output
         self.seconds, self.time_text, self.time_style, self.steps = None, "", "auto", []     # see attach_time
         self.record_path = None                                                       # see BuildRecorder
+        self.stopped = ""                                       # engine-fallback stopped the chain (lib/pdfmd_chain)
         return self
 
 
 def engine_label(result) -> str:
     """`  (lualatex)` or `  (typst; lualatex failed)` for the closing line; nothing when no engine was involved."""
     engine = getattr(result, "engine", None)
+    if not result[1] and getattr(result, "stopped", ""):
+        return f"  ({result.stopped})"
     if not engine or not result[1]:
         return ""
     failed = getattr(result, "failed", [])
@@ -14491,6 +14503,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         flush_summary()
         return md_path, ok, reason
 
+    if (target_format == "pdf" and engines and md_path.suffix.lower() not in OFFICE_INPUT_EXTENSIONS
+            and not all(is_native_engine(engine) for engine in engines)):
+        engines = pdfmd_chain.plan_build(md_path, metadata_files, engines, output, verbose)     # engine-fallback (v3.33.71)
     native_engines = [engine for engine in engines if is_native_engine(engine)]
     if target_format == "pdf" and native_engines:
         # The native tier (see the section after dependency_report()): no
@@ -14538,7 +14553,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         # opts back into the old Pandoc-mediated route for a document
         # that specifically needs pdfmd's own injection applied to it.
         ok, reason = compile_tex_direct(md_path, output, engines, keep_aux, verbose, debug)
-        if ok or not which("pandoc"):
+        if ok or not which("pandoc") or pdfmd_chain.stopped():
             flush_summary()
             return md_path, ok, reason[-3000:]
         # No LaTeX engine got it through (or none is installed): Pandoc can still read the file and any engine can
@@ -15207,7 +15222,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             if pandoc_refused_command(result):      # an option Pandoc does not take: every engine would fail on it (v3.33.44)
                 break
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-            report_engine_failure(str(md_path), engine, result, remaining, debug)
+            if pdfmd_chain.engine_failed(str(md_path), engine, result, remaining, debug):     # engine-fallback stops here
+                break
         if result is None:
             # Every engine was skipped: each shares an engine with one that failed already.
             return md_path, False, ("no PDF engine could build this. Install a LaTeX or Typst engine "
@@ -15227,7 +15243,9 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
     if result[1] and problems and resolve_strict(md_path, metadata_files):
         result = (result[0], False, strict_message(problems))
-    return attach_time(Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"]), md_path, metadata_files)
+    built = Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"])
+    built.stopped = pdfmd_chain.stopped()
+    return attach_time(built, md_path, metadata_files)
 
 
 def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
@@ -15242,7 +15260,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     BUILD["engine"], BUILD["failed"], BUILD["output"], BUILD["sources"], BUILD["partial"], BUILD["root"] = None, [], None, [], None, None
     begin_timer()
-    BUILD["tried"] = []
+    BUILD["tried"], BUILD["chain"] = [], None
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
@@ -16387,8 +16405,9 @@ def run_main() -> None:
     # turn off the lookup that is still busy finding that document.
     FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
     NO_AUTO_CLI = args.no_auto
-    global FALLBACK_CLI, MISSING_CLI, STRICT_CLI
+    global FALLBACK_CLI, MISSING_CLI, STRICT_CLI, ENGINE_CLI, ENGINE_FALLBACK_CLI
     FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
+    ENGINE_CLI, ENGINE_FALLBACK_CLI = args.engine, args.engine_fallback
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
     global BUILD_TIME_CLI, TIME_FORMAT_CLI, BUILD_LOG_CLI

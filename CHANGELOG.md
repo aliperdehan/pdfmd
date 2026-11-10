@@ -19,6 +19,67 @@ same commit as the change.
 
 ---
 
+## v3.33.71 — 2026-11-10
+
+Pre-edit state: commit `c516381`. **`engine-fallback`: what a PDF engine's failure does** (the author's decision of 2026-11-10).
+Any failure tried the next engine, and the degraded file (a Typst PDF after a LaTeX error in the document) replaced the good PDF
+already there, with exit 0 (`--strict` made it exit 1, and still replaced it). New setting: `--engine-fallback MODE`,
+`pdfmd-options: {engine-fallback: MODE}` (the document, its metadata files, a folder, the config), a `--setup` row (Output, *When a
+PDF engine fails*).
+
+- `on`: as before. `missing`: only an engine that cannot run here falls through, with `NOTE  doc.md: engine-fallback missing:
+  lualatex counts as unusable here (...), not as an error in the document, so xelatex is tried`; an engine that ran and reported an
+  error in the document stops the build. `off`: the first failure stops it. `auto`, **the default (a change of behaviour)**: a PDF
+  that does not exist yet gets the whole chain, as `on`; for one that exists, the engine that made it is looked up, the chain
+  starts with it (or the first engine of its family: LuaTeX, XeTeX, pdfTeX, the browsers, groff's two), the others following in
+  their usual order, and the build behaves as `missing`. Nothing found: as `on`. A pinned engine (`-e X`, `-e A,B`,
+  `pdf-engine:` anywhere, the config's default) is never reordered; `auto` with one is `missing` when the PDF exists, `on` when
+  not. A bare `-e` pins nothing.
+- Which engine made the PDF: pdfmd's own build record first (the newest `-ok` record whose `output:` is this file, `~` read as
+  the home folder, and whose closing label shows no fallback: `(typst; lualatex failed)` is not mirrored, so a degraded build
+  does not lock itself in, and when every record of the file fell back nothing is mirrored), else the PDF's Creator and Producer
+  (Typst, LuaTeX, xdvipdfmx/XeTeX, pdfTeX, WeasyPrint, Prince, Edge's and Chrome's Skia, LibreOffice, Calibre, groff). The record
+  already kept what is needed (the `result:` row's label), so its format is unchanged.
+- What counts as the document's error (`failure_kind`): TeX, a `!` error line or a `-file-line-error` line (the direct `.tex`
+  route), a missing `.sty` or `.cls` included; not the signatures of a broken or read-only installation (`TEX_UNUSABLE`, and the
+  causes `TEX_CAUSES` names but a missing package). Typst: an `error:` with its place in the source. Pandoc's 47 (no such
+  program) and every other failure count as the engine's.
+- A stop: `WARN  doc.md: lualatex failed (! Undefined control sequence.); engine-fallback auto: an error in the document, so the
+  build stops here and the existing doc.pdf is left as it was`, the place and cause lines as before, exit 1, and the closing line
+  `FAIL  doc.md  (lualatex failed; engine-fallback auto stopped the build, doc.pdf kept; --engine-fallback on tries the next
+  engine)`. A failed engine never writes the output (Pandoc writes it on success only; Calibre, the browsers and LibreOffice write
+  into a scratch folder and copy on success), so the kept PDF is byte-identical. `--verbose`: `ENGINE  engine-fallback auto: doc.pdf
+  was made by lualatex (build record 2026-11-10 13:40); starting with lualatex`.
+- Where: `lib/pdfmd_chain` (new package: the mode, the lookup, the mirrored chain, the classification, `engine_failed`), called
+  from the Markdown engine loop, the direct `.tex` loop (`compile_tex_direct`, which also serves the cache and natbib routes; a
+  stopped `.tex` build no longer goes on through Pandoc, which drops the failing command and builds) and `-r`'s patch route (the
+  default `-r` route is the Markdown loop). `pdfmd.py`: the plan call, the hooks, `ENGINE_CLI` and `ENGINE_FALLBACK_CLI` (set by
+  `main`, carried to `-j` workers), the stopped text on `Built` for the closing line, `report_engine_failure(stopped=...)`.
+  Unaffected: outputs other than PDF, `.typ` and `.html` inputs built by their own engine, the built-in renderers.
+- Constants, all facts and no thresholds: `PANDOC_PROGRAM_NOT_FOUND = 47` (Pandoc's exit code), `TEX_UNUSABLE` (TeX's messages
+  for a missing format, an unwritable file), `TEX_FILE_LINE_ERROR`, `TYPST_SOURCE_ERROR` (the engines' message layouts),
+  `PRODUCERS` (what each engine writes in a PDF's Creator/Producer).
+- Checked through pdfmd (scratch folders and config): `\undefinedcommandxyz` with no PDF there: lualatex, xelatex, pdflatex
+  fail, Typst builds, as before; after a good LuaLaTeX build: stops, exit 1, sha256 the same; `--engine-fallback on`: Typst
+  builds and replaces it; `missing` stops the same way; a fake `lualatex` on PATH that fails without a LaTeX error: auto and
+  missing go on to xelatex with the NOTE, `off` stops and keeps the PDF; a PDF made by `-e typst`: the next build starts with
+  Typst (by the record, and with `PDFMD_BUILD_LOG=off` by the PDF's Creator), a Typst error in the document then stops it and
+  keeps the PDF; a record of Typst after LaTeX failed: not mirrored (the whole chain), and with an older good LuaLaTeX record:
+  LuaLaTeX first, stop; `-e xelatex,typst` on a Typst PDF: no reordering, stop at XeLaTeX; `-b` (and `-b -j 2`) with a broken
+  and a changed document: the first kept, the second rebuilt, exit 1; `-r` (route and patch) and `-p`: stop, `book.pdf` and
+  `s.pdf` kept; a `.tex` compiled directly: stop, no Pandoc retry; `engine-fallback: on` in the document wins over the default;
+  `--to html`: unaffected.
+- README (the engine order), `docs/recipes.md` (the troubleshooting rows), `docs/agents.md` (exit codes), `--help` (`output`).
+- Tests: `test_engine_fallback` (the kinds, the modes and where they come from, pinned as `resolve_engines` decides, mirroring
+  and families, the PDF metadata table, records with `~`, degraded and other outputs; through pdfmd: the stop with the PDF kept
+  and `on`, a fake engine with `off` and `missing`, the record and metadata lookup, a direct `.tex`, a batch).
+  `test_engine_fallback test_engine_chain test_direct test_tex_cause test_native test_build_record test_build_log test_jobs
+  test_office_latex test_markup_guarded test_report_build test_browser_engine test_calibre test_split test_packaging
+  test_docs_consistency test_setup test_isolation test_setup_folder test_help`: 381 run, OK (3 skipped) but for the two changelog
+  checks, run before this entry was written, and one record check of the new test, fixed (the suite runs with records off).
+  After that fix and the direct `.tex` route's (its log is read for the kind of error): `test_engine_fallback test_direct
+  test_tex_cause test_split test_packaging test_docs_consistency test_setup test_isolation test_help`: 142 OK (1 skipped).
+
 ## v3.33.70 — 2026-11-10
 
 Pre-edit state: commit `0ab740d`. **`==highlight==` builds on LuaLaTeX.** A document with `==marked text==` stopped LuaLaTeX with

@@ -324,6 +324,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "the order written and nothing else (-e typst,calibre,lualatex; a family word or "
                              "`pandoc`, every engine Pandoc drives, expands in place); a pdf-engine: setting "
                              "takes the same list")
+    parser.add_argument("--engine-fallback", choices=("auto", "on", "missing", "off"), default=None, metavar="MODE",
+                        help="what a PDF engine's failure does: on (the next engine is tried, whatever failed), missing (only "
+                             "an engine that cannot run here falls through; an error in the document stops the build and "
+                             "keeps the PDF already there), off (the first failure stops it), auto (default: on when the "
+                             "PDF does not exist yet; else the chain starts with the engine that made it, as missing). "
+                             "Also `pdfmd-options: {engine-fallback: MODE}`")
     parser.add_argument("-t", "--to", dest="to", default=None, metavar="FORMAT",
                         help="Pandoc target format, e.g. html, latex (tex), typst, plain (txt), docx; or an ebook only "
                              "Calibre writes: azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz, txtz. "

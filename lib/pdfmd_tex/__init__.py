@@ -11,7 +11,7 @@ Moved out of `pdfmd.py` unchanged (v3.33.36, SPLIT.md), with `TEX_CAUSES`, `TEX_
 `TEX_RERUN_TRIGGERS`, `TEX_LOG_WRAP_WIDTH`, `AUX_CLEAN_SUFFIXES` and `PLOT_CTX_TWICE`, `PLOT_CTX_MARGIN` and `PLOT_CTX_PLAIN` (the
 protocol they belong to is described in `pdfmd.py`, above `CACHE_HANDSHAKE`, which stays). `core` is the `pdfmd` module, bound by
 `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`ENGINE_FAMILY`, `LATEX_ENGINES`,
-`TECTONIC_SEARCH_ENV`, `frontmatter_value`, `log_cmd`, `office_packages`, `package_helper`, `record_engine`,
+`TECTONIC_SEARCH_ENV`, `frontmatter_value`, `log_cmd`, `office_packages`, `package_helper`, `pdfmd_chain` (since v3.33.71), `record_engine`,
 `report_engine_failure`, `run_probe`, `sha1_file`, `tex_argument`, `vprint` and `which`) are read as `core.X` when it runs;
 `run_probe` and `which` are patched by tests as `pdfmd.X`. `render_plot_requests` and `compile_tex_direct` were decorated with
 `pdfmd`'s `@timed`, which is defined far below the place where the package loads: `_timed` is the same decorator looked up at
@@ -593,6 +593,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
     failed_engines: list[str] = []
     last_reason = ""
     for engine_index, engine in enumerate(tex_engines):
+        log_tail = ""
         family = core.ENGINE_FAMILY.get(engine, engine)
         if family in failed_families:
             print(f"SKIP  {tex_path}: {engine} shares the {family} engine with an earlier "
@@ -629,12 +630,17 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                 core.record_engine(engine, failed_engines)
                 return True, ""
             last_reason = reason
+            try:              # the log says whether the document or the engine failed (pdfmd_chain.failure_kind)
+                log_tail = (output_dir / f"{tex_path.stem}.log").read_text(encoding="utf-8", errors="replace")[-20000:]
+            except OSError:
+                pass
         finally:
             if scratch is not None:
                 shutil.rmtree(scratch, ignore_errors=True)
         failed_families.add(family)
         failed_engines.append(engine)
         remaining = [e for e in tex_engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families]
-        fake_result = subprocess.CompletedProcess(args=[engine], returncode=1, stdout="", stderr=last_reason)
-        core.report_engine_failure(str(tex_path), engine, fake_result, remaining, debug)
+        fake_result = subprocess.CompletedProcess(args=[engine], returncode=1, stdout=log_tail, stderr=last_reason)
+        if core.pdfmd_chain.engine_failed(str(tex_path), engine, fake_result, remaining, debug):   # engine-fallback (v3.33.71)
+            break
     return False, last_reason

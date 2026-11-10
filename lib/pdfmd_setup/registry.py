@@ -41,6 +41,7 @@ UNSET = {
     "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
     "options.attach-bibliography": "only the cited entries", "options.attach-csl": "off",
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
+    "options.engine-fallback": "auto: the whole chain for a new PDF; for an existing one, its engine first, and an error in the document keeps it",
     "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
     "options.line-numbers": "off", "options.line-number-step": "1", "options.column-outlier": "2", "options.column-outlier-rows": "4", "options.column-outlier-length": "30", "options.column-word-floor-limit": "16",
     "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
@@ -86,7 +87,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope", "options.paragraph-spacing",
+    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
@@ -274,6 +275,15 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("typst", "Typst (only Typst, no fallback to others)"), ("weasyprint", "WeasyPrint (HTML)"),
                 ("calibre", "Calibre's ebook-convert (only when named, no fallback)"), ("tex", "only TeX engines"), ("html", "only HTML engines"), ("office", "only the LibreOffice route")), "",
                "The engine to try first (a family limits the fallback chain). `-e` on the command line wins.", "Output"),
+        choice("options.engine-fallback", "When a PDF engine fails",
+               (("auto", "a new PDF: any failure tries the next engine; an existing one: start with the engine that made it, "
+                         "as missing"),
+                ("on", "any failure tries the next engine"),
+                ("missing", "only an engine that cannot run here falls through; an error in the document stops the build and "
+                            "keeps the PDF already there"),
+                ("off", "the first failure stops the build")), "",
+               "A stopped build exits 1 and leaves the existing PDF as it was. A pinned engine (-e, pdf-engine) is never "
+               "reordered. Per run: --engine-fallback MODE.", "Output"),
         text("options.editor", "Editor for pdfmd --edit",
              "A command: code --wait, vim, \"nano -l\". Without one --edit uses its built-in editor (pdfmd --install tui). "
              "Per run: --editor.", "Output"),
