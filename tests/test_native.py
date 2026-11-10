@@ -120,6 +120,17 @@ class NormaliseTests(unittest.TestCase):
         self.assertIn("After", source.text)
         self.assertEqual(counts["latex"], 3)
 
+    def test_single_line_raw_environment_keeps_following_text(self):
+        for engine in ("inkmd", "calibre"):
+            with self.subTest(engine=engine):
+                source, counts = self.normalise(
+                    "Before\n\n\\begin{center}hidden\\end{center}\n\nAfter\n\nLast\n", engine)
+                self.assertIn("Before", source.text)
+                self.assertIn("After", source.text)
+                self.assertIn("Last", source.text)
+                self.assertNotIn("hidden", source.text)
+                self.assertEqual(counts["latex"], 1)
+
     def test_math_environments_become_display_math(self):
         source, counts = self.normalise("\\begin{equation} a = b \\end{equation}\n")
         self.assertNotIn("begin{equation}", source.text)
@@ -417,6 +428,23 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
         environment = {**os.environ, "PATH": str(empty), "PDFMD_CALIBRE": "", "PDFMD_NO_PROMPT": "1", **hidden_tools(empty)}
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], cwd=cwd,
                               env=environment, capture_output=True, text=True)
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_single_line_environment_does_not_truncate_pdf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "doc.md").write_text(
+                "Before\n\n\\begin{center}hidden\\end{center}\n\nAfter\n\nLast\n")
+            env = {**os.environ, "XDG_CONFIG_HOME": str(root / "config"),
+                   "XDG_CACHE_HOME": str(root / "cache"), "XDG_DATA_HOME": str(root / "data"),
+                   "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"),
+                                     "doc.md", "-e", "inkmd"], cwd=root, env=env,
+                                    stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            text = "".join(page.extract_text() for page in pypdf.PdfReader(root / "doc.pdf").pages)
+            for word in ("Before", "After", "Last"):
+                self.assertIn(word, text)
 
     def test_markdown_to_pdf_with_no_pandoc(self):
         with tempfile.TemporaryDirectory() as directory:

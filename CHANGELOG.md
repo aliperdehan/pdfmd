@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.104 — 2026-11-10
+
+Pre-edit state: commit `090adea`. **Preserve text after single-line LaTeX environments.** A raw environment opening and closing on one line left the native normaliser skipping the rest of the document. It now enters the skip state only when the closing tag is absent; regressions cover inkmd and Calibre normalisation and a full inkmd build.
+
 ## v3.33.103 — 2026-11-10
 
 Pre-edit state: commit `164cf4c`. **Ignore indented code in checks.** References and images in indented code

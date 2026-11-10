@@ -1011,7 +1011,8 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
                     items.append((rest, False))
             continue
         if begin and begin.group(1) not in TEX_MATH_ENVIRONMENTS:
-            skip_environment = begin.group(1)
+            if not re.search(rf"\\end\{{{re.escape(begin.group(1))}\}}", line[begin.end():]):
+                skip_environment = begin.group(1)
             count("latex")
             continue
         if PAGE_BREAK_RE.match(line):
