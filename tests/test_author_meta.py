@@ -215,5 +215,42 @@ class TypstAuthorFonts(unittest.TestCase):
                     self.assertEqual(pypdf.PdfReader(str(root / f"{name}.pdf")).metadata.get("/Author"), expected)
 
 
+class Prince(unittest.TestCase):
+    """v3.33.66: Prince takes the first `<meta name="author">` of the page alone: a PDF of two authors named one."""
+
+    def options(self, front: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "doc.md"
+            document.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+            return pdfmd.prince_author_options(document, [], [])
+
+    def test_two_names_or_more_are_given_joined_as_weasyprint_joins_them(self):
+        self.assertEqual(self.options(STRINGS), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
+        self.assertEqual(self.options(MAPS), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
+        self.assertEqual(self.options(MIXED), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
+        self.assertEqual(self.options(UNICODE), ["--pdf-engine-opt=--pdf-author=Ərlan Şükürov, 李雷, Zoë Ångström"])
+
+    def test_one_name_its_own_author_meta_and_latex_are_left_to_the_page(self):
+        for front in ("author: Bob\n", "author:\n  name: Bob\n", NAMELESS, STRINGS + "author-meta: Mine\n",
+                      "author:\n  - Jane \\emph{x} Doe\n  - Bob\n", ""):
+            with self.subTest(front):
+                self.assertEqual(self.options(front), [])
+
+    @unittest.skipUnless(PANDOC and shutil.which("prince"), "needs Pandoc and Prince")
+    def test_through_pdfmd_the_pdf_names_both(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "doc.md").write_text(f"---\ntitle: T\n{MIXED}---\n\nWords.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "prince", "--no-stamp"],
+                                  cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                  env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            try:
+                import pypdf
+            except ImportError:
+                self.skipTest("needs pypdf")
+            self.assertEqual(pypdf.PdfReader(str(root / "doc.pdf")).metadata.get("/Author"), "Alice Able, Bob Baker")
+
+
 if __name__ == "__main__":
     unittest.main()

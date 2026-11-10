@@ -2,7 +2,7 @@
 PDF engine of Pandoc's. LibreOffice (`run_soffice_convert`, `convert_office_direct` for an office file, `convert_via_soffice_bridge`
 for the "soffice" engine, `start_soffice_job` for an odt, rtf or doc target), Calibre (`calibre_html_command`, `calibre_page_options`
 with `calibre_author_options`, `run_calibre` for the "calibre" engine with `drop_calibre_author`, `run_calibre_convert` for its targets) and a headless browser
-(`browser_page_css`, `run_browser_print`).
+(`browser_page_css`, `run_browser_print`); and the authors Prince's PDF would leave out (`prince_author_options`, v3.33.66).
 
 Moved out of `pdfmd.py` unchanged (v3.33.26, SPLIT.md), with `CALIBRE_TABLE_CSS` and `PANDOC_TABLE_STYLE_RE`. `core` is the `pdfmd`
 module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`BROWSER_ENGINES`, `CALIBRE_CSS`,
@@ -205,6 +205,21 @@ def calibre_author_options(metadata: dict) -> list[str]:
         return []
     names = core.author_names(value)
     return ["--authors", " & ".join(names)] if names else []
+
+
+def prince_author_options(md_path: Path, metadata_files: list[Path], variables: list[str]) -> list[str]:
+    """`--pdf-engine-opt=--pdf-author=A, B` for Prince (v3.33.66): of the page's `<meta name="author">` tags it takes the
+    first alone, so a PDF of two authors named one (two strings, two mappings, a string and a mapping alike), where WeasyPrint
+    names them all, joined by `, `. Two or more names (each mapping's `name`, as `author_names` reads them) are given to it
+    joined the same way. One name is left to the page, and so is a document's own `author-meta`, and a name with LaTeX in it
+    (the page has it as text, read by title_meta.lua)."""
+    metadata = core.effective_metadata(md_path, metadata_files, variables)
+    if "author-meta" in metadata:
+        return []
+    names = core.author_names(metadata.get("author"))
+    if len(names) < 2 or any("\\" in name for name in names):
+        return []
+    return ["--pdf-engine-opt=--pdf-author=" + ", ".join(names)]
 
 
 def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: list[str]) -> list[str]:

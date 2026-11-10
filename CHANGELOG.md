@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.66 — 2026-11-10
+
+Pre-edit state: commit `0a31b7b`. **A Prince PDF names every author.** Checking the 3.33.56 mapping-author change on `-e
+prince` (Prince 17): the page Pandoc writes carries a `<meta name="author">` for each author (two mappings, a string and a
+mapping: both), but Prince takes the first tag alone, so the PDF's Author was `Alice Able` of two mappings and `Carol Cole` of
+a string and a mapping; and of two plain strings as well, so the cause is Prince's route, not the mapping change. WeasyPrint
+names them all, joined by `, `. Fixed the way Calibre's route was (3.33.53, `calibre_author_options`), where the engine is
+known: `prince_author_options` (`lib/pdfmd_bridge`) gives Prince `--pdf-engine-opt=--pdf-author=A, B` (Prince's own option)
+when there are two names or more (each mapping's `name`, as `author_names` reads them), from the one-document build and from
+`-r`. One name, a document's own `author-meta` and a name with LaTeX in it are left to the page; the command is then as before.
+
+- Checked through pdfmd (Prince; WeasyPrint): two mappings `Alice Able`, now `Alice Able, Bob Baker` (WeasyPrint the same); a
+  string and a mapping `Carol Cole`, now `Carol Cole, Dan Dee`; two strings the same; one author and an own `author-meta`:
+  unchanged. `-r` with a string and a mapping: `Alice Able`, now both. The page's text and Prince's two page-1 annotations
+  (its free licence's mark) are as at HEAD.
+- Tests: `test_author_meta` (the option for strings, mappings, both and CJK; none for one name, a nameless mapping, an own
+  `author-meta`, LaTeX; the PDF's Author through pdfmd). `test_author_meta test_browser_engine test_calibre test_report_build
+  test_split test_packaging test_docs_consistency test_setup`: 136 OK (1 skipped); `test_direct test_engine_chain`: 39 OK.
+
 ## v3.33.65 — 2026-11-10
 
 Pre-edit state: commit `6f7fd42`. **A Typst PDF's Author keeps Chinese, Japanese and Korean names, and one such author alone

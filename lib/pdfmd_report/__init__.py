@@ -388,6 +388,8 @@ def run(core, *,
                     prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters)
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
+                    if engine == "prince":                # it names only the page's first author (v3.33.66)
+                        cmd += core.prince_author_options(files[0], metadata_files, variables)
                     if report_from:
                         cmd += ["-f", report_from]
                     if metadata is not AUTO_METADATA_DISABLED:

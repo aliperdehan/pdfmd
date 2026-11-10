@@ -1508,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.65"
+PDFMD_VERSION = "3.33.66"
 import argparse
 import atexit
 import contextlib
@@ -1746,8 +1746,8 @@ from pdfmd_routing import (BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, 
 
 import pdfmd_bridge  # noqa: E402
 from pdfmd_bridge import (CALIBRE_TABLE_CSS, PANDOC_TABLE_STYLE_RE, browser_page_css, calibre_html_command,  # noqa: E402, F401 -- CALIBRE_TABLE_CSS and PANDOC_TABLE_STYLE_RE are read by tests, run_calibre_convert and run_soffice_convert are patched or read by tests and lib/
-                          calibre_page_options, convert_office_direct, convert_via_soffice_bridge, run_browser_print,
-                          run_calibre, run_calibre_convert, run_soffice_convert, start_soffice_job)
+                          calibre_page_options, convert_office_direct, convert_via_soffice_bridge, prince_author_options,
+                          run_browser_print, run_calibre, run_calibre_convert, run_soffice_convert, start_soffice_job)
 import pdfmd_restore  # noqa: E402
 from pdfmd_restore import (RESTORE_CHAIN, check_source_command, layout_from_source, restore_attachments,  # noqa: E402, F401 -- RESTORE_CHAIN, layout_from_source, restore_attachments, restore_attachments_in_place and restore_chain are read by tests
                            restore_attachments_in_place, restore_chain, restore_from_markdown, restore_from_pdf,
@@ -15007,6 +15007,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd.append(f"--pdf-engine-opt=--font-path={fonts_directory()}")
                     if engine == "tectonic":                      # it reads no TEXINPUTS: the kits' folders by its own option
                         cmd += [f"--pdf-engine-opt=-Zsearch-path={folder}" for folder in tectonic_search_folders(md_path)]
+                    if engine == "prince":                        # it names only the page's first author (v3.33.66)
+                        cmd += prince_author_options(md_path, metadata_files, variables)
                     if engine == "typst" and (0,) < pandoc_version() < (3, 2) and not any(
                             "--root" in option for option in pandoc_options):
                         # an older Pandoc runs typst with its root at the document, where an absolute picture path
