@@ -900,8 +900,10 @@ from it.
 #### The flat file that carries its source: `--keep-source`
 
 Flattening cannot be undone (ids, cross-reference numbers, citations and scripts are text now). So a Markdown output
-can end with its whole source in one HTML comment, the same set of files `--attach-source` puts into a PDF (the
-assembled Markdown, a manifest of the layout, the `.csv` data), and `--restore` writes them back:
+can end with its whole source in one HTML comment (the assembled Markdown, a manifest of the layout, the `.csv` data), and
+`--restore` writes them back. Unlike `--attach-source` on a PDF it has no bundle unless asked: a `.tex` the text `\input`s
+and the pictures stay out (`--bundle sources` adds the first, `--bundle` both), as does a `preamble.tex`, which a Markdown
+build does not read:
 
 ```sh
 pdfmd report --to gfm --keep-source            # report.gfm.md ends with the source, compressed (packed)

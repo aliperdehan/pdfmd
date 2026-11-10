@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.58b — 2026-11-10
+
+Pre-edit state: commit `4006293`. Docs only, no version bump. **README: what `--keep-source` keeps.** It said a Markdown
+output carries "the same set of files `--attach-source` puts into a PDF". Not so: a source kept in a Markdown output has no
+bundle unless one is asked for (`attached_bundle_mode`, `lib/pdfmd_attach`: `sources` by default for a PDF, none for a Markdown
+output). The sentence now says so: a `.tex` the text `\input`s and the pictures stay out unless `--bundle sources` or `--bundle`
+asks, and a `preamble.tex` is not in it either. Checked through pdfmd on a document with a `preamble.tex` that `\input`s
+`extra.tex`, an `\input{part.tex}`, a picture and a `.csv` div (`pdfmd --restore ... --list`): the PDF (`--attach-source`)
+carries the preamble (embedded), `part.tex`, `extra.tex` and the picture; `--to gfm --keep-source` only the Markdown and its
+metadata, the picture recorded; with `--bundle sources` also `part.tex`; with `--bundle` also the picture. `docs/recipes.md`'s
+mention ("`report.md`, the parts and the CSV data") was right and is unchanged. `test_split test_packaging test_docs_consistency test_setup`: OK.
+
 ## v3.33.58 — 2026-11-10
 
 Pre-edit state: commit `27c75a2`. **The space between paragraphs is a setting, and `indent: true` drops it in Typst as in
