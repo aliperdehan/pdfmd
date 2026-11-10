@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.124 — 2026-11-11
+
+Pre-edit state: commit `afe876a`. **[tables] Keep untagged cells when applying horizontal table defaults.** A plain pipe
+table with `table-align: centre` crashed during LaTeX conversion because the alignment wrapper measured missing
+inlines. Cells without a removed tag now supply their original inlines. A checkout regression checks centred,
+unchanged cell contents in LaTeX and HTML and retained contents in Typst; cell alignment, cell tag and table tests
+cover existing overrides, spans and width handling.
+
 ## v3.33.123 — 2026-11-11
 
 Pre-edit state: commit `e4addd7`. **Keep preserved section numbers in flat partial builds.** Exporting a later

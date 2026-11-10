@@ -170,7 +170,10 @@ end
 local function fix_cell(cell, column, ctx)
   local single = #cell.contents == 1 and (cell.contents[1].t == "Plain" or cell.contents[1].t == "Para")
   local tag, rest
-  if single then tag, rest = take_tag(cell.contents[1].content) end
+  if single then
+    tag, rest = take_tag(cell.contents[1].content)
+    rest = rest or cell.contents[1].content
+  end
   if tag and tag.covered then
     if KEEP[BASE] then
       cell.contents = {pandoc.Plain(pandoc.Inlines{pandoc.RawInline(BASE, restore_text(tag))})}

@@ -75,3 +75,17 @@ class LuaReview(unittest.TestCase):
                 if to in ("gfm", "txt"):
                     self.assertIn("2 Second", text)
                     self.assertIn("2.1 Child", text)
+
+    def test_horizontal_table_default_keeps_untagged_contents(self):
+        source = ("---\npdfmd-options: {table-align: centre}\n---\n\n"
+                  "| Name | Qty |\n|---|---|\n| apples | 3 |\n| total | 12 |\n")
+        for to in ("latex", "typst", "html"):
+            with self.subTest(to=to):
+                text = self.build(source, to)
+                self.assertIn("apples", text)
+                self.assertIn("total", text)
+                if to == "latex":
+                    self.assertIn(r"\multicolumn{1}{c}{apples}", text)
+                    self.assertIn(r"\multicolumn{1}{c}{total}", text)
+                elif to == "html":
+                    self.assertIn('<td style="text-align: center;">apples</td>', text)
