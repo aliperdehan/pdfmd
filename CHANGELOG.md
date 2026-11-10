@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.57 — 2026-11-10
+
+Pre-edit state: commit `c923e08`. **`--assemble-only` and `--merge` embed only the bibliography entries the text cites.** A
+document citing 1 of the 3 entries of its `.bib` got all three in `--merge`'s file (or `--assemble-only --embed-metadata
+bibliography`), where `--keep-source` and `--attach-source` keep only the one: the pruning (`EmbedPlan.bib_prune`) was set by
+`attached_source` only, and the assembled stage's plan kept its default, off.
+
+- `write_assembled_markdown` (`lib/pdfmd_assemble`), which writes the assembled stage of a build and of a `-r` report, sets it
+  from the same setting as the attached source, `resolve_bibliography_pruning` (`lib/pdfmd_attach`): `--attach-bibliography
+  used|all`, else `pdfmd-options.attach-bibliography`, else only the cited entries (and what they cross-reference; all of them
+  with `nocite: '@*'`). The bibliography is embedded as a `{=pdfmd}` block; the `.bib` itself is only read. A plain
+  `--assemble-only` (no bibliography kind) still names the `.bib` and embeds nothing.
+- Docs: README (the assembled file), the `--attach-bibliography` help and the `--doc` text say it.
+- Checked through pdfmd: `--merge` of a document citing `@knuth` of `knuth`, `lamport`, `other`: three entries at HEAD, now
+  `knuth` (`EMBEDDED  bibliography refs.bib (refs.bib: 1 of 3 entries)`); `--attach-bibliography all` three; `--assemble-only
+  --embed-metadata bibliography` one; `-r . --merge` on a two-chapter folder one; `refs.bib` byte-identical afterwards. The
+  merged file, moved to a folder without `refs.bib`, builds to PDF (lualatex): "As shown by Knuth (1984)" and its reference.
+- Tests: a new `test_embedding` class (the entries for each setting, the author's `.bib` untouched, the merged file building
+  alone with its citation; the first fails at HEAD); `test_rawcode test_history test_embedding test_metadata_append test_calc
+  test_attach test_keep_source test_help test_split test_packaging test_docs_consistency test_setup`: 334 OK (1 skipped).
+
 ## v3.33.56 — 2026-11-10
 
 Pre-edit state: commit `f3d7ccc`. **A LaTeX or HTML PDF names an author written as a mapping.** With `author: [{name: Jane

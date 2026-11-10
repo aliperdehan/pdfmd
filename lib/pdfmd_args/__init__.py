@@ -175,7 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="keep the comments of these kinds of source (comma-separated, as "
                              "--strip-comments-in), where the rest are stripped")
     parser.add_argument("--attach-bibliography", choices=("used", "all"), default=None,
-                        help="what the attached bibliography holds: 'used' (default) only the entries the "
+                        help="what the attached bibliography holds (and the one --assemble-only and --merge "
+                             "embed): 'used' (default) only the entries the "
                              "text cites (and what they cross-reference; all of them if it has "
                              "`nocite: '@*'`), 'all' the file as it is. A document sets it with "
                              "pdfmd-options.attach-bibliography")

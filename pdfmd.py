@@ -664,6 +664,7 @@ Stopping early (--stop-at, v3.19.0):
     they cross-reference; every entry if the document has `nocite: '@*'`), so a
     shared .bib of hundreds of entries does not travel whole: `pdfmd-options.
     attach-bibliography: all` / --attach-bibliography all keeps the file as it is.
+    The same setting prunes the bibliography --assemble-only and --merge embed (v3.33.57).
     Attachments are deflated. (v3.22.4)
     Off by default: the source holds everything its author wrote. A -r/--report
     build attaches its chapters (each keeping its own front matter) with the
@@ -1500,7 +1501,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.56"
+PDFMD_VERSION = "3.33.57"
 import argparse
 import atexit
 import contextlib

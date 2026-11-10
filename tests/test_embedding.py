@@ -152,6 +152,53 @@ class FileBlocks(unittest.TestCase):
         self.assertIn("files", pdfmd.parse_embed_option(["files", "metadata"])[0])
 
 
+REFERENCES = ("@book{knuth,\n  author = {Donald E. Knuth},\n  title = {The TeXbook},\n  publisher = {Addison-Wesley},\n"
+              "  year = {1984}\n}\n\n@book{lamport,\n  author = {Leslie Lamport},\n  title = {LaTeX},\n"
+              "  publisher = {Addison-Wesley},\n  year = {1994}\n}\n\n@article{other,\n  author = {A. Nother},\n"
+              "  title = {Unused},\n  journal = {J},\n  year = {2000}\n}\n")
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class AssembledBibliography(Env):
+    """v3.33.57: --assemble-only (and --merge) embedded the whole bibliography, where --keep-source and --attach-source keep
+    only the entries the text cites; now under the same setting (--attach-bibliography, pdfmd-options.attach-bibliography)."""
+
+    def setUp(self):
+        super().setUp()
+        (self.directory / "refs.bib").write_text(REFERENCES, encoding="utf-8")
+        self.document = self.directory / "doc.md"
+        self.document.write_text("---\ntitle: Cites\nbibliography: refs.bib\n---\n\nAs shown by @knuth, it is hard.\n",
+                                 encoding="utf-8")
+
+    def entries(self, *args: str) -> list[str]:
+        done = self.run_pdfmd("doc.md", *args, "-o", "out.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "out.md").read_text(encoding="utf-8")
+        return [line.split("{")[1].rstrip(",") for line in text.splitlines() if line.startswith("@")]
+
+    def test_only_the_cited_entries(self):
+        self.assertEqual(self.entries("--merge"), ["knuth"])
+        self.assertEqual(self.entries("--assemble-only", "--embed-metadata", "bibliography"), ["knuth"])
+        self.assertEqual(self.entries("--merge", "--attach-bibliography", "all"), ["knuth", "lamport", "other"])
+        self.assertEqual((self.directory / "refs.bib").read_text(encoding="utf-8"), REFERENCES)      # the author's own file
+        self.document.write_text(self.document.read_text(encoding="utf-8").replace(
+            "bibliography: refs.bib\n", "bibliography: refs.bib\npdfmd-options:\n  attach-bibliography: all\n"),
+            encoding="utf-8")
+        self.assertEqual(self.entries("--merge"), ["knuth", "lamport", "other"])
+
+    def test_the_assembled_file_builds_alone_with_its_citation(self):
+        self.entries("--merge")
+        away = self.directory / "away"
+        away.mkdir()
+        shutil.move(str(self.directory / "out.md"), str(away / "out.md"))
+        done = self.run_pdfmd("out.md", "--to", "html", "-o", "out.html", cwd=away)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        page = (away / "out.html").read_text(encoding="utf-8")
+        self.assertIn("Knuth", page)
+        self.assertIn("1984", page)
+        self.assertNotIn("Lamport", page)
+
+
 class FilesEndToEnd(Env):
     def make_source(self):
         source = self.directory / "src"

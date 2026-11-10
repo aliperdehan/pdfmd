@@ -188,6 +188,10 @@ def write_assembled_markdown(sources: list[Path], output: Path,
     output.parent.mkdir(parents=True, exist_ok=True)
     if plan is not None:
         plan.output = output
+        # the bibliography embedded keeps only the entries the text cites, as in --keep-source and --attach-source, under
+        # the same setting (--attach-bibliography, pdfmd-options.attach-bibliography; v3.33.57: it was always whole here)
+        from pdfmd_attach import resolve_bibliography_pruning
+        plan.bib_prune = resolve_bibliography_pruning(sources[0], plan.metadata_files)
     text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments)
     core.write_text_lf(output, text)
     print(f"ASSEMBLED  {core.display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "

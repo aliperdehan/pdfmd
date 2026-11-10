@@ -1424,6 +1424,10 @@ pdfmd report --assemble-only --embed-metadata metadata preamble   # only those
 pdfmd report --assemble-only --embed-metadata --lua-mode ref   # name the filter instead of copying it
 ```
 
+An embedded bibliography keeps only the entries the text cites, as an attached source does
+(`--attach-bibliography all`, or `pdfmd-options.attach-bibliography: all`, embeds the whole file); the `.bib`
+itself is left as it is.
+
 An embedded Lua filter sits in a `{=pdfmd}` block at the end of the file. A
 Lua filter can run any command, so one only runs if this machine's pdfmd
 embedded it (otherwise it is skipped with a warning, unless you pass
