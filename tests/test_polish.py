@@ -259,6 +259,13 @@ class InkmdKeys(unittest.TestCase):
             self.assertEqual(filed.returncode, 0, filed.stderr)
             self.assertTrue((Path(folder) / "made.pdf").read_bytes().startswith(b"%PDF-"))
 
+    def test_equals_form_out_writes_pdf_to_stdout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "doc.md").write_text("# Doc\n", encoding="utf-8")
+            done = self.run_inkmd(folder, "doc.md", "--out=-")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertTrue(done.stdout.startswith(b"%PDF-"))
+
     def test_a_failed_build_fails_the_command_and_prints_no_pdf(self):
         with tempfile.TemporaryDirectory() as folder:
             done = self.run_inkmd(folder, "missing.md")

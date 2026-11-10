@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.93 — 2026-11-10
+
+Pre-edit state: commit `67064fa`. **Fix inkmd's equals-form stdout option.** `--out=-` parsed successfully but the
+entry point searched for a separate `--out` token and raised a traceback. Output options are now normalised before
+stdout handling. A regression runs the inkmd entry point and checks the PDF on stdout.
+
 ## v3.33.92b — 2026-11-10
 
 Pre-edit state: commit `809708d`. **Tests: `test_crop` no longer writes build records into the real cache.** Its second

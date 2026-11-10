@@ -50,7 +50,7 @@ MD2PDF_ENGINE_WORDS = frozenset({"lualatex", "xelatex", "pdflatex", "tectonic", 
                                  "chromium", "prince", "groff", "pdfroff", "pagedjs-cli"})
 
 
-INKMD_KEYS = {"-o": "--out", "--output": "--out", "--page-size": "--paper"}
+INKMD_KEYS = {"-o": "--out", "--out": "--out", "--output": "--out", "--page-size": "--paper"}
 
 
 def mdpdf_npm_file(value: str) -> bool:
