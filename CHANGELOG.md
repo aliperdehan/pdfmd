@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.107 — 2026-11-11
+
+Pre-edit state: commit `94a542a`. **Match cached web previews to their source.** Rendering an edit and undoing to the
+original text reused the edited HTML because the cache was keyed only by path and the original-text flag. Cached HTML
+now carries the exact source text and is reused only for that text; a node regression renders edits and reversions
+through scripts/pdfmd --api with isolated scratch folders.
+
 ## v3.33.106 — 2026-11-11
 
 Pre-edit state: commit `436ab13`. **Track the text submitted by Save.** Typing while a save request was pending made the

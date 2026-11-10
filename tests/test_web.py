@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -116,3 +117,50 @@ class WebApp(unittest.TestCase):
   assert.equal(anyDirty(), false);
 })().catch(e => {console.error(e); process.exitCode = 1;});
 ''')
+
+
+@unittest.skipUnless(NODE and shutil.which("pandoc"), "needs node and Pandoc")
+class LivePreview(unittest.TestCase):
+    def test_reverting_to_original_renders_that_exact_source(self):
+        script = r'''
+const fs = require("fs"), path = require("path"), vm = require("vm"), assert = require("assert");
+const {execFileSync} = require("child_process");
+const [web, python, launcher, folder] = process.argv.slice(1);
+let renders = 0;
+const context = {
+  FIXTURES: {settingsSchema: []}, location: {protocol: "http:", hash: ""},
+  fetch: async (url, opts = {}) => {
+    const args = [launcher, "--api", opts.method || "GET", url];
+    if (opts.body) args.push(opts.body);
+    if (url === "/api/render") renders++;
+    const data = JSON.parse(execFileSync(python, args, {cwd: folder, env: process.env,
+      stdio: ["ignore", "pipe", "pipe"], encoding: "utf8"}));
+    return {ok: true, json: async () => data};
+  },
+};
+context.window = context;
+vm.runInNewContext(fs.readFileSync(path.join(web, "js/api.js"), "utf8"), context);
+(async () => {
+  const api = context.api;
+  const original = await api.renderLive("doc.md", "Original", true);
+  const edited = await api.renderLive("doc.md", "Edited", false);
+  assert.notEqual(original, edited);
+  const reverted = await api.renderLive("doc.md", "Original", true);
+  assert.equal(reverted, original, "Undo must show the original preview");
+  assert.equal(renders, 3);
+  assert.equal(await api.renderLive("doc.md", "Original", false), original);
+  assert.equal(renders, 3, "the exact source can be reused even when unchanged is false");
+  await api.renderLive("doc.md", "Original\n", false);
+  assert.equal(renders, 4, "cache keys include trailing whitespace");
+})().catch(e => {console.error(e); process.exitCode = 1;});
+'''
+        with tempfile.TemporaryDirectory(prefix="pdfmd-web-preview-") as directory:
+            root = Path(directory)
+            (root / "doc.md").write_text("Original")
+            env = {**os.environ, "XDG_CONFIG_HOME": str(root / "config"),
+                   "XDG_CACHE_HOME": str(root / "cache"), "XDG_DATA_HOME": str(root / "data"),
+                   "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            done = subprocess.run([NODE, "-e", script, str(WEB), sys.executable,
+                                   str(ROOT / "scripts" / "pdfmd"), str(root)], env=env,
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
