@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.103 — 2026-11-10
+
+Pre-edit state: commit `164cf4c`. **Ignore indented code in checks.** References and images in indented code
+were reported as missing. The checker now masks code blocks while retaining paragraph and list continuations; a regression
+covers spaces, tabs and both continuations.
+
 ## v3.33.102 — 2026-11-10
 
 Pre-edit state: commit `52ecb20`. **[kits] Accept slashes in repository refs.** A slash in `@REF` prevented its

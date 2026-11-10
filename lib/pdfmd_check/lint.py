@@ -178,6 +178,8 @@ def mask_code(body: str) -> tuple[str, list[tuple[int, str]]]:
     fence: tuple[str, int, int] | None = None
     in_comment, comment_line = False, 0
     first_of_paragraph = 1
+    indented_code = False
+    list_indent: int | None = None
 
     def flush() -> None:
         nonlocal in_comment, comment_line
@@ -190,6 +192,25 @@ def mask_code(body: str) -> tuple[str, list[tuple[int, str]]]:
         paragraph.clear()
 
     for number, line in enumerate(lines, 1):
+        expanded = line.expandtabs(4)
+        indent = len(expanded) - len(expanded.lstrip(" "))
+        if not in_comment and fence is None:
+            if indented_code and not line.strip():
+                out.append(line)
+                continue
+            if indented_code and indent < 4:
+                indented_code = False
+            marker = re.match(r"^( {0,3})(?:[-+*]|[0-9]+[.)])[ \t]+", line)
+            if marker:
+                list_indent = len(marker.group().expandtabs(4))
+            elif line.strip() and list_indent is not None and indent < list_indent:
+                list_indent = None
+            after_blank = number == 1 or not lines[number - 2].strip()
+            if (indented_code or (after_blank and indent >= 4 and list_indent is None)) and line.strip():
+                flush()
+                indented_code = True
+                out.append(blank(line))
+                continue
         if fence is not None:
             closing = FENCE_RE.match(line)
             if closing and closing.group(2)[0] == fence[0] and len(closing.group(2)) >= fence[1] \

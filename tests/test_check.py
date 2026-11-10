@@ -46,6 +46,12 @@ class Reading(unittest.TestCase):
                 "\\newcommand{\\a}[1]{\\b{#1}}\n")
         self.assertEqual(codes(text, Bibliography(True, frozenset(), True)), [])
 
+    def test_indented_code_is_masked_but_list_and_paragraph_continuations_are_checked(self):
+        text = "# A\n\n    @fig:code ![x](missing.png)\n\n\t@fig:other\n\nText\n    @fig:paragraph\n\n- item\n\n    @fig:list ![x](list.png)\n"
+        found = lint([Source("d.md", None, text)])
+        self.assertEqual([(p.line, p.code) for p in found],
+                         [(8, "crossref-missing"), (12, "image-missing"), (12, "crossref-missing")])
+
     def test_inline_code_across_a_line_break(self):
         self.assertEqual(codes("# A\n\nThe `$for(a)$$a.b$\nand `$x` text, $$ is fine\n"), ["math-open"])
         self.assertEqual(codes("# A\n\nWrap `code $$\nacross` lines.\n"), [])
