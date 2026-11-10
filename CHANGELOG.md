@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.95 — 2026-11-10
+
+Pre-edit state: commit `ab3276d`. **Recognise drawable code emoji in the font check.** Emoji found only in code were
+reported missing even when a colour emoji font could draw them. The check now considers body and code emoji together
+for picture fallback. A regression checks the result with and without the font.
+
 ## v3.33.94 — 2026-11-10
 
 Pre-edit state: commit `01aad75`. **Use the effective body size for CSS headings.** A document fontsize overrode the

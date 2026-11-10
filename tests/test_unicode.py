@@ -675,6 +675,28 @@ class CodeFallback(unittest.TestCase):
 
 
 class CheckFonts(unittest.TestCase):
+    def test_code_emoji_uses_the_colour_font_when_available(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            make_font(root / "emoji.ttf", "Noto Color Emoji", [(0x20, 0x7E)])
+            doc = root / "d.md"
+            doc.write_text("---\nmainfont: Main Test\nmonofont: Main Test\n---\n`🚀`\n", encoding="utf-8")
+            pdfmd._FONT_INDEX = pu.FontIndex(root, use_system=False)
+            try:
+                with mock.patch.object(pdfmd, "managed_face", return_value=None), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(pdfmd.check_fonts(doc, None, []))
+                    (root / "emoji.ttf").unlink()
+                    pdfmd._FONT_INDEX = pu.FontIndex(root, use_system=False)
+                    self.assertFalse(pdfmd.check_fonts(doc, None, []))
+            finally:
+                pdfmd._FONT_INDEX = None
+                pdfmd.reset_font_caches()
+
     def test_the_report_names_fonts_and_what_is_missing(self):
         import contextlib
         import io

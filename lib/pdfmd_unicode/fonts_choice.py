@@ -245,6 +245,7 @@ def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) 
         print(f"  {line.replace('->', 'takes')}")
     if not plan.choices and not plan.emoji and not plan.uncovered:
         print(f"  every character of the text is in {main}")
+    emoji = set(plan.emoji)
     code_text = unicode_code_text(paths)
     if code_text.strip():
         mono = core.document_font_setting("monofont", paths, metadata_files, variables) or default_monofont()
@@ -253,15 +254,15 @@ def check_fonts(md_path: Path, no_auto: list[str] | None, variables: list[str]) 
             for line in code.describe():
                 print(f"  code in {mono}: {line.replace('->', 'takes')}")
             undrawn.update(code.uncovered)
-            undrawn.update({code_point: 1 for code_point in code.emoji})
-    if plan.emoji:
+            emoji.update(code.emoji)
+    if emoji:
         picture = (core.managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji")
                    or index.regular("Apple Color Emoji"))
-        print(f"  {len(plan.emoji)} emoji character(s): LaTeX sets them as pictures from "
+        print(f"  {len(emoji)} emoji character(s): LaTeX sets them as pictures from "
               + (picture.family if picture else "a colour emoji font (not installed: pdfmd --install emoji)")
               + "; Typst draws them itself")
         if picture is None:
-            undrawn.update({code_point: 1 for code_point in plan.emoji})
+            undrawn.update({code_point: 1 for code_point in emoji})
     if undrawn:
         from pdfmd_unicode import install as installer
         wanted = installer.packages_for(undrawn, language)
