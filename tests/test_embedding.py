@@ -154,6 +154,17 @@ class FileBlocks(unittest.TestCase):
         self.assertIn("files", pdfmd.parse_embed_option({"files": True})[0])
         self.assertIn("files", pdfmd.parse_embed_option(["files", "metadata"])[0])
 
+    def test_file_payload_round_trips_exact_bytes(self):
+        for data in (b"x\n\n", b"\n", b" \t\n", b"x\r\n\r\n", b"\r\n", b"", b"x\n", b"x\r\n",
+                     b"no newline", b"x\r\ny\n", b"x\x00y", b"\xff"):
+            with self.subTest(data=data):
+                block = pdfmd.render_embedded_file("data.txt", "data.txt", data)
+                parsed = pdfmd.parse_embedded_blocks(block)[0]
+                self.assertEqual(parsed["bytes"], data)
+                self.assertEqual(parsed["declared"], parsed["sha256"])
+                if data in (b"x\n", b"x\r\n", b""):
+                    self.assertNotIn("encoding: base64", block)
+
 
 REFERENCES = ("@book{knuth,\n  author = {Donald E. Knuth},\n  title = {The TeXbook},\n  publisher = {Addison-Wesley},\n"
               "  year = {1984}\n}\n\n@book{lamport,\n  author = {Leslie Lamport},\n  title = {LaTeX},\n"
@@ -214,6 +225,28 @@ class FilesEndToEnd(Env):
             "---\ntitle: Embedded\n---\n\n::: {.csv file=\"tables/stock.csv\" caption=\"Stock\"}\n:::\n\n"
             "![red](img/red.png){width=2cm}\n\nRaw LaTeX: \\includegraphics[width=2cm]{img/raw.png}\n", encoding="utf-8")
         return source
+
+    def test_assemble_and_unpack_keep_trailing_bytes(self):
+        payloads = [b"x\n\n", b"\n", b" \t\n", b"x\r\n\r\n", b"\r\n", b"x\r\n", b"x\n"]
+        source = self.directory / "source"
+        source.mkdir()
+        for index, data in enumerate(payloads):
+            (source / f"file{index}.tex").write_bytes(data)
+        (source / "doc.md").write_text("# Test\n\n```{=latex}\n" + "".join(
+            f"\\input{{file{index}.tex}}\n" for index in range(len(payloads))) + "```\n", encoding="utf-8")
+        env = dict(self.env)
+        for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+            env[key] = str(self.directory / key)
+        def run(*args):
+            return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args], cwd=source,
+                                  env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        done = run("doc.md", "--assemble-only", "--embed-metadata", "files", "-o", "all.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        restored = self.directory / "restored"
+        done = run("all.md", "--unpack", "-o", str(restored))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for index, data in enumerate(payloads):
+            self.assertEqual((restored / f"file{index}.tex").read_bytes(), data)
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_files_are_not_embedded_unless_asked_and_are_with_files_or_all(self):

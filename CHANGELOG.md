@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.89 — 2026-11-10
+
+Pre-edit state: commit `8065b88`. **Embed referenced files without losing trailing bytes.** Readable file blocks discarded
+extra final newlines and whitespace-only contents, including CRLF, producing altered resources and hash mismatches on unpack.
+The writer now checks the text form against the existing reader and uses the existing binary encoding unless it round-trips
+exactly. Older assembled documents remain readable and ordinary editable text blocks stay text. Byte-level regressions and
+an isolated assemble/unpack launcher test cover whitespace, LF, CRLF, mixed endings and binary payloads; checked failing
+before the fix and passing afterwards. File-embedding, standalone-source and required checks run. `pdfmd.py` stays at
+17,211 lines; no new thresholds.
+
 ## v3.33.88 — 2026-11-10
 
 Pre-edit state: commit `1707f06`. **Protect final outputs on every single-file route.** EPUB-derived Calibre targets,

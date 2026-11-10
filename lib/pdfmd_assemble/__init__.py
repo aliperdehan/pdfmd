@@ -257,8 +257,10 @@ def render_embedded_file(name: str, path: str, data: bytes) -> str:
     if windows:
         text = text.replace("\r\n", "\n")
     if printable and (not text or text.endswith("\n")) and "\r" not in text:
-        return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\n{'eol: crlf' + chr(10) if windows else ''}"
+        block = (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\n{'eol: crlf' + chr(10) if windows else ''}"
                 f"sha256: {digest}\n\n{text.rstrip(chr(10))}\n```\n")
+        if parse_embedded_blocks(block)[0]["bytes"] == data:
+            return block
     encoded = base64.b64encode(data).decode("ascii")
     wrapped = "\n".join(encoded[index:index + 76] for index in range(0, len(encoded), 76))
     return (f"```{{=pdfmd}}\ntype: file\nname: {name}\npath: {clean_path}\nencoding: base64\nsha256: {digest}\n\n"
