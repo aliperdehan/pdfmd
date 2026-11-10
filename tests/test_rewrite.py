@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,47 @@ class Rewrite(unittest.TestCase):
             run(directory, "-", "-e", "inkmd", text="# One\n")
             run(directory, "-", "-e", "inkmd", "--no-rewrite", text="# Two\n")
             self.assertEqual(names(directory), ["stdin (1).pdf", "stdin.pdf"])
+
+
+@unittest.skipIf(os.name == "nt", "executable stand-ins use shebangs")
+class OtherRoutes(unittest.TestCase):
+    def test_all_routes_protect_the_final_output_once(self):
+        for route in ("azw3", "mobi", "typst", "html", "quarto"):
+            with self.subTest(route=route), tempfile.TemporaryDirectory(prefix="pdfmd-rewrite-") as directory:
+                folder = Path(directory)
+                binary = folder / "bin"
+                binary.mkdir()
+                program = ("#!" + sys.executable + "\nimport sys\nfrom pathlib import Path\n"
+                           "args = sys.argv[1:]\n"
+                           "if '--version' in args: print('tool 1.0'); sys.exit()\n"
+                           "name = Path(sys.argv[0]).name\n"
+                           "target = args[2] if name == 'typst' else args[args.index('-o')+1] if name == 'quarto' else args[-1] if name == 'wkhtmltopdf' else args[1]\n"
+                           "Path(target).write_bytes(b'%PDF-new output')\n")
+                for name in ("typst", "ebook-convert", "wkhtmltopdf", "quarto"):
+                    path = binary / name
+                    path.write_text(program, encoding="utf-8")
+                    path.chmod(0o755)
+                suffix = {"typst": "typ", "html": "html", "quarto": "qmd"}.get(route, "md")
+                source = folder / ("doc." + suffix)
+                source.write_text("# Hello\n", encoding="utf-8")
+                ext = route if route in ("azw3", "mobi") else "pdf"
+                target = folder / ("out." + ext)
+                target.write_bytes(b"original")
+                (folder / ("out (1)." + ext)).write_bytes(b"first copy")
+                env = dict(os.environ, PATH=str(binary) + os.pathsep + os.environ.get("PATH", ""),
+                           PDFMD_CONFIG="", PDFMD_NO_PROMPT="1", PDFMD_CALIBRE=str(binary / "ebook-convert"))
+                for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+                    env[key] = str(folder / key)
+                if route in ("azw3", "mobi") and not shutil.which("pandoc"):
+                    continue
+                flags = ["-e", "wkhtmltopdf"] if route == "html" else []
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source), "-o", str(target),
+                                       "--no-rewrite", "--no-backup", *flags],
+                                      cwd=folder, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual(target.read_bytes(), b"original")
+                self.assertEqual((folder / ("out (1)." + ext)).read_bytes(), b"first copy")
+                self.assertTrue((folder / ("out (2)." + ext)).is_file())
 
 
 if __name__ == "__main__":

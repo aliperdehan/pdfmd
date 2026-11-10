@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.87"
+PDFMD_VERSION = "3.33.88"
 import argparse
 import atexit
 import contextlib
@@ -14175,14 +14175,7 @@ def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
     source, ok, error = results[0]
     if not ok:
         return results
-    ext = "." + job["goal"]
-    final = job["final"]
-    if final is None:
-        final = Path(source).with_suffix(ext)
-    elif final.is_dir():
-        final = final / (Path(source).stem + ext)
-    elif not final.suffix:
-        final = final.with_suffix(ext)
+    final = load_package("pdfmd_routing.output").job_target(job["final"], Path(source), job["goal"])
     tool = job.get("tool", "calibre")
     if tool == "soffice":
         worked, why = run_soffice_convert(job["scratch"] / job["intermediate"], final, verbose, job["goal"])
@@ -15701,7 +15694,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                 source_override: tuple[str, bool] | None = None,
                 all_parts: list[Path] | None = None,
                 full_override: str | None = None,
-                calc_text_override: str | None = None) -> tuple[Path, bool, str]:
+                calc_text_override: str | None = None, output_resolved: bool = False) -> tuple[Path, bool, str]:
     """_convert_one, plus the --backup snapshot on success -- wrapped here
     rather than threaded into each of _convert_one's own success returns
     (Pandoc, natbib/biblatex, direct .tex, office), so every one of them
@@ -15773,10 +15766,10 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
         else:
             export_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-calc-export-")
             CALC_DUMP = Path(export_scratch.name) / "names.tsv"
-    if target_format != ASSEMBLED_FORMAT and not rewrite_wanted(md_path, metadata_list):
+    if not output_resolved:
         planned = output_file or ((out_dir / f"{md_path.stem}{output_extension_for(target_format, md_path)}") if out_dir
                                   else md_path.with_suffix(output_extension_for(target_format, md_path)))
-        output_file = numbered_output(planned, rewrite_template(md_path, metadata_list))
+        output_file = load_package("pdfmd_routing.output").protected(md_path, planned, target_format, metadata_list)
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                               pandoc_options, metadata_file, output_file, preamble_files,
@@ -16955,6 +16948,7 @@ def run_main() -> None:
             output_file = Path.cwd() / f"{output_stem}{output_extension}"
         output = output_file or ((out_dir / f"{output_stem}{output_extension}") if out_dir
                                  else source.with_name(f"{output_stem}{output_extension}"))
+        output = output_file = load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
         if source.suffix.lower() == ".qmd":
             if args.presentation:
                 raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
@@ -16998,7 +16992,7 @@ def run_main() -> None:
             # document never has and can't be read as (same crash as
             # above) -- engines (from select_engines(args.engine, ...) at
             # the top of main()) is used as-is.
-            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format)]
+            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True)]
         else:
             if scaffold_plan is not None or section_plan is not None:
                 # _convert_one derives the output name from the document's own
@@ -17027,7 +17021,7 @@ def run_main() -> None:
                                    source_override=((section_plan.text, section_plan.shifted)
                                                     if section_plan is not None else None),
                                    full_override=(section_plan.full_text if section_plan is not None else None),
-                                   calc_text_override=(section_plan.calc_text if section_plan is not None else None))]
+                                   calc_text_override=(section_plan.calc_text if section_plan is not None else None), output_resolved=True)]
             if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
                 if LAST_WHOLE:
                     print("NOTE  section build: the whole document was numbered and this section kept, so its "

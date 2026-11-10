@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.88 — 2026-11-10
+
+Pre-edit state: commit `1707f06`. **Protect final outputs on every single-file route.** EPUB-derived Calibre targets,
+direct Typst and HTML, and Quarto bypassed the ordinary converter's numbering and overwrote existing files under
+`--no-rewrite`. A lazy routing helper now resolves the final protected name before dispatch, including the destination of
+an intermediate conversion; the ordinary converter skips its own resolution when that has already happened. Batch and
+report builds retain per-document protection through the same helper. Launcher regressions cover AZW3, MOBI, direct Typst,
+direct HTML and Quarto, preserving existing numbered copies; checked failing before the fix and passing afterwards.
+Rewrite, Calibre-target, direct-route and required checks run: 160 pass, one skips; the real Calibre KEPUB check fails
+to generate its default cover, identically with the pre-edit code in an isolated scratch copy. `pdfmd.py` shrinks from 17,217 to 17,211 lines; no new thresholds.
+
 ## v3.33.87 — 2026-11-10
 
 Pre-edit state: commit `a20c854`. **Keep handwritten notes during history stamping.** Notes before the live stamp were
