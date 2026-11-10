@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.133 — 2026-11-11
+
+Pre-edit state: commit `e8483a0`. **Handle decomposed accents in ASCII builds.** Combining accents were
+reported as missing, so equivalent decomposed text failed where composed text passed. Normalise text and remove
+remaining combining accents; transliteration and checkout ASCII-build regressions and repository guard tests run.
+
 ## v3.33.132 — 2026-11-11
 
 Pre-edit state: commit `4c6ed44`. **Keep readable source names unambiguous.** A file ending in ` (base64)`

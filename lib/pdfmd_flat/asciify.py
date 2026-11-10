@@ -159,6 +159,8 @@ class Asciifier:
 
     # -- one character
     def _plain(self, character: str) -> str | None:
+        if unicodedata.combining(character):
+            return ""
         if character in PLAIN:
             return PLAIN[character]
         decomposed = "".join(c for c in unicodedata.normalize("NFKD", character) if not unicodedata.combining(c))
@@ -232,6 +234,7 @@ class Asciifier:
         """`text` in ASCII; the characters of `keep` are left as they are."""
         if text.isascii():
             return text
+        text = unicodedata.normalize("NFC", text)
         out: list[str] = []
         position = 0
         for match in NON_ASCII.finditer(text):

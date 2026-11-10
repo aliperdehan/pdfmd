@@ -57,6 +57,11 @@ class Transliteration(unittest.TestCase):
     def test_latin_letters(self):
         self.check("Café Müller Łódź Straße Æsir œuvre ﬁ", "Cafe Muller Lodz Strasse AEsir oeuvre fi")
 
+    def test_decomposed_accents(self):
+        self.ascii.anyascii = None
+        self.check("é e\u0301 q\u0301", "e e q")
+        self.assertEqual(dict(self.ascii.lost), {})
+
     def test_greek_by_name_the_micro_prefix_and_words(self):
         self.check("α-helix ΔT Ω", "alpha-helix DeltaT Omega")
         self.check("5 μm, 3 µL, μ = 2", "5 um, 3 uL, mu = 2")
@@ -148,8 +153,8 @@ class CommandLine(unittest.TestCase):
         self.env = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
 
     def run_pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
-                              encoding="utf-8", cwd=self.directory, env=self.env)
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *arguments], capture_output=True, text=True,
+                              encoding="utf-8", cwd=self.directory, env=self.env, stdin=subprocess.DEVNULL)
 
     def write(self, name: str, text: str) -> Path:
         path = self.directory / name
@@ -211,6 +216,12 @@ class CommandLine(unittest.TestCase):
         bad = self.run_pdfmd("doc.md", "--to", "ascii:docx")
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn("text formats", bad.stdout + bad.stderr)
+
+    def test_decomposed_accents_with_fail(self):
+        self.write("doc.md", "é e\u0301 q\u0301\n")
+        result = self.run_pdfmd("doc.md", "--to", "ascii", "--ascii-missing", "fail")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("e e q", self.read("doc.ascii.txt"))
 
     def test_missing_characters(self):
         if HAS_HAN:
