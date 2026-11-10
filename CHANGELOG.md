@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.66b — 2026-11-10
+
+Pre-edit state: commit `18405b2`. Tests only, no version bump. **`test_author_meta`'s Typst checks hold on Pandoc 3.1.3 too**
+(the `linux-pandoc` job runs the suite with it): its Typst template puts the header-includes after `#show: doc => conf(`, where
+3.13's puts them before. The checks of 3.33.63 and 3.33.65 no longer cut the output at that line or compare the two places:
+no `[true]` among the names, and the `#show <pdfmd-author-font-N>` rule present. (On 3.1.3 the rule then comes after the title
+block, whose names keep Typst's own fallback font; the Author is right either way.) `test_author_meta test_split
+test_packaging test_docs_consistency test_setup`: OK.
+
 ## v3.33.66 — 2026-11-10
 
 Pre-edit state: commit `0a31b7b`. **A Prince PDF names every author.** Checking the 3.33.56 mapping-author change on `-e

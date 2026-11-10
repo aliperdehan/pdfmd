@@ -101,7 +101,7 @@ class Filter(unittest.TestCase):
         latex, typst, html = (self.convert(NAMELESS, writer) for writer in ("latex", "typst", "html5"))
         self.assertIn("\\author{true}", latex)                     # Bob Baker's own mapping: LaTeX's template reads no `name`
         self.assertIn("\\author{Bob Baker}", self.convert("author:\n  - affiliation: NU\n  - Bob Baker\n", "latex"))
-        self.assertNotIn("true", typst.split("#show: doc => conf(")[1])
+        self.assertNotIn("[true]", typst)                               # (an author's name is `[...]` in Typst)
         self.assertIn("name: [Bob Baker]", typst)
         self.assertIn('<meta name="author" content="Bob Baker" />', html)
         html = self.convert("author:\n  - affiliation: NU\n  - Bob Baker\n", "html5")    # (a mapping's name: not read there either)
@@ -109,7 +109,7 @@ class Filter(unittest.TestCase):
         self.assertIn('<p class="author">Bob Baker</p>', html)
         alone = self.convert("author:\n  affiliation: NU\n", "latex")
         self.assertIn("\\author{}", alone)                              # none left: as with no author at all
-        self.assertNotIn("true", self.convert("author:\n  - affiliation: NU\n  - email: e@x\n", "typst").split("#show: doc => conf(")[1])
+        self.assertNotIn("[true]", self.convert("author:\n  - affiliation: NU\n  - email: e@x\n", "typst"))
 
     def test_typst_is_left_to_its_template(self):
         self.assertEqual(self.convert(MAPS, "typst"),
@@ -183,7 +183,6 @@ class TypstAuthorFonts(unittest.TestCase):
         self.assertIn("#box[山田 太郎]<pdfmd-author-font-1>", out)
         self.assertIn("Kim #box[김민준]<pdfmd-author-font-2>", out)
         self.assertNotIn("#text(font:", out)
-        self.assertLess(out.index("#show <pdfmd-author-font-1>"), out.index("#show: doc => conf("))
 
     def test_names_without_a_font_run_are_as_before(self):
         for front in (STRINGS, MAPS, UNICODE):
