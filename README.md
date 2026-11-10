@@ -3137,7 +3137,9 @@ features you never use: modes, source, tables, history, code, raw, markdown, fon
 of `--help`; output, setup and debug stay on). Their options leave `--help`, shell completion (regenerate it with
 `--completion`) and the setup screen, and the command line refuses them; `pdfmd --disabled --history doc` uses one for a
 single run and `pdfmd --disabled --help all` shows them. A document's own `pdfmd-options` still apply, so a document
-from someone else builds the same. In the full-screen setup, `r` resets a row (it used to be `d`). The files are rewritten without your
+from someone else builds the same. In the full-screen setup, `r` resets a row (it used to be `d`).
+Choosing no markup or page-break families stores an explicit empty list, disabling those families; reset to the flavour
+default with `-` in the plain list editor or `r` on the full-screen row. The files are rewritten without your
 comments (the old one is kept as `.bak`). The same keys can be written by hand under `options:` of `config.yaml`. A
 full-screen version is optional: `pdfmd --install tui` (prompt_toolkit, about 1 MB), then `pdfmd --setup fancy`, or set
 "This setup screen" to fancy to make it the one `pdfmd --setup` opens. The first time pdfmd finishes a build in a terminal

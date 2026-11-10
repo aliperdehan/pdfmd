@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.91 — 2026-11-10
+
+Pre-edit state: commit `81d9a91`. **Keep a setup choice of no markup or page-break families disabled.** Both editors
+removed an empty selection, letting the flavour's enabled defaults return. They now store an explicit empty list for these
+two rows, which both readers accept as disabled. Reset remains separate: `-` in the plain list editor (as in its text
+editor), or `r` on the full-screen row, removes the override and restores the default. Editor regressions cover both rows
+and resets; an isolated launcher build verifies that neither filter runs. Checked failing before the fix and passing
+afterwards. Setup-area and required checks run. `pdfmd.py` stays at 17,211 lines; no new thresholds.
+
 ## v3.33.90 — 2026-11-10
 
 Pre-edit state: commit `fce0501`. **Keep restored images distinct after an extension change.** Extracting both

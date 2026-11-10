@@ -117,11 +117,14 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
         for number, (value, meaning) in enumerate(setting.choices, start=1):
             say(f"  {number:>2}. [{'x' if value in chosen else ' '}] {value:<14} {meaning}")
         try:
-            answer = read_line("Numbers to toggle (1 3 5), a = all, n = none, Enter = leave as it is: ").strip().lower()
+            answer = read_line("Numbers to toggle (1 3 5), a = all, n = none, - = default, Enter = leave as it is: ").strip().lower()
         except EOFError:
             return False
         if not answer:
             return False
+        if answer == "-":
+            write(stores, setting, None)
+            return current is not None
         if answer == "a":
             chosen = {value for value, _ in setting.choices}
         elif answer == "n":
@@ -130,7 +133,9 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
             for part in answer.replace(",", " ").split():
                 if part.isdigit() and 1 <= int(part) <= len(setting.choices):
                     chosen ^= {setting.choices[int(part) - 1][0]}
-        new = [value for value, _ in setting.choices if value in chosen] or None
+        new = [value for value, _ in setting.choices if value in chosen]
+        if not new and setting.key not in ("options.markup", "options.pagebreak"):
+            new = None
         write(stores, setting, new)
         return new != current
     now = from_stored(setting, current)

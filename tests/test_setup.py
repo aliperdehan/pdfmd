@@ -61,6 +61,35 @@ class Plain(unittest.TestCase):
         self.assertIs(data["options"]["unicode"], True)
         self.assertEqual(len(data["options"]["no-auto"]), 2)                   # two kinds toggled on
 
+    def test_no_families_are_disabled_and_a_separate_reset_restores_defaults(self):
+        from pdfmd_setup import plain
+        stores = {"config": {"options": {}}}
+        for key in ("options.markup", "options.pagebreak"):
+            setting = next(item for item in SETTINGS if item.key == key)
+            registry.write(stores, setting, [setting.choices[0][0]])
+            self.assertTrue(plain.edit(stores, setting, lambda prompt: "n", lambda line: None))
+            self.assertEqual(registry.read(stores, setting), [])
+        with tempfile.TemporaryDirectory(prefix="pdfmd-setup-none-") as directory:
+            folder = Path(directory)
+            (folder / "doc.md").write_text("==keep literal==\n\n<!-- pagebreak -->\n", encoding="utf-8")
+            config = folder / ".pdfmd"
+            config.mkdir(parents=True)
+            (config / "config.yaml").write_text(yaml.safe_dump(stores["config"]), encoding="utf-8")
+            env = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1", APPDATA=str(folder / "config"),
+                       XDG_CONFIG_HOME=str(folder / "config"), XDG_CACHE_HOME=str(folder / "cache"),
+                       XDG_DATA_HOME=str(folder / "data"))
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--to", "html",
+                                   "--verbose", "--no-backup"], cwd=folder, env=env, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertNotIn("markup.lua", done.stdout + done.stderr)
+            self.assertNotIn("pagebreak.lua", done.stdout + done.stderr)
+            self.assertIn("==keep literal==", (folder / "doc.html").read_text(encoding="utf-8"))
+        for key in ("options.markup", "options.pagebreak"):
+            setting = next(item for item in SETTINGS if item.key == key)
+            self.assertTrue(plain.edit(stores, setting, lambda prompt: "-", lambda line: None))
+            self.assertIsNone(registry.read(stores, setting))
+
     def test_zero_restores_the_default_and_empty_sections_go(self):
         done, path = self.run_setup([str(number("options.fallback")), "0", "s"], "options:\n  fallback: box\n")
         self.assertFalse(path.exists())                      # nothing left to keep: the file goes
@@ -692,6 +721,18 @@ class Fancy(unittest.TestCase):
         down = "j" * [s.key for s in SETTINGS].index("options.fallback")
         self.assertTrue(self.drive(down + " s", stores))          # unset -> first choice
         self.assertEqual(stores["config"], {"options": {"fallback": "word"}})
+
+    def test_removing_the_last_family_stores_none_and_r_restores_the_default(self):
+        for key in ("options.markup", "options.pagebreak"):
+            with self.subTest(key=key):
+                setting = next(item for item in SETTINGS if item.key == key)
+                stores = {"config": {}}
+                registry.write(stores, setting, [setting.choices[0][0]])
+                down = "j" * [item.key for item in SETTINGS].index(key)
+                self.assertTrue(self.drive(down + "\r \rs", stores))
+                self.assertEqual(registry.read(stores, setting), [])
+                self.assertTrue(self.drive(down + "rs", stores))
+                self.assertIsNone(registry.read(stores, setting))
 
     def test_a_text_setting_is_asked_for_and_stored_in_its_file(self):
         stores: dict = {}

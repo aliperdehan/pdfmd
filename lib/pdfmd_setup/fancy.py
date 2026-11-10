@@ -51,7 +51,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         chosen = [str(item) for item in current] if isinstance(current, list) else []
         chosen = [item for item in chosen if item != value] if value in chosen else chosen + [value]
         ordered = [item for item, _ in setting.choices if item in chosen]
-        write(stores, setting, ordered or None)
+        write(stores, setting, ordered if ordered or setting.key in ("options.markup", "options.pagebreak") else None)
         state["dirty"] = True
 
     def render():
