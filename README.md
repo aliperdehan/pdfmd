@@ -903,9 +903,11 @@ from it.
 
 Flattening cannot be undone (ids, cross-reference numbers, citations and scripts are text now). So a Markdown output
 can end with its whole source in one HTML comment (the assembled Markdown, a manifest of the layout, the `.csv` data), and
-`--restore` writes them back. Unlike `--attach-source` on a PDF it has no bundle unless asked: a `.tex` the text `\input`s
-and the pictures stay out (`--bundle sources` adds the first, `--bundle` both), as does a `preamble.tex`, which a Markdown
-build does not read:
+`--restore` writes them back. It carries what `--attach-source` puts into a PDF for the same bundle setting: the
+`preamble.tex` (found as a PDF build finds it, though the Markdown build itself does not read it) and, by default (`sources`),
+the `.tex` files the text and the preamble `\input`. The pictures are the difference: a PDF holds them, a Markdown file
+does not, so they come with `--bundle` (or `--bundle all`); without, the restored folder needs them put back. `--no-bundle`
+keeps the source and the preamble alone:
 
 ```sh
 pdfmd report --to gfm --keep-source            # report.gfm.md ends with the source, compressed (packed)
@@ -1530,8 +1532,8 @@ style, a compound library, a shared bibliography and parts.
   again; only images are left out (the PDF has them). Over 100 MB (`bundle-max-mb`) only the source is
   attached. `bundle: false` (or `--no-bundle`) keeps the source alone; `--bundle` (`bundle: true`) stores the
   image files too, `--bundle all` the whole folder except output and housekeeping. Data whose file name a
-  macro builds cannot be found: use `all`. A Markdown output (`--keep-source`) has no PDF to take pictures
-  from and keeps the source alone unless you ask.
+  macro builds cannot be found: use `all`. A Markdown output (`--keep-source`) keeps the same files, but has no PDF to
+  take pictures from: they come with `--bundle`.
 - **`--restore` and `--unpack` stay short.** They count what they write by folder; `--verbose` lists every
   file, and `--restore --list` always does.
 - **Your own LaTeX packages** (a house style in `texmf-home`) are recorded with

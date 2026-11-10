@@ -1508,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.63"
+PDFMD_VERSION = "3.33.64"
 import argparse
 import atexit
 import contextlib
@@ -15827,7 +15827,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                                            else md_path.with_suffix(suffix))
                 keep_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                           preamble_files, effective_no_auto(md_path, no_auto), keep_mode, verbose,
-                                          ascii_only=ASCII_CLI["on"] and target_format in ASCII_FORMATS)
+                                          ascii_only=ASCII_CLI["on"] and target_format in ASCII_FORMATS,
+                                          pandoc_options=pandoc_options)
     return result
 
 

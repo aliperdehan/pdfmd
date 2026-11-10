@@ -196,6 +196,32 @@ Water is H~2~O.
                 self.assertIn("--> and --!>", source)
                 self.assertEqual((self.directory / f"{mode}.restored" / "data.csv").read_text(), "Name,Mass\nWater,18.02\n")
 
+    def test_the_preamble_and_the_files_it_inputs_come_back_as_from_a_pdf(self):
+        """v3.33.64: a Markdown output kept no preamble.tex, nor what it \\inputs (not even with --bundle sources), where a
+        PDF's attached source has both: the bundle is `sources` by default for both, and the pictures come with --bundle."""
+        self.write("extra.tex", "\\newcommand{\\shout}[1]{\\textbf{#1!}}\n")
+        self.write("preamble.tex", "\\input{extra.tex}\n\\newcommand{\\greet}{Hello}\n")
+        (self.directory / "pic.png").write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+            "1f15c4890000000d49444154789c63000100000500010d0a2db40000000049454e44ae426082"))
+        self.write("doc.md", "---\ntitle: T\n---\n\n\\greet{} and \\shout{loud}.\n\n![A box](pic.png)\n")
+        for flags, name, files in (((), "default", ["doc.md", "extra.tex", "preamble.tex"]),
+                                   (("--bundle", "sources"), "sources", ["doc.md", "extra.tex", "preamble.tex"]),
+                                   (("--bundle",), "referenced", ["doc.md", "extra.tex", "pic.png", "preamble.tex"]),
+                                   (("--no-bundle",), "none", ["doc.md", "preamble.tex"])):
+            with self.subTest(name):
+                made = self.run_pdfmd("doc.md", "--to", "gfm", "--keep-source", *flags, "-o", f"{name}.md")
+                self.assertEqual(made.returncode, 0, made.stderr)
+                self.assertIn(", preamble", made.stdout)
+                restored = self.run_pdfmd("--restore", f"{name}.md")
+                self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
+                folder = self.directory / f"{name}.restored"
+                self.assertEqual(sorted(item.name for item in folder.iterdir()), files)
+                self.assertIn("\\input{extra.tex}", (folder / "preamble.tex").read_text(encoding="utf-8"))
+        plain = self.run_pdfmd("doc.md", "--to", "gfm", "-o", "plain.md")             # the Markdown itself: no preamble used
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertNotIn("preamble", plain.stdout + plain.stderr)
+
     def test_restore_never_overwrites_and_can_list(self):
         self.document()
         self.assertEqual(self.run_pdfmd("doc.md", "--to", "gfm", "--keep-source", "-o", "k.md").returncode, 0)

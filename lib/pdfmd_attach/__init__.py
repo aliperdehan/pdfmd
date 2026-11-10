@@ -16,7 +16,7 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd na
 runs: `ACCESSORY_DIRNAME`, `ATTACH_FORMAT`, `ATTACH_MANIFEST`, `ATTACH_SOURCE`, `BIB_ATTACH_CLI`, `BUNDLE_CLI`, `BUNDLE_MAX_MB`,
 `BUNDLE_PACKAGES_CLI`, `BUNDLE_SKIP_DIRS`, `CSL_ATTACH_CLI`, `EMBED_BLOCK_RE`, `EMBED_KINDS`, `EmbedRequest`, `GRAPHIC_RE`,
 `IMAGE_REF_RE`, `PDFMD_VERSION`, `RESTORED_SUFFIX`, `UNPACKED_SUFFIX`, `active_kits`, `add_calc_constants`,
-`assemble_markdown_text`, `atomic_write_bytes`, `atomic_write_pdf`, `comments_note`, `display_path`, `drop_calc_export`,
+`assemble_markdown_text`, `atomic_write_bytes`, `atomic_write_pdf`, `comments_note`, `display_path`, `document_preambles`, `drop_calc_export`,
 `extra_key`, `first_block_start`, `first_pdfmd_option`, `folder_layer_files`, `folder_options_safe`, `front_matter_dict`,
 `frontmatter_no_auto`, `header_includes_text`, `is_crlf_text`, `is_global_metadata`, `kit_carried_files`,
 `kit_embedded_preambles`, `make_embed_plan`, `match_images_to_pdf`, `merge_options`, `option_flag`, `option_flag_number`,
@@ -185,11 +185,14 @@ SCANNED_SUFFIXES = (".tex", ".sty", ".cls", ".def", ".cfg", ".md", ".markdown", 
 
 def attached_bundle_mode(md_path: Path, metadata_files: list[Path], is_pdf: bool) -> str | None:
     """The bundle a source is attached with. Said (--bundle, --no-bundle, pdfmd-options.bundle): that. Not
-    said: for a PDF, "sources" (v3.28.15: a restored report builds again, which needed `bundle: referenced`
-    before and the images with it); for a Markdown output (--keep-source), none."""
+    said: "sources" (v3.28.15: a restored report builds again, which needed `bundle: referenced` before and the
+    images with it), for a PDF and, since v3.33.64, for a Markdown output (--keep-source) as well, which had none:
+    the files the text and its preamble `\\input` come back with it. ``is_pdf`` no longer changes the answer; the
+    pictures do differ: a PDF holds them, a Markdown file stores them only with a bundle that takes them (`referenced`,
+    `all`)."""
     if core.BUNDLE_CLI is not None or core.first_pdfmd_option(md_path, metadata_files, "bundle") is not None:
         return core.resolve_bundle(md_path, metadata_files)
-    return "sources" if is_pdf else None
+    return "sources"
 
 
 def layout_path(base: Path, item: Path) -> str:
@@ -931,9 +934,16 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
 
 def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
                               preamble_files: list[Path] | None, no_auto: list[str] | None, mode: str,
-                              verbose: bool, ascii_only: bool = False) -> None:
+                              verbose: bool, ascii_only: bool = False, pandoc_options: list[str] | None = None) -> None:
     """--keep-source: end the Markdown just written with its source. For an ASCII build the trailer is ASCII too: the
-    packed form, with the source's name spelt in ASCII (the readable form would carry the Unicode source as it is)."""
+    packed form, with the source's name spelt in ASCII (the readable form would carry the Unicode source as it is).
+
+    The preambles are found here when the build had none (v3.33.64): a Markdown build does not look for them (they are
+    LaTeX's), so the kept source had no `preamble.tex`, nor the files it `\\input`s, where a PDF's attached one has both.
+    Found as a PDF build finds them (`document_preambles`, with the run's Pandoc options: an `--include-in-header` still
+    stops the search), for the kept source only: the Markdown written is as before."""
+    if not preamble_files:
+        preamble_files = core.document_preambles(md_path, list(pandoc_options or []), no_auto)
     try:
         import pdfmd_flat.keep as keep
     except ImportError:

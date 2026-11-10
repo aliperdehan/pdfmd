@@ -802,9 +802,9 @@ class BundleReach(unittest.TestCase):
         self.assertIn("FILE      schemes/ester.tex", shown.getvalue())
         self.assertFalse((self.root / "l").exists())
 
-    def test_a_markdown_output_keeps_its_source_alone_unless_a_bundle_is_asked_for(self):
-        document = self.scheme_report()
-        self.assertIsNone(pdfmd.attached_bundle_mode(document, [], False))
+    def test_a_markdown_output_keeps_the_files_its_text_reads_as_a_pdf_does(self):
+        document = self.scheme_report()                                    # v3.33.64: was none for a Markdown output
+        self.assertEqual(pdfmd.attached_bundle_mode(document, [], False), "sources")
         self.assertEqual(pdfmd.attached_bundle_mode(document, [], True), "sources")
 
     def test_a_picture_that_comes_back_under_a_new_name_is_renamed_in_the_stored_tex(self):

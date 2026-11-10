@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.64 — 2026-11-10
+
+Pre-edit state: commit `5e64828`. **A Markdown output's kept source carries the preamble and the files it `\input`s, as a
+PDF's attached source does.** `--to gfm --keep-source` kept no `preamble.tex` (a Markdown build does not look for
+preambles, so none was passed on), and so none of the `.tex` files it `\input`s, even with `--bundle sources` or `--bundle`;
+and with no bundle by default a `.tex` the text `\input`s stayed out too. A restored folder then could not build the PDF the
+original builds (LaTeX stopped on the preamble's commands; pdfmd fell back to Typst). The author (2026-11-10): "it should at
+least try to compile the same, and bundle shall provide identical output in any case; even attach-source should at least
+carry its preamble".
+
+- `keep_source_after_success` (`lib/pdfmd_attach`) finds the preambles itself when the build had none: `document_preambles`
+  with the run's Pandoc options (an `--include-in-header` still stops the search), for the kept source only. The Markdown
+  written is unchanged (byte-identical to HEAD, with and without `--keep-source`, but for the trailer) and no FOUND line is
+  added.
+- `attached_bundle_mode`: `sources` by default for a Markdown output too (was none): the files the text and its preamble
+  `\input` come with it. The pictures are what differs from a PDF: a PDF holds them (`--restore` takes them out of it), a
+  Markdown file does not, so they come with `--bundle` (`referenced`) or `--bundle all`, as `sources` is defined (never
+  images); `--restore` says which to put back. `--no-bundle` keeps the source and the preamble alone. The 1 MB warning stays.
+- Checked through pdfmd on a folder with `preamble.tex` (`\input{extra.tex}`, two commands the text uses) and `pic.png`: the
+  PDF built from the original, then `--to gfm --keep-source` in each mode, `--restore`, the PDF built from the restored folder
+  (pdftotext and pages against the original). HEAD: every mode restores `doc.md` only (and `pic.png` with `--bundle`),
+  LuaLaTeX fails on `\greet`, Typst builds it, the text differs. Now: default and `sources` restore `doc.md`, `preamble.tex`,
+  `extra.tex`: LuaLaTeX, the same text once `pic.png` is put back (without it the picture's description stands in it);
+  `--bundle`: also `pic.png`, the same text and page count as it is; `--no-bundle`: `doc.md` and `preamble.tex`. The PDF's
+  `--attach-source` (checked first): the preamble embedded, `extra.tex` stored, the picture from the PDF; unchanged.
+- Tests: `test_keep_source` (the files restored in each mode, no preamble line for a plain Markdown build) and `test_attach`
+  (the default bundle); fail at HEAD. `test_keep_source test_attach test_attach_layers test_attach_format
+  test_standalone_source test_kit_carry test_edit_pdf test_ascii test_embedding test_split test_packaging
+  test_docs_consistency test_setup`: 253 OK (5 skipped).
+- README (`--keep-source`, which v3.33.58b had made say the opposite, and the bundle list) and `docs/recipes.md`.
+
 ## v3.33.63 — 2026-11-10
 
 Pre-edit state: commit `ab44146`. **An author written as a mapping without `name` is left out, with a warning.** With
