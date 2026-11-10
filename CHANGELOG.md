@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.86 — 2026-11-10
+
+Pre-edit state: commit `2e743e9`. **Preserve the document catalogue when cropping.** Cropping to the source itself or
+another output discarded attached sources and bookmarks. Crop now clones the complete document before changing page boxes,
+handles page selection separately and writes through an exclusively created sibling file before atomic replacement.
+An isolated launcher regression checks attachments, outline destinations, metadata and boxes for both output forms;
+checked failing before the fix and passing afterwards. Crop-area and required checks run. `pdfmd.py` stays at 17,241 lines;
+no new thresholds.
+
 ## v3.33.85 — 2026-11-10
 
 Pre-edit state: commit `949997a`. **Watch individual inputs for additions, changes and deletions.** Comparing only the newest

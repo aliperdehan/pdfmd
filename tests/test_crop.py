@@ -144,6 +144,29 @@ class CommandLine(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, encoding="utf-8",
                               cwd=self.dir)
 
+    def test_crop_preserves_attachments_and_outline_for_every_destination(self):
+        writer = pypdf.PdfWriter(clone_from=str(self.source))
+        writer.add_attachment("source.md", b"# Original\n")
+        writer.add_outline_item("Formula", 0)
+        writer.add_metadata({"/Subject": "Keep me"})
+        writer.write(str(self.source))
+        for name in ("other.pdf", "formula.pdf"):
+            with self.subTest(name=name):
+                env = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1")
+                for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+                    env[key] = str(self.dir / key)
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"),
+                                       "--crop", str(self.source), "-o", str(self.dir / name)],
+                                      cwd=self.dir, env=env, stdin=subprocess.DEVNULL,
+                                      capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                reader = pypdf.PdfReader(str(self.dir / name))
+                self.assertEqual(reader.attachments["source.md"], [b"# Original\n"])
+                self.assertEqual(reader.outline[0].title, "Formula")
+                self.assertEqual(reader.get_destination_page_number(reader.outline[0]), 0)
+                self.assertEqual(reader.metadata.subject, "Keep me")
+                self.assertEqual(media(self.dir / name), [48.0, 28.0, 112.0, 52.0])
+
     def test_the_result_sits_beside_the_source(self):
         done = self.run_pdfmd("--crop", "formula.pdf", "--crop-pad", "1")
         self.assertEqual(done.returncode, 0, done.stderr)

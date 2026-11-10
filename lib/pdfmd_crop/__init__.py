@@ -124,11 +124,12 @@ def crop_pdf(source: Path, target: Path, *, pad: float = DEFAULT_PAD, ignore_bot
     # a fresh reader: the probe changed the crop boxes of the first one
     reader = PdfReader(str(source))
     writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
     result: list[Box | None] = []
     for number in range(count):
         if page is not None and number + 1 != page:
             continue
-        target_page = reader.pages[number]
+        target_page = writer.pages[number]
         area = target_page.cropbox
         left0, bottom0 = float(area.left), float(area.bottom)
         right0, top0 = float(area.right), float(area.top)
@@ -149,16 +150,20 @@ def crop_pdf(source: Path, target: Path, *, pad: float = DEFAULT_PAD, ignore_bot
                 if f"/{name[:-3].capitalize()}Box" in target_page:
                     setattr(target_page, name, rectangle)
             result.append(box)
-        writer.add_page(target_page)
-    if reader.metadata:
-        writer.add_metadata({key: str(value) for key, value in reader.metadata.items()})
+    if page is not None:
+        for number in reversed(range(count)):
+            if number + 1 != page:
+                writer.remove_page(number, clean=True)
     # to a sibling file first, so a crop in place never leaves half a PDF
-    partial = target.with_name(target.name + ".part")
+    partial = None
     try:
-        with open(partial, "wb") as handle:
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix=target.name + ".", suffix=".part", delete=False) as handle:
+            partial = Path(handle.name)
             writer.write(handle)
         partial.replace(target)
     except OSError as error:
-        partial.unlink(missing_ok=True)
         raise CropError(f"could not write {target}: {error}") from error
+    finally:
+        if partial is not None:
+            partial.unlink(missing_ok=True)
     return Cropped(count, result)
