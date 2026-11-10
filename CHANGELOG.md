@@ -66,6 +66,10 @@ or an option clash) when a kit, the class or a `preamble.tex` had loaded soul or
   595.28 x 841.89, rot 90, now 841.89 x 595.28, rot 0. A plain document with `::: landscape`: `-t latex -s` byte-identical to
   HEAD, page 2 still rot 90. A `preamble.tex` with `\usepackage{soul}`, and one with `\usepackage{lua-ul}`: LuaLaTeX failed, now
   builds. Documents with string and mapping authors, `-t latex -s`: byte-identical.
+- Fixed in a second commit, before release: pdfmd's own header files in the system's temporary folder (`pdfmd-fonts-*.tex`, which
+  a CJK author's name brings; `pdfmd-pdfmeta-*.tex`) were taken for the user's, so such a document got the guarded header
+  (`pdfmds_own_header`). Six documents with string, LaTeX, CJK and mapping authors, `-t latex -s` and `-t beamer -s`:
+  byte-identical to the commit before 3.33.67.
 - The other packages of the markup header: xcolor is loaded only when it is not (as before); tcolorbox loaded again is a no-op and
   pdfmd's names (`pdfmdcallout`, `pdfmd-*` colours, `\pdfmdhl`) are its own. `center`, `keep`, `toc`, `appendix`, `underline` and
   `space` load nothing.

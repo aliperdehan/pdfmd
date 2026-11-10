@@ -15,6 +15,7 @@ call); the pdfmd names it reads (`MARKUP_HEADERS`, `active_kits`, `cache_root`, 
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 core = None
@@ -76,6 +77,19 @@ def _values(cmd: list[str], short: str, long: str) -> list[str]:
     return found
 
 
+def pdfmds_own_header(path: Path) -> bool:
+    """Whether a header file is one pdfmd writes itself: in its cache folder, or a `pdfmd-*` file of the system's temporary folder
+    (the fonts header, `pdfmd-fonts-*.tex`; the PDF properties, `pdfmd-pdfmeta-*.tex`). A document's `header-includes` file
+    (`.NAME.pdfmd-header-*.tex`, beside it) is the user's LaTeX, and so is every other file."""
+    try:
+        where = path.resolve()
+        cache = core.cache_root().resolve()
+        temporary = Path(tempfile.gettempdir()).resolve()
+    except OSError:
+        return False
+    return cache in where.parents or (where.parent == temporary and where.name.startswith("pdfmd-"))
+
+
 def foreign_latex_before(md_path: Path, metadata_files: list[Path], before: list[str]) -> bool:
     """Whether LaTeX that is not Pandoc's template or pdfmd's own may come before the markup header in this build: a chosen kit, a
     header file outside pdfmd's cache folder (`preamble.tex`, `-H`), an own template or defaults file, a non-standard class."""
@@ -83,16 +97,8 @@ def foreign_latex_before(md_path: Path, metadata_files: list[Path], before: list
         return True
     if any(item in ("--template", "-d", "--defaults") or item.startswith(("--template=", "--defaults=")) for item in before):
         return True
-    try:
-        own = core.cache_root().resolve()
-    except OSError:
-        own = None
     for name in _values(before, "-H", "--include-in-header"):
-        try:
-            path = Path(name).resolve()
-        except OSError:
-            return True
-        if own is None or own not in path.parents:
+        if not pdfmds_own_header(Path(name)):
             return True
     classes = [value.split("=", 1)[1] if "=" in value else value.split(":", 1)[1]
                for value in _values(before, "-V", "--variable") + _values(before, "-M", "--metadata")

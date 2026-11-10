@@ -77,6 +77,12 @@ class Pieces(unittest.TestCase):
             own = pdfmd.cache_root() / "tex" / "packages-x.tex"
             self.assertEqual(markup.markup_header_pieces(document, [], ["landscape"], ["--include-in-header", str(own)]),
                              [pdfmd.MARKUP_LANDSCAPE_HEADER])
+            fonts = Path(tempfile.gettempdir()) / "pdfmd-fonts-abc.tex"          # the fonts header of a CJK author (3.33.67's fix)
+            self.assertEqual(markup.markup_header_pieces(document, [], ["landscape"], ["--include-in-header", str(fonts)]),
+                             [pdfmd.MARKUP_LANDSCAPE_HEADER])
+            theirs = Path(folder) / ".a.pdfmd-header-abc.tex"
+            self.assertEqual(markup.markup_header_pieces(document, [], ["landscape"], ["--include-in-header", str(theirs)]),
+                             [markup.LANDSCAPE_GUARDED])
 
     def test_the_guard_keeps_an_environment_with_its_end(self):
         self.assertIn(r"\ifdefined\landscape\ifdefined\endlandscape", markup.LANDSCAPE_GUARDED)
