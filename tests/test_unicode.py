@@ -483,6 +483,27 @@ class ColourEmoji(unittest.TestCase):
         self.assertEqual(self.colorfont.write_pictures(text, set(), str(self.font), self.root / "none"), {})
         self.assertEqual(self.colorfont.write_pictures(text, wanted, str(self.root / "missing.ttf"), self.root / "x"), {})
 
+    def test_parallel_picture_writers_use_distinct_temporary_files(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from unittest.mock import patch
+
+        barrier = Barrier(2)
+        replace = Path.replace
+
+        def concurrent_replace(path, target):
+            barrier.wait(timeout=10)
+            return replace(path, target)
+
+        def write():
+            return self.colorfont.write_pictures("🚀", {0x1F680}, str(self.font), self.root / "out")
+
+        with patch.object(Path, "replace", concurrent_replace), ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: write(), range(2)))
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(Path(results[0]["🚀"]).read_bytes(), self.ROCKET)
+        self.assertEqual(list((self.root / "out").iterdir()), [Path(results[0]["🚀"])])
+
     def test_the_filter_replaces_a_sequence_with_its_picture(self):
         if not shutil.which("pandoc"):
             self.skipTest("Pandoc not installed")

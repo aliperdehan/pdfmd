@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.111 — 2026-11-11
+
+Pre-edit state: commit `7cb78ca`. **Avoid concurrent emoji cache writes colliding.** Parallel builds caching the
+same emoji shared a temporary file, so one rename could make the other fail. Each writer now atomically replaces
+the cache entry from its own temporary file; a concurrent-writer regression checks both results and cleanup.
+
 ## v3.33.110 — 2026-11-11
 
 Pre-edit state: commit `77d205d`. **Preserve complete abstracts when flattening.** An abstract containing several
