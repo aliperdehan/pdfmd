@@ -147,6 +147,13 @@ class Pipeline(unittest.TestCase):
         self.assertIn("┌", plain)
         self.assertLessEqual(max(visible_width(line) for line in text.splitlines()), 70)
 
+    def test_incomplete_display_math_falls_back_without_traceback(self):
+        (self.directory / "incomplete.md").write_text("$$\n\\frac{a}\n\\\n$$\n", encoding="utf-8")
+        done = self.run_pdfmd("--view", "incomplete.md", "--color", "never")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("Traceback", done.stdout + done.stderr)
+        self.assertIn("a/()", done.stdout)
+
     def test_an_ansi_extension_selects_the_format(self):
         done = self.run_pdfmd("a.md", "-o", "x.ansi", "--no-stamp", "--no-backup", "--color", "never")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.83 — 2026-11-10
+
+Pre-edit state: commit `fcb70f1`. **Fall back for an incomplete maths command.** A display fraction followed by a lone
+backslash and newline caused an unchecked match to raise a traceback. The parser now signals unsupported maths so the plain
+form is rendered. A terminal-view pipeline regression covers the malformed input; the area and required checks run.
+
 ## v3.33.82 — 2026-11-10
 
 Pre-edit state: commit `6083a26`. **Keep the stdin scratch source through conversion.** An unwritable current folder forced

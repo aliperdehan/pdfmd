@@ -98,6 +98,8 @@ def group(source: str, start: int) -> Tuple[str, int]:
         raise Unsupported("unbalanced brace")
     if source[start] == "\\":
         match = re.compile(r"\\(?:[A-Za-z]+|.)").match(source, start)
+        if not match:
+            raise Unsupported("incomplete command")
         return match.group(0), match.end()
     return source[start], start + 1
 
