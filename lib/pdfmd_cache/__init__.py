@@ -62,30 +62,64 @@ CACHE_LOCATION_NAMES = {"root": "global", "user": "global", "home": "global", "c
                         "self-contained": "document"}
 
 
+def location_setting(md_path: Path, metadata_files: list[Path]) -> tuple[object, str] | None:
+    """The cache location asked for and the setting that asks (`--cache-location`, `pdfmd-options.cache.location` or
+    `pdfmd-options.cache-location`): the command line, else the document, its metadata files and the config file, the
+    first that says. None when none does."""
+    if core.CACHE_LOCATION_CLI is not None:
+        return core.CACHE_LOCATION_CLI, "--cache-location"
+    sources = [core.frontmatter_pdfmd_options(md_path)]
+    for metadata_file in core.metadata_files_by_priority(metadata_files):
+        found = core.metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(found if isinstance(found, dict) else {})
+    sources.append(core.config_options(md_path))
+    for options in sources:
+        nested = options.get("cache")
+        value = nested.get("location") if isinstance(nested, dict) else None
+        if value:                                       # an empty one gives way to `cache-location:`, as before
+            return value, "pdfmd-options.cache.location"
+        if options.get("cache-location") is not None:
+            return options["cache-location"], "pdfmd-options.cache-location"
+    return None
+
+
+def location_word(value) -> str:
+    text = str(value).strip().casefold()
+    return CACHE_LOCATION_NAMES.get(text, text)
+
+
 def cache_location(md_path: Path, metadata_files: list[Path]) -> str:
     """Where this document's cache lives: `global` (cache_root(): ~/.cache/pdfmd) or `document` (a
     `.cache/pdfmd` folder beside it, so the folder carries its cache wherever it is moved). The command
     line, else `pdfmd-options: {cache: {location: ...}}` (or `cache-location:`) of the document, its
     metadata files and the config file, else global."""
-    value = core.CACHE_LOCATION_CLI
-    if value is None:
-        sources = [core.frontmatter_pdfmd_options(md_path)]
-        for metadata_file in core.metadata_files_by_priority(metadata_files):
-            found = core.metadata_file_yaml(metadata_file).get("pdfmd-options")
-            sources.append(found if isinstance(found, dict) else {})
-        sources.append(core.config_options(md_path))
-        for options in sources:
-            nested = options.get("cache")
-            value = (nested.get("location") if isinstance(nested, dict) else None) or options.get("cache-location")
-            if value is not None:
-                break
-    if value is None:
+    found = location_setting(md_path, metadata_files)
+    if found is None:
         return "global"
-    text = str(value).strip().casefold()
-    text = CACHE_LOCATION_NAMES.get(text, text)
+    value = found[0]
+    text = location_word(value)
     if text not in core.CACHE_LOCATIONS:
         raise SystemExit(f"{md_path}: cache location {value!r} is not one of {', '.join(core.CACHE_LOCATIONS)}")
     return text
+
+
+def check_location(md_path: Path, metadata_files: list[Path], cli: bool | None) -> None:
+    """An unknown cache location (`location: moon`) stops a build when the cache is used (cache_location, v3.23.12); with
+    the cache off nothing reads it, and it passed in silence. Now a WARN, once a build (convert_one calls this), naming the
+    setting, the value and the words it takes (v3.33.61)."""
+    if md_path.suffix.lower() not in (".md", ".markdown"):
+        return
+    try:
+        found = location_setting(md_path, metadata_files)
+    except OSError:
+        return
+    if found is None or location_word(found[0]) in core.CACHE_LOCATIONS:
+        return
+    settings = core.cache_settings(md_path, metadata_files, cli)
+    if any(settings.values()):
+        return                                                  # used: cache_location stops the build there
+    print(f"WARN  {md_path}: {found[1]} {found[0]!r} is not one of {', '.join(core.CACHE_LOCATIONS)}; "
+          "the cache is off, so nothing uses it", file=sys.stderr)
 
 
 def document_cache_root(md_path: Path, metadata_files: list[Path]) -> Path:

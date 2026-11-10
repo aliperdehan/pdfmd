@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.61 — 2026-11-10
+
+Pre-edit state: commit `d880025`. **An unknown cache location is a warning when the cache is off.** `pdfmd-options: {cache:
+{location: moon}}` (or `cache-location: moon`) stopped a build only where the cache is used (`cache_location`,
+`lib/pdfmd_cache`: `--cache`, `cache: {aux: true}` or `plots`); with the cache off nothing read it, and the word passed in
+silence. `check_location` (`lib/pdfmd_cache`, called by `convert_one`, so once a build) now prints `WARN  doc.md:
+pdfmd-options.cache.location 'moon' is not one of global, document; the cache is off, so nothing uses it` (the setting that
+says it: `cache.location` or `cache-location`; `--cache-location` takes only the two words). With the cache on, the error is
+as before. `location_setting` gives the value and the setting that says it, which `cache_location` now reads; the order of the
+places (command line, document, metadata files, config) is unchanged. A `--strict` build counts the warning. README (the cache
+section) says so.
+
+- Checked through pdfmd: `location: moon` to PDF and `--to html`, `cache-location: moon`: one WARN each, the build OK (none at
+  HEAD); `--cache`: `cache location 'moon' is not one of global, document`, exit 1, no WARN (as at HEAD); `location: here` (an
+  alias) and `--cache-location global`: nothing; `--strict --to html`: FAIL on the warning.
+- Tests: `test_cache_location` (the message for both settings, nothing with the cache on or a known word, once through pdfmd and
+  the error with `--cache`; fail at HEAD). `test_cache_location test_build_log test_split test_packaging test_docs_consistency
+  test_setup`: 111 OK (1 skipped).
+
 ## v3.33.60b — 2026-11-10
 
 Pre-edit state: commit `cf7d376`. Tests only, no version bump. **The tests no longer write into the machine's own cache,

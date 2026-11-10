@@ -76,6 +76,42 @@ class Location(CacheCase):
         with self.assertRaises(SystemExit):
             pdfmd.cache_location(doc, [])
 
+    def test_a_bad_location_with_the_cache_off_is_a_warning_naming_the_setting(self):
+        import contextlib
+        import io
+        for front, key in (("cache: {location: moon}", "pdfmd-options.cache.location"),
+                           ("cache-location: moon", "pdfmd-options.cache-location")):
+            with self.subTest(key):
+                doc = self.document("a", front=f"pdfmd-options:\n  {front}\n")
+                with contextlib.redirect_stderr(io.StringIO()) as said:
+                    pdfmd.pdfmd_cache.check_location(doc, [], None)
+                self.assertEqual(said.getvalue(), f"WARN  {doc}: {key} 'moon' is not one of global, document; "
+                                                  "the cache is off, so nothing uses it\n")
+        for front, cli in (("cache: {location: moon, aux: true}", None), ("cache: {location: moon}", True),
+                           ("cache: {location: here}", None), ("cache-location: global", None), ("title: T", None)):
+            with self.subTest(front=front, cli=cli):
+                doc = self.document("b", front=f"pdfmd-options:\n  {front}\n" if "cache" in front else f"{front}\n")
+                with contextlib.redirect_stderr(io.StringIO()) as said:
+                    pdfmd.pdfmd_cache.check_location(doc, [], cli)
+                self.assertEqual(said.getvalue(), "")                           # the cache on (an error when used), or a known word
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_through_pdfmd_the_warning_comes_once_and_the_cache_on_still_stops(self):
+        import subprocess
+        doc = self.document("a", text="Text.\n", front="title: T\npdfmd-options:\n  cache: {location: moon}\n")
+        env = {**os.environ, "PDFMD_NO_PROMPT": "1"}
+        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), str(doc), "--to", "html", "--no-stamp"],
+                              capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr.count("WARN  "), 1, done.stderr)
+        self.assertIn("pdfmd-options.cache.location 'moon' is not one of global, document; the cache is off", done.stderr)
+        if any(shutil.which(name) for name in ("lualatex", "xelatex", "pdflatex")):
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), str(doc), "--cache", "--no-stamp"],
+                                  capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("cache location 'moon' is not one of global, document", done.stderr)
+            self.assertNotIn("WARN  ", done.stderr)
+
     def test_the_local_folder_is_marked_as_a_cache_and_ignored_by_git(self):
         doc = self.document("a")
         local = self.root / "a" / ".cache" / "pdfmd"

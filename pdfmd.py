@@ -1508,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.60"
+PDFMD_VERSION = "3.33.61"
 import argparse
 import atexit
 import contextlib
@@ -15223,6 +15223,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":
     recorder = load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
     try:
         with warning_capture() as seen:
+            pdfmd_cache.check_location(md_path, metadata_files, bound.get("cache_cli"))
             result = _convert_one_recorded(md_path, *args, **kwargs)
             if result[1]:
                 check_output_budget(BUILD["output"], BUILD["sources"] or [md_path], md_path, metadata_files)

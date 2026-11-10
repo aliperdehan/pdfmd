@@ -1967,7 +1967,8 @@ puts it in a `.cache/pdfmd` folder beside the document (with a `CACHEDIR.TAG`, s
 backup tools skip it, and a `.gitignore`), which travels with the folder. It is
 yours to choose per document, in the config file for everything, or with
 `--cache-location`. `--clear-cache` clears both places. (The colour-emoji pictures
-LaTeX uses are in the same cache.)
+LaTeX uses are in the same cache.) A word other than `global` or `document` stops a build
+that uses the cache; with the cache off it is a warning.
 
 ### Tables straight from a CSV file
 
