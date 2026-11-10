@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.56 — 2026-11-10
+
+Pre-edit state: commit `f3d7ccc`. **A LaTeX or HTML PDF names an author written as a mapping.** With `author: [{name: Jane
+Doe, affiliation: NU}]` the PDF's Author left that author out on the LaTeX engines and on WeasyPrint: Pandoc's `author-meta`
+(hyperref's `pdfauthor`, the HTML page's `<meta name="author">`) holds the authors written as text only. Two mappings gave
+`''` (lualatex, pdflatex) or no Author (xelatex, WeasyPrint); a string and a mapping gave only the string. (`-e calibre` was
+fixed in 3.33.53.)
+
+- `pdfmd_lua/title_meta.lua`, which already set `author-meta` from the names when they hold LaTeX, now sets it too when an
+  author is a mapping: from each mapping's `name` only (never the whole mapping, so no "Jane DoeNU"), joined as Pandoc joins
+  authors written as text: one `"A; B"` for LaTeX and Beamer, one `<meta name="author">` each for HTML (raw and escaped, as
+  `office.lua` writes them). A mapping without `name` is left out. A document's own `author-meta` stays. `title_filter_args`
+  runs the filter when `mapped_author` (`lib/pdfmd_native`, beside `author_names`; `calibre_author_options` uses it too) says
+  an author is a mapping. A document whose authors are all text gets no new filter: its command and output are as before.
+- Typst is unchanged: Pandoc's Typst template reads each mapping's `name` itself (two mappings, a string and a mapping: both
+  names, `A & B`).
+- Checked through pdfmd, the PDF's Author on lualatex, xelatex, pdflatex and WeasyPrint (before, after): two mappings `''` or
+  none, now `Alice Able; Bob Baker` (WeasyPrint `Alice Able, Bob Baker`); a string and a mapping `Alice Able`, now both;
+  `"Doe, Jane"`, `"Smith & Wesson; Ltd"` and the string `O%Brien`: `O%Brien`, now `Doe, Jane; Smith & Wesson; Ltd; O%Brien`
+  (the `.tex` has `Smith \& Wesson`, `O\%Brien`); a mapping without `name` and `Bob Baker`: `''` or none, now `Bob Baker`;
+  `Ərlan Şükürov`, `李雷` (mappings) and `Zoë Ångström`: only the last, now all three; a name with `$x^2$`: `Bob`, now
+  `Jane x^2 Doe; Bob`. Only strings: `-t latex -s`, `-t typst -s`, `-t html -s` and the `--verbose` Pandoc command
+  byte-identical to HEAD (also with LaTeX in a string author, and CJK). `-e calibre` with two mappings still `Alice Able &
+  Bob Baker`.
+- Not changed (Pandoc's templates): a name that holds the join's own separator (`Doe, Jane` among WeasyPrint's or Typst's
+  `, `) reads as two; Typst gives `true & Bob Baker` for a mapping without `name` (`true` also stands in its title block, and
+  in LaTeX's `\author`), and drops a CJK name (`李雷`) from its Author, also one written as text.
+- Tests: a new `test_author_meta` (the predicate, when the filter runs, LaTeX/Beamer/HTML/Typst output, a document's own
+  `author-meta`, a LuaLaTeX PDF's Author; five fail at HEAD); `test_author_meta test_office_latex test_calibre test_serve
+  test_engine_filters test_native test_split test_packaging test_docs_consistency test_setup`: 286 OK (3 skipped).
+
 ## v3.33.55 — 2026-11-10
 
 Pre-edit state: commit `0969ff6`. **A Calibre PDF of a document with no author has no author.** `-e calibre` (and Calibre's

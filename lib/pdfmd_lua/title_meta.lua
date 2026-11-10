@@ -5,12 +5,23 @@
 -- before the document's own filters: one that takes the title out and keeps `title-meta` (nulabreport's, for a part
 -- built alone) finds it set, and so does the LaTeX filter, which gives a Word or HTML file's properties the title a
 -- house style's cover took out. A `title-meta` or `author-meta` of the document's own stays.
+--
+-- An author written as a mapping (`- name: Jane Doe` with an `affiliation:`, v3.33.56). Pandoc's `author-meta` holds the
+-- authors written as text only, so a LaTeX or HTML PDF named none of two mappings, and only the string of a string and a
+-- mapping. pdfmd runs this filter then too, and the names (each mapping's `name`, never the whole mapping) are joined as
+-- Pandoc joins authors written as text: one "A; B" for LaTeX and Beamer (hyperref's pdfauthor), one `<meta name="author">`
+-- each for HTML (a WeasyPrint or Calibre PDF), raw as office.lua writes them (text in a template variable is wrapped at
+-- 72 columns). Typst's template reads `name` itself; other writers are left as they are.
 
 local stringify = pandoc.utils.stringify
 
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local function is_tex(raw) return raw.format == "tex" or raw.format == "latex" end
+
+local function html_text(text)
+  return (text:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"))
+end
 
 local function wrapped(value)
   local kind = pandoc.utils.type(value)
@@ -46,14 +57,24 @@ function Meta(meta)
   local authors = meta.author
   if authors ~= nil and meta["author-meta"] == nil then
     local list = pandoc.utils.type(authors) == "List" and authors or {authors}
-    local raw, names = false, {}
+    local raw, mapped, names = false, false, {}
     for _, author in ipairs(list) do
-      local value = pandoc.utils.type(author) == "table" and author.name or author
+      local is_mapping = pandoc.utils.type(author) == "table"
+      mapped = mapped or is_mapping
+      local value = is_mapping and author.name or author
       raw = raw or (value ~= nil and has_tex(value))
       local name = value ~= nil and plain(value) or nil
       if name then names[#names + 1] = name end
     end
-    if raw and #names > 0 then meta["author-meta"] = pandoc.MetaString(table.concat(names, "; ")); changed = true end
+    if #names > 0 and mapped and FORMAT:match("^html") then
+      local tags = pandoc.MetaList({})
+      for _, name in ipairs(names) do tags:insert(pandoc.MetaInlines({pandoc.RawInline("html", html_text(name))})) end
+      meta["author-meta"] = tags
+      changed = true
+    elseif #names > 0 and (raw or (mapped and (FORMAT == "latex" or FORMAT == "beamer"))) then
+      meta["author-meta"] = pandoc.MetaString(table.concat(names, "; "))
+      changed = true
+    end
   end
   return changed and meta or nil
 end

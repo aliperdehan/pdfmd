@@ -1500,7 +1500,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.55"
+PDFMD_VERSION = "3.33.56"
 import argparse
 import atexit
 import contextlib
@@ -1781,7 +1781,7 @@ import pdfmd_native  # noqa: E402
 from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BREAK_COMMENT_RE, PAGE_BREAK_RE, PAPER_SIZES,  # noqa: E402, F401 -- all but MathText and convert_native are read by tests
                           MathText, author_names, convert_native, csv_div_table, csv_guess_delimiter, csv_keep,
                           ignored_front_matter_keys, inline_math, native_font_size, native_landscape, native_order, native_page,
-                          native_paper, normalise_gfm)
+                          native_paper, mapped_author, normalise_gfm)
 import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
 
@@ -4234,7 +4234,8 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
 
 def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
     """``--lua-filter title_meta.lua`` when the title or the authors have LaTeX in them (v3.28.6): Pandoc's own
-    `title-meta`, the PDF's Title, leaves raw LaTeX out ("Reduction of -Cinnamaldehyde" for `\\emph{trans}`). Before the
+    `title-meta`, the PDF's Title, leaves raw LaTeX out ("Reduction of -Cinnamaldehyde" for `\\emph{trans}`); and when an
+    author is a mapping (`mapped_author`, v3.33.56), which Pandoc's `author-meta`, the PDF's Author, leaves out. Before the
     document's own filters, so that one which takes the title out and keeps `title-meta` finds it set."""
     files = sources if isinstance(sources, list) else [sources]
     if not files:
@@ -4248,7 +4249,7 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
         return "" if value is None else str(value)
 
     metadata = effective_metadata(files[0], metadata_files, [])
-    if not any("\\" in text(metadata.get(key)) for key in ("title", "author")):
+    if not any("\\" in text(metadata.get(key)) for key in ("title", "author")) and not mapped_author(metadata.get("author")):
         return []
     try:
         import pdfmd_lua

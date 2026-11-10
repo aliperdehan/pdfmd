@@ -7,7 +7,7 @@ with `calibre_author_options`, `run_calibre` for the "calibre" engine with `drop
 Moved out of `pdfmd.py` unchanged (v3.33.26, SPLIT.md), with `CALIBRE_TABLE_CSS` and `PANDOC_TABLE_STYLE_RE`. `core` is the `pdfmd`
 module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`BROWSER_ENGINES`, `CALIBRE_CSS`,
 `CALIBRE_OPTIONS`, `CITEPROC_DISABLED`, `DEFAULT_MARGIN`, `HTML_MATH_OPTIONS`, `PARTIAL_METADATA`, `SOFFICE_SHARED_FORMATS`,
-`atomic_write_pdf`, `author_names`, `contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `metadata_cwd`,
+`atomic_write_pdf`, `author_names`, `contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `mapped_author`, `metadata_cwd`,
 `office_finish`, `office_module`, `office_reference`, `pandoc_metadata_order`, `pandoc_version`, `pandoc_working_directory`,
 `prepared_latex_inputs`, `pypdf`, `report_engine_failure`, `resolve_calibre`, `resolve_soffice`, `resource_path_option`, `run_office_pandoc`,
 `run_soffice`, `select_filter_args`, `table_keep_metadata`, `vprint` and `which`) are read as `core.X` when it runs.
@@ -201,7 +201,7 @@ def calibre_author_options(metadata: dict) -> list[str]:
     the others, or wrote `Unknown`. Authors that are all text are left to Pandoc (it writes their markup as plain text), and a
     document's own `author-meta` is left alone."""
     value = metadata.get("author")
-    if "author-meta" in metadata or not any(isinstance(item, dict) for item in (value if isinstance(value, list) else [value])):
+    if "author-meta" in metadata or not core.mapped_author(value):
         return []
     names = core.author_names(value)
     return ["--authors", " & ".join(names)] if names else []

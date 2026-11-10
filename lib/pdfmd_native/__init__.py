@@ -534,6 +534,11 @@ class NativeSource:
         self.emoji = emoji
 
 
+def mapped_author(value) -> bool:
+    """Whether an author is written as a mapping (`- name: B`), which Pandoc's `author-meta` leaves out (v3.33.56)."""
+    return any(isinstance(item, dict) for item in (value if isinstance(value, list) else [value]))
+
+
 def author_names(value) -> list[str]:
     if isinstance(value, dict):
         value = value.get("name")
