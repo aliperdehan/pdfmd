@@ -180,15 +180,17 @@ local function number_headings(doc)
   return doc
 end
 
-local function collect_slugs(doc)
+local function collect_slugs(doc, head)
   local seen = {}
-  doc.blocks:walk({Header = function(header)
+  local function collect(header)
     local slug = github_slug(pandoc.utils.stringify(header))
     local count = seen[slug] or 0
     seen[slug] = count + 1
     local anchor = count == 0 and slug or (slug .. "-" .. count)
     if header.identifier ~= "" then slugs[header.identifier] = anchor end
-  end})
+  end
+  head:walk({Header = collect})
+  doc.blocks:walk({Header = collect})
 end
 
 local function link(element)
@@ -529,11 +531,11 @@ local function flatten(doc)
   read_config(doc.meta)
   if not flat then return nil end
   doc = number_headings(doc)
-  collect_slugs(doc)
+  local head = config.title and title_block(doc.meta) or pandoc.Blocks{}
+  collect_slugs(doc, head)
   doc = doc:walk(inline_pass)
   doc = doc:walk(block_pass)
   if config.title then
-    local head = title_block(doc.meta)
     head:extend(doc.blocks)
     doc.blocks = head
   end

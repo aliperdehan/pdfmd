@@ -142,6 +142,14 @@ class Filter(unittest.TestCase):
         self.assertIn("[the start](#alpha)", out)
         self.assertIn("See [the start](#alpha), gone and [web](https://example.org/).", out)
 
+    def test_title_reserves_slug_before_duplicate_headings(self):
+        text = "---\ntitle: Alpha\n---\n\n# Alpha {#first}\n\n# Alpha {#second}\n\n[Go](#second)\n"
+        out, _ = self.flatten(text)
+        self.assertEqual(out.count("# Alpha"), 3)
+        self.assertIn("[Go](#alpha-2)", out)
+        out, _ = self.flatten(text, title=False)
+        self.assertIn("[Go](#alpha-1)", out)
+
     def test_section_numbers_are_written_into_the_headings(self):
         out, _ = self.flatten("# One\n\n## Two\n\n# Three {.unnumbered}\n\n# Four\n", "unicode", False,
                               "--number-sections")

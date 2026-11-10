@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.98 — 2026-11-10
+
+Pre-edit state: commit `a744ec3`. **Reserve generated title slugs before body headings.** Flattening inserted a title
+after allocating heading anchors, so links to duplicate headings pointed to earlier headings. Slug allocation now
+includes the generated title first. A regression checks two duplicate body headings with and without a title.
+
 ## v3.33.97 — 2026-11-10
 
 Pre-edit state: commit `a49f8f0`. **Close single-character highlights at their own delimiter.** A one-character
