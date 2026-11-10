@@ -382,6 +382,7 @@ class CommandLine(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.directory, True)
         (self.directory / "doc.md").write_text(DOCUMENT, encoding="utf-8")
         self.env = {**os.environ, **config_env(self.directory / "xdg"), "PDFMD_CONFIG": ""}
+        self.env.pop("PDFMD_NO_PROMPT", None)       # the backup-folder note is checked below, and PDFMD_NO_PROMPT silences it
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=self.directory,

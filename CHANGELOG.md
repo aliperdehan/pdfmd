@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.54b — 2026-11-10
+
+Pre-edit state: commit `c01c99e`. Entry 3fi. Tests only, no version bump. **`test_tables.CommandLine` no longer depends on the
+caller's `PDFMD_NO_PROMPT`.** The full suite, run with `PDFMD_NO_PROMPT=1` (after phase 1 of the split: 2,763 tests, 23 skipped),
+failed one test, `test_extract_backs_up_the_old_file_and_expand_undoes_it`: it checks the once-only "backups go to .backups/" note,
+which `notice_once` keeps silent under `PDFMD_NO_PROMPT` by design, and the test passed the caller's environment on. Its pdfmd runs
+now drop that variable. Checked: `test_tables` with and without `PDFMD_NO_PROMPT=1`: OK both ways.
+
 ## v3.33.54 — 2026-11-10
 
 Pre-edit state: commit `cea90ba`. **The PDF built for reference numbers is a step of `--verbose`'s times.** A `-e calibre`
