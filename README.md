@@ -2577,7 +2577,8 @@ spellings work too: `a4paper`, `us-letter`, `A4`, and `a3`, `a2`... (LaTeX class
 **Landscape pages** (v3.29, `markup: landscape`). A fenced `::: landscape`, a div with `style="page: landscape"` and, for writers
 that are not LaTeX, a raw `\begin{landscape}` ... `\end{landscape}` put what they hold on pages turned sideways, the document
 going back to portrait after it: LaTeX with `pdflscape` (the page is rotated in the PDF; `lscape`, or no turning, when it is not
-installed), Typst with `#page(flipped: true)[...]`, WeasyPrint and the browsers with a named page (`@page landscape`: the browsers
+installed; a `landscape` environment that a kit's package, the class or your `preamble.tex` defines is used instead, and
+pdflscape is not loaded, v3.33.67), Typst with `#page(flipped: true)[...]`, WeasyPrint and the browsers with a named page (`@page landscape`: the browsers
 get the document's paper turned; WeasyPrint's is its own A4 unless your own `@page landscape` says otherwise), Word with two
 section breaks (the file's own paper and margins, headers and footers, turned for the block; a block at the very start or end, or two
 in a row, make no empty page). Calibre's PDF cannot name page types, and OpenDocument has no sections made from here: they keep the

@@ -438,7 +438,7 @@ def run(core, *,
                         cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
                         cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
                         cmd += cover_header_args(list(files), metadata_files)
-                        cmd += markup_header_args(list(files), metadata_files)
+                        cmd += markup_header_args(list(files), metadata_files, cmd)
                     if report_fonts_filter is not None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if report_tablewidth_auto and engine in LATEX_ENGINES:

@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.67 — 2026-11-10
+
+Pre-edit state: commit `fbdfb7f`. **A kit's own `landscape` environment is no longer replaced by pdflscape's, and LuaLaTeX no
+longer stops after a preamble's soul.** pdfmd's `landscape` markup, on by default, loads pdflscape in its header file, which comes
+after a kit's package; lscape defines `landscape` with `\def`, so it replaced a kit's own `\newenvironment{landscape}` without a
+word. nulabreport's (a wider sheet, logo and footer upright: MediaBox 842 x 595, `/Rotate 0`) became pdflscape's turned portrait
+page (595 x 842, `/Rotate 90`), and a grid table in it got the portrait width; in every report of the kit, with or without a
+landscape block. The same header's `highlight` loads `lua-ul` with `[soul]`, which stopped LuaLaTeX (`\textul already defined`,
+or an option clash) when a kit, the class or a `preamble.tex` had loaded soul or a bare lua-ul; pdfmd went on to XeLaTeX.
+
+- `markup_header_pieces` (`lib/pdfmd_tex/markup.py`, a stand-in in `pdfmd.py`; `markup_header_args` gives it the Pandoc command so
+  far) gives the guarded header when LaTeX of somebody else's may come before it: a chosen kit, a header file outside pdfmd's
+  cache folder (`preamble.tex`, `-H`), `--template` or a defaults file, a `documentclass` other than article, report, book, the
+  three KOMA classes, memoir and beamer (`STANDARD_CLASSES`). The guarded `landscape` loads pdflscape (or lscape, or the empty
+  stand-in) only when `\landscape` and `\endlandscape` are not both defined; `::: landscape` writes `\begin{landscape}`, so it
+  uses whichever environment there is. The guarded `highlight` loads lua-ul only when it is not loaded (bare, without `[soul]`,
+  after soul) and, after a soul of somebody else's, sets pdfmd's colour inside `\pdfmdhl` only, so a kit's own `\hl` keeps its
+  colour on pdfLaTeX and XeLaTeX. A document with nothing before the header gets it as before, byte for byte.
+- Checked through pdfmd: the 20-line report of the nulabreport kit (`genchem`, chosen in a folder's `.pdfmd/config.yaml`): page 2
+  595.28 x 841.89, rot 90, now 841.89 x 595.28, rot 0. A plain document with `::: landscape`: `-t latex -s` byte-identical to
+  HEAD, page 2 still rot 90. A `preamble.tex` with `\usepackage{soul}`, and one with `\usepackage{lua-ul}`: LuaLaTeX failed, now
+  builds. Documents with string and mapping authors, `-t latex -s`: byte-identical.
+- The other packages of the markup header: xcolor is loaded only when it is not (as before); tcolorbox loaded again is a no-op and
+  pdfmd's names (`pdfmdcallout`, `pdfmd-*` colours, `\pdfmdhl`) are its own. `center`, `keep`, `toc`, `appendix`, `underline` and
+  `space` load nothing.
+- Tests: `test_markup_guarded` (the pieces for each kind of LaTeX before; through pdfmd a fixture kit whose package defines
+  `landscape`: its wider page kept on LuaLaTeX, a plain document's turned page as before; LuaLaTeX after a preamble's soul).
+  `test_markup_guarded test_css_v2 test_show_comments test_markup_highlight test_markup_landscape test_calibre test_polish
+  test_markup_word test_native test_paper test_office test_markup_callouts test_css test_report_build test_split test_packaging
+  test_docs_consistency test_setup`: 365 OK (3 skipped).
+
 ## v3.33.66b — 2026-11-10
 
 Pre-edit state: commit `18405b2`. Tests only, no version bump. **`test_author_meta`'s Typst checks hold on Pandoc 3.1.3 too**

@@ -1508,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.66"
+PDFMD_VERSION = "3.33.67"
 import argparse
 import atexit
 import contextlib
@@ -1856,6 +1856,7 @@ kit_header_settle = deferred("pdfmd_kits.locate", "kit_header_settle")
 kit_cache_tex = deferred("pdfmd_kits.locate", "kit_cache_tex")
 kit_header_resolve = deferred("pdfmd_kits.locate", "kit_header_resolve")
 kit_carried_files = deferred("pdfmd_kits.locate", "kit_carried_files")
+markup_header_pieces = deferred("pdfmd_tex.markup", "markup_header_pieces")       # v3.33.67
 begin_timer = deferred("pdfmd_buildinfo.build", "begin_timer")                  # move 21 (v3.33.23); read by lib/pdfmd_report too
 attach_time = deferred("pdfmd_buildinfo.build", "attach_time")                  # read by lib/pdfmd_report too
 time_breakdown = deferred("pdfmd_buildinfo.build", "time_breakdown")            # read by lib/pdfmd_report too
@@ -3313,12 +3314,14 @@ MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "comments": MARKUP_CALLOUT_
                   "landscape": MARKUP_LANDSCAPE_HEADER}
 
 
-def markup_header_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+def markup_header_args(sources: Path | list[Path], metadata_files: list[Path], before: list[str] | None = None) -> list[str]:
     """`--include-in-header` for a LaTeX build's universal markup: the pdfmdcallout environment, \\pdfmdhl ... in ONE header file
-    of pdfmd's own (a filter's `header-includes` is dropped by every other header file of pdfmd's), or []."""
+    of pdfmd's own (a filter's `header-includes` is dropped by every other header file of pdfmd's), or []. ``before`` is the
+    Pandoc command so far: after a kit's or the user's own LaTeX the header keeps what that defined (v3.33.67,
+    pdfmd_tex.markup)."""
     files = sources if isinstance(sources, list) else [sources]
     kinds = markup_kinds(files[0], metadata_files) if files else []
-    pieces = list(dict.fromkeys(MARKUP_HEADERS[kind] for kind in kinds if kind in MARKUP_HEADERS))     # the box is one piece
+    pieces = markup_header_pieces(files[0], metadata_files, kinds, before) if kinds else []     # the box is one piece
     if not pieces:
         return []
     text = "\n".join(pieces)
@@ -14844,7 +14847,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
                     cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                     cmd += cover_header_args([md_path, *parts_inputs], css_meta)
-                    cmd += markup_header_args([md_path, *parts_inputs], css_meta)
+                    cmd += markup_header_args([md_path, *parts_inputs], css_meta, cmd)
                     cmd += slide_notes_args([md_path, *parts_inputs], metadata_files, target_format == "beamer")
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
@@ -15099,7 +15102,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
                         cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                         cmd += cover_header_args([md_path, *parts_inputs], css_meta)
-                        cmd += markup_header_args([md_path, *parts_inputs], css_meta)
+                        cmd += markup_header_args([md_path, *parts_inputs], css_meta, cmd)
                         cmd += slide_notes_args([md_path, *parts_inputs], metadata_files, bool(presentation))
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to

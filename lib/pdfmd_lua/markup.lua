@@ -17,7 +17,7 @@
 --            the blocks stay on one page. LaTeX the samepage environment, Typst #block(breakable: false)[...], HTML a break-inside
 --            div; Word and OpenDocument keep the text with a note once.
 -- landscape  ::: landscape, a div with style="page: landscape", a raw \begin{landscape}...\end{landscape}: the blocks on landscape pages.
---            LaTeX the landscape environment (pdfmd's header file loads pdflscape), Typst #page(flipped: true)[...], HTML a
+--            LaTeX the landscape environment (pdfmd's header file loads pdflscape unless one is defined already), Typst #page(flipped: true)[...], HTML a
 --            named page, Word two section breaks (the page setup of the document, turned); OpenDocument keeps the text with a note once.
 -- space      vertical space on a line of its own: \vspace{1cm}, \vspace*{..}, \smallskip, \medskip, \bigskip, <br> (each one an em), a raw
 --            #v(1cm): LaTeX \vspace{..}, Typst #v(..), HTML an empty div of that height, Word and OpenDocument empty paragraphs (a
