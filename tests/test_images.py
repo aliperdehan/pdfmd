@@ -47,11 +47,18 @@ class Scan(unittest.TestCase):
                 "![remote](https://example.com/x.svg)\n")
         found = images.find_references(text)
         self.assertEqual([(item.kind, item.path) for item in found],
-                         [("markdown", "one.svg"), ("markdown", "two words.svg"), ("graphics", "three.svg"),
+                         [("markdown", "one.svg"), ("markdown", "two%20words.svg"), ("graphics", "three.svg"),
                           ("includesvg", "four"), ("includesvg", "five"), ("markdown", "https://example.com/x.svg")])
         self.assertTrue(all(item.is_svg for item in found))
         self.assertTrue(found[-1].remote)
         self.assertFalse(found[0].remote)
+
+    def test_balanced_and_reference_image_destinations(self):
+        text = '![plot](plot(1).svg) ![remote][ P ] ![short][] ![shortcut]\n\n[p]: https://example.test/plot.svg\n[short]: short.svg\n[shortcut]: <other plot.svg>\n'
+        found = images.find_references(text)
+        self.assertEqual([item.path for item in found],
+                         ["plot(1).svg", "https://example.test/plot.svg", "short.svg", "other%20plot.svg"])
+        self.assertEqual([item.line for item in found], [1, 1, 1, 1])
 
     def test_a_raster_is_not_an_svg(self):
         [item] = images.find_references("![p](photo.PNG)")
@@ -294,6 +301,17 @@ class Remote(unittest.TestCase):
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Filter(unittest.TestCase):
+    def test_gfm_space_in_reference_destination_matches_encoded_map(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "map.yaml").write_text('pdfmd-image-map: {"plot%20one.svg": "/cache/plot.pdf"}\n')
+            source = "![Ref][p]\n\n[p]: <plot one.svg>\n"
+            done = subprocess.run([PANDOC, "-f", "gfm", "-t", "latex", "--lua-filter",
+                                   str(ROOT / "lib" / "pdfmd_lua" / "images.lua"), "--metadata-file", str(root / "map.yaml")],
+                                  input=source, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("/cache/plot.pdf", done.stdout)
+
     def test_the_map_is_applied_to_markdown_and_raw_latex(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-images-lua-"))
         self.addCleanup(shutil.rmtree, directory, True)

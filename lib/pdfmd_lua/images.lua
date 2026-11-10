@@ -4,11 +4,15 @@
 
 local map = {}
 
+local function named(path)
+  return map[path] or map[(path:gsub(" ", "%%20"))]
+end
+
 local function lookup(path)
-  local found = map[path]
+  local found = named(path)
   if found then return found end
   -- \includesvg takes the name without the extension
-  return map[path .. ".svg"]
+  return named(path .. ".svg")
 end
 
 local function latex_path(path)
@@ -58,7 +62,7 @@ function Pandoc(doc)
   end
   return doc:walk({
     Image = function(image)
-      local replaced = map[image.src]
+      local replaced = named(image.src)
       if replaced then image.src = replaced; return image end
       return nil
     end,

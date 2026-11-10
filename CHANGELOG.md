@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.117 — 2026-11-11
+
+Pre-edit state: commit `e617756`. **Find reference-style images and balanced destinations.** Markdown images
+using reference definitions were missed, and a parenthesis in an inline path truncated it, preventing fetching or
+SVG conversion. The scanner resolves reference labels and reads balanced destinations; a regression and a
+checkout build cover both forms.
+
 ## v3.33.116 — 2026-11-11
 
 Pre-edit state: commit `27b6d45`. **Avoid concurrent image cache collisions.** Parallel downloads and SVG
