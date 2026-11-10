@@ -465,6 +465,28 @@ class Pictures(unittest.TestCase):
         self.assertIn("could not draw a LaTeX block", done.stderr)
         self.assertIn("End.", re.sub(r"<[^>]+>", "", zipfile.ZipFile(root / "d.docx").read("word/document.xml").decode()))
 
+    def test_distinct_documents_do_not_share_named_asset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outputs = []
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                   "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"),
+                   "XDG_DATA_HOME": str(root / "data"), "LOCALAPPDATA": str(root / "cache")}
+            for name, colour in (("first", b"0 0 1"), ("second", b"1 0 0"), ("first", b"1 0 0")):
+                folder = root / name
+                folder.mkdir(exist_ok=True)
+                (folder / "plot.pdf").write_bytes(MINIMAL_PDF.replace(b"0 0 1 rg", colour + b" rg"))
+                os.utime(folder / "plot.pdf", (1, 1))
+                (folder / "d.md").write_text("![Plot](plot.pdf)\n", encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "-o", "d.docx"],
+                                      cwd=folder, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                with zipfile.ZipFile(folder / "d.docx") as archive:
+                    svg = next(name for name in archive.namelist() if name.endswith(".svg"))
+                    outputs.append(archive.read(svg))
+            self.assertNotEqual(outputs[0], outputs[1])
+            self.assertEqual(outputs[1], outputs[2])
+
     def test_a_pdf_picture_is_converted(self):
         root, done = self.build({"plot.pdf": MINIMAL_PDF}, "![A plot](plot.pdf)\n")
         self.assertEqual(done.returncode, 0, done.stderr)

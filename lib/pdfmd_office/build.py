@@ -17,6 +17,7 @@ stand-in in `pdfmd.py` loads it on the first call; the first binding wins); the 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -350,6 +351,20 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
     return status
 
 
+def asset_store_key(assets: list[dict], folders: list[Path]) -> str:
+    """Separate stores by resolved sources and their contents, including missing assets."""
+    digest = hashlib.sha256()
+    for item in sorted(assets, key=lambda asset: asset["id"]):
+        name = item["tex"]
+        path = next((folder / name for folder in folders if (folder / name).is_file()), None)
+        for value in (item["id"], name, str(path.resolve()) if path else ""):
+            digest.update(value.encode("utf-8", "surrogateescape"))
+            digest.update(b"\0")
+        if path is not None:
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
 def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verbose: bool,
                             debug: bool) -> tuple[Path, dict[str, str]]:
     """Draw the fragments in `items` that are not cached yet; returns the folder holding their pictures
@@ -393,6 +408,8 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
     labels_text = labels_aux.read_text(encoding="utf-8") if labels_aux.is_file() else ""
     key = module.fragments.store_key(preamble, engines[0] if engines else "", labels_text)
     store = root / key
+    if assets:
+        store /= asset_store_key(assets, [pandoc_cwd, md_path.parent, md_path.parent / "metadata"])
     store.mkdir(parents=True, exist_ok=True)
     os.utime(store)
     todo = [item for item in latex_items if not (store / f"{item['id']}.json").is_file()]

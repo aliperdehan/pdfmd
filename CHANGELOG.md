@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.115 — 2026-11-11
+
+Pre-edit state: commit `3f4441e`. **Keep office figure caches distinct.** Documents with different PDFs named
+`plot.pdf` could reuse the first figure when its cached conversion was newer. The store now includes the resolved
+asset identities and content hashes; a full-pipeline regression checks different documents and a changed source
+with an unchanged timestamp.
+
 ## v3.33.114 — 2026-11-11
 
 Pre-edit state: commit `3ecb803`. **Recognise keycap emoji for picture fallback.** A keycap whose digit was in the
