@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.75 — 2026-11-10
+
+Pre-edit state: commit `8f76bec`. **Keep live documents' build records when clearing stale cache folders.** Build records
+scrub the home folder to `~`, but `--cache-info` and `--clear-cache stale` treated that spelling as a relative path: every
+document under the home folder appeared missing, so clearing stale folders deleted its records, including kept failure
+evidence. The reader now restores the current home folder, including both native and forward-slash Windows spellings.
+Per-document manifests already store literal absolute paths; their reader preserves those, including literal tildes.
+Relative, foreign, malformed or inaccessible paths, and an unreadable or incomplete newest record, count as unknown
+(unrecorded) and are kept; only a confirmed missing document is stale. The manifest reader in moved-cache adoption already
+reads the writer's unsanitised absolute path and needs no home expansion. `pdfmd.py` stays at 17,241 lines (version only).
+Regression tests in `test_cache_manage` exercise the writer's scrubbed paths, unknown owners and filesystem errors, and run
+`python3 scripts/pdfmd --cache-info` and `--clear-cache stale` with a fake home and scratch XDG folders: the live document's
+records and failure evidence survive, while the deleted document's records and cache are removed. Checked failing before
+the fix and passing afterwards; cache-area tests and the split, packaging, docs-consistency, setup and isolation checks run.
+
 ## v3.33.74b — 2026-11-10
 
 Pre-edit state: commit `66c3e37`. **CLAUDE.md: `pdfmd.py` stays a launchpad.** After phase 1 of the split (30,872 lines down to

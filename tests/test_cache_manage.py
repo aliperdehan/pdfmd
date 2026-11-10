@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -28,6 +29,7 @@ os.environ["PDFMD_CONFIG"] = ""
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 
 import pdfmd  # noqa: E402
+from pdfmd_buildinfo import record  # noqa: E402
 
 manage = pdfmd.load_package("pdfmd_cache.manage")
 
@@ -75,7 +77,7 @@ class FakeCache(unittest.TestCase):
         return result, out.getvalue()
 
     def run_pdfmd(self, *arguments: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *arguments], capture_output=True, text=True,
                               encoding="utf-8", cwd=self.docs, stdin=subprocess.DEVNULL,
                               env={**os.environ, **self.env, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": ""})
 
@@ -117,6 +119,90 @@ class Info(FakeCache):
         refused = self.run_pdfmd("--cache-info", "doc.md")
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("--cache-info takes no document", refused.stderr)
+
+
+class RecordedPaths(FakeCache):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"HOME": str(self.top), "USERPROFILE": str(self.top),
+                                               "XDG_CONFIG_HOME": str(self.top / "config"),
+                                               "XDG_DATA_HOME": str(self.top / "data")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.live = self.root / "builds" / "doc-aaaaaaaa"
+        self.gone = self.top / "moved-away" / "gone.md"
+        self.failed = record.write(self.live, f"pdfmd build record\ndocument:  {self.doc}\n\nfailure evidence\n",
+                                   False, 5, 0, when=datetime(2026, 11, 10, 12, 1))
+        record.write(self.live, f"pdfmd build record\ndocument:  {self.doc}\n", True, 5, 0,
+                     when=datetime(2026, 11, 10, 12, 2))
+        record.write(self.root / "builds" / "gone-bbbbbbbb", f"pdfmd build record\ndocument:  {self.gone}\n",
+                     True, 5, 0, when=datetime(2026, 11, 10, 12, 2))
+
+    def test_the_writer_scrubbed_home_round_trips(self):
+        self.assertIn("document:  ~/docs/doc.md".replace("/", os.sep), self.failed.read_text(encoding="utf-8"))
+        for spelling in (str(self.doc), self.doc.as_posix()):
+            with self.subTest(spelling=spelling):
+                text = record.scrub_home(f"document:  {spelling}\n", str(Path.home()))
+                self.file("builds/doc-aaaaaaaa/20261110-120300-ok.log", text)
+                self.assertEqual(manage.document_of_records(self.live), self.doc)
+        self.assertEqual(manage.document_of_records(self.root / "builds" / "gone-bbbbbbbb"), self.gone)
+
+    def test_manifest_paths_are_absolute_and_literal_tildes_survive(self):
+        literal = self.docs / "~draft.md"
+        literal.write_text("text", encoding="utf-8")
+        folder = self.root / "0123456789-doc"
+        pdfmd.write_cache_manifest(folder, literal)
+        self.assertEqual(json.loads((folder / pdfmd.CACHE_MANIFEST).read_text(encoding="utf-8"))["path"], str(literal))
+        self.assertEqual(manage.document_of_cache(folder), literal)
+
+    def test_unresolvable_recorded_paths_are_unknown_and_kept(self):
+        folder = self.root / "0123456789-doc"
+        values = ["relative/doc.md", "~someone/doc.md", "bad\0path"]
+        if os.name != "nt":
+            values.extend([r"~\docs\doc.md", r"C:\Users\someone\doc.md"])
+        for value in values:
+            with self.subTest(value=value):
+                self.file("builds/doc-aaaaaaaa/20261110-120300-ok.log", f"document:  {value}\n")
+                self.file("0123456789-doc/.pdfmd-source.json", json.dumps({"path": value}))
+                self.assertIsNone(manage.document_of_records(self.live))
+                self.assertIsNone(manage.document_of_cache(folder))
+                self.assertEqual(manage.stale([(self.live, 0, manage.document_of_records(self.live)),
+                                              (folder, 0, manage.document_of_cache(folder))]), [])
+
+    def test_an_unknown_newest_record_does_not_fall_back_to_an_old_missing_owner(self):
+        folder = self.root / "builds" / "gone-bbbbbbbb"
+        newest = folder / "20261110-120300-ok.log"
+        for contents in (b"pdfmd build record\n", b"document:  ~/bad\xffpath.md\n"):
+            with self.subTest(contents=contents):
+                newest.write_bytes(contents)
+                self.assertIsNone(manage.document_of_records(folder))
+        with mock.patch.object(Path, "open", side_effect=PermissionError("denied")):
+            self.assertIsNone(manage.document_of_records(folder))
+
+    def test_home_or_filesystem_lookup_failure_is_unknown(self):
+        folder = self.root / "0123456789-doc"
+        with mock.patch.object(Path, "home", side_effect=RuntimeError("no home")):
+            self.assertIsNone(manage.document_of_records(self.live))
+        for error in (PermissionError("denied"), OSError("unavailable"), OSError("symbolic link loop")):
+            with self.subTest(error=error), mock.patch.object(Path, "stat", side_effect=error):
+                self.assertIsNone(manage.document_of_cache(folder))
+                self.assertEqual(manage.stale([(folder, 0, self.doc)]), [])
+
+    def test_cache_commands_keep_live_records_and_failure_evidence(self):
+        evidence = self.failed.read_bytes()
+        done = self.run_pdfmd("--cache-info")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"builds/[^\n]*3 documents' build records, 1 stale")
+        self.assertIn("Stale: 2 folders whose document is gone", done.stdout)
+        done = self.run_pdfmd("--clear-cache", "stale")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.failed.read_bytes(), evidence)
+        self.assertTrue((self.root / "0123456789-doc").is_dir())
+        self.assertFalse((self.root / "builds" / "gone-bbbbbbbb").exists())
+        self.assertFalse((self.root / "abcdef0123-gone").exists())
+        again = self.run_pdfmd("--cache-info")
+        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+        self.assertNotIn("Stale:", again.stdout)
 
 
 class Clear(FakeCache):

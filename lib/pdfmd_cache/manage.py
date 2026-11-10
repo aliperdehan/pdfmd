@@ -9,7 +9,7 @@ The parts are read from what is in `cache_root()`, not from a list:
 - every other folder (tex/, office/, raw/, images/, ...) is shared by all documents and listed by its name, and the loose
   files (CACHEDIR.TAG, kits.json, ...) together.
 Stale: a document cache or a build-record folder whose recorded document no longer exists. One that records none (an old
-folder, a record cut short) is not called stale: it is counted as "unrecorded".
+folder, a record cut short), or whose recorded path cannot be resolved, is not called stale: it is counted as "unrecorded".
 
 Removal never follows a symbolic link: a link is removed as a link, `shutil.rmtree` does not descend into one, and a path
 is removed only when the folder it sits in is the cache folder (or the document's own `.cache/pdfmd` that `all` and a
@@ -69,30 +69,59 @@ def tree_size(path: Path) -> int:
     return total
 
 
+def document_missing(document: Path) -> bool | None:
+    """True only for a missing document; None when the filesystem cannot tell us (keep its cache)."""
+    try:
+        document.stat()
+    except (FileNotFoundError, NotADirectoryError):
+        return True
+    except (OSError, ValueError):
+        return None
+    return False
+
+
+def recorded_path(value: object, *, home_scrubbed: bool = False) -> Path | None:
+    """Read an absolute native path, undoing buildinfo.record.scrub_home only for build records.
+
+    Manifests store literal absolute paths. Records replace the native home spelling and, on Windows, its forward-slash
+    spelling with `~`; both separators are native there. Relative, foreign and unresolvable paths have no known owner.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        if home_scrubbed and (value == "~" or value.startswith(("~/", "~" + os.sep))):
+            value = str(Path.home()) + value[1:]
+        document = Path(value)
+        if not document.is_absolute() or document_missing(document) is None:
+            return None
+        return document
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def document_of_cache(folder: Path) -> Path | None:
     """The document a per-document cache recorded (.pdfmd-source.json), None when it recorded none."""
     try:
         recorded = json.loads((folder / core.CACHE_MANIFEST).read_text(encoding="utf-8")).get("path")
     except (OSError, ValueError, AttributeError):
         return None
-    return Path(recorded) if isinstance(recorded, str) and recorded else None
+    return recorded_path(recorded)
 
 
 def document_of_records(folder: Path) -> Path | None:
-    """The document the newest build record of a `builds/` folder names in its header, None when none does."""
+    """The document the newest build record of a `builds/` folder names, None when its owner is unknown."""
     try:
         records = sorted((path for path in folder.iterdir() if RECORD_NAME.match(path.name) and path.is_file()), reverse=True)
     except OSError:
         return None
     for record in records:
         try:
-            with record.open(encoding="utf-8", errors="replace") as handle:
+            with record.open(encoding="utf-8") as handle:
                 head = handle.read(4096)
-        except OSError:
-            continue
+        except (OSError, UnicodeError):
+            return None
         found = RECORD_DOCUMENT.search(head)
-        if found:
-            return Path(found.group(1))
+        return recorded_path(found.group(1), home_scrubbed=True) if found else None
     return None
 
 
@@ -126,7 +155,8 @@ def survey(root: Path) -> dict:
 
 def stale(items: list) -> list:
     """The folders whose recorded document is gone."""
-    return [(folder, size, document) for folder, size, document in items if document is not None and not document.exists()]
+    return [(folder, size, document) for folder, size, document in items
+            if document is not None and document_missing(document) is True]
 
 
 def cache_info(cwd: Path | None = None) -> int:
