@@ -133,6 +133,37 @@ class Commands(unittest.TestCase):
                 self.assertEqual(options[options.index("--authors"):] if "--authors" in options else [], expected, front)
                 self.assertEqual(options[:4], ["--custom-size", "612x792", "--unit", "point"], front)
 
+    def test_calibres_unknown_author_is_taken_out(self):
+        # v3.33.55: ebook-convert names `Unknown` when it is given no author, in the Info dictionary and the XMP metadata
+        try:
+            import pypdf
+            from pypdf.generic import DecodedStreamObject, NameObject
+        except ImportError:
+            self.skipTest("needs pypdf")
+        xmp = (b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+               b'<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">'
+               b'<dc:title><rdf:Alt><rdf:li xml:lang="x-default">T</rdf:li></rdf:Alt></dc:title>\n      '
+               b'<dc:creator>\n <rdf:Seq>\n <rdf:li>Unknown</rdf:li>\n </rdf:Seq>\n </dc:creator>'
+               b'</rdf:Description></rdf:RDF></x:xmpmeta>')
+        with tempfile.TemporaryDirectory() as folder:
+            pdf = Path(folder) / "doc.pdf"
+            writer = pypdf.PdfWriter()
+            writer.add_blank_page(100, 100)
+            writer.add_metadata({"/Title": "T", "/Author": "Unknown"})
+            stream = DecodedStreamObject()
+            stream.set_data(xmp)
+            writer._root_object[NameObject("/Metadata")] = writer._add_object(stream)
+            with open(pdf, "wb") as handle:
+                writer.write(handle)
+            pdfmd.pdfmd_bridge.drop_calibre_author(pdf, False)
+            reader = pypdf.PdfReader(str(pdf))
+            self.assertEqual(reader.metadata.get("/Title"), "T")
+            self.assertNotIn("/Author", reader.metadata)
+            data = reader.trailer["/Root"]["/Metadata"].get_object().get_data()
+            self.assertNotIn(b"creator", data)
+            self.assertIn(b"<dc:title>", data)
+            self.assertEqual(reader.xmp_metadata.dc_title, {"x-default": "T"})
+
 
 NARROW_TABLE = "| a |\n|---|\n| 1 |\n\n: A rather long caption for a narrow table, set whole\n"
 
@@ -193,6 +224,30 @@ class Builds(unittest.TestCase):
                                        "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertEqual(pypdf.PdfReader(str(root / "doc.pdf")).metadata.get("/Author"), "Alice Able & Bob Baker")
+
+    def test_no_author_is_no_author(self):
+        # v3.33.55: Calibre wrote `Unknown` for a document with no author; an author named Unknown is still one
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        cases = {"title: Trial\n": None, "title: Trial\nauthor:\n  - affiliation: X\n": None,
+                 "title: Trial\nauthor: Unknown\n": "Unknown"}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for front, expected in cases.items():
+                (root / "doc.md").write_text(f"---\n{front}---\n\nWords.\n", encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "-e", "calibre", "-o", "doc.pdf"],
+                                      cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                      env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
+                                           "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"),
+                                           "PDFMD_NO_PROMPT": "1"})
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                reader = pypdf.PdfReader(str(root / "doc.pdf"))
+                self.assertEqual(reader.metadata.get("/Author"), expected, front)
+                self.assertEqual(reader.metadata.get("/Title"), "Trial", front)
+                xmp = reader.xmp_metadata
+                self.assertEqual(xmp.dc_creator if xmp else [], [expected] if expected else [], front)
 
     def test_a_caption_is_not_cut_off_at_its_tables_width(self):
         # v3.28.3: it read "Table 1: A rather / long / caption / for a / narrow" and the rest of each line was gone

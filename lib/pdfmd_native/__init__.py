@@ -1357,6 +1357,9 @@ def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, v
         if done.returncode != 0 or not produced.is_file():
             said = [line for line in (done.stderr + "\n" + done.stdout).splitlines() if line.strip()]
             raise RuntimeError("ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
+        if not authors:
+            from pdfmd_bridge import drop_calibre_author     # Calibre's `Unknown` author out (v3.33.55)
+            drop_calibre_author(produced, verbose)
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(produced, output)
         set_pdf_info(output, source.metadata, verbose, creator="Calibre")

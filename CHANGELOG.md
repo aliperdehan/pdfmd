@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.55 — 2026-11-10
+
+Pre-edit state: commit `0969ff6`. **A Calibre PDF of a document with no author has no author.** `-e calibre` (and Calibre's
+Markdown reader, the native route without Pandoc) wrote `/Author: Unknown` into the PDF's Info dictionary and `Unknown` as
+`dc:creator` in its XMP metadata: `ebook-convert` always names an author, and given none (or `--authors ""`) it names
+`Unknown`. The LaTeX engines write an empty `/Author`, Typst and WeasyPrint none at all.
+
+- `drop_calibre_author` (`lib/pdfmd_bridge`) takes both out of the PDF `ebook-convert` wrote, before it is copied to the
+  output. `run_calibre` calls it when the document names no author: no `--authors` option (`calibre_author_options`) and no
+  `<meta name="author">` in the page Pandoc wrote; `render_calibre_markdown` (`lib/pdfmd_native`) when it passes no
+  `--authors`. So the author is absent, as for Typst and WeasyPrint; an author who is really called `Unknown` stays.
+- Checked through pdfmd (`-e calibre`, `pdfinfo` and pypdf): no author `Unknown` (Info and XMP) at HEAD, now none in either;
+  a mapping without `name` the same; `author: Unknown` kept; `[Alice Able, Bob Baker]` unchanged (`Alice Able & Bob Baker`,
+  XMP both); the native route (empty PATH) `Unknown` at HEAD, now none, with authors `Alice Able, Bob Baker` as before.
+- Tests: two new `test_calibre` cases (the function on a PDF with an Info and an XMP author; three builds' Info and XMP
+  authors; both fail at HEAD); `test_doctor test_calibre_markdown test_calibre test_ebook_input test_calibre_targets
+  test_office_latex test_engine_chain test_native test_paper test_partial_provenance test_install_calibre test_split
+  test_packaging test_docs_consistency test_setup`: 349 OK (4 skipped).
+
 ## v3.33.54b — 2026-11-10
 
 Pre-edit state: commit `c01c99e`. Entry 3fi. Tests only, no version bump. **`test_tables.CommandLine` no longer depends on the

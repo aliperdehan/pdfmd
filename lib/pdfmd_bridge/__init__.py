@@ -1,15 +1,15 @@
 """The bridges to LibreOffice, Calibre and a browser: a document turned into a PDF (or another format) by a program that is not a
 PDF engine of Pandoc's. LibreOffice (`run_soffice_convert`, `convert_office_direct` for an office file, `convert_via_soffice_bridge`
 for the "soffice" engine, `start_soffice_job` for an odt, rtf or doc target), Calibre (`calibre_html_command`, `calibre_page_options`
-with `calibre_author_options`, `run_calibre` for the "calibre" engine, `run_calibre_convert` for its targets) and a headless browser
+with `calibre_author_options`, `run_calibre` for the "calibre" engine with `drop_calibre_author`, `run_calibre_convert` for its targets) and a headless browser
 (`browser_page_css`, `run_browser_print`).
 
 Moved out of `pdfmd.py` unchanged (v3.33.26, SPLIT.md), with `CALIBRE_TABLE_CSS` and `PANDOC_TABLE_STYLE_RE`. `core` is the `pdfmd`
 module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`BROWSER_ENGINES`, `CALIBRE_CSS`,
 `CALIBRE_OPTIONS`, `CITEPROC_DISABLED`, `DEFAULT_MARGIN`, `HTML_MATH_OPTIONS`, `PARTIAL_METADATA`, `SOFFICE_SHARED_FORMATS`,
-`author_names`, `contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `metadata_cwd`,
+`atomic_write_pdf`, `author_names`, `contains_citations`, `csl_args`, `document_filter_args`, `effective_metadata`, `html_math_args`, `log_cmd`, `metadata_cwd`,
 `office_finish`, `office_module`, `office_reference`, `pandoc_metadata_order`, `pandoc_version`, `pandoc_working_directory`,
-`prepared_latex_inputs`, `report_engine_failure`, `resolve_calibre`, `resolve_soffice`, `resource_path_option`, `run_office_pandoc`,
+`prepared_latex_inputs`, `pypdf`, `report_engine_failure`, `resolve_calibre`, `resolve_soffice`, `resource_path_option`, `run_office_pandoc`,
 `run_soffice`, `select_filter_args`, `table_keep_metadata`, `vprint` and `which`) are read as `core.X` when it runs.
 `CITEPROC_DISABLED` is rebound by `main`, so it stays in `pdfmd.py`; `core.html_math_args`, `core.pandoc_version`,
 `core.resolve_calibre`, `core.resolve_soffice` and `core.which` are patched by tests as `pdfmd.X`, and `pdfmd.run_calibre_convert`
@@ -249,9 +249,43 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
         said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
         return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
                                            "ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
+    if "--authors" not in page_options and not PAGE_AUTHOR_RE.search(head):
+        drop_calibre_author(produced, verbose)
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(produced, output)
     return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+PAGE_AUTHOR_RE = re.compile(r"""<meta\s+name=["']?author["'\s/>]""", re.IGNORECASE)
+XMP_CREATOR_RE = re.compile(rb"\s*<dc:creator\b(?:[^>]*/>|.*?</dc:creator>)", re.DOTALL)
+
+
+def drop_calibre_author(pdf: Path, verbose: bool) -> None:
+    """Take Calibre's author out of a PDF made for a document with no author. `ebook-convert` always names one: `Unknown` (in
+    the language of its interface) when it is given none, and `--authors ""` gives `Unknown` too; it writes it as `/Author` in
+    the Info dictionary and as `dc:creator` in the XMP metadata. The LaTeX and Typst engines write no author at all, so neither
+    is kept. Best effort: the PDF itself is already fine."""
+    if core.pypdf is None:
+        return
+    try:
+        reader = core.pypdf.PdfReader(pdf)
+        info = dict(reader.metadata) if reader.metadata else {}
+        writer = core.pypdf.PdfWriter(clone_from=reader)          # clone_from keeps Calibre's outline (see stamp_pdf_metadata_posthoc)
+        changed = info.pop("/Author", None) is not None
+        if changed:
+            writer.metadata = info
+        stream = writer._root_object.get("/Metadata")
+        if stream is not None:
+            stream = stream.get_object()
+            data = stream.get_data()
+            cleaned = XMP_CREATOR_RE.sub(b"", data)
+            if cleaned != data:
+                stream.set_data(cleaned)
+                changed = True
+        if changed:
+            core.atomic_write_pdf(writer, pdf)
+    except Exception as error:  # noqa: BLE001 -- best effort, like set_pdf_info
+        core.vprint(verbose, f"WARN  calibre: could not take out Calibre's `Unknown` author ({error})", file=sys.stderr)
 
 
 def start_soffice_job(args, goal: str, target_format: str) -> dict:
