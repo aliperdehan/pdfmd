@@ -2004,6 +2004,17 @@ yours to choose per document, in the config file for everything, or with
 LaTeX uses are in the same cache.) A word other than `global` or `document` stops a build
 that uses the cache; with the cache off it is a warning.
 
+`pdfmd --cache-info` shows the cache folder and the size of each part: the documents' own caches (`<hash>-<name>/`), the
+build records (`builds/`), the folders every document shares (`tex/`, `office/`, `images/`, ...) and the loose files, and how
+much is stale: a document cache or a document's build records whose document is gone (each records its document: the cache
+in `.pdfmd-source.json`, a build record in its `document:` line; one that records none is counted as unrecorded, not stale).
+`pdfmd --clear-cache WHAT` clears one part of it: `builds`, `documents`, `stale` or `all` (the cache folder and the
+`.cache/pdfmd` of the folder you are in, as a bare `--clear-cache` without a document); each folder removed is printed with
+its size. A bare `--clear-cache` keeps its meaning (with a document its cache, without one all of it). Nothing outside the
+cache is touched: a symbolic link in it is removed as a link, never followed, and a cache folder that is itself a link is not
+cleared by `all`. `pdfmd --doctor` adds a NOTE when the cache is larger than `cache.max-mb` (the config file's
+`options: {cache: {max-mb: 1000}}`, the default, 1 GB; `0` never; `pdfmd --setup`, Cache).
+
 ### Tables straight from a CSV file
 
 ```markdown

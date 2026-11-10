@@ -1127,6 +1127,9 @@ The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache):
     is a `.cache/pdfmd` folder beside the document (CACHEDIR.TAG, .gitignore) that
     travels with it. Plot-cache entries record the folders they were made in and
     are re-pointed at the new ones after a move. --clear-cache clears both.
+    `pdfmd --cache-info` (v3.33.74, lib/pdfmd_cache/manage.py) shows each part's size and the stale part (a
+    document cache or build records whose recorded document is gone); `--clear-cache builds|documents|stale|all`
+    clears one part, never following a link; `--doctor` notes a cache over `cache.max-mb` (config, default 1000).
 
     In parts mode the cache also lets a part built alone see the rest: its
     labels (\\ref/\\cref to a table in a part left out) are taken from the last
@@ -1514,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.73"
+PDFMD_VERSION = "3.33.74"
 import argparse
 import atexit
 import contextlib
@@ -1811,6 +1814,10 @@ ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # m
 ansi_columns = deferred("pdfmd_ansi.cli", "ansi_columns")
 ansi_finish = deferred("pdfmd_ansi.cli", "ansi_finish")
 ansi_without_pandoc = deferred("pdfmd_ansi.cli", "ansi_without_pandoc")
+cache_command = deferred("pdfmd_cache.manage", "cache_command")                 # v3.33.74: --cache-info, --clear-cache WHAT
+clear_cache = deferred("pdfmd_cache.manage", "clear_cache")
+remove_cache_paths = deferred("pdfmd_cache.manage", "remove_all")
+cache_size_note = deferred("pdfmd_cache.manage", "size_note")
 serve_live_filters = deferred("pdfmd_serve.commands", "serve_live_filters")     # move 6 (v3.33.7); read by tests/test_serve.py
 serve_command = deferred("pdfmd_serve.commands", "serve_command")
 api_command = deferred("pdfmd_serve.commands", "api_command")
@@ -16513,6 +16520,10 @@ def run_main() -> None:
         raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:
         raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
+    if args.cache_info or isinstance(args.clear_cache, str):
+        status = cache_command(args)                        # --cache-info, --clear-cache WHAT (pdfmd_cache.manage)
+        if status is not None:
+            raise SystemExit(status)
     if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
     if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or args.to_many or picture_target(args) in PICTURE_ONLY):
@@ -16598,7 +16609,6 @@ def run_main() -> None:
         raise SystemExit(PANDOC_MISSING)
     paths = args.path or [Path.cwd()]
     if args.clear_cache:
-        targets = []
         if args.path:
             try:
                 document = find_markdown(paths[0])
@@ -16606,15 +16616,12 @@ def run_main() -> None:
                 raise SystemExit(str(error))
             plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
             source = plan.scaffold if plan else document
-            targets = [cache_directory(source), cache_directory(source, source.resolve().parent / LOCAL_CACHE_DIRNAME)]
+            local = source.resolve().parent / LOCAL_CACHE_DIRNAME
+            status = remove_cache_paths([cache_directory(source), cache_directory(source, local)], [cache_root(), local])
         else:
-            targets = [cache_root(), Path.cwd() / LOCAL_CACHE_DIRNAME]
-        for target in targets:
-            if target.exists():
-                shutil.rmtree(target, ignore_errors=True)
-                print(f"CLEARED  {target}")
-            else:
-                print(f"NOTHING  {target} does not exist")
+            status = clear_cache("all")                     # the cache folder and ./.cache/pdfmd (v3.33.74: with sizes)
+        if status:
+            raise SystemExit(status)
         return
     if args.slim and not args.unpack:
         raise SystemExit("--slim goes with --unpack")

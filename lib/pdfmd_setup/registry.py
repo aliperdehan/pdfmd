@@ -61,7 +61,7 @@ UNSET = {
     "options.keep-source": "off",
     "options.stamp.packages": "none", "options.stamp.include-output": "off", "options.stamp.pdf-metadata": "on", "options.stamp.partial": "off (a partial build leaves no entry)",
     "options.backup.format": "compact (report.md.bak.20260924091500)", "options.backup.keep": "all of them", "options.backup.pdfs": "none (only the source is kept)",
-    "options.bundle-packages": "off", "options.cache.plots": "off",
+    "options.bundle-packages": "off", "options.cache.plots": "off", "options.cache.max-mb": "1000 (1 GB)",
     "options.csv.enabled": "on", "options.csv.rows": "10", "options.csv.cols": "7", "options.table-keep": "the filter's own (10)", "options.table-ascii": "repair", "options.cell-align": "on", "options.table-tag-brackets": "angle, amp", "options.table-align": "the column's own", "options.table-valign": "top (the baseline of the row)", "options.md-macro": "on", "options.linebreak": "every spelling, inside table cells only", "options.table-captions": "note", "options.table-caption-label": "strip", "options.table-caption-need-label": "on", "options.table-caption-colon-words": "0 (off)", "options.table-caption-words": "the document language's word, and Table", "options.pager": "on",
     "options.pager_command": "$PDFMD_PAGER, $PAGER, else less -FRX",
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
@@ -78,7 +78,8 @@ UNSET = {
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
 MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.tesseract-path", "options.soffice-path", "options.dot-path",
-                     "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path"})
+                     "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path",
+                     "options.cache.max-mb"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
 # layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
@@ -531,6 +532,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("off", "none: a name defined in a part left out is undefined")), "auto", "", "Cache"),
         choice("options.cache.location", "Where the cache lives",
                (("global", "~/.cache/pdfmd"), ("document", ".cache/pdfmd beside the document")), "global", "", "Cache"),
+        text("options.cache.max-mb", "Cache size --doctor notes (MB)",
+             "pdfmd --doctor says so (a NOTE) when ~/.cache/pdfmd is larger. Default 1000 (1 GB); 0: never. "
+             "pdfmd --cache-info shows the parts, pdfmd --clear-cache WHAT clears one.", "Cache", "config", "number"),
         # -- input
         choice("options.text-to-markdown", "Read .txt files as Markdown",
                (("auto", "guess headings, lists, tables; a garbled text gets paragraphs only"),

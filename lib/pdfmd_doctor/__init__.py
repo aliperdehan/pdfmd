@@ -334,7 +334,10 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, f"pdfmd --setup: {screens}")
     cache = core.cache_root()
     size = folder_size(cache) if cache.is_dir() else 0
-    line(None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --clear-cache)")
+    line(None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --cache-info, pdfmd --clear-cache)")
+    over = core.cache_size_note(size)                  # v3.33.74: larger than cache.max-mb
+    if over:
+        line(None, over)
     line(None, f"installed tools and fonts: {core.data_root()}")
 
     print()

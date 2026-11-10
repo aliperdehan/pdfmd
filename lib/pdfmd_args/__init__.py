@@ -768,9 +768,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "full build gives it at that place, defined above or below (auto, the default, or scan), "
                              "or off (a `name`{=} defined in a part left out is then undefined). "
                              "Also `pdfmd-options: {seed-calc: off}`")
-    parser.add_argument("--clear-cache", action="store_true",
+    parser.add_argument("--clear-cache", nargs="?", const=True, default=False, metavar="WHAT",
                         help="delete pdfmd's cache folder for the given document (or all of it, with no "
-                             "document), then exit; always safe")
+                             "document), then exit; always safe. WHAT clears one part of the whole cache: builds "
+                             "(the build records), documents (every document's own cache), stale (the document "
+                             "caches and build records whose document is gone) or all; each with its size")
+    parser.add_argument("--cache-info", action="store_true",
+                        help="show pdfmd's cache folder and the size of each part (the documents' caches, the build "
+                             "records, the shared folders), and how much of it is stale, then exit")
     parser.add_argument("--no-cache", dest="cache", action="store_false",
                         help="turn the cache off for this build, whatever pdfmd-options says")
     parser.add_argument("--split", type=Path, metavar="DIR",

@@ -827,7 +827,11 @@ pdfmd report --cache-plots            # also nulabreport's plots as PDFs (nulabr
 pdfmd report --cache-location document          # keep the cache beside the document (.cache/pdfmd)
 pdfmd report --no-cache               # off for one build
 pdfmd report --clear-cache            # delete this document's cache;  pdfmd --clear-cache: all of it
+pdfmd --cache-info                    # the cache's parts and their sizes, and what is stale (its document is gone)
+pdfmd --clear-cache stale             # or builds (the build records), documents (every document's cache), all
 ```
+
+`pdfmd --doctor` notes a cache larger than `cache.max-mb` (config `options: {cache: {max-mb: 1000}}`, the default; 0 never).
 
 It never skips a build. With the cache a part built alone (`report#methods`) shows the real numbers of the parts left
 out, exact where the scan of 3.3 is approximate. Per document: `pdfmd-options: {cache: {aux: true, plots: true, location: document}}`.
@@ -959,7 +963,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | history | `--history`, `--history-all`, `--history-diff`, `--history-restore`, `--no-restored-note`, `--init-backups`, `--backup-folder`, `--global`, `--stamp`, `--stamp-mode`, `--stamp-store`, `--stamp-partial`, `--no-stamp-partial`, `--history-to-file`, `--history-to-notes`, `--merge-history`, `--backup`, `--backup-format` |
 | fonts and scripts | `-f`, `--fallback`, `--missing`, `--check-fonts`, `--translit`, `--emoji-fallback` |
 | PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
-| cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache` |
+| cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache`, `--cache-info` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
 | check the source | `--check`, `--check-ignore`, `--strict`, `--max-asset-mb`, `--max-output-mb` |
 | a new document | `--init` |

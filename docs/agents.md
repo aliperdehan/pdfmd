@@ -46,7 +46,7 @@ pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the
   `PDFMD_CONFIG=file.yaml` names another. A `.pdfmd/` folder in the document's folder or above it still applies (it is a
   project's own setting; `--verbose` lists it as `AUTO SETTINGS`, the closing `FOUND` line as `.pdfmd`).
 - The output goes beside the document, or where `-o` says; pdfmd also keeps a cache (`~/.cache/pdfmd`) and a data folder
-  for what `--install` fetches (`~/.local/share/pdfmd`). `pdfmd --clear-cache` empties the cache and is always safe.
+  for what `--install` fetches (`~/.local/share/pdfmd`). `pdfmd --clear-cache` empties the cache and is always safe; `pdfmd --cache-info` shows its parts, `pdfmd --clear-cache stale` clears what belongs to documents that are gone.
   `--no-backup` forces backups of replaced files off for a run.
 - A Lua filter, a preamble or a metadata file beside the document is used without being named (a new or edited Lua
   filter is said in a `NOTE`; `--strict` does not run one that is new). `--no-auto` turns the discovery off, one kind

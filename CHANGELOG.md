@@ -19,6 +19,50 @@ same commit as the change.
 
 ---
 
+## v3.33.74 — 2026-11-10
+
+Pre-edit state: commit `c60bec8`. **The cache through pdfmd itself: `--cache-info`, `--clear-cache WHAT`, and a `--doctor`
+NOTE over a size** (the author, 2026-11-10: "yes, you can queue it"). There was no way to see what the cache held or to clear
+less than all of it (or one document's), and nothing said when it had grown.
+
+- `pdfmd --cache-info`: the cache folder and its size, then each part with its size: the documents' own caches
+  (`<hash>-<name>/`), the build records (`builds/`, a folder a document), each shared folder (`tex/`, `office/`, `raw/`,
+  `images/`, ...; read from what is there, not from a list, largest first) and the loose files (`CACHEDIR.TAG`,
+  `kits.json`, ...); `./.cache/pdfmd` when the folder you are in has one. Stale: a document cache whose
+  `.pdfmd-source.json` `path` is gone, and a `builds/` folder whose newest record's `document:` line names a document that
+  is gone; a folder that records none is counted as unrecorded, not stale. Sizes in B, KB, MB, GB (powers of 1000, as
+  `--doctor`'s cache line). No `--json`: pdfmd's reports (`--doctor` among them) have no JSON form; `--api` is the web
+  UI's API.
+- `pdfmd --clear-cache WHAT`, WHAT `builds` (the build records), `documents` (every document's own cache), `stale` (the stale
+  ones of both) or `all` (the cache folder and `./.cache/pdfmd`, what a bare `--clear-cache` without a document does).
+  Each folder removed is printed with its size, and a total when there were several; a bare `--clear-cache` keeps its
+  meaning (with a document, its two cache folders; without, all) and prints sizes too. `--clear-cache doc.md` is still the
+  document: a value that is not one of the four words is put back among the paths. `--clear-cache WHAT` with a document,
+  and `--cache-info` with one, stop with a line that says why. The WHAT forms and `--cache-info` run before the Pandoc
+  check, so they work without Pandoc (the bare form still needs it, as before). Never outside the cache: a path is removed
+  only when the folder it sits in (resolved) is the cache folder, the `./.cache/pdfmd` being cleared, or below them; a
+  symbolic link is removed as a link (`shutil.rmtree` does not descend into one); a cache folder that is itself a link is
+  not cleared by `all` (SKIPPED, exit 1; it used to print CLEARED and remove nothing).
+- `--doctor`: `NOTE  the cache is 1.3 GB, more than cache.max-mb (1000 MB): pdfmd --cache-info shows its parts, pdfmd
+  --clear-cache stale (or builds, documents, all) clears them` when the cache is larger than `cache.max-mb`, a new setting:
+  the config file's `options: {cache: {max-mb: N}}` (the doctor reads no document), default 1000 (1 GB, the constant
+  `CACHE_MAX_MB` holds only that default), 0 or less for never; a `--setup` row (Cache, this computer only) and
+  `lib/pdfmd_setup/inventory.py`. The doctor's cache line names `pdfmd --cache-info` too.
+- The code is a new module, `lib/pdfmd_cache/manage.py`, reached from `pdfmd.py` through `deferred` stand-ins
+  (`cache_command`, `clear_cache`, `remove_cache_paths`, `cache_size_note`); `--help cache`, README (the cache section),
+  `docs/recipes.md` (12.1 and the flag table), `docs/agents.md` and `pdfmd.py`'s opening docstring.
+- Checked through pdfmd on a fake cache (scratch `XDG_CACHE_HOME`, never the real one): three document caches (one whose
+  document is gone, with a link out of the cache inside it; one with no record), three build-record folders (one gone, one
+  empty), `tex/`, `office/`, the loose files and a link named like a document cache. `--cache-info` listed each part, 1 + 1
+  stale and 1 + 1 unrecorded; `--clear-cache stale` removed the two stale folders (7.2 KB) and kept what the link pointed
+  at; `documents`, `builds`, `--clear-cache=stale`, `--clear-cache doc.md` (that document's two folders), a bare
+  `--clear-cache` (the cache and `./.cache/pdfmd`) and a linked cache folder (SKIPPED) as described; `--doctor` with
+  `max-mb: 0.001` printed the NOTE, without the config file not.
+- Tests: a new `test_cache_manage` (the parts and stale on a fake cache, each WHAT, the link left alone, nothing outside
+  removed, the word-or-document rule, through pdfmd (a document's case with Pandoc, as the bare form needs it), the doctor's NOTE for the default, a value and 0). `test_cache_manage
+  test_cache_location test_doctor test_help test_attach test_attach_layers test_diagrams test_install_python test_kit_carry
+  test_kit_install test_split test_packaging test_docs_consistency test_setup test_isolation`: 249 OK (1 skipped).
+
 ## v3.33.73 — 2026-11-10
 
 Pre-edit state: commit `be4e402`. **Typst's line spacing is LaTeX's** (the author, 2026-11-10: "yes"; every Typst PDF's
