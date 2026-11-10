@@ -62,8 +62,8 @@ class CommandLine(unittest.TestCase):
     def run_pdfmd(self, *arguments: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
         environment = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(self.config), "APPDATA": str(self.config),
                        "PDFMD_NO_PROMPT": "1"}
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, text=True,
-                              encoding="utf-8", cwd=cwd or self.directory, env=environment)
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *arguments], capture_output=True, text=True,
+                              encoding="utf-8", cwd=cwd or self.directory, env=environment, stdin=subprocess.DEVNULL)
 
     def test_the_list(self):
         done = self.run_pdfmd("--init")
@@ -84,6 +84,14 @@ class CommandLine(unittest.TestCase):
         again = self.run_pdfmd("--init", "article", "my-paper")
         self.assertEqual(again.returncode, 1)
         self.assertIn("already exist", again.stderr)
+
+    def test_quoted_front_matter_values_round_trip(self):
+        import yaml
+        title = 'The "quoted" paper \\ draft'
+        done = self.run_pdfmd("--init", "article", "quoted", "-V", "title=" + title)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        text = (self.directory / "quoted" / "quoted.md").read_text(encoding="utf-8")
+        self.assertEqual(yaml.safe_load(text.split("---", 2)[1])["title"], title)
 
     def test_the_title_comes_from_the_name_and_the_date_is_today(self):
         self.run_pdfmd("--init", "notes", "thermo_lecture-3")

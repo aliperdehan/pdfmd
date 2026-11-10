@@ -13,6 +13,7 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the command 
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -78,6 +79,15 @@ def find(spec: str, user_folder: Path | None) -> Path | None:
 
 
 def fill(text: str, values: dict[str, str]) -> str:
+    # Escape placeholders that form a double-quoted YAML front-matter scalar.
+    parts = re.split(r"(?m)^---[ \t]*$", text, maxsplit=2)
+    if len(parts) == 3 and not parts[0].strip():
+        scalar = re.compile(r'(?m)^([ \t]*(?:[^:#\n]+):[ \t]*")(' + PLACEHOLDER_RE.pattern + r')(")([ \t]*(?:#.*)?)$')
+        def quote(found):
+            value = values.get(found.group(3))
+            return found.group(0) if value is None else found.group(1) + json.dumps(value, ensure_ascii=False)[1:-1] + found.group(4) + found.group(5)
+        parts[1] = scalar.sub(quote, parts[1])
+        text = "---".join(parts)
     return PLACEHOLDER_RE.sub(lambda found: values.get(found.group(1), found.group(0)), text)
 
 
