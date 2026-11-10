@@ -1930,7 +1930,7 @@ local function misspelt_table(block)
   return nil
 end
 
--- A part built alone (3.30.19). pdfmd evaluates the parts before it first, with this filter and `-M pdfmd-calc-dump=FILE`: the
+-- A part built alone (3.30.19). pdfmd evaluates the parts before it first, with this filter and `-V pdfmd-calc-dump=FILE`: the
 -- file lists every name with the value of its last definition (full precision, so later arithmetic is exact) and its digits;
 -- the real pass reads it back with `-M pdfmd-calc-seed=FILE` as definitions that stand above everything in the document.
 local function number_text(x)
@@ -1991,7 +1991,7 @@ local function dump_names(path)
 end
 
 -- A part built alone, any part of the document (3.31.44). pdfmd reads the WHOLE document with this filter and nothing else, with
--- `pdfmd-calc-mark-in` / `-out` paragraphs around each part it is going to build, and `-M pdfmd-calc-halves=FILE`: the file holds
+-- `pdfmd-calc-mark-in` / `-out` paragraphs around each part it is going to build, and `-V pdfmd-calc-halves=FILE`: the file holds
 -- A lines, the last definition of each name in the text left out ABOVE the last part built (it counts as defined above everything,
 -- as the dump does), and B lines, the first definition of each name in the text left out BELOW it (the real pass reads those
 -- with `-M pdfmd-calc-below=FILE`: they stand after everything, so a name is taken from there only when nothing above or inside the
@@ -2024,7 +2024,7 @@ local function dump_halves(path)
   file:close()
 end
 
--- pdfmd --check (3.30.22): `-M pdfmd-calc-check=FILE` writes what the check reports, after the first pass has read every place of
+-- pdfmd --check (3.30.22): `-V pdfmd-calc-check=FILE` writes what the check reports, after the first pass has read every place of
 -- the document (nothing is evaluated for it, and the output of the build is not used). Tab-separated, one record a line, the
 -- text of a place with \\, tab and line ends escaped:
 --   U  name  place          a use of a name no span, `::: calc` line, {ans} or constants file defines (one per statement)
@@ -2143,11 +2143,12 @@ return {{Pandoc = function(doc)
   if WARNED >= 3 then                                  -- a report with names where numbers belong must not pass unnoticed
     io.stderr:write(string.format("WARN  calc: %d places were not evaluated (each is above); the output shows their code or text where the numbers belong\n", WARNED))
   end
-  local dump = doc.meta["pdfmd-calc-dump"]
-  if dump then dump_names(pandoc.utils.stringify(dump)) end
-  local halves = doc.meta["pdfmd-calc-halves"]
-  if halves then dump_halves(pandoc.utils.stringify(halves)) end
-  local check = doc.meta["pdfmd-calc-check"]
-  if check then check_report(pandoc.utils.stringify(check), constants_end) end
+  -- Internal output paths come only from CLI writer variables, never document metadata.
+  local dump = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-dump"]
+  if dump then dump_names(tostring(dump)) end
+  local halves = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-halves"]
+  if halves then dump_halves(tostring(halves)) end
+  local check = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-check"]
+  if check then check_report(tostring(check), constants_end) end
   return doc
 end}}

@@ -122,6 +122,28 @@ class Filter(unittest.TestCase):
         return subprocess.run([PANDOC, "-f", "markdown", "-t", writer, "--wrap=none", "--lua-filter", str(CALC_LUA)], input=text,
                               capture_output=True, text=True, encoding="utf-8")
 
+    def test_document_metadata_cannot_choose_internal_output_paths(self):
+        with tempfile.TemporaryDirectory(prefix="pdfmd-calc-output-") as folder:
+            base = Path(folder)
+            for key in ("dump", "halves", "check"):
+                with self.subTest(key=key):
+                    victim = base / (key + ".txt")
+                    victim.write_text("keep me\n", encoding="utf-8")
+                    document = base / "document.md"
+                    document.write_text(
+                        f"---\npdfmd-calc-{key}: {victim.as_posix()}\n---\n\n"
+                        "pdfmd-calc-mark-in\n\n`x = 2+2`{=}\n\npdfmd-calc-mark-out\n",
+                        encoding="utf-8")
+                    env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                           **{name: str(base / name) for name in
+                              ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+                    done = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts" / "pdfmd"), str(document),
+                         "--to", "html", "--no-backup", "-o", str(base / "out.html")],
+                        cwd=base, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertEqual(victim.read_text(encoding="utf-8"), "keep me\n")
+
     def test_the_values(self):
         for expression, expected in VALUES:
             with self.subTest(expression=expression):
@@ -1207,7 +1229,7 @@ class PartBuiltAlone(unittest.TestCase):
         before = self.directory / "before.md"
         before.write_text((self.parts / "50-calculations.md").read_text(encoding="utf-8"), encoding="utf-8")
         dump = self.directory / "names.tsv"
-        first = subprocess.run([PANDOC, str(before), "-t", "native", "-o", str(self.directory / "discarded.native"), "--lua-filter", str(CALC_LUA), "-M", f"pdfmd-calc-dump={dump}"],
+        first = subprocess.run([PANDOC, str(before), "-t", "native", "-o", str(self.directory / "discarded.native"), "--lua-filter", str(CALC_LUA), "-V", f"pdfmd-calc-dump={dump}"],
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
         self.assertEqual(first.returncode, 0, first.stderr)
         lines = dump.read_text(encoding="utf-8").splitlines()

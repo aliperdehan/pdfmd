@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.76 — 2026-11-10
+
+Pre-edit state: commit `fb5a625`. **Keep calculator output paths out of document metadata.** A document containing
+`pdfmd-calc-dump` could truncate any writable file when its calculator ran; the internal halves and check outputs had the
+same flaw. These internal channels now take Pandoc CLI writer variables (`-V`), which document metadata cannot set,
+instead of metadata (`-M`). The export, partial-build seed and check callers use the trusted channel. No documented
+front-matter setting changes. A regression runs `python3 scripts/pdfmd` with all three malicious keys in isolated scratch
+folders and checks existing files survive; checked failing before the fix and passing afterwards. Calculator and check
+area tests and the required split, packaging, docs-consistency, setup and isolation checks run. `pdfmd.py` stays at 17,241
+lines (version and two argument substitutions only); no new thresholds.
+
 ## v3.33.75 — 2026-11-10
 
 Pre-edit state: commit `8f76bec`. **Keep live documents' build records when clearing stale cache folders.** Build records

@@ -91,7 +91,7 @@ def check_bibliography(document: Path, metadata_files: list[Path], variables: li
 
 
 def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[list, list] | None":
-    """What the calculator's filter finds in ``files`` for `--check` (pdfmd_lua/calc.lua, `-M pdfmd-calc-check=FILE`): ([(name, place)] of the
+    """What the calculator's filter finds in ``files`` for `--check` (pdfmd_lua/calc.lua, `-V pdfmd-calc-check=FILE`): ([(name, place)] of the
     uses of a name nothing defines, [(name, place, origin)] of every definition of a name that has several). None when there is
     no calculator in them, `calc` is off, Pandoc is not there or could not read them: the check then says nothing about names
     (a NOTE when Pandoc is the reason). Pandoc is run only for a document with a calculator span or div."""
@@ -109,7 +109,7 @@ def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[
     with tempfile.TemporaryDirectory(prefix="pdfmd-calc-check-") as scratch:
         report = Path(scratch) / "names.tsv"
         command = [pandoc, *(str(file.resolve()) for file in files), "-t", "native", "-o", str(Path(scratch) / "out.native"),
-                   *arguments, "-M", "pdfmd-calc-check=" + str(report)]
+                   *arguments, "-V", "pdfmd-calc-check=" + str(report)]
         try:
             done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   cwd=core.pandoc_working_directory(files[0].parent))

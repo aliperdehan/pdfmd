@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.75"
+PDFMD_VERSION = "3.33.76"
 import argparse
 import atexit
 import contextlib
@@ -4260,7 +4260,7 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     if CALC_BELOW is not None and not BUILD.get("scanning"):
         arguments += ["-M", "pdfmd-calc-below=" + str(CALC_BELOW)]
     if CALC_DUMP is not None and not BUILD.get("scanning"):
-        arguments += ["-M", "pdfmd-calc-dump=" + str(CALC_DUMP)]
+        arguments += ["-V", "pdfmd-calc-dump=" + str(CALC_DUMP)]
     return arguments + ["--lua-filter", str(shipped)]
 
 
@@ -13564,7 +13564,7 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         return nothing
     halves = scratch / "calc-halves.tsv"
     cmd = ["pandoc", *(str(file.resolve()) for file in inputs), *(["-f", from_format] if from_format else []),
-           "-t", "native", "-o", str(scratch / "calc-names.native"), *arguments, "-M", "pdfmd-calc-halves=" + str(halves)]
+           "-t", "native", "-o", str(scratch / "calc-names.native"), *arguments, "-V", "pdfmd-calc-halves=" + str(halves)]
     cwd = pandoc_working_directory(md_path.parent)
     log_cmd(cmd, cwd, verbose)
     started = time.time()
