@@ -167,12 +167,16 @@ local function number_headings(doc)
   local walked = pandoc.walk_block(pandoc.Div(doc.blocks), {
     Header = function(header)
       if header.classes:includes("unnumbered") then return nil end
-      local level = math.min(header.level, 6)
-      counters[level] = counters[level] + 1
-      for deeper = level + 1, 6 do counters[deeper] = 0 end
-      local parts = {}
-      for index = (base or 1), level do parts[#parts + 1] = tostring(counters[index]) end
-      header.content = pandoc.Inlines{pandoc.Str(table.concat(parts, ".")), pandoc.Space()} .. header.content
+      local number = header.attributes.number
+      if not number then
+        local level = math.min(header.level, 6)
+        counters[level] = counters[level] + 1
+        for deeper = level + 1, 6 do counters[deeper] = 0 end
+        local parts = {}
+        for index = (base or 1), level do parts[#parts + 1] = tostring(counters[index]) end
+        number = table.concat(parts, ".")
+      end
+      header.content = pandoc.Inlines{pandoc.Str(number), pandoc.Space()} .. header.content
       return header
     end,
   })

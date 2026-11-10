@@ -59,3 +59,19 @@ class LuaReview(unittest.TestCase):
                 self.assertIn("Stable: 0, 0, 0, 0.", text)
                 self.assertIn("Ties: 2.68, -1.01.", text)
                 self.assertIn("Below: 1.", text)
+
+    def test_flat_partial_preserves_section_numbers(self):
+        parts = self.root / "parts"
+        parts.mkdir()
+        (parts / "10-first.md").write_text("# First\n\nDiscarded.\n", encoding="utf-8")
+        (parts / "20-second.md").write_text("# Second\n\n## Child\n\nKept.\n", encoding="utf-8")
+        source = "---\npdfmd-options: {parts: auto}\n---\n"
+        for to in ("gfm", "txt", "latex", "typst", "html"):
+            with self.subTest(to=to):
+                text = self.build(source, to, "--number-sections", request="d@20")
+                self.assertIn("Second", text)
+                self.assertIn("Child", text)
+                self.assertNotIn("Discarded.", text)
+                if to in ("gfm", "txt"):
+                    self.assertIn("2 Second", text)
+                    self.assertIn("2.1 Child", text)

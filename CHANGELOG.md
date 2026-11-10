@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.123 — 2026-11-11
+
+Pre-edit state: commit `e4addd7`. **Keep preserved section numbers in flat partial builds.** Exporting a later
+numbered part to GFM or text restarted its headings at one, although selection had preserved their whole-document
+numbers. The flat filter now uses an existing heading number before calculating one. A checkout regression checks
+the second part and its child in GFM and text, alongside LaTeX, Typst and HTML selection checks; flat and section
+tests verify ordinary numbering and partial builds.
+
 ## v3.33.122 — 2026-11-11
 
 Pre-edit state: commit `4f2de7e`. **Preserve rounded values with away rounding.** The unconditional relative
