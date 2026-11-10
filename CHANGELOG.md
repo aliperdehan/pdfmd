@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.106 — 2026-11-11
+
+Pre-edit state: commit `436ab13`. **Track the text submitted by Save.** Typing while a save request was pending made the
+newer, unwritten text appear saved. Save now captures its submitted snapshot and records only that snapshot as saved; a
+delayed-response node regression checks the dirty indicator and the next save.
+
 ## v3.33.105 — 2026-11-10
 
 Pre-edit state: commit `d862f15`. **Keep web-editor Undo within its document.** Switching files recorded their

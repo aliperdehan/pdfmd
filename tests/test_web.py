@@ -94,3 +94,25 @@ class WebApp(unittest.TestCase):
   assert.equal(switches.at(-1), null, "the empty editor has fresh history");
 })().catch(e => {console.error(e); process.exitCode = 1;});
 ''')
+
+    def test_typing_during_save_keeps_the_unwritten_text_dirty(self):
+        self.run_js(r'''
+(async () => {
+  let text = "submitted", finish;
+  const writes = [];
+  S.cur = "a.md"; S.tabs = [S.cur];
+  const f = S.files[S.cur] = {text, saved: "old", original: "old"};
+  S.editor = {getText: () => text};
+  context.api.writeFile = (p, t) => { writes.push([p, t]); return new Promise(resolve => {finish = resolve;}); };
+  const saving = save();
+  text = f.text = "typed during save";
+  finish({}); await saving;
+  assert.equal(f.saved, "submitted");
+  assert.equal(f.text, "typed during save");
+  assert.equal(anyDirty(), true);
+  assert.deepEqual(writes, [["a.md", "submitted"]]);
+  const again = save(); finish({}); await again;
+  assert.equal(f.saved, "typed during save");
+  assert.equal(anyDirty(), false);
+})().catch(e => {console.error(e); process.exitCode = 1;});
+''')
