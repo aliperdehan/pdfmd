@@ -218,6 +218,7 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
     fragments LaTeX must draw (compiled in the document's own preamble, cached), once to put their
     pictures in; a `.docx` is then finished (SVG beside the PNG, baselines, widths)."""
     def run(command: list[str]):
+        core.log_cmd(command, pandoc_cwd, verbose)    # each run, the plain one too (v3.33.60: --verbose missed it)
         return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
 
     module = core.office_module()
@@ -244,7 +245,6 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
     first[first.index("-o") + 1] = str(scratch / f"pass1{suffix}")
     wanted_path = scratch / "wanted.json"
     first += ["-M", "pdfmd-office-mode=collect", "-M", f"pdfmd-office-wanted={wanted_path}"]
-    core.log_cmd(first, pandoc_cwd, verbose)
     result = run(first)
     if result.returncode != 0 or not wanted_path.is_file():
         return result
@@ -263,7 +263,6 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
         return run(cmd)
     store, failures = office_render_fragments(items, arguments, pandoc_cwd, verbose, debug)
     final = list(cmd) + ["-M", "pdfmd-office-mode=render", "-M", f"pdfmd-office-fragments={store}"]
-    core.log_cmd(final, pandoc_cwd, verbose)
     result = run(final)
     for item in items:
         if item["id"] in failures:

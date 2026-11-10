@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.60 — 2026-11-10
+
+Pre-edit state: commit `843907f`. **`--verbose` prints the Pandoc command that writes the file on the office-filter route
+too.** A build through the LaTeX filter (every `--to docx`/`odt`, and a `-e typst` or `-e weasyprint` run of a document with
+LaTeX those writers drop, such as `\ce{H2O}`) printed only the first run's `CMD`, the one writing `pass1.docx` or
+`pass1.typ`, and nothing for the run that wrote the output: `build_office_pandoc` (`lib/pdfmd_office/build.py`) logged its
+first and its final run by hand, and its two plain runs (no fragments to draw, or no filter) not at all. So the build record
+had no command for the file either. Its own `run()` now logs every command it runs, and the two explicit calls are gone, so
+each command is printed once.
+
+- Checked through pdfmd on one small document per route, `CMD` lines (HEAD; now): `-e lualatex` 1; 1, `-e typst` 1; 1,
+  `-e weasyprint` 1; 1, `--to html` 1; 1, `--to docx` 1 (`pass1.docx` only); 2 (`pass1.docx`, then the `.docx`). A document
+  with `\ce{H2O}`, `-e typst` and `-e weasyprint`: 1 (`pass1.typ`, `pass1.html`); 2 (then the PDF's). A seven-page report on
+  Typst whose LaTeX goes through the filter: 1; 2. `pdfmd-options: {office: {latex: auto}}` on plain text (nothing to
+  draw), `-e typst` and `-e weasyprint`: 1; 2. The build record of a `--to docx` run without `--verbose`: the `pass1.docx`
+  command only; both.
+- Tests: `test_office_latex` (`--to docx` and `-e typst --verbose` name a `pass1.` command and exactly one writing the
+  output; fails at HEAD). `test_office_latex test_build_log test_split test_packaging test_docs_consistency`: 104 OK.
+
 ## v3.33.59 — 2026-11-10
 
 Pre-edit state: commit `901a2b9`. **Typst: the reference list's entries no longer overlap.** With a CSL whose

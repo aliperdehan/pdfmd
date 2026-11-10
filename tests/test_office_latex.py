@@ -680,6 +680,23 @@ class OtherOutputs(unittest.TestCase):
         self.assertEqual(self.run_pdfmd(said_no, "-e", "typst").returncode, 0)
         self.assertFalse(list((said_no / "cache").rglob("*.svg")))
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_verbose_names_the_command_that_writes_the_file(self):
+        # v3.33.60: through the LaTeX filter with nothing to draw, --verbose printed only the first run's command (the
+        # one writing pass1.*), never the one that wrote the file
+        root = Path(tempfile.mkdtemp(prefix="pdfmd-verbose-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / "d.md").write_text("Water is \\ce{H2O}.\n", encoding="utf-8")
+        runs = [("d.docx", "--to", "docx")] + ([("d.pdf", "-e", "typst")] if TYPST else [])
+        for output, *arguments in runs:
+            with self.subTest(output=output):
+                done = self.run_pdfmd(root, *arguments, "--verbose")
+                self.assertEqual(done.returncode, 0, done.stderr)
+                commands = [line for line in done.stderr.splitlines() if line.startswith("CMD  pandoc ")]
+                self.assertTrue(any("pass1." in line for line in commands), commands)
+                self.assertEqual(len([line for line in commands if re.search(r" -o \S*" + re.escape(output) + " ", line)]), 1,
+                                 commands)
+
     @unittest.skipUnless(TYPST, "needs Typst")
     def test_typst_after_latex_failed_gets_the_filter(self):
         # the failed engines are recorded by TeX family (luatex, xetex, pdftex), which the check did not know: the
