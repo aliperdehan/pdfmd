@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.118 — 2026-11-11
+
+Pre-edit state: commit `fcefbd7`. **Use hyperref anchors to name office references.** Without cleveref, a figure's
+auxiliary entry lost its type and `\autoref` called it a section. The parser now reads recognised anchor types,
+while preserving cleveref's precedence; a regression covers figures, tables and the override.
+
 ## v3.33.117 — 2026-11-11
 
 Pre-edit state: commit `e617756`. **Find reference-style images and balanced destinations.** Markdown images

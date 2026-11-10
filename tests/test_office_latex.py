@@ -53,6 +53,14 @@ class Labels(unittest.TestCase):
         self.assertEqual(labels["fig:a"]["type"], "figure")
         self.assertEqual(labels["sec:intro"]["num"], "I")
 
+    def test_hyperref_anchor_supplies_type_without_cleveref(self):
+        aux = r"\newlabel{fig:plot}{{1}{2}{A plot}{figure.1}{}}" + "\n" + r"\newlabel{tab:data}{{2}{3}{Data}{table.caption.2}{}}"
+        labels = parse_aux(aux)
+        self.assertEqual(labels["fig:plot"]["type"], "figure")
+        self.assertEqual(labels["tab:data"]["type"], "table")
+        override = aux + "\n" + r"\newlabel{fig:plot@cref}{{[equation][1][]1}{[1][2][]2}{}{}}"
+        self.assertEqual(parse_aux(override)["fig:plot"]["type"], "equation")
+
     def test_caption_separator_and_names_come_from_the_preamble(self):
         self.assertEqual(caption_separator([r"\captionsetup{labelsep=period}"]), ". ")
         self.assertEqual(caption_separator([r"\captionsetup{labelsep=colon}"]), ": ")

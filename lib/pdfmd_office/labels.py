@@ -57,6 +57,7 @@ def parse_aux(text: str) -> dict[str, dict]:
     """{label: {num, page, title, type}} from the `\\newlabel` lines of an .aux file."""
     labels: dict[str, dict] = {}
     cref: dict[str, tuple[str, str]] = {}
+    anchors: dict[str, str] = {}
     position = 0
     marker = "\\newlabel"
     while True:
@@ -85,6 +86,8 @@ def parse_aux(text: str) -> dict[str, dict]:
                 cref[label[:-5]] = (found.group(1), _plain(found.group(2)))
             continue
         if fields:
+            if len(fields) > 3:
+                anchors[label] = fields[3]
             labels[label] = {"num": _plain(fields[0]), "page": _plain(fields[1]) if len(fields) > 1 else "",
                              "title": _plain(fields[2]) if len(fields) > 2 else ""}
     for label, (kind, number) in cref.items():
@@ -93,12 +96,14 @@ def parse_aux(text: str) -> dict[str, dict]:
         if not entry.get("num"):
             entry["num"] = number
     for label, entry in labels.items():
-        entry.setdefault("type", _type_from_anchor(label, entry))
+        entry.setdefault("type", _type_from_anchor(anchors.get(label, "")))
     return labels
 
 
-def _type_from_anchor(label: str, entry: dict) -> str:
-    return ""
+def _type_from_anchor(anchor: str) -> str:
+    kind = anchor.partition(".")[0]
+    kind = {"Hfootnote": "footnote", "Item": "enumi"}.get(kind, kind)
+    return kind if kind in CREF_NAMES else ""
 
 
 def caption_separator(texts: list[str]) -> str:
