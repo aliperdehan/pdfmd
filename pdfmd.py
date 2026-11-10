@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.119"
+PDFMD_VERSION = "3.33.120"
 import argparse
 import atexit
 import contextlib
@@ -3729,7 +3729,7 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
         if label not in TABLAY_NOTED:
             TABLAY_NOTED.add(label)
             print(f"NOTE  cell-tags: {label}: a table has a vertical alignment, a width or a height, which LaTeX draws with its "
-                  "`tabularray` package; it was not found (kpsewhich), so a LaTeX build ignores them. HTML is unaffected.")
+                  "`tabularray` package; it was not found (kpsewhich), so LaTeX ignores these except percentage widths. HTML is unaffected.")
     return arguments
 
 

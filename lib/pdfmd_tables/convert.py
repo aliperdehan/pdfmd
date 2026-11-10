@@ -9,6 +9,7 @@ import re
 import subprocess
 import unicodedata
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 
 from . import sheets
@@ -424,6 +425,9 @@ def expand(text: str, base_dir: Path) -> Extracted:
             new += ["", f"{block.indent}: {caption}"]
         elif block.identifier:
             new += ["", f"{block.indent}: {{#{block.identifier}}}"]
+        if widths:
+            percentages = " ".join(f"{(Decimal(str(width)) * 100).normalize():f}%" for width in widths)
+            new += ["", f'{block.indent}{{widths="{percentages}"}}']
         lines[block.start:block.end] = new
         origin = block.attributes.get("file", "inline data")
         result.report.insert(0, f"EXPAND  {label}: {origin} -> {len(rows)} rows")

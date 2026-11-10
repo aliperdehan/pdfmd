@@ -363,7 +363,42 @@ class Expand(unittest.TestCase):
     def test_a_csv_block_becomes_a_pipe_table_with_its_caption_and_alignment(self):
         text = ('::: {.csv align="lr" caption="Masses {#tbl:m}" widths="1,3"}\n```\nname,mass\n"a, b",1\n```\n:::\n')
         result = tables.expand(text, Path("."))
-        self.assertEqual(result.text, "| name | mass |\n|:--|--------:|\n| a, b | 1 |\n\n: Masses {#tbl:m}\n")      # 1:3, colons counted
+        self.assertEqual(result.text, "| name | mass |\n|:--|--------:|\n| a, b | 1 |\n\n: Masses {#tbl:m}\n\n{widths=\"25% 75%\"}\n")  # 1:3, colons counted
+
+    def test_expansion_keeps_explicit_widths_as_table_attributes(self):
+        source = '::: {.csv widths="1,3" caption="Results"}\n```\na,b\nx,2\n```\n:::\n'
+        result = tables.expand(source, Path("."))
+        self.assertIn('{widths="25% 75%"}', result.text)
+        self.assertIn(': Results', result.text)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_expanded_widths_survive_the_checkout_pipeline(self):
+        from pdfmd_tables.celltags import normalise
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            document = root / "doc.md"
+            document.write_text('---\ntitle: Widths\n---\n\n::: {.csv widths="1,3"}\n```\na,b\nx,2\n```\n:::\n')
+            env = {**os.environ, "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"),
+                   "XDG_DATA_HOME": str(root / "data"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd")]
+            def run(*args):
+                result = subprocess.run([*command, *args], cwd=root, env=env, stdin=subprocess.DEVNULL,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            run("doc.md", "--to", "html", "-o", "before.html")
+            run("--expand-tables", "doc.md")
+            run("doc.md", "--to", "html", "-o", "after.html")
+            for name in ("before.html", "after.html"):
+                html = (root / name).read_text()
+                self.assertIn('width: 25%', html)
+                self.assertIn('width: 75%', html)
+            prepared = normalise(document.read_text()).text
+            latex = subprocess.run([PANDOC, "-f", "markdown", "-t", "latex", "-M", "pdfmd-tblr=off",
+                                    "--lua-filter", str(ROOT / "lib" / "pdfmd_lua" / "cellalign.lua")],
+                                   input=prepared, capture_output=True, text=True, env=env)
+            self.assertEqual(latex.returncode, 0, latex.stderr)
+            self.assertIn(r"\real{0.25", latex.stdout)
+            self.assertIn(r"\real{0.75", latex.stdout)
 
     def test_all_rows_are_kept_whatever_the_cap(self):
         data = "n\n" + "\n".join(str(n) for n in range(30)) + "\n"

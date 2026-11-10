@@ -485,7 +485,7 @@ local function handle_table(tbl)
     return tbl
   end
   if tblr then return to_tblr(tbl, spec) end
-  if not TEX[BASE] and not KEEP[BASE] then percent_widths(tbl, spec) end
+  if not KEEP[BASE] then percent_widths(tbl, spec) end
   return tbl
 end
 

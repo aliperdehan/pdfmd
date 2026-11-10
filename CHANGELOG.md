@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.120 — 2026-11-11
+
+Pre-edit state: commit `33d4237`. **[tables] Retain CSV widths when expanding tables.** Short expanded pipe tables
+lost chosen column widths because Pandoc ignored their separator proportions. Expansion now records widths in the
+table attribute line, and LaTeX without tabularray applies percentage widths to Pandoc's columns; regressions
+compare checkout HTML output before and after expansion and check the LaTeX fallback.
+
 ## v3.33.119 — 2026-11-11
 
 Pre-edit state: commit `57a4089`. **[tables] Protect pipes inside code and maths from cell tags.** Splitting a table
