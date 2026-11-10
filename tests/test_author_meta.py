@@ -154,5 +154,66 @@ class Nameless(unittest.TestCase):
                              ["author entry 1 has no name: left out", "author entry 3 has no name: left out"], done.stderr)
 
 
+TYPST_LUA = ROOT / "lib" / "pdfmd_lua" / "typst.lua"
+WRAPPED = ('author:\n  - "`#text(font: (\\"X Serif\\",), lang: \\"zh\\")[`{=typst}李雷`]`{=typst}"\n  - Alice Able\n'
+           '  - name: "`#text(font: (\\"X Serif\\",), lang: \\"zh\\")[`{=typst}山田 太郎`]`{=typst}"\n'
+           '  - "Kim `#text(font: (\\"Y Gothic\\",), lang: \\"ko\\")[`{=typst}김민준`]`{=typst}"\n')
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class TypstAuthorFonts(unittest.TestCase):
+    """v3.33.65: a name pdfmd's font filter set in another script's font (`#text(font: ...)[...]`) was dropped from a Typst
+    PDF's Author (Pandoc's template reads no styled content), and one alone stopped the build."""
+
+    def convert(self, front: str) -> str:
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "doc.md"
+            source.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+            done = subprocess.run([PANDOC, str(source), "-s", "-t", "typst", "--lua-filter", str(TYPST_LUA)],
+                                  capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stdout
+
+    def test_each_run_is_a_labelled_box_with_one_rule_a_font(self):
+        out = self.convert(WRAPPED)
+        self.assertIn('#show <pdfmd-author-font-1>: set text(font: ("X Serif",), lang: "zh")', out)
+        self.assertIn('#show <pdfmd-author-font-2>: set text(font: ("Y Gothic",), lang: "ko")', out)
+        self.assertEqual(out.count("#show <pdfmd-author-font-"), 2)                     # one rule for each font setting
+        self.assertIn("#box[李雷]<pdfmd-author-font-1>", out)
+        self.assertIn("#box[山田 太郎]<pdfmd-author-font-1>", out)
+        self.assertIn("Kim #box[김민준]<pdfmd-author-font-2>", out)
+        self.assertNotIn("#text(font:", out)
+        self.assertLess(out.index("#show <pdfmd-author-font-1>"), out.index("#show: doc => conf("))
+
+    def test_names_without_a_font_run_are_as_before(self):
+        for front in (STRINGS, MAPS, UNICODE):
+            with self.subTest(front):
+                with tempfile.TemporaryDirectory() as folder:
+                    source = Path(folder) / "doc.md"
+                    source.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+                    plain = subprocess.run([PANDOC, str(source), "-s", "-t", "typst"], capture_output=True, text=True,
+                                           encoding="utf-8").stdout
+                self.assertEqual(self.convert(front), plain)
+
+    @unittest.skipUnless(shutil.which("typst"), "needs Typst")
+    def test_the_pdfs_author_holds_the_names(self):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name, front, expected in (("many", "author:\n  - 李雷\n  - Alice Able\n  - name: 山田太郎\n  - 김민준\n",
+                                           "李雷, Alice Able, 山田太郎 & 김민준"),
+                                          ("one", "author: 山田太郎\n", "山田太郎")):           # one alone stopped the build
+                with self.subTest(name):
+                    (root / f"{name}.md").write_text(f"---\ntitle: T\n{front}---\n\nWords.\n", encoding="utf-8")
+                    done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), f"{name}.md", "-e", "typst", "--no-stamp"],
+                                          cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                          env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertEqual(pypdf.PdfReader(str(root / f"{name}.pdf")).metadata.get("/Author"), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

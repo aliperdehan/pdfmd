@@ -40,6 +40,17 @@
 -- line height). Only for a whole N >= 0, where Pandoc's template writes a spacing (it writes none for 2.5, nor without the
 -- attribute, and the entries then keep the paragraph spacing, as before). The template's own rule already needs Typst 0.12.
 
+--
+-- Author names in another script's font (v3.33.65). pdfmd's font filter (pdfmd_unicode, run before this one) sets a run the
+-- main font lacks (李雷, 山田太郎, 김민준) as `#text(font: ("X",), lang: "zh")[...]`, in the metadata too. Pandoc's template
+-- makes the PDF's Author with `content-to-string(author.name)`, which reads a text, a sequence or a `body`, and `#text(..)[..]`
+-- is styled content, none of them: the name was dropped from the Author (`, Alice Able,  & `), and an author list of one
+-- such name stopped the build ("expected string or array, found none"). In an author's name each such run becomes
+-- `#box[...]<pdfmd-author-font-N>` (a box has a `body`) with `#show <pdfmd-author-font-N>: set text(...)` in the
+-- header-includes, one label for each font setting: the same font in the title block, the name in the Author. An
+-- --include-in-header replaces the header-includes and with them the rule: the name is then set in Typst's own fallback
+-- font, still in the Author.
+
 if not FORMAT:match("^typst") then return {} end
 
 local LABELLED = {Header = true, Div = true, Span = true, Figure = true, Table = true}
@@ -187,6 +198,86 @@ local function page_rules(meta)
   return nil
 end
 
+local AUTHOR_LABEL = "pdfmd-author-font-"
+
+-- the settings of a font filter's `#text(...)[` opener, or nil
+local function opener(inline)
+  if inline.t ~= "RawInline" or inline.format ~= "typst" then return nil end
+  return inline.text:match("^#text%((.*)%)%[$")
+end
+
+-- `inlines` with each `#text(OPTIONS)[` ... `]` made `#box[` ... `]<label>`, or nil when there is none
+local function labelled_runs(inlines, labels, rules)
+  local out, changed, index = pandoc.List(), false, 1
+  while index <= #inlines do
+    local options, close = opener(inlines[index]), nil
+    if options then
+      local depth = 0
+      for later = index + 1, #inlines do
+        local item = inlines[later]
+        if opener(item) then
+          depth = depth + 1
+        elseif item.t == "RawInline" and item.format == "typst" and item.text == "]" then
+          if depth == 0 then close = later; break end
+          depth = depth - 1
+        end
+      end
+    end
+    if close then
+      local label = labels[options]
+      if label == nil then
+        label = AUTHOR_LABEL .. (#rules + 1)
+        labels[options] = label
+        rules[#rules + 1] = "#show <" .. label .. ">: set text(" .. options .. ")"
+      end
+      out:insert(pandoc.RawInline("typst", "#box["))
+      for inner = index + 1, close - 1 do out:insert(inlines[inner]) end
+      out:insert(pandoc.RawInline("typst", "]<" .. label .. ">"))
+      index, changed = close + 1, true
+    else
+      out:insert(inlines[index])
+      index = index + 1
+    end
+  end
+  return changed and out or nil
+end
+
+-- the authors' names with their font runs labelled (see the top); true when one was
+local function author_fonts(meta)
+  local authors = meta.author
+  if authors == nil then return false end
+  local labels, rules = {}, {}
+  local function relabel(value)
+    if pandoc.utils.type(value) ~= "Inlines" then return value end
+    return pandoc.Plain(value):walk({Inlines = function(inlines) return labelled_runs(inlines, labels, rules) end}).content
+  end
+  if pandoc.utils.type(authors) == "List" then
+    for index, author in ipairs(authors) do
+      if pandoc.utils.type(author) == "table" then
+        if author.name ~= nil then author.name = relabel(author.name) end
+        authors[index] = author
+      else
+        authors[index] = relabel(author)
+      end
+    end
+  elseif pandoc.utils.type(authors) == "table" then
+    if authors.name ~= nil then authors.name = relabel(authors.name) end
+  else
+    authors = relabel(authors)
+  end
+  if #rules == 0 then return false end
+  meta.author = authors
+  for _, rule in ipairs(rules) do add_header(meta, rule) end
+  return true
+end
+
+local function meta_rules(meta)
+  local labelled = author_fonts(meta)
+  local paged = page_rules(meta) ~= nil
+  if labelled or paged then return meta end
+  return nil
+end
+
 -- The height of one line of text: Typst's line box runs from `text.top-edge` (the cap height) to `text.bottom-edge` (the
 -- baseline), font metrics, so any glyph measures the same; `X` is only something to measure (a format fact)
 local LINE_HEIGHT = "measure[X].height"
@@ -202,4 +293,4 @@ local function entry_spacing(div)
   return div
 end
 
-return {{Meta = page_rules, Div = entry_spacing, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}
+return {{Meta = meta_rules, Div = entry_spacing, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}

@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.65 — 2026-11-10
+
+Pre-edit state: commit `6f7fd42`. **A Typst PDF's Author keeps Chinese, Japanese and Korean names, and one such author alone
+no longer stops the build.** With `author: [李雷, Alice Able, 山田太郎, 김민준]` a Typst PDF's Author was `, Alice Able,  & `
+(LaTeX: `李雷; Alice Able; 山田太郎; 김민준`), with strings and with mappings alike, and `author: 山田太郎` alone failed: `error:
+expected string or array, found none`. The cause is pdfmd's, not Typst's: its font filter (`pdfmd_unicode`) sets a run the main
+font lacks as `#text(font: ("AppleMyungjo",), lang: "zh")[李雷]`, in the metadata too, and Pandoc's Typst template makes the
+Author with `content-to-string(author.name)`, which reads a text, a sequence or a `body` and returns nothing for styled
+content. (Pandoc alone, without pdfmd's filters, keeps the names.)
+
+- Fixed in the source, not by rewriting the PDF: `pdfmd_lua/typst.lua` (which runs after the font filter) makes each such run
+  in an author's name `#box[李雷]<pdfmd-author-font-N>` (a box has a `body`) and puts `#show <pdfmd-author-font-N>: set
+  text(font: ..., lang: ...)` into the header-includes, one label for each font setting, so the title block keeps the font pdfmd
+  chose and the Author gets the name. Typst's Author keeps its template's form (`A, B & C`; LaTeX's is `A; B; C`). An
+  `--include-in-header` replaces the header-includes and the rules with them: the names are then set in Typst's own fallback
+  font, and the Author still holds them.
+- Checked through pdfmd, `-e typst` and `-e lualatex`, Author (HEAD; now): four names as strings: `, Alice Able,  & `; `李雷,
+  Alice Able, 山田太郎 & 김민준` (LuaLaTeX `李雷; Alice Able; 山田太郎; 김민준`); `山田 太郎` and Alice Able: `& Alice Able`;
+  `山田 太郎 & Alice Able`; a mapping with `name: 李雷` among them: the same; `author: 山田太郎` alone: the build failed; OK,
+  `山田太郎`. The pages' text (`pdftotext -layout`) and fonts (`pdffonts`: AppleMyungjo, STIX Two Text, STSongti) are the same as
+  HEAD's. A CJK title was kept already (`李雷的报告`). `-t typst -s` byte-identical (the font filter runs on the PDF route only);
+  four documents with Latin names, `-e typst`: the same Author and text.
+- Tests: `test_author_meta` (the labelled boxes and one rule a font, names without a run unchanged, the PDF's Author through
+  pdfmd for four names and for one alone; fail at HEAD). `test_author_meta test_engine_filters test_office_latex
+  test_paragraph_spacing test_unicode test_split test_packaging test_docs_consistency test_setup`: 245 OK (5 skipped).
+
 ## v3.33.64 — 2026-11-10
 
 Pre-edit state: commit `5e64828`. **A Markdown output's kept source carries the preamble and the files it `\input`s, as a
