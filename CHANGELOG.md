@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.59 — 2026-11-10
+
+Pre-edit state: commit `901a2b9`. **Typst: the reference list's entries no longer overlap.** With a CSL whose
+`<bibliography entry-spacing="0">` (APA 6th, among others) each entry's first line was printed on top of the previous entry's
+last line, at every `linestretch`. Pandoc's Typst template turns entry-spacing N into `#show <refs>: set par(spacing: Nem)`,
+and Typst measures that spacing edge to edge, from a line's baseline to the next line's cap height, where the line pitch inside
+an entry is the leading plus that height. So 0 gave a pitch of the cap height alone (7.88 to 7.96 pt at 12 pt Times New
+Roman; `measure[X].height` is 7.95 pt), and 1 gave 1em, closer than the lines of one entry once `linestretch` is above about
+1.5 (19.88 pt between entries, 23.48 pt between lines at `linestretch: 2`). LaTeX's `CSLReferences` sets `\itemsep` to N x
+`\baselineskip`: N lines added to the line pitch (measured, LuaLaTeX: 0 gives one pitch, 1 two).
+
+- `pdfmd_lua/typst.lua` puts `#show: body => context { set par(spacing: par.leading + N * (par.leading +
+  measure[X].height)); body }` at the top of the `refs` div (`par.leading` alone for 0): entry-spacing 0 sets the entries at
+  the document's line spacing, 1 one line more, as in LaTeX. Inside the div, so an `--include-in-header` that replaces the
+  header-includes does not drop it. Only for a whole N of 0 or more, where Pandoc's template writes a spacing: without the
+  attribute, or with `2.5` (Pandoc writes none), the entries keep the paragraph spacing as before.
+  `measure[X].height` is the height of a line (Typst's line box runs from `text.top-edge`, the cap height, to
+  `text.bottom-edge`, the baseline: font metrics, so any glyph gives the same; a format fact, named `LINE_HEIGHT`).
+- Checked through pdfmd (`pdftotext -bbox-layout`, the pitch at each entry boundary against the pitch inside an entry,
+  three wrapped APA 6 entries at 12 pt): `linestretch` 1, 1.5, 2 with entry-spacing 0: 15.68/15.68, 19.58/19.58,
+  23.48/23.48 (were 7.88 at each, overlapping); entry-spacing 1: 31.37, 39.17, 46.97 (two pitches; were 19.88). With
+  `indent: true` and with `--paragraph-spacing 6pt` the same (the body's paragraph gap 29.48 with 6pt; the entries keep no
+  first-line indent). The heading-to-first-entry gap is unchanged. A seven-page report with APA 6 (`linestretch: 2`, Times
+  New Roman, Typst): pages 1 to 6 word for word in the same places, page 7 the same down to the end of the first entry,
+  then each entry 23.53 pt below the last line (eight overlaps before, none after). `-t typst -s`: the one new line; with no
+  CSL (Pandoc's default style, no entry-spacing) byte-identical to HEAD. `-r` (two parts, Typst): no overlap (two before).
+  `--citeproc` comes before typst.lua on each Typst route (`-e typst`, the office pre-pass route, `-r`).
+- Tests: `test_engine_filters` (the rule for 0, 2, 2.5, none and another div; a Typst PDF through pdfmd with entry-spacing 0
+  and 1, the pitches measured); both fail at HEAD. `test_engine_filters test_paragraph_spacing test_office_latex
+  test_engine_chain test_split test_packaging test_docs_consistency`: 132 OK.
+
 ## v3.33.58b — 2026-11-10
 
 Pre-edit state: commit `4006293`. Docs only, no version bump. **README: what `--keep-source` keeps.** It said a Markdown

@@ -31,6 +31,15 @@
 -- passes it as `pdfmd-paragraph-spacing`) is the room added to that, as LaTeX's \parskip is added to the line pitch:
 -- `#set par(spacing: 0.65em + 6pt)`. A Typst before 0.12 has no par.spacing; pdfmd says so (`pdfmd-typst-block-spacing`)
 -- and `#show par: set block(spacing: ...)` is written instead.
+--
+-- The reference list's entry spacing (v3.33.59). Pandoc's template turns a CSL `entry-spacing="N"` into `#show <refs>: set
+-- par(spacing: Nem)`, but Typst measures that spacing edge to edge, from one line's baseline to the next line's cap height,
+-- where the line spacing inside an entry is the leading plus that height. So entry-spacing 0 printed each entry's first line
+-- on top of the previous entry's last line (pitch = cap height, 7.95 pt at 12 pt Times), and 1 put entries closer than the
+-- lines of one entry when linestretch is above about 1.5. LaTeX sets `\itemsep` to N x `\baselineskip`: N lines added to
+-- the line pitch. A `#show:` rule at the top of the `refs` div gives Typst the same: spacing = leading + N x (leading +
+-- line height). Only for a whole N >= 0, where Pandoc's template writes a spacing (it writes none for 2.5, nor without the
+-- attribute, and the entries then keep the paragraph spacing, as before). The template's own rule already needs Typst 0.12.
 
 if not FORMAT:match("^typst") then return {} end
 
@@ -180,4 +189,19 @@ local function page_rules(meta)
   return nil
 end
 
-return {{Meta = page_rules, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}
+-- The height of one line of text: Typst's line box runs from `text.top-edge` (the cap height) to `text.bottom-edge` (the
+-- baseline), font metrics, so any glyph measures the same; `X` is only something to measure (a format fact)
+local LINE_HEIGHT = "measure[X].height"
+
+-- the `refs` div: its entries N lines apart (CSL entry-spacing), as LaTeX's \itemsep; nil leaves it to Pandoc's template
+local function entry_spacing(div)
+  if div.identifier ~= "refs" then return nil end
+  local lines = tonumber(div.attributes["entry-spacing"] or "")
+  if lines == nil or lines < 0 or lines ~= math.floor(lines) then return nil end
+  local value = "par.leading"
+  if lines > 0 then value = string.format("par.leading + %d * (par.leading + %s)", lines, LINE_HEIGHT) end
+  div.content:insert(1, pandoc.RawBlock("typst", "#show: body => context { set par(spacing: " .. value .. "); body }"))
+  return div
+end
+
+return {{Meta = page_rules, Div = entry_spacing, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}

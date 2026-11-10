@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -120,6 +121,25 @@ class Filter(unittest.TestCase):
         self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt", "-M", "pdfmd-typst-block-spacing=true"),
                          ["#show par: set block(spacing: 0.65em + 6pt)"])
 
+    def test_reference_entries_are_spaced_in_lines(self):
+        """v3.33.59: the `refs` div's CSL entry-spacing N becomes the leading plus N lines; Pandoc's template wrote
+        `spacing: Nem`, edge to edge, so 0 printed one entry's first line on the previous one's last."""
+        def rules(attributes: str, identifier: str = "refs") -> list[str]:
+            source = self.directory / "refs.md"
+            source.write_text(f"::: {{#{identifier} .references .csl-bib-body {attributes}}}\nAn entry.\n:::\n",
+                              encoding="utf-8")
+            done = subprocess.run([PANDOC, str(source), "-t", "typst", "--lua-filter", str(TYPST_LUA)],
+                                  capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return [line for line in done.stdout.splitlines() if "spacing" in line]
+
+        self.assertEqual(rules('entry-spacing="0"'), ["#show: body => context { set par(spacing: par.leading); body }"])
+        self.assertEqual(rules('entry-spacing="2"'), ["#show: body => context { set par(spacing: par.leading + 2 * "
+                                                      "(par.leading + measure[X].height)); body }"])
+        self.assertEqual(rules('entry-spacing="2.5"'), [])               # Pandoc's template writes no spacing for it
+        self.assertEqual(rules(""), [])
+        self.assertEqual(rules('entry-spacing="0"', "other"), [])
+
     @unittest.skipUnless(TYPST, "needs Typst")
     def test_the_spacing_rule_compiles(self):
         source = self.directory / "spaced.md"
@@ -195,6 +215,38 @@ class CommandLine(unittest.TestCase):
         typ = self.run_pdfmd("doc.md", "-y", "shared/meta.yaml", "-t", "typst", "-o", "doc.typ")
         self.assertEqual(typ.returncode, 0, typ.stdout + typ.stderr)
         self.assertIn('image("pictures/dot.png"', (self.directory / "doc.typ").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_reference_entries_do_not_overlap(self):
+        """v3.33.59: with a CSL's entry-spacing 0 the entries' lines are the document's line spacing apart (each entry's
+        first line was printed on the previous entry's last); with 1 one line more, as LaTeX's \\itemsep does."""
+        words = " ".join(["word"] * 40)
+        (self.directory / "refs.bib").write_text("".join(f"@book{{k{n}, title={{Entry {n} {words}}}, year={{2000}}}}\n"
+                                                         for n in range(3)), encoding="utf-8")
+        for spacing, apart in (("0", 1), ("1", 2)):
+            with self.subTest(entry_spacing=spacing):
+                (self.directory / "style.csl").write_text(
+                    '<?xml version="1.0" encoding="utf-8"?>\n<style xmlns="http://purl.org/net/xbiblio/csl" '
+                    'class="in-text" version="1.0"><info><title>T</title><id>t</id><updated>2026-01-01T00:00:00+00:00'
+                    '</updated></info><citation><layout><text variable="title"/></layout></citation>'
+                    f'<bibliography entry-spacing="{spacing}"><sort><key variable="title"/></sort><layout>'
+                    '<text variable="title"/></layout></bibliography></style>\n', encoding="utf-8")
+                (self.directory / "doc.md").write_text("---\nbibliography: refs.bib\ncsl: style.csl\nlinestretch: 2\n"
+                                                       "nocite: '@*'\n---\n", encoding="utf-8")
+                done = self.run_pdfmd("doc.md", "-e", "typst")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                layout = subprocess.run(["pdftotext", "-bbox-layout", str(self.directory / "doc.pdf"), "-"],
+                                        capture_output=True, text=True, encoding="utf-8").stdout
+                lines = [(float(top), first) for top, first in re.findall(
+                    r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', layout, re.S) if first != "1"]  # no page number
+                tops = [top for top, _ in lines]
+                firsts = [index for index, (_, first) in enumerate(lines) if first == "Entry"]
+                pitches = [round(after - before, 1) for before, after in zip(tops, tops[1:])]
+                self.assertEqual(len(firsts), 3)
+                self.assertGreater(len(tops), 6)                                # the entries wrap
+                line = min(pitches)
+                for index, pitch in enumerate(pitches, 1):
+                    self.assertAlmostEqual(pitch, line * (apart if index in firsts else 1), delta=0.2, msg=pitches)
 
     def test_the_filter_is_given_only_to_typst(self):
         self.assertEqual(pdfmd.typst_filter_args("latex"), [])
