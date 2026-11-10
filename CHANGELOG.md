@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.80b — 2026-11-10
+
+Pre-edit state: commit `2961066`. **Clarify restore's treatment of linked folders.** README and recipes said `--restore`
+never wrote outside its folder, which implied that it refused a folder the user had linked elsewhere. The author confirmed
+that following such a folder is expected: a PDF cannot plant the link, and restore never overwrites. Both passages now say
+it never writes a path outside its folder, never overwrites, and follows a folder the user linked elsewhere. Documentation
+only; no version bump or behaviour change. The split, packaging, docs-consistency, setup and isolation checks run.
+
 ## v3.33.80 — 2026-11-10
 
 Pre-edit state: commit `1f7b9ca`. **Give each live render its own exclusively created copy.** Rendering unsaved text used

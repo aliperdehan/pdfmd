@@ -703,7 +703,8 @@ attach needs no bundle for them. `--bundle` is for what the PDF does not draw (C
 - **Comments.** By default notes to yourself do not travel. `strip-comments: false`, or per kind
   (`[preamble, bibliography]`, `{markdown: false}`, `--keep-comments-in metadata`) keeps them; with the `metadata`
   kind kept the restored YAML files and front matter are the original text.
-- **Safety.** `--restore` never overwrites and never writes outside its folder. A restored Lua filter is code: read it first.
+- **Safety.** `--restore` never overwrites and never writes a path outside its folder. A folder you linked elsewhere is
+  followed. A restored Lua filter is code: read it first.
 - **A report for a lab course:** put `attach-source: true` and `strip-comments: false` in the shared `metadata.yaml`;
   every PDF is then also a complete, editable copy of the report minus the photographs.
 

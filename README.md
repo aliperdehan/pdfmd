@@ -1617,9 +1617,9 @@ style, a compound library, a shared bibliography and parts.
   beside the document); a house style that exists nowhere else should travel, so set `attach-csl: true` for it.
 - **It is opt-in, and it is everything you wrote.** An attached source includes
   what the author would not send in an email; check `--list` before sharing.
-- `--restore` never overwrites a file and never writes outside its folder. A
-  restored Lua filter is code that pdfmd runs beside the document, so restore
-  names it: read it first if the PDF is not from you.
+- `--restore` never overwrites a file and never writes a path outside its folder.
+  A folder you linked elsewhere is followed. A restored Lua filter is code that
+  pdfmd runs beside the document, so restore names it: read it first if the PDF is not from you.
 - `-r/--report` builds attach their chapters too. A section build (`doc#section`)
   attaches nothing.
 
