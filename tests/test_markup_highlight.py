@@ -37,6 +37,14 @@ def convert(writer: str, enabled: str = "highlight", text: str = SOURCE, *extra:
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Filter(unittest.TestCase):
+    def test_single_character_does_not_consume_the_next_highlight(self):
+        for writer, expected in (("html5", "<mark>x</mark> and <mark>xy</mark>"),
+                                 ("latex", "\\pdfmdhl{x} and \\pdfmdhl{xy}"),
+                                 ("typst", "#highlight[x] and #highlight[xy]")):
+            with self.subTest(writer=writer):
+                out, _ = convert(writer, text="==x== and ==xy==\n")
+                self.assertIn(expected, out)
+
     def test_html_gets_mark(self):
         out, _ = convert("html5")
         self.assertIn("<mark>marked text</mark>", out)

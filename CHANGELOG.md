@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.97 — 2026-11-10
+
+Pre-edit state: commit `a49f8f0`. **Close single-character highlights at their own delimiter.** A one-character
+highlight missed its closer and consumed a later marked passage. The matching pattern now accepts one character.
+A regression checks separate highlights in LaTeX, Typst and HTML.
+
 ## v3.33.96 — 2026-11-10
 
 Pre-edit state: commit `d0e9274`. **Include long-vowel marks in kana romanisation.** The Common-script mark split kana

@@ -357,7 +357,7 @@ local function highlight_runs(inlines)
       local last
       for position = index, #inlines do
         local other = inlines[position]
-        if other.t == "Str" and other.text:match("[^=]==%p*$") and (position > index or item.text:match("^==.+[^=]==%p*$")) then
+        if other.t == "Str" and other.text:match("[^=]==%p*$") and (position > index or item.text:match("^==.-[^=]==%p*$")) then
           last = position
           break
         end
