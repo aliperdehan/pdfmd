@@ -124,6 +124,12 @@ class Args(unittest.TestCase):
         (self.root / "d.md").write_text("---\ntitle: T\nheader-includes: |\n  \\usepackage{titlesec}\n---\n\n# H\n", encoding="utf-8")
         self.assertEqual(self.args(), [])
 
+    def test_document_font_size_overrides_css_body_size_for_headings(self):
+        (self.root / "d.md").write_text("---\nfontsize: 12pt\n---\n\n# H\n", encoding="utf-8")
+        (self.root / "pdfmd.css").write_text("body { font-size: 11pt } h1 { font-size: 2em }\n", encoding="utf-8")
+        out = self.args()
+        self.assertIn("\\fontsize{24}{28.8}", Path(out[1]).read_text(encoding="utf-8"))
+
     def test_the_font_size_is_taken_from_the_document(self):
         (self.root / "d.md").write_text("---\ntitle: T\nfontsize: 12pt\n---\n\n# H\n", encoding="utf-8")
         out = self.args()

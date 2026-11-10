@@ -218,8 +218,9 @@ def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], var
         if found:
             note("CSS", f"{names} not applied to the headings: {where} formats them itself ({found.group(0).strip()})")
             return []
-    size = next((item.split("=", 1)[1] for item in [*variables, *translation.variables] if item.startswith("fontsize=")),
-                str(metadata.get("fontsize") or ""))
+    size = next((item.split("=", 1)[1] for item in variables if item.startswith("fontsize=")),
+                str(metadata.get("fontsize") or next((item.split("=", 1)[1] for item in translation.variables
+                                                      if item.startswith("fontsize=")), "")))
     found_size = re.match(r"(\d+(?:\.\d+)?)", size)
     base = float(found_size.group(1)) if found_size else 10.0
     left_out: list[str] = []

@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.94 — 2026-11-10
+
+Pre-edit state: commit `01aad75`. **Use the effective body size for CSS headings.** A document fontsize overrode the
+CSS body size, but relative heading sizes still used the rejected CSS value. Heading conversion now honours the document
+size before the CSS fallback. A regression checks a 12pt document with an 11pt CSS body and a 2em heading.
+
 ## v3.33.93 — 2026-11-10
 
 Pre-edit state: commit `67064fa`. **Fix inkmd's equals-form stdout option.** `--out=-` parsed successfully but the
