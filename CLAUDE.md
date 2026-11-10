@@ -61,6 +61,18 @@ gets the module as its `core` (a module global that `bind_core()` sets when `pdf
 has; `pdfmd_report` and `pdfmd_batch` take it as an argument; a package that does not load at start is reached through `deferred()`, SPLIT.md step 6) and reads `core.X` when it runs, never
 `import pdfmd` (run as a script, the file is `__main__`, and a second import is a second copy with its own state).
 
+The split cost a great deal of careful work; keep `pdfmd.py` from growing back (the author, 2026-11-10). It is a launchpad: its
+imports, the binding block, state that must stay a module global, and the dispatch of a run. So:
+- A fix to code that still sits in `pdfmd.py` may change it in place, but anything new (a helper, a constant, a branch beyond a
+  few lines, docstring prose) goes into the package of its feature and is called from there. A commit that makes `pdfmd.py` longer
+  says why in its changelog entry; `wc -l pdfmd.py` before and after is part of every review.
+- Load only what the run needs. A package is imported at start only when every run uses it; everything else is reached through
+  `deferred()` and loads on first use. Heavy standard-library modules (`urllib.request`, `ssl`, `http.server`, `tarfile` ...) are
+  imported inside the package that uses them, never at start. Check a change with
+  `python3 -c "import sys; sys.argv=['pdfmd','--version']; sys.path.insert(0,'.'); import pdfmd; print(sorted(sys.modules))"`
+  and a timed `python3 scripts/pdfmd --version`.
+- What still sits in `pdfmd.py` moves out in phase 2 (`SPLIT.md`), not piecemeal inside unrelated commits.
+
 ## Debugging
 
 `pdfmd --version` prints the current version. `--verbose` prints pdfmd's

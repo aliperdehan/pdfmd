@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.74b — 2026-11-10
+
+Pre-edit state: commit `66c3e37`. **CLAUDE.md: `pdfmd.py` stays a launchpad.** After phase 1 of the split (30,872 lines down to
+17,149) the file had grown by 92 lines in a day of fixes. The "pdfmd.py holds only the core" section now says what may change in
+place (a fix to code still there), what never goes in (new helpers, constants, longer branches, docstring prose), that a commit
+lengthening it says why, and that only packages every run needs load at start (the rest through `deferred()`, heavy standard-library
+modules inside their packages), with the two checks to run. Docs only; `test_docs_consistency` and `test_packaging` run.
+
 ## v3.33.74 — 2026-11-10
 
 Pre-edit state: commit `c60bec8`. **The cache through pdfmd itself: `--cache-info`, `--clear-cache WHAT`, and a `--doctor`
