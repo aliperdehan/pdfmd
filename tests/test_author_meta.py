@@ -251,5 +251,92 @@ class Prince(unittest.TestCase):
             self.assertEqual(pypdf.PdfReader(str(root / "doc.pdf")).metadata.get("/Author"), "Alice Able, Bob Baker")
 
 
+
+def pdfmd_run(root: Path, *args: str, config: str = "") -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args, "--no-stamp", "--no-backup"], cwd=root, capture_output=True,
+                          text=True, stdin=subprocess.DEVNULL,
+                          env={**os.environ, "PDFMD_CONFIG": config, **cache_env(root / "cache"),
+                               "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"})
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class TitleBlock(unittest.TestCase):
+    """v3.33.69: an author written as a mapping WITH a `name` was `true` in LaTeX's \\author and HTML's title block (Pandoc's
+    templates read no `name`). title_meta.lua writes the name in its place when pdfmd gives it `pdfmd-author-names`: only where
+    nothing after pdfmd's filters reads the mapping (no kit, no own template, no Lua filter of the document's own)."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="pdfmd-author-title-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def convert(self, front: str, writer: str, flag: bool = True) -> str:
+        source = self.root / "doc.md"
+        source.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-s", "-t", writer, *(["-M", "pdfmd-author-names=true"] if flag else []),
+                               "--lua-filter", str(TITLE_META)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def test_the_filter_writes_the_names_in_latex_beamer_and_html(self):
+        self.assertIn(r"\author{Alice Able \and Bob Baker}", self.convert(MAPS, "latex"))
+        self.assertIn(r"\author{Alice Able \and Bob Baker}", self.convert(MIXED, "latex"))
+        self.assertIn(r"\author{Bob Baker}", self.convert("author:\n  name: Bob Baker\n  affiliation: NU\n", "latex"))
+        self.assertIn(r"\texorpdfstring{Alice Able \and Bob Baker}", self.convert(MAPS, "beamer"))
+        page = self.convert(MAPS, "html5")
+        self.assertIn('<p class="author">Alice Able</p>\n<p class="author">Bob Baker</p>', page)
+        self.assertNotIn(">true<", page)
+        self.assertIn("pdfauthor={Alice Able; Bob Baker},", self.convert(MAPS, "latex"))          # the PDF's Author as before
+        self.assertNotIn("pdfmd-author-names", self.convert(MAPS, "latex"))
+
+    def test_without_the_flag_and_in_typst_nothing_changes(self):
+        self.assertIn(r"\author{true \and true}", self.convert(MAPS, "latex", flag=False))
+        self.assertEqual(self.convert(MAPS, "typst"), self.convert(MAPS, "typst", flag=False))
+
+    def test_through_pdfmd_where_nothing_else_reads_the_mapping(self):
+        (self.root / "doc.md").write_text(f"---\ntitle: T\n{MAPS}---\n\nx\n", encoding="utf-8")
+        done = pdfmd_run(self.root, "doc.md", "--to", "latex", "-o", "doc.tex")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(r"\author{Alice Able \and Bob Baker}", (self.root / "doc.tex").read_text(encoding="utf-8"))
+        done = pdfmd_run(self.root, "doc.md", "--to", "html", "-s", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('<p class="author">Alice Able</p>', (self.root / "doc.html").read_text(encoding="utf-8"))
+
+    def test_strings_alone_get_no_flag(self):
+        for front in (STRINGS, "author: Bob\n", NAMELESS.replace("  - name: Bob Baker\n", "  - Bob Baker\n"), ""):
+            (self.root / "doc.md").write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
+            self.assertNotIn("pdfmd-author-names=true", pdfmd.title_filter_args(self.root / "doc.md", []), front)
+
+    def test_a_documents_own_filter_a_template_or_a_kit_keeps_the_mapping(self):
+        (self.root / "doc.md").write_text(f"---\ntitle: T\n{MAPS}---\n\nx\n", encoding="utf-8")
+        self.assertIn("pdfmd-author-names=true", pdfmd.title_filter_args(self.root / "doc.md", [], []))
+        self.assertNotIn("pdfmd-author-names=true", pdfmd.title_filter_args(self.root / "doc.md", [], ["--template", "x.latex"]))
+        (self.root / "doc.lua").write_text("function Meta(m) io.stderr:write('AFFILIATION ', pandoc.utils.stringify("
+                                           "m.author[1].affiliation), '\\n') end\n", encoding="utf-8")
+        self.assertNotIn("pdfmd-author-names=true", pdfmd.title_filter_args(self.root / "doc.md", [], []))
+        done = pdfmd_run(self.root, "doc.md", "--to", "latex", "-o", "doc.tex")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("AFFILIATION NU", done.stdout + done.stderr)                      # the document's own filter still reads the mapping
+        (self.root / "doc.lua").unlink()
+        kits = self.root / "kits"
+        (kits / "house").mkdir(parents=True)
+        (kits / "house" / ".kit").write_text("kit-format: 1\nname: house\n", encoding="utf-8")
+        config = self.root / "cfg.yaml"
+        config.write_text(f"kits: [{kits}]\n", encoding="utf-8")
+        (self.root / "doc.md").write_text(f"---\ntitle: T\n{MAPS}pdfmd-options: {{kit: house}}\n---\n\nx\n", encoding="utf-8")
+        done = pdfmd_run(self.root, "doc.md", "--to", "latex", "-o", "doc.tex", "--verbose", config=str(config))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("AUTO KIT", done.stdout + done.stderr)
+        self.assertNotIn("pdfmd-author-names", done.stdout + done.stderr)
+
+    @unittest.skipUnless(shutil.which("lualatex") and shutil.which("pdftotext"), "needs LuaLaTeX and pdftotext")
+    def test_the_rendered_title_names_them(self):
+        (self.root / "doc.md").write_text(f"---\ntitle: T\n{MIXED}---\n\nWords.\n", encoding="utf-8")
+        done = pdfmd_run(self.root, "doc.md", "-o", "doc.pdf", "-e", "lualatex")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = subprocess.run(["pdftotext", "-l", "1", str(self.root / "doc.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn("Bob Baker", text)
+        self.assertNotIn("true", text)
+
+
 if __name__ == "__main__":
     unittest.main()

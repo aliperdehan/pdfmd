@@ -19,6 +19,36 @@ same commit as the change.
 
 ---
 
+## v3.33.69 — 2026-11-10
+
+Pre-edit state: commit `06edd4c`. **An author written as a mapping with a `name` is named in the LaTeX and HTML title block.**
+With `author: [{name: Jane Doe, affiliation: NU}, Bob Baker]` LaTeX's `\author` was `{true \and Bob Baker}` (the rendered title
+said `true`) and HTML's title block `<p class="author">true</p>`: Pandoc's LaTeX, Beamer and HTML templates print `$author$`,
+which for a mapping is `true` (Typst's reads `name`). 3.33.56 mended the PDF's Author and 3.33.63 left nameless entries out; the
+visible title was still left as Pandoc wrote it.
+
+- `pdfmd_lua/title_meta.lua`, given `-M pdfmd-author-names=true`, writes each mapping that has a `name` as that name for the
+  `latex`, `beamer` and `html*` writers, after it has made `author-meta` (so the PDF's Author is as before) and removes the flag.
+  `title_filter_args` gives the flag only when `author_names_in_place` (`lib/pdfmd_native`, beside `mapped_author`) says that
+  nothing after pdfmd's filters reads the mapping: an author mapping with a `name`, no chosen kit (apa7's and nulabreport's
+  filters build their title pages from the mappings), no `--template` or defaults file, no Lua filter of the document's own
+  (`<name>.lua`, a loaded package's, `pdfmd-options.lua-filter`, an assembled file's). Elsewhere the title stays Pandoc's
+  (`true`): the mapping is kept for whatever reads it.
+- Checked through pdfmd: a mapping and a string, two mappings, one mapping alone: `-t latex -s` `\author{Jane Doe \and Bob
+  Baker}`, `{Alice Able \and Bob Baker}`, `{Carol Cole}` (were `true \and Bob Baker`, `true \and true`, `true`); Beamer the same
+  inside `\texorpdfstring`; HTML `<p class="author">` with each name; LuaLaTeX page 1 (`pdftotext`): `Jane Doe`, `Bob Baker`
+  under the title, the Author `Jane Doe; Bob Baker` as before. String authors (one, two, LaTeX and CJK names): `-t latex`,
+  `-t html`, `-t beamer` `-s` byte-identical; `-t typst -s` of a mapping byte-identical. The apa7 kit with two mappings:
+  `-t latex -s` byte-identical to the commit before, page 1 the same. A document with its own `doc.lua` that reads
+  `affiliation`: it still reads it, and the title stays `true`.
+- Not changed: other writers that print `$author$` (ConTeXt, ms, RTF and others) keep Pandoc's `true`; Word and ODT read
+  the mapping themselves.
+- Tests: `test_author_meta` (`TitleBlock`: the filter with and without the flag, Typst unchanged, through pdfmd LaTeX and HTML,
+  no flag for strings, none with an own filter, a template or a kit, the rendered LuaLaTeX title).
+  `test_author_meta test_office_latex test_serve test_native test_engine_filters test_report_build test_split test_packaging
+  test_docs_consistency test_setup`: 305 run, OK (7 skipped) but for the two changelog checks, run before this entry was
+  written; `test_packaging test_docs_consistency` then: OK.
+
 ## v3.33.68 — 2026-11-10
 
 Pre-edit state: commit `c4b6d8c`. **A kit can switch a kind of universal markup off: `markup-off:` in its `.kit`** (the author:

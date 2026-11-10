@@ -1509,7 +1509,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.68"
+PDFMD_VERSION = "3.33.69"
 import argparse
 import atexit
 import contextlib
@@ -1790,7 +1790,7 @@ import pdfmd_native  # noqa: E402
 from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BREAK_COMMENT_RE, PAGE_BREAK_RE, PAPER_SIZES,  # noqa: E402, F401 -- all but MathText and convert_native are read by tests
                           MathText, author_names, convert_native, csv_div_table, csv_guess_delimiter, csv_keep,
                           ignored_front_matter_keys, inline_math, native_font_size, native_landscape, native_order, native_page,
-                          native_paper, mapped_author, normalise_gfm)
+                          native_paper, mapped_author, normalise_gfm, author_names_in_place)
 import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
 import pdfmd_paragraph  # noqa: E402
@@ -4249,11 +4249,14 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     return arguments + ["--lua-filter", str(shipped)]
 
 
-def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+def title_filter_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options: list[str] | None = None,
+                      no_auto: list[str] | None = None) -> list[str]:
     """``--lua-filter title_meta.lua`` when the title or the authors have LaTeX in them (v3.28.6): Pandoc's own
     `title-meta`, the PDF's Title, leaves raw LaTeX out ("Reduction of -Cinnamaldehyde" for `\\emph{trans}`); and when an
     author is a mapping (`mapped_author`, v3.33.56), which Pandoc's `author-meta`, the PDF's Author, leaves out. Before the
-    document's own filters, so that one which takes the title out and keeps `title-meta` finds it set."""
+    document's own filters, so that one which takes the title out and keeps `title-meta` finds it set. With
+    `-M pdfmd-author-names=true` when the filter may also write such an author's name in its place in LaTeX's and HTML's
+    title block (author_names_in_place, v3.33.69)."""
     files = sources if isinstance(sources, list) else [sources]
     if not files:
         return []
@@ -4274,7 +4277,10 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
         pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("title_meta")
-    return ["--lua-filter", str(shipped)] if shipped is not None else []
+    if shipped is None:
+        return []
+    in_place = author_names_in_place(files[0], metadata_files, metadata.get("author"), pandoc_options, no_auto)
+    return [*(["-M", "pdfmd-author-names=true"] if in_place else []), "--lua-filter", str(shipped)]
 
 
 # LaTeX packages a document's own commands need (v3.27.16, auto kind `texpackages`): `\ce{H2O}` without mhchem, or
@@ -4414,7 +4420,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += linebreak_args(md_path, metadata_files)
     if cellalign_early:
         args += cellalign_args(md_path, metadata_files)
-    args += title_filter_args(md_path, metadata_files)
+    args += title_filter_args(md_path, metadata_files, pandoc_options, no_auto)
     args += cover_filter_args(md_path, metadata_files)
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
     args += crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))

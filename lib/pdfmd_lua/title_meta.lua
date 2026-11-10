@@ -64,6 +64,24 @@ local function without_nameless(meta)
   return true
 end
 
+-- An author written as a mapping WITH a `name` (v3.33.69): Pandoc's LaTeX and HTML templates print it as `true` too
+-- (`\author{true \and Bob}`, `<p class="author">true</p>`), as they read no `name` (Typst's does). With
+-- `pdfmd-author-names` (pdfmd sets it only when nothing after its filters reads the mapping: no kit, no own template, no
+-- Lua filter of the document's own) each such author becomes its name for those writers, after `author-meta` is made.
+local function names_in_place(meta)
+  if meta["pdfmd-author-names"] == nil then return false end
+  meta["pdfmd-author-names"] = nil
+  local authors = meta.author
+  if authors == nil or not (FORMAT == "latex" or FORMAT == "beamer" or FORMAT:match("^html")) then return true end
+  local single = pandoc.utils.type(authors) ~= "List"
+  local out = pandoc.List()
+  for _, author in ipairs(single and {authors} or authors) do
+    if pandoc.utils.type(author) == "table" and author.name ~= nil then out:insert(author.name) else out:insert(author) end
+  end
+  meta.author = single and out[1] or pandoc.MetaList(out)
+  return true
+end
+
 function Meta(meta)
   local changed = without_nameless(meta)
   if meta.title ~= nil and meta["title-meta"] == nil and has_tex(meta.title) then
@@ -92,5 +110,6 @@ function Meta(meta)
       changed = true
     end
   end
+  changed = names_in_place(meta) or changed
   return changed and meta or nil
 end

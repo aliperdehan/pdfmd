@@ -540,6 +540,25 @@ def mapped_author(value) -> bool:
     return any(isinstance(item, dict) for item in (value if isinstance(value, list) else [value]))
 
 
+def author_names_in_place(md_path: Path, metadata_files: list[Path], authors, pandoc_options: list[str] | None,
+                          no_auto: list[str] | None) -> bool:
+    """Whether `pdfmd_lua/title_meta.lua` may write each author written as a mapping with a `name` as that name (v3.33.69): Pandoc's
+    LaTeX and HTML templates print such an author as `true` (`\\author{true \\and Bob}`, `<p class="author">true</p>`), as they
+    read no `name`. Only where nothing after pdfmd's filters reads the mapping: no chosen kit (apa7's and nulabreport's filters
+    build their title pages from it), no own template or defaults file, no Lua filter of the document's own (`<name>.lua`, a
+    loaded package's, `pdfmd-options.lua-filter`, an assembled file's). Elsewhere the title is left as Pandoc writes it."""
+    if not any(isinstance(item, dict) and item.get("name") is not None for item in (authors if isinstance(authors, list) else [authors])):
+        return False
+    if any(item in ("--template", "-d", "--defaults") or item.startswith(("--template=", "--defaults="))
+           for item in pandoc_options or []):
+        return False
+    if core.active_kits(md_path, metadata_files, None):
+        return False
+    if core.option_names(core.frontmatter_pdfmd_options(md_path), "lua-filter") or core.is_assembled_document(md_path):
+        return False
+    return core.discovery_disabled(no_auto, "lua") or not core.find_lua_filters(md_path, metadata_files, no_auto)
+
+
 def nameless_authors(value) -> list[int]:
     """The places (from 1) of the authors written as a mapping without `name` (`- affiliation: NU`). Pandoc's templates print
     such an author as `true` (the LaTeX title, Typst's title block and PDF Author, HTML's title block); `pdfmd_lua/title_meta.lua`
