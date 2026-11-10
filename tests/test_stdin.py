@@ -52,6 +52,24 @@ class Stdin(unittest.TestCase):
             self.assertTrue((Path(directory) / "named.pdf").is_file())
             self.assertFalse((Path(directory) / "stdin.pdf").exists())
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_unwritable_current_directory_keeps_scratch_source_until_build_finishes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cwd = root / "unwritable"
+            cwd.mkdir(mode=0o555)
+            if os.access(cwd, os.W_OK):
+                self.skipTest("current user can write to the directory")
+            environment = {**os.environ, "TMPDIR": directory, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                           "XDG_CONFIG_HOME": directory, "XDG_CACHE_HOME": directory, "XDG_DATA_HOME": directory}
+            done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "-", "--to", "html", "-o",
+                                   str(root / "out.html")], cwd=cwd, input="Scratch source\n", capture_output=True,
+                                  text=True, env=environment)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("Scratch source", (root / "out.html").read_text())
+            self.assertEqual(list(root.glob("pdfmd-stdin-*")), [])
+            cwd.chmod(0o755)
+
     def test_empty_input_is_refused_with_a_reason(self):
         with tempfile.TemporaryDirectory() as directory:
             done = run(directory, "  \n", "-e", "inkmd")

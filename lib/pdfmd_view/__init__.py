@@ -122,8 +122,9 @@ def stdin_build(args) -> None:
     if not text.strip():
         raise SystemExit("Nothing to build: standard input was empty.")
     made: list[Path] = []
-    with tempfile.TemporaryDirectory(prefix="pdfmd-stdin-") as scratch:
-        source = view_stdin_file(text, Path(scratch), made)
+    scratch = Path(tempfile.mkdtemp(prefix="pdfmd-stdin-"))
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
+    source = view_stdin_file(text, scratch, made)
     atexit.register(lambda: [item.unlink(missing_ok=True) for item in made])
     core.DISPLAY_ALIAS[source] = core.DISPLAY_ALIAS[source.resolve()] = source.with_name("stdin.md")
     args.path = [source]

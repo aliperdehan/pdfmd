@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.82 — 2026-11-10
+
+Pre-edit state: commit `6083a26`. **Keep the stdin scratch source through conversion.** An unwritable current folder forced
+stdin into a temporary directory that was removed before the build read it. Cleanup now runs at exit, after conversion.
+A pipeline regression exercises the unwritable folder and cleanup; the area and required checks run.
+
 ## v3.33.81 — 2026-11-10
 
 Pre-edit state: commit `eb0463e`. **Preserve separated filenames in terminal viewing.** `--view -- report.md` passed the
