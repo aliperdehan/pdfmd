@@ -253,6 +253,21 @@ class Emoji(unittest.TestCase):
             self.assertEqual(plan.uncovered, {})
             self.assertFalse(plan)
 
+    def test_keycap_sequences_reach_picture_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            make_font(root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+            index = pu.FontIndex(root, use_system=False)
+            plan = pu.plan_text("1️⃣ #⃣", "Main Test", index)
+            self.assertIn(0x20E3, plan.emoji)
+            self.assertNotIn(0x20E3, plan.uncovered)
+            from pdfmd_unicode import colorfont
+            font = make_color_font(root / "emoji.ttf", {1: ColourEmoji.ROCKET})
+            from unittest.mock import patch
+            with patch.object(colorfont.ColorFont, "png", return_value=ColourEmoji.ROCKET):
+                pictures = colorfont.write_pictures("1️⃣ #⃣", plan.emoji, str(font), root / "out")
+            self.assertEqual(set(pictures), {"1️⃣", "#⃣"})
+
     def test_text_symbols_without_a_variation_selector_are_not_emoji(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

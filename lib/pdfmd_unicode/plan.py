@@ -10,11 +10,12 @@ every script, instead of one hand-written `ucharclasses` block per document.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .emoji import can_be_emoji, is_emoji_code_point, VARIATION_EMOJI
+from .emoji import can_be_emoji, is_emoji_code_point, KEYCAP, VARIATION_EMOJI
 from .fonts import Face, FontIndex, coverage
 from .scripts import (COMMON, FONTSPEC_SCRIPTS, RTL_SCRIPTS, SCRIPT_NAMES, chain_for, han_language,
                       is_neutral, script_of)
@@ -293,6 +294,12 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
              if ord(character) == VARIATION_EMOJI and number}
     emoji = {code_point for code_point in missing if is_emoji_code_point(code_point)
              or (can_be_emoji(code_point) and code_point in asked)}
+    # A keycap is a sequence, even when the main font already covers its digit.
+    without_keycaps = re.sub(r"[0-9#*]\ufe0f?\u20e3", "", text)
+    if KEYCAP in missing and without_keycaps != text:
+        emoji.add(KEYCAP)
+        if chr(KEYCAP) not in without_keycaps:
+            missing.remove(KEYCAP)
     # A text symbol that is only sometimes asked for as a picture (the heart with U+FE0F)
     # still goes through the fonts for the occurrences that are not.
     missing = [code_point for code_point in missing if not is_emoji_code_point(code_point)]

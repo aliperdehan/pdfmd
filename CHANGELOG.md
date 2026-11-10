@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.114 — 2026-11-11
+
+Pre-edit state: commit `3ecb803`. **Recognise keycap emoji for picture fallback.** A keycap whose digit was in the
+main font was treated as a missing combining mark instead of an emoji. Complete keycap sequences now reach the
+colour-font picture path; a regression covers both variation-selector forms and verifies picture selection.
+
 ## v3.33.113 — 2026-11-11
 
 Pre-edit state: commit `be4474c`. **Analyse nested and indented code for font fallback.** Indented blocks and
