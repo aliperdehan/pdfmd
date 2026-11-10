@@ -101,8 +101,8 @@ class Builds(unittest.TestCase):
         write(self.kits / "ownland" / ".kit", "kit-format: 1\nname: ownland\npackage: ownland\n")
         write(self.kits / "ownland" / "ownland.sty", OWN_LANDSCAPE)
 
-    def build(self, options: str, output: str, *args) -> tuple[subprocess.CompletedProcess, Path]:
-        write(self.folder / "report.md", DOCUMENT.format(options=options))
+    def build(self, options: str, output: str, *args, extra: str = "") -> tuple[subprocess.CompletedProcess, Path]:
+        write(self.folder / "report.md", DOCUMENT.format(options=options) + extra)
         environment = {**os.environ, "PDFMD_CONFIG": str(self.config), "XDG_CACHE_HOME": str(self.root / "cache"),
                        "PDFMD_NO_PROMPT": "1", "PDFMD_BUILD_LOG": "off"}
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "report.md", "-o", output, "--no-backup", "--no-stamp",
@@ -144,6 +144,14 @@ class Builds(unittest.TestCase):
         done, _ = self.build("", "soul.pdf", "-e", "lualatex")
         self.assertTrue(re.search(r"\(lualatex\)", done.stdout + done.stderr), done.stdout + done.stderr)
         self.assertNotIn("lualatex failed", done.stdout + done.stderr)
+
+    @unittest.skipUnless(LUALATEX, "LuaLaTeX is needed")
+    def test_lualatex_highlights_after_a_preambles_soul_or_bare_lua_ul(self):
+        # v3.33.70: lua-ul's \highLight needs luacolor, which the guarded header now loads too
+        for package in ("soul", "lua-ul"):
+            write(self.folder / "preamble.tex", f"\\usepackage{{{package}}}\n")
+            done, _ = self.build("", f"{package}.pdf", "-e", "lualatex", extra="\nSome ==marked== words.\n")
+            self.assertNotIn("luacolor", done.stdout + done.stderr)
 
 
 if __name__ == "__main__":

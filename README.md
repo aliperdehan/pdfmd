@@ -2553,7 +2553,8 @@ is formatted in the file, a style of that name in your own reference document ke
 the text as it is and say so once. `markup: [callouts, toc, center]` or `true` for all; `--markup center` for one run.
 
 **Highlighted text** (v3.29, `markup: highlight`). `==marked text==` (across several words, with emphasis inside, over a line
-break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (plain text when `soul` is not installed), Typst with
+break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (LuaLaTeX: `lua-ul`'s `\highLight`, with the `luacolor` it needs, when both are
+installed; plain text when `soul` is not installed either), Typst with
 `#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`, Word with the character style `PdfmdHighlight` (a yellow shading);
 Pandoc's own Markdown output keeps `==...==`, and OpenDocument keeps the text and says once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
 punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or `true` for all; `--markup highlight` for one run.

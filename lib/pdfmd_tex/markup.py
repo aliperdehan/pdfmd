@@ -43,11 +43,13 @@ HIGHLIGHT_GUARDED = r"""% pdfmd: highlighted text (pdfmd-options: markup: highli
 \definecolor{pdfmd-mark}{HTML}{FFF3A3}
 % under LuaTeX Pandoc's template loads lua-ul (with soul's \ul) for an underline; the same load here, with its own \highLight, keeps the two apart
 % a lua-ul or a soul loaded above (by a kit, a class, a preamble) is kept as it was loaded, and so is the colour of its \hl
+% lua-ul's \highLight colours through luacolor (loaded again it is a no-op): both are needed, else soul
 \ifdefined\directlua
-  \IfFileExists{lua-ul.sty}{\def\pdfmdhasluaul{1}}{}
+  \IfFileExists{lua-ul.sty}{\IfFileExists{luacolor.sty}{\def\pdfmdhasluaul{1}}{}}{}
 \fi
 \IfFileExists{soul.sty}{\def\pdfmdhassoul{1}}{}
 \ifdefined\pdfmdhasluaul
+  \@ifpackageloaded{luacolor}{}{\usepackage{luacolor}}
   \@ifpackageloaded{lua-ul}{}{\@ifpackageloaded{soul}{\usepackage{lua-ul}}{\usepackage[soul]{lua-ul}}}
   \newcommand{\pdfmdhl}[1]{\highLight[pdfmd-mark]{#1}}
 \else\ifdefined\pdfmdhassoul

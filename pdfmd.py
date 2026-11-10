@@ -1509,7 +1509,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.69"
+PDFMD_VERSION = "3.33.70"
 import argparse
 import atexit
 import contextlib
@@ -3288,11 +3288,13 @@ MARKUP_HIGHLIGHT_HEADER = r"""% pdfmd: highlighted text (pdfmd-options: markup: 
 \makeatother
 \definecolor{pdfmd-mark}{HTML}{FFF3A3}
 % under LuaTeX Pandoc's template loads lua-ul (with soul's \ul) for an underline; the same load here, with its own \highLight, keeps the two apart
+% lua-ul's \highLight colours through luacolor, which Pandoc's template loads only for ~~struck~~ text: both are needed, else soul
 \ifdefined\directlua
-  \IfFileExists{lua-ul.sty}{\def\pdfmdhasluaul{1}}{}
+  \IfFileExists{lua-ul.sty}{\IfFileExists{luacolor.sty}{\def\pdfmdhasluaul{1}}{}}{}
 \fi
 \IfFileExists{soul.sty}{\def\pdfmdhassoul{1}}{}
 \ifdefined\pdfmdhasluaul
+  \usepackage{luacolor}
   \usepackage[soul]{lua-ul}
   \newcommand{\pdfmdhl}[1]{\highLight[pdfmd-mark]{#1}}
 \else\ifdefined\pdfmdhassoul

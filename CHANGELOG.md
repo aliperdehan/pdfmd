@@ -19,6 +19,28 @@ same commit as the change.
 
 ---
 
+## v3.33.70 — 2026-11-10
+
+Pre-edit state: commit `0ab740d`. **`==highlight==` builds on LuaLaTeX.** A document with `==marked text==` stopped LuaLaTeX with
+`Package lua-ul Error: Color support in lua-ul requires luacolor`, in plain documents too, and pdfmd went on to XeLaTeX (`OK ...
+(xelatex; lualatex failed)`). The highlight markup's header loads lua-ul under LuaTeX and colours with its `\highLight`, which
+colours through luacolor; Pandoc's template loads luacolor only for `~~struck~~` text, so a document without any had none.
+
+- Both headers of the `highlight` markup (the plain one, `MARKUP_HIGHLIGHT_HEADER` in `pdfmd.py`, and the guarded one,
+  `HIGHLIGHT_GUARDED` in `lib/pdfmd_tex/markup.py`) take the lua-ul route only when `lua-ul.sty` and `luacolor.sty` are both
+  installed, and load luacolor before lua-ul, as Pandoc's template does (the guarded one only when it is not loaded yet); with
+  lua-ul but no luacolor the header falls to soul, as it does without lua-ul. The plain header's other lines are unchanged.
+- Checked through pdfmd: a plain document with `==highlighted words==`, no `-e`: `OK ... (lualatex)` (was `(xelatex; lualatex
+  failed)`), the page rendered with `pdftoppm`: the words on pale yellow; `-e xelatex` and `-e pdflatex`: built, highlighted, as
+  before; a `preamble.tex` with `\usepackage{soul}` and one with `\usepackage{lua-ul}` (the guarded header): LuaLaTeX builds,
+  highlighted; `==x==` with `~~y~~` and `<u>z</u>` (Pandoc's own luacolor and lua-ul, then pdfmd's): LuaLaTeX builds.
+- README (highlighted text) says which package LuaLaTeX uses.
+- Tests: `test_markup_highlight` (`LuaColor`: both headers; a plain document on LuaLaTeX, no fallback, yellow on the page),
+  `test_markup_guarded` (highlight after a preamble's soul or bare lua-ul on LuaLaTeX); both fail at HEAD.
+  `test_markup_highlight test_markup_guarded test_doctor test_markup_landscape test_markup_callouts test_show_comments test_split
+  test_packaging test_docs_consistency test_setup test_isolation`: 148 run, OK (1 skipped) but for the two changelog checks, run
+  before this entry was written.
+
 ## v3.33.69 — 2026-11-10
 
 Pre-edit state: commit `06edd4c`. **An author written as a mapping with a `name` is named in the LaTeX and HTML title block.**

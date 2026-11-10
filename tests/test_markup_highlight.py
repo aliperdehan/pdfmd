@@ -97,5 +97,45 @@ class Header(unittest.TestCase):
             self.assertEqual(pdfmd.markup_header_args(doc, []), [])               # a kind that needs no LaTeX needs no file
 
 
+LUALATEX = shutil.which("lualatex")
+KPSEWHICH = shutil.which("kpsewhich")
+
+
+def tex_file(name: str) -> bool:
+    return bool(KPSEWHICH) and bool(subprocess.run([KPSEWHICH, name], capture_output=True, text=True).stdout.strip())
+
+
+class LuaColor(unittest.TestCase):
+    """v3.33.70: lua-ul's `\\highLight` colours through luacolor, which Pandoc's template loads only for struck-out text, so
+    `==x==` stopped LuaLaTeX ("Color support in lua-ul requires luacolor") and pdfmd fell back to XeLaTeX."""
+
+    def test_both_headers_load_luacolor_before_lua_ul(self):
+        markup = pdfmd.load_package("pdfmd_tex.markup")
+        for header in (pdfmd.MARKUP_HIGHLIGHT_HEADER, markup.HIGHLIGHT_GUARDED):
+            self.assertIn("{luacolor.sty}{\\def\\pdfmdhasluaul{1}}", header)        # lua-ul without luacolor: soul instead
+            self.assertLess(header.index("{luacolor}"), header.index("{lua-ul}"))
+
+    @unittest.skipUnless(PANDOC and LUALATEX and tex_file("lua-ul.sty") and tex_file("luacolor.sty"),
+                         "needs Pandoc, LuaLaTeX, lua-ul and luacolor")
+    def test_a_plain_document_builds_on_lualatex_with_its_highlight(self):
+        with tempfile.TemporaryDirectory() as folder:
+            doc = Path(folder) / "d.md"
+            doc.write_text("Some ==marked words== here.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), str(doc), "--no-backup", "--no-stamp"],
+                                  capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                  env={**__import__("os").environ, "PDFMD_NO_PROMPT": "1", "PDFMD_BUILD_LOG": "off"})
+            output = done.stdout + done.stderr
+            self.assertEqual(done.returncode, 0, output)
+            self.assertRegex(output, r"OK +\S*d\.md > d\.pdf .*\(lualatex\)")
+            self.assertNotIn("failed", output)
+            if shutil.which("pdftoppm"):
+                from PIL import Image
+                subprocess.run(["pdftoppm", "-r", "40", "-f", "1", "-l", "1", "-png", str(Path(folder) / "d.pdf"),
+                                str(Path(folder) / "page")], check=True)
+                image = Image.open(next(Path(folder).glob("page*.png"))).convert("RGB")
+                yellow = [1 for red, green, blue in image.getdata() if red > 230 and green > 225 and blue < 200]
+                self.assertGreater(len(yellow), 20)                 # the pale yellow of pdfmd-mark (FFF3A3) is on the page
+
+
 if __name__ == "__main__":
     unittest.main()
