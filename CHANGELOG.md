@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.109 — 2026-11-11
+
+Pre-edit state: commit `59c8ea0`. **[tables] Retain CSV fields beyond the header.** A data row wider than its header
+silently lost its extra fields because row output used the header length. The filter now pads that header with empty
+cells before applying the existing column limits; a full-pipeline regression covers longer and shorter rows, separator
+alignment and capped columns.
+
 ## v3.33.108 — 2026-11-11
 
 Pre-edit state: commit `41dc2f1`. **[smiles] Preserve all CRLF SD-file records.** Carriage returns prevented SD-file

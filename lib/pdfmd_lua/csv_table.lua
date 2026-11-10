@@ -432,6 +432,7 @@ local function csv_blocks(div)
     header_fields = {}
     for i = 1, math.max(total_cols, 1) do header_fields[i] = "Column " .. i end
   end
+  for i = #header_fields + 1, total_cols do header_fields[i] = "" end
   -- attributes win over a separator row; they name the columns of the file, like the separator row
   aligns = read_align(div.attributes["align"]) or aligns
   local own_widths = read_widths(div.attributes["widths"])

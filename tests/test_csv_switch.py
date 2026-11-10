@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -165,6 +166,37 @@ class RealRuns(unittest.TestCase):
         self.assertIn('"csv"', native)                                      # the Div with its class
         self.assertIn("water,3", native.replace('Str "water,3"', "water,3"))
         self.assertNotIn("WARN", said)
+
+    def test_data_wider_than_header_keeps_every_uncapped_field(self):
+        cases = (("cols=all", "h1,h2\nalpha,beta,EXTRA\nshort\n", 3, "EXTRA"),
+                 ("cols=all", "h1,h2\n:--,--:\nalpha,beta,ALIGNED\n", 3, "ALIGNED"),
+                 ("cols=3", "h1,h2\nv1,v2,v3,v4,TAIL\n", 4, "TAIL"))
+        for attributes, data, columns, kept in cases:
+            with self.subTest(attributes=attributes, data=data):
+                source = self.directory / "ragged.md"
+                source.write_text('---\ntitle: CSV\n---\n\n::: {.csv delimiter="comma" ' +
+                                  attributes + '}\n```\n' + data + '```\n:::\n')
+                env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source),
+                                       "--to", "json", "-o", "table.json", "--no-auto", "crossref"],
+                                      cwd=self.directory, env=env, stdin=subprocess.DEVNULL,
+                                      capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                ast = json.loads((self.directory / "table.json").read_text())
+                table = next(block["c"] for block in ast["blocks"] if block["t"] == "Table")
+                self.assertEqual(len(table[2]), columns)
+                self.assertIn('"' + kept + '"', json.dumps(table))
+                if "short" in data:
+                    self.assertIn('"short"', json.dumps(table))
+                if "ALIGNED" in data:
+                    self.assertEqual([spec[0]["t"] for spec in table[2]],
+                                     ["AlignLeft", "AlignRight", "AlignDefault"])
+                if attributes == "cols=3":
+                    self.assertIn("WARN", done.stdout + done.stderr)
+                    self.assertNotIn('"v3"', json.dumps(table))
+                    self.assertNotIn('"v4"', json.dumps(table))
 
     def test_a_bare_div_builds_the_same_table_as_the_braced_one(self):
         bare, _ = self.build("", BARE)
