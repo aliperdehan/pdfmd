@@ -985,6 +985,49 @@ class PicturesFromThePdf(unittest.TestCase):
         self.assertFalse((out / "fig" / "v.svg").exists())
         self.assertIn("![c](fig/v.pdf)", (out / "r.md").read_text(encoding="utf-8"))      # the Markdown follows
 
+    def test_extraction_reserves_original_stored_and_new_names(self):
+        import pdfmd_pdfimages
+        pdf = self.pdf_with("forms.pdf", [
+            {"kind": "form", "bbox": [0, 0, width, 10], "data": f"0 0 {width} 10 re f".encode()}
+            for width in (10, 20, 30)])
+        pictures = pdfmd_pdfimages.pdf_pictures(pypdf.PdfReader(pdf))
+        records = [{"path": name, "pdf": {key: picture[key] for key in ("kind", "sha256", "width", "height")}}
+                   for name, picture in zip(("figure.svg", "figure.pdf", "figure.eps"), pictures)]
+        records.append({"path": "figure-1.pdf"})
+        for ordered in (records, list(reversed(records))):
+            out, renamed, failed = pdfmd.extract_pdf_images(pdf, ordered, {"figure-2.pdf"})
+            self.assertEqual(failed, [])
+            self.assertEqual(len(out), 3)
+            self.assertEqual(set(renamed), {"figure.svg", "figure.eps"})
+            self.assertEqual(set(out), {"figure.pdf", "figure-3.pdf", "figure-4.pdf"})
+            for original, width in (("figure.svg", 10), ("figure.pdf", 20), ("figure.eps", 30)):
+                reader = pypdf.PdfReader(io.BytesIO(out[renamed.get(original, original)]))
+                self.assertEqual(float(reader.pages[0].mediabox.width), width)
+
+    def test_restore_pipeline_keeps_colliding_vector_images_and_references(self):
+        (self.root / "figure.svg").write_text('<svg width="100" height="60"></svg>', encoding="utf-8")
+        blank_pdf(self.root / "figure.pdf")
+        blank_pdf(self.root / "figure-1.pdf")
+        document = self.root / "r.md"
+        document.write_text("# Figures\n\n![one](figure.svg) ![two](figure.pdf) ![reserved](figure-1.pdf)\n", encoding="utf-8")
+        pdf = self.pdf_with("r.pdf", [
+            {"kind": "form", "bbox": [0, 0, 75, 45], "data": b"0 0 75 45 re f"},
+            {"kind": "form", "bbox": [0, 0, 200, 200], "data": b"0 0 200 200 re f"}])
+        with contextlib.redirect_stdout(io.StringIO()):
+            pdfmd.attach_source_after_success(document, pdf, [], [], [], None, False)
+        out = self.root / "out"
+        env = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1")
+        for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+            env[key] = str(self.root / key)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--restore", str(pdf), "-o", str(out)],
+                              cwd=self.root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (out / "r.md").read_text(encoding="utf-8")
+        self.assertIn("![one](figure-2.pdf)", text)
+        self.assertIn("![two](figure.pdf)", text)
+        self.assertEqual(float(pypdf.PdfReader(out / "figure-2.pdf").pages[0].mediabox.width), 75)
+        self.assertEqual(float(pypdf.PdfReader(out / "figure.pdf").pages[0].mediabox.width), 200)
+
     def test_a_bundle_stores_the_files_and_extracts_nothing(self):
         (self.root / "p.png").write_bytes(pdfmd.encode_png(1, 1, 8, 2, b"\x01\x02\x03"))
         document = self.root / "r.md"

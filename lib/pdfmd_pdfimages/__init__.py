@@ -245,6 +245,7 @@ def extract_pdf_images(pdf_path: Path, images: list[dict], skip: set[str]) -> tu
     wanted = [image for image in images if image.get("pdf") and image["path"] not in skip]
     if not wanted:
         return out, renamed, failed
+    reserved = {image["path"] for image in images} | skip
     reader = core.pypdf.PdfReader(pdf_path)
     pictures = pdf_pictures(reader)
     for image in wanted:
@@ -269,6 +270,13 @@ def extract_pdf_images(pdf_path: Path, images: list[dict], skip: set[str]) -> tu
         except Exception:  # noqa: BLE001 -- one picture not coming out is not the restore failing
             failed.append(name)
             continue
+        if target != name:
+            original = PurePosixPath(target)
+            number = 1
+            while target in reserved:
+                target = str(original.with_name(f"{original.stem}-{number}{original.suffix}"))
+                number += 1
+        reserved.add(target)
         out[target] = data
         if target != name:
             renamed[name] = target

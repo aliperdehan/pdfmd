@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.90 — 2026-11-10
+
+Pre-edit state: commit `fce0501`. **Keep restored images distinct after an extension change.** Extracting both
+`figure.svg` and `figure.pdf` as PDF silently replaced one drawing and pointed both references at the survivor. Extraction
+now reserves names against every original image, stored resource and newly extracted file before recording a rename.
+Regressions check both extraction orders, all three kinds of collision, distinct recovered drawings and an isolated restore
+launcher run with rewritten references; checked failing before the fix and passing afterwards. Attachment, standalone-source
+and required checks run. `pdfmd.py` stays at 17,211 lines; no new thresholds (suffix numbers are name ordinals).
+
 ## v3.33.89 — 2026-11-10
 
 Pre-edit state: commit `8065b88`. **Embed referenced files without losing trailing bytes.** Readable file blocks discarded
