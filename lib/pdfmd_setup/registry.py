@@ -808,7 +808,7 @@ def put(config: dict, key: str, value) -> None:
         if not isinstance(node, dict):
             if value is None:
                 return
-            node = nodes[-1][part] = {}
+            node = nodes[-1][part] = {"enabled": node} if part in ("calc", "csv") and node is not None else {}
         nodes.append(node)
     if value is not None:
         nodes[-1][parts[-1]] = value

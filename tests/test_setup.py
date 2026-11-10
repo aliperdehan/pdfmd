@@ -90,6 +90,31 @@ class Plain(unittest.TestCase):
             self.assertTrue(plain.edit(stores, setting, lambda prompt: "-", lambda line: None))
             self.assertIsNone(registry.read(stores, setting))
 
+    def test_editing_details_keeps_disabled_calc_and_csv_off(self):
+        from pdfmd_setup import plain
+        stores = {"config": {"options": {"calc": False, "csv": False}}}
+        for key, answer in (("options.calc.digits", "4sf"), ("options.csv.rows", "4")):
+            setting = next(item for item in SETTINGS if item.key == key)
+            self.assertTrue(plain.edit(stores, setting, lambda prompt: answer, lambda line: None))
+        self.assertEqual(stores["config"]["options"],
+                         {"calc": {"enabled": False, "digits": "4sf"}, "csv": {"enabled": False, "rows": 4}})
+        with tempfile.TemporaryDirectory(prefix="pdfmd-setup-off-") as directory:
+            folder = Path(directory)
+            doc = folder / "doc.md"
+            doc.write_text("---\n" + yaml.safe_dump({"pdfmd-options": stores["config"]["options"]})
+                           + "---\n\n`2+2`{=}\n\n::: {.csv}\na,b\n1,2\n:::\n", encoding="utf-8")
+            self.assertTrue(pdfmd.calc_is_off(doc, []))
+            self.assertTrue(pdfmd.csv_is_off(doc, []))
+            env = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1")
+            for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+                env[key] = str(folder / key)
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(doc), "--to", "html", "--verbose"],
+                                  cwd=folder, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertNotIn("calc.lua", done.stdout + done.stderr)
+            self.assertNotIn("csv_table.lua", done.stdout + done.stderr)
+            self.assertIn("2+2", (folder / "doc.html").read_text(encoding="utf-8"))
+
     def test_zero_restores_the_default_and_empty_sections_go(self):
         done, path = self.run_setup([str(number("options.fallback")), "0", "s"], "options:\n  fallback: box\n")
         self.assertFalse(path.exists())                      # nothing left to keep: the file goes
@@ -687,6 +712,18 @@ class Registry(unittest.TestCase):
         registry.put(config, "options.cache.aux", None)
         self.assertEqual(config, {})
 
+    def test_calc_and_csv_scalar_shorthand_survives_detail_edits(self):
+        for feature in ("calc", "csv"):
+            for scalar in (False, "off", True, "on"):
+                with self.subTest(feature=feature, scalar=scalar):
+                    config = {"options": {feature: scalar}}
+                    registry.put(config, f"options.{feature}.digits", "4sf")
+                    self.assertEqual(config["options"][feature], {"enabled": scalar, "digits": "4sf"})
+                    registry.put(config, f"options.{feature}.digits", None)
+                    self.assertEqual(config["options"][feature], {"enabled": scalar})
+                    registry.put(config, f"options.{feature}.enabled", True)
+                    self.assertIs(config["options"][feature]["enabled"], True)
+
     def test_every_setting_has_a_key_a_kind_and_choices(self):
         for setting in SETTINGS:
             self.assertIn(setting.kind, ("choice", "multi", "text", "action"))
@@ -738,6 +775,19 @@ class Fancy(unittest.TestCase):
         stores: dict = {}
         self.assertTrue(self.drive("\rs", stores, ask=lambda setting, now: "Ali P."))   # the first row is the author
         self.assertEqual(stores["metadata"], {"author": "Ali P."})
+
+    def test_editing_details_preserves_disabled_scalar_features(self):
+        for feature, field, answer in (("calc", "digits", "4sf"), ("csv", "rows", "4")):
+            with self.subTest(feature=feature):
+                stores = {"config": {"options": {feature: False}}}
+                down = "j" * [item.key for item in SETTINGS].index(f"options.{feature}.{field}")
+                self.assertTrue(self.drive(down + "\rs", stores, ask=lambda setting, now: answer))
+                self.assertIs(stores["config"]["options"][feature].get("enabled"), False)
+                with tempfile.TemporaryDirectory(prefix="pdfmd-setup-reader-") as directory:
+                    doc = Path(directory) / "doc.md"
+                    doc.write_text("---\n" + yaml.safe_dump({"pdfmd-options": stores["config"]["options"]}) + "---\n", encoding="utf-8")
+                    reader = pdfmd.calc_is_off if feature == "calc" else pdfmd.csv_is_off
+                    self.assertTrue(reader(doc, []))
 
     def test_q_quits_without_saving(self):
         stores: dict = {}

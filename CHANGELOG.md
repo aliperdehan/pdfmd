@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.92 — 2026-11-10
+
+Pre-edit state: commit `1db80de`. **Preserve disabled calculation and CSV features when editing their details.** Setup
+replaced scalar `calc: false` or `csv: false` with a mapping containing only the edited sub-setting, silently enabling the
+feature. The shared registry now carries scalar shorthand into the mapping's existing `enabled` field. Both readers accept
+that form, and explicitly changing the enabled row still works. Regressions exercise both editors, shorthand aliases, detail
+resets and the readers, plus an isolated launcher build confirming that neither filter runs; the editor regressions were
+checked failing before the fix and passing afterwards. Setup, CSV-switch and required checks run. `pdfmd.py` stays at
+17,211 lines; no new thresholds.
+
 ## v3.33.91 — 2026-11-10
 
 Pre-edit state: commit `81d9a91`. **Keep a setup choice of no markup or page-break families disabled.** Both editors
