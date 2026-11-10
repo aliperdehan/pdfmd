@@ -23,6 +23,23 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: E402
 
 
+class ResourcePaths(unittest.TestCase):
+    def test_local_images_and_code(self):
+        from pdfmd_native import calibre_resource_paths
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            base, scratch = root / "source", root / "scratch"
+            base.mkdir()
+            scratch.mkdir()
+            text = ('![A](images/a%20b.png?x=1#part) <img src="https://example.org/a.png">\n'
+                    '`![Code](images/code.png)`\n![Reference][plot]\n\n[plot]: images/ref.png\n')
+            result = calibre_resource_paths(text, base, scratch)
+            self.assertIn('../source/images/a%20b.png?x=1#part', result)
+            self.assertIn('<img src="https://example.org/a.png">', result)
+            self.assertIn('`![Code](images/code.png)`', result)
+            self.assertIn('[plot]: ../source/images/ref.png', result)
+
+
 class Selection(unittest.TestCase):
     def test_calibre_is_a_native_engine_only_without_pandoc(self):
         with mock.patch.object(pdfmd, "which", lambda name: None), mock.patch.object(pdfmd, "resolve_calibre", lambda: "/c"):
@@ -66,11 +83,14 @@ class Selection(unittest.TestCase):
                 self.assertIsNone(pdfmd.resolve_calibre())
 
 
-STUB = """#!{python}
-import json, shutil, sys
+STUB = r"""#!{python}
+import json, re, shutil, sys
 from pathlib import Path
 args = sys.argv[1:]
-Path({log!r}).write_text(json.dumps({{"args": args, "text": Path(args[0]).read_text(encoding="utf-8")}}), encoding="utf-8")
+text = Path(args[0]).read_text(encoding="utf-8")
+image = re.search(r"!\[[^]]*\]\(([^)]+)\)", text)
+image_path = Path(args[0]).parent / image.group(1) if image else None
+Path({log!r}).write_text(json.dumps({{"args": args, "text": text, "image_found": bool(image_path and image_path.is_file())}}), encoding="utf-8")
 if {fail!r}:
     sys.stderr.write("stub: refused")
     sys.exit(1)
@@ -94,8 +114,8 @@ class Build(unittest.TestCase):
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
         path = os.environ["PATH"] if pandoc else str(self.directory / "empty")
         environment = {**os.environ, "PATH": path, "PDFMD_CALIBRE": str(script), "PDFMD_NO_PROMPT": "1"}
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *args, "--no-stamp"], capture_output=True,
-                              text=True, encoding="utf-8", cwd=self.directory, env=environment)
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", *args, "--no-stamp"], capture_output=True,
+                              text=True, encoding="utf-8", cwd=self.directory, env=environment, stdin=subprocess.DEVNULL)
 
     def test_without_pandoc_calibre_reads_the_markdown(self):
         done = self.run_pdfmd()
@@ -115,6 +135,17 @@ class Build(unittest.TestCase):
         self.assertIn("# My Title", call["text"])                                       # the title block, as Markdown
         self.assertNotIn("papersize", call["text"])                                     # the front matter is gone
         self.assertTrue((self.directory / "d.pdf").read_bytes().startswith(b"%PDF"))
+
+    def test_relative_image_is_available_to_calibre(self):
+        images = self.directory / "images"
+        images.mkdir()
+        (images / "plot.png").write_bytes(b"image")
+        (self.directory / "d.md").write_text("![Plot](images/plot.png)\n\n`![Code](images/example.png)`\n", encoding="utf-8")
+        done = self.run_pdfmd("-e", "calibre")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        call = json.loads(self.log.read_text(encoding="utf-8"))
+        self.assertTrue(call["image_found"])
+        self.assertIn("`![Code](images/example.png)`", call["text"])
 
     def test_the_formulas_are_text_and_it_says_so(self):
         done = self.run_pdfmd()

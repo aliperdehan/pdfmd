@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.135 — 2026-11-11
+
+Pre-edit state: commit `6f6dfd2`. **Keep native Calibre image paths usable.** Moving normalised Markdown to
+scratch made relative images resolve there instead of beside the source. Image references now point back to the
+source base; a checkout regression with a stand-in Calibre and the native and repository guard tests run.
+
 ## v3.33.134 — 2026-11-11
 
 Pre-edit state: commit `b09c66e`. **Protect TeX files with spaces from fallback.** File-and-line diagnostics
