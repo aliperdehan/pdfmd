@@ -41,8 +41,9 @@ PANDOC_PROGRAM_NOT_FOUND = 47
 TEX_UNUSABLE = ("I can't find the format file", "Fatal format file error", "I can't write on file", "Not writing to",
                 "kpathsea: Running mktexfmt", "not loadable: Bad metric (TFM) file")
 # An error as TeX's -file-line-error writes it in its log (`./report.tex:12: Undefined control sequence.`), which pdfmd's direct
-# .tex route asks for
-TEX_FILE_LINE_ERROR = re.compile(r"(?m)^\S+\.(?:tex|sty|cls|ltx|def|cfg|bbl):\d+: .*$")
+# .tex route asks for. TeX can wrap the filename even inside its extension.
+TEX_FILE_LINE_ERROR = re.compile(
+    r"(?m)^[^\r\n]+\.\n?(?:t\n?e\n?x|s\n?t\n?y|c\n?l\n?s|l\n?t\n?x|d\n?e\n?f|c\n?f\n?g|b\n?b\n?l)[\"\']?\n?:\d+: .*$")
 # A Typst diagnostic: `error: ...`, then the place in the source on a line of its own (Typst's own layout)
 TYPST_SOURCE_ERROR = re.compile(r"(?m)^error: .*\n(?:.*\n)?\s*┌─ ")
 # A PDF's Creator and Producer, as each engine writes them -> the engine (first match wins; facts of the engines). pdfmd adds

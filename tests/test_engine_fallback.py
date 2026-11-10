@@ -58,6 +58,11 @@ class Kinds(unittest.TestCase):
         typst = "error: unknown variable: nosuch\n    ┌─ toPdf.typ:153:1\n    │\n153 │ #nosuch()\n"
         self.assertEqual(chain.failure_kind("typst", failed(typst)), ("document", "error: unknown variable: nosuch"))
 
+    def test_file_line_errors_with_spaces_and_quotes(self):
+        for name in ("./my paper.tex", '"./my paper.tex"', "./my paper.t\nex"):
+            result = subprocess.CompletedProcess(["lualatex"], 1, f"{name}:12: Undefined control sequence.\n", "")
+            self.assertEqual(chain.failure_kind("lualatex", result)[0], "document")
+
     def test_an_engine_that_cannot_run_is_the_engines(self):
         for engine, text, code in (
                 ("lualatex", "Error producing PDF.\n", 43),                                     # no LaTeX error at all
@@ -186,7 +191,7 @@ class Builds(unittest.TestCase):
 
     def pdfmd(self, *args, env: dict | None = None) -> tuple[int, str]:
         environment = {**os.environ, "PDFMD_NO_PROMPT": "1", **(env or {})}
-        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args, "--no-backup"], capture_output=True, text=True,
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args, "--no-backup"], capture_output=True, text=True,
                               cwd=self.folder, env=environment, stdin=subprocess.DEVNULL)
         return done.returncode, done.stdout + done.stderr
 
@@ -268,6 +273,15 @@ class Builds(unittest.TestCase):
         self.assertEqual(sha(self.folder / "t.pdf"), before)
         self.assertNotIn("trying it through Pandoc", said)              # the Pandoc route would drop the command and build
         self.assertIn("t.pdf kept", said)
+
+    def test_spaced_tex_name_stops_fallback(self):
+        self.write("my paper.tex", "\\documentclass{article}\\begin{document}Bad \\undefinedcommandxyz.\\end{document}\n")
+        output = self.folder / "my paper.pdf"
+        output.write_bytes(b"previous output")
+        code, said = self.pdfmd("my paper.tex", "--engine-fallback", "missing")
+        self.assertNotEqual(code, 0, said)
+        self.assertEqual(output.read_bytes(), b"previous output")
+        self.assertNotIn("trying it through Pandoc", said)
 
     def test_keep_aux_compiles_in_place_and_still_keeps_the_pdf(self):
         # TeX opens the PDF itself in place and removes it when it stops: the old one is put back

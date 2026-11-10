@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.134 — 2026-11-11
+
+Pre-edit state: commit `b09c66e`. **Protect TeX files with spaces from fallback.** File-and-line diagnostics
+with spaces or quoted names were classified as engine failures, allowing a lossy retry to replace a PDF. The
+classifier now recognises these filenames; classifier and checkout build regressions and repository guard tests run.
+
 ## v3.33.133 — 2026-11-11
 
 Pre-edit state: commit `e8483a0`. **Handle decomposed accents in ASCII builds.** Combining accents were
