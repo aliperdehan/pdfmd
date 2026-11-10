@@ -48,6 +48,10 @@ class Tables(unittest.TestCase):
         self.assertEqual(translit.romanize("운명", packs("hangul")), "unmyeong")
         self.assertEqual(translit.romanize("서울 abc", packs("hangul")), "seoul abc")
 
+    def test_kana_long_marks_join_adjacent_kana(self):
+        self.assertEqual(translit.romanize("スーパーマン", packs("kana")), "supaman")
+        self.assertEqual(translit.romanize("ー abc ー", packs("kana")), "ー abc ー")
+
     def test_kana_by_hepburn(self):
         self.assertEqual(translit.romanize("きょうと", packs("kana")), "kyouto")
         self.assertEqual(translit.romanize("トウキョウ", packs("kana")), "toukyou")

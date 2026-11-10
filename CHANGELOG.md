@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.96 — 2026-11-10
+
+Pre-edit state: commit `d0e9274`. **Include long-vowel marks in kana romanisation.** The Common-script mark split kana
+runs, preventing Latin-name lookup of names such as スーパーマン. Marks adjacent to kana now join the kana run and are
+handled by its existing romaniser. A regression checks the name and preserves standalone marks.
+
 ## v3.33.95 — 2026-11-10
 
 Pre-edit state: commit `ab3276d`. **Recognise drawable code emoji in the font check.** Emoji found only in code were

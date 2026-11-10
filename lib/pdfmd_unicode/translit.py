@@ -185,8 +185,12 @@ def romanize(text: str, packs: frozenset[str]) -> str:
         return text
     out: list[str] = []
     runs: list[tuple[str, str]] = []  # (pack, run) of consecutive characters of one pack
-    for character in text:
+    for position, character in enumerate(text):
         pack = SCRIPT_PACK.get(script_of(ord(character))) if not character.isascii() else None
+        if character == KANA_LONG and "kana" in packs and (
+                (runs and runs[-1][0] == "kana") or
+                (position + 1 < len(text) and SCRIPT_PACK.get(script_of(ord(text[position + 1]))) == "kana")):
+            pack = "kana"
         if pack is None and not character.isascii() and "other" in packs:
             pack = "other" if script_of(ord(character)) not in HANDLED else None
         if pack is not None and (pack in packs or pack == "other") and runs and runs[-1][0] == pack:
