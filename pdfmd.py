@@ -1509,7 +1509,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.71"
+PDFMD_VERSION = "3.33.72"
 import argparse
 import atexit
 import contextlib
@@ -5763,7 +5763,11 @@ def _active_kits(md_path: Path, metadata_files: list[Path] | None, no_auto: list
         for warning in kit.warnings:
             print(f"WARN  {warning}", file=sys.stderr)
         resolved.append(ActiveKit(kit, mode, found, choice))
-        if VERBOSE_OUTPUT:
+        if VERBOSE_OUTPUT and choice.layer == "command line":        # a KIT line with its file and how to read about it (v3.33.72)
+            line = selection.command_line_line(resolved[-1].describe(), kit.name, display_path(kit.path))
+            if line:
+                print(line)
+        elif VERBOSE_OUTPUT:
             print(f"AUTO KIT  {resolved[-1].describe()}")
     ACTIVE_KITS[key] = resolved
     return resolved

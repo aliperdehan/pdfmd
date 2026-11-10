@@ -3267,6 +3267,9 @@ matched by name or alias (`nulabreport:220`). The layers stack, lowest first: th
 order; `none` drops what is below. A folder's `kit:` names a kit (searched in `kits:` of the config, the config folder's `kits/` and
 the TeX tree), never a path and never the project's `kits/` folder.
 
+`--kit NAME` builds with a kit, `pdfmd --kits NAME` describes it (and builds nothing); with `--verbose` a kit that `--kit` chose
+is named on one line with its file and that command (``KIT  apa7 1.0 mode stu (chosen in the command line) from ~/kits/apa7/.kit;
+`pdfmd --kits apa7` describes it``, v3.33.72); a normal run says nothing more.
 `--kit` replaces every `kit:` setting; give it several times to stack them; `--kit none` (or a bare `--kit` before another
 option) uses no kit. `kit-stack` (`pdfmd-options`, `--kit-stack`, a `--setup` row) makes `--kit` stack on the layers instead: `all`,
 or a list of `global`, `preset`, `folder`, `document`; so `--kit-stack all --kit nulabreport:orgchem` changes only the mode for one

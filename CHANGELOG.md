@@ -19,6 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.33.72 — 2026-11-10
+
+Pre-edit state: commit `1db8e7b`. **`--kit NAME` builds with a kit; `--kits NAME` describes it, and `--verbose` says so** (agreed
+by the author, 2026-11-10: no NOTE in a normal run). The two flags differ by one letter and `--kits NAME` builds nothing, so a
+run that wanted the description (or the other way round) got no word about the other.
+
+- With `--verbose`, a kit chosen by `--kit` is named on one line, once a run: `KIT  apa7 1.0 mode stu (chosen in the command
+  line) from ~/kits/apa7/.kit; \`pdfmd --kits apa7\` describes it`, in place of its `AUTO KIT  apa7 1.0 mode stu (chosen in the
+  command line)` line (a kit chosen by a document, a folder or the config keeps its `AUTO KIT` line). The line is made by
+  `command_line_line` (`lib/pdfmd_kits/selection.py`), which says it once a run however often the kits are chosen (they are
+  chosen again for other files: see below). A run without `--verbose` prints nothing more.
+- `--kit`'s help: "--kit builds with a kit; --kits NAME describes it (what it sets, its modes, its files)". `docs/agents.md`
+  has `pdfmd report.md --kit apa7` among the commands that matter, with the same clause; the README's *Choosing a kit* says it.
+- `docs/agents.md` no longer names v3.33.71 beside `engine-fallback` (`test_docs_consistency` wants no version there but the
+  current one; it passed while 3.33.71 was current).
+- Checked through pdfmd with a fixture kit (`kits/house/.kit`, mode `stu`) above the document: `--kit house:stu --to latex
+  --verbose`: the `KIT` line with the kit file (was `AUTO KIT  house 1.0 mode stu (chosen in the command line)`); without
+  `--verbose`: nothing about the kit, as before; `pdfmd --kits house`: the description, as before.
+- Noticed, not changed: `plan_scaffold` (`lib/pdfmd_parts`) looks at every `*.md` of the four folders above the document for a
+  parts scaffold and finds each one's metadata, which chooses its kits: with `--kit house` and a kit found only above the
+  document, a stray `brief.md` two folders up stopped the build (`brief.md: kit \`house\` ...: no kit called \`house\``), and in
+  the test suite a leftover `80-appendix.bak.md` in the system's temporary folder got the kits chosen a second time. The same
+  scan makes `test_kit_selection`'s `test_the_global_config_kit_is_the_bottom_layer` fail on this machine at 0ab740d already
+  (its `AUTO KIT` comes from that file).
+- Tests: `test_kit_selection` (the line once, with the kit file and the command; none without `--verbose`; a document's kit keeps
+  `AUTO KIT`; fails at HEAD). `test_kit_selection test_kits test_kit_markup_off test_kit_no_auto test_kit_preamble test_author_meta
+  test_help test_docs_consistency test_split test_packaging test_setup test_isolation`: 231 run, OK (1 skipped) but for
+  `test_the_global_config_kit_is_the_bottom_layer`, which fails the same way at 0ab740d (above).
+
 ## v3.33.71 — 2026-11-10
 
 Pre-edit state: commit `c516381`. **`engine-fallback`: what a PDF engine's failure does** (the author's decision of 2026-11-10).

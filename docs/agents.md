@@ -10,6 +10,7 @@ pdfmd report.md                     # Markdown to report.pdf beside it; the clos
 pdfmd report.md -o out.pdf          # a name; the suffix picks the format (.docx .odt .epub .html .tex .azw3 ...)
 pdfmd report.md --to docx           # the format by name
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
+pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
 pdfmd --doctor                      # what is installed and what is missing, with the command that fixes each
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)
@@ -28,7 +29,7 @@ pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the
 - The exit code is `0` when every file was built and `1` when any failed (the others in a batch are still built). With
   `--strict` a build that printed a warning (an engine that failed and was replaced, a missing glyph, a Pandoc
   `[WARNING]`) counts as failed too: the output is kept, the exit code is `1`. `--check` exits `1` on an error.
-- When an engine fails, the next one is tried only where `engine-fallback` lets it (v3.33.71). The default, `auto`, stops a
+- When an engine fails, the next one is tried only where `engine-fallback` lets it. The default, `auto`, stops a
   build whose PDF already exists at an error in the document (exit `1`, the existing PDF left as it was; the closing line says
   `engine-fallback auto stopped the build`) and goes on only past an engine that cannot run here; a new PDF gets the whole
   chain. `--engine-fallback on` is the old behaviour, `missing` and `off` are stricter.

@@ -714,7 +714,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kit", action="append", nargs="?", const="", default=None, metavar="KIT",
                         help="use this kit for the run: nulabreport, nulabreport:qca, nulabreport[qca], or a path; repeat it to stack "
                              "several. It replaces every `kit:` setting (the --kit-stack setting keeps some); `--kit none`, or "
-                             "a bare --kit before another option, uses no kit. A kit is a folder with a `.kit` file (--kits)")
+                             "a bare --kit before another option, uses no kit. A kit is a folder with a `.kit` file. --kit builds with a kit; "
+                             "--kits NAME describes it (what it sets, its modes, its files)")
     parser.add_argument("--kit-stack", default=None, metavar="LAYERS",
                         help="which kit settings --kit stacks on instead of replacing: all, or a list of global, preset, folder, "
                              "document (e.g. folder,document); off (default) replaces them all. Also `pdfmd-options: {kit-stack: ...}`")

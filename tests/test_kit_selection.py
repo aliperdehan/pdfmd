@@ -291,6 +291,24 @@ class Builds(unittest.TestCase):
         done, _ = self.run_pdfmd("--kit", "lab:qca")
         self.assertIn("mode qca", done.stdout)
 
+    def test_verbose_names_the_file_of_a_kit_kit_chose_and_how_to_describe_it(self):
+        # v3.33.72: `--kit` builds, `--kits` describes; one --verbose line says so, a normal run nothing more
+        done, _ = self.run_pdfmd("--kit", "lab:qca")
+        kit_file = str(self.root / "course" / "kits" / "lab" / ".kit")
+        lines = [line for line in done.stdout.splitlines() if line.startswith("KIT  ")]
+        self.assertEqual(len(lines), 1, done.stdout)
+        self.assertTrue(lines[0].startswith("KIT  lab 2.0 mode qca (chosen in the command line) from "), lines[0])
+        self.assertTrue(lines[0].endswith("; `pdfmd --kits lab` describes it"), lines[0])
+        self.assertIn(Path(kit_file).name, lines[0])
+        self.assertNotIn("AUTO KIT  lab 2.0", done.stdout)
+        done, _ = self.run_pdfmd("--kit", "lab:qca", verbose=False)
+        self.assertEqual(done.returncode, 0, done.stderr + done.stdout)
+        self.assertNotIn("--kits", done.stdout + done.stderr)
+        self.assertNotIn("KIT  ", done.stdout + done.stderr)
+        done, _ = self.run_pdfmd()                                                          # the document's own choice
+        self.assertIn("AUTO KIT  lab 2.0 (chosen in the document)", done.stdout)
+        self.assertNotIn("describes it", done.stdout)
+
     def test_an_unknown_mode_or_kit_stops_and_says_what_there_is(self):
         self.write_doc("pdfmd-options: {kit: 'lab:physics'}")
         done, _ = self.run_pdfmd()

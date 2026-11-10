@@ -186,3 +186,16 @@ def combine(layers: dict[str, list[Selection]], cli: list[Selection] | None, kit
     else:
         kept = [name for name in LAYERS if name in kit_stack]
     return stack([*(layers.get(name, []) for name in kept), cli])
+
+
+_SAID: set[str] = set()        # the lines said: once a run, however often (and for however many documents) the kits are chosen
+
+
+def command_line_line(described: str, name: str, kit_file: str) -> str | None:
+    """The `--verbose` line of a kit that `--kit` chose (v3.33.72): what it is, the `.kit` file it came from, and the command
+    that describes it (`--kit` builds with a kit; `--kits` describes one). None when this run said it already."""
+    line = f"KIT  {described} from {kit_file}; `pdfmd --kits {name}` describes it"
+    if line in _SAID:
+        return None
+    _SAID.add(line)
+    return line
