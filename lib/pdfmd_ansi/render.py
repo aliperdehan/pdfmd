@@ -9,6 +9,7 @@ of pdfmd is imported: `qwen` and a later full-screen reader can use this package
 
 from __future__ import annotations
 
+import copy
 import re
 from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
@@ -405,8 +406,10 @@ class Renderer:
         natural = [1] * count
         floor = [1] * count
         measured = []
+        measuring = copy.copy(self)
+        measuring.notes = self.notes.copy()
         for cell in cells:
-            lines = self.blocks(cell.blocks, INF)
+            lines = measuring.blocks(cell.blocks, INF)
             need = max([line_width(line) for line in lines] + [1])
             word = self.words_width(lines)
             measured.append((need, word))

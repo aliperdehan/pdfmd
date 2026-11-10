@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.84 — 2026-11-10
+
+Pre-edit state: commit `10b9086`. **Measure table cells without changing renderer state.** A footnote in a table cell was
+registered during measurement and rendering, producing a second marker and duplicate note. Measurement now uses a separate
+renderer state. A terminal-view pipeline regression checks the marker and note; the area and required checks run.
+
 ## v3.33.83 — 2026-11-10
 
 Pre-edit state: commit `fcb70f1`. **Fall back for an incomplete maths command.** A display fraction followed by a lone

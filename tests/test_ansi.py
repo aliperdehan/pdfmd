@@ -154,6 +154,13 @@ class Pipeline(unittest.TestCase):
         self.assertNotIn("Traceback", done.stdout + done.stderr)
         self.assertIn("a/()", done.stdout)
 
+    def test_table_footnote_is_registered_only_when_rendered(self):
+        (self.directory / "note.md").write_text("| Column |\n| --- |\n| Cell[^n] |\n\n[^n]: One note.\n", encoding="utf-8")
+        done = self.run_pdfmd("--view", "note.md", "--color", "never")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Cell¹", done.stdout)
+        self.assertEqual(done.stdout.count("One note."), 1)
+
     def test_an_ansi_extension_selects_the_format(self):
         done = self.run_pdfmd("a.md", "-o", "x.ansi", "--no-stamp", "--no-backup", "--color", "never")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
