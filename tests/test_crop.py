@@ -205,7 +205,7 @@ class Pictures(unittest.TestCase):
         draw(self.source, "50 30 60 20 rectfill showpage 10 10 20 20 rectfill showpage")
 
     def run_pdfmd(self, *arguments: str, path: str | None = None):
-        env = None if path is None else {"PATH": path}
+        env = None if path is None else {**os.environ, "PATH": path}   # keep the run's scratch XDG folders
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, encoding="utf-8",
                               cwd=self.dir, env=env)
 

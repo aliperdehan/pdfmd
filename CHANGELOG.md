@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.92b — 2026-11-10
+
+Pre-edit state: commit `809708d`. **Tests: `test_crop` no longer writes build records into the real cache.** Its second
+`run_pdfmd` helper ran pdfmd with an environment holding only `PATH` when a test narrowed the tools, which dropped the run's
+scratch `XDG_CACHE_HOME` (and the other folders `isolation_support` sets), so pdfmd fell back to the user's own
+`~/.cache/pdfmd/builds`. The isolation guard reported seven records from one run. The helper now keeps the inherited
+environment and replaces only `PATH`. Test-only change: no version bump.
+
 ## v3.33.92 — 2026-11-10
 
 Pre-edit state: commit `1db80de`. **Preserve disabled calculation and CSV features when editing their details.** Setup
