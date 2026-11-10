@@ -35,6 +35,7 @@ UNSET = {
     "papersize": "US Letter (A4 in WeasyPrint)", "fontsize": "10 pt LaTeX, 11 pt Typst",
     "geometry": "margin=1in", "mainfont": "STIX Two Text (or a serif with the letters)",
     "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
+    "options.paragraph-spacing": "the engine's own (none with indent: true)",
     "colorlinks": "off", "toc": "off",
     "options.unicode": "off (only for text the font lacks)", "translit": "Cyrillic only",
     "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
@@ -85,7 +86,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope",
+    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid",
@@ -213,6 +214,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("monofont", "Code font", "Without one pdfmd picks JetBrains Mono or Menlo.", "Every document (global metadata)",
              "metadata"),
         text("linestretch", "Line spacing", "A factor: 1.15, 1.5.", "Every document (global metadata)", "metadata", "number"),
+        text("options.paragraph-spacing", "Space between paragraphs",
+             "Added to the line spacing at a paragraph break: a length (6pt, 1em, 2mm; units pt, mm, cm, in, em), 0 for none, "
+             "or auto. LaTeX and Typst; the HTML engines take it from a style sheet. Empty: each engine's own (none with "
+             "indent: true). Per run: --paragraph-spacing.", "Every document (global metadata)"),
         choice("colorlinks", "Coloured links", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("toc", "Table of contents", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("options.global-metadata", "Use the global metadata above", on_off, "",

@@ -87,11 +87,11 @@ class Filter(unittest.TestCase):
         self.assertEqual(done.stderr.count("WARN"), 1)
         self.assertIn("3 links to anchors that are not in the document (#c, #nope)", done.stderr)
 
-    def standalone_typst(self, front: str) -> str:
+    def standalone_typst(self, front: str, *extra: str) -> str:
         source = self.directory / "indent.md"
         source.write_text(f"---\ntitle: T\n{front}---\n\n# H\n\nOne.\n\nTwo.\n", encoding="utf-8")
-        done = subprocess.run([PANDOC, str(source), "-s", "-t", "typst", "--lua-filter", str(TYPST_LUA)], capture_output=True,
-                              text=True, encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-s", "-t", "typst", *extra, "--lua-filter", str(TYPST_LUA)],
+                              capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout
 
@@ -102,6 +102,32 @@ class Filter(unittest.TestCase):
         self.assertIn(rule, self.standalone_typst("indent: \"yes\"\n"))
         self.assertNotIn(rule, self.standalone_typst("indent: false\n"))
         self.assertNotIn(rule, self.standalone_typst(""))
+
+    def test_the_space_between_paragraphs(self):
+        """v3.33.58: `indent: true` gives Typst LaTeX's spacing (one line: the leading, linestretch x 0.65em), and
+        paragraph-spacing (`pdfmd-paragraph-spacing`) is added to it; a Typst before 0.12 gets the block rule."""
+        def rules(front: str, *extra: str) -> list[str]:
+            return [line for line in self.standalone_typst(front, *extra).splitlines() if "spacing" in line and "#" in line]
+
+        self.assertEqual(rules(""), [])
+        self.assertEqual(rules("indent: false\n"), [])
+        self.assertEqual(rules("indent: true\n"), ["#set par(spacing: 0.65em)"])
+        self.assertEqual(rules("indent: true\nlinestretch: 1.5\n"), ["#set par(spacing: 0.975em)"])
+        self.assertEqual(rules("indent: true\n", "-V", "linestretch=2"), ["#set par(spacing: 1.3em)"])
+        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt"), ["#set par(spacing: 0.65em + 6pt)"])
+        self.assertEqual(rules("indent: true\n", "-M", "pdfmd-paragraph-spacing=1em"), ["#set par(spacing: 0.65em + 1em)"])
+        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=0pt"), ["#set par(spacing: 0.65em)"])
+        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt", "-M", "pdfmd-typst-block-spacing=true"),
+                         ["#show par: set block(spacing: 0.65em + 6pt)"])
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_the_spacing_rule_compiles(self):
+        source = self.directory / "spaced.md"
+        source.write_text("---\nindent: true\n---\n\nOne.\n\nTwo.\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-o", str(self.directory / "spaced.pdf"), "--pdf-engine=typst",
+                               "-M", "pdfmd-paragraph-spacing=6pt", "--lua-filter", str(TYPST_LUA)],
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_other_writers_are_untouched(self):
         done = self.convert("html")

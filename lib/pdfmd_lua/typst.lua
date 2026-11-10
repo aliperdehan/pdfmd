@@ -23,6 +23,14 @@
 -- `#set par(first-line-indent: 1.5em)` goes into `header-includes` the same way (1.5em, what `indent=true` means for an
 -- indent div, indent.lua). Typst, like LaTeX, leaves the first paragraph after a heading unindented. An indent div
 -- inside the document still sets its own stretch.
+--
+-- The space between paragraphs (v3.33.58). With `indent: true` LaTeX also drops the space between paragraphs (the parskip
+-- package is not loaded): the next paragraph starts one line below. Typst kept its own 1.2em; it now gets its line spacing
+-- too. Typst measures a paragraph's spacing as it measures its leading (edge to edge), so spacing = leading is that one
+-- line, and the leading is what Pandoc's template sets: linestretch x 0.65em. `pdfmd-options.paragraph-spacing` (pdfmd
+-- passes it as `pdfmd-paragraph-spacing`) is the room added to that, as LaTeX's \parskip is added to the line pitch:
+-- `#set par(spacing: 0.65em + 6pt)`. A Typst before 0.12 has no par.spacing; pdfmd says so (`pdfmd-typst-block-spacing`)
+-- and `#show par: set block(spacing: ...)` is written instead.
 
 if not FORMAT:match("^typst") then return {} end
 
@@ -124,6 +132,9 @@ local function add_header(meta, text)
 end
 
 local INDENT_DEFAULT = "1.5em"   -- indent.lua's DEFAULT: what `indent=true` means for a div
+-- Typst's own default leading, 0.65em (a format fact: `par.leading`), which Pandoc's template scales by `linestretch`
+-- (`leading: linestretch * 0.65em`); the line spacing that a paragraph break keeps
+local TYPST_LEADING_EM = 0.65
 
 -- `indent: true` (a YAML boolean, or the words true/yes/on): Pandoc's LaTeX template indents; the Typst one does not
 local function indent_on(value)
@@ -131,6 +142,23 @@ local function indent_on(value)
   if pandoc.utils.type(value) == "boolean" then return value end
   local word = pandoc.utils.stringify(value):lower()
   return word == "true" or word == "yes" or word == "on"
+end
+
+-- the template's linestretch: a -V variable first, then the metadata, else 1
+local function linestretch(meta)
+  local value = variables["linestretch"]
+  if value == nil and meta.linestretch ~= nil then value = pandoc.utils.stringify(meta.linestretch) end
+  return tonumber(value ~= nil and tostring(value) or "") or 1
+end
+
+-- `#set par(spacing: ...)` for `indent: true` (the line spacing) and paragraph-spacing (that plus the value), or nil
+local function spacing_rule(meta)
+  local extra = meta["pdfmd-paragraph-spacing"] ~= nil and pandoc.utils.stringify(meta["pdfmd-paragraph-spacing"]) or nil
+  if extra == nil and not indent_on(meta.indent) then return nil end
+  local value = string.format("%gem", linestretch(meta) * TYPST_LEADING_EM)
+  if extra ~= nil and extra ~= "0pt" then value = value .. " + " .. extra end
+  if meta["pdfmd-typst-block-spacing"] ~= nil then return "#show par: set block(spacing: " .. value .. ")" end
+  return "#set par(spacing: " .. value .. ")"
 end
 
 local function page_rules(meta)
@@ -141,6 +169,11 @@ local function page_rules(meta)
   end
   if indent_on(meta.indent) then
     add_header(meta, "#set par(first-line-indent: " .. INDENT_DEFAULT .. ")")
+    changed = true
+  end
+  local spacing = spacing_rule(meta)
+  if spacing then
+    add_header(meta, spacing)
     changed = true
   end
   if changed then return meta end

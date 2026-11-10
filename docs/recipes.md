@@ -145,7 +145,14 @@ style for each length (`pdfmd-indent-0pt`, `pdfmd-indent-2em`; an em is 12 pt th
 quotes, code and tables keep their own styles. The other formats have no per-block indent: the text stays, the setting is dropped,
 with a NOTE. The document's own indent is Pandoc's
 `indent: true` in the front matter (none is the default): LaTeX indents the first line of each paragraph, and since 3.33.42
-Typst does too (1.5em; Pandoc's Typst template has no such variable, so pdfmd sets it).
+Typst does too (1.5em; Pandoc's Typst template has no such variable, so pdfmd sets it). LaTeX then drops the space between
+paragraphs too, and since 3.33.58 so does Typst (its paragraph spacing is its line spacing).
+
+The space between paragraphs is `pdfmd-options: {paragraph-spacing: 6pt}` (or `--paragraph-spacing 6pt` for one run): what a
+paragraph break adds to the line spacing, a length (pt, mm, cm, in, em), `0` for none, or `auto`, the default (each engine's
+own, as above). LaTeX gets `\setlength{\parskip}{6pt}` after its template's own paragraph set-up, Typst `#set par(spacing:
+0.65em + 6pt)` (Typst measures it from the line's edge, so its leading, `linestretch` x 0.65em, comes first), so the gap is
+the same in both. The HTML engines and `--to html` are not given it: a style sheet's `p { margin: ... }` sets theirs.
 
 Pandoc reads `::: indent=3in` as a div whose one class is `indent=3in`; only the braced form carries attributes. So the
 value is also understood in the class word, with the same values: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`,

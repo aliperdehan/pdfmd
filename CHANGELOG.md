@@ -19,6 +19,47 @@ same commit as the change.
 
 ---
 
+## v3.33.58 — 2026-11-10
+
+Pre-edit state: commit `27c75a2`. **The space between paragraphs is a setting, and `indent: true` drops it in Typst as in
+LaTeX.** With `indent: true` Pandoc's LaTeX template leaves out the parskip package, so the next paragraph starts one line
+below; Typst kept its own spacing (1.2em, 6 pt more than a line at 11 pt). And there was no way to set the gap.
+
+- `indent: true`: `pdfmd_lua/typst.lua` adds `#set par(spacing: 0.65em)` beside the first-line indent (3.33.42): Typst's
+  paragraph spacing becomes its line spacing. Typst measures both edge to edge, and the leading is the one Pandoc's template
+  sets, `linestretch` x 0.65em (`linestretch: 1.5` gives `0.975em`; a `-V linestretch` first, as in the template).
+  `TYPST_LEADING_EM = 0.65` is Typst's documented default leading, a format fact (named and commented in the filter).
+- `pdfmd-options: {paragraph-spacing: 6pt}` (the document, its metadata files, the config, `--setup`) and `--paragraph-spacing
+  LENGTH` for a run: what a paragraph break adds to the line spacing, a length (pt, mm, cm, in, em), `0` (any zero is `0pt`) or
+  `auto`, the default (each engine's own, so nothing changes unless it is set). A bare number, a negative length or another
+  unit stops the build with `... must be a length such as 6pt or 1em (pt, mm, cm, in, em), 0, or auto, not '6px'`, naming
+  `--paragraph-spacing` or `pdfmd-options.paragraph-spacing`. A new package, `lib/pdfmd_paragraph`, reads it:
+  - LaTeX and Beamer (the PDF route, `-t latex`/`beamer`, `-r`, the natbib/biblatex route): `\setlength{\parskip}{X}` in a
+    header file of its own, after the template's parskip set-up.
+  - Typst (`-e typst`, `-t typst`, `-r`): `-M pdfmd-paragraph-spacing=X`, and typst.lua writes `#set par(spacing: <leading> +
+    X)`. Not `spacing: X` as such: Typst's spacing replaces the line gap where LaTeX's `\parskip` is added to it, so `0` would
+    set paragraphs closer than lines (measured: 7.15 pt less than the line pitch at 11 pt) and `6pt` 1.15 pt closer than
+    LaTeX's. With the leading added the same value gives the same gap on both. A Typst before 0.12 has no `par.spacing`:
+    pdfmd says so (`pdfmd-typst-block-spacing`, only when the `typst` found is older; none found counts as current) and the
+    filter writes `#show par: set block(spacing: ...)` (not tested here: the Typst on this machine is 0.15.1).
+  - The HTML engines and `--to html` are not given it: pdfmd adds no style sheet of its own in one place there; the docs say
+    a style sheet's `p { margin: ... }` sets theirs.
+- `--setup` row (`options.paragraph-spacing`, with its UNSET words, a folder option) and `lib/pdfmd_setup/inventory.py`; the
+  flag is in `--help output`; README (settings inside the document), `docs/recipes.md` (beside `indent`) and `pdfmd.py`'s opening docstring.
+- Checked through pdfmd on real PDFs, `pdftotext -bbox-layout`, three four-line paragraphs at 11 pt, the gap at a paragraph
+  break minus the line pitch (LuaLaTeX; Typst): default 6.78; 6.05 (unchanged); `6pt` 5.98; 6.0; `0` 0.0; 0.0; `1em` 10.91;
+  11.0. With `indent: true`: default 0.0; 0.0 (Typst was 6.05 at HEAD), and `6pt`, `0`, `1em` as above, the second paragraph
+  indented in both. `linestretch: 1.5` with `indent: true`: 0.0 on both. `-r` (both engines) and `citation-engine: natbib`
+  with `0`: 0.0. The `-t latex -s` line comes after `\usepackage{parskip}` and after a discovered `preamble.tex`;
+  `pdfmd-options` `0` with `--paragraph-spacing auto` gives the default back. Not set: `-t latex -s`, `-t typst -s` and the
+  `--verbose` Pandoc commands (lualatex, typst) byte-identical to HEAD; with `indent: true` the same except the new Typst line.
+  `python3 scripts/pdfmd --version` start-up unchanged within noise (best 155 ms HEAD, 159 ms).
+- Tests: a new `test_paragraph_spacing` (the values taken and refused, the messages, the header file, the command line over
+  the document and `auto`, the Typst arguments for a current, an old and no Typst, `-t latex`/`-t typst` through pdfmd) and
+  two `test_engine_filters` cases (typst.lua's rules for each case, and a Typst build with one); `test_paragraph_spacing
+  test_engine_filters test_indent test_texpackages test_header_includes test_report_build test_engine_chain test_paper
+  test_serve test_help test_doc test_launcher test_split test_packaging test_docs_consistency test_setup`: 258 OK (1 skipped).
+
 ## v3.33.57 — 2026-11-10
 
 Pre-edit state: commit `c923e08`. **`--assemble-only` and `--merge` embed only the bibliography entries the text cites.** A

@@ -2999,6 +2999,11 @@ that kind of engine. For example, a document full of chemical structures
 can require TeX, and a plain memo can skip the slow LaTeX run. `-e` on the
 command line always wins, and a bare `-e` means "try every engine".
 
+`paragraph-spacing:` is the space between paragraphs, added to the line spacing: a length (`6pt`, `1em`, `2mm`; pt, mm, cm,
+in, em), `0` for none, or `auto`, the default, each engine's own (LaTeX's half line, Typst's 1.2em; none with `indent:
+true`, in Typst too since 3.33.58). It is for LaTeX and Typst, the same gap in both; `--paragraph-spacing 6pt` sets it for one
+run. The HTML engines (WeasyPrint, Calibre, a browser) and `--to html` take it from a style sheet (`p { margin: ... }`).
+
 ### Your own defaults: the config file
 
 `pdfmd --init-config` writes a commented `~/.config/pdfmd/config.yaml`

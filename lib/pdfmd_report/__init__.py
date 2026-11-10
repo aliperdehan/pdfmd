@@ -433,6 +433,7 @@ def run(core, *,
                     cmd += pandoc_options
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args(files, report_no_auto, report_note)
+                        cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
                         cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
                         cmd += cover_header_args(list(files), metadata_files)
                         cmd += markup_header_args(list(files), metadata_files)
@@ -446,6 +447,7 @@ def run(core, *,
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
+                    cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, engine)
                     report_last = typst_filter_args(engine) + weasyprint_math_args(
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),

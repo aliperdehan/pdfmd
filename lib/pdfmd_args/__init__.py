@@ -247,6 +247,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="paper size (a4, letter ...), with the orientation if you like: a4,landscape; same as "
                              "-V papersize=SIZE, but written for each engine (LaTeX, Typst, WeasyPrint, Calibre, the "
                              "browsers and the native renderers all turn the page)")
+    parser.add_argument("--paragraph-spacing", metavar="LENGTH", default=None,
+                        help="the space between paragraphs, added to the line spacing: a length (6pt, 1em, 2mm; pt mm cm in "
+                             "em), 0 for none, or auto (the default: each engine's own; with `indent: true` none). LaTeX and "
+                             "Typst; the HTML engines take it from a style sheet. Also "
+                             "`pdfmd-options: {paragraph-spacing: 6pt}`, or --setup")
     parser.add_argument("--family", choices=("helvetica", "times"), default=None,
                         help="font family of the built-in renderer (inkmd)")
     parser.add_argument("--no-autolinks", action="store_true",

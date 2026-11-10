@@ -151,6 +151,13 @@ Paragraph indent for a stretch of text (v3.30.0):
     and Beamer in a `\\begingroup` ... `\\endgroup`, Typst a `first-line-indent` rule, HTML a `text-indent` style; the
     Markdown writers keep the div, the others drop the setting with a NOTE. docs/recipes.md 1.9.
 
+The space between paragraphs (v3.33.58):
+    `pdfmd-options.paragraph-spacing` (also the config and pdfmd --setup) or `--paragraph-spacing LENGTH`: what a paragraph
+    break adds to the line spacing, a length (pt, mm, cm, in, em), 0 or auto (the default: each engine's own). LaTeX and
+    Beamer get `\\setlength{\\parskip}` in a header file, Typst `#set par(spacing: <leading> + X)` (pdfmd_lua/typst.lua); with
+    `indent: true` Typst's spacing is its leading, as LaTeX drops parskip then. The HTML engines are not given it
+    (pdfmd_paragraph). docs/recipes.md 1.9.
+
 Page breaks (v3.27.13, off unless asked since v3.27.15):
     `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
     pdfmd --setup), `--pagebreak [KIND ...]` and `--no-pagebreak` add pdfmd_lua/pagebreak.lua to every Pandoc route,
@@ -1501,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.57"
+PDFMD_VERSION = "3.33.58"
 import argparse
 import atexit
 import contextlib
@@ -1785,10 +1792,12 @@ from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BRE
                           native_paper, mapped_author, normalise_gfm)
 import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
+import pdfmd_paragraph  # noqa: E402
+from pdfmd_paragraph import latex_args as paragraph_spacing_latex_args, typst_args as paragraph_spacing_typst_args  # noqa: E402
 
 bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
           pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor, pdfmd_cache, pdfmd_install, pdfmd_tex,
-          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args)
+          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args, pdfmd_paragraph)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # move 5 (v3.33.6)
@@ -14291,6 +14300,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if shift_heading:
                 cmd += ["--shift-heading-level-by=-1"]
             cmd += pandoc_options
+            cmd += paragraph_spacing_latex_args(md_path, metadata_files)
             if preamble_files:
                 for preamble_file in preamble_files:
                     cmd += ["--include-in-header", str(preamble_file)]
@@ -14824,6 +14834,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += pandoc_options
                 if is_tex_target:
                     cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
+                    cmd += paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
                     cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                     cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                     cmd += markup_header_args([md_path, *parts_inputs], css_meta)
@@ -14845,6 +14856,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                         list(preamble_files or ([] if discovery_disabled(no_auto, "preamble")
                                                                 else find_preambles(md_path.parent, md_path.stem, []))),
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
+                cmd += paragraph_spacing_typst_args(md_path, metadata_files, target_format)
                 cmd += typst_filter_args(target_format)
                 if target_format == "epub" and EBOOK_MATH.get("mode") == "text":
                     cmd += ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
@@ -15072,6 +15084,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += pandoc_options
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args([md_path, *parts_inputs], no_auto, note)
+                        cmd += paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
                         cmd += css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
                         cmd += cover_header_args([md_path, *parts_inputs], css_meta)
                         cmd += markup_header_args([md_path, *parts_inputs], css_meta)
@@ -15095,6 +15108,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(lua_filter)]
                     # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
+                    cmd += paragraph_spacing_typst_args(md_path, metadata_files, engine)
                     last_filters = typst_filter_args(engine) + weasyprint_math_args(
                         engine, pandoc_options,
                         selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
@@ -16382,6 +16396,8 @@ def run_main() -> None:
         os.environ[CALC_NOINDENT_ENV] = args.calc_noindent
     if args.calc_space is not None:
         os.environ[CALC_SPACE_ENV] = args.calc_space
+    if args.paragraph_spacing is not None:
+        os.environ[pdfmd_paragraph.ENV] = pdfmd_paragraph.command_line_value(args.paragraph_spacing)
     if args.calc_align is not None:
         os.environ[CALC_ALIGN_ENV] = args.calc_align
     if args.calc_constants is not None:
