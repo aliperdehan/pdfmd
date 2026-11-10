@@ -19,6 +19,39 @@ same commit as the change.
 
 ---
 
+## v3.33.62 — 2026-11-10
+
+Pre-edit state: commit `76d2dc0`. **A Typst older than 0.12 is refused as an engine, with one line that says so.** v3.33.58
+had given such a Typst a branch of its own for the space between paragraphs (`pdfmd-typst-block-spacing`: `#show par: set
+block(spacing: ...)` where 0.12's `par.spacing` is missing), never tested on a real one. That branch is gone
+(`lib/pdfmd_paragraph`'s `typst_args` passes the value only, `pdfmd_lua/typst.lua` writes `#set par(spacing: ...)` only), and
+pdfmd needs Typst 0.12 (`TYPST_MIN` in `lib/pdfmd_install`, a version fact: `par.spacing` and a `set document` in the body
+are 0.12's). An older one is treated as the engine chain treats a missing one (`typst_too_old`):
+
+- `-e typst` (and its alias `-e 6`, the `typst` family) stops before anything runs: "Typst 0.11.1 is older than 0.12, which
+  pdfmd needs: update it (PATH-TO-IT; github.com/typst/typst/releases), or take it off PATH and run `pdfmd --install typst`"
+  (a Typst on PATH wins over pdfmd's own, so the installer alone would not replace it); when the old one is pdfmd's own,
+  "`pdfmd --install typst` puts a current one in its place".
+- `-e typst,lualatex`: `NOTE  --engine: typst: Typst 0.11.1 is older ...; the next in the list is tried`, as for an engine
+  that is not installed.
+- The automatic chain keeps Typst in its list and passes it over when it gets there (`SKIP  doc.md: Typst 0.11.1 is older
+  ...`), so a build that LaTeX makes asks Typst nothing.
+- The version is `typst_version()`, whose `typst --version` is cached for the run (the build record asks the same), so a build
+  with a current Typst starts no second process; asked only where Typst is named or reached.
+
+- Checked through pdfmd with a fake `typst` on PATH that says `typst 0.11.1`: `-e typst` (`indent: true`): the line, exit 1,
+  the fake never run (HEAD: Pandoc ran it with `-M pdfmd-typst-block-spacing=true`, and the build failed on it); `-e
+  typst,lualatex`: the NOTE, then LuaLaTeX OK; no `-e`, a document whose `\undefinedcommandxyz` fails the three LaTeX engines:
+  `SKIP ... Typst 0.11.1 is older ...`, then WeasyPrint OK. The real Typst 0.15.1 with `indent: true`: OK, no
+  `block-spacing` in the command.
+- Tests: `test_engine_chain` (alone, as an alias, in a list, a current one, none found, the automatic chain asks nothing,
+  pdfmd's own Typst; through pdfmd with the fake: stops before it runs; fail at HEAD), `test_paragraph_spacing` (no version is
+  asked) and `test_engine_filters` (the old rule's case removed). `test_engine_chain test_paragraph_spacing test_engine_filters
+  test_calibre test_native test_browser_engine test_install_core_tex test_calibre_markdown test_office_latex test_split
+  test_packaging test_docs_consistency test_setup`: 303 OK (7 skipped); the run's end check named another session's build in
+  a temporary folder (counted then, fixed in 3.33.62b).
+- README (the engine order) says so.
+
 ## v3.33.61 — 2026-11-10
 
 Pre-edit state: commit `d880025`. **An unknown cache location is a warning when the cache is off.** `pdfmd-options: {cache:

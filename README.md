@@ -309,6 +309,8 @@ The numbers are the fallback order, and also shortcuts: `-e 6` means
 whose engine is not installed is passed over with a NOTE while another one of the list can run, and the build stops only
 when none can. `pdf-engine:` in `pdfmd-options`, the front matter, a metadata file or the config takes the same list
 (`pdf-engine: [typst, lualatex]`). Without `-e` the chain is the numbered one above, unchanged.
+A Typst older than 0.12 counts as not installed: `-e typst` stops with a line that says so and where a newer one comes
+from, a list goes on to its next engine, and the numbered chain passes it over (SKIP).
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

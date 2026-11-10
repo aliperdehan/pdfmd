@@ -121,8 +121,6 @@ class Filter(unittest.TestCase):
         self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt"), ["#set par(spacing: 0.65em + 6pt)"])
         self.assertEqual(rules("indent: true\n", "-M", "pdfmd-paragraph-spacing=1em"), ["#set par(spacing: 0.65em + 1em)"])
         self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=0pt"), ["#set par(spacing: 0.65em)"])
-        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt", "-M", "pdfmd-typst-block-spacing=true"),
-                         ["#show par: set block(spacing: 0.65em + 6pt)"])
 
     def test_reference_entries_are_spaced_in_lines(self):
         """v3.33.59: the `refs` div's CSL entry-spacing N becomes the leading plus N lines; Pandoc's template wrote

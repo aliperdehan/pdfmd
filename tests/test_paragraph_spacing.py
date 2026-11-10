@@ -87,19 +87,14 @@ class Arguments(unittest.TestCase):
         self.assertIsNone(pdfmd_paragraph.paragraph_spacing(document, []))
         self.assertEqual(pdfmd.paragraph_spacing_latex_args(document, []), [])
 
-    def test_typst_gets_the_value_and_an_old_typst_is_told(self):
+    def test_typst_gets_the_value(self):
         typst_args = pdfmd.paragraph_spacing_typst_args
-        with mock.patch.object(pdfmd, "typst_version", return_value=(0, 15, 1)):
+        with mock.patch.object(pdfmd, "typst_version", side_effect=AssertionError("no version is asked")):
             self.assertEqual(typst_args(self.document(""), [], "typst"), [])
             self.assertEqual(typst_args(self.document("indent: true\n"), [], "typst"), [])
             spaced = self.document("pdfmd-options:\n  paragraph-spacing: 6pt\n")
             self.assertEqual(typst_args(spaced, [], "typst"), ["-M", "pdfmd-paragraph-spacing=6pt"])
             self.assertEqual(typst_args(spaced, [], "lualatex"), [])
-        with mock.patch.object(pdfmd, "typst_version", return_value=(0, 11, 1)):
-            self.assertEqual(typst_args(self.document("indent: true\n"), [], "typst"), ["-M", "pdfmd-typst-block-spacing=true"])
-            self.assertEqual(typst_args(self.document(""), [], "typst"), [])
-        with mock.patch.object(pdfmd, "typst_version", return_value=(0,)):          # none found: a current one
-            self.assertEqual(typst_args(self.document("indent: true\n"), [], "typst"), [])
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")

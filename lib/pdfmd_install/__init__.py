@@ -12,8 +12,9 @@ Moved out of `pdfmd.py` unchanged (v3.33.35, SPLIT.md), with `INSTALL_SPECS`, th
 `KATEX_PACKAGE`, `MATHJAX_DEFAULT_FONT`, `MATHJAX_FONT_SHA256`, `MATHJAX_VERSION`, `PDFMD_VERSION`, `batchocr_spec`,
 `batchocr_version`, `config_options`, `data_root`, `display_path`, `find_batchocr`, `fonts_directory`, `install_ocr_languages`,
 `install_ocr_tools`, `kits_install_directory`, `mathjax_font_package`, `open_url`, `own_python_folder`, `reset_font_caches`,
-`resolve_calibre`, `run_probe`, `system_install_hint`, `tools_directory`, `unicode_module`, `use_managed_tools` and `which`) are read
-as `core.X` when it runs. `KATEX_PACKAGE` stays in `pdfmd.py`: it is built from `KATEX_VERSION` when that file is loaded. Tests patch
+`resolve_calibre`, `run_probe`, `system_install_hint`, `tools_directory`, `typst_version`, `unicode_module`, `use_managed_tools` and
+`which`) are read as `core.X` when it runs. `TYPST_MIN` and `typst_too_old` (v3.33.62) are new here: the oldest Typst pdfmd builds
+with, and the line that says the one found is older. `KATEX_PACKAGE` stays in `pdfmd.py`: it is built from `KATEX_VERSION` when that file is loaded. Tests patch
 `download_file`, `github_latest_release`, `github_release_asset`, `install_extra`, `install_tectonic`, `install_typst`,
 `typst_asset_name` and `d2_asset_name` of this package as `pdfmd.X` (and `config_options`, `data_root`, `resolve_calibre`, `run_probe`
 and `which`): every use of them here is `core.X`, so a patch reaches it. `urllib.request` is imported inside the functions that
@@ -60,6 +61,29 @@ TYPST_TARGETS = {
     ("darwin", "x86_64"): "x86_64-apple-darwin", ("darwin", "aarch64"): "aarch64-apple-darwin",
     ("windows", "x86_64"): "x86_64-pc-windows-msvc", ("windows", "aarch64"): "aarch64-pc-windows-msvc",
 }
+
+
+# The oldest Typst pdfmd builds with (v3.33.62), a version fact: `par.spacing` (the space between paragraphs, `indent: true`,
+# paragraph-spacing) and a `set document` in the body (a title or authors kept for the PDF's properties) are Typst 0.12's.
+TYPST_MIN = (0, 12)
+
+
+def typst_too_old() -> str | None:
+    """The line that says the `typst` found is older than TYPST_MIN, and where a newer one comes from; None for a current one,
+    for none found and for one that says no version. `typst_version()` is cached, so asking again (the build record asks too)
+    starts no second process. An engine too old is treated as one that is missing: `-e typst` stops with this line, a list
+    (`-e typst,lualatex`) goes on to the next with it as a NOTE, and the automatic chain passes Typst over (SKIP) when it
+    gets there."""
+    version = core.typst_version()
+    if version == (0,) or version >= TYPST_MIN:
+        return None
+    found = core.which("typst")
+    own = found is not None and Path(found).resolve().parent == core.tools_directory().resolve()
+    advice = ("`pdfmd --install typst` puts a current one in its place" if own else
+              f"update it ({core.display_path(Path(found)) if found else 'typst'}; github.com/{TYPST_REPOSITORY}/releases), "
+              "or take it off PATH and run `pdfmd --install typst`")
+    return (f"Typst {'.'.join(map(str, version))} is older than {'.'.join(map(str, TYPST_MIN))}, which pdfmd needs: "
+            + advice)
 
 
 def typst_asset_name(system: str | None = None, machine: str | None = None) -> str | None:

@@ -29,8 +29,7 @@
 -- too. Typst measures a paragraph's spacing as it measures its leading (edge to edge), so spacing = leading is that one
 -- line, and the leading is what Pandoc's template sets: linestretch x 0.65em. `pdfmd-options.paragraph-spacing` (pdfmd
 -- passes it as `pdfmd-paragraph-spacing`) is the room added to that, as LaTeX's \parskip is added to the line pitch:
--- `#set par(spacing: 0.65em + 6pt)`. A Typst before 0.12 has no par.spacing; pdfmd says so (`pdfmd-typst-block-spacing`)
--- and `#show par: set block(spacing: ...)` is written instead.
+-- `#set par(spacing: 0.65em + 6pt)`. `par.spacing` is Typst 0.12's, the oldest pdfmd builds with (v3.33.62).
 --
 -- The reference list's entry spacing (v3.33.59). Pandoc's template turns a CSL `entry-spacing="N"` into `#show <refs>: set
 -- par(spacing: Nem)`, but Typst measures that spacing edge to edge, from one line's baseline to the next line's cap height,
@@ -166,7 +165,6 @@ local function spacing_rule(meta)
   if extra == nil and not indent_on(meta.indent) then return nil end
   local value = string.format("%gem", linestretch(meta) * TYPST_LEADING_EM)
   if extra ~= nil and extra ~= "0pt" then value = value .. " + " .. extra end
-  if meta["pdfmd-typst-block-spacing"] ~= nil then return "#show par: set block(spacing: " .. value .. ")" end
   return "#set par(spacing: " .. value .. ")"
 end
 

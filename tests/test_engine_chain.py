@@ -74,6 +74,67 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.select("html"), ["weasyprint"])
 
 
+class OldTypst(unittest.TestCase):
+    """v3.33.62: a Typst older than 0.12 counts as a missing engine, with a line that says why."""
+
+    def select(self, requested, version=(0, 11, 1), **kwargs):
+        with mock.patch.object(pdfmd, "typst_version", return_value=version):
+            return Chain.select(self, requested, **kwargs)
+
+    def test_named_alone_it_stops_with_one_line(self):
+        for word in ("typst", "6"):
+            with self.subTest(word), self.assertRaises(SystemExit) as raised:
+                self.select(word)
+            said = str(raised.exception)
+            self.assertTrue(said.startswith("Typst 0.11.1 is older than 0.12, which pdfmd needs: update it ("), said)
+            self.assertIn("`pdfmd --install typst`", said)
+            self.assertNotIn("\n", said)
+
+    def test_in_a_list_the_next_is_tried_with_a_note(self):
+        shown = io.StringIO()
+        with contextlib.redirect_stderr(shown):
+            self.assertEqual(self.select("typst,lualatex"), ["lualatex"])
+        self.assertIn("NOTE  --engine: typst: Typst 0.11.1 is older than 0.12", shown.getvalue())
+        self.assertIn("the next in the list is tried", shown.getvalue())
+
+    def test_a_current_one_or_none_that_says_a_version_is_used(self):
+        for version in ((0, 12), (0, 12, 0), (0, 15, 1), (0,)):
+            with self.subTest(version):
+                self.assertEqual(self.select("typst", version=version), ["typst"])
+
+    def test_the_automatic_chain_keeps_it_for_the_build_to_pass_over(self):
+        with mock.patch.object(pdfmd, "typst_version", side_effect=AssertionError("not asked")):
+            self.assertEqual(Chain.select(self, None, calibre=None), ["lualatex", "xelatex", "typst", "weasyprint"])
+
+    def test_pdfmds_own_typst_is_replaced_by_its_installer(self):
+        own = str(pdfmd.tools_directory() / "typst")
+        with mock.patch.object(pdfmd, "typst_version", return_value=(0, 11)), mock.patch.object(pdfmd, "which", lambda name: own):
+            self.assertEqual(pdfmd.pdfmd_install.typst_too_old(),
+                             "Typst 0.11 is older than 0.12, which pdfmd needs: `pdfmd --install typst` puts a current one in its place")
+
+
+@unittest.skipUnless(sys.platform != "win32" and pdfmd.which("pandoc"), "needs Pandoc and a shell script as a program")
+class OldTypstThroughPdfmd(unittest.TestCase):
+    def test_a_typst_that_says_0_11_stops_the_build_before_it_runs(self):
+        import os
+        import subprocess
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            (base / "bin").mkdir()
+            fake = base / "bin" / "typst"
+            fake.write_text('#!/bin/sh\nif [ "$1" = "--version" ]; then echo "typst 0.11.1 (5011510d)"; exit 0; fi\n'
+                            'echo "typst ran" >&2; exit 1\n', encoding="utf-8")
+            fake.chmod(0o755)
+            (base / "d.md").write_text("---\ntitle: T\nindent: true\n---\n\nText.\n", encoding="utf-8")
+            env = {**os.environ, "PATH": f"{base / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}", "PDFMD_NO_PROMPT": "1"}
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "-e", "typst", "--no-stamp"], cwd=base,
+                                  capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn("Typst 0.11.1 is older than 0.12, which pdfmd needs: update it (", done.stderr)
+            self.assertNotIn("typst ran", done.stderr)
+            self.assertFalse((base / "d.pdf").exists())
+
+
 class Automatic(unittest.TestCase):
     """v3.29.1: with no -e, the browsers and Calibre are last resorts, ahead of LibreOffice."""
 

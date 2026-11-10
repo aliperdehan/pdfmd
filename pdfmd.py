@@ -1508,7 +1508,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.61"
+PDFMD_VERSION = "3.33.62"
 import argparse
 import atexit
 import contextlib
@@ -4880,6 +4880,11 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
         if group is not None:
             family = requested.casefold()
             installed_in_group = [engine for engine in group if engine_executable(engine)]
+            too_old = pdfmd_install.typst_too_old() if "typst" in installed_in_group else None
+            if too_old:                                # too old counts as missing (v3.33.62)
+                installed_in_group.remove("typst")
+                if not installed_in_group:
+                    raise SystemExit(too_old)
             if not installed_in_group:
                 raise SystemExit(
                     f"{label} restricted to the '{family}' engine family, but none of "
@@ -4906,6 +4911,8 @@ def select_engines(requested: str | None, presentation: bool, label: str = "--en
                 "engine, one of " + ", ".join(sorted(LATEX_ENGINES))
             )
         if engine_executable(requested):
+            if requested == "typst" and pdfmd_install.typst_too_old():
+                raise SystemExit(pdfmd_install.typst_too_old())
             return [requested]
         if requested == "calibre":
             raise SystemExit(f"{label} requested Calibre, but its ebook-convert was not found (on PATH, in "
@@ -14954,6 +14961,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             if family in failed_families:
                 print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
+                continue
+            if engine == "typst" and pdfmd_install.typst_too_old():         # an automatic chain gets here (v3.33.62)
+                print(f"SKIP  {md_path}: {pdfmd_install.typst_too_old()}", file=sys.stderr)
                 continue
             if engine == "soffice":
                 # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's

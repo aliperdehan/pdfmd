@@ -7,13 +7,13 @@ own spacing, as before.
   set-up (the parskip package without `indent`, the class's 0pt with it).
 - Typst (`typst_args`): the value reaches `pdfmd_lua/typst.lua` as `pdfmd-paragraph-spacing`, which writes `#set
   par(spacing: <leading> + X)`. Typst measures a paragraph's spacing as it measures its leading, edge to edge, where LaTeX adds
-  `\\parskip` to the line pitch: the line's leading is added so the same value gives the same gap. A Typst before 0.12 has no
-  `par.spacing`; it is told (`pdfmd-typst-block-spacing`) and the filter writes `#show par: set block(spacing: ...)`.
+  `\\parskip` to the line pitch: the line's leading is added so the same value gives the same gap. `par.spacing` is Typst 0.12's,
+  the oldest pdfmd builds with (v3.33.62: an older one is refused as an engine, `pdfmd_install.typst_too_old`).
 - The HTML writers (WeasyPrint, Calibre, the browser, `--to html`) are not given it: pdfmd adds no style sheet of its own in
   one place there; a style sheet's `p { margin: ... }` does it.
 
 `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses
-(`cache_root`, `display_path`, `effective_metadata`, `first_pdfmd_option` and `typst_version`) are read as `core.X` when it runs.
+(`cache_root`, `display_path` and `first_pdfmd_option`) are read as `core.X` when it runs.
 """
 
 from __future__ import annotations
@@ -89,15 +89,8 @@ def latex_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[s
 
 
 def typst_args(md_path: Path, metadata_files: list[Path], writer: str) -> list[str]:
-    """What typst.lua needs to set the space between paragraphs: the value, and whether the Typst here is older than 0.12
-    (asked only when a rule will be written: a value, or the document's `indent: true`, which gives Typst LaTeX's spacing).
-    A Typst that is not found, or says no version, counts as a current one."""
+    """What typst.lua needs to set the space between paragraphs: the value."""
     if writer != "typst":
         return []
     value = paragraph_spacing(md_path, metadata_files)
-    args = ["-M", f"pdfmd-paragraph-spacing={value}"] if value is not None else []
-    if value is not None or core.effective_metadata(md_path, metadata_files, []).get("indent") not in (None, False):
-        version = core.typst_version()
-        if (0,) < version < (0, 12):
-            args += ["-M", "pdfmd-typst-block-spacing=true"]
-    return args
+    return ["-M", f"pdfmd-paragraph-spacing={value}"] if value is not None else []
