@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.119 — 2026-11-11
+
+Pre-edit state: commit `57a4089`. **[tables] Protect pipes inside code and maths from cell tags.** Splitting a table
+row before masking code and maths exposed literal `<c>` text to tag processing. Row splitting now respects those
+spans and escaped pipes; a regression checks unchanged literals both alone and alongside a real cell tag.
+
 ## v3.33.118 — 2026-11-11
 
 Pre-edit state: commit `fcefbd7`. **Use hyperref anchors to name office references.** Without cleveref, a figure's

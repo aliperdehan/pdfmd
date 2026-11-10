@@ -116,6 +116,15 @@ class Spellings(unittest.TestCase):
         self.assertEqual(cell("«c» x"), "«c» x")
         self.assertEqual(cell("«mc» x", ("guillemet",)), "<pc hc vm> x")
 
+    def test_pipes_inside_code_and_maths_do_not_expose_tags(self):
+        for literal in ("`a| <c>`", "``a| <c>``", "$a| <c>$", r"\(a| <c>\)"):
+            source = "| h | i |\n|---|---|\n| " + literal + " | x |\n"
+            self.assertEqual(normalise(source).text, source, literal)
+            tagged = source.replace("| x |", "| <r> x |")
+            result = normalise(tagged).text
+            self.assertIn(literal, result)
+            self.assertIn("<pc hr> x", result)
+
     def test_code_math_and_escapes_are_left_alone(self):
         for text in ("`&c&` x", "$a &c& b$ x", "\\&c& x", "\\<c> x", "$K<c>$"):
             self.assertNotIn("<pc", cell(text), text)

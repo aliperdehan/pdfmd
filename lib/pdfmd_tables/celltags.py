@@ -262,16 +262,35 @@ def _split_row(line: str) -> tuple[str, list[str], str]:
     start = len(body) - len(body.lstrip())
     lead = body[:start]
     rest = body[start:]
-    opening = "|" if rest.startswith("|") else ""
-    if opening:
-        rest = rest[1:]
+    masks = _masked(rest)
+    separators = []
+    for position, character in enumerate(rest):
+        if character != "|" or _inside(masks, position, position + 1):
+            continue
+        before = position
+        while before and rest[before - 1] == "\\":
+            before -= 1
+        if (position - before) % 2 == 0:
+            separators.append(position)
+    opening = ""
+    if separators and separators[0] == 0:
+        opening = "|"
+        separators.pop(0)
+        start = 1
+    else:
+        start = 0
     closing = ""
-    if rest.rstrip().endswith("|") and not rest.rstrip().endswith("\\|"):
-        stripped = rest.rstrip()
-        trailing = rest[len(stripped):]
-        rest = stripped[:-1]
-        closing = "|" + trailing
-    return lead + opening, re.split(r"(?<!\\)\|", rest), closing
+    if separators and not rest[separators[-1] + 1:].strip():
+        end = separators.pop()
+        closing = rest[end:]
+    else:
+        end = len(rest)
+    cells = []
+    for position in separators:
+        cells.append(rest[start:position])
+        start = position + 1
+    cells.append(rest[start:end])
+    return lead + opening, cells, closing
 
 
 def _canon(spec: Spec | None, colspan: int = 1, rowspan: int = 1, covered: str = "") -> str:
