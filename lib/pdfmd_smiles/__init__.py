@@ -89,6 +89,7 @@ def split_molecules(text: str, kind: str) -> list[tuple[str, str]]:
     """(text of one structure, its name) for each structure in `text`, a molfile or SD file per record, a line each for
     SMILES and InChI (a name after the first space)."""
     if kind == "mol":
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
         # a molfile's first line is its title and may be blank, so a record keeps its leading lines as they are
         records = [record for record in re.split(r"(?m)^\$\$\$\$[ \t]*$\n?", text) if re.search(r"(?m)^M\s+END", record)]
         return [(record.rstrip("\n") + "\n", "") for record in records]

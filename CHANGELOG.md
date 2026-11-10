@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.108 — 2026-11-11
+
+Pre-edit state: commit `41dc2f1`. **[smiles] Preserve all CRLF SD-file records.** Carriage returns prevented SD-file
+delimiters from matching, so RDKit read only the first molecule. Molfile line endings are now normalised before
+splitting, retaining blank title lines; regressions cover record counts and an isolated full build of a CRLF SD file.
+
 ## v3.33.107 — 2026-11-11
 
 Pre-edit state: commit `94a542a`. **Match cached web previews to their source.** Rendering an edit and undoing to the

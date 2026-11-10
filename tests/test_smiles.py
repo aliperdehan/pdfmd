@@ -83,6 +83,13 @@ class Reading(unittest.TestCase):
         self.assertEqual(len(found), 2)
         self.assertTrue(found[0][0].startswith("\n  RDKit"))
 
+    def test_crlf_sd_records_keep_blank_titles(self):
+        for ending in ("\n", "\r\n", "\r"):
+            with self.subTest(ending=ending):
+                text = (MOLFILE + "$$$$ \t\n" + MOLFILE + "$$$$\n").replace("\n", ending)
+                found = pdfmd_smiles.split_molecules(text, "mol")
+                self.assertEqual(found, [(MOLFILE, ""), (MOLFILE, "")])
+
 
 @unittest.skipUnless(HAS_RDKIT, "needs RDKit")
 class Drawing(unittest.TestCase):
@@ -202,6 +209,23 @@ class Build(unittest.TestCase):
         (self.directory / "x.mol").write_text(MOLFILE, encoding="utf-8")
         html, done = self.build('```{.smiles file="x.mol"}\n```\n')
         self.assertIn("data:image/svg+xml;base64,", html, done.stderr)
+
+    def test_a_crlf_sd_file_draws_every_molecule(self):
+        import base64
+        import re
+        (self.directory / "x.sdf").write_bytes(
+            (MOLFILE + "$$$$\n" + MOLFILE + "$$$$\n").replace("\n", "\r\n").encode())
+        source = self.directory / "sd.md"
+        source.write_text('---\ntitle: SD\n---\n\n```{.smiles file="x.sdf" columns="1"}\n```\n')
+        env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               "XDG_CONFIG_HOME": str(self.directory / "config"),
+               "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source), "--to", "html"],
+                              cwd=self.directory, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        html = source.with_suffix(".html").read_text()
+        svg = base64.b64decode(re.search(r"base64,([A-Za-z0-9+/=]+)", html).group(1)).decode()
+        self.assertIn("height='400px'", svg)
 
     def test_a_missing_file_and_a_bad_structure_leave_the_block_as_code_with_a_warning(self):
         html, done = self.build('```{.smiles file="nowhere.mol"}\n```\n\n```smiles\nnot a smiles\n```\n')
