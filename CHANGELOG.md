@@ -19,6 +19,11 @@ same commit as the change.
 
 ---
 
+## v3.33.99 — 2026-11-10
+
+Pre-edit state: commit `c31f457`. **[tables] Detect auto delimiters during expansion.** Expanding a CSV block with
+`delimiter="auto"` split on the letter a. Expansion now guesses the delimiter; a regression covers comma and semicolon data.
+
 ## v3.33.98 — 2026-11-10
 
 Pre-edit state: commit `a744ec3`. **Reserve generated title slugs before body headings.** Flattening inserted a title

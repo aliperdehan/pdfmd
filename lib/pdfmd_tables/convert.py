@@ -334,7 +334,7 @@ def block_table(block: CsvBlock, base_dir: Path) -> tuple[list[str], list[list[s
     """(header, rows, alignments, widths) of a `.csv` block, as the Lua filter reads them (all rows, no caps)."""
     text, origin = read_csv_data(block, base_dir)
     delimiter = block.attributes.get("delimiter")
-    delimiter = DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1]) if delimiter else \
+    delimiter = DELIMITER_NAMES.get(delimiter.lower(), delimiter[:1]) if delimiter and delimiter.lower() != "auto" else \
         guess_delimiter(text, block.attributes.get("file"))
     rows = [row for row in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter) if row]
     if not rows:

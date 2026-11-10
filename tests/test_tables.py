@@ -370,6 +370,13 @@ class Expand(unittest.TestCase):
         result = tables.expand("::: {.csv}\n```\n" + data + "```\n:::\n", Path("."))
         self.assertEqual(result.text.count("\n| "), 30)
 
+    def test_expand_auto_delimiter_sniffs_data(self):
+        for delimiter, data in ((",", "Name,Amount\nx,2\n"), (";", "Name;Amount\nx;2\n")):
+            with self.subTest(delimiter=delimiter):
+                result = tables.expand('::: {.csv delimiter="auto"}\n' + data + ':::\n', Path("."))
+                self.assertIn("| Name | Amount |", result.text)
+                self.assertIn("| x", result.text)
+
     def test_a_missing_file_is_reported_and_left(self):
         text = '::: {.csv file="missing.csv"}\n:::\n'
         result = tables.expand(text, Path(tempfile.gettempdir()))
