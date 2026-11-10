@@ -3,6 +3,7 @@ fixtures show (the page is built against the fixtures, so a drift here breaks th
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
@@ -13,6 +14,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -127,6 +129,96 @@ class Handlers(Folder):
     def test_a_binary_file_is_not_text(self):
         (self.root / "x.png").write_bytes(b"\x89PNG\xff\xfe\x00")
         self.assertEqual(self.get("/api/file?path=x.png")[0], 415)
+
+
+class PreviewCopies(Folder):
+    def test_existing_hidden_copy_is_preserved(self):
+        existing = self.root / ".pdfmd-live-report.md"
+        existing.write_text("keep\n", encoding="utf-8")
+        with self.core.document_file(self.root / "report.md", self.root, "unsaved\n") as copy:
+            self.assertNotEqual(copy, existing)
+            self.assertEqual(copy.parent, self.root)
+            self.assertEqual(copy.suffix, ".md")
+            self.assertEqual(copy.read_text(), "unsaved\n")
+        self.assertFalse(copy.exists())
+        self.assertEqual(existing.read_text(), "keep\n")
+
+    def test_existing_symlink_and_its_target_are_preserved(self):
+        victim = self.root.parent / "victim.md"
+        victim.write_text("keep\n", encoding="utf-8")
+        existing = self.root / ".pdfmd-live-report.md"
+        existing.symlink_to(victim)
+        with self.core.document_file(self.root / "report.md", self.root, "unsaved\n"):
+            self.assertEqual(victim.read_text(), "keep\n")
+        self.assertTrue(existing.is_symlink())
+        self.assertEqual(victim.read_text(), "keep\n")
+
+    def test_overlapping_renders_get_independent_copies_and_cleanup(self):
+        with self.core.document_file(self.root / "report.md", self.root, "first\n") as first:
+            with self.core.document_file(self.root / "report.md", self.root, "second\n") as second:
+                self.assertNotEqual(first, second)
+                self.assertEqual(first.read_text(), "first\n")
+                self.assertEqual(second.read_text(), "second\n")
+            self.assertFalse(second.exists())
+            self.assertEqual(first.read_text(), "first\n")
+        self.assertFalse(first.exists())
+
+    def test_exclusive_creation_skips_a_symlink_collision(self):
+        victim = self.root.parent / "victim.md"
+        victim.write_text("keep\n", encoding="utf-8")
+        collision = self.root / ".pdfmd-live-occupied-report.md"
+        collision.symlink_to(victim)
+        with mock.patch("tempfile._get_candidate_names", return_value=iter(("occupied", "fresh"))):
+            with self.core.document_file(self.root / "report.md", self.root, "unsaved\n") as copy:
+                self.assertEqual(copy.name, ".pdfmd-live-fresh-report.md")
+        self.assertTrue(collision.is_symlink())
+        self.assertEqual(victim.read_text(), "keep\n")
+
+    def test_cleanup_leaves_a_replacement_file_alone(self):
+        with self.core.document_file(self.root / "report.md", self.root, "unsaved\n") as copy:
+            copy.rename(self.root / "moved.md")
+            copy.write_text("replacement\n", encoding="utf-8")
+        self.assertEqual(copy.read_text(), "replacement\n")
+
+    def test_exception_cleans_up_its_copy(self):
+        with self.assertRaisesRegex(RuntimeError, "filter failed"):
+            with self.core.document_file(self.root / "report.md", self.root, "unsaved\n") as copy:
+                raise RuntimeError("filter failed")
+        self.assertFalse(copy.exists())
+
+    def test_unwritable_folder_falls_back_and_cleans_up(self):
+        with mock.patch("pdfmd_serve.core.tempfile.NamedTemporaryFile", side_effect=PermissionError):
+            with self.core.document_file(self.root / "report.md", self.root, "unsaved\n") as copy:
+                self.assertNotEqual(copy.parent, self.root)
+                self.assertEqual(copy.read_text(), "unsaved\n")
+        self.assertFalse(copy.exists())
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_warnings_keep_the_source_name(self):
+        @contextlib.contextmanager
+        def filters(document, metadata):
+            print(f"WARN  {document}: sample warning", file=sys.stderr)
+            yield []
+        status, answer = Core(self.root, filters=filters).handle(
+            "POST", "/api/render", {"path": "report.md", "text": "unsaved\n"})
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["warnings"], ["WARN  report.md: sample warning"])
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_cli_preview_preserves_existing_symlink(self):
+        victim = self.root.parent / "victim.md"
+        victim.write_text("keep\n", encoding="utf-8")
+        existing = self.root / ".pdfmd-live-report.md"
+        existing.symlink_to(victim)
+        env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               **{key: str(self.root.parent / key) for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", "POST", "/api/render",
+                               json.dumps({"path": "report.md", "text": "# Unsaved\n"})],
+                              cwd=self.root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Unsaved", json.loads(done.stdout)["html"])
+        self.assertTrue(existing.is_symlink())
+        self.assertEqual(victim.read_text(), "keep\n")
 
 
 class Render(Folder):

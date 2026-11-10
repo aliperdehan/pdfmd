@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.80 — 2026-11-10
+
+Pre-edit state: commit `1f7b9ca`. **Give each live render its own exclusively created copy.** Rendering unsaved text used
+a fixed `.pdfmd-live-<name>.md`: an existing file was overwritten and deleted, a symlink redirected the write, and overlapping
+renders shared and removed each other's input. The copy is now an exclusive, uniquely named temporary file beside the
+source, closed before filters read it. Cleanup checks the created file's identity and leaves a replacement at that name
+alone; the existing unwritable-folder fallback remains. Warnings retain the source name. Regressions cover pre-existing
+files and symlinks, an exclusive-creation collision, overlapping renders, replacement and exception cleanup, the fallback,
+warnings and an isolated `python3 scripts/pdfmd --api POST /api/render` run. Checked failing before the fix and passing
+afterwards; socket-free serve-area tests and the required split, packaging, docs-consistency, setup and isolation checks
+pass. Nine socket-based checks in the broader run cannot pass here because the sandbox denies loopback binding.
+`pdfmd.py` stays at 17,241 lines (version only); no new thresholds.
+
 ## v3.33.79 — 2026-11-10
 
 Pre-edit state: commit `ca51b1b`. **Validate the complete unpack plan before touching its destinations.** `--unpack` trusted

@@ -44,6 +44,16 @@ HIDDEN_COPY = re.compile(r"[^\s:]*\.pdfmd-live-")      # the name of the copy of
 POSITION = re.compile(r'data-pos="(\d+:\d+-\d+:\d+)"')      # beside every name that starts with a dot
 
 
+def _remove_preview_copy(path: Path, identity: os.stat_result) -> None:
+    """Remove this render's file, leaving any replacement at its old name alone."""
+    try:
+        current = path.lstat()
+    except FileNotFoundError:
+        return
+    if os.path.samestat(current, identity):
+        path.unlink()
+
+
 class ApiError(Exception):
     def __init__(self, status: int, code: str, message: str, **extra):
         super().__init__(message)
@@ -279,7 +289,11 @@ class Core:
                 said = io.StringIO()
                 with contextlib.redirect_stderr(said):
                     arguments = stack.enter_context(self.filters(document, metadata))
-                notes = [HIDDEN_COPY.sub("", line) for line in said.getvalue().splitlines() if line.strip()]
+                warning_text = said.getvalue()
+                if not body.get("path") or document != path:
+                    original = path.name if body.get("path") else "document.md"
+                    warning_text = warning_text.replace(str(document), original).replace(document.name, original)
+                notes = [HIDDEN_COPY.sub("", line) for line in warning_text.splitlines() if line.strip()]
                 command += [str(item) for item in (arguments or [])]
                 done = subprocess.run(command, input=text.encode("utf-8"), capture_output=True, cwd=str(folder), timeout=RENDER_TIMEOUT)
         except subprocess.TimeoutExpired:
@@ -315,10 +329,16 @@ class Core:
                     return
             except (OSError, UnicodeDecodeError):
                 pass
-        copy = folder / f".pdfmd-live-{path.name if path is not None else 'document.md'}"
+        copy = None
         try:
-            copy.write_text(text, encoding="utf-8")
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=folder, prefix=".pdfmd-live-",
+                                             suffix=f"-{path.name if path is not None else 'document.md'}", delete=False) as handle:
+                identity = os.fstat(handle.fileno())
+                copy = Path(handle.name)
+                handle.write(text)
         except OSError:
+            if copy is not None:
+                _remove_preview_copy(copy, identity)
             with tempfile.TemporaryDirectory(prefix="pdfmd-live-") as scratch:      # a folder that cannot be written to: its settings are lost
                 copy = Path(scratch) / (path.name if path is not None else "document.md")
                 copy.write_text(text, encoding="utf-8")
@@ -327,7 +347,7 @@ class Core:
         try:
             yield copy
         finally:
-            copy.unlink(missing_ok=True)
+            _remove_preview_copy(copy, identity)
 
     @staticmethod
     def _write_bytes(path: Path, data: bytes) -> None:
