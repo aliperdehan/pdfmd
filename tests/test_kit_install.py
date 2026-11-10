@@ -53,6 +53,10 @@ class Parse(unittest.TestCase):
     def test_forms(self):
         cases = {
             "owner/repo": ("github", "owner/repo", "", ""),
+            "owner/repo@feature/x": ("github", "owner/repo", "feature/x", ""),
+            "https://user@host/g/r.git@feature/x": ("git", "https://user@host/g/r.git", "feature/x", ""),
+            "ssh://git@host/g/r.git": ("git", "ssh://git@host/g/r.git", "", ""),
+            "git@host:g/r.git@feature/x": ("git", "git@host:g/r.git", "feature/x", ""),
             "owner/repo@v1.2": ("github", "owner/repo", "v1.2", ""),
             "owner/repo#apa7": ("github", "owner/repo", "", "apa7"),
             "owner/repo@abc123#apa7": ("github", "owner/repo", "abc123", "apa7"),
@@ -78,7 +82,7 @@ class Parse(unittest.TestCase):
 
     def test_refused(self):
         for text in ("", "   ", "http://host/x.git", "git://host/x.git", "owner/repo@", "owner/repo#", "./x@v1", "apa7@v1",
-                     "a/b/c"):
+                     "a/b/c", "name@feature/x"):
             with self.subTest(text), self.assertRaises(InstallError):
                 parse_source(text)
 

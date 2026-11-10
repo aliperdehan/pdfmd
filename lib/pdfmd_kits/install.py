@@ -96,9 +96,12 @@ def parse_source(text: str) -> Source:
         if not name:
             raise InstallError(f"{text!r}: nothing after # (the name of a kit)")
     ref = ""
-    last = max(raw.rfind("/"), raw.rfind(":"))
     at = raw.rfind("@")
-    if at > last and at > 0:                           # `owner/repo@v1`, not the `git@` of `git@host:o/r.git`
+    scheme = raw.find("://")
+    authority_end = raw.find("/", scheme + 3) if scheme >= 0 else -1
+    scp = re.match(r"^[\w.-]+@[\w.-]+:", raw) if scheme < 0 else None
+    credential = (scheme >= 0 and (authority_end < 0 or at < authority_end)) or (scp and at < scp.end())
+    if at > 0 and not credential:                      # URL and scp credentials are not refs
         raw, ref = raw[:at], raw[at + 1:]
         if not ref:
             raise InstallError(f"{text!r}: nothing after @ (a tag, a branch or a commit)")

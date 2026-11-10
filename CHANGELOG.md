@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.102 — 2026-11-10
+
+Pre-edit state: commit `52ecb20`. **[kits] Accept slashes in repository refs.** A slash in `@REF` prevented its
+recognition and could contaminate a Git URL. Parsing now distinguishes credentials from refs; regressions cover branch names,
+URL and SSH credentials, and rejection of a bare kit name with a ref.
+
 ## v3.33.101 — 2026-11-10
 
 Pre-edit state: commit `fc71eee`. **[tables] Protect fenced code after pipe tables.** Pipe-table scanning consumed
