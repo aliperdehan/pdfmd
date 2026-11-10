@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.127 — 2026-11-11
+
+Pre-edit state: commit `14f775f`. **Preserve class options when adding a cover.** With `cover: true` and a list
+such as `[twoside, draft]`, the cover filter nested the existing list and LaTeX received `twosidedraft` as one option.
+It now recognises Pandoc metadata lists with `pandoc.utils.type` and appends directly. A checkout regression checks
+separate, ordered options for list and scalar inputs in LaTeX, with Typst and HTML body checks; cover and repository
+guard tests also run. The type API used is available in Pandoc 3.1.3.
+
 ## v3.33.126 — 2026-11-11
 
 Pre-edit state: commit `ad125e6`. **Convert nested raw HTML before inserting its wrapper.** With `--raw`, an image

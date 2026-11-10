@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -133,3 +134,17 @@ Measure: \qty{5}{\widget}, \qty{7}{\gadget} and \qty{9}{\bolt}.
                 elif to == "typst":
                     self.assertIn("#strong[before #emph[nested", text)
                     self.assertIn('image("plot.png"', text)
+
+    def test_cover_preserves_existing_class_options(self):
+        for value, expected in (("[twoside, draft]", ["twoside", "draft", "titlepage"]),
+                                ("twoside", ["twoside", "titlepage"])):
+            source = (f"---\ntitle: Cover\nclassoption: {value}\n"
+                      "pdfmd-options: {cover: true}\n---\n\nCover body.\n")
+            for to in ("latex", "typst", "html"):
+                with self.subTest(value=value, to=to):
+                    text = self.build(source, to)
+                    self.assertIn("Cover body.", text)
+                    if to == "latex":
+                        match = re.search(r"\\documentclass\[([^]]*)\]", text, re.S)
+                        self.assertIsNotNone(match, text)
+                        self.assertEqual([part.strip() for part in match[1].split(",")], expected)

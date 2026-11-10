@@ -12,7 +12,7 @@ local function append(meta, key, value)
   local current = meta[key]
   if current == nil then
     meta[key] = pandoc.MetaList({value})
-  elseif current.t == "MetaList" then
+  elseif pandoc.utils.type(current) == "List" then
     current[#current + 1] = value
     meta[key] = current
   else
