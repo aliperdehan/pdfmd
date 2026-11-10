@@ -19,6 +19,11 @@ same commit as the change.
 
 ---
 
+## v3.33.100 — 2026-11-10
+
+Pre-edit state: commit `a0e5d27`. **[tables] Preserve blank spreadsheet cells with pandas.** Pandas represented blank
+cells as NaN, causing conversion to fail. Missing cells are now normalised to empty cells; a regression checks both Python readers.
+
 ## v3.33.99 — 2026-11-10
 
 Pre-edit state: commit `c31f457`. **[tables] Detect auto delimiters during expansion.** Expanding a CSV block with

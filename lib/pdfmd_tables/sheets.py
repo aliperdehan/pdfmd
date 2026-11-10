@@ -76,6 +76,7 @@ def _with_pandas(path: Path, sheet: str | None) -> str:
     import pandas
     name: int | str = 0 if not sheet else (int(sheet) - 1 if sheet.isdigit() else sheet)
     frame = pandas.read_excel(path, sheet_name=name, header=None, dtype=object)
+    frame = frame.where(frame.notna(), None)
     return _csv(frame.itertuples(index=False, name=None) if len(frame) else [])
 
 

@@ -74,6 +74,19 @@ class Reading(unittest.TestCase):
             self.skipTest("needs pandas")
         self.assertEqual(sheets._with_pandas(self.file, None), 'name,value,when\n"a, b",1,2026-01-02\nc,"x""y",2.5\n')
 
+    def test_blank_cells_in_each_python_reader(self):
+        book = openpyxl.Workbook()
+        book.active.append(["name", "blank", "value"])
+        book.active.append(["x", None, 2])
+        book.save(self.file)
+        expected = "name,blank,value\nx,,2\n"
+        self.assertEqual(sheets._with_openpyxl(self.file, None), expected)
+        try:
+            import pandas  # noqa: F401
+        except ImportError:
+            self.skipTest("needs pandas")
+        self.assertEqual(sheets._with_pandas(self.file, None), expected)
+
     def test_a_file_nothing_can_read_says_what_to_install(self):
         broken = self.root / "b.xlsx"
         broken.write_bytes(b"not a zip")
