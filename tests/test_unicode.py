@@ -684,6 +684,21 @@ class CodeFallback(unittest.TestCase):
         return subprocess.run(["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(filter_file)],
                               input=markdown, capture_output=True, text=True, encoding="utf-8").stdout
 
+    def test_indented_and_nested_code_is_collected(self):
+        if not shutil.which("pandoc"):
+            self.skipTest("Pandoc not installed")
+        from pdfmd_unicode import fonts_choice
+        from unittest.mock import patch
+        source = self.root / "code.md"
+        source.write_text("    → indented\n\n> ```\n> القدر\n> ```\n", encoding="utf-8")
+        with patch.object(fonts_choice, "core", pdfmd):
+            text = fonts_choice.unicode_code_text([source])
+        self.assertIn("→ indented", text)
+        self.assertIn("القدر", text)
+        plan = self.plan(text)
+        self.assertIn(ord("→"), plan.code_candidates)
+        self.assertIn(ord("ا"), plan.code_candidates)
+
     def test_code_has_its_own_missing_characters(self):
         plan = self.plan("a \u2192 b")
         self.assertEqual(plan.describe(), [])            # the body needs nothing

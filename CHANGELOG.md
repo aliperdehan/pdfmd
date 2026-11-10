@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.113 — 2026-11-11
+
+Pre-edit state: commit `be4474c`. **Analyse nested and indented code for font fallback.** Indented blocks and
+fences inside quotations were missed by the source scanner, leaving monofont gaps undetected. Font analysis now
+collects code from Pandoc's parsed document when available, retaining the existing scanner as a fallback; a
+regression covers both block forms and their fallback characters.
+
 ## v3.33.112 — 2026-11-11
 
 Pre-edit state: commit `49255a8`. **Keep script-specific fallback font switches.** When one fallback family drew

@@ -19,6 +19,7 @@ its cache; `reset_font_caches` in `pdfmd.py` clears the other caches here by nam
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -159,7 +160,7 @@ def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
 
 
 def unicode_code_text(md_paths: list[Path]) -> str:
-    """The code of the Markdown files: the content of fenced blocks and inline code spans."""
+    """Collect code from Markdown, including nested and indented blocks."""
     pieces: list[str] = []
     for path in md_paths:
         try:
@@ -167,6 +168,28 @@ def unicode_code_text(md_paths: list[Path]) -> str:
         except (OSError, UnicodeDecodeError):
             continue
         text = core.EMBED_BLOCK_RE.sub("", text)
+        pandoc = shutil.which("pandoc")
+        if pandoc:
+            reader = core.flavour_reader(path)[0] or "markdown"
+            try:
+                result = subprocess.run([pandoc, "-f", reader, "-t", "json"], input=text,
+                                        capture_output=True, text=True, encoding="utf-8", check=True)
+                document = json.loads(result.stdout)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                pass
+            else:
+                def collect(node):
+                    if isinstance(node, dict):
+                        if node.get("t") in ("Code", "CodeBlock"):
+                            pieces.append(node["c"][1])
+                        else:
+                            for value in node.values():
+                                collect(value)
+                    elif isinstance(node, list):
+                        for value in node:
+                            collect(value)
+                collect(document)
+                continue
         pieces += [match.group(2) for match in re.finditer(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)^[ \t]*\1[ \t]*$", text)]
         text = re.sub(r"(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$", "", text)
         pieces += re.findall(r"`([^`\n]+)`", text)
