@@ -1477,7 +1477,8 @@ Kits (--kit, --kits, --install kit:SOURCE; v3.31.34 on):
     default metadata, a citation style. `--kit NAME[:MODE]` or `pdfmd-options: {kit: ...}` chooses one; its folder is on
     TEXINPUTS (for Tectonic, -Zsearch-path, v3.32.6), so nothing is installed into TeX. `pdfmd --install kit:owner/repo`
     fetches the kits of any repository (v3.32.7; nothing in it is run), `--kits` lists them. A kit may switch off pdfmd's own
-    margin, font or table-width defaults with `no-auto:` (v3.32.8). The README's Kits section is the full description.
+    margin, font or table-width defaults with `no-auto:` (v3.32.8), and a kind of universal markup with `markup-off:`
+    (v3.33.68). The README's Kits section is the full description.
 """
 from __future__ import annotations
 
@@ -1508,7 +1509,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.67"
+PDFMD_VERSION = "3.33.68"
 import argparse
 import atexit
 import contextlib
@@ -1857,6 +1858,7 @@ kit_cache_tex = deferred("pdfmd_kits.locate", "kit_cache_tex")
 kit_header_resolve = deferred("pdfmd_kits.locate", "kit_header_resolve")
 kit_carried_files = deferred("pdfmd_kits.locate", "kit_carried_files")
 markup_header_pieces = deferred("pdfmd_tex.markup", "markup_header_pieces")       # v3.33.67
+kit_markup_off = deferred("pdfmd_kits.markup", "kit_markup_off")                   # v3.33.68
 begin_timer = deferred("pdfmd_buildinfo.build", "begin_timer")                  # move 21 (v3.33.23); read by lib/pdfmd_report too
 attach_time = deferred("pdfmd_buildinfo.build", "attach_time")                  # read by lib/pdfmd_report too
 time_breakdown = deferred("pdfmd_buildinfo.build", "time_breakdown")            # read by lib/pdfmd_report too
@@ -3227,8 +3229,8 @@ def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | No
 
 
 def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
-    """The kinds of universal markup this build carries: the command line's, else pdfmd-options'; with the comments
-    (`comments`, which no list names) when they are to be shown."""
+    """The kinds of universal markup this build carries: the command line's, else pdfmd-options' (less a chosen kit's
+    `markup-off:`, pdfmd_kits.markup); with the comments (`comments`, which no list names) when they are to be shown."""
     kinds: list[str] = []
     if not MARKUP_CLI["off"]:
         if MARKUP_CLI["kinds"] is not None:
@@ -3236,6 +3238,8 @@ def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
         else:
             value = first_pdfmd_option(md_path, metadata_files, "markup")
             kinds = markup_value(flavour_default(md_path, metadata_files, "markup") if value is None else value)
+            if kinds and active_kits(md_path, metadata_files, None):
+                kinds = kit_markup_off(md_path, metadata_files, kinds)        # a kit's `markup-off:` (v3.33.68)
     if show_comments_on(md_path, metadata_files):
         kinds.append("comments")
     return kinds

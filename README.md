@@ -3194,6 +3194,7 @@ defaults: metadata.yaml        # metadata file(s) every mode gets
 latex-keys: {experiment: LabExperiment}   # the blocks of `<package>-pdfmd.yaml`, same meaning
 carry: [nulabreport.sty, assets/]         # what an attached source or a bundle takes along
 no-auto: [margin]              # pdfmd defaults the kit takes over (v3.32.8), see below
+markup-off: [landscape]        # kinds of universal markup the kit switches off (v3.33.68), see below
 ```
 
 Every path stays inside the kit's folder. `settings:`, `requires:` and `options:` are reserved for later; any other unknown
@@ -3206,6 +3207,15 @@ that only wanted this had to write `geometry: " "` into its metadata. It may nam
 for files, so it cannot take that search over. The kit's switch is weaker than the command line, the document and the folders'
 files, which can turn a kind back on (`pdfmd-options: {auto: {margin: on}}`), and stronger than the config file's. An older pdfmd
 ignores the key with a warning. `pdfmd --kits NAME` shows it.
+
+**A kit that does a markup's job itself** (v3.33.68). `markup-off: [landscape]` in the `.kit` takes those kinds of universal markup
+(the kinds `markup:` names) out of the list for documents that use the kit, so a house style with its own landscape pages
+need not list every other kind. It may name any kind of `markup:` (`callouts`, `toc`, `center`, `highlight`, `underline`, `keep`,
+`landscape`, `appendix`, `space`; a list or one string with commas); any other word, `comments` among them (that is
+`show-comments`), is a warning naming the kit file. Like `no-auto:`, the kit's switch is weaker than `--markup` and `--no-markup`,
+the document, its own metadata files and the folders' files: a `markup:` set there is used as it is. It is stronger than the
+config file's, a preset's, the global metadata's, the kit's own metadata and the flavour's default list. An older pdfmd ignores the
+key with a warning. `pdfmd --kits NAME` shows it, `--verbose` says what it took out.
 
 **Finding a kit.** By name, ignoring case and `- _ .` and spaces (`Nu-Lab-Report` is `nulabreport`): the folder's name, the
 `NAME.kit` file's name or the `name:` it declares. The places, in order: a `kits/` folder beside the document and above it; the

@@ -19,6 +19,31 @@ same commit as the change.
 
 ---
 
+## v3.33.68 — 2026-11-10
+
+Pre-edit state: commit `c4b6d8c`. **A kit can switch a kind of universal markup off: `markup-off:` in its `.kit`** (the author:
+"i want it", 2026-11-10). `markup-off: [landscape]` takes those kinds out of the markup list for the documents built with the kit, so
+a house style whose own LaTeX does that job (nulabreport's landscape sheet, before 3.33.67) need not list every other kind in its
+metadata. A list or one string with commas, any case.
+
+- Precedence, as for the kit's `no-auto:`: `--markup` and `--no-markup`, the document's front matter, its own metadata files and the
+  folders' files win (a `markup:` set there is used as it is); the config file, a preset, the global metadata, the kit's own
+  metadata files and the flavour's default list lose (the kit's words are taken out of them). `pdfmd_kits.kitfile` reads the
+  key as written (it knows no kinds); `kit_markup_off` (`lib/pdfmd_kits/markup.py`, a stand-in in `pdfmd.py`, called from
+  `markup_kinds` only when a kit is chosen) checks the words against `MARKUP_KINDS`: any other (`comments` too, which is
+  `show-comments`) is one `WARN  <kit file>: markup-off: WORD is not a kind of universal markup (...); ignored`. `--verbose`
+  prints `AUTO KIT  switches off markup landscape (markup-off in the kit)`, once. `pdfmd --kits NAME` shows `markup-off`.
+  Documented in the README's Kits section, the `.kit` format's docstring and the Kits paragraph of `--help`. A `.kit` key is
+  not a flag or a `pdfmd-options` key, so `lib/pdfmd_setup/inventory.py` has no row for it (none for `no-auto:` or `carry:`
+  either).
+- Checked through pdfmd with a fixture kit: the kinds Pandoc gets, `-t latex`: the default list less `landscape` (no pdflscape
+  in the `.tex`); the document's `markup: [landscape, toc]`, a folder's `markup: [landscape]`, `--markup landscape`: kept;
+  `--no-markup`: none; the config's `[landscape, toc]`: `toc`; the kit's own metadata `[center, landscape]`: `center`; a kit
+  without the key and `--kit house`: as before and the same.
+- Tests: `test_kit_markup_off` (reading the key; the builds above; the WARN once, naming the kit file; `--kits`).
+  `test_kit_markup_off test_show_comments test_kit_no_auto test_markup_callouts test_kits test_markup_landscape
+  test_markup_guarded test_help test_split test_packaging test_docs_consistency test_setup`: 189 OK (1 skipped).
+
 ## v3.33.67 — 2026-11-10
 
 Pre-edit state: commit `fbdfb7f`. **A kit's own `landscape` environment is no longer replaced by pdflscape's, and LuaLaTeX no

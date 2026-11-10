@@ -25,6 +25,9 @@ file is the data. Every path in it is relative to the kit's folder and stays ins
     carry: [nulabreport.sty, chemicals.tex, assets/]   # the parts an attached source or a bundle takes along
     no-auto: [margin]              # pdfmd's own defaults the kit takes over (v3.32.8): margin, mainfont, monofont, mathfont,
                                    #   font, tablewidth; the document, a folder or the command line can still switch one back on
+    markup-off: [landscape]        # kinds of pdfmd's universal markup the kit takes out of the default list (v3.33.68); a
+                                   #   `markup:` of the document, its metadata, a folder or the command line wins; pdfmd warns
+                                   #   about a word that is not a kind (it knows the kinds, this file does not)
 
 Reserved and accepted without a word, built later: `settings`, `requires`, `options`. Any other key is a WARN (a typo
 should be seen), not a stop.
@@ -42,7 +45,7 @@ SUFFIX = ".kit"
 
 HELPER_BLOCKS = ("latex-keys", "picture-cache", "draft-skip", "office")
 TOP_KEYS = frozenset({"kit-format", "name", "version", "description", "package", "default-mode", "modes", "latex", "lua",
-                      "defaults", "metadata", "carry", "no-auto", *HELPER_BLOCKS})
+                      "defaults", "metadata", "carry", "no-auto", "markup-off", *HELPER_BLOCKS})
 # What `no-auto:` may name: the defaults that are decided once the kit is known. A kit is chosen from the layers and
 # the discovered files, so it cannot switch off the finding of those (metadata, lua, preamble, kit ...).
 KIT_NO_AUTO_KINDS = ("margin", "mainfont", "monofont", "mathfont", "font", "tablewidth")
@@ -96,6 +99,7 @@ class Kit:
     helper: dict = field(default_factory=dict)  # the helper blocks that are there, by their names
     carry: tuple[str, ...] = ()
     no_auto: tuple[str, ...] = ()               # pdfmd defaults the kit switches off (KIT_NO_AUTO_KINDS)
+    markup_off: tuple[str, ...] = ()            # kinds of universal markup the kit switches off, as written (pdfmd checks them)
     warnings: tuple[str, ...] = ()
 
     def answers_to(self, text) -> bool:
@@ -264,6 +268,11 @@ def load_kit(path: Path, extra_aliases: dict | None = None) -> Kit:
             else:
                 warnings.append(f"{path}: `no-auto: {item}` is not something a kit can switch off (it may name "
                                 f"{', '.join(KIT_NO_AUTO_KINDS)}); ignored")
+    markup_off: list[str] = []
+    for item in _strings(None if data.get("markup-off") is False else data.get("markup-off"), "`markup-off:`", problems):
+        for word in item.replace(",", " ").casefold().split():        # a list, or one string with commas, as `markup:` takes
+            if word not in markup_off:
+                markup_off.append(word)
     latex = _strings(data.get("latex"), "`latex:`", problems)
     lua = _files(data.get("lua"), folder, "`lua:`", problems)
     defaults = _files(data.get("defaults"), folder, "`defaults:`", problems)
@@ -273,7 +282,8 @@ def load_kit(path: Path, extra_aliases: dict | None = None) -> Kit:
         version = package_file_version(folder, package)
     return Kit(path=path, folder=folder, name=str(name), version=version, description=description, package=package,
                default_mode=default_mode, modes=modes, latex=latex, lua=lua, defaults=defaults, metadata=metadata,
-               helper=helper, carry=tuple(carry), no_auto=tuple(no_auto), warnings=tuple(warnings))
+               helper=helper, carry=tuple(carry), no_auto=tuple(no_auto), markup_off=tuple(markup_off),
+               warnings=tuple(warnings))
 
 
 def package_file_version(folder: Path, package: str) -> str:

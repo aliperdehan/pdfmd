@@ -113,6 +113,8 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
                 print(f"  carries   {', '.join(kit.carry)}")
             if kit.no_auto:
                 print(f"  no-auto   {', '.join(kit.no_auto)}")
+            if kit.markup_off:
+                print(f"  markup-off {', '.join(kit.markup_off)}")
             for warning in kit.warnings:
                 print(f"WARN  {warning}", file=sys.stderr)
         return ok
