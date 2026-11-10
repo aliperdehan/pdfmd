@@ -44,3 +44,18 @@ class LuaReview(unittest.TestCase):
             with self.subTest(to=to):
                 text = self.build(source, to)
                 self.assertIn("Remainders: -2, 1, -1, -2.", text)
+
+    def test_calc_away_preserves_rounded_values(self):
+        source = ("---\npdfmd-options: {calc: {round: away}}\n---\n\n"
+                  "Stable: `round(10000000000000) - 10000000000000`{=}, "
+                  "`round(-10000000000000) + 10000000000000`{=}, "
+                  "`round(1.2345678901234, 13) - 1.2345678901234`{=}, "
+                  "`round(4503599627370496) - 4503599627370496`{=}.\n\n"
+                  "Ties: `round(2.675, 2)`{=}, `round(-1.005, 2)`{=}.\n\n"
+                  "Below: `round(1.0049999999999, 2)`{=}.\n")
+        for to in ("latex", "typst", "html"):
+            with self.subTest(to=to):
+                text = self.build(source, to)
+                self.assertIn("Stable: 0, 0, 0, 0.", text)
+                self.assertIn("Ties: 2.68, -1.01.", text)
+                self.assertIn("Below: 1.", text)

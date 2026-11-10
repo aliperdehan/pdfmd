@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.122 — 2026-11-11
+
+Pre-edit state: commit `4f2de7e`. **Preserve rounded values with away rounding.** The unconditional relative
+correction added whole units to large integers and altered precise decimals, and could promote values below a half.
+Rounding now separates the integer and fractional parts and recognises decimal half ties in the original units,
+without a tolerance threshold. Checkout regressions check stable values, signed ties and a nearby non-tie in
+LaTeX, Typst and HTML; the calculator and repository guard tests also run.
+
 ## v3.33.121 — 2026-11-11
 
 Pre-edit state: commit `ff873da`. **Keep remainder operators before signed divisors.** Inline calculations such as

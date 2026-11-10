@@ -57,7 +57,12 @@ local function round(x, digits)
   end
   local scale = 10 ^ digits
   local v = math.abs(x) * scale
-  local r = math.floor(v + 0.5 + v * 1e-13) / scale        -- the 1e-13 lets 2.675 (binary 2.67499..) round to 2.68
+  local lower = math.floor(v)
+  local fraction = v - lower
+  -- Scaling can put a decimal half just below .5 (1.005 * 100). Compare with the half in the original units;
+  -- an exact integer has no half to correct, even when adding .5 would itself round back to that integer.
+  if fraction >= 0.5 or (fraction > 0 and math.abs(x) == (lower + 0.5) / scale) then lower = lower + 1 end
+  local r = lower / scale
   return x < 0 and -r or r
 end
 
