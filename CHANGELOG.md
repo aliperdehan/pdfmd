@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.105 — 2026-11-10
+
+Pre-edit state: commit `d862f15`. **Keep web-editor Undo within its document.** Switching files recorded their
+replacement text in one shared CodeMirror history, so Undo could put one file into another. Document switches now retain
+separate editor states and histories, discarded on tab closure. The shipped bundle was rebuilt offline with the
+installed esbuild and locked dependencies; node regressions exercise real CodeMirror history and tab switching. HTTP
+checks were blocked by the sandbox’s socket-binding restriction.
+
 ## v3.33.104 — 2026-11-10
 
 Pre-edit state: commit `090adea`. **Preserve text after single-line LaTeX environments.** A raw environment opening and closing on one line left the native normaliser skipping the rest of the document. It now enters the skip state only when the closing tag is absent; regressions cover inkmd and Calibre normalisation and a full inkmd build.
