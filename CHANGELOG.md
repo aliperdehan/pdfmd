@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.101 — 2026-11-10
+
+Pre-edit state: commit `fc71eee`. **[tables] Protect fenced code after pipe tables.** Pipe-table scanning consumed
+opening fences and allowed ASCII repair inside code examples. It now stops at fences, including indented fences; a regression
+covers backticks and tildes.
+
 ## v3.33.100 — 2026-11-10
 
 Pre-edit state: commit `a0e5d27`. **[tables] Preserve blank spreadsheet cells with pandas.** Pandas represented blank

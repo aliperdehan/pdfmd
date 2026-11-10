@@ -96,6 +96,16 @@ class Repair(unittest.TestCase):
         for text in (fenced, tilde, indented, comment, front):
             self.assertEqual(repair_ascii_tables(text), (text, []), text)
 
+    def test_fences_after_pipe_tables_are_left_verbatim(self):
+        for fence in ("```", "~~~~~"):
+            for prefix in ("", "    "):
+                text = ("| A | B |\n|---|---|\n| 1 | 2 |\n" +
+                        prefix + fence + "\n\n" + SLOPPY + prefix + fence + "\n")
+                if prefix:
+                    text = "- item\n\n" + text
+                with self.subTest(fence=fence, prefix=prefix):
+                    self.assertEqual(repair_ascii_tables(text), (text, []))
+
     def test_a_table_after_a_closed_fence_is_repaired(self):
         text, repairs = repair_ascii_tables(f"```\ncode\n```\n\n{SLOPPY}")
         self.assertEqual(len(repairs), 1)

@@ -48,7 +48,7 @@ GRID_ROW = re.compile(r"^ {0,3}\|")
 PSQL_RULE = re.compile(r"^ {0,3}-+(?:\+-+)+[ \t]*$")
 PSQL_FOOTER = re.compile(r"^\(\d+ rows?\)[ \t]*$")
 BAR = re.compile(r"(?<!\\)\|")
-FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
 COMMENT_OPEN = "<!--"
 COMMENT_CLOSE = "-->"
 BOX_VERTICAL = "│┃║"
@@ -329,7 +329,8 @@ def pipe_table_end(lines: list[str], index: int) -> int | None:
     if not BAR.search(separator) or not all(SEPARATOR_CELL.match(cell) for cell in split_cells(separator)):
         return None
     end = index + 2
-    while end < len(lines) and lines[end].strip() and not ORG_KEYWORD.match(lines[end].rstrip("\r")):
+    while end < len(lines) and lines[end].strip() and not ORG_KEYWORD.match(lines[end].rstrip("\r")) \
+            and not FENCE.match(lines[end]):
         end += 1
     return end
 
