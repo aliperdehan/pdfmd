@@ -16,12 +16,13 @@ Moved out of `pdfmd.py` unchanged (v3.33.39, SPLIT.md), with the constants only 
 `NATIVE_PAPER_NOTED`, the papers already noted) and the comments that are theirs alone: the one on math without a typesetter
 (which `MathText` points at) and those on `NATIVE_META_KEYS` and `MATHTEXT_REWRITES`. In `MathText.command`, the local `core` (the
 radicand of `\\sqrt` as it prints) is `under_root`, as the name `core` is this module's link to pdfmd. `core` is the `pdfmd`
-module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses are read as `core.X` when it
-runs: `CALIBRE_CSS`, `CALIBRE_OPTIONS`, `CSV_DEFAULTS`, `CSV_DELIMITER_NAMES`, `CSV_DELIMITER_WORDS`, `CSV_DIV_RE`, `Chunk`,
+module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses are read as `core.X` when it runs:
+`CALIBRE_CSS`, `CALIBRE_OPTIONS`, `CSV_DEFAULTS`, `CSV_DELIMITER_NAMES`, `CSV_DELIMITER_WORDS`, `CSV_DIV_RE`, `Chunk`,
 `DEFAULT_MARGIN`, `DIV_FENCE_RE`, `FENCE_RE`, `INKMD_CLI`, `MATH_LINE_BREAK`, `NATIVE_LOST`, `NATIVE_PAPER_POINTS`, `PAPER_CLI`,
 `PAPER_NAME_ALIASES`, `atomic_write_bytes`, `atomic_write_pdf`, `csv_defaults`, `csv_is_off`, `csv_note_mode`, `display_path`,
-`inkmd_emoji_font`, `log_cmd`, `math_lines`, `matplotlib_available`, `metadata_file_yaml`, `obsidian_source`, `office_module`,
-`pandoc_metadata_order`, `pypdf`, `record_engine`, `resolve_calibre`, `scalar_text`, `split_front_matter`, `vprint` and `yaml`.
+`effective_metadata` and `MARKDOWN_LIKE_SUFFIXES` (`warn_nameless_authors`, v3.33.63), `inkmd_emoji_font`, `log_cmd`, `math_lines`,
+`matplotlib_available`, `metadata_file_yaml`, `obsidian_source`, `office_module`, `pandoc_metadata_order`, `pypdf`, `record_engine`,
+`resolve_calibre`, `scalar_text`, `split_front_matter`, `vprint` and `yaml`.
 `NATIVE_LOST` (what the tier left out, which `pdfmd.py` reads after the build) stays there as state: `native_lose` adds to
 `core.NATIVE_LOST`. `PAPER_CLI` stays, rebound with `global` in `main`; `matplotlib_available` and `resolve_calibre` are patched
 by tests as `pdfmd.X`; `math_lines`, with `Chunk` and `MATH_LINE_BREAK`, stays because `lib/pdfmd_ansi` reads it; `csv_defaults`
@@ -537,6 +538,26 @@ class NativeSource:
 def mapped_author(value) -> bool:
     """Whether an author is written as a mapping (`- name: B`), which Pandoc's `author-meta` leaves out (v3.33.56)."""
     return any(isinstance(item, dict) for item in (value if isinstance(value, list) else [value]))
+
+
+def nameless_authors(value) -> list[int]:
+    """The places (from 1) of the authors written as a mapping without `name` (`- affiliation: NU`). Pandoc's templates print
+    such an author as `true` (the LaTeX title, Typst's title block and PDF Author, HTML's title block); `pdfmd_lua/title_meta.lua`
+    leaves it out (v3.33.63)."""
+    return [place for place, item in enumerate(value if isinstance(value, list) else [value], 1)
+            if isinstance(item, dict) and "name" not in item]
+
+
+def warn_nameless_authors(md_path: Path, metadata_files: list[Path]) -> None:
+    """One WARN for each author left out for having no name (nameless_authors), once a build: convert_one calls it."""
+    if md_path.suffix.lower() not in core.MARKDOWN_LIKE_SUFFIXES:
+        return
+    try:
+        authors = core.effective_metadata(md_path, metadata_files, []).get("author")
+    except (OSError, ValueError):
+        return
+    for place in nameless_authors(authors):
+        print(f"WARN  {md_path}: author entry {place} has no name: left out", file=sys.stderr)
 
 
 def author_names(value) -> list[str]:

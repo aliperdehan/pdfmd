@@ -47,6 +47,12 @@ class Predicate(unittest.TestCase):
         self.assertFalse(pdfmd.mapped_author("A"))
         self.assertFalse(pdfmd.mapped_author(None))
 
+    def test_nameless_authors(self):
+        self.assertEqual(pdfmd.pdfmd_native.nameless_authors([{"affiliation": "NU"}, "Bob", {"name": "A"}, {"email": "e"}]), [1, 4])
+        self.assertEqual(pdfmd.pdfmd_native.nameless_authors({"affiliation": "NU"}), [1])
+        for value in (["A", {"name": "B"}], "A", None, [], {"name": "A"}):
+            self.assertEqual(pdfmd.pdfmd_native.nameless_authors(value), [])
+
     def test_the_filter_runs_for_a_mapping_and_not_for_text(self):
         with tempfile.TemporaryDirectory() as folder:
             document = Path(folder) / "doc.md"
@@ -89,6 +95,22 @@ class Filter(unittest.TestCase):
     def test_a_documents_own_author_meta_stays(self):
         self.assertIn("pdfauthor={Mine},", self.convert(MAPS + "author-meta: Mine\n", "latex"))
 
+    def test_an_author_without_a_name_is_left_out_not_printed_as_true(self):
+        """v3.33.63: Pandoc printed a mapping without `name` as `true` in LaTeX's \\author, Typst's title block and Author, and
+        HTML's title block."""
+        latex, typst, html = (self.convert(NAMELESS, writer) for writer in ("latex", "typst", "html5"))
+        self.assertIn("\\author{true}", latex)                     # Bob Baker's own mapping: LaTeX's template reads no `name`
+        self.assertIn("\\author{Bob Baker}", self.convert("author:\n  - affiliation: NU\n  - Bob Baker\n", "latex"))
+        self.assertNotIn("true", typst.split("#show: doc => conf(")[1])
+        self.assertIn("name: [Bob Baker]", typst)
+        self.assertIn('<meta name="author" content="Bob Baker" />', html)
+        html = self.convert("author:\n  - affiliation: NU\n  - Bob Baker\n", "html5")    # (a mapping's name: not read there either)
+        self.assertNotIn(">true<", html)
+        self.assertIn('<p class="author">Bob Baker</p>', html)
+        alone = self.convert("author:\n  affiliation: NU\n", "latex")
+        self.assertIn("\\author{}", alone)                              # none left: as with no author at all
+        self.assertNotIn("true", self.convert("author:\n  - affiliation: NU\n  - email: e@x\n", "typst").split("#show: doc => conf(")[1])
+
     def test_typst_is_left_to_its_template(self):
         self.assertEqual(self.convert(MAPS, "typst"),
                          subprocess.run([PANDOC, str(self.directory / "doc.md"), "-s", "-t", "typst"], capture_output=True,
@@ -112,6 +134,24 @@ class Build(unittest.TestCase):
                                        "PDFMD_NO_PROMPT": "1"})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertEqual(pypdf.PdfReader(str(root / "doc.pdf")).metadata.get("/Author"), "Alice Able; Bob Baker")
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class Nameless(unittest.TestCase):
+    def test_one_warning_an_entry_once_a_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "doc.md").write_text("---\ntitle: T\nauthor:\n  - affiliation: NU\n  - Bob\n  - email: e@x\n---\n\nWords.\n",
+                                         encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "html", "--no-stamp"],
+                                  cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                  env={**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"),
+                                       "XDG_CONFIG_HOME": str(root / "config"), "APPDATA": str(root / "config"),
+                                       "PDFMD_NO_PROMPT": "1"})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            warned = [line for line in done.stderr.splitlines() if line.startswith("WARN")]
+            self.assertEqual([line.split("doc.md: ", 1)[1] for line in warned],
+                             ["author entry 1 has no name: left out", "author entry 3 has no name: left out"], done.stderr)
 
 
 if __name__ == "__main__":

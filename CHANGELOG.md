@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.63 — 2026-11-10
+
+Pre-edit state: commit `ab44146`. **An author written as a mapping without `name` is left out, with a warning.** With
+`author: [{affiliation: NU}, Bob]` Pandoc's templates printed the first author as `true`: LaTeX's `\author{true \and Bob}`,
+Typst's title block and PDF Author (`true & Bob`), HTML's title block (`<p class="author">true</p>`). The author's call
+(2026-11-10): leave such an entry out rather than follow Pandoc. `pdfmd_lua/title_meta.lua`, which every route runs whenever an
+author is a mapping (`document_filter_args`: LaTeX, Typst, HTML, Word ...), now drops each mapping without `name` before the
+writer builds the title block (all of them: no author at all, as without the key). `warn_nameless_authors`
+(`lib/pdfmd_native`, beside `mapped_author`; called by `convert_one`, so once a build) prints `WARN  doc.md: author entry N has
+no name: left out` for each (N from 1, the place in the list). Every other author is unchanged.
+
+- Checked through pdfmd (HEAD; now), `[{affiliation: NU}, Bob]`: LuaLaTeX Author `Bob`; `Bob`, title `true` / `Bob`; now `Bob`
+  and one WARN. Typst Author `true & Bob`; `Bob`, title block `true`, `Bob`; `Bob`. A single `author: {affiliation: NU}`:
+  LuaLaTeX title `true`, now none; Typst Author `true`, now none. `[{name: Alice Able}, {affiliation: NU}, Bob, {email:
+  x@y.z}]`: Typst Author `Alice Able, true, Bob & true`, now `Alice Able & Bob`, two WARNs (2 and 4). `-t latex`, `-t typst`,
+  `-t html` `-s` of four documents without such an entry (two strings, a mapping and a string, a single mapping with `name`,
+  one string): byte-identical to HEAD.
+- Not changed (Pandoc's templates): LaTeX's `\author` and HTML's title block print an author written as a mapping WITH a `name`
+  as `true` as well (they read no `name`; Typst's does). The PDF's Author was mended in 3.33.56; the visible title is not.
+- Tests: `test_author_meta` (`nameless_authors`; LaTeX, Typst and HTML without `true`, none left; the WARNs through pdfmd; fail
+  at HEAD). `test_author_meta test_office_latex test_native test_serve test_split test_packaging test_docs_consistency
+  test_setup`: 249 OK (3 skipped).
+
 ## v3.33.62b — 2026-11-10
 
 Pre-edit state: commit `29602c2`. Tests only, no version bump. **The tests' end check (3.33.60b) counts only documents in the

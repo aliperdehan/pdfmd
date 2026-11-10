@@ -48,8 +48,24 @@ local function plain(value)
   return text ~= "" and text or nil
 end
 
+-- An author written as a mapping without `name` (`- affiliation: NU`, v3.33.63) is left out: Pandoc's templates printed it as
+-- `true` (LaTeX's \author, Typst's title block and PDF Author, HTML's title block). pdfmd says so (`author entry N has no
+-- name: left out`) and runs this filter whenever an author is a mapping.
+local function without_nameless(meta)
+  local authors = meta.author
+  if authors == nil then return false end
+  local single = pandoc.utils.type(authors) ~= "List"
+  local kept, dropped = pandoc.List(), false
+  for _, author in ipairs(single and {authors} or authors) do
+    if pandoc.utils.type(author) == "table" and author.name == nil then dropped = true else kept:insert(author) end
+  end
+  if not dropped then return false end
+  meta.author = #kept > 0 and pandoc.MetaList(kept) or nil
+  return true
+end
+
 function Meta(meta)
-  local changed = false
+  local changed = without_nameless(meta)
   if meta.title ~= nil and meta["title-meta"] == nil and has_tex(meta.title) then
     local text = plain(meta.title)
     if text then meta["title-meta"] = pandoc.MetaString(text); changed = true end
