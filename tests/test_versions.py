@@ -219,6 +219,25 @@ class Acting(Base):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("+Old text.", done.stdout)
 
+    @unittest.skipUnless(GIT, "needs git")
+    def test_git_diff_before_a_rename(self):
+        subprocess.run([GIT, "init", "-q", str(self.directory)], check=True, env=self.env)
+        old = self.directory / "old é.md"
+        old.write_text("Old draft.\n", encoding="utf-8")
+        subprocess.run([GIT, "-C", str(self.directory), "add", "--", old.name], check=True, env=self.env)
+        subprocess.run([GIT, "-C", str(self.directory), "commit", "-qm", "draft"], check=True, env=self.env)
+        rev = subprocess.run([GIT, "-C", str(self.directory), "rev-parse", "--short", "HEAD"],
+                             check=True, capture_output=True, text=True, env=self.env).stdout.strip()
+        subprocess.run([GIT, "-C", str(self.directory), "mv", old.name, "new.md"], check=True, env=self.env)
+        subprocess.run([GIT, "-C", str(self.directory), "commit", "-qm", "rename"], check=True, env=self.env)
+        (self.directory / "new.md").write_text("New draft.\n", encoding="utf-8")
+        env = {**self.env, **{key: str(self.directory / key) for key in
+                             ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--history-diff", rev, "new.md"],
+                              cwd=self.directory, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Old draft.", done.stdout)
+
     def test_the_interactive_list_shows_diffs_and_asks_before_restoring(self):
         self.old_versions()
         found = pdfmd.document_versions(self.document, [], include_git=False)

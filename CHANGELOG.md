@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.131 — 2026-11-11
+
+Pre-edit state: commit `6935645`. **Retrieve history across renames.** Earlier commits were listed by Git's
+followed history but read using the current name, so diff and restore failed. Retrieval now follows rename records
+back to the selected commit; a checkout history-diff regression and the history and repository guard tests run.
+
 ## v3.33.130 — 2026-11-11
 
 Pre-edit state: commit `7f125a2`. **Read Unicode names from Git history.** Git quoted non-ASCII file names,

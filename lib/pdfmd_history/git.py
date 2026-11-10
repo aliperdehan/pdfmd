@@ -65,6 +65,22 @@ def show(path: Path, revision: str) -> str | None:
     name = tracked_name(path)
     if name is None:
         return None
+    # Walk the same followed history as the listing, updating the name only
+    # after the rename commit itself (where the new name already exists).
+    history = _git(path.parent, "log", "--follow", "--format=%H", "--name-status", "-z", "--", path.name)
+    if history is not None and history.returncode == 0:
+        fields = iter(history.stdout.split("\0"))
+        for item in fields:
+            if item and all(c in "0123456789abcdef" for c in item):
+                if item.startswith(revision.lower()):
+                    break
+            elif item.startswith("\nR"):
+                old = next(fields, "")
+                new = next(fields, "")
+                if new == name:
+                    name = old
+            elif item.startswith("\n"):
+                next(fields, None)
     done = _git(path.parent, "show", f"{revision}:{name}")
     return done.stdout if done is not None and done.returncode == 0 else None
 
