@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.84"
+PDFMD_VERSION = "3.33.85"
 import argparse
 import atexit
 import contextlib
@@ -16884,7 +16884,7 @@ def run_main() -> None:
                 watch_source = find_markdown(paths[0])
             except FileNotFoundError as error:
                 raise SystemExit(str(error))
-        run_watch(watch_source, pinned_watch_argv(sys.argv[1:], args.path, paths[0]))
+        run_watch(watch_source, pinned_watch_argv(sys.argv[1:], args.path, paths[0]), args, default_target, scaffold_plan, section_plan)
         return
     if args.report:
         from pdfmd_report import run as run_report

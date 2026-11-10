@@ -1,6 +1,6 @@
 """`pdfmd --watch`: recompile a document whenever it or its accessory files change.
 
-`watch_signature`, `pinned_watch_argv` and `run_watch` are moved out of `pdfmd.py` unchanged (v3.33.3, SPLIT.md). `core`
+`watch_signature`, `pinned_watch_argv` and `run_watch` moved out of `pdfmd.py` in v3.33.3 (SPLIT.md). `core`
 is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the package reads `core.WATCH_INTERVAL`,
 `core.PARTS_DIR_ALIASES` and `core.accessory_directories` when it runs. `run_watch` re-runs the script `core.__file__`
 (`pdfmd.py`), not this package's `__file__`.
@@ -16,37 +16,45 @@ from pathlib import Path
 core = None
 
 
-def watch_signature(source: Path) -> float:
-    """Max mtime across ``source``'s own directory and its ``metadata/``
-    subfolder (if present) -- the same two locations pdfmd's own metadata/
-    preamble/Lua-filter auto-discovery already searches
-    (accessory_directories()), reused as a cheap, dependency-free,
-    non-recursive proxy for "has anything --watch should react to
-    changed". Non-recursive is deliberate: an unbounded directory tree
-    scan polled every WATCH_INTERVAL seconds would be a real cost in a
-    large project directory, for no real benefit -- pdfmd's own auto-
-    discovery never looks any deeper than these two directories either.
-    """
-    latest = 0.0
+def watch_signature(source: Path, outputs: set[Path] | None = None) -> tuple:
+    """Snapshot the files in discovery directories and conventional parts folders."""
+    excluded = {path.resolve() for path in (outputs or set())} - {source.resolve()}
+    entries = {}
+
+    def record(path: Path) -> None:
+        try:
+            if path.resolve() in excluded or not path.is_file():
+                return
+            stat = path.stat()
+            entries[str(path)] = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            pass
+
     for directory in core.accessory_directories(source.parent, source.stem):
         for path in directory.glob("*"):
-            if path.is_file():
-                try:
-                    latest = max(latest, path.stat().st_mtime)
-                except OSError:
-                    continue
-    # A parts-mode document's parts live one level down (and deeper): watch
-    # those too. Only the conventional folder names -- a custom
-    # `parts: <folder>` is not followed, to keep this scan cheap and bounded.
+            record(path)
     for name in core.PARTS_DIR_ALIASES:
         directory = source.parent / name
         if directory.is_dir():
             for path in directory.rglob("*.md"):
-                try:
-                    latest = max(latest, path.stat().st_mtime)
-                except OSError:
-                    continue
-    return latest
+                record(path)
+    return tuple(sorted(entries.items()))
+
+
+def watch_output(source, args, default_target, scaffold_plan, section_plan) -> Path:
+    """The same output path that single-file dispatch chooses for this build."""
+    stem = scaffold_plan.output_stem if scaffold_plan is not None else (
+        section_plan.output_stem if section_plan is not None else source.stem)
+    target = default_target(source, core.scaffold_metadata_files(source, args.metadata_file))
+    extension = core.output_extension_for(target, source)
+    if args.out and not args.destination_cwd and args.out.is_dir():
+        return args.out.resolve() / f"{stem}{extension}"
+    if args.out:
+        requested = Path.cwd() / args.out.name if args.destination_cwd else args.out.resolve()
+        return core.default_output_path(requested, target)
+    if args.destination_cwd:
+        return Path.cwd() / f"{stem}{extension}"
+    return source.with_name(f"{stem}{extension}")
 
 
 def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list[str]:
@@ -63,7 +71,7 @@ def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list
     return argv
 
 
-def run_watch(source: Path, argv: list[str]) -> None:
+def run_watch(source: Path, argv: list[str], args, default_target, scaffold_plan, section_plan) -> None:
     """Recompile ``source`` immediately, then again on each later change.
 
     Deliberately a thin wrapper that re-execs the whole, already-tested
@@ -74,9 +82,9 @@ def run_watch(source: Path, argv: list[str]) -> None:
     feature the author expects to use rarely). Polling a directory's own file mtimes (watch_signature(), not a
     filesystem-events library like watchdog) keeps this dependency-free,
     matching every other part of pdfmd. The signature is re-snapshotted
-    AFTER each recompile, not just before, so the compile's own output
-    file (and a --stamp write back into the source itself) never falsely
-    re-triggers another immediate recompile.
+    AFTER each recompile, so a --stamp write back into the source itself
+    never falsely re-triggers another immediate recompile. The output file
+    is excluded from the snapshot.
     """
     rerun_argv = [arg for arg in argv if arg not in ("-w", "--watch")]
     script = str(Path(core.__file__).resolve())
@@ -84,8 +92,9 @@ def run_watch(source: Path, argv: list[str]) -> None:
     try:
         while True:
             subprocess.run([sys.executable, script, *rerun_argv])
-            signature = watch_signature(source)
-            while watch_signature(source) == signature:
+            outputs = {watch_output(source, args, default_target, scaffold_plan, section_plan)}
+            signature = watch_signature(source, outputs)
+            while watch_signature(source, outputs) == signature:
                 time.sleep(core.WATCH_INTERVAL)
             print(f"WATCH  change detected, recompiling {source}...")
     except KeyboardInterrupt:

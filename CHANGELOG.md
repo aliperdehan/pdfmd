@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.85 — 2026-11-10
+
+Pre-edit state: commit `949997a`. **Watch individual inputs for additions, changes and deletions.** Comparing only the newest
+mtime missed an older deleted metadata, preamble or parts file. Watch now compares names, mtimes and sizes, excluding the
+build output. Snapshot and watch pipeline regressions cover input changes and output exclusion; the area and required checks run.
+
 ## v3.33.84 — 2026-11-10
 
 Pre-edit state: commit `10b9086`. **Measure table cells without changing renderer state.** A footnote in a table cell was
