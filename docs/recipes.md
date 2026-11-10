@@ -148,11 +148,16 @@ with a NOTE. The document's own indent is Pandoc's
 Typst does too (1.5em; Pandoc's Typst template has no such variable, so pdfmd sets it). LaTeX then drops the space between
 paragraphs too, and since 3.33.58 so does Typst (its paragraph spacing is its line spacing).
 
+The line spacing is LaTeX's in Typst as well (3.33.73): `linestretch` x the class's line distance for the `fontsize` (12, 13.6
+and 14.5 pt at 10, 11 and 12 pt, 1.2 x another size; Pandoc's Typst template's 11 pt when none is set), whatever the font.
+Typst's line box is made the same for every font (`top-edge: 0.7em`, `bottom-edge: "baseline"`) and its leading is that
+distance less the box, set at the top of the body; a raw `#set par(leading: ...)` further down still wins.
+
 The space between paragraphs is `pdfmd-options: {paragraph-spacing: 6pt}` (or `--paragraph-spacing 6pt` for one run): what a
 paragraph break adds to the line spacing, a length (pt, mm, cm, in, em), `0` for none, or `auto`, the default (each engine's
-own, as above). LaTeX gets `\setlength{\parskip}{6pt}` after its template's own paragraph set-up, Typst `#set par(spacing:
-0.65em + 6pt)` (Typst measures it from the line's edge, so its leading, `linestretch` x 0.65em, comes first), so the gap is
-the same in both. The HTML engines and `--to html` are not given it: a style sheet's `p { margin: ... }` sets theirs.
+own, as above; in Typst, 0.55em more than a line). LaTeX gets `\setlength{\parskip}{6pt}` after its template's own paragraph
+set-up, Typst `#set par(spacing: <leading> + 6pt)` (Typst measures it from the line's edge, so its leading comes first), so
+the gap is the same in both. The HTML engines and `--to html` are not given it: a style sheet's `p { margin: ... }` sets theirs.
 
 Pandoc reads `::: indent=3in` as a div whose one class is `indent=3in`; only the braced form carries attributes. So the
 value is also understood in the class word, with the same values: `::: indent=3in`, `::: .indent=3in`, `::: indent-3in`,

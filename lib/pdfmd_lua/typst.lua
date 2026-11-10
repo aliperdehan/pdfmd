@@ -27,9 +27,24 @@
 -- The space between paragraphs (v3.33.58). With `indent: true` LaTeX also drops the space between paragraphs (the parskip
 -- package is not loaded): the next paragraph starts one line below. Typst kept its own 1.2em; it now gets its line spacing
 -- too. Typst measures a paragraph's spacing as it measures its leading (edge to edge), so spacing = leading is that one
--- line, and the leading is what Pandoc's template sets: linestretch x 0.65em. `pdfmd-options.paragraph-spacing` (pdfmd
--- passes it as `pdfmd-paragraph-spacing`) is the room added to that, as LaTeX's \parskip is added to the line pitch:
--- `#set par(spacing: 0.65em + 6pt)`. `par.spacing` is Typst 0.12's, the oldest pdfmd builds with (v3.33.62).
+-- line, and the leading is the one the line spacing below sets. `pdfmd-options.paragraph-spacing` (pdfmd passes it as
+-- `pdfmd-paragraph-spacing`) is the room added to that, as LaTeX's \parskip is added to the line pitch: `#set par(spacing:
+-- <leading> + 6pt)`. Without either, Typst's own room is kept (v3.33.73): its default spacing less its default leading,
+-- 1.2em - 0.65em, added to the leading, so a paragraph break stays 0.55em more than a line at any linestretch (Typst's
+-- own 1.2em edge to edge was less than a line from a linestretch of about 1.6). `par.spacing` is Typst 0.12's, the
+-- oldest pdfmd builds with (v3.33.62).
+--
+-- The line spacing (v3.33.73). LaTeX puts lines linestretch x \baselineskip apart, the class's for the size (size10.clo,
+-- size11.clo, size12.clo: 12pt, 13.6pt, 14.5pt; setspace's \setstretch), whatever the font. Pandoc's Typst template sets
+-- `leading: linestretch * 0.65em`, and Typst's line box runs from the cap height to the baseline (font metrics), so a
+-- line was leading + cap height apart: 23.48 pt at linestretch 2, 12 pt Times, where LaTeX has 28.89, and about 1.31em
+-- at linestretch 1 where LaTeX has 1.2. The box is made the same for every font (`top-edge: 0.7em`, `bottom-edge:
+-- "baseline"`) and the leading is LaTeX's pitch less that box, in em, so a larger or smaller text keeps the ratio. A TeX
+-- point is 1/72.27 in, Typst's 1/72 in, so the pitch is scaled by 72/72.27 to be the same length on the page. The rules
+-- go at the top of the body, not into header-includes: the template's own `set par(leading: ...)` sits inside `conf`,
+-- around the body, and would override a header rule, while a raw `#set par(leading: ...)` later in the document still
+-- overrides this one. So the title block (inside `conf`, before the body) keeps the template's leading. Only for a
+-- standalone document (a template): a fragment is someone else's to space.
 --
 -- The reference list's entry spacing (v3.33.59). Pandoc's template turns a CSL `entry-spacing="N"` into `#show <refs>: set
 -- par(spacing: Nem)`, but Typst measures that spacing edge to edge, from one line's baseline to the next line's cap height,
@@ -151,9 +166,20 @@ local function add_header(meta, text)
 end
 
 local INDENT_DEFAULT = "1.5em"   -- indent.lua's DEFAULT: what `indent=true` means for a div
--- Typst's own default leading, 0.65em (a format fact: `par.leading`), which Pandoc's template scales by `linestretch`
--- (`leading: linestretch * 0.65em`); the line spacing that a paragraph break keeps
+-- Typst's own default leading and paragraph spacing, 0.65em and 1.2em (format facts: `par.leading`, `par.spacing`); the
+-- room a paragraph break adds when nothing sets it is their difference (see the top)
 local TYPST_LEADING_EM = 0.65
+local TYPST_SPACING_EM = 1.2
+-- LaTeX's \baselineskip for the class's \normalsize (format facts: size10.clo \@xiipt, size11.clo 13.6, size12.clo 14.5,
+-- in TeX points; the KOMA and memoir classes use the same three), by the size Pandoc gives the class
+local BASELINESKIP = {[10] = 12, [11] = 13.6, [12] = 14.5}
+-- for another size (the standard classes have none): TeX's usual 1.2 x the size (a convention, not a measurement)
+local BASELINESKIP_RATIO = 1.2
+local TEX_POINT = 72 / 72.27     -- a TeX point in Typst's (PostScript) points (a format fact)
+local TYPST_FONTSIZE = 11        -- Pandoc's Typst template's `fontsize: 11pt` when the document sets none
+-- the line box's top edge, the same for every font: about a cap height (0.66 to 0.72em in the usual fonts), so the
+-- room around a heading, a table row or a block moves by a fraction of a point (a choice; the pitch does not depend on it)
+local TOP_EDGE_EM = 0.7
 
 -- `indent: true` (a YAML boolean, or the words true/yes/on): Pandoc's LaTeX template indents; the Typst one does not
 local function indent_on(value)
@@ -170,13 +196,40 @@ local function linestretch(meta)
   return tonumber(value ~= nil and tostring(value) or "") or 1
 end
 
--- `#set par(spacing: ...)` for `indent: true` (the line spacing) and paragraph-spacing (that plus the value), or nil
-local function spacing_rule(meta)
+-- the template's font size in points (a -V variable first, then the metadata, else the template's), nil for another unit
+local function fontsize(meta)
+  local value = variables["fontsize"]
+  if value == nil and meta.fontsize ~= nil then value = pandoc.utils.stringify(meta.fontsize) end
+  if value == nil then return TYPST_FONTSIZE end
+  return tonumber(tostring(value):match("^%s*(%d+%.?%d*)%s*pt%s*$") or "")
+end
+
+-- a number of em as Typst writes it: four decimals at most, no trailing zeros
+local function em(value)
+  return (string.format("%.4f", value):gsub("0+$", ""):gsub("%.$", "")) .. "em"
+end
+
+-- the leading that puts lines LaTeX's linestretch x \baselineskip apart with a TOP_EDGE_EM line box (see the top)
+local function leading(meta)
+  local size = fontsize(meta)
+  local skip = size and BASELINESKIP[size]
+  local ratio = skip and skip / size or BASELINESKIP_RATIO
+  return linestretch(meta) * ratio * TEX_POINT - TOP_EDGE_EM
+end
+
+-- the space between paragraphs: the leading for `indent: true`, plus paragraph-spacing when set, else plus Typst's own
+local function spacing(meta, lead)
   local extra = meta["pdfmd-paragraph-spacing"] ~= nil and pandoc.utils.stringify(meta["pdfmd-paragraph-spacing"]) or nil
-  if extra == nil and not indent_on(meta.indent) then return nil end
-  local value = string.format("%gem", linestretch(meta) * TYPST_LEADING_EM)
-  if extra ~= nil and extra ~= "0pt" then value = value .. " + " .. extra end
-  return "#set par(spacing: " .. value .. ")"
+  if extra == "0pt" or (extra == nil and indent_on(meta.indent)) then return lead end
+  return lead .. " + " .. (extra or em(TYPST_SPACING_EM - TYPST_LEADING_EM))
+end
+
+-- the line box, the leading and the paragraph spacing, for the top of a standalone document's body (see the top)
+local function line_rules(meta)
+  if not (PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.template ~= nil) then return nil end
+  local lead = em(leading(meta))
+  return string.format('#set text(top-edge: %s, bottom-edge: "baseline")\n#set par(leading: %s, spacing: %s)',
+    em(TOP_EDGE_EM), lead, spacing(meta, lead))
 end
 
 local function page_rules(meta)
@@ -187,11 +240,6 @@ local function page_rules(meta)
   end
   if indent_on(meta.indent) then
     add_header(meta, "#set par(first-line-indent: " .. INDENT_DEFAULT .. ")")
-    changed = true
-  end
-  local spacing = spacing_rule(meta)
-  if spacing then
-    add_header(meta, spacing)
     changed = true
   end
   if changed then return meta end
@@ -278,8 +326,9 @@ local function meta_rules(meta)
   return nil
 end
 
--- The height of one line of text: Typst's line box runs from `text.top-edge` (the cap height) to `text.bottom-edge` (the
--- baseline), font metrics, so any glyph measures the same; `X` is only something to measure (a format fact)
+-- The height of one line of text: Typst's line box runs from `text.top-edge` to `text.bottom-edge` (TOP_EDGE_EM and the
+-- baseline in a standalone document, v3.33.73; Typst's own cap height otherwise), so any glyph measures the same; `X` is
+-- only something to measure (a format fact)
 local LINE_HEIGHT = "measure[X].height"
 
 -- the `refs` div: its entries N lines apart (CSL entry-spacing), as LaTeX's \itemsep; nil leaves it to Pandoc's template
@@ -293,4 +342,12 @@ local function entry_spacing(div)
   return div
 end
 
-return {{Meta = meta_rules, Div = entry_spacing, Pandoc = function(doc) return absolute_pictures(plain_missing_links(doc)) end}}
+-- the document with its line rules at the top of the body
+local function line_spacing(doc)
+  local rules = line_rules(doc.meta)
+  if rules then doc.blocks:insert(1, pandoc.RawBlock("typst", rules)) end
+  return doc
+end
+
+return {{Meta = meta_rules, Div = entry_spacing,
+         Pandoc = function(doc) return line_spacing(absolute_pictures(plain_missing_links(doc))) end}}

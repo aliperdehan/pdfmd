@@ -118,7 +118,7 @@ class ThroughPdfmd(unittest.TestCase):
             self.assertLess(tex.index("\\usepackage{parskip}"), tex.index("\\setlength{\\parskip}{6pt}"))    # after the template's
             done = self.run_pdfmd(root, "doc.md", "-t", "typst", "-s", "-o", "doc.typ", "--paragraph-spacing", "1em")
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertIn("#set par(spacing: 0.65em + 1em)", (root / "doc.typ").read_text(encoding="utf-8"))
+            self.assertIn("#set par(leading: 0.5317em, spacing: 0.5317em + 1em)", (root / "doc.typ").read_text(encoding="utf-8"))
             done = self.run_pdfmd(root, "doc.md", "-t", "latex", "-s", "-o", "doc.tex", "--paragraph-spacing", "6px")
             self.assertNotEqual(done.returncode, 0)
             self.assertIn("--paragraph-spacing must be", done.stdout + done.stderr)

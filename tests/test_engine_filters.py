@@ -108,19 +108,49 @@ class Filter(unittest.TestCase):
         self.assertNotIn(rule, self.standalone_typst(""))
 
     def test_the_space_between_paragraphs(self):
-        """v3.33.58: `indent: true` gives Typst LaTeX's spacing (one line: the leading, linestretch x 0.65em), and
-        paragraph-spacing (`pdfmd-paragraph-spacing`) is added to it; a Typst before 0.12 gets the block rule."""
+        """v3.33.58: `indent: true` gives Typst LaTeX's spacing (one line: the leading), and paragraph-spacing
+        (`pdfmd-paragraph-spacing`) is added to it; v3.33.73: the leading is LaTeX's line pitch less the line box, and
+        without either Typst's own room (1.2em - 0.65em) is added to it."""
         def rules(front: str, *extra: str) -> list[str]:
             return [line for line in self.standalone_typst(front, *extra).splitlines() if "spacing" in line and "#" in line]
 
-        self.assertEqual(rules(""), [])
-        self.assertEqual(rules("indent: false\n"), [])
-        self.assertEqual(rules("indent: true\n"), ["#set par(spacing: 0.65em)"])
-        self.assertEqual(rules("indent: true\nlinestretch: 1.5\n"), ["#set par(spacing: 0.975em)"])
-        self.assertEqual(rules("indent: true\n", "-V", "linestretch=2"), ["#set par(spacing: 1.3em)"])
-        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt"), ["#set par(spacing: 0.65em + 6pt)"])
-        self.assertEqual(rules("indent: true\n", "-M", "pdfmd-paragraph-spacing=1em"), ["#set par(spacing: 0.65em + 1em)"])
-        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=0pt"), ["#set par(spacing: 0.65em)"])
+        self.assertEqual(rules(""), ["#set par(leading: 0.5317em, spacing: 0.5317em + 0.55em)"])
+        self.assertEqual(rules("indent: false\n"), ["#set par(leading: 0.5317em, spacing: 0.5317em + 0.55em)"])
+        self.assertEqual(rules("indent: true\n"), ["#set par(leading: 0.5317em, spacing: 0.5317em)"])
+        self.assertEqual(rules("indent: true\nlinestretch: 1.5\n"), ["#set par(leading: 1.1476em, spacing: 1.1476em)"])
+        self.assertEqual(rules("indent: true\n", "-V", "linestretch=2"), ["#set par(leading: 1.7635em, spacing: 1.7635em)"])
+        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=6pt"),
+                         ["#set par(leading: 0.5317em, spacing: 0.5317em + 6pt)"])
+        self.assertEqual(rules("indent: true\n", "-M", "pdfmd-paragraph-spacing=1em"),
+                         ["#set par(leading: 0.5317em, spacing: 0.5317em + 1em)"])
+        self.assertEqual(rules("", "-M", "pdfmd-paragraph-spacing=0pt"), ["#set par(leading: 0.5317em, spacing: 0.5317em)"])
+
+    def test_the_line_spacing_is_latexs(self):
+        """v3.33.73: lines linestretch x the class's \\baselineskip apart (10, 11, 12 pt: 12, 13.6, 14.5 TeX points; 1.2 x
+        another size), less the line box of 0.7em, in Typst's points; a -V variable over the metadata; at the top of
+        the body, after the template's own leading; none in a fragment."""
+        def leading(front: str, *extra: str) -> str:
+            text = self.standalone_typst(front, *extra)
+            found = re.findall(r"#set par\(leading: ([0-9.]+em),", text)
+            self.assertEqual(len(found), 1, text)
+            self.assertIn('#set text(top-edge: 0.7em, bottom-edge: "baseline")', text)
+            self.assertLess(text.index("#show: doc => conf("), text.index("#set par(leading:"))
+            self.assertLess(text.index("#set par(leading:"), text.index("One."))
+            return found[0]
+
+        self.assertEqual(leading(""), "0.5317em")                         # the template's 11pt
+        self.assertEqual(leading("fontsize: 10pt\n"), "0.4955em")
+        self.assertEqual(leading("fontsize: 12pt\n"), "0.5038em")
+        self.assertEqual(leading("fontsize: 12pt\nlinestretch: 2\n"), "1.7076em")
+        self.assertEqual(leading("fontsize: 10pt\nlinestretch: 1.5\n"), "1.0933em")
+        self.assertEqual(leading("fontsize: 14pt\n"), "0.4955em")       # no class size: 1.2 x the size
+        self.assertEqual(leading("fontsize: 12pt\n", "-V", "fontsize=10pt"), "0.4955em")
+        source = self.directory / "fragment.md"
+        source.write_text("One.\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, str(source), "-t", "typst", "--lua-filter", str(TYPST_LUA)],
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("leading", done.stdout)
 
     def test_reference_entries_are_spaced_in_lines(self):
         """v3.33.59: the `refs` div's CSL entry-spacing N becomes the leading plus N lines; Pandoc's template wrote
@@ -248,6 +278,40 @@ class CommandLine(unittest.TestCase):
                 line = min(pitches)
                 for index, pitch in enumerate(pitches, 1):
                     self.assertAlmostEqual(pitch, line * (apart if index in firsts else 1), delta=0.2, msg=pitches)
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_lines_are_latexs_line_pitch_apart(self):
+        """v3.33.73: a Typst PDF's lines are LaTeX's linestretch x \\baselineskip apart (a TeX point is 72/72.27 of
+        Typst's), in two fonts; a paragraph break adds paragraph-spacing to it; a raw rule later in the text still wins."""
+        words = " ".join(["word"] * 120)
+        cases = (("fontsize: 12pt\nlinestretch: 2\n", 2 * 14.5), ("fontsize: 10pt\n", 12.0),
+                 ("fontsize: 11pt\nlinestretch: 1.5\nmainfont: Times New Roman\n", 1.5 * 13.6))
+        for front, pitch in cases:
+            with self.subTest(front=front):
+                (self.directory / "doc.md").write_text(f"---\n{front}---\n\nFirst {words}\n\nSecond {words}\n",
+                                                       encoding="utf-8")
+                done = self.run_pdfmd("doc.md", "-e", "typst", "--paragraph-spacing", "6pt")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                tops = self.line_tops()
+                second = [first for _, first in tops].index("Second")
+                pitches = [round(after - before, 2) for (before, _), (after, _) in zip(tops, tops[1:])]
+                for index, apart in enumerate(pitches[:4] + pitches[second:second + 3]):
+                    self.assertAlmostEqual(apart, pitch * 72 / 72.27, delta=0.05, msg=pitches)
+                self.assertAlmostEqual(pitches[second - 1], pitch * 72 / 72.27 + 6, delta=0.05, msg=pitches)
+        (self.directory / "doc.md").write_text(f"---\nfontsize: 12pt\n---\n\nFirst {words}\n\n```{{=typst}}\n"
+                                               f"#set par(leading: 2em)\n```\n\nSecond {words}\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "-e", "typst")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        tops = self.line_tops()
+        second = [first for _, first in tops].index("Second")
+        self.assertAlmostEqual(tops[second + 1][0] - tops[second][0], 12 * 2.7, delta=0.05)    # 2em + the 0.7em box
+
+    def line_tops(self) -> list[tuple[float, str]]:
+        layout = subprocess.run(["pdftotext", "-bbox-layout", str(self.directory / "doc.pdf"), "-"],
+                                capture_output=True, text=True, encoding="utf-8").stdout
+        page = layout.split("</page>")[0]
+        return [(float(top), first) for top, first in re.findall(
+            r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', page, re.S)]
 
     def test_the_filter_is_given_only_to_typst(self):
         self.assertEqual(pdfmd.typst_filter_args("latex"), [])

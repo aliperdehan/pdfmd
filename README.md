@@ -3039,9 +3039,14 @@ can require TeX, and a plain memo can skip the slow LaTeX run. `-e` on the
 command line always wins, and a bare `-e` means "try every engine".
 
 `paragraph-spacing:` is the space between paragraphs, added to the line spacing: a length (`6pt`, `1em`, `2mm`; pt, mm, cm,
-in, em), `0` for none, or `auto`, the default, each engine's own (LaTeX's half line, Typst's 1.2em; none with `indent:
-true`, in Typst too since 3.33.58). It is for LaTeX and Typst, the same gap in both; `--paragraph-spacing 6pt` sets it for one
-run. The HTML engines (WeasyPrint, Calibre, a browser) and `--to html` take it from a style sheet (`p { margin: ... }`).
+in, em), `0` for none, or `auto`, the default, each engine's own (LaTeX's half line, Typst's 0.55em more than a line; none
+with `indent: true`, in Typst too since 3.33.58). It is for LaTeX and Typst, the same gap in both; `--paragraph-spacing 6pt`
+sets it for one run. The HTML engines (WeasyPrint, Calibre, a browser) and `--to html` take it from a style sheet (`p { margin:
+... }`).
+
+`linestretch:` and `fontsize:` give Typst the line spacing LaTeX has (since 3.33.73): lines `linestretch` x the LaTeX class's
+line distance apart (12, 13.6 and 14.5 pt at 10, 11 and 12 pt; 1.2 x any other size), in any font, so a page holds as many
+lines in both. Pandoc's own Typst template puts them closer (23.5 pt at `linestretch: 2`, 12 pt, where LaTeX has 28.9).
 
 ### Your own defaults: the config file
 

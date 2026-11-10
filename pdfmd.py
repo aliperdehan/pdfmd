@@ -158,6 +158,11 @@ The space between paragraphs (v3.33.58):
     `indent: true` Typst's spacing is its leading, as LaTeX drops parskip then. The HTML engines are not given it
     (pdfmd_paragraph). docs/recipes.md 1.9.
 
+Typst's line spacing (v3.33.73):
+    pdfmd_lua/typst.lua puts lines `linestretch` x LaTeX's \\baselineskip for the `fontsize` apart in Typst, in any font
+    (`#set text(top-edge: 0.7em, bottom-edge: "baseline")` and `#set par(leading: ...)` at the top of the body); without
+    paragraph-spacing or `indent: true` a paragraph break adds Typst's own 0.55em. docs/recipes.md 1.9.
+
 Page breaks (v3.27.13, off unless asked since v3.27.15):
     `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and
     pdfmd --setup), `--pagebreak [KIND ...]` and `--no-pagebreak` add pdfmd_lua/pagebreak.lua to every Pandoc route,
@@ -1509,7 +1514,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.72"
+PDFMD_VERSION = "3.33.73"
 import argparse
 import atexit
 import contextlib

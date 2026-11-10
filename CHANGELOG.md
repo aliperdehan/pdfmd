@@ -19,6 +19,62 @@ same commit as the change.
 
 ---
 
+## v3.33.73 — 2026-11-10
+
+Pre-edit state: commit `be4e402`. **Typst's line spacing is LaTeX's** (the author, 2026-11-10: "yes"; every Typst PDF's
+look changes, which the author accepted). LaTeX puts lines `linestretch` x the class's `\baselineskip` apart (size10.clo,
+size11.clo, size12.clo: 12, 13.6 and 14.5 TeX points), in any font. Pandoc's Typst template sets `leading: linestretch *
+0.65em`, and Typst's line box runs from the font's cap height to the baseline, so its lines were leading + cap height apart:
+23.48 pt at `linestretch: 2`, 12 pt, where LaTeX has 28.89, and 13.07 pt at `linestretch: 1`, 10 pt, where LaTeX has 11.95
+(about 1.31em against 1.2). The longer the stretch, the further apart: a page held a quarter more lines in Typst.
+
+- `pdfmd_lua/typst.lua` puts `#set text(top-edge: 0.7em, bottom-edge: "baseline")` and `#set par(leading: L, spacing: S)`
+  at the top of the body of a standalone Typst document (`-e typst`, `-t typst -s`, `-r`, the office pre-pass route; a
+  fragment, `-t typst` without `-s`, gets none). The box is the same for every font, and L is LaTeX's pitch less it, in em
+  (so a heading or a footnote keeps the ratio): `linestretch` x `\baselineskip` / size x 72/72.27 (a TeX point is 1/72.27
+  in, Typst's 1/72) - 0.7. The size is the `fontsize` (a `-V` variable first, then the metadata), else the template's 11pt;
+  a size the standard classes do not have (14pt, or one not in pt) takes 1.2 x the size. In the body, not the
+  header-includes: the template's own `set par(leading: ...)` sits inside `conf`, around the body, and wins over a header
+  rule; a raw `#set par(leading: ...)` further down still wins over this one (tested). The title block keeps the template's
+  leading. Constants (format facts, named in the filter): `BASELINESKIP` (10/11/12 pt), `TEX_POINT`, `TYPST_FONTSIZE` (11),
+  `TYPST_SPACING_EM` (1.2, Typst's default `par.spacing`); a convention, `BASELINESKIP_RATIO` (1.2); a choice, `TOP_EDGE_EM`
+  (0.7em, about a cap height: 0.66 to 0.72em in the usual fonts, so the room around a heading, a table row or a block moves
+  by a fraction of a point; the pitch does not depend on it).
+- The space between paragraphs keeps v3.33.58's meaning, now from the new leading: `indent: true` S = L (one line), and
+  `paragraph-spacing X` S = L + X. With neither (`auto`, "each engine's own") Typst's own room is kept: its default spacing
+  less its default leading, S = L + 0.55em, so a paragraph break is 0.55em more than a line at every `linestretch`, as it
+  was at 1 (6.05 pt at 11 pt, unchanged). Typst's own 1.2em edge to edge had been less than a line from a `linestretch` of
+  about 1.6: at 2 a paragraph break was 1.0 to 1.2 pt *closer* than the lines. The rule moved from the header-includes into
+  the body block (an `--include-in-header` no longer drops it). v3.33.59's reference-list rule reads `par.leading` and
+  `measure[X].height` where it runs, so it takes the new leading and box unchanged.
+- Checked through pdfmd (`pdftotext -bbox-layout`, four 90-word paragraphs, LuaLaTeX against Typst; the line pitch, then
+  the paragraph break less the pitch), STIX Two Text (pdfmd's default font) and Times New Roman alike to 0.01 pt:
+
+  | size | linestretch | LuaLaTeX | Typst | Typst before | break-pitch LaTeX / Typst / before |
+  |---|---|---|---|---|---|
+  | 10 pt | 1 / 1.5 / 2 | 11.95 / 17.93 / 23.91 | 11.95 / 17.93 / 23.91 | 13.07 / 16.32 / 19.57 | 5.98 / 5.5 / 5.5, 2.25, -1.0 |
+  | 11 pt | 1 / 1.5 / 2 | 13.55 / 20.32 / 27.10 | 13.55 / 20.32 / 27.10 | 14.38 / 17.95 / 21.53 | 6.77 / 6.05 / 6.05, 2.48, -1.1 |
+  | 12 pt | 1 / 1.5 / 2 | 14.45 / 21.67 / 28.89 | 14.45 / 21.67 / 28.89 | 15.68 / 19.58 / 23.48 | 7.22 / 6.6 / 6.6, 2.7, -1.2 |
+
+  (Typst before in Times New Roman: 13.12 to 23.55, 0.05 to 0.07 more, the cap heights' difference.) An APA 6 reference
+  list (CSL entry-spacing 0, and a copy with 1), 12 pt Times New Roman, `linestretch` 1 and 2, plain, `indent: true` and
+  `--paragraph-spacing 6pt`: inside an entry 14.45 / 28.89 in both engines; between entries the same with 0 and twice it
+  (28.89 / 57.78) with 1, in both; with `indent: true` a paragraph break is one pitch in both, with `6pt` the pitch + 5.98
+  (LaTeX, 6 TeX points) and + 6.0 (Typst). `-r` (two parts, `metadata.yaml` with 12 pt, 2): 28.89 in both parts. A page of
+  each looked at side by side: the same lines at the same heights.
+- The author's seven-page report (`linestretch: 2`, 12 pt Times New Roman, A4, Typst), a scratch copy: its `references.bib`
+  (a link into OneDrive) could not be read (the file provider timed out on every try), so the copy was built without
+  `bibliography:` (the citations print as `(key?)`, the References heading has no entries). Body text: Typst 8 pages (7
+  before), LuaLaTeX 9; the same A4 page and text width, the same 28.9 pt between lines in both, Typst 24 to 25 lines a
+  full page, LaTeX 22 to 23. What is left is not the line spacing: LaTeX's title block and section headings take more room
+  (44 to 60 pt around a heading, about 30 in Typst), its paragraph break adds 7.22 pt to Typst's 6.6, and its page
+  breaking keeps fewer lines on a page.
+- Tests: `test_engine_filters` (the rules for 10, 11, 12, 14 pt, 1, 1.5, 2, `-V` over the metadata, none in a fragment, the
+  place after `conf`; a Typst PDF through pdfmd measured against LaTeX's pitch in two fonts, a paragraph break with 6pt,
+  and a raw `#set par(leading: 2em)` that still wins); `test_paragraph_spacing` and `test_author_meta` (the new block in
+  `-t typst -s`). `test_setup test_office_latex test_paragraph_spacing test_engine_filters test_office test_css
+  test_author_meta test_split test_packaging test_docs_consistency test_isolation`: 257 OK (5 skipped).
+
 ## v3.33.72 — 2026-11-10
 
 Pre-edit state: commit `1db8e7b`. **`--kit NAME` builds with a kit; `--kits NAME` describes it, and `--verbose` says so** (agreed

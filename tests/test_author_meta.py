@@ -192,7 +192,10 @@ class TypstAuthorFonts(unittest.TestCase):
                     source.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
                     plain = subprocess.run([PANDOC, str(source), "-s", "-t", "typst"], capture_output=True, text=True,
                                            encoding="utf-8").stdout
-                self.assertEqual(self.convert(front), plain)
+                lines = self.convert(front).split("\n")              # less the line spacing rules (v3.33.73)
+                at = lines.index('#set text(top-edge: 0.7em, bottom-edge: "baseline")')
+                self.assertTrue(lines[at + 1].startswith("#set par(leading: "))
+                self.assertEqual("\n".join(lines[:at] + lines[at + 2:]), plain)
 
     @unittest.skipUnless(shutil.which("typst"), "needs Typst")
     def test_the_pdfs_author_holds_the_names(self):
