@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.126 — 2026-11-11
+
+Pre-edit state: commit `ad125e6`. **Convert nested raw HTML before inserting its wrapper.** With `--raw`, an image
+or italic tag inside a bold HTML span disappeared from LaTeX and Typst because the outer conversion skipped its
+unconverted contents. Matched inline wrappers now process their contents recursively through the same conversion
+rules before insertion. A checkout regression checks one retained image, nested italics and surrounding text in
+LaTeX and Typst, alongside unchanged HTML; raw conversion and repository guard tests also run.
+
 ## v3.33.125 — 2026-11-11
 
 Pre-edit state: commit `b64a8b6`. **Read chemistry declarations from header metadata.** Custom units declared

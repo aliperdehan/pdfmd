@@ -322,6 +322,7 @@ end
 
 -- list handlers -----------------------------------------------------------------------------------------------------
 -- Returns the replacement for the raw item at `index` of `list` and the index to go on from.
+local process
 local function convert_inline(list, index)
   local item = list[index]
   local syntax = SYNTAX[item.format]
@@ -332,6 +333,7 @@ local function convert_inline(list, index)
       if close then
         local middle = {}
         for k = index + 1, close - 1 do middle[#middle + 1] = list[k] end
+        middle = process(middle, "RawInline", convert_inline) or middle
         local doc = read(item.text .. SENTINEL .. list[close].text, "html")
         if doc then
           local filled, found = fill_inlines(doc, middle)
@@ -406,7 +408,7 @@ local function convert_block(list, index)
   return {}, index + 1
 end
 
-local function process(list, kind, convert)
+process = function(list, kind, convert)
   local out, changed, index = {}, false, 1
   while index <= #list do
     local item = list[index]

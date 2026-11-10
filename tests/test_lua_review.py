@@ -116,3 +116,20 @@ Measure: \qty{5}{\widget}, \qty{7}{\gadget} and \qty{9}{\bolt}.
                 self.assertIn("blt", text)
                 if to != "latex":
                     self.assertNotIn("OLD", text)
+
+    def test_nested_raw_html_keeps_images_and_italics(self):
+        (self.root / "plot.png").write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c6360f8cfc0f01f0005000201a5f645400000000049454e44ae426082"))
+        source = '<b>before <i>nested <img src="plot.png"> after</i> end</b>.\n'
+        for to in ("latex", "typst", "html"):
+            with self.subTest(to=to):
+                text = self.build(source, to, "--raw")
+                self.assertEqual(text.count("plot.png"), 1, text)
+                self.assertIn("after", text)
+                if to == "latex":
+                    self.assertIn(r"\textbf{before \emph{nested", text)
+                    self.assertIn(r"\includegraphics", text)
+                elif to == "typst":
+                    self.assertIn("#strong[before #emph[nested", text)
+                    self.assertIn('image("plot.png"', text)
