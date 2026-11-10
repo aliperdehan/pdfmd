@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.128 — 2026-11-11
+
+Pre-edit state: commit `4fbc5fa`. **Honour image mode for raw equation blocks.** Raw LaTeX equation environments
+and bracketed displays became native maths even with `office: {latex: images}`. Both block handlers now guard
+the native branch with the same image-mode check as the inline handler, allowing fragment rendering instead.
+A checkout regression verifies two pictures rather than native maths in Word, two image references in Typst and
+HTML, retained raw LaTeX, and unchanged native maths in auto mode; office and repository guard tests also run.
+
 ## v3.33.127 — 2026-11-11
 
 Pre-edit state: commit `14f775f`. **Preserve class options when adding a cover.** With `cover: true` and a list

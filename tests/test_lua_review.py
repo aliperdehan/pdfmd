@@ -148,3 +148,38 @@ Measure: \qty{5}{\widget}, \qty{7}{\gadget} and \qty{9}{\bolt}.
                         match = re.search(r"\\documentclass\[([^]]*)\]", text, re.S)
                         self.assertIsNotNone(match, text)
                         self.assertEqual([part.strip() for part in match[1].split(",")], expected)
+
+    @unittest.skipUnless(shutil.which("pdftocairo") and (shutil.which("lualatex") or shutil.which("xelatex")),
+                         "needs a LaTeX engine and pdftocairo")
+    def test_office_raw_equations_honour_images_mode(self):
+        body = r"""
+Equation marker.
+
+```{=latex}
+\begin{equation}
+x^2=1
+\end{equation}
+```
+
+```{=latex}
+\[y^2=4\]
+```
+"""
+        for mode in ("auto", "images"):
+            source = f"---\npdfmd-options: {{office: {{latex: {mode}, labels: off}}}}\n---\n" + body
+            for to in ("docx", "latex", "typst", "html"):
+                with self.subTest(mode=mode, to=to):
+                    text = self.build(source, to, "--raw")
+                    self.assertIn("Equation marker.", text)
+                    if to == "docx":
+                        if mode == "images":
+                            self.assertNotIn("<m:oMath", text)
+                            self.assertEqual(text.count("<pic:pic"), 2, text)
+                        else:
+                            self.assertIn("<m:oMath", text)
+                            self.assertNotIn("<pic:pic", text)
+                    elif to == "latex":
+                        self.assertIn("x^2=1", text)
+                        self.assertIn("y^2=4", text)
+                    elif mode == "images":
+                        self.assertEqual(len(re.findall(r"<img\b", text)) if to == "html" else text.count("image("), 2, text)

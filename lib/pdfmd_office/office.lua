@@ -942,7 +942,7 @@ function RawBlock(el)
   if display then
     local translated = math_translate(display)
     if translated then translated = break_display(translated, 68) end
-    if translated and math_native(translated, true) then
+    if not pictures() and translated and math_native(translated, true) then
       counters.math = counters.math + 1
       return pandoc.Para({pandoc.Math("DisplayMath", translated)})
     end
@@ -955,7 +955,7 @@ function RawBlock(el)
   if tex then
     local translated = math_translate(tex)
     if translated then translated = break_display(translated, unnumbered and 68 or 52) end
-    if translated and math_native(translated, true) then
+    if not pictures() and translated and math_native(translated, true) then
       counters.math = counters.math + 1
       return equation_block(pandoc.Span({pandoc.Math("DisplayMath", translated)}, pandoc.Attr(eq_labels[1] or "", {"pdfmd-equation"},
         {{"labels", table.concat(eq_labels, ",")}, {"numbered", unnumbered and "no" or "yes"}})))
