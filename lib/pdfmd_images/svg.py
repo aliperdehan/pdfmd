@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
+from .cache import write_cached
+
 CONVERTERS = ("rsvg-convert", "inkscape", "cairosvg", "svglib", "soffice")
 HINTS = ("brew install librsvg  |  apt install librsvg2-bin  |  pip install cairosvg  |  Inkscape or LibreOffice")
 
@@ -63,9 +65,7 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
             produced = scratch / "out.pdf"
             ok, reason = _run(name, svg, produced, scratch, which, soffice, run)
             if ok and produced.is_file() and produced.stat().st_size > 0:
-                partial = target.with_suffix(".part")
-                shutil.copyfile(produced, partial)
-                partial.replace(target)
+                write_cached(target, produced.read_bytes())
                 return target, ""
             reasons.append(f"{name}: {reason}")
         finally:

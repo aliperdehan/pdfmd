@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .cache import write_cached
+
 TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/svg+xml": ".svg",
          "application/pdf": ".pdf"}
 SUFFIXES = (".png", ".jpg", ".jpeg", ".svg", ".pdf")
@@ -77,7 +79,5 @@ def fetch(url: str, directory: Path, *, max_age_days: float = 7, timeout: float 
         return old, f"not an image LaTeX can use ({kind or 'unknown type'})", False
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{key}{suffix}"
-    partial = target.with_suffix(target.suffix + ".part")
-    partial.write_bytes(data)
-    partial.replace(target)
+    write_cached(target, data)
     return target, "", False

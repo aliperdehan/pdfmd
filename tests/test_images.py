@@ -97,6 +97,49 @@ class Converting(unittest.TestCase):
         self.assertIn("rsvg", why)
 
 
+class ConcurrentCaching(unittest.TestCase):
+    def run_writers(self, operation):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        barrier = Barrier(2)
+        replace = Path.replace
+
+        def simultaneous(path, target):
+            barrier.wait(timeout=10)
+            return replace(path, target)
+
+        with mock.patch.object(Path, "replace", simultaneous), ThreadPoolExecutor(max_workers=2) as pool:
+            return list(pool.map(lambda _: operation(), range(2)))
+
+    def test_remote_writers_do_not_share_a_partial_file(self):
+        from pdfmd_images import remote
+        class Response:
+            headers = {"Content-Type": "image/png"}
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self, limit): return PNG_BYTES
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(remote, "_open", side_effect=lambda *a: Response()):
+            results = self.run_writers(lambda: remote.fetch("https://example.test/image.png", Path(directory)))
+            self.assertEqual(results[0], results[1])
+            self.assertEqual(results[0][0].read_bytes(), PNG_BYTES)
+            self.assertEqual(len(list(Path(directory).iterdir())), 1)
+
+    def test_svg_writers_do_not_share_a_partial_file(self):
+        from pdfmd_images import svg
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "a.svg"
+            source.write_text(SVG, encoding="utf-8")
+            def convert(name, svg_file, produced, *args):
+                produced.write_bytes(b"%PDF-test")
+                return True, ""
+            with mock.patch.object(svg, "available_converters", return_value=["fake"]), mock.patch.object(svg, "_run", side_effect=convert):
+                results = self.run_writers(lambda: svg.convert_svg(source, root / "cache"))
+            self.assertEqual(results[0], results[1])
+            self.assertEqual(results[0][0].read_bytes(), b"%PDF-test")
+            self.assertEqual(len(list((root / "cache").iterdir())), 1)
+
+
 class Arguments(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-images-args-"))

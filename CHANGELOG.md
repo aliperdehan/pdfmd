@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.116 — 2026-11-11
+
+Pre-edit state: commit `27b6d45`. **Avoid concurrent image cache collisions.** Parallel downloads and SVG
+conversions shared partial filenames, so one writer could remove another's file before its rename. Both paths now
+write unique temporary files and replace the target atomically; concurrent-writer regressions cover each path.
+
 ## v3.33.115 — 2026-11-11
 
 Pre-edit state: commit `3f4441e`. **Keep office figure caches distinct.** Documents with different PDFs named
