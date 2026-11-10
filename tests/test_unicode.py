@@ -179,6 +179,22 @@ class Planning(unittest.TestCase):
         self.assertIn("Path={", header)  # a font from pdfmd's own folder is loaded by file
         self.assertIn("\\pdfmdrunrtl", header)
 
+    def test_shared_family_keeps_script_and_direction(self):
+        make_font(self.root / "ascii.ttf", "ASCII Test", [(0x20, 0x7E)])
+        make_font(self.root / "dejavu.ttf", "DejaVu Sans", [(0x20, 0x7E), (0x370, 0x3FF), (0x590, 0x5FF)])
+        index = pu.FontIndex(self.root, use_system=False)
+        plan = pu.plan_text("αβγ אב", "ASCII Test", index)
+        greek = plan.choices[plan.candidates[ord("α")][0]]
+        hebrew = plan.choices[plan.candidates[ord("א")][0]]
+        self.assertEqual(greek.family, hebrew.family)
+        self.assertNotEqual(greek.key, hebrew.key)
+        self.assertFalse(greek.rtl)
+        self.assertTrue(hebrew.rtl)
+        self.assertIn("Script=Hebrew", plan.latex_header())
+        code = pu.plan_text("אב", "ASCII Test", index)
+        plan.add_code(code)
+        self.assertTrue(plan.choices[plan.code_candidates[ord("א")][0]].rtl)
+
     def test_symbols_and_arabic_punctuation_follow_their_neighbours(self):
         plan = self.plan("القدر، والقضاء ✶")
         comma = ord("،")

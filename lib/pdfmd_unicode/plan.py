@@ -70,7 +70,7 @@ class Plan:
         remap: dict[str, str] = {}
         for key, choice in code.choices.items():
             for existing_key, existing in self.choices.items():
-                if existing.family == choice.family:
+                if existing.family == choice.family and existing.script == choice.script:
                     remap[key] = existing_key
                     break
             else:
@@ -334,24 +334,31 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
             else:
                 uncovered[code_point] = text.count(chr(code_point))
 
-    families = list(dict.fromkeys([*used, *(primary[code_point] for code_point in sorted(common))]))
+    groups = list(dict.fromkeys((family, script_of(code_point)) for code_point, family in primary.items()
+                                if code_point not in common))
+    for code_point in sorted(common):
+        family = primary[code_point]
+        if not any(group_family == family for group_family, _ in groups):
+            groups.append((family, script_of(code_point)))
     choices: dict[str, Choice] = {}
-    keys: dict[str, str] = {}
-    for number, family in enumerate(families):
+    keys: dict[tuple[str, str], str] = {}
+    for number, (family, script) in enumerate(groups):
         face = index.regular(family)
         assert face is not None
         key = _key(number)
-        keys[family] = key
+        keys[family, script] = key
         choices[key] = Choice(key, family, face, {}, index.styles(face) if face.managed else {})
 
     candidates: dict[int, list[str]] = {}
     for code_point, family in primary.items():
-        found = [keys[family]]
-        if code_point in common:
-            found += [keys[other] for other in used if other != family and index.covers(other, code_point)]
-        candidates[code_point] = found
         script = script_of(code_point)
-        counts = choices[keys[family]].scripts
+        if code_point in common:
+            found = [keys[group] for group in groups if group[0] == family]
+            found += [keys[group] for group in groups if group[0] != family and index.covers(group[0], code_point)]
+        else:
+            found = [keys[family, script]]
+        candidates[code_point] = found
+        counts = choices[found[0]].scripts
         counts[script] = counts.get(script, 0) + 1
     for choice in choices.values():
         if any(code in CJK_SCRIPTS for code in choice.scripts):
@@ -360,7 +367,8 @@ def plan_text(text: str, main_family: str, index: FontIndex, document_language: 
     if words:
         for key, choice in choices.items():
             plan.cover[key] = {code_point for code_point in wanted
-                               if code_point in coverage(choice.face.path, choice.face.index)}
+                               if code_point in coverage(choice.face.path, choice.face.index)
+                               and (script_of(code_point) in COMMON or script_of(code_point) == choice.script)}
     return plan
 
 

@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.112 — 2026-11-11
+
+Pre-edit state: commit `49255a8`. **Keep script-specific fallback font switches.** When one fallback family drew
+both Greek and Hebrew, grouping by family lost Hebrew direction and script settings. Choices now retain their
+script in body and code, with regression coverage for a shared family and right-to-left text.
+
 ## v3.33.111 — 2026-11-11
 
 Pre-edit state: commit `7cb78ca`. **Avoid concurrent emoji cache writes colliding.** Parallel builds caching the
