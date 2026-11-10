@@ -33,10 +33,10 @@ def _git(folder: Path, *arguments: str, timeout: int = 20) -> subprocess.Complet
 def tracked_name(path: Path) -> str | None:
     """The path of `path` as git knows it (relative to the repository), or None when it is not in a repository or git
     does not track it."""
-    done = _git(path.parent, "ls-files", "--full-name", "--error-unmatch", "--", path.name)
-    if done is None or done.returncode != 0 or not done.stdout.strip():
+    done = _git(path.parent, "ls-files", "-z", "--full-name", "--error-unmatch", "--", path.name)
+    if done is None or done.returncode != 0 or not done.stdout:
         return None
-    return done.stdout.strip().splitlines()[0]
+    return done.stdout.split("\0", 1)[0]
 
 
 def log(path: Path, limit: int = 0) -> list[Commit]:

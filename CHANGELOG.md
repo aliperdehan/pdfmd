@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.130 — 2026-11-11
+
+Pre-edit state: commit `7f125a2`. **Read Unicode names from Git history.** Git quoted non-ASCII file names,
+so history could list commits but could not retrieve their contents. NUL-delimited `ls-files` output now retains
+the path verbatim; a checkout history-diff regression and the history and repository guard tests run.
+
 ## v3.33.129 — 2026-11-11
 
 Pre-edit state: commit `ed51822`. **Escape quoted template metadata.** Quotes and backslashes in template
