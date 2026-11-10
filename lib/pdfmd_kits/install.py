@@ -37,6 +37,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
+from pdfmd_assemble.paths import confined_destination
+
 from .kitfile import FILE, SUFFIX, Kit, KitError, load_kit, normalise
 
 RECORD = ".pdfmd-install.json"
@@ -131,11 +133,12 @@ def safe_extract(archive: Path, destination: Path, max_bytes: int, max_files: in
         for member in bundle:
             name = member.name
             parts = PurePosixPath(name).parts
-            if name.startswith(("/", "\\")) or ".." in parts or (parts and re.match(r"^[A-Za-z]:", parts[0])):
-                raise InstallError(f"the archive holds {name!r}, which leaves the folder it is unpacked in: refused")
             if member.name == "pax_global_header" or not parts:
                 continue
-            target = destination.joinpath(*parts)
+            try:
+                target = confined_destination(destination, name)
+            except (ValueError, OSError, RuntimeError):
+                raise InstallError(f"the archive holds {name!r}, which leaves the folder it is unpacked in: refused") from None
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue

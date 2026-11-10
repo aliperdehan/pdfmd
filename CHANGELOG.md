@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.77 — 2026-11-10
+
+Pre-edit state: commit `8060fc5`. **[kits] Confine archive extraction on Windows as well as POSIX.** A kit tarball could
+use backslashes to hide parent traversal from the POSIX-only name check, then overwrite files outside its extraction
+folder on Windows. The shared path-safety helper in `pdfmd_assemble.paths` rejects Windows roots, drives (including nested
+drive components), backslashes and parent components on every host, and checks resolved containment before creating a
+folder or file, including pre-existing symlinks. Regression tests exercise Windows names on any OS, a symlink escape and
+`python3 scripts/pdfmd --install` with a local archive supplied by a stub downloader and scratch configuration paths (no
+network). Checked failing before the fix and passing afterwards; kit-install area tests and the required split, packaging,
+docs-consistency, setup and isolation checks run. `pdfmd.py` stays at 17,241 lines (version only); no new thresholds.
+
 ## v3.33.76 — 2026-11-10
 
 Pre-edit state: commit `fb5a625`. **Keep calculator output paths out of document metadata.** A document containing

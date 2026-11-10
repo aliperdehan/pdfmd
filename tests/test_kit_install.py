@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -246,6 +247,47 @@ class Safety(Base):
             with self.subTest(name), self.assertRaises(InstallError):
                 kits_install.safe_extract(self.archive([(self.info(name), b"x")]), self.tmp / "out", MB, 100)
         self.assertFalse((self.tmp / "evil").exists())
+
+    def test_windows_member_names_are_refused_on_every_host(self):
+        names = (r"repo/..\..\escape.txt", "C:/escape.txt", "C:escape.txt",
+                 r"\escape.txt", r"\\server\share\escape.txt", "repo/C:/escape.txt",
+                 "repo/C:escape.txt", "repo/../escape.txt")
+        for name in names:
+            with self.subTest(name=name):
+                self.assertTrue(PureWindowsPath(name).drive or PureWindowsPath(name).root
+                                or ".." in PureWindowsPath(name).parts or "C:" in name)
+                with self.assertRaisesRegex(InstallError, "refused"):
+                    kits_install.safe_extract(self.archive([(self.info(name), b"x")]), self.tmp / "out", MB, 100)
+
+    def test_extraction_refuses_a_pre_existing_symlink_escape(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        victim = write(outside / "keep.txt", "keep\n")
+        destination = self.tmp / "out"
+        destination.mkdir()
+        (destination / "repo").symlink_to(outside, target_is_directory=True)
+        archive = self.archive([(self.info("repo/keep.txt"), b"lost")])
+        with self.assertRaisesRegex(InstallError, "refused"):
+            kits_install.safe_extract(archive, destination, MB, 100)
+        self.assertEqual(victim.read_text(), "keep\n")
+
+    def test_cli_refuses_windows_archive_names_without_network(self):
+        archive = self.archive([(self.info(r"repo/..\..\escape.txt"), b"lost")])
+        hook = self.tmp / "hook"
+        hook.mkdir()
+        (hook / "sitecustomize.py").write_text(
+            "import os, shutil, pdfmd\nfrom pathlib import Path\n"
+            "pdfmd.kits_install_directory = lambda: Path(os.environ['XDG_CONFIG_HOME']) / 'kits'\n"
+            "pdfmd.download_file = lambda url, destination, sha256: "
+            "shutil.copyfile(os.environ['PDFMD_TEST_ARCHIVE'], destination)\n", encoding="utf-8")
+        env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               "PDFMD_TEST_ARCHIVE": str(archive), "PYTHONPATH": os.pathsep.join((str(hook), str(ROOT))),
+               **{key: str(self.tmp / key) for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--install", "kit:owner/repo", "--yes"],
+                              cwd=self.tmp, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("refused", done.stdout + done.stderr)
+        self.assertIn("escape.txt", done.stdout + done.stderr)
 
     def test_links_and_special_files_are_not_kept(self):
         archive = self.archive([
