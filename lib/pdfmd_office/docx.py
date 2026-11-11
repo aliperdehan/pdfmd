@@ -344,7 +344,8 @@ def patch_document(document: str, spec: OfficeSpec) -> str:
         text = text[:-2] + "></w:sectPr>"
     start = re.match(r"<w:sectPr\b[^>]*>", text).group(0)
     inner = text[len(start):-len("</w:sectPr>")]
-    inner = _set(inner, SECT_ORDER, "pgSz", size)
+    if spec.paper or spec.landscape:
+        inner = _set(inner, SECT_ORDER, "pgSz", size)
     inner = _set(inner, SECT_ORDER, "pgMar", margin)
     return document[:last.start()] + start + inner + "</w:sectPr>" + document[last.end():]
 

@@ -84,9 +84,10 @@ def patch_styles(styles: str, spec: OfficeSpec, house: bool) -> str:
         if match:
             tag = match.group(0)
             old = {side: re.search(rf'fo:margin-{side}="([\d.]+)in"', tag) for side in ("top", "bottom", "left", "right")}
-            tag = _attr(tag, "fo:page-width", _inch(width))
-            tag = _attr(tag, "fo:page-height", _inch(height))
-            tag = _attr(tag, "style:print-orientation", "landscape" if spec.landscape else "portrait")
+            if spec.paper or spec.landscape:
+                tag = _attr(tag, "fo:page-width", _inch(width))
+                tag = _attr(tag, "fo:page-height", _inch(height))
+                tag = _attr(tag, "style:print-orientation", "landscape" if spec.landscape else "portrait")
             for side in ("top", "bottom", "left", "right"):
                 twips = spec.margins.get(side)
                 if twips is not None:

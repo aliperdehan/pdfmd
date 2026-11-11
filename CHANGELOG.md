@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.151 — 2026-11-11
+
+Pre-edit state: commit `1c1b737`. A margin-only Office override made has_page true and replaced a reference document’s dimensions and orientation with the Letter defaults. DOCX and ODT patching now replace page size and orientation only when the specification requests paper or landscape, preserving a template’s page for margin-only changes. Package and checkout regressions failed before the fix in both formats and orientations and pass afterwards; explicit paper overrides still apply. Office, Word-markup and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.150 — 2026-11-11
 
 Pre-edit state: commit `813f3dd`. Office inputs resolved hybrid attachments from user configuration alone, excluding folder settings that enabled the feature or overrode a user-wide enable. The Office branch now passes the document path to config_options, retaining command-line priority. Folder/user regressions in both directions and a checkout attachment test with a stand-in Office converter failed before the fix and pass afterwards, including command-line overrides; embedding and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
