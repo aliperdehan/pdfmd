@@ -43,7 +43,8 @@
 -- point is 1/72.27 in, Typst's 1/72 in, so the pitch is scaled by 72/72.27 to be the same length on the page. The rules
 -- go at the top of the body, not into header-includes: the template's own `set par(leading: ...)` sits inside `conf`,
 -- around the body, and would override a header rule, while a raw `#set par(leading: ...)` later in the document still
--- overrides this one. So the title block (inside `conf`, before the body) keeps the template's leading. Only for a
+-- overrides this one. pdfmd also supplies these lengths to its copy of the default template, inside `conf`, for the
+-- title block, abstract and outline (v3.33.162). Only for a
 -- standalone document (a template): a fragment is someone else's to space.
 --
 -- The reference list's entry spacing (v3.33.59). Pandoc's template turns a CSL `entry-spacing="N"` into `#show <refs>: set
@@ -345,7 +346,13 @@ end
 -- the document with its line rules at the top of the body
 local function line_spacing(doc)
   local rules = line_rules(doc.meta)
-  if rules then doc.blocks:insert(1, pandoc.RawBlock("typst", rules)) end
+  if rules then
+    local lead = em(leading(doc.meta))
+    doc.meta["pdfmd-typst-top-edge"] = pandoc.MetaString(em(TOP_EDGE_EM))
+    doc.meta["pdfmd-typst-leading"] = pandoc.MetaString(lead)
+    doc.meta["pdfmd-typst-spacing"] = pandoc.MetaString(spacing(doc.meta, lead))
+    doc.blocks:insert(1, pandoc.RawBlock("typst", rules))
+  end
   return doc
 end
 

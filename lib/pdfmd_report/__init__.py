@@ -313,7 +313,7 @@ def run(core, *,
                 if is_tex_target:
                     cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
                 cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, target_format)
-                cmd += typst_filter_args(target_format)
+                cmd += typst_filter_args(target_format, cmd)
                 cmd += report_office_arguments.filter_arguments
                 cmd += chem_filter_args(list(files), metadata_files,
                                         list(report_preambles or ([] if discovery_disabled(report_no_auto, "preamble")
@@ -455,7 +455,7 @@ def run(core, *,
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
                     cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, engine)
-                    report_last = typst_filter_args(engine) + weasyprint_math_args(
+                    report_last = typst_filter_args(engine, cmd) + weasyprint_math_args(
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
                         report_no_auto)

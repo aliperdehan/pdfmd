@@ -306,6 +306,38 @@ class CommandLine(unittest.TestCase):
         second = [first for _, first in tops].index("Second")
         self.assertAlmostEqual(tops[second + 1][0] - tops[second][0], 12 * 2.7, delta=0.05)    # 2em + the 0.7em box
 
+    @unittest.skipUnless(shutil.which("pdftotext") and shutil.which("lualatex"), "needs pdftotext and LuaLaTeX")
+    def test_title_abstract_and_toc_use_the_body_pitch(self):
+        source = self.directory / "doc.md"
+        source.write_text("---\ntitle: Titlefirst " + "title " * 12 +
+                          "\nfontsize: 12pt\nlinestretch: 2\nmainfont: STIX Two Text\nabstract: Abstractfirst " +
+                          "abstractword " * 20 + "\n---\n\n# Headingfirst " + "heading " * 10 +
+                          "\n\nBodyfirst " + "bodyword " * 80 + "\n\n# Headingsecond\n\nLast.\n", encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+        lines = {}
+        for engine in ("lualatex", "typst"):
+            output = self.directory / (engine + ".pdf")
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source), "-e", engine,
+                                   "--toc", "--no-stamp", "--no-backup", "-o", str(output)],
+                                  env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            layout = subprocess.check_output(["pdftotext", "-bbox-layout", str(output), "-"], text=True)
+            lines[engine] = [(float(top), first) for top, first in re.findall(
+                r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', layout, re.S)]
+
+        def pitch(engine, word):
+            found = lines[engine]
+            index = next(i for i, (_, first) in enumerate(found) if first == word)
+            return found[index + 1][0] - found[index][0]
+
+        body = pitch("lualatex", "Bodyfirst")
+        self.assertAlmostEqual(pitch("typst", "Bodyfirst"), body, delta=0.05)
+        for word, size_ratio in (("Titlefirst", 1.5), ("Abstractfirst", 1), ("Headingfirst", 1)):
+            with self.subTest(region=word):
+                self.assertAlmostEqual(pitch("typst", word) / size_ratio, body, delta=0.05)
+
     def line_tops(self) -> list[tuple[float, str]]:
         layout = subprocess.run(["pdftotext", "-bbox-layout", str(self.directory / "doc.pdf"), "-"],
                                 capture_output=True, text=True, encoding="utf-8").stdout

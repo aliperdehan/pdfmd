@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.162 — 2026-11-11
+
+Pre-edit state: commit `282f2f1`. Typst's default template laid out the title block, abstract and contents before the body's line-spacing rule, retaining a tighter pitch at linestretch 2. A cached copy of Pandoc's own default template now consumes the Lua filter's existing calculated lengths inside its conf function, so those regions follow the body's pitch ratio too; custom templates and fragments keep their existing route. A checkout-launcher regression failed before the fix in all three regions and passes afterwards, measuring pdftotext -bbox-layout against the same document's LaTeX body (28.89 pt at 12 pt, stretch 2; the title scales with its font size). LaTeX itself uses tighter spacing in these front regions. Engine-filter, paragraph, author, chain, Office LaTeX and repository guard tests run (240 tests, six skipped; Properties.test_a_calibre_pdf also fails with the pre-edit code in the sandbox). pdfmd.py grows from 17,203 to 17,204 lines for the deferred template helper; its implementation stays in pdfmd_lua. No new setting or behavioural threshold; the existing line-box and format constants are reused.
+
 ## v3.33.161 — 2026-11-11
 
 Pre-edit state: commit `7b03549`. A kit default containing markup made the markup-off guard return before checking a folder's explicit markup request, removing a kind the folder wanted. The guard now continues past kit and global defaults to check the stronger folder request. A checkout-launcher regression failed before the fix and passes afterwards; kit markup, callout, comment and repository guard tests run. pdfmd.py remains 17,203 lines. No new setting or behavioural threshold.
