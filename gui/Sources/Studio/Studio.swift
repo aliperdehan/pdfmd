@@ -406,7 +406,7 @@ final class StudioController: NSObject, NSSplitViewDelegate {
             loadPDF()
         } else {
             pane.showMode(false, hasPDF: pdfURL != nil)
-            if renders == 0 || editedSinceRender { render() }
+            if renders == 0 || editedSinceRender || pane.html.url == nil { render() }
         }
     }
 }

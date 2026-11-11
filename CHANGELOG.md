@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.187a — 2026-11-12
+
+Pre-edit state: commit `8a394ce`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.19: render a reopened Studio preview.** Hiding and showing a preview made a new empty pane, but an earlier render made the controller think it was already populated. A pane with no HTML URL now triggers a render even when the text has not changed.
+
+Regression: `tests/test_colophon_studio_reopen.py` exercises a fresh pane after an earlier render without opening a window; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.187 — 2026-11-12
 
 Pre-edit state: commit `129a3c7`. Project images in a live preview used their unchanged Markdown URLs, which requested the web application's files instead of the project and lost the document's folder. The render API now resolves local image paths beside the document, checks project containment, follows the existing project-root fallback, and rewrites supported images to encoded `/api/raw` URLs; remote and outside paths are left alone.
