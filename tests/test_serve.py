@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pdfmd_serve import API_VERSION, Core, Server  # noqa: E402
+from pdfmd_serve import API_VERSION, ApiError, Core, Server  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 WEB = ROOT / "lib" / "pdfmd_web"
@@ -68,6 +68,18 @@ class Folder(unittest.TestCase):
 
 
 class Handlers(Folder):
+    def test_filesystem_failures_are_structured_api_errors(self):
+        with mock.patch.object(Path, "read_bytes", side_effect=PermissionError("denied")):
+            status, answer = self.get("/api/file?path=report.md")
+            self.assertEqual((status, answer["api"], answer["code"]), (403, API_VERSION, "permission"))
+            (self.root / "pic.png").touch()
+            with self.assertRaises(ApiError) as error:
+                self.core.raw({"path": "pic.png"})
+            self.assertEqual((error.exception.status, error.exception.code), (403, "permission"))
+        with mock.patch.object(self.core, "write_bytes", side_effect=OSError("disk error")):
+            status, answer = self.core.handle("POST", "/api/file", {"path": "new.md", "text": "text"})
+            self.assertEqual((status, answer["api"], answer["code"]), (500, API_VERSION, "filesystem"))
+
     def test_project_has_the_shape_of_the_fixture(self):
         status, project = self.get("/api/project")
         self.assertEqual(status, 200)

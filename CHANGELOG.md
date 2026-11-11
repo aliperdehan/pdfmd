@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.186 — 2026-11-12
+
+Pre-edit state: commit `b7df125`. Filesystem errors while reading or saving through `--serve` and `--api` escaped the JSON contract, producing tracebacks or dropped HTTP requests. The dispatch and raw-file route now translate missing files, permission failures and other filesystem errors into structured API responses.
+
+Regression: `tests/test_serve.py` injects read, raw and write errors; it fails before the fix and passes afterwards. An unreadable scratch document also fails cleanly through `scripts/pdfmd --api`. pdfmd.py changes only its version line.
+
 ## v3.33.185j — 2026-11-12
 
 Pre-edit state: commit `82f49f1`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.18: restore the login-item default.** Restoring Popup defaults removed the preference before the app could unregister its own login item, leaving automatic login enabled. Restore now switches off an app-managed item before clearing the key, while leaving a login item managed only in System Settings alone.

@@ -64,6 +64,15 @@ class ApiError(Exception):
         self.status, self.code, self.message, self.extra = status, code, message, extra
 
 
+def filesystem_error(error: OSError) -> ApiError:
+    """Turn expected filesystem failures into the same API error contract for JSON and raw requests."""
+    if isinstance(error, FileNotFoundError):
+        return ApiError(404, "no_file", "the file no longer exists")
+    if isinstance(error, PermissionError):
+        return ApiError(403, "permission", "permission denied while accessing the project")
+    return ApiError(500, "filesystem", "a filesystem operation failed")
+
+
 def kind_of(name: str) -> str:
     return KINDS.get(os.path.splitext(name)[1].lower(), "other")
 
@@ -141,7 +150,9 @@ class Core:
             if body is not None and not isinstance(body, dict):
                 raise ApiError(400, "body", "the body must be a JSON object")
             status, answer = handler(self, query, body or {})
-        except ApiError as error:
+        except (ApiError, OSError) as error:
+            if isinstance(error, OSError):
+                error = filesystem_error(error)
             status, answer = error.status, {"error": error.message, "code": error.code, **error.extra}
         return status, {"api": API_VERSION, **answer}
 
@@ -212,13 +223,16 @@ class Core:
     def raw(self, query: dict) -> tuple[bytes, str]:
         """`GET /api/raw?path=NAME`: a picture or a PDF of the project, byte for byte, and its type. The one answer that is not JSON (the HTTP
         shell sends it); an error is an `ApiError` as everywhere."""
-        path, name = self.resolve(query.get("path"))
-        mime = RAW_TYPES.get(path.suffix.lower())
-        if mime is None:
-            raise ApiError(415, "not_viewable", f"{name} is not a picture or a PDF")
-        if not path.is_file():
-            raise ApiError(404, "no_file", f"{name} is not a file of this project")
-        return path.read_bytes(), mime
+        try:
+            path, name = self.resolve(query.get("path"))
+            mime = RAW_TYPES.get(path.suffix.lower())
+            if mime is None:
+                raise ApiError(415, "not_viewable", f"{name} is not a picture or a PDF")
+            if not path.is_file():
+                raise ApiError(404, "no_file", f"{name} is not a file of this project")
+            return path.read_bytes(), mime
+        except OSError as error:
+            raise filesystem_error(error) from error
 
     def put_file(self, query: dict, body: dict) -> tuple[int, dict]:
         path, name = self.resolve(body.get("path"))
