@@ -30,6 +30,18 @@ markup = pdfmd.load_package("pdfmd_tex.markup")      # bound to pdfmd as its `co
 PANDOC = shutil.which("pandoc")
 LUALATEX = shutil.which("lualatex")
 
+
+def tex_has(name: str) -> bool:
+    """The TeX installation has this file (kpsewhich). soul.sty is not in every one: on Ubuntu 24.04 it is in
+    texlive-plain-generic, which texlive-latex-extra does not bring."""
+    kpsewhich = shutil.which("kpsewhich")
+    if not kpsewhich:
+        return False
+    try:
+        return bool(subprocess.run([kpsewhich, name], capture_output=True, text=True, timeout=120).stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        return False
+
 # a package that defines `landscape` itself, as a house style may: a wider sheet, never a turned one
 OWN_LANDSCAPE = r"""\ProvidesPackage{ownland}[2026/11/10 v1.0.0 test]
 \newenvironment{landscape}{\clearpage\pagewidth=297mm \pageheight=210mm}{\clearpage\pagewidth=210mm \pageheight=297mm}
@@ -140,6 +152,8 @@ class Builds(unittest.TestCase):
 
     @unittest.skipUnless(LUALATEX, "LuaLaTeX is needed")
     def test_lualatex_builds_after_a_preambles_soul(self):
+        if not tex_has("soul.sty"):
+            self.skipTest("needs LaTeX's soul package (kpsewhich finds no soul.sty)")
         write(self.folder / "preamble.tex", "\\usepackage{soul}\n")
         done, _ = self.build("", "soul.pdf", "-e", "lualatex")
         self.assertTrue(re.search(r"\(lualatex\)", done.stdout + done.stderr), done.stdout + done.stderr)
@@ -148,6 +162,8 @@ class Builds(unittest.TestCase):
     @unittest.skipUnless(LUALATEX, "LuaLaTeX is needed")
     def test_lualatex_highlights_after_a_preambles_soul_or_bare_lua_ul(self):
         # v3.33.70: lua-ul's \highLight needs luacolor, which the guarded header now loads too
+        if not tex_has("soul.sty"):
+            self.skipTest("needs LaTeX's soul package (kpsewhich finds no soul.sty)")
         for package in ("soul", "lua-ul"):
             write(self.folder / "preamble.tex", f"\\usepackage{{{package}}}\n")
             done, _ = self.build("", f"{package}.pdf", "-e", "lualatex", extra="\nSome ==marked== words.\n")

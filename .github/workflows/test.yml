@@ -163,7 +163,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends texlive-luatex texlive-xetex texlive-latex-recommended \
-            texlive-latex-extra texlive-fonts-recommended texlive-science lmodern poppler-utils fonts-dejavu fonts-jetbrains-mono
+            texlive-latex-extra texlive-plain-generic texlive-fonts-recommended texlive-science lmodern poppler-utils fonts-dejavu fonts-jetbrains-mono
       - run: pip install .
       - run: pandoc --version | head -1
       - name: STIX Two Text, pdfmd's default main font, which the tests that name it need
