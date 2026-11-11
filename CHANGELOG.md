@@ -104,7 +104,8 @@ Pre-edit state: commit `1016a0c`. Reference-number PDF builds inherited a non-La
 Pre-edit state: commit `81f311a`. Inputs such as `a.md` and an earlier `a.html` could both build to `a.pdf`, silently
 replacing the first result. Inputs with the same resolved planned destination now build once, preferring Markdown, other
 text markup, HTML, then office and e-book formats, with name order breaking ties; the NOTE names the skipped inputs and
-chosen source. Checkout regressions failed before the fix and pass afterwards for Markdown and HTML, HTML and DOCX,
+chosen source. Collision skips now have their own note naming the winning input, separate from non-input and built-output notes;
+the checkout wording regressions failed before that correction and pass afterwards (pre-edit state: commit `16932ff`). Checkout regressions failed before the fix and pass afterwards for Markdown and HTML, HTML and DOCX,
 a Cyrillic spaced name, and a shared output folder.
 
 A repeated multi-path build could treat its earlier HTML or other readable output as a source, then fail on a

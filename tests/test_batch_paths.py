@@ -261,8 +261,18 @@ class Checkout(unittest.TestCase):
                 done = self.run_pdfmd(html, md, "-e", "inkmd")
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
-                self.assertIn(f"{html} (same output as {md})", done.stdout)
+                self.assertIn(f"NOTE  skipped (same output as {md}): {html}", done.stdout)
+                self.assertNotIn("skipped non-input paths", done.stdout)
                 self.assertTrue((self.work / (stem + ".pdf")).is_file())
+
+    def test_collision_and_non_input_have_separate_notes(self):
+        (self.work / "a.md").write_text("# Source\n", encoding="utf-8")
+        (self.work / "a.html").write_text("<p>Old</p>", encoding="utf-8")
+        (self.work / "image.png").write_bytes(b"image")
+        done = self.run_pdfmd("a.html", "a.md", "image.png", "-e", "inkmd")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("NOTE  skipped non-input paths: image.png", done.stdout)
+        self.assertIn("NOTE  skipped (same output as a.md): a.html", done.stdout)
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_same_destination_prefers_html_to_docx(self):
@@ -271,7 +281,7 @@ class Checkout(unittest.TestCase):
         done = self.run_pdfmd("a.docx", "a.html", "--to", "latex")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
-        self.assertIn("a.docx (same output as a.html)", done.stdout)
+        self.assertIn("NOTE  skipped (same output as a.html): a.docx", done.stdout)
         self.assertIn("HTML source", (self.work / "a.tex").read_text(encoding="utf-8"))
 
     def test_same_destination_in_output_folder_uses_name_tiebreak(self):
@@ -281,7 +291,7 @@ class Checkout(unittest.TestCase):
         done = self.run_pdfmd("z/same.md", "a/same.md", "-e", "inkmd", "-o", "out")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
-        self.assertIn("z/same.md (same output as a/same.md)", done.stdout)
+        self.assertIn("NOTE  skipped (same output as a/same.md): z/same.md", done.stdout)
         self.assertTrue((self.work / "out/same.pdf").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")

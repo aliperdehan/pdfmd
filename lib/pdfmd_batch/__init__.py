@@ -72,18 +72,16 @@ def collect_inputs(core, paths: list[Path], recursive: bool = False, include_nev
 
 
 def selection_note(core, paths, files, skipped, outputs, collisions=()):
-    if skipped or outputs or collisions:
+    if skipped:
         note = "NOTE  skipped non-input paths: " + ", ".join(core.display_path(path) for path in skipped)
-        if outputs:
-            note += ("; " if skipped else "") + "built outputs: " + ", ".join(core.display_path(path) for path in outputs)
-        if collisions:
-            note += ("; " if skipped or outputs else "") + ", ".join(
-                f"{core.display_path(file)} (same output as {core.display_path(chosen)})"
-                for file, chosen in collisions)
         if len(paths) == 2 and any(path.suffix.lower() == ".pdf" and
                                   any(file.parent == path.resolve().parent for file in files) for path in skipped):
             note += "; to name the output, use -o NAME.pdf"
         print(note)
+    if outputs:
+        print("NOTE  skipped built outputs: " + ", ".join(core.display_path(path) for path in outputs))
+    for file, chosen in collisions:
+        print(f"NOTE  skipped (same output as {core.display_path(chosen)}): {core.display_path(file)}")
 
 
 def prepare_inputs(core, args) -> None:
