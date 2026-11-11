@@ -231,7 +231,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             reader = core.pypdf.PdfReader(pdf_path)
-            writer = core.pypdf.PdfWriter(clone_from=reader)
+            writer = core.deferred("pdfmd_polish.info", "clone_pdf")(reader)
             count = len(writer.pages)
             header_template, footer_template = options.get("header"), options.get("footer")
             for template in (header_template, footer_template):

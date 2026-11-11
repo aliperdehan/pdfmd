@@ -680,7 +680,7 @@ def write_pdf_attachments(pdf_path: Path, files: dict[str, bytes]) -> None:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            writer = core.pypdf.PdfWriter(clone_from=pdf_path)      # the whole document: properties, bookmarks, files
+            writer = core.deferred("pdfmd_polish.info", "clone_pdf")(pdf_path)      # the whole document: properties, bookmarks, files
             for name, data in files.items():
                 add_deflated_attachment(writer, name, data)
             core.atomic_write_pdf(writer, pdf_path)

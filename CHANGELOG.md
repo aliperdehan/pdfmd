@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.178 — 2026-11-12
+
+Pre-edit state: commit `2f9290c`. FINDING F2: pypdf's clone default labelled engine PDFs as `%PDF-1.3`, even when their input declared 1.7. All five finishing paths now use one shared clone helper that copies the reader's header, with guards for older pypdf interfaces. Object-stream handling is unchanged (DECISION 51 remains separate). Regression: 1.7 fixtures failed in all five paths before and pass after; older header interfaces are covered too, alongside the native launcher build. pdfmd.py stays at 17,211 lines.
+
 ## v3.33.177 — 2026-11-12
 
 Pre-edit state: commit `fb5f1b8`. FINDING F1: stamping or removing Calibre's placeholder author passed the existing Info dictionary through pypdf's text conversion, changing `/Trapped /False` into the invalid string `(/False)`. A shared pdfmd_polish.info helper now preserves name-valued entries, while ordinary strings remain strings; polishing uses it too. Regression: pypdf-made inputs retain NameObject values through stamping, polishing, author removal, attachments and hybrid attachments; stamp and author-removal checks failed before and pass after. A native build through scripts/pdfmd checks stamping and polishing together. pdfmd.py stays at 17,211 lines.

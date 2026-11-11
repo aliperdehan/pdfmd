@@ -78,7 +78,7 @@ def attach_hybrid(pdf_path: Path, data: bytes, extension: str) -> bool:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            writer = core.pypdf.PdfWriter(clone_from=pdf_path)
+            writer = core.deferred("pdfmd_polish.info", "clone_pdf")(pdf_path)
             if any(existing.startswith("Original.") and existing[9:] in core.HYBRID_MIME for existing in writer.attachments):
                 return False
             attachment = writer.add_attachment(name, data)

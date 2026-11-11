@@ -25,10 +25,12 @@ except ImportError:
 
 @unittest.skipUnless(pypdf, 'needs pypdf')
 class InfoNames(unittest.TestCase):
-    def rewrite(self, route):
+    def rewrite(self, route, header=None):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'engine.pdf'
             writer = pypdf.PdfWriter()
+            if header:
+                writer.pdf_header = header
             writer.add_blank_page(200, 200)
             writer.add_metadata({'/Author': 'Unknown', '/Title': 'Original', '/Subject': '/False'})
             writer._info[NameObject('/Trapped')] = NameObject('/False')
@@ -50,7 +52,10 @@ class InfoNames(unittest.TestCase):
             elif route == 'hybrid':
                 self.assertTrue(pdfmd.attach_hybrid(path, b'ODF fixture', 'odt'))
                 self.assertIn('Original.odt', pypdf.PdfReader(path).attachments)
-            info = pypdf.PdfReader(path).metadata
+            reader = pypdf.PdfReader(path)
+            if header:
+                self.assertEqual(reader.pdf_header, header)
+            info = reader.metadata
             self.assertIsInstance(info['/Trapped'], NameObject)
             self.assertEqual(info['/Trapped'], '/False')
             self.assertIsInstance(info['/Subject'], TextStringObject)
@@ -69,6 +74,21 @@ class InfoNames(unittest.TestCase):
 
     def test_hybrid(self):
         self.rewrite('hybrid')
+
+    def test_header_versions(self):
+        for route in ('stamp', 'polish', 'calibre', 'attachments', 'hybrid'):
+            with self.subTest(route=route):
+                self.rewrite(route, header='%PDF-1.7')
+
+    def test_older_pypdf_header_interfaces(self):
+        from types import SimpleNamespace
+        helper = pdfmd.load_package('pdfmd_polish.info')
+        for writer in (SimpleNamespace(_header=b'%PDF-1.3'), SimpleNamespace()):
+            with self.subTest(writer=writer), patch.object(pdfmd.pypdf, 'PdfWriter', return_value=writer):
+                self.assertIs(helper.clone_pdf(SimpleNamespace(pdf_header='%PDF-1.7')), writer)
+                if hasattr(writer, '_header'):
+                    self.assertEqual(writer._header, b'%PDF-1.7')
+                self.assertIs(helper.clone_pdf(SimpleNamespace()), writer)
 
     def test_stamp_and_polish_through_pdfmd(self):
         with tempfile.TemporaryDirectory() as directory:

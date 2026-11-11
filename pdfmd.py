@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.177"
+PDFMD_VERSION = "3.33.178"
 import argparse
 import atexit
 import contextlib
@@ -10761,7 +10761,7 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
                     existing["/Creator"] = f"{creator} via pdfmd-cli" if creator else "pdfmd-cli"
                 # clone_from, not append(): append() drops the whole outline of a PDF whose bookmarks are typed
                 # `/Type /Outlines` (Calibre 9.16 writes them so), and a Calibre PDF's bookmarks are its headings
-                writer = pypdf.PdfWriter(clone_from=reader)
+                writer = deferred("pdfmd_polish.info", "clone_pdf")(reader)
                 deferred("pdfmd_polish.info", "add_metadata")(writer, {
                     **existing,
                     f"/{PDF_INFO_VERSIONS_KEY}": summary,
