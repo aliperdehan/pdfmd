@@ -25,9 +25,10 @@ this is **not tested yet** in this alpha.
 
 ## What it does
 
-- Opens any file (the Open panel is not limited to known types); UTF-8, falling back to Latin-1; saves in the
-  encoding it read. Tested without a window: real saves of `.tex`, `.hst`, `.yaml.bak`, a file without extension and a
-  Latin-1 file. It is an `NSDocument` app, so autosave in place, versions, Revert, Open Recent and the Find bar
+- Opens any file (the Open panel is not limited to known types) as UTF-8; a file that is not UTF-8 (Latin-1, UTF-16, Shift-JIS) is
+  shown read-only, read as Latin-1, with a message and "read-only" in the status bar, and is never saved back (reading other encodings
+  is a later step). A reload of a file changed on disk that fails says why. Tested without a window: real saves of `.tex`, `.hst`,
+  `.yaml.bak` and a file without extension; a Latin-1 and a UTF-16 file refused. It is an `NSDocument` app, so autosave in place, versions, Revert, Open Recent and the Find bar
   come with it, but those were **not exercised** by a person yet.
 - Colours Markdown (headings, lists, quotes, emphasis, links, code spans and fences, `$math$`, comments) and a
   YAML front matter. The colours cover the visible lines plus a margin and are kept out of the text storage,

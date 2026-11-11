@@ -113,6 +113,13 @@ func setWrap(_ wrap: Bool, _ tv: NSTextView, _ scroll: NSScrollView) {
 final class EditorDocument: NSDocument {
     var text = ""
     var encoding: String.Encoding = .utf8
+    /// The file is not valid UTF-8: it is shown (as Latin-1, the one reading that never fails) read-only and never saved back, as a
+    /// save would silently turn a UTF-16 or Shift-JIS file into Latin-1. Reading other encodings is a later step.
+    private(set) var notUTF8 = false
+    private var toldNotUTF8 = false
+    /// For the self-test: the error of the last failed reload, which is otherwise shown in an alert.
+    static var quietErrors = false
+    private(set) var lastReloadError: Error?
     var lineEnding: (name: String, unit: unichar) = ("LF", 10)
     var controller: EditorWindowController?
 
@@ -157,10 +164,22 @@ final class EditorDocument: NSDocument {
         else { choose(alert.runModal() == .alertSecondButtonReturn) }
     }
 
-    private func loadFromDisk(_ url: URL) {
+    /// Loads the file on disk into the window (the caret stays where it was). A reload that fails says why and leaves the window as it was.
+    func loadFromDisk(_ url: URL) {
         let caret = controller?.parts.textView.selectedRange().location ?? 0
-        try? revert(toContentsOf: url, ofType: fileType ?? "Markdown and text")
+        do {
+            try revert(toContentsOf: url, ofType: fileType ?? "Markdown and text")
+            lastReloadError = nil
+        } catch {
+            lastReloadError = error
+            if !EditorDocument.quietErrors {
+                if let window = controller?.window { presentError(error, modalFor: window, delegate: nil, didPresent: nil, contextInfo: nil) }
+                else { presentError(error) }
+            }
+            return
+        }
         if let tv = controller?.parts.textView { tv.setSelectedRange(NSRange(location: min(caret, (tv.string as NSString).length), length: 0)) }
+        tellNotUTF8()
     }
 
     override class var readableTypes: [String] { ["Markdown and text"] }
@@ -182,16 +201,43 @@ final class EditorDocument: NSDocument {
     override func read(from data: Data, ofType typeName: String) throws {
         lineEnding = detectLineEnding(data)
         if let s = String(data: data, encoding: .utf8) {
-            text = s; encoding = .utf8
+            text = s; encoding = .utf8; notUTF8 = false
         } else if let s = String(data: data, encoding: .isoLatin1) {
-            text = s; encoding = .isoLatin1
+            text = s; encoding = .isoLatin1; notUTF8 = true
         } else {
             throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadInapplicableStringEncodingError)
         }
         controller?.load(text, document: self)   // a revert: the window exists already
     }
 
+    override func showWindows() {
+        super.showWindows()
+        tellNotUTF8()
+    }
+
+    /// Says once, in a sheet on the window, that the file is shown read-only because it is not UTF-8.
+    private func tellNotUTF8() {
+        guard notUTF8, !toldNotUTF8, let window = controller?.window, window.isVisible else { return }
+        toldNotUTF8 = true
+        let a = NSAlert()
+        a.messageText = "“\(displayName ?? "This file")” is not UTF-8 text."
+        a.informativeText = "It is shown read-only, read as Latin-1, so that a save cannot turn it into another encoding without a word. Other encodings are not read yet."
+        a.beginSheetModal(for: window, completionHandler: nil)
+    }
+
+    /// A file that is not UTF-8 is never written back (no menu item reaches this for it; this is the last word).
+    static let notUTF8Error = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteInapplicableStringEncodingError, userInfo: [
+        NSLocalizedDescriptionKey: "This file is not UTF-8 text, so it is open read-only and is not saved.",
+        NSLocalizedRecoverySuggestionErrorKey: "Copy the text into a new document to keep a UTF-8 version of it."])
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        let saving = [#selector(NSDocument.save(_:)), #selector(NSDocument.saveAs(_:)), #selector(NSDocument.saveTo(_:))]
+        if notUTF8, let action = item.action, saving.contains(action) { return false }
+        return super.validateUserInterfaceItem(item)
+    }
+
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType, completionHandler: @escaping (Error?) -> Void) {
+        if notUTF8 { completionHandler(EditorDocument.notUTF8Error); return }
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             completionHandler(error)
             self?.controller?.statusBar.refresh()   // the size on disk changed
@@ -346,10 +392,11 @@ final class EditorWindowController: NSWindowController, NSMenuItemValidation {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func load(_ text: String, document: EditorDocument) {
-        statusBar.encodingName = encodingDisplayName(document.encoding)
+        statusBar.encodingName = encodingDisplayName(document.encoding) + (document.notUTF8 ? ", read-only" : "")
         statusBar.lineEndingName = document.lineEnding.name
         statusBar.fileURL = document.fileURL
         stats.lineBreak = document.lineEnding.unit
+        parts.textView.isEditable = !document.notUTF8   // not UTF-8: read-only (a revert can change that either way)
         parts.textView.string = text
         stats.reset()
         ruler.reset()

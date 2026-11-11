@@ -467,7 +467,6 @@ enum Smoke {
             ("a.tex", utf8Text.data(using: .utf8)!, ("EDIT " + utf8Text).data(using: .utf8)!),
             ("b.hst", utf8Text.data(using: .utf8)!, ("EDIT " + utf8Text).data(using: .utf8)!),
             ("c_noext", utf8Text.data(using: .utf8)!, ("EDIT " + utf8Text).data(using: .utf8)!),
-            ("d.md", "café ünï\n".data(using: .isoLatin1)!, "EDIT café ünï\n".data(using: .isoLatin1)!),
             ("e.yaml.bak", "key: value\n".data(using: .utf8)!, "EDIT key: value\n".data(using: .utf8)!),
         ]
         var failures = 0
@@ -484,6 +483,38 @@ enum Smoke {
             let onDisk = (try? Data(contentsOf: url)) ?? Data()
             let ok = err == nil && onDisk == expected
             print("\(ok ? "ok  " : "FAIL") save \(name) (\(doc.fileType ?? "no type"), \(doc.encoding == .utf8 ? "utf-8" : "latin-1")) \(err.map { "error: \($0)" } ?? "") edited-after-save: \(doc.isDocumentEdited)")
+            if !ok { failures += 1 }
+            doc.close()
+        }
+        // a file that is not UTF-8 (Latin-1, UTF-16 with its byte-order mark): shown read-only, never saved back in another encoding
+        func readOnly(_ name: String, _ bytes: Data) {
+            let url = base.appendingPathComponent(name)
+            try! bytes.write(to: url)
+            guard let doc = open(url), let controller = doc.controller else { print("FAIL \(name): did not open"); failures += 1; return }
+            var err: Error?
+            var done = false
+            doc.save(to: url, ofType: "Markdown and text", for: .saveOperation) { e in err = e; done = true }
+            while !done { spin(0.05) }
+            let saveItem = NSMenuItem(title: "Save", action: #selector(NSDocument.save(_:)), keyEquivalent: "s")
+            let ok = doc.notUTF8 && !controller.parts.textView.isEditable && err != nil && (try? Data(contentsOf: url)) == bytes
+                && !doc.validateUserInterfaceItem(saveItem) && controller.statusBar.encodingName.hasSuffix("read-only")
+            print("\(ok ? "ok  " : "FAIL") \(name): not UTF-8, read-only, the save refused and the bytes kept \(ok ? "" : "notUTF8 \(doc.notUTF8) editable \(controller.parts.textView.isEditable) error \(err.map { "\($0)" } ?? "none")")")
+            if !ok { failures += 1 }
+            doc.close()
+        }
+        readOnly("d.md", "café ünï\n".data(using: .isoLatin1)!)
+        readOnly("u16.txt", Data([0xFF, 0xFE]) + "UTF-16 text\n".data(using: .utf16LittleEndian)!)
+        // a reload that fails (the file can no longer be read) says why and leaves the window as it was
+        let locked = base.appendingPathComponent("locked.md")
+        try! "kept\n".write(to: locked, atomically: true, encoding: .utf8)
+        if let doc = open(locked), let controller = doc.controller {
+            chmod(locked.path, 0)
+            EditorDocument.quietErrors = true
+            doc.loadFromDisk(locked)
+            EditorDocument.quietErrors = false
+            chmod(locked.path, 0o644)
+            let ok = doc.lastReloadError != nil && controller.currentString() == "kept\n"
+            print("\(ok ? "ok  " : "FAIL") a reload that fails is reported and leaves the text \(ok ? "" : "error \(doc.lastReloadError.map { "\($0)" } ?? "none")")")
             if !ok { failures += 1 }
             doc.close()
         }

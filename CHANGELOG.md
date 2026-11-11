@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.33.183a — 2026-11-12
+
+Pre-edit state: commit `919f5b2`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.5: a file that
+is not UTF-8 opens read-only, and a failed reload says so.** Scout item 1 (approved by the author): the editor read a file as UTF-8
+and otherwise as Latin-1, which never fails, so a UTF-16 or Shift-JIS file opened as mojibake and the next save, autosave in place
+included, wrote it back as Latin-1 without a word; and the reload of a file changed on disk was `try? revert`, so a reload that failed
+left the window silently out of step with the disk. Now a file that is not valid UTF-8 is shown (read as Latin-1) in a text view that
+cannot be edited, the status bar says "read-only", a sheet says why when the window opens, Save, Save As and Save To are off, and
+`save(to:ofType:for:)` refuses as the last word, so nothing reaches the disk; a reload that makes the file UTF-8 again makes the window
+editable again. A failed reload presents its error on the window and leaves the text as it was. Reading other encodings is a later
+item. Regression: `--smoke-save` (headless) now opens a Latin-1 and a UTF-16 file (read-only, the save refused, the bytes kept, Save
+off) instead of saving the Latin-1 one back, and reloads a file that can no longer be read (the error kept, the text unchanged);
+checked failing with the old reading and `try? revert` and passing now; `--smoke` and `--smoke-untitled` still pass.
+
 ## v3.33.183 — 2026-11-12
 
 Pre-edit state: commit `6ab9c87`. Review finding G4.4: `/api/render` of `pdfmd --serve` checked the document's own path but ran
