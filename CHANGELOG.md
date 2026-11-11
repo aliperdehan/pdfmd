@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.150 — 2026-11-11
+
+Pre-edit state: commit `813f3dd`. Office inputs resolved hybrid attachments from user configuration alone, excluding folder settings that enabled the feature or overrode a user-wide enable. The Office branch now passes the document path to config_options, retaining command-line priority. Folder/user regressions in both directions and a checkout attachment test with a stand-in Office converter failed before the fix and pass afterwards, including command-line overrides; embedding and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.149 — 2026-11-11
 
 Pre-edit state: commit `15dd600`. Batch builds omitted the command-line cache override when calling the converter, allowing document settings to defeat both --cache and --no-cache in sequential and parallel runs. Both calls now pass cache_cli=args.cache. Checkout regressions failed before the fix in all four switch/worker combinations and pass afterwards, checking persistent cache manifests as well as PDFs; batch-path, cache-location and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.

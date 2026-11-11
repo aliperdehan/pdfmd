@@ -36,7 +36,7 @@ def resolve_hybrid(path: Path, metadata_files: list[Path]) -> bool:
     if core.HYBRID_CLI is not None:
         return core.HYBRID_CLI
     if path.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
-        return bool(core.option_flag(core.config_options().get("hybrid")))
+        return bool(core.option_flag(core.config_options(path).get("hybrid")))
     return bool(core.option_flag(core.first_pdfmd_option(path, metadata_files, "hybrid")))
 
 
