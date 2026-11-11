@@ -96,10 +96,16 @@ def serve_command(args) -> int:
     try:
         import pdfmd_web
         from pdfmd_serve import run
+        from pdfmd_serve.shell import MAX_REQUEST_MB
     except ImportError as error:
         print(f"--serve needs pdfmd's pdfmd_serve and pdfmd_web packages: {error}", file=sys.stderr)
         return 2
-    return run(serve_core(folder), Path(pdfmd_web.__file__).resolve().parent)
+    # the largest request body (`serve-max-request-mb` in the config's options: MB, 0 or less = no limit), read before serve_core
+    # makes the folder the working one
+    megabytes = core.option_flag_number(core.config_options().get("serve-max-request-mb"))
+    megabytes = MAX_REQUEST_MB if megabytes is None else megabytes
+    return run(serve_core(folder), Path(pdfmd_web.__file__).resolve().parent,
+               max_body=int(megabytes * 1024 * 1024) if 0 < megabytes < float("inf") else None)
 
 
 def api_command(words: list[str]) -> int:

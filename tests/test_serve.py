@@ -30,6 +30,20 @@ PANDOC = shutil.which("pandoc")
 WEB = ROOT / "lib" / "pdfmd_web"
 
 
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _kill(pid: int) -> None:
+    if os.name == "posix" and _alive(pid):
+        import signal
+        os.kill(pid, signal.SIGTERM)
+
+
 def fixtures() -> dict:
     text = (WEB / "fixtures" / "fixtures.js").read_text(encoding="utf-8")
     return json.loads(text.split("window.FIXTURES = ", 1)[1].rstrip().rstrip(";"))
@@ -419,6 +433,41 @@ class Http(Folder):
     def bearer(self):
         return {"Authorization": "Bearer tok-123"}
 
+    def raw_request(self, port, head: str) -> bytes:
+        """Headers sent with no body; the answer read as far as the server sends it (a server waiting for the body times out)."""
+        import socket
+        with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
+            sock.sendall(head.encode("ascii"))
+            return sock.recv(65536)
+
+    def test_a_body_over_the_limit_or_a_negative_length_is_refused_unread(self):
+        server = Server(self.core, WEB, "tok-123", max_body=64)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join(5)))
+        port = server.server_address[1]
+        huge = self.raw_request(port, f"PUT /api/file HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {10 ** 12}\r\n\r\n")
+        self.assertIn(b" 413 ", huge.split(b"\r\n")[0], "answered at once, without waiting for (or allocating) the body")
+        self.assertIn(b"serve-max-request-mb", huge)
+        negative = self.raw_request(port, f"PUT /api/file HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: -1\r\n\r\n")
+        self.assertIn(b" 400 ", negative.split(b"\r\n")[0], "read(-1) would wait for the end of the connection")
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)     # a body within the limit still goes through
+        connection.request("POST", "/api/file", body=json.dumps({"path": "small.md", "text": "x"}),
+                           headers={"Authorization": "Bearer tok-123", "Host": f"127.0.0.1:{port}"})
+        self.assertEqual(connection.getresponse().status, 201)
+        connection.close()
+
+    @unittest.skipUnless(os.name == "posix", "a parent that ends is seen on POSIX only")
+    def test_the_server_stops_when_its_parent_is_gone(self):
+        from pdfmd_serve.shell import ParentGone
+        server = Server(self.core, WEB, "tok-123")
+        self.addCleanup(server.server_close)
+        self.assertEqual(server.parent, os.getppid())
+        server.service_actions()                                   # the parent is there: nothing happens
+        server.parent = -1                                         # as if the process that started it had ended
+        with self.assertRaises(ParentGone):
+            server.service_actions()
+
     def test_it_listens_on_the_loopback_only(self):
         self.assertEqual(self.server.server_address[0], "127.0.0.1")
 
@@ -528,6 +577,46 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(sorted(item["name"] for item in project["tree"]), ["a.md", "z.md"])
             connection.close()
             self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["a.md", "z.md"], "serving builds nothing")
+        finally:
+            process.terminate()
+            process.communicate(timeout=30)
+
+    @unittest.skipUnless(os.name == "posix", "a parent that ends is seen on POSIX only")
+    def test_serve_ends_with_the_program_that_started_it(self):
+        """A crashed Mac app (or a closed terminal) left `pdfmd --serve` idling on its port: the parent here starts it and ends."""
+        out = self.folder / "serve.out"
+        # the starter waits for the server's first line (as the app does) and then ends, leaving the server without its parent
+        starter = ("import subprocess, sys\n"
+                   "p = subprocess.Popen([sys.executable, sys.argv[1], '--serve'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,"
+                   " stderr=subprocess.DEVNULL, text=True)\n"
+                   "open(sys.argv[2], 'w').write(p.stdout.readline())\n"
+                   "print(p.pid)\n")
+        done = subprocess.run([sys.executable, "-c", starter, str(ROOT / "scripts" / "pdfmd"), str(out)], cwd=self.folder,
+                              capture_output=True, text=True, timeout=60)
+        pid = int(done.stdout.strip())
+        self.addCleanup(lambda: _kill(pid))
+        import time
+        self.assertIn('"url"', out.read_text(encoding="utf-8"), "the server started and said where it listens")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and _alive(pid):
+            time.sleep(0.1)
+        self.assertFalse(_alive(pid), "the server outlived the program that started it")
+
+    def test_serve_reads_the_request_limit_from_the_setup(self):
+        """`serve-max-request-mb` in the config's options: a body over it is refused by `pdfmd --serve` itself."""
+        config = self.folder / "config.yaml"
+        config.write_text("options:\n  serve-max-request-mb: 0.001\n", encoding="utf-8")        # about 1 KB
+        process = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--serve"], cwd=self.folder, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                   env={**os.environ, "PDFMD_CONFIG": str(config)})
+        try:
+            info = json.loads(process.stdout.readline())
+            headers = {"Authorization": "Bearer " + info["token"], "Content-Type": "application/json"}
+            for text, status in (("x" * 4000, 413), ("x", 201)):
+                connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
+                connection.request("POST", "/api/file", body=json.dumps({"path": f"n{len(text)}.md", "text": text}), headers=headers)
+                self.assertEqual(connection.getresponse().status, status)
+                connection.close()
         finally:
             process.terminate()
             process.communicate(timeout=30)

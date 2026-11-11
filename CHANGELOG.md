@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.184 — 2026-11-12
+
+Pre-edit state: commit `7a941df`. **Colophon 0.3.7.** Scout item 4 (approved by the author), two holes of `pdfmd --serve`:
+
+- **An orphaned server idled for good.** Colophon starts the server through a login shell and stops it when the window closes or
+  the app quits, but a crashed app left it running on its port (`StudioServer.swift` said so), and so did a closed terminal. On
+  POSIX the server now notes its parent when it starts and stops (`ParentGone`, raised from `service_actions`, which `serve_forever`
+  calls at every turn of its existing 0.2 s poll: no new clock) once the parent has changed, as an orphan's does. Windows gives an
+  orphan no new parent, and `os.kill` there would end a process, so it is not watched there. Under Colophon the parent was the login
+  shell, which outlives the app, so the app's launch line now `exec`s the server (`eval "exec $PDFMD_CMD --serve ..."`): the app is
+  its parent. Note: a server started with `nohup pdfmd --serve &` now ends with its terminal's shell too. No idle time-out: there is
+  no setting for one, so it is left out.
+- **The request body was read unbounded, before the token check.** `Content-Length` went straight to `rfile.read`, so any local
+  process could make the server allocate whatever it named, and a negative length read until the connection ended. A negative or
+  non-numeric length is now a 400 and a body over the new setting **`serve-max-request-mb`** (the config's options: a `--setup` row
+  under Checks and limits, in the inventory; MB, default 100, 0 or less = no limit) a 413, both answered before the body is read and
+  with the connection closed. Read once, from the global setup, when the server starts.
+
+Regression: `tests/test_serve.py`: a 10^12-byte length gets 413 at once and -1 gets 400 while a small body still saves; a server
+whose parent changed raises `ParentGone`; through `scripts/pdfmd`, a server whose starter ends stops by itself, and a config with
+`serve-max-request-mb: 0.001` refuses a 4 KB body and takes a small one. Checked failing on the old server code (the starter's
+server stayed, the 4 KB body was taken) and passing now. Colophon, headless and never shown: the server's parent is the app's
+process, and after a `kill -9` of the app the server was gone within three seconds. pdfmd.py stays at 17,136 lines.
+
 ## v3.33.183c — 2026-11-12
 
 Pre-edit state: commit `8e8fe53`. A workflow only, so no `PDFMD_VERSION` bump and no Colophon one. Scout item 3 (approved by the

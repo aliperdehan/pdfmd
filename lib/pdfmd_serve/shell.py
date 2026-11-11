@@ -2,13 +2,16 @@
 
 The token travels once, in the URL that pdfmd prints (`?t=...`); the server answers it with an HttpOnly, SameSite=Strict cookie and a
 redirect, so the page never handles it. A script may send `Authorization: Bearer TOKEN` instead. Every request is checked for the Host
-(DNS rebinding), a write for the Origin; no CORS header is ever sent, so no other site can read an answer.
+(DNS rebinding), a write for the Origin; no CORS header is ever sent, so no other site can read an answer. A body larger than the
+setting `serve-max-request-mb` is refused before it is read (it is read before the token is checked). On a POSIX system the server
+stops when the program that started it is gone (the Mac app that crashed, the terminal that was closed), instead of idling on its port.
 """
 
 from __future__ import annotations
 
 import hmac
 import json
+import os
 import secrets
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,13 +35,33 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
        "frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; connect-src 'self'; worker-src 'self' blob:")
 
 
+# The default of the setting `serve-max-request-mb`: the largest request body, in MB (a whole file's text in a save, the text of a
+# render). 0 or a negative number: no limit.
+MAX_REQUEST_MB = 100
+
+
+class ParentGone(Exception):
+    """The program that started the server has ended: serve_forever stops (raised from its own loop, as shutdown() there would wait
+    for itself)."""
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, core: Core, web_root: Path, token: str):
+    def __init__(self, core: Core, web_root: Path, token: str, max_body: int | None = None):
         super().__init__(("127.0.0.1", 0), Handler)
         self.core, self.web_root, self.token = core, Path(web_root).resolve(), token
+        self.max_body = max_body if max_body is not None and max_body > 0 else None
+        # the parent of the moment it starts; a POSIX system gives an orphan a new one. Windows does not (and os.kill there would end
+        # a process), so the server only watches on POSIX
+        self.parent = os.getppid() if os.name == "posix" else None
+
+    def service_actions(self) -> None:
+        """Called by serve_forever at every turn of its loop (its poll interval), so the parent is looked at without a clock of its own."""
+        super().service_actions()
+        if self.parent is not None and os.getppid() != self.parent:
+            raise ParentGone
 
     @property
     def hosts(self) -> set:
@@ -104,8 +127,20 @@ class Handler(BaseHTTPRequestHandler):
         length = self.headers.get("Content-Length")
         if length:
             try:
-                self.body = self.rfile.read(int(length))
-            except (ValueError, OSError):
+                size = int(length)
+            except ValueError:
+                size = -1
+            if size < 0:                                     # read(-1) would wait for the end of the connection
+                self.close_connection = True
+                return self.refuse(400, "length", "a bad Content-Length")
+            limit = self.server.max_body
+            if limit is not None and size > limit:           # refused unread: the connection cannot carry another request
+                self.close_connection = True
+                return self.refuse(413, "too_large", f"the request body is {size} bytes, over the limit of {limit} "
+                                                     "(the setting serve-max-request-mb)")
+            try:
+                self.body = self.rfile.read(size)
+            except OSError:
                 self.close_connection = True
                 return self.refuse(400, "length", "a bad Content-Length")
         if self.headers.get("Host", "") not in self.server.hosts:
@@ -156,10 +191,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send(200, target.read_bytes(), MIME[target.suffix.lower()])
 
 
-def run(core: Core, web_root: Path, announce=None) -> int:
-    """Serve until interrupted. `announce(info)` is called once with `{api, url, port, token, root}` (default: one JSON line on stdout)."""
+def run(core: Core, web_root: Path, announce=None, max_body: int | None = None) -> int:
+    """Serve until interrupted, or until the program that started the server is gone (POSIX). `announce(info)` is called once with
+    `{api, url, port, token, root}` (default: one JSON line on stdout); `max_body` is the largest request body in bytes (None: no limit)."""
     token = secrets.token_urlsafe(24)
-    server = Server(core, web_root, token)
+    server = Server(core, web_root, token, max_body)
     port = server.server_address[1]
     info = {"api": API_VERSION, "url": f"http://127.0.0.1:{port}/?t={token}", "port": port, "token": token, "root": core.display(core.root)}
     if announce is None:
@@ -168,7 +204,7 @@ def run(core: Core, web_root: Path, announce=None) -> int:
         announce(info)
     try:
         server.serve_forever(poll_interval=0.2)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ParentGone):
         pass
     finally:
         server.server_close()

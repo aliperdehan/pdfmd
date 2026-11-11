@@ -1764,7 +1764,9 @@ The server is meant to be safe on a shared machine: it listens on 127.0.0.1 only
 printed URL trades it for a cookie once, a script sends `Authorization: Bearer TOKEN`); a request is refused when its `Host` is not
 `127.0.0.1` or `localhost` (DNS rebinding) or, for a write, when its `Origin` is another site; files are reached only below the project folder
 (`..`, absolute paths and links out of the folder are refused) and the page is sent with a policy that stops a script in a document's raw
-HTML from running. No CORS header is sent, so no other site can read an answer.
+HTML from running. No CORS header is sent, so no other site can read an answer. A request body over `serve-max-request-mb` (in the setup's options, 100 MB by default; 0 = no limit) is refused (413)
+before it is read. On macOS and Linux the server stops by itself when the program that started it ends (the Mac app that crashed, the
+shell of a terminal that was closed, under `nohup` too), instead of idling on its port.
 
 The JSON is a public contract for other programs too, and `pdfmd --api METHOD PATH [JSON]` answers one request on stdout without a server
 (`JSON` may be `-` to read it from standard input; the exit status is 1 for an error answer):
