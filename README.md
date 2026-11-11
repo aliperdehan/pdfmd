@@ -1513,7 +1513,8 @@ pdfmd-options:
   embed: {lua: ref}        # what --assemble-only embeds without the flag
 ```
 
-Plain HTML output is a fragment. For a finished page, or one file with
+Plain HTML output is a fragment with MathML maths by default; an explicit
+`html.math`, Pandoc maths flag or passed defaults file chooses the method. For a finished page, or one file with
 everything (images, CSS) inlined, ask for it, on the command line or in the
 document:
 

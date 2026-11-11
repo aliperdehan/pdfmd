@@ -483,8 +483,8 @@ HTML output and a default format (v3.19.4):
     from the first file in -r report mode. A missing PDF engine is an error
     only for a document that really builds a PDF.
 
-    `pdfmd-options: {html: {...}}` shapes an HTML build, and does nothing
-    unless set -- pdfmd's HTML output stays the fragment it was:
+    `pdfmd-options: {html: {...}}` shapes an HTML build; without a full
+    page setting, pdfmd's HTML output stays a fragment:
 
         pdfmd-options:
           html:
@@ -494,7 +494,7 @@ HTML output and a default format (v3.19.4):
             css: style.css         # a name or a list, relative to the document
 
     `self-contained` is `--standalone --embed-resources` (`--self-contained`
-    on a Pandoc older than 2.19), and then math defaults to MathML, the one
+    on a Pandoc older than 2.19); HTML maths defaults to MathML, including fragments, the one
     kind that needs no network (mathjax/katex/webtex fetch their scripts when
     the file is built; pdfmd passes the method as `--math-method=` on Pandoc
     3.11 and later, `--html-math-method=` on the range before, and the short
@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.175"
+PDFMD_VERSION = "3.33.176"
 import argparse
 import atexit
 import contextlib
@@ -11478,7 +11478,7 @@ def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metada
 # --stop-at, no -p). `pdfmd-options: {html: {...}}` shapes an HTML build:
 #   self-contained: true   one file with everything inlined (--embed-resources
 #                          --standalone; pdfmd's HTML output is otherwise a
-#                          fragment, unchanged); math defaults to MathML then,
+#                          fragment); maths defaults to MathML in fragments too,
 #                          the one kind that needs no network
 #   standalone: true       a full page, resources left linked
 #   math: mathml|mathjax|katex|webtex|plain
@@ -11719,8 +11719,7 @@ def html_settings(md_path: Path, metadata_files: list[Path]) -> dict:
 def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: list[str],
                      cli_self_contained: bool | None, note) -> list[str]:
     """The Pandoc arguments an HTML target adds (see the comment above
-    HTML_TARGETS); nothing at all unless something asks for it, so a plain
-    `pdfmd x -o x.html` is exactly what it was."""
+    HTML_TARGETS), with MathML unless the user chooses a method."""
     settings = html_settings(md_path, metadata_files)
     truthy = lambda value: value is True or str(value).casefold() in {"true", "yes", "on"}
     self_contained = (cli_self_contained if cli_self_contained is not None
@@ -11734,12 +11733,7 @@ def html_pandoc_args(md_path: Path, metadata_files: list[Path], pandoc_options: 
         note("HTML", f"{md_path}: self-contained: one file, resources inlined")
     elif standalone:
         note("HTML", f"{md_path}: a full page (--standalone)")
-    math = str(settings.get("math", "")).casefold()
-    has_math_option = any(item.startswith(HTML_MATH_OPTIONS) for item in pandoc_options)
-    if not has_math_option and math in HTML_MATH_METHODS:
-        out += html_math_args(math)
-    elif not has_math_option and math in ("", "auto") and self_contained:
-        out += html_math_args("mathml")  # the one kind of math that needs no network
+    out += deferred("pdfmd_bridge.html_math", "arguments")(settings, pandoc_options, md_path, metadata_files)
     css = settings.get("css")
     for name in ([css] if isinstance(css, str) else css if isinstance(css, list) else []):
         out += ["--css", str((md_path.parent / str(name)).resolve())]

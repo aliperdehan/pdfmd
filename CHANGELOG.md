@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.176 — 2026-11-12
+
+Pre-edit state: commit `acca9b8`. DECISION 54: an ordinary HTML fragment inherited Pandoc's maths default, so older Pandoc left some formulae as raw TeX with a warning. Every HTML target now explicitly names MathML in the installed Pandoc's spelling unless html.math, a Pandoc maths flag or a passed defaults file chooses a method. The helper lives in pdfmd_bridge; the two calc tests no longer inject a MathML header. Regression: test_html_math checks default and explicit methods, defaults files and a fragment through the checkout launcher; checked failing before and passing after. pdfmd.py shrinks from 17,217 to 17,211 lines.
+
 ## v3.33.175d — 2026-11-12
 
 Pre-edit state: commit `c3cde16`. A test and the workflow only, from the second CI run's `windows-latex` job (not gating;

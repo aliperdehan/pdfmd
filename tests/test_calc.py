@@ -36,14 +36,6 @@ def pypdf_available() -> bool:
     return True
 
 
-def pandoc_html_math_is_mathml() -> bool:
-    """Whether the installed Pandoc writes MathML for HTML when no math method is named (recent ones do; 3.1.3 writes its
-    plain-text maths, which leaves a formula it cannot set as TeX with a warning of Pandoc's own)."""
-    if PANDOC is None:
-        return True
-    done = subprocess.run([PANDOC, "-t", "html"], input="$x$", capture_output=True, text=True, encoding="utf-8")
-    return "<math" in done.stdout
-
 CALC_LUA = ROOT / "lib" / "pdfmd_lua" / "calc.lua"
 
 # expression -> the text it becomes (R's print: 7 significant digits, 20 and not 20.0)
@@ -606,9 +598,7 @@ class Switches(unittest.TestCase):
         self.assertEqual(convert("latex", "--calc-typeset", "--no-calc-typeset"), off)
         self.assertEqual(convert("latex", "--no-calc-typeset", header="pdfmd-options:\n  calc:\n    typeset: true\n"), off)
         self.assertIn("V_(upright(e l))", convert("typst", "--calc-typeset"))
-        # MathML: Pandoc's default on a recent Pandoc, asked for by name on an older one (pdfmd's html: math: option)
-        mathml = "" if pandoc_html_math_is_mathml() else "pdfmd-options:\n  html:\n    math: mathml\n"
-        self.assertIn("<math", convert("html", "--calc-typeset", header=mathml))
+        self.assertIn("<math", convert("html", "--calc-typeset"))
         for target in ("markdown", "gfm", "plain"):                                                 # no maths there: the text stays
             with self.subTest(target=target):
                 self.assertEqual(convert(target, "--calc-typeset"), convert(target))
@@ -639,8 +629,7 @@ class Switches(unittest.TestCase):
         self.assertEqual(convert("latex", "--calc-typeset", "display", "--no-calc-typeset"), convert("latex"))
         self.assertEqual(convert("latex", "--calc-typeset", "inline"), convert("latex", "--calc-typeset"))
         self.assertIn('upright("Total DNA: ")', convert("typst", "--calc-typeset", "display"))
-        mathml = "" if pandoc_html_math_is_mathml() else "pdfmd-options:\n  html:\n    math: mathml\n"   # as above
-        self.assertIn("<math display=\"block\"", convert("html", "--calc-typeset", "display", header=mathml))
+        self.assertIn("<math display=\"block\"", convert("html", "--calc-typeset", "display"))
         for target in ("markdown", "plain"):
             with self.subTest(target=target):
                 self.assertEqual(convert(target, "--calc-typeset", "display"), convert(target))
