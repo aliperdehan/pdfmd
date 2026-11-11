@@ -123,7 +123,16 @@ enum CLI {
         guard let app = appURL() else { fail("Colophon.app was not found in ~/Applications or /Applications") }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = (wait ? ["-W"] : []) + ["-a", app.path] + files.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+        let paths = files.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+        if wait {
+            for path in paths where !FileManager.default.fileExists(atPath: path) { fail("file not found: \(path)") }
+            p.arguments = ["-n", "-W", "-a", app.path, "--args", "--colophon-wait"] + paths
+            var env = ProcessInfo.processInfo.environment
+            env.removeValue(forKey: "COLOPHON_CLI")
+            p.environment = env
+        } else {
+            p.arguments = ["-a", app.path] + paths
+        }
         do { try p.run() } catch { fail("cannot run open: \(error.localizedDescription)", code: 126) }
         p.waitUntilExit()
         exit(p.terminationStatus)

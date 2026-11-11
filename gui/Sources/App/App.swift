@@ -36,12 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         buildMenus()
         LiveSettings.install(domain: Bundle.main.bundleIdentifier ?? "io.github.aliperdehan.pdfmdedit")
         let paths = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0) }
-        launchedWithFiles = !paths.isEmpty
+        let waiting = CommandLine.arguments.contains("--colophon-wait")
+        launchedWithFiles = !paths.isEmpty || waiting
         for p in paths {
             NSDocumentController.shared.openDocument(withContentsOf: URL(fileURLWithPath: p), display: true) { _, _, error in
                 if let error { NSApp.presentError(error) }
             }
         }
+        if waiting && paths.isEmpty { NSDocumentController.shared.newDocument(nil) }
         if CommandLine.arguments.contains("--web") { WebStudioController.open() }   // the web studio at launch (a Mac window around lib/pdfmd_web)
         NSApp.activate(ignoringOtherApps: true)
         PopController.shared.settingsChanged()   // the menu-bar icon and the shortcut, when the setting says so

@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185f — 2026-11-12
+
+Pre-edit state: commit `2a42b0e`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.14: wait for a dedicated open instance.** `colophon open -w` attached to an already-running app and waited for that app to quit even after the requested document closed. It now opens a separate instance that quits when its last window closes; a wait without files opens an untitled document. Missing files are reported before starting it.
+
+Regression: `tests/test_colophon_open_wait.py` checks the launch arguments without opening a window; it fails before the fix and passes afterwards. Swift build checks the application compiles; the window lifecycle was not exercised because this task forbids launching the app.
+
 ## v3.33.185e — 2026-11-12
 
 Pre-edit state: commit `7078730`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.13: stop timed-out tool probes and drain their output.** A shell child that ignored SIGTERM could survive tool discovery and hold its output reader indefinitely. Discovery now stops the process tree, escalates after the existing Build stop grace, and bounds the output drain without leaving a blocking reader. The setting also controls these probe delays.
