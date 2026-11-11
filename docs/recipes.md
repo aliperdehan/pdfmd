@@ -36,6 +36,7 @@ pdfmd                     # finds it, finds its metadata, preamble and filters, 
 
 With a single `.md` in the folder you never need the name. With several it stops and says so: name one
 (`pdfmd lecture`), convert all separately (`-b`) or join them (`-r`).
+Name several paths (`pdfmd a.md b.md`) to build them separately too; `pdfmd *` skips PDFs and other non-inputs in one `NOTE`.
 
 ### 1.2 Name a document loosely
 
@@ -332,7 +333,15 @@ pdfmd book -r -i appendix          # leave one out
 pdfmd book -r --exclude-unnumbered # skip files without a chapter:
 pdfmd notes -b                     # or: every file its own PDF, in parallel (-j N workers)
 pdfmd notes -b --recursive -o out/ # include subfolders; collect the PDFs in out/
+pdfmd -b a.md notes/               # mix explicit inputs and folders; build duplicates once
+pdfmd a.md b.md                    # same as -b a.md b.md; -r still joins into one document
+pdfmd -b *                        # skip earlier PDFs, pictures and other non-input paths in one NOTE
 ```
+
+Folders still supply only `.md` files; named files may use other Pandoc input formats. Single-file readers for PDFs,
+Quarto and non-Pandoc ebooks are excluded; name those alone. A batch with no buildable inputs fails.
+Use `-o out/` for an output folder; `-o one.pdf` and single-document options such as `--watch` are refused.
+With exactly two paths, a skipped PDF beside a buildable input adds `to name the output, use -o NAME.pdf`.
 
 ### 3.2 One document in parts
 

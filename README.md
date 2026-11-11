@@ -564,6 +564,8 @@ pdfmd lecture                 # finds lecture.md, writes lecture.pdf beside it
 pdfmd lecture.md --open       # ...and opens it when done
 pdfmd ~/notes/lecture.md -d   # write the PDF into the current directory instead
 pdfmd lecture -w              # watch: rebuild on every save, until Ctrl+C
+pdfmd a.md b.md               # several input paths: build each separately, like -b
+pdfmd *                      # build inputs separately; skip PDFs and pictures in one NOTE
 ```
 
 A bare name is looked up as `<name>.md`. The name can contain dots:
@@ -1836,12 +1838,24 @@ OK    notes/week1.md > week1.pdf
 OK    notes/week2.md > week2.pdf
 ```
 
-`-b` converts every `.md` in the folder into its own PDF, in parallel
-(`-j N` sets the number of workers). `--bopen SPEC` opens some of the finished files when
+`-b` accepts files, folders or a mixture: `pdfmd -b a.md b.md`, `pdfmd -b a.md notes/` or `pdfmd -b *`.
+Each folder supplies its `.md` files as before; explicit files can also use other Pandoc input formats.
+Several paths without `-b` do the same (`pdfmd a.md b.md` or `pdfmd *`); `-r` still joins them into one document,
+and a single path keeps single-file mode. Resolved duplicates are built once. Non-input paths, including PDFs,
+pictures and folders without Markdown, are skipped in one `NOTE`; if nothing remains, the command fails.
+Special single-file readers such as PDF-to-Markdown, Calibre ebook input and Quarto are excluded from batches;
+Pandoc-readable EPUB files are accepted. With two paths, a skipped PDF beside a selected input also gives the hint
+`to name the output, use -o NAME.pdf`. To build just that PDF as an input, name it alone.
+
+Every input becomes its own output; `-j N` sets the number of workers over the whole list.
+`-o DIR` collects the results in a folder; `-o FILE.pdf` is refused (an existing directory with that name is allowed).
+Single-document options such as `--watch` and `--section` are refused as in folder batches.
+`--bopen SPEC` opens some of the finished files when
 the batch is done: `f5` the first five, `l5` the last five, `fl10` the first five and the last five, `e3` the third, sixth, ninth ... file, `s3` the first, fourth, seventh ... (Python's `[::3]`),
 `f2,l3` a mix, or none for all (any number works; the files open in the order the batch lists them). Add `--recursive` to include
 subfolders, and `-o DIR` to collect the PDFs somewhere else. A document with `priority: never` is left out of the batch (one `NOTE`
-names it); `--all` includes it. `draft` and the numbers do not matter here: they only choose one document.
+names it); `--all` includes it. An explicitly named file is built even with `priority: never`.
+`draft` and the numbers do not matter here: they only choose one document.
 
 ### A book or report from several files
 

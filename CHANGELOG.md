@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.140 — 2026-11-11
+
+Pre-edit state: commit `9a194d3`. **Build several input paths separately.** The author's explicit-file batch
+failed because `-b` required one folder; plain multiple paths also failed. Batch mode now accepts mixed files and
+folders, and multiple paths without `-r` use the same pipeline. Folder discovery retains its Markdown-only rules;
+explicit Pandoc inputs are deduplicated by resolved path. EPUBs use the existing scratch Markdown reader before
+text-based metadata inspection, retaining their resources, output folders and display names in workers too.
+PDFs and other non-inputs are skipped in one NOTE, with
+an output-naming hint for a PDF beside an input in the two-path case; an empty selection fails. Single-file mode,
+report merging and compatibility output arguments retain their meanings. Output filenames and existing single-document
+restrictions are refused for batches; output folders and workers apply across the selection.
+
+Selection and validation live in `lib/pdfmd_batch`; `pdfmd.py` grows by one dispatch line (17,211 to 17,212 lines) to
+route batches before the special single-file readers. Help, the README, recipes and agent guide describe the inputs.
+Regression tests failed before the fix and pass afterwards, including checkout-launcher builds with synthetic names
+containing spaces, Cyrillic and brackets, earlier PDF outputs, mixed folders, duplicate paths, attachments, parallel
+workers, other Pandoc formats, single-file PDF routing and compatibility commands. Area tests and the required split,
+packaging, documentation, setup and isolation checks run. No new setting or behavioural threshold is introduced.
+
 ## v3.33.139 — 2026-11-11
 
 Pre-edit state: commit `85e665f`. **Repair the full-screen Windows PATH action.** Selecting the action passed

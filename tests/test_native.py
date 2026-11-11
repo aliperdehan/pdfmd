@@ -495,14 +495,15 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
             self.assertIn("NOTE  Pandoc was not found: building with the built-in renderer", result.stdout)
             self.assertTrue((Path(directory) / "doc.pdf").is_file())
 
-    def test_batch_with_files_says_only_that_it_takes_a_folder(self):
-        """v3.33.45: the Pandoc note was printed before the error."""
+    def test_batch_with_missing_file_fails_before_the_pandoc_note(self):
+        """Input errors are reported before the native fallback note."""
         with tempfile.TemporaryDirectory() as directory:
             for name in ("a.md", "b.md"):
                 (Path(directory) / name).write_text("# Hi\n", encoding="utf-8")
-            result = self.run_pdfmd("-b", "a.md", "b.md", cwd=directory)
+            with mock.patch.dict(os.environ, {"TEXMFVAR": str(Path(directory) / "texmf-var")}):
+                result = self.run_pdfmd("-b", "a.md", "missing.md", cwd=directory)
             self.assertEqual(result.returncode, 1)
-            self.assertEqual(result.stdout + result.stderr, "Batch mode requires one directory path\n")
+            self.assertEqual(result.stdout + result.stderr, "missing.md: no such file or directory\n")
 
     def test_things_that_need_pandoc_still_say_so(self):
         with tempfile.TemporaryDirectory() as directory:

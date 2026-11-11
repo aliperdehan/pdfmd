@@ -9,6 +9,9 @@ A short guide for a program or an AI assistant that runs `pdfmd`. The same text 
 pdfmd report.md                     # Markdown to report.pdf beside it; the closing line names the engine
 pdfmd report.md -o out.pdf          # a name; the suffix picks the format (.docx .odt .epub .html .tex .azw3 ...)
 pdfmd report.md --to docx           # the format by name
+pdfmd -b a.md notes/                # separate builds from files and folders; each folder supplies *.md
+pdfmd a.md b.md                     # several paths imply -b; -r still merges them
+pdfmd *                            # skip non-inputs (including PDFs and pictures) in one NOTE; deduplicate inputs
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
 pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
 pdfmd --doctor                      # what is installed and what is missing, with the command that fixes each
@@ -20,6 +23,11 @@ pdfmd --install full                # Pandoc and Typst into pdfmd's own folder, 
 pdfmd --restore report.pdf          # a PDF that carries its own source: write the folder back (never over a file)
 pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the attachment list only)
 ```
+
+Batch selection uses resolved paths and fails if nothing buildable remains. Explicit files can use Pandoc input
+formats; special single-file routes such as PDF-to-Markdown, Quarto and non-Pandoc ebooks are excluded. Name those alone.
+Use `-o DIR` for batch output; a filename is refused, as are single-document options such as `--watch` and `--section`.
+With two paths, a skipped PDF beside a selected input adds `to name the output, use -o NAME.pdf`.
 
 ## Reading what pdfmd says
 

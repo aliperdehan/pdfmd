@@ -143,11 +143,28 @@ class Build(unittest.TestCase):
         self.assertIn("Install Calibre", done.stdout + done.stderr)
         self.assertFalse((self.directory / "out.md").exists())
 
-    def test_an_ebook_is_built_alone(self):
+    def test_an_epub_and_markdown_build_separately(self):
         (self.directory / "other.md").write_text("Hello\n", encoding="utf-8")
-        done = self.run_pdfmd("book.epub", "other.md", calibre=False)
-        self.assertNotEqual(done.returncode, 0)
-        self.assertIn("one at a time", done.stdout + done.stderr)
+        for jobs, destination in (("1", None), ("2", "out")):
+            with self.subTest(jobs=jobs):
+                extra = ["-o", destination] if destination else []
+                done = self.run_pdfmd("book.epub", "other.md", "--to", "html", "--self-contained", "-j", jobs,
+                                      *extra, calibre=False)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                folder = self.directory / destination if destination else self.directory
+                self.assertTrue((folder / "book.html").is_file())
+                self.assertTrue((folder / "other.html").is_file())
+                self.assertIn("data:image/png;base64,", (folder / "book.html").read_text(encoding="utf-8"))
+                self.assertIn(f"book.epub > {Path(destination or '.') / 'book.html'}", done.stdout)
+                self.assertEqual(self.calls(), [])
+
+    def test_a_non_pandoc_ebook_is_skipped_in_a_batch(self):
+        (self.directory / "other.md").write_text("Hello\n", encoding="utf-8")
+        done = self.run_pdfmd("book.mobi", "other.md", "--to", "html", calibre=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("NOTE  skipped non-input paths: book.mobi", done.stdout)
+        self.assertTrue((self.directory / "other.html").is_file())
+        self.assertEqual(self.calls(), [])
 
     def test_a_missing_book_is_named(self):
         done = self.run_pdfmd("gone.epub", calibre=False)

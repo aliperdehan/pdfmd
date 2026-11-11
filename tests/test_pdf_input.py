@@ -107,11 +107,13 @@ class PdfInput(unittest.TestCase):
             self.assertEqual(done.returncode, 1, args)
             self.assertFalse(self.record.exists(), args)
 
-    def test_pdf_and_markdown_together_are_refused(self):
+    def test_pdf_beside_markdown_is_skipped_without_reading_it(self):
         (self.root / "b.md").write_text("x\n", encoding="utf-8")
-        done = self.run_pdfmd("a.pdf", "b.md", batchocr=self.fake())
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("cannot be given together", done.stderr)
+        done = self.run_pdfmd("a.pdf", "b.md", "-e", "inkmd", batchocr=self.fake())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("NOTE  skipped non-input paths: a.pdf; to name the output, use -o NAME.pdf", done.stdout)
+        self.assertTrue((self.root / "b.pdf").is_file())
+        self.assertFalse(self.record.exists())
 
     def test_the_exit_status_is_batchocrs(self):
         self.assertEqual(self.run_pdfmd("a.pdf", batchocr=self.fake(code=1)).returncode, 1)

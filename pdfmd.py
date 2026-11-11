@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.139"
+PDFMD_VERSION = "3.33.140"
 import argparse
 import atexit
 import contextlib
@@ -16564,16 +16564,17 @@ def run_main() -> None:
         if args.uninstall.startswith("ocr"):
             raise SystemExit(0 if install_ocr_languages(args.uninstall.partition(":")[2], remove=True) else 1)
         raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)
-    routed = route_pdf_input(args, pandoc_options)
-    if routed is not None:
-        raise SystemExit(routed)
-    routed = route_text_input(args, pandoc_options)
-    if routed is not None:
-        raise SystemExit(routed)
-    route_ebook_input(args)
-    if args.batch:                      # before any note (Pandoc missing, the native tier) is printed
-        from pdfmd_batch import check_paths
-        check_paths(args.path or [Path.cwd()])
+    if args.batch or (not args.report and len(args.path or []) > 1):
+        from pdfmd_batch import prepare_inputs
+        prepare_inputs(sys.modules[__name__], args)
+    else:
+        routed = route_pdf_input(args, pandoc_options)
+        if routed is not None:
+            raise SystemExit(routed)
+        routed = route_text_input(args, pandoc_options)
+        if routed is not None:
+            raise SystemExit(routed)
+        route_ebook_input(args)
     if not which("pandoc") and not native_possible(args):
         raise SystemExit(PANDOC_MISSING)
     paths = args.path or [Path.cwd()]

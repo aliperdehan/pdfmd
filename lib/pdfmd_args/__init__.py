@@ -79,10 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
     if TieredHelp is not None:
         parser.add_argument("-h", "--help", action=TieredHelp)
     parser.add_argument("--version", action="version", version=f"pdfmd {core.PDFMD_VERSION}")
-    parser.add_argument("path", type=Path, nargs="*", help="Markdown name, files, or directory (default: current directory)")
+    parser.add_argument("path", type=Path, nargs="*", help="Markdown name, input files or folders; several paths build separately (default: current directory)")
     parser.add_argument("-p", "--presentation", action="store_true", help="create Beamer slides")
     parser.add_argument("--slide-level", type=int, help="Beamer heading level used for slide breaks")
-    parser.add_argument("-b", "--batch", action="store_true", help="convert all Markdown files")
+    parser.add_argument("-b", "--batch", action="store_true", help="build files and folders separately (folders select *.md); skip non-inputs")
     parser.add_argument("-r", "--report", "--book", action="store_true",
                         help="combine all Markdown files in PATH into one PDF")
     parser.add_argument("--recursive", action="store_true",
