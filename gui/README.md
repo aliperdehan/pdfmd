@@ -53,7 +53,7 @@ this is **not tested yet** in this alpha.
   inline math, chemistry with `mhchem`, text) or a Markdown snippet (through pdfmd) to a tightly cropped vector PDF, shows it, and
   copies it as PDF and PNG with ⌘↩ (or drag it out, or Save as PDF, PNG or SVG). Window > Equation Popup (⌥⌘E) opens it. The preamble
   is a plain file (`~/Library/Application Support/pdfmdedit/popup/preamble.tex`, copied once from eqpop's folder if there is one, never
-  overwritten); a failed run shows a table of every error (double-click jumps to the line) and a Log. `pdflatex` renders from a cached,
+  overwritten; the pane saves it as it is typed, and asks first when another program changed it since the pane read it); a failed run shows a table of every error (double-click jumps to the line) and a Log. `pdflatex` renders from a cached,
   compiled preamble. With the setting **`popMenuBar`** on, Colophon keeps running in the menu bar (an `f(x)` icon, a global shortcut,
   `popHotkey`, ⌥⇧T by default; **quit a still-running eqpop first**: it holds the same shortcut, and macOS lets both apps register it, so neither tells you about the clash) and stays alive when its last window is closed; with
   it off, which is the default, there is no icon and no shortcut. Every choice is a setting on the Popup tab (and so a

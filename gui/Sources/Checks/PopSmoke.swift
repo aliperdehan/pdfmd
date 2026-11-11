@@ -169,6 +169,26 @@ enum PopSmoke {
         Settings.set("popPreambleShown", 0)
         c.settingsChanged()
         check("and 0 closes it again to the same size", c.paneBox.isHidden && abs(c.panel.frame.height - h0) < 1)
+        // the pane's file changed by another program: an edit in the pane does not replace it unasked (the scratch preamble)
+        c.paneSeg.selectedSegment = 0
+        c.loadPane()
+        let preURL = PopStore.preambleURL
+        let onDisk = { (try? String(contentsOf: preURL, encoding: .utf8)) ?? "" }
+        try? "% changed by another program\n".write(to: preURL, atomically: true, encoding: .utf8)
+        c.preambleView.string += "% typed in the pane\n"
+        c.paneChoice = false
+        c.savePane(to: preURL)
+        check("an edit over a preamble changed elsewhere asks; Load keeps the file and shows it", onDisk() == "% changed by another program\n" && c.preambleView.string == onDisk(), onDisk())
+        c.preambleView.string += "% typed again\n"
+        c.paneChoice = nil   // nothing changed on disk since: no question (an alert here would hang the test)
+        c.savePane(to: preURL)
+        check("then an edit is saved as it is typed", onDisk() == "% changed by another program\n% typed again\n", onDisk())
+        try? "% changed again\n".write(to: preURL, atomically: true, encoding: .utf8)
+        c.preambleView.string += "% mine\n"
+        c.paneChoice = true
+        c.savePane(to: preURL)
+        check("Keep Mine replaces the file with the pane's text", onDisk() == c.preambleView.string && onDisk().hasSuffix("% mine\n"), onDisk())
+        c.paneChoice = nil
         Settings.set("popMode", "inline"); Settings.set("popEngine", "lualatex"); Settings.set("popPdfmdEngine", "typst")
         c.settingsChanged()
         check("popMode, popEngine and popPdfmdEngine show in the open window", c.selectedMode == .inline && c.selectedEngine == .lualatex && c.pdfmdPopup.titleOfSelectedItem == "typst")

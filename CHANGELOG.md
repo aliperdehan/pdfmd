@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.181c — 2026-11-12
+
+Pre-edit state: commit `5b329f4`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.4: the
+popup's preamble and metadata panes no longer overwrite a file changed elsewhere.** Review finding G3.1: the pane writes its
+file at every key press, the whole text at once, and did so without looking at the disk: with the pane open, a change made to
+`preamble.tex` (or `pdfmd-metadata.yaml`) in another editor was replaced by the pane's older text at the next key press. The
+pane now keeps the bytes it read (or last wrote) and `PopController.savePane` compares them with the disk before writing; when
+the file changed meanwhile, an alert offers Keep Mine (the file is replaced) or Load the File on Disk (the typing is dropped and
+the pane shows the file). A file that is gone is written again, and a failed write now says so in the status line instead of
+being ignored. Regression: `--smoke-pop` (headless, on its scratch folder) changes the scratch preamble behind the pane and checks
+Load, a plain edit afterwards with no question, and Keep Mine; checked failing with the old unconditional write and passing now.
+
 ## v3.33.181b — 2026-11-12
 
 Pre-edit state: commit `d1731fc`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.3: a link in

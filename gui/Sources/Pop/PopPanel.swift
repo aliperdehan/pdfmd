@@ -63,6 +63,10 @@ final class PopController: NSObject, NSTextViewDelegate {
     static var preamblePaneHeight: CGFloat { CGFloat(Settings.number("popPaneHeight")) }
     var built = false
     var offscreen = false                  // tests and screenshots: the window is never shown, nothing is saved
+    /// The bytes of the pane's file as the pane last read or wrote them: an edit is saved over the file only while it still holds them.
+    var paneOnDisk: Data?
+    /// For the smoke test: the answer to the conflict question without an alert (true = keep the pane's text, false = load the file).
+    var paneChoice: Bool?
 
     // what it does
     let renderer = PopRenderer()
@@ -132,7 +136,9 @@ final class PopController: NSObject, NSTextViewDelegate {
         preambleView = preambleScroll.documentView as? NSTextView
         PopController.plainCode(preambleView)
         preambleView.delegate = self
-        preambleView.string = PopStore.preamble()
+        _ = PopStore.preamble()   // creates the file on first use
+        paneOnDisk = try? Data(contentsOf: PopStore.preambleURL)
+        preambleView.string = paneOnDisk.flatMap { String(data: $0, encoding: .utf8) } ?? PopStore.defaultPreamble
         preambleScroll.hasVerticalScroller = true
         preambleScroll.borderType = .bezelBorder
         preambleEditing = PopTeXEditing(preambleView)
@@ -363,7 +369,7 @@ final class PopController: NSObject, NSTextViewDelegate {
     func textDidChange(_ n: Notification) {
         if (n.object as? NSTextView) === preambleView {
             let file = paneSeg.selectedSegment == 1 ? PopStore.metadataURL : PopStore.preambleURL
-            if !offscreen { try? preambleView.string.write(to: file, atomically: true, encoding: .utf8) }   // the file is the source of truth
+            if !offscreen { savePane(to: file) }   // the file is the source of truth
             changed(after: Settings.number("popPreambleDelayMs") / 1000)
         } else {
             keep("popSource", input.string)
@@ -394,7 +400,35 @@ final class PopController: NSObject, NSTextViewDelegate {
     func loadPane() {
         let meta = paneSeg.selectedSegment == 1
         preambleEditing.yaml = meta
-        preambleView.string = meta ? PopStore.metadata() : PopStore.preamble()
+        _ = meta ? PopStore.metadata() : PopStore.preamble()   // creates the file on first use
+        paneOnDisk = try? Data(contentsOf: meta ? PopStore.metadataURL : PopStore.preambleURL)
+        preambleView.string = paneOnDisk.flatMap { String(data: $0, encoding: .utf8) } ?? (meta ? PopStore.defaultMetadata : PopStore.defaultPreamble)
+    }
+
+    /// Writes the pane's text to its file, at every edit. When another program changed the file since the pane read it (or last wrote
+    /// it), the author is asked first: keep the pane's text (the file on disk is replaced) or load the file (what was typed in the pane
+    /// is dropped). A file that is gone is written again.
+    func savePane(to file: URL) {
+        let disk = try? Data(contentsOf: file)
+        let mine = preambleView.string
+        if let disk, disk != paneOnDisk, disk != mine.data(using: .utf8), !keepPaneOverDisk(file) {
+            paneOnDisk = disk
+            preambleView.string = String(data: disk, encoding: .utf8) ?? String(decoding: disk, as: UTF8.self)
+            return
+        }
+        do {
+            try mine.write(to: file, atomically: true, encoding: .utf8)
+            paneOnDisk = mine.data(using: .utf8)
+        } catch { setStatus("\(file.lastPathComponent) was not saved: \(error.localizedDescription)", error: true) }
+    }
+
+    private func keepPaneOverDisk(_ file: URL) -> Bool {
+        if let answer = paneChoice { return answer }
+        let a = NSAlert()
+        a.messageText = "“\(file.lastPathComponent)” was changed by another program."
+        a.informativeText = "Keep the text of the pane (the file on disk is replaced), or load the file on disk (what was typed in the pane is lost)."
+        a.addButton(withTitle: "Keep Mine"); a.addButton(withTitle: "Load the File on Disk")
+        return a.runModal() == .alertFirstButtonReturn
     }
 
     func makeRequest(_ src: String) -> PopRequest {
