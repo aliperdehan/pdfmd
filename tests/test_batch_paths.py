@@ -246,6 +246,45 @@ class Checkout(unittest.TestCase):
         self.assertEqual(list(self.work.glob("*.pdf")), [])
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_rebuild_glob_skips_built_outputs_but_keeps_independent_html(self):
+        independent = self.work / "independent.html"
+        for prefix in ((), ("-b",)):
+            with self.subTest(prefix=prefix):
+                self.assert_built(self.run_pdfmd(*prefix, *self.names, "--to", "html"), 2, suffix=".html")
+                independent.write_text("<p>Independent</p>", encoding="utf-8")
+                done = self.run_pdfmd(*prefix, *sorted(self.work.iterdir()), "--to", "html", "-o", "out")
+                # Outputs in the source folder are not outputs in the selected destination.
+                self.assertNotIn("built outputs:", done.stdout)
+                done = self.run_pdfmd(*prefix, *sorted(p for p in self.work.iterdir() if p.is_file()), "--to", "html")
+                self.assertIn("built outputs:", done.stdout)
+                for name in self.names:
+                    self.assertIn(Path(name).with_suffix(".html").name, done.stdout)
+                # The independent HTML remains an input and hits the ordinary self-output protection.
+                self.assertIn("independent.html is the source itself", done.stdout + done.stderr)
+                independent.unlink()
+                done = self.run_pdfmd(*prefix, *sorted(p for p in self.work.iterdir() if p.is_file()), "--to", "html")
+                self.assert_built(done, 2, suffix=".html")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_rebuild_respects_no_rewrite(self):
+        self.assert_built(self.run_pdfmd(*self.names, "--to", "html"), 2, suffix=".html")
+        done = self.run_pdfmd("-b", *sorted(self.work.iterdir()), "--to", "html", "--no-rewrite")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("built outputs:", done.stdout)
+        for name in self.names:
+            self.assertTrue((self.work / (Path(name).stem + " (1).html")).is_file())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_glob_outputs_in_named_directory_and_compound_extension(self):
+        out = self.work / "out"
+        out.mkdir()
+        for name in self.names:
+            (out / Path(name).with_suffix(".gfm.md")).write_text("old", encoding="utf-8")
+        done = self.run_pdfmd(*self.names, *sorted(out.iterdir()), "--to", "gfm", "-o", out)
+        self.assert_built(done, 2, out, ".gfm.md")
+        self.assertIn("built outputs:", done.stdout)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_workers_cover_explicit_files_and_folders_with_pandoc(self):
         directory = self.work / "dir"
         directory.mkdir()

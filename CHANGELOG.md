@@ -21,6 +21,12 @@ same commit as the change.
 
 ## v3.33.140 — 2026-11-11
 
+A repeated multi-path build could treat its earlier HTML or other readable output as a source, then fail on a
+self-overwrite. Selection now skips and names outputs belonging to another selected input, using the batch target and
+output-extension rules, while retaining unrelated inputs and the existing rewrite behaviour. Checkout-launcher
+regressions failed before the fix and pass afterwards, including output folders, compound extensions and Cyrillic names.
+Pre-fix state: commit `db5f3d9`.
+
 Pre-edit state: commit `9a194d3`. **Build several input paths separately.** The author's explicit-file batch
 failed because `-b` required one folder; plain multiple paths also failed. Batch mode now accepts mixed files and
 folders, and multiple paths without `-r` use the same pipeline. Folder discovery retains its Markdown-only rules;

@@ -15767,8 +15767,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             export_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-calc-export-")
             CALC_DUMP = Path(export_scratch.name) / "names.tsv"
     if not output_resolved:
-        planned = output_file or ((out_dir / f"{md_path.stem}{output_extension_for(target_format, md_path)}") if out_dir
-                                  else md_path.with_suffix(output_extension_for(target_format, md_path)))
+        planned = output_file or load_package("pdfmd_routing.output").planned(md_path, out_dir, target_format)
         output_file = load_package("pdfmd_routing.output").protected(md_path, planned, target_format, metadata_list)
     try:
         result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,

@@ -26,7 +26,8 @@ def input_suffixes(core) -> set[str]:
             | core.SUFFIX_READERS.keys() | set(core.MARKDOWN_LIKE_SUFFIXES))
 
 
-def collect_inputs(core, paths: list[Path], recursive: bool = False, include_never: bool = False) -> list[Path]:
+def collect_inputs(core, paths: list[Path], recursive: bool = False, include_never: bool = False,
+                   deferred_note: list | None = None) -> list[Path]:
     """Expand folders as before; keep explicit Pandoc inputs once, comparing resolved paths."""
     suffixes = input_suffixes(core)
     files, skipped, seen = [], [], set()
@@ -50,15 +51,24 @@ def collect_inputs(core, paths: list[Path], recursive: bool = False, include_nev
             if file not in seen:
                 files.append(file)
                 seen.add(file)
-    if skipped:
+    if deferred_note is not None and files:
+        deferred_note.extend(skipped)
+    else:
+        selection_note(core, paths, files, skipped, [])
+    if not files:
+        raise SystemExit("No buildable input files remain; name a Pandoc input or a folder containing Markdown files")
+    return files
+
+
+def selection_note(core, paths, files, skipped, outputs):
+    if skipped or outputs:
         note = "NOTE  skipped non-input paths: " + ", ".join(core.display_path(path) for path in skipped)
+        if outputs:
+            note += ("; " if skipped else "") + "built outputs: " + ", ".join(core.display_path(path) for path in outputs)
         if len(paths) == 2 and any(path.suffix.lower() == ".pdf" and
                                   any(file.parent == path.resolve().parent for file in files) for path in skipped):
             note += "; to name the output, use -o NAME.pdf"
         print(note)
-    if not files:
-        raise SystemExit("No buildable input files remain; name a Pandoc input or a folder containing Markdown files")
-    return files
 
 
 def prepare_inputs(core, args) -> None:
@@ -68,7 +78,9 @@ def prepare_inputs(core, args) -> None:
         raise SystemExit("Choose either --batch or --report/--book, not both")
     if args.out and not args.out.is_dir() and (args.out.suffix or args.out.is_file() or str(args.out) == "-"):
         raise SystemExit("-o/--out in batch mode takes an output directory, not a filename")
-    args.path = collect_inputs(core, args.path or [Path.cwd()], args.recursive, args.include_never)
+    args.batch_original_paths = args.path or [Path.cwd()]
+    args.batch_skipped = []
+    args.path = collect_inputs(core, args.batch_original_paths, args.recursive, args.include_never, args.batch_skipped)
 
 
 def prepare_epubs(core, args, files: list[Path], output: Path | None) -> dict[Path, Path | None]:
@@ -102,10 +114,6 @@ def run(core, *,
 
     files = list(paths)       # prepare_inputs has already expanded, filtered and resolved the paths
     output = Path.cwd() if args.destination_cwd else (args.out.resolve() if args.out else None)
-    if output:
-        output.mkdir(parents=True, exist_ok=True)
-    destinations = prepare_epubs(core, args, files, output)
-    files = list(destinations)
     if target_format == ASSEMBLED_FORMAT:
         # Not an assembly of an assembly: a file written by an earlier run
         # (NAME.assembled.md) would otherwise come out as NAME.assembled.assembled.md.
@@ -122,6 +130,23 @@ def run(core, *,
         found = metadata_for(file)
         chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
         return chosen or batch_target
+
+    # Compare the ordinary output names before rewrite protection picks a numbered copy.
+    # A source must never exclude itself when its input and output suffixes coincide.
+    built = set()
+    for file in files:
+        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_target(file)).resolve()
+        if planned != file:
+            built.add(planned)
+    outputs = [file for file in files if file in built]
+    files = [file for file in files if file not in built]
+    selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs)
+    if not files:
+        raise SystemExit("No buildable input files remain; the selected files are built outputs")
+    if output:
+        output.mkdir(parents=True, exist_ok=True)
+    destinations = prepare_epubs(core, args, files, output)
+    files = list(destinations)
 
     def preamble_for(file):
         if not (file_target(file) in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file)):

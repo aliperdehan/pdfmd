@@ -7,6 +7,12 @@ from pathlib import Path
 core = None
 
 
+def planned(source: Path, directory: Path | None, target: str) -> Path:
+    """The ordinary destination before rewrite protection."""
+    extension = core.output_extension_for(target, source)
+    return directory / (source.stem + extension) if directory else source.with_suffix(extension)
+
+
 def protected(source: Path, output: Path, target: str, metadata) -> Path:
     files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
     if target == core.ASSEMBLED_FORMAT or core.rewrite_wanted(source, files):
