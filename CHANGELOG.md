@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185b — 2026-11-12
+
+Pre-edit state: commit `7a4649c`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.10: restore a missing file's watcher.** Deleting a file for longer than the disk-change pause left the editor permanently unwatched after it was recreated. A parent-directory watch now reattaches the file watch when it returns, and replacement events remain pending through a burst of notifications.
+
+Regression: `tests/test_colophon_disk_watcher.py` deletes, recreates and then writes the file; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185a — 2026-11-12
 
 Pre-edit state: commit `2ebeddd`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.9: bound build stopping and output draining.** A build whose child ignored SIGTERM and retained the output pipe could prevent further builds and exports. The new Build stop grace preference (positive seconds, default 3) bounds the final drain and the wait before SIGKILL; process birth times prevent signalling a reused PID. Invalid values use the default. `buildTimeout` still controls when a build is stopped.

@@ -7,11 +7,25 @@ final class DiskWatcher {
     private let url: URL
     private let onChange: () -> Void
     private var source: DispatchSourceFileSystemObject?
+    private var directory: DispatchSourceFileSystemObject?
+    private var needsReattachment = false
     private var pending: DispatchWorkItem?
 
     init(url: URL, onChange: @escaping () -> Void) {
         self.url = url
         self.onChange = onChange
+        let fd = open(url.deletingLastPathComponent().path, O_EVTONLY)
+        if fd >= 0 {
+            let s = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write], queue: .main)
+            s.setEventHandler { [weak self] in
+                guard let self, self.source == nil else { return }
+                self.watch()
+                if self.source != nil { self.fired(replaced: false) }
+            }
+            s.setCancelHandler { close(fd) }
+            s.resume()
+            directory = s
+        }
         watch()
     }
 
@@ -20,6 +34,7 @@ final class DiskWatcher {
     func stop() {
         pending?.cancel(); pending = nil
         source?.cancel(); source = nil
+        directory?.cancel(); directory = nil
     }
 
     private func watch() {
@@ -34,10 +49,14 @@ final class DiskWatcher {
     }
 
     private func fired(replaced: Bool) {
+        needsReattachment = needsReattachment || replaced
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            if replaced { self.watch() }
+            if self.needsReattachment {
+                self.needsReattachment = false
+                self.watch()
+            }
             self.onChange()
         }
         pending = work
