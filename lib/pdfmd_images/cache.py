@@ -1,16 +1,6 @@
-"""Atomic writes to the image cache, shared by concurrent builds."""
+"""Atomic writes to the image cache, shared by concurrent builds: `pdfmd_cache.write_cached()`, which every cache of
+pdfmd uses (it also survives Windows refusing the rename while another writer holds the same entry)."""
 
-from pathlib import Path
-from tempfile import NamedTemporaryFile
+from pdfmd_cache import write_cached
 
-
-def write_cached(target: Path, data: bytes) -> None:
-    temporary = None
-    try:
-        with NamedTemporaryFile(dir=target.parent, suffix=".part", delete=False) as output:
-            temporary = Path(output.name)
-            output.write(data)
-        temporary.replace(target)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+__all__ = ["write_cached"]

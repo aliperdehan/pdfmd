@@ -24,6 +24,46 @@ from tempfile import mkdtemp
 core = None
 
 
+# Two builds that fill the same cache entry at once (v3.33.x): each writes the whole file to its own `.part` beside the
+# target and renames it over the target. On Windows the rename is refused (PermissionError, "Access is denied") while
+# another writer is renaming onto, or a reader holds, the same target. A cache entry is named by its content, so both
+# writers carry the same bytes: the one that is refused has nothing left to do once the target holds them, and otherwise
+# tries again a few times. The two numbers are constants (a file-system fact with no sensible knob, not a setting).
+REPLACE_TRIES = 20
+REPLACE_PAUSE = 0.05          # seconds between two tries: one second at most
+
+
+def write_cached(target: Path, data: bytes) -> None:
+    """Write ``data`` to the cache file ``target``, all or nothing, safely beside another writer of the same entry."""
+    from tempfile import NamedTemporaryFile
+    target = Path(target)
+    temporary = None
+    try:
+        with NamedTemporaryFile(dir=target.parent, suffix=".part", delete=False) as output:
+            temporary = Path(output.name)
+            output.write(data)
+        for attempt in range(REPLACE_TRIES):
+            try:
+                temporary.replace(target)
+                return
+            except PermissionError:
+                try:
+                    if target.read_bytes() == data:
+                        return                             # the other writer's file is ours, byte for byte
+                except OSError:
+                    pass                                   # not there yet, or still held
+                if attempt + 1 == REPLACE_TRIES:
+                    raise
+                import time
+                time.sleep(REPLACE_PAUSE)
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+
+
 def cache_root() -> Path:
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")

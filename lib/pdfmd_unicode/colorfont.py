@@ -11,7 +11,8 @@ from __future__ import annotations
 import re
 import struct
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+
+from pdfmd_cache import write_cached
 
 from .emoji import EMOJI_BLOCKS, DEFAULT_EMOJI, TEXT_DEFAULT_EMOJI, VARIATION_EMOJI, ZERO_WIDTH_JOINER
 
@@ -325,16 +326,6 @@ def write_pictures(text: str, wanted: set[int], font_path: str, directory: Path,
             if data is None:
                 continue
             directory.mkdir(parents=True, exist_ok=True)
-            with NamedTemporaryFile(dir=directory, suffix=".part", delete=False) as output:
-                temporary = Path(output.name)
-                try:
-                    output.write(data)
-                except BaseException:
-                    temporary.unlink(missing_ok=True)
-                    raise
-            try:
-                temporary.replace(target)
-            finally:
-                temporary.unlink(missing_ok=True)
+            write_cached(target, data)
         pictures[sequence] = str(target)
     return pictures

@@ -185,6 +185,60 @@ class ConcurrentCaching(unittest.TestCase):
             self.assertEqual(len(list((root / "cache").iterdir())), 1)
 
 
+class RefusedReplace(unittest.TestCase):
+    """Windows refuses the rename over a cache entry that another writer is renaming onto or holds (PermissionError)."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="pdfmd-images-refused-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.target = self.root / "entry.pdf"
+
+    def refusing(self, times, other=None):
+        """Path.replace that raises the Windows error ``times`` times (the other writer's file appearing first)."""
+        replace, calls = Path.replace, []
+
+        def refused(path, target):
+            calls.append(path)
+            if len(calls) <= times:
+                if other is not None:
+                    Path(target).write_bytes(other)
+                raise PermissionError(13, "Access is denied", str(path), 5, str(target))
+            return replace(path, target)
+        return mock.patch.object(Path, "replace", refused), calls
+
+    def test_the_other_writers_identical_file_is_success(self):
+        import pdfmd_cache
+        from pdfmd_images.cache import write_cached
+        self.assertIs(write_cached, pdfmd_cache.write_cached)
+        patched, calls = self.refusing(99, other=b"%PDF-same")
+        with patched:
+            write_cached(self.target, b"%PDF-same")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([item.name for item in self.root.iterdir()], ["entry.pdf"])
+
+    def test_a_refusal_with_no_file_yet_is_tried_again(self):
+        import pdfmd_cache
+        patched, calls = self.refusing(2)
+        with patched, mock.patch.object(pdfmd_cache, "REPLACE_PAUSE", 0):
+            pdfmd_cache.write_cached(self.target, b"%PDF-mine")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.target.read_bytes(), b"%PDF-mine")
+        self.assertEqual([item.name for item in self.root.iterdir()], ["entry.pdf"])
+
+    def test_a_lasting_refusal_is_still_an_error_and_leaves_no_partial_file(self):
+        import pdfmd_cache
+        patched, calls = self.refusing(99, other=b"something else")
+        with patched, mock.patch.object(pdfmd_cache, "REPLACE_PAUSE", 0), self.assertRaises(PermissionError):
+            pdfmd_cache.write_cached(self.target, b"%PDF-mine")
+        self.assertEqual(len(calls), pdfmd_cache.REPLACE_TRIES)
+        self.assertEqual([item.name for item in self.root.iterdir()], ["entry.pdf"])
+
+    def test_the_emoji_pictures_use_the_same_writer(self):
+        import pdfmd_cache
+        from pdfmd_unicode import colorfont
+        self.assertIs(colorfont.write_cached, pdfmd_cache.write_cached)
+
+
 class Arguments(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-images-args-"))
