@@ -73,7 +73,7 @@ final class PopController: NSObject, NSTextViewDelegate {
     var lastPDF: Data?
     var lastKey: String?                   // what lastPDF was rendered from; nil after a failed render
     var lastLog = ""
-    var wantCopy = false
+    var wantCopy: String?
     var debounce: Timer?
     var pasteboard: NSPasteboard = .general   // tests copy to a private one
     var previousApp: NSRunningApplication?
@@ -457,6 +457,9 @@ final class PopController: NSObject, NSTextViewDelegate {
 
     /// The input changed: render after a pause when live, else just say that the preview is out of date.
     func changed(after delay: TimeInterval) {
+        if let pending = wantCopy, pending != PopController.key(makeRequest(input.string.trimmingCharacters(in: .whitespacesAndNewlines))) {
+            wantCopy = nil
+        }
         if live && !selectedEngine.isSlow { schedule(after: delay); return }
         debounce?.invalidate()
         renderer.cancel()
@@ -498,17 +501,21 @@ final class PopController: NSObject, NSTextViewDelegate {
                 let size = PopPDFTools.pointSize(pdf).map { String(format: "%.0f × %.0f pt", $0.width, $0.height) } ?? ""
                 let more = r.pages > 1 ? " · page 1 of \(r.pages)" : ""
                 self.setStatus(String(format: "%@ · %.2f s", size, Date().timeIntervalSince(started)) + more, error: false)
-                if self.wantCopy { self.wantCopy = false; self.finishCopy(pdf) }
+                if self.wantCopy == key {
+                    self.wantCopy = nil
+                    let current = PopController.key(self.makeRequest(self.input.string.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    if current == key { self.finishCopy(pdf) }
+                }
             case .failure(.cancelled):
                 break
             case .failure(.noEngine(let name)):
-                self.failed()
+                self.failed(key: key)
                 let how = name == "pdfmd" ? "pipx install pdfmd-cli" : "install MacTeX or BasicTeX"
                 self.errors.scroll.isHidden = true
                 self.preview.isHidden = false
                 self.setStatus("\(name) not found (\(how)), or pick another engine.", error: true)
             case .failure(.failed(let f)):
-                self.failed()
+                self.failed(key: key)
                 self.lastLog = f.log
                 self.errors.issues = f.issues
                 self.errors.scroll.isHidden = false
@@ -520,9 +527,9 @@ final class PopController: NSObject, NSTextViewDelegate {
     }
 
     /// A failed render: what is on screen is no longer the current text, and a pending copy must not take it instead.
-    func failed() {
+    func failed(key: String) {
         lastKey = nil
-        if wantCopy { wantCopy = false; NSSound.beep() }
+        if wantCopy == key { wantCopy = nil; NSSound.beep() }
     }
 
     /// What a result was made from. pdfmd reads neither the mode nor the popup's preamble, so they are not part of its key.
@@ -544,7 +551,7 @@ final class PopController: NSObject, NSTextViewDelegate {
         let src = input.string.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = PopController.key(makeRequest(src))
         if let pdf = lastPDF, lastKey == now { finishCopy(pdf) }
-        else { wantCopy = true; schedule(after: 0) }
+        else { wantCopy = now; schedule(after: 0) }
     }
 
     func finishCopy(_ pdf: Data) {

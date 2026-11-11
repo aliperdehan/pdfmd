@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185i — 2026-11-12
+
+Pre-edit state: commit `38aae0c`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.17: bind pending copies to their render.** Editing a snippet during the live-render pause could let the preceding render copy and hide the popup for text no longer shown. A pending copy now records its request key and is copied only if the completed render and current input still match it; an older completion cannot consume a newer request.
+
+Regression: `tests/test_colophon_pending_copy.py` delivers old and current completions after an edit without a window; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185h — 2026-11-12
 
 Pre-edit state: commit `746b79e`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.16: ignore searches from replaced PDFs.** A PDF reloaded during a search could receive old matches or an old completion in the new search. Replacement now cancels and detaches the old document, and callbacks are accepted only from the current document.
