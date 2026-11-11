@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.156 — 2026-11-11
+
+Pre-edit state: commit `b5cb5a6`. Calibre pages with reordered or spaced author attributes could be mistaken for authorless pages, and cleanup could delete a real PDF author. HTML attribute parsing now recognises the author regardless of order and spacing, and cleanup removes only the Unknown placeholder. Regressions failed before the fix and pass afterwards; Calibre and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
+
 ## v3.33.155 — 2026-11-11
 
 Pre-edit state: commit `73e41d5`. Patch-built reports to LaTeX and Typst omitted paragraph spacing because their non-PDF route did not add the spacing arguments and Typst filter. The route now applies the same settings as ordinary builds. Checkout regressions for both targets failed before the fix and pass afterwards; paragraph spacing and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.

@@ -264,14 +264,27 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
         said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
         return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
                                            "ebook-convert failed: " + " | ".join(said[-3:] or ["no PDF written"]))
-    if "--authors" not in page_options and not PAGE_AUTHOR_RE.search(head):
+    if "--authors" not in page_options and not page_has_author(head):
         drop_calibre_author(produced, verbose)
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(produced, output)
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
-PAGE_AUTHOR_RE = re.compile(r"""<meta\s+name=["']?author["'\s/>]""", re.IGNORECASE)
+def page_has_author(head: str) -> bool:
+    from html.parser import HTMLParser
+
+    class AuthorParser(HTMLParser):
+        found = False
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "meta" and any(key == "name" and (value or "").lower() == "author" for key, value in attrs):
+                self.found = True
+
+    parser = AuthorParser()
+    parser.feed(head)
+    return parser.found
+
 XMP_CREATOR_RE = re.compile(rb"\s*<dc:creator\b(?:[^>]*/>|.*?</dc:creator>)", re.DOTALL)
 
 
@@ -285,6 +298,8 @@ def drop_calibre_author(pdf: Path, verbose: bool) -> None:
     try:
         reader = core.pypdf.PdfReader(pdf)
         info = dict(reader.metadata) if reader.metadata else {}
+        if info.get("/Author") != "Unknown":
+            return
         writer = core.pypdf.PdfWriter(clone_from=reader)          # clone_from keeps Calibre's outline (see stamp_pdf_metadata_posthoc)
         changed = info.pop("/Author", None) is not None
         if changed:

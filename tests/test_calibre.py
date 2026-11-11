@@ -136,6 +136,26 @@ class Commands(unittest.TestCase):
                 self.assertEqual(options[options.index("--authors"):] if "--authors" in options else [], expected, front)
                 self.assertEqual(options[:4], ["--custom-size", "612x792", "--unit", "point"], front)
 
+    def test_page_author_attributes_and_real_pdf_author(self):
+        bridge = pdfmd.pdfmd_bridge
+        for html in ('<meta content="Alice" name="author">', "<META NAME = 'author' content='Alice'>"):
+            with self.subTest(html=html):
+                self.assertTrue(bridge.page_has_author(html))
+        self.assertFalse(bridge.page_has_author('<meta name="description" content="author">'))
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf")
+        with tempfile.TemporaryDirectory() as folder:
+            pdf = Path(folder) / "doc.pdf"
+            writer = pypdf.PdfWriter()
+            writer.add_blank_page(100, 100)
+            writer.add_metadata({"/Author": "Alice"})
+            with pdf.open("wb") as handle:
+                writer.write(handle)
+            bridge.drop_calibre_author(pdf, False)
+            self.assertEqual(pypdf.PdfReader(pdf).metadata.get("/Author"), "Alice")
+
     def test_calibres_unknown_author_is_taken_out(self):
         # v3.33.55: ebook-convert names `Unknown` when it is given no author, in the Info dictionary and the XMP metadata
         try:
