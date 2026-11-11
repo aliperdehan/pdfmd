@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.180 — 2026-11-12
+
+Pre-edit state: commit `2cf014b`. DECISION 50: `.odt` used Pandoc's OpenDocument writer by default, dropping raw Word blocks
+such as a cover or form and the Word route's extras. The deferred pdfmd_bridge.odt helper now runs the complete Word build
+and the existing LibreOffice converter; auto falls back to Pandoc when LibreOffice is missing or conversion fails, with
+one warning naming the losses and asking for LibreOffice. `odt.engine: auto | soffice | pandoc` has a setup row, unset words,
+folder support, inventory coverage and documentation; command-line `-e soffice` / `-e pandoc` wins. An OpenDocument reference
+(`.odt`/`.ott`), named or discovered, selects Pandoc in auto with a note. Regression: route mocks and isolated scripts/pdfmd
+builds check raw OOXML in the Word intermediate, conversion failure, missing LibreOffice, explicit choices, CLI precedence
+and reference selection; checked failing before and passing after. The real LibreOffice conversion skips when missing or
+unable to start, including the Codex sandbox; it must be run outside that sandbox. pdfmd.py grows from 17,133 to 17,136 lines
+for the deferred dispatch and the exception to the ignored-engine warning; all new route logic lives in the package.
+
 ## v3.33.179a — 2026-11-12
 
 Pre-edit state: commit `9459f2b`. A test only, from the third CI run of the 3.33.17x fixes (`native`, Windows, Python 3.9,

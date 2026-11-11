@@ -419,7 +419,8 @@ anchor for every file it split the book into, its page-break divs and classes) i
 
 LibreOffice writes what Pandoc cannot too (v3.29): `pdfmd letter.md -o letter.doc` (Word 97) has Pandoc write the Word file (the
 same one `-o letter.docx` writes: your reference document, native equations and tables, pictures for what LaTeX alone can draw)
-and headless LibreOffice turn it into `.doc`. `rtf`, `odt`, `txt` and `epub` go through LibreOffice only with `-e soffice` (or
+and headless LibreOffice turn it into `.doc`. `.odt` uses that same Word route by default (see `odt.engine` below).
+`rtf`, `txt` and `epub` go through LibreOffice only with `-e soffice` (or
 `-e libreoffice`, `-e office`) first on the command line, with a NOTE; without it Pandoc writes them from the document itself,
 which is the better file. `-e soffice` with another target (`.tex`, `.md`) lists what it writes.
 
@@ -1535,6 +1536,13 @@ pdfmd-options:
   default-output: html     # build to HTML when no format is given
   html: {self-contained: true, css: style.css}
 ```
+
+OpenDocument output uses `pdfmd-options: {odt: {engine: auto}}` by default: the same complete Word build as `.docx`, then
+LibreOffice converts it to `.odt`. If LibreOffice is missing or conversion fails, Pandoc writes the `.odt` with one warning:
+raw Word blocks such as a cover or form and the Word route's extras are lost; install LibreOffice to keep them.
+`odt.engine: soffice` requires LibreOffice and errors on failure; `odt.engine: pandoc` uses Pandoc silently.
+`-e soffice` / `-e pandoc` on the command line wins over the key. In auto, an `.odt`/`.ott` reference document, named or
+discovered beside the source, selects Pandoc's styling with a NOTE. `--setup` offers the same OpenDocument writer choice.
 
 ### The PDF carries its own source
 

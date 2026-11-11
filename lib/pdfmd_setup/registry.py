@@ -43,6 +43,7 @@ UNSET = {
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
     "options.engine-fallback": "auto: the whole chain for a new PDF; for an existing one, its engine first, and an error in the document keeps it",
     "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
+    "options.odt.engine": "auto",
     "options.line-numbers": "off", "options.line-number-step": "1", "options.column-outlier": "2", "options.column-outlier-rows": "4", "options.column-outlier-length": "30", "options.column-word-floor-limit": "16",
     "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
@@ -92,7 +93,7 @@ FOLDER_OPTIONS = frozenset({
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
-    "options.keep-source", "options.hybrid",
+    "options.keep-source", "options.hybrid", "options.odt.engine",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
     "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note", "options.stamp.partial",
     "options.backup.enabled", "options.backup.format", "options.backup.keep", "options.backup.pdfs",
@@ -294,6 +295,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("typst", "Typst")), "pdf", "What `pdfmd file.md` writes when no -o or --to is given.", "Output"),
         choice("options.apply-defaults", "Defaults for .typ and .html files", (("true", "apply metadata.yaml's title, author, font, paper, margin"), ("false", "build them as they are")), "false",
                "A .typ or .html file is built by its own engine and gets no defaults. Per run: --apply-defaults.", "Output"),
+        choice("options.odt.engine", "OpenDocument writer",
+               (("auto", "LibreOffice from Word; Pandoc if unavailable or an OpenDocument reference is chosen"),
+                ("soffice", "LibreOffice from Word (required)"), ("pandoc", "Pandoc's OpenDocument writer")),
+               "", "Auto keeps raw Word blocks (a cover or form) and the Word route's extras; a failed conversion falls "
+               "back to Pandoc with a warning. An .odt/.ott reference selects Pandoc in auto. Per document: odt.engine; "
+               "-e soffice / -e pandoc wins.", "Output"),
         # -- HTML
         choice("options.html.self-contained", "HTML as one file", on_off, "", "Everything inlined (--embed-resources).",
                "HTML"),

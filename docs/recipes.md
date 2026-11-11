@@ -640,6 +640,7 @@ pdfmd lecture -o lecture.html --self-contained
 ```yaml
 pdfmd-options:
   html: {self-contained: true, css: style.css, math: mathjax}      # math: mathml (default), mathjax, katex, webtex
+  odt: {engine: auto}    # auto (default): Word -> LibreOffice, Pandoc fallback; soffice: required; pandoc: direct
 ```
 
 ### 7.4 Typst and slides

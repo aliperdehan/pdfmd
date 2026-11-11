@@ -177,6 +177,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "txt.math": Omitted("inert", "text has no math markup"),
     "html.self-contained": "options.html.self-contained", "html.standalone": "options.html.standalone",
     "html.math": "options.html.math", "html.css": "options.html.css",
+    "odt.engine": "options.odt.engine",
     "hybrid": "options.hybrid",
     "keep-source": "options.keep-source",
     "lua-filter": "options.lua-filter",

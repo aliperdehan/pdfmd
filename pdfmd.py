@@ -345,7 +345,7 @@ Output formats:
     Calibre as a writer (v3.29.0): `-o book.azw3` / `--to azw3` (azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz,
     txtz: the twelve only Calibre writes) has Pandoc write an EPUB 3 in a scratch folder and `ebook-convert` make the ebook
     from it; epub, docx, rtf, txt and fb2 go the same way only with `-e calibre` on the command line. One document at a
-    time. LibreOffice writes `.doc` (and rtf, odt, txt, epub with `-e soffice` first) from Pandoc's Word file the same way.
+    time. LibreOffice writes `.doc` and, by default, `.odt` (rtf, txt, epub with `-e soffice` first) from Pandoc's Word file.
     A browser is an engine too (v3.29.0): `-e edge|chrome|chromium|brave|browser` has it print the HTML page headless.
     The math: a target that can show pictures gets each formula drawn by LaTeX (the Word route's `latex: images`; the
     EPUB's MathML is not drawn by a Kindle or a Kobo), a plain-text one gets the formulas as text with one WARN
@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.179"
+PDFMD_VERSION = "3.33.180"
 import argparse
 import atexit
 import contextlib
@@ -14006,8 +14006,8 @@ def math_pictures_possible() -> str | None:
 
 
 # LibreOffice as a writer (v3.29.1): `-o letter.doc` (Word 97, which Pandoc does not write) is made from the Word file Pandoc
-# writes, by headless LibreOffice; rtf, odt, txt and epub go the same way only with `-e soffice` first on the command line
-# (Pandoc writes them itself, and an odt or an rtf from the document is the better file).
+# writes, by headless LibreOffice; rtf, txt and epub go the same way only with `-e soffice` first on the command line.
+# OpenDocument's default Word route is selected per document in pdfmd_bridge/odt.py (DECISION 50).
 SOFFICE_ONLY_FORMATS = ("doc",)
 SOFFICE_SHARED_FORMATS = ("rtf", "odt", "txt", "epub")
 
@@ -14292,6 +14292,8 @@ def _convert_one(md_path: Path, *args, **kwargs):
     (and its NAME.unpacked/ folder) findable for the whole build -- the cache
     route's compile step included, which runs after the Markdown-to-.tex pass."""
     with embedded_resources(md_path):
+        if kwargs.get("target_format") == "odt":
+            return deferred("pdfmd_bridge.odt", "convert")(_convert_one_core, md_path, *args, **kwargs)
         return _convert_one_core(md_path, *args, **kwargs)
 
 
@@ -16645,7 +16647,8 @@ def run_main() -> None:
                     print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
                 convert_job = start_soffice_job(args, goal, target_format)
                 target_format = "docx"
-    if args.engine is not None and target_format != "pdf" and stop_at != "markdown":
+    if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
+            and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
         print(f"WARN  --engine is ignored for "
               f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
               "no PDF engine is involved", file=sys.stderr)
