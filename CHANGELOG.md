@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.146 — 2026-11-11
+
+Pre-edit state: commit `3a8f506`. Font lookup inspected metadata files in input order rather than winning order; a managed font found in the weaker file could then be injected with -V over the stronger file. Lookup now follows metadata_files_by_priority, retaining document and command-line priority and the first-file precedence setting. Lookup and checkout regressions with a scratch managed font failed before the fix and pass afterwards; Unicode and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.145 — 2026-11-11
 
 Pre-edit state: commit `cfa9016`. Metadata files closed with a valid --- fence were parsed as multiple YAML documents, silently losing pdfmd settings while Pandoc still read its metadata. The metadata reader now uses the shared front-matter parser for supported fences and retains bare YAML parsing. Engine-setting and checkout code-numbering regressions failed before the fix and pass afterwards, covering both fence terminators and bare files; configuration, engine-chain and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.

@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.145"
+PDFMD_VERSION = "3.33.146"
 import argparse
 import atexit
 import contextlib
@@ -7669,7 +7669,7 @@ def document_font_setting(key: str, md_paths: list[Path], metadata_files: list[P
     for variable in variables:
         if variable.startswith(f"{key}="):
             return variable.split("=", 1)[1] or None
-    for path in [*md_paths[:1], *metadata_files]:
+    for path in [*md_paths[:1], *metadata_files_by_priority(metadata_files)]:
         try:
             data = (front_matter_dict(path.read_text(encoding="utf-8-sig"))
                     if path.suffix.lower() in (".md", ".markdown", ".txt", "") else metadata_file_yaml(path))

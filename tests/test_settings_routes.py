@@ -148,3 +148,41 @@ class FencedMetadataSettings(RouteCase):
         text = (self.root / 'd.tex').read_text()
         self.assertIn('numbers=left', text)
         self.assertIn('stepnumber=3', text)
+
+
+class FontMetadataPrecedence(RouteCase):
+    def test_font_lookup_follows_file_priority_document_and_cli(self):
+        self.source.write_text('Text.\n')
+        base, extra = self.root / 'base.yaml', self.root / 'extra.yaml'
+        base.write_text('mainfont: Earlier\n')
+        extra.write_text('mainfont: Later\n')
+        for precedence, expected in (('later', 'Later'), ('first', 'Earlier')):
+            with self.subTest(precedence=precedence), patch.object(pdfmd, 'METADATA_PRECEDENCE_CLI', precedence):
+                self.assertEqual(pdfmd.document_font_setting('mainfont', [self.source], [base, extra], []), expected)
+        self.source.write_text('---\nmainfont: Document\n---\nText.\n')
+        self.assertEqual(pdfmd.document_font_setting('mainfont', [self.source], [base, extra], []), 'Document')
+        self.assertEqual(pdfmd.document_font_setting('mainfont', [self.source], [base, extra], ['mainfont=CLI']), 'CLI')
+
+    @unittest.skipUnless(shutil.which('pandoc'), 'needs Pandoc')
+    def test_checkout_managed_earlier_font_cannot_override_later_metadata(self):
+        self.source.write_text('Text.\n')
+        managed = Path(self.env['XDG_DATA_HOME']) / 'pdfmd' / 'fonts'
+        managed.mkdir(parents=True)
+        # Give the shipped test font a private family name, only in this scratch copy.
+        font = (ROOT / 'lib' / 'pdfmd_inkmd' / 'assets' / 'fonts' / 'DejaVuSans.ttf').read_bytes()
+        for encoding in ('utf-16-be', 'ascii'):
+            font = font.replace('DejaVu Sans'.encode(encoding), 'PdfmdX Sans'.encode(encoding))
+        (managed / 'Earlier.ttf').write_bytes(font)
+        base, extra = self.root / 'base.yaml', self.root / 'extra.yaml'
+        base.write_text('mainfont: PdfmdX Sans\n')
+        extra.write_text('mainfont: DejaVu Serif\n')
+        for precedence in ('later', 'first'):
+            with self.subTest(precedence=precedence):
+                self.run_pdfmd('--to', 'latex', '-o', str(self.root / 'd.tex'), '-y', str(base), str(extra),
+                               '--metadata-precedence', precedence, '--no-auto', 'unicode')
+                text = (self.root / 'd.tex').read_text()
+                if precedence == 'later':
+                    self.assertIn('\\setmainfont[]{DejaVu Serif}', text)
+                    self.assertNotIn('Earlier.ttf', text)
+                else:
+                    self.assertIn('Earlier.ttf', text)
