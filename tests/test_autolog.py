@@ -11,7 +11,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -133,8 +133,13 @@ class Builds(unittest.TestCase):
         lines = self.run_pdfmd("d.md", "--to", "latex")
         self.assertEqual(lines[0], "FOUND     metadata: metadata.yaml + preamble.tex")
         self.assertTrue(lines[1].startswith("DEFAULTS  global metadata, margin 1in"), lines[1])
-        self.assertIn("font STIX Two Text", lines[1])
-        self.assertIn("code in JetBrains Mono", lines[1])
+        # the fonts pdfmd chooses on this machine: its own two where they are installed, else a stand-in (the tests see no font
+        # that `pdfmd --install fonts` fetched: isolation_support gives the run a data folder of its own)
+        pdfmd.reset_font_caches()
+        with redirect_stderr(io.StringIO()):
+            main, mono = pdfmd.preferred_font(), pdfmd.default_monofont()
+        self.assertIn(f"font {main}", lines[1])
+        self.assertIn(f"code in {mono}", lines[1])
         self.assertRegex(lines[-1], r"^OK    d\.md > d\.tex(?:  in [\d.:]+(?: s)?)?$")
         self.assertLessEqual(len(lines), 4, lines)
         self.assertTrue(all(len(line) <= 110 for line in lines), lines)

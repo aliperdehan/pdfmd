@@ -574,7 +574,8 @@ class Switches(unittest.TestCase):
             text = source if header is None else source.replace("---\ntitle: T\n", "---\ntitle: T\n" + header, 1)
             (self.directory / "doc.md").write_text(text, encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", target, "--no-backup", "-o", "out." + target,
-                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                                   # --no-auto font: no font is chosen, so a machine without pdfmd's default one says no WARN
+                                   "--no-auto", "font", *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
                                   env={**os.environ, **(env or {})})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertNotIn("WARN", done.stdout + done.stderr)
@@ -610,7 +611,8 @@ class Switches(unittest.TestCase):
         def convert(target, *arguments, env=None, header=""):
             (self.directory / "doc.md").write_text(source.replace("---\ntitle: T\n", "---\ntitle: T\n" + header, 1), encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", target, "--no-backup", "-o", "out." + target,
-                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                                   # --no-auto font: no font is chosen, so a machine without pdfmd's default one says no WARN
+                                   "--no-auto", "font", *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
                                   env={**os.environ, **(env or {})})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertNotIn("WARN", done.stdout + done.stderr)
@@ -666,7 +668,9 @@ class Switches(unittest.TestCase):
         def convert(*arguments, text=source):
             (self.directory / "doc.md").write_text(text, encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "doc.md", "--to", "latex", "--no-backup", "-o", "out.tex",
-                                   *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8")
+                                   # --no-auto font: no font is chosen, so a machine without pdfmd's default one says no WARN
+                                   "--no-auto", "font", *arguments], cwd=self.directory, capture_output=True, text=True,
+                                  encoding="utf-8")
             return done, " ".join((self.directory / "out.tex").read_text(encoding="utf-8").split()) if done.returncode == 0 else ""
         done, display = convert("--calc-typeset", "display", "--calc-typeset-upright", "k")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
