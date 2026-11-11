@@ -30,37 +30,40 @@ class WatchSignature(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_watch_rebuilds_after_metadata_deletion_and_ignores_output_changes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "report.md").write_text("Watch body.\n")
-            metadata = root / "metadata.yaml"
-            metadata.write_text("title: Test\n")
-            os.utime(metadata, (1, 1))
-            output = root / "result.html"
-            env = {**os.environ, "TMPDIR": directory, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
-                   "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"),
-                   "XDG_DATA_HOME": str(root / "data")}
-            process = subprocess.Popen([sys.executable, str(Path(pdfmd.__file__).parent / "scripts/pdfmd"),
-                                        "--watch", "report.md", "--to", "html", "-o", "result.html",
-                                        "--no-stamp", "--no-backup"], cwd=root, env=env,
-                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                deadline = time.monotonic() + 15
-                while not output.exists() and time.monotonic() < deadline:
-                    time.sleep(0.1)
-                self.assertTrue(output.exists())
-                time.sleep(2)
-                output.write_text("external output change")
-                time.sleep(2)
-                self.assertEqual(output.read_text(), "external output change")
-                metadata.unlink()
-                deadline = time.monotonic() + 15
-                while output.read_text() == "external output change" and time.monotonic() < deadline:
-                    time.sleep(0.1)
-                self.assertIn("Watch body", output.read_text())
-            finally:
-                process.terminate()
-                process.wait(timeout=10)
+        # cleaned up leniently: on Windows, terminate() ends pdfmd but not a Pandoc child still running in the folder, which
+        # keeps it busy for a moment (CI, windows-latex)
+        directory = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, directory, True)
+        root = Path(directory)
+        (root / "report.md").write_text("Watch body.\n")
+        metadata = root / "metadata.yaml"
+        metadata.write_text("title: Test\n")
+        os.utime(metadata, (1, 1))
+        output = root / "result.html"
+        env = {**os.environ, "TMPDIR": directory, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"),
+               "XDG_DATA_HOME": str(root / "data")}
+        process = subprocess.Popen([sys.executable, str(Path(pdfmd.__file__).parent / "scripts/pdfmd"),
+                                    "--watch", "report.md", "--to", "html", "-o", "result.html",
+                                    "--no-stamp", "--no-backup"], cwd=root, env=env,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.monotonic() + 15
+            while not output.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertTrue(output.exists())
+            time.sleep(2)
+            output.write_text("external output change")
+            time.sleep(2)
+            self.assertEqual(output.read_text(), "external output change")
+            metadata.unlink()
+            deadline = time.monotonic() + 15
+            while output.read_text() == "external output change" and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertIn("Watch body", output.read_text())
+        finally:
+            process.terminate()
+            process.wait(timeout=10)
 
     def test_add_change_and_delete_inputs_but_ignore_output(self):
         with tempfile.TemporaryDirectory() as directory:

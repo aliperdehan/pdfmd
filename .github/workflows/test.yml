@@ -225,6 +225,10 @@ jobs:
           miktex="/c/Program Files/MiKTeX/miktex/bin/x64"
           echo 'C:\Program Files\MiKTeX\miktex\bin\x64' >> "$GITHUB_PATH"
           "$miktex/initexmf" --admin --set-config-value='[MPM]AutoInstall=1'     # packages a document needs are fetched on demand
+          # ... except that no on-demand install ran in the second CI run of 3.33.17x (`booktabs.sty' not found): the
+          # packages pdfmd's own LaTeX asks for beyond MiKTeX's basic set are installed up front
+          "$miktex/mpm" --admin --update-db || echo "WARN mpm --update-db failed"
+          "$miktex/mpm" --admin --install=booktabs || echo "WARN mpm could not install booktabs"
           "$miktex/lualatex" --version | head -1
       - name: poppler (the tests read PDFs with pdftotext and pdftoppm)
         run: |

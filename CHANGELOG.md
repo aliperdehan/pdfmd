@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.175d — 2026-11-12
+
+Pre-edit state: commit `c3cde16`. A test and the workflow only, from the second CI run's `windows-latex` job (not gating;
+three failures left of round 1's fifteen, the third being the STIX expectation fixed in v3.33.175c).
+`test_watch.WatchSignature.test_watch_rebuilds_after_metadata_deletion_and_ignores_output_changes` passed but errored
+when its temporary folder was removed (`WinError 32`): on Windows `terminate()` ends pdfmd, not a Pandoc child still
+running in that folder. The folder is now removed leniently, as other tests do; no assertion changed.
+`test_calc.Export.test_it_does_not_travel_with_attach_source_but_a_constants_file_does` failed on `booktabs.sty' not
+found: MiKTeX's on-demand install (`[MPM]AutoInstall=1`) installed nothing in that job, so `test.yml` now installs
+`booktabs` up front with `mpm --admin`, a warning instead of a failed step when it cannot.
+
 ## v3.33.175c — 2026-11-12
 
 Pre-edit state: commit `12abf9d`. Tests only, from the second CI run on the branch (Linux with Pandoc latest and 3.1.3).
