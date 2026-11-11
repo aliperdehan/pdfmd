@@ -4,7 +4,8 @@ The token travels once, in the URL that pdfmd prints (`?t=...`); the server answ
 redirect, so the page never handles it. A script may send `Authorization: Bearer TOKEN` instead. Every request is checked for the Host
 (DNS rebinding), a write for the Origin; no CORS header is ever sent, so no other site can read an answer. A body larger than the
 setting `serve-max-request-mb` is refused before it is read (it is read before the token is checked). On a POSIX system the server
-stops when the program that started it is gone (the Mac app that crashed, the terminal that was closed), instead of idling on its port.
+stops when the process named by the environment variable PDFMD_SERVE_PARENT is gone (the Mac app that crashed: Colophon sets it to its
+own process id), instead of idling on its port. Without the variable (a terminal, `nohup`, a script) nothing is watched.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import hmac
 import json
 import os
 import secrets
+import sys
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -45,6 +47,33 @@ class ParentGone(Exception):
     for itself)."""
 
 
+def watched_parent() -> int | None:
+    """The process id in PDFMD_SERVE_PARENT, on POSIX only (os.kill with signal 0 would end a process on Windows); a value that is not
+    a positive integer is ignored with one warning."""
+    value = os.environ.get("PDFMD_SERVE_PARENT", "").strip()
+    if not value or os.name != "posix":
+        return None
+    try:
+        pid = int(value)
+        if pid <= 0:
+            raise ValueError(value)
+    except ValueError:
+        print(f"WARN  PDFMD_SERVE_PARENT is not a positive process id ({value!r}): the server does not watch a parent", file=sys.stderr)
+        return None
+    return pid
+
+
+def process_exists(pid: int) -> bool:
+    """Signal 0 only asks: a process of another user exists (PermissionError)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
@@ -53,14 +82,13 @@ class Server(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), Handler)
         self.core, self.web_root, self.token = core, Path(web_root).resolve(), token
         self.max_body = max_body if max_body is not None and max_body > 0 else None
-        # the parent of the moment it starts; a POSIX system gives an orphan a new one. Windows does not (and os.kill there would end
-        # a process), so the server only watches on POSIX
-        self.parent = os.getppid() if os.name == "posix" else None
+        # the process whose end ends the server: only the one PDFMD_SERVE_PARENT names (the app that started it), never the shell's
+        self.parent = watched_parent()
 
     def service_actions(self) -> None:
         """Called by serve_forever at every turn of its loop (its poll interval), so the parent is looked at without a clock of its own."""
         super().service_actions()
-        if self.parent is not None and os.getppid() != self.parent:
+        if self.parent is not None and not process_exists(self.parent):
             raise ParentGone
 
     @property
@@ -192,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run(core: Core, web_root: Path, announce=None, max_body: int | None = None) -> int:
-    """Serve until interrupted, or until the program that started the server is gone (POSIX). `announce(info)` is called once with
+    """Serve until interrupted, or until the process named by PDFMD_SERVE_PARENT is gone (POSIX). `announce(info)` is called once with
     `{api, url, port, token, root}` (default: one JSON line on stdout); `max_body` is the largest request body in bytes (None: no limit)."""
     token = secrets.token_urlsafe(24)
     server = Server(core, web_root, token, max_body)

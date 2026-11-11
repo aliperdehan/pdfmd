@@ -2,10 +2,10 @@ import Foundation
 
 /// `pdfmd --serve FOLDER` started by the app for one web studio window: the page of the studio then runs on the real folder, through the
 /// JSON core of pdfmd (the app holds no logic of its own). pdfmd is found the way the build finds it (the Settings command, else the newest
-/// one the login shell knows) and is run in a login shell, which `exec`s it, so the app is its parent; the one JSON line it prints says
-/// where it listens. Stopped with everything it started when the window closes and when the app quits; when the app crashes, pdfmd sees
-/// that its parent is gone and stops by itself (pdfmd 3.33.184 and newer; an older one stays idle on its random port, which only the
-/// token opens).
+/// one the login shell knows) and is run in a login shell (the command may start with `VAR=value` or be an alias, so it is not `exec`'d); the one
+/// JSON line it prints says where it listens. Stopped with everything it started when the window closes and when the app quits; the app
+/// passes its own process id as PDFMD_SERVE_PARENT, so when it crashes pdfmd sees that process gone and stops by itself (pdfmd 3.33.185
+/// and newer; an older one stays idle on its random port, which only the token opens).
 final class StudioServer {
     struct Failure: Error { let message: String }
 
@@ -49,9 +49,10 @@ final class StudioServer {
     private func launch(command: String, done: @escaping (Result<URL, Failure>) -> Void) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lic", #"eval "exec $PDFMD_CMD --serve \"\$@\"""#, "pdfmd", folder.path]   // exec: the server's parent is the app
+        p.arguments = ["-lic", #"eval "$PDFMD_CMD --serve \"\$@\"""#, "pdfmd", folder.path]
         var env = ProcessInfo.processInfo.environment
         env["PDFMD_CMD"] = command
+        env["PDFMD_SERVE_PARENT"] = String(ProcessInfo.processInfo.processIdentifier)   // pdfmd stops when this process is gone
         p.environment = env
         p.currentDirectoryURL = folder
         let out = Pipe(), err = Pipe()

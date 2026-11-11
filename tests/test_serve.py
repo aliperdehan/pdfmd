@@ -457,16 +457,32 @@ class Http(Folder):
         self.assertEqual(connection.getresponse().status, 201)
         connection.close()
 
-    @unittest.skipUnless(os.name == "posix", "a parent that ends is seen on POSIX only")
-    def test_the_server_stops_when_its_parent_is_gone(self):
+    @unittest.skipUnless(os.name == "posix", "a watched process is seen on POSIX only")
+    def test_the_server_watches_only_the_process_it_is_told_about(self):
+        import io
+        from contextlib import redirect_stderr
+        from unittest import mock
         from pdfmd_serve.shell import ParentGone
-        server = Server(self.core, WEB, "tok-123")
-        self.addCleanup(server.server_close)
-        self.assertEqual(server.parent, os.getppid())
-        server.service_actions()                                   # the parent is there: nothing happens
-        server.parent = -1                                         # as if the process that started it had ended
-        with self.assertRaises(ParentGone):
+        clean = {key: value for key, value in os.environ.items() if key != "PDFMD_SERVE_PARENT"}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            server = Server(self.core, WEB, "tok-123")
+            self.addCleanup(server.server_close)
+            self.assertIsNone(server.parent, "no variable: nothing is watched")
             server.service_actions()
+        with mock.patch.dict(os.environ, {"PDFMD_SERVE_PARENT": str(os.getpid())}):
+            watched = Server(self.core, WEB, "tok-123")
+            self.addCleanup(watched.server_close)
+            self.assertEqual(watched.parent, os.getpid())
+            watched.service_actions()                                  # it exists: nothing happens
+            watched.parent = 2 ** 22 + 12345                           # a process that is not there
+            with self.assertRaises(ParentGone):
+                watched.service_actions()
+        for bad in ("abc", "0", "-5", "1.5"):
+            with mock.patch.dict(os.environ, {"PDFMD_SERVE_PARENT": bad}), redirect_stderr(io.StringIO()) as err:
+                server = Server(self.core, WEB, "tok-123")
+                self.addCleanup(server.server_close)
+                self.assertIsNone(server.parent, bad)
+                self.assertEqual(err.getvalue().count("WARN"), 1, bad)
 
     def test_it_listens_on_the_loopback_only(self):
         self.assertEqual(self.server.server_address[0], "127.0.0.1")
@@ -581,26 +597,47 @@ class CommandLine(unittest.TestCase):
             process.terminate()
             process.communicate(timeout=30)
 
+    @unittest.skipUnless(os.name == "posix", "a watched process is seen on POSIX only")
+    def test_serve_ends_with_the_process_named_by_pdfmd_serve_parent(self):
+        """A crashed Mac app left `pdfmd --serve` idling on its port: the app passes its process id, and the server ends with it."""
+        helper = subprocess.Popen(["sleep", "300"])
+        self.addCleanup(lambda: (helper.kill(), helper.wait()) if helper.poll() is None else None)
+        process = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--serve"], cwd=self.folder, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                   env={**os.environ, "PDFMD_SERVE_PARENT": str(helper.pid)})
+        self.addCleanup(lambda: (process.kill(), process.wait()) if process.poll() is None else None)
+        self.assertIn('"url"', process.stdout.readline(), "the server started and said where it listens")
+        import time
+        time.sleep(0.8)
+        self.assertIsNone(process.poll(), "the process is alive: the server keeps serving")
+        helper.kill()
+        helper.wait()                                                  # reaped: a zombie would still answer signal 0
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.fail("the server outlived the process it was told to watch")
+
     @unittest.skipUnless(os.name == "posix", "a parent that ends is seen on POSIX only")
-    def test_serve_ends_with_the_program_that_started_it(self):
-        """A crashed Mac app (or a closed terminal) left `pdfmd --serve` idling on its port: the parent here starts it and ends."""
+    def test_serve_without_the_variable_outlives_its_starter(self):
+        """A server started by hand (`nohup pdfmd --serve &`): the shell that started it ends and the server keeps serving."""
+        import time
         out = self.folder / "serve.out"
-        # the starter waits for the server's first line (as the app does) and then ends, leaving the server without its parent
-        starter = ("import subprocess, sys\n"
-                   "p = subprocess.Popen([sys.executable, sys.argv[1], '--serve'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,"
-                   " stderr=subprocess.DEVNULL, text=True)\n"
-                   "open(sys.argv[2], 'w').write(p.stdout.readline())\n"
-                   "print(p.pid)\n")
-        done = subprocess.run([sys.executable, "-c", starter, str(ROOT / "scripts" / "pdfmd"), str(out)], cwd=self.folder,
-                              capture_output=True, text=True, timeout=60)
+        env = {key: value for key, value in os.environ.items() if key != "PDFMD_SERVE_PARENT"}
+        done = subprocess.run(["sh", "-c", 'nohup "$1" "$2" --serve >"$3" 2>/dev/null </dev/null & echo $!', "sh", sys.executable,
+                               str(ROOT / "scripts" / "pdfmd"), str(out)], cwd=self.folder, capture_output=True, text=True, timeout=60, env=env)
         pid = int(done.stdout.strip())
         self.addCleanup(lambda: _kill(pid))
-        import time
-        self.assertIn('"url"', out.read_text(encoding="utf-8"), "the server started and said where it listens")
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and _alive(pid):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and '"url"' not in (out.read_text(encoding="utf-8") if out.exists() else ""):
             time.sleep(0.1)
-        self.assertFalse(_alive(pid), "the server outlived the program that started it")
+        info = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+        time.sleep(1.5)                                                # several turns of the 0.2 s poll after the starter's end
+        self.assertTrue(_alive(pid), "an unwatched server must outlive its starter")
+        connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
+        connection.request("GET", "/api/project", headers={"Authorization": "Bearer " + info["token"]})
+        self.assertEqual(connection.getresponse().status, 200)
+        connection.close()
+        _kill(pid)
 
     def test_serve_reads_the_request_limit_from_the_setup(self):
         """`serve-max-request-mb` in the config's options: a body over it is refused by `pdfmd --serve` itself."""

@@ -19,17 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.33.185 — 2026-11-12
+
+Pre-edit state: commit `a3e4022`. **Colophon 0.3.8.** Two regressions of v3.33.184: `exec $PDFMD_CMD` failed (status 127) when the
+user's pdfmd command starts with `VAR=value` or is an alias name, so the studio server did not start for them; and a server started
+by hand with `nohup pdfmd --serve &` stopped with its terminal's shell, which `nohup` users do not want. Now the server watches a
+process only when it is told which: the environment variable **`PDFMD_SERVE_PARENT`**, a positive process id, on POSIX only. At every
+`service_actions` turn it asks `os.kill(pid, 0)` whether that process exists (`ProcessLookupError` = gone, `ParentGone`;
+`PermissionError` = it exists); never on Windows, where signal 0 ends a process. A value that is not a positive integer is ignored
+with one `WARN` line on stderr. Without the variable (a terminal, `nohup`, a script) nothing is watched, as before 3.33.184; the
+`os.getppid()` comparison is gone. Colophon's launch line is `eval "$PDFMD_CMD --serve ..."` again (no `exec`) and the launched
+process gets `PDFMD_SERVE_PARENT` = the app's process id. Docs (README, `gui/README.md`, the module docstring, the 3.33.184 entry
+below) said the server stops when "the terminal that was closed" is gone: only a server started by Colophon is watched. The 3.33.183
+entry said the live filters' guard costs one Python start "the first time": measured, it is about 20 ms on every render of a document
+that reads a project file (0.12 to 0.16 s against 0.09 to 0.13 s); corrected there.
+
+Regression: `tests/test_serve.py`: with `PDFMD_SERVE_PARENT` set to a helper's pid, killing the helper ends the server within seconds;
+without it, the server whose starter ended keeps serving; a bad value warns and is ignored. pdfmd.py only has its version line changed.
+
 ## v3.33.184 — 2026-11-12
 
 Pre-edit state: commit `7a941df`. **Colophon 0.3.7.** Scout item 4 (approved by the author), two holes of `pdfmd --serve`:
 
 - **An orphaned server idled for good.** Colophon starts the server through a login shell and stops it when the window closes or
-  the app quits, but a crashed app left it running on its port (`StudioServer.swift` said so), and so did a closed terminal. On
+  the app quits, but a crashed app left it running on its port (`StudioServer.swift` said so), and so did a closed terminal (see v3.33.185). On
   POSIX the server now notes its parent when it starts and stops (`ParentGone`, raised from `service_actions`, which `serve_forever`
   calls at every turn of its existing 0.2 s poll: no new clock) once the parent has changed, as an orphan's does. Windows gives an
   orphan no new parent, and `os.kill` there would end a process, so it is not watched there. Under Colophon the parent was the login
   shell, which outlives the app, so the app's launch line now `exec`s the server (`eval "exec $PDFMD_CMD --serve ..."`): the app is
-  its parent. Note: a server started with `nohup pdfmd --serve &` now ends with its terminal's shell too. No idle time-out: there is
+  its parent. (Superseded by v3.33.185: only a server started by Colophon, which passes `PDFMD_SERVE_PARENT`, is watched, by that process id instead of the parent's; the `exec` is gone.) No idle time-out: there is
   no setting for one, so it is left out.
 - **The request body was read unbounded, before the token check.** `Content-Length` went straight to `rfile.read`, so any local
   process could make the server allocate whatever it named, and a negative length read until the connection ended. A negative or
@@ -95,7 +113,7 @@ the operating system through a small Python check (symlinks and `..` after a lin
 A refused file fails as a missing one does, with one warning the page shows. Not covered, and said so in the README: a program a
 filter starts (a LaTeX picture's `\input`, a diagram tool's include) reads what it is told. What it costs: a file outside the project
 that a setting names (a shared LaTeX preamble) is not read by the live view's filters either, a file of the project costs one short
-Python start the first time a filter opens it, and the live view no longer uses Pandoc's user data folder (no templates are used there;
+Python start (about 20 ms on every render of a document that reads a project file: 0.12 to 0.16 s against 0.09 to 0.13 s), and the live view no longer uses Pandoc's user data folder (no templates are used there;
 an `init.lua` of the user's own is not run). Regression: `tests/test_serve.py` renders `../secret.csv`, its absolute path,
 `sub/../../secret.csv`, a file link, a folder link and `..` after a link that stays inside (the links where symlinks exist): none
 reaches the page and each warns; `../inside.csv` from `sub/` and an absolute path inside still are tables. Checked failing without the
