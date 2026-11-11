@@ -338,6 +338,62 @@ class CommandLine(unittest.TestCase):
             with self.subTest(region=word):
                 self.assertAlmostEqual(pitch("typst", word) / size_ratio, body, delta=0.05)
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_custom_template_spacing_wins_property_by_property(self):
+        (self.directory / "doc.md").write_text(
+            "---\nfontsize: 12pt\nlinestretch: 2\n---\n\nFirst  \nline\n\nSecond  \nline\n", encoding="utf-8")
+        folder = self.directory / "custom templates"
+        folder.mkdir()
+        template = folder / "own.typ"
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+        default_leading = (2 * 14.5 * 72 / 72.27) - 0.7 * 12
+        cases = (("", default_leading + 8.4, default_leading + 15),
+                 ("#set par(leading: 2em)", 32.4, default_leading + 15),
+                 ("#set par(leading: 1.3em)", 24, default_leading + 15),
+                 ("#set par(spacing: 30pt)", default_leading + 8.4, 38.4),
+                 ("#set text(top-edge: 1em)", default_leading + 12, default_leading + 18.6),
+                 ("#set text(bottom-edge: -0.2em)", default_leading + 10.8, default_leading + 17.4),
+                 ("#show: body => { set par(leading: 2em, spacing: 30pt); body }", 32.4, 38.4))
+        for rules, pitch, gap in cases:
+            with self.subTest(rules=rules):
+                template.write_text('#set text(size: 12pt)\n' + rules + '\n$body$\n', encoding="utf-8")
+                self.check_template_pitch(environment, ["--template", str(template)], pitch, gap)
+        (folder / "nested").mkdir()
+        (folder / "nested" / "piece.typ").write_text('#set par(spacing: 30pt)\n\n', encoding="utf-8")
+        template.write_text('#set text(size: 12pt)\n#set par(leading: 2em)\n$nested/piece.typ()$\n$body$\n', encoding="utf-8")
+        defaults = folder / "defaults.yaml"
+        defaults.write_text('template: "${.}/own.typ"\n', encoding="utf-8")
+        for options in (["--template=" + str(template)], ["--defaults", str(defaults)]):
+            with self.subTest(options=options):
+                self.check_template_pitch(environment, options, 32.4, 38.4)
+        defaults_folder = Path(environment["XDG_DATA_HOME"]) / "pandoc" / "defaults"
+        defaults_folder.mkdir(parents=True)
+        (defaults_folder / "base.yaml").write_text("template: " + str(template) + "\n", encoding="utf-8")
+        (defaults_folder / "house.yaml").write_text('defaults: ["${.}/base.yaml"]\n', encoding="utf-8")
+        self.check_template_pitch(environment, ["--defaults", "house"], 32.4, 38.4)
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_default_template_body_still_resets_header_edges(self):
+        (self.directory / "doc.md").write_text(
+            '---\nfontsize: 12pt\nlinestretch: 2\nheader-includes: |\n'
+            '  ```{=typst}\n  #set text(top-edge: 1em)\n  ```\n---\n\nFirst  \nline\n\nSecond  \nline\n', encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
+        pitch = 2 * 14.5 * 72 / 72.27
+        self.check_template_pitch(environment, [], pitch, pitch + 0.55 * 12)
+
+    def check_template_pitch(self, environment, options, pitch, gap):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "-e", "typst",
+                               "--no-stamp", "--no-backup", *options], cwd=self.directory, env=environment,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        tops = self.line_tops()
+        self.assertAlmostEqual(tops[1][0] - tops[0][0], pitch, delta=0.05, msg=tops)
+        self.assertAlmostEqual(tops[2][0] - tops[1][0], gap, delta=0.05, msg=tops)
+
     def line_tops(self) -> list[tuple[float, str]]:
         layout = subprocess.run(["pdftotext", "-bbox-layout", str(self.directory / "doc.pdf"), "-"],
                                 capture_output=True, text=True, encoding="utf-8").stdout

@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.162"
+PDFMD_VERSION = "3.33.163"
 import argparse
 import atexit
 import contextlib
@@ -11297,7 +11297,7 @@ def chem_filter_args(sources: list[Path], metadata_files: list[Path], preamble_f
     return args + ["--lua-filter", str(shipped)]
 
 
-def typst_filter_args(writer: str, command: list[str] | None = None) -> list[str]:
+def typst_filter_args(writer: str, command: list[str] | None = None, directory: Path | None = None) -> list[str]:
     """``--lua-filter typst.lua`` for Typst (v3.27.11): a link to an anchor the document does not have becomes its
     text with one WARN, where Typst would stop the build; with a Pandoc before 3.2, a picture's relative path is made
     absolute. Last, after citeproc and the document's own filters."""
@@ -11309,7 +11309,7 @@ def typst_filter_args(writer: str, command: list[str] | None = None) -> list[str
         pdfmd_lua_missing()
         return []
     shipped = pdfmd_lua.path("typst")
-    return typst_template_args(writer, command or []) + ["--lua-filter", str(shipped)] if shipped is not None else []
+    return typst_template_args(writer, command or [], directory) + ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
 KATEX_X_HEIGHT = 0.442       # KaTeX_Main's x-height per em (v3.28.25: the size that matches a body font's is its x-height / this)
@@ -14872,7 +14872,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                                 else find_preambles(md_path.parent, md_path.stem, []))),
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
                 cmd += paragraph_spacing_typst_args(md_path, metadata_files, target_format)
-                cmd += typst_filter_args(target_format, cmd)
+                cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
                 if target_format == "epub" and EBOOK_MATH.get("mode") == "text":
                     cmd += ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
                 if flat_target:
@@ -15129,7 +15129,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
                     cmd += paragraph_spacing_typst_args(md_path, metadata_files, engine)
-                    last_filters = typst_filter_args(engine, cmd) + weasyprint_math_args(
+                    last_filters = typst_filter_args(engine, cmd, pandoc_cwd) + weasyprint_math_args(
                         engine, pandoc_options,
                         selected_font or document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)
