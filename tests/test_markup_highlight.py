@@ -126,6 +126,10 @@ class LuaColor(unittest.TestCase):
     @unittest.skipUnless(PANDOC and LUALATEX and tex_file("lua-ul.sty") and tex_file("luacolor.sty"),
                          "needs Pandoc, LuaLaTeX, lua-ul and luacolor")
     def test_a_plain_document_builds_on_lualatex_with_its_highlight(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("needs Pillow")
         with tempfile.TemporaryDirectory() as folder:
             doc = Path(folder) / "d.md"
             doc.write_text("Some ==marked words== here.\n", encoding="utf-8")
@@ -137,7 +141,6 @@ class LuaColor(unittest.TestCase):
             self.assertRegex(output, r"OK +\S*d\.md > d\.pdf .*\(lualatex\)")
             self.assertNotIn("failed", output)
             if shutil.which("pdftoppm"):
-                from PIL import Image
                 subprocess.run(["pdftoppm", "-r", "40", "-f", "1", "-l", "1", "-png", str(Path(folder) / "d.pdf"),
                                 str(Path(folder) / "page")], check=True)
                 image = Image.open(next(Path(folder).glob("page*.png"))).convert("RGB")

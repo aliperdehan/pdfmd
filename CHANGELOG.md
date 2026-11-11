@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.169e — 2026-11-11
+
+Pre-edit state: commit `9131720`. The YAML provenance test read UTF-8 project metadata with the platform default encoding, failing under Windows cp1252, and the LuaLaTeX highlight test imported optional Pillow without a skip. Every read_text in test_pyyaml now explicitly requests UTF-8; the highlight test checks Pillow before building and skips with needs Pillow when absent. The existing tests fail before the fix with a simulated cp1252 default and with Pillow hidden, and pass afterwards (the missing-Pillow case skips). YAML/highlight area tests and repository guards pass (117 tests, one skipped), as does lint. The simulated-default-encoding regression passes and the hidden-Pillow regression skips with the required reason. Tests only, no shipped-code version bump, constant, setting or behavioural threshold.
+
 ## v3.33.169d — 2026-11-11
 
 Pre-edit state: commit `f909dc6`. Native CI ran author conversion, assembly/unpacking, HTML rewrite and watch-refusal assertions without the Pandoc they require, and expected a timed reference-number build without any eligible LaTeX engine. Pandoc skips now guard only the affected methods, the HTML route subtest and the --watch subtests. The timing test requires an installed LaTeX engine other than ConTeXt, matching build_reference_numbers: with no Pandoc or kpsewhich it still passes when an eligible engine is selected, whereas no engine or ConTeXt alone returns before the timed step. All reported failures are reproduced before the fix; the five touched modules pass normally (110 tests, four skipped) and with Pandoc and LaTeX off PATH (110 tests, 52 skipped), alongside repository guards (97 tests, one skipped). The requested unversioned Homebrew Python path is absent here, so the restricted-PATH run uses /opt/homebrew/bin/python3.14. --watch makes native_possible return false at pdfmd.py:5248, so the Pandoc check at pdfmd.py:16573 precedes the batch refusal at pdfmd.py:16842; the order is unchanged. Tests only, no shipped-code version bump, constant, setting or behavioural threshold.

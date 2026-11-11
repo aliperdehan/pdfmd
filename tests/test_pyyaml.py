@@ -58,11 +58,11 @@ assert yaml.safe_load(yaml.safe_dump(data)) == data
     def test_licence_and_provenance_are_shipped(self):
         import pdfmd_yaml
         package = Path(pdfmd_yaml.__file__).parent
-        self.assertIn('Permission is hereby granted', (package / 'LICENSE').read_text())
-        self.assertIn('never edit by hand', (package / 'VENDORED.md').read_text())
+        self.assertIn('Permission is hereby granted', (package / 'LICENSE').read_text(encoding="utf-8"))
+        self.assertIn('never edit by hand', (package / 'VENDORED.md').read_text(encoding="utf-8"))
         self.assertFalse((package / 'cyaml.py').exists())
         self.assertFalse((package / '_yaml.py').exists())
-        text = (ROOT / 'pyproject.toml').read_text()
+        text = (ROOT / 'pyproject.toml').read_text(encoding="utf-8")
         self.assertIn('"lib/pdfmd_yaml/LICENSE"', text)
         self.assertIn('pdfmd_yaml = ["LICENSE", "VENDORED.md"]', text)
 
@@ -125,7 +125,7 @@ class Fallback(unittest.TestCase):
         self.run_pdfmd('--setup', 'plain', stdin=f'{number}\n1\ns\n')
         config = Path(self.env['XDG_CONFIG_HOME']) / 'pdfmd/config.yaml'
         import pdfmd_yaml
-        self.assertTrue(pdfmd_yaml.safe_load(config.read_text())['options']['line-numbers'])
+        self.assertTrue(pdfmd_yaml.safe_load(config.read_text(encoding="utf-8"))['options']['line-numbers'])
         (self.folder / 'doc.md').write_text('```python\nx = 1\n```\n')
         self.build_numbered()
 
