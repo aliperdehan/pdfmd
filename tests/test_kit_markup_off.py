@@ -109,6 +109,21 @@ class Builds(unittest.TestCase):
         kinds, _ = self.kinds("pdfmd-options: {kit: house}")
         self.assertEqual(kinds, ["landscape"])
 
+    def test_folder_markup_survives_a_kits_markup_default(self):
+        self.kit("markup-off: [landscape]\n", "pdfmd-options:\n  markup: [landscape]\n")
+        write(self.folder / ".pdfmd" / "config.yaml", "options:\n  markup: [landscape]\n")
+        write(self.folder / "report.md", "---\npdfmd-options: {kit: house}\n---\nText.\n")
+        done = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "pdfmd"), "report.md", "--to", "latex", "-o", "out.tex",
+             "--no-backup", "--no-stamp", "--verbose"], cwd=self.folder, capture_output=True, text=True,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                 "XDG_CONFIG_HOME": str(self.root / "config"), "XDG_CACHE_HOME": str(self.root / "cache"),
+                 "XDG_DATA_HOME": str(self.root / "data")})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("pdfmd-markup=landscape", done.stdout + done.stderr)
+        self.assertIn("pdflscape", (self.folder / "out.tex").read_text(encoding="utf-8"))
+
     def test_the_command_line_wins(self):
         self.kit("markup-off: [landscape]\n")
         kinds, _ = self.kinds("pdfmd-options: {kit: house}", "--markup", "landscape")

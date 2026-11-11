@@ -31,13 +31,14 @@ def _say_once(what: str, where: str, line: str, stream=None) -> None:
 def markup_set_above_kit(md_path: Path, metadata_files: list[Path]) -> bool:
     """Whether the `markup` value in force comes from a place stronger than a kit: the document's front matter, one of its own
     metadata files (not a kit's, not the global metadata or a preset), a folder's files. The places are read in the order
-    first_pdfmd_option reads them, so the answer is about the value that is used."""
+    first_pdfmd_option reads them. Kit and global defaults do not hide a folder's explicit request."""
     if "markup" in core.frontmatter_pdfmd_options(md_path):
         return True
     for path in core.metadata_files_by_priority(metadata_files):
         options = core.metadata_file_yaml(path).get("pdfmd-options")
-        if isinstance(options, dict) and "markup" in options:
-            return not (path in core.KIT_METADATA or core.is_global_metadata(path))
+        if (isinstance(options, dict) and "markup" in options
+                and path not in core.KIT_METADATA and not core.is_global_metadata(path)):
+            return True
     return any(isinstance(options, dict) and "markup" in options for _, options in core.folder_layers(md_path))
 
 

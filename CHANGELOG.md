@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.161 — 2026-11-11
+
+Pre-edit state: commit `7b03549`. A kit default containing markup made the markup-off guard return before checking a folder's explicit markup request, removing a kind the folder wanted. The guard now continues past kit and global defaults to check the stronger folder request. A checkout-launcher regression failed before the fix and passes afterwards; kit markup, callout, comment and repository guard tests run. pdfmd.py remains 17,203 lines. No new setting or behavioural threshold.
+
 ## v3.33.160 — 2026-11-11
 
 Pre-edit state: commit `62d93a6`. Command-line Lua and JSON filters received flattened author names because the title filter's safety check ignored their Pandoc options. The check now recognises the long, short, separate and attached filter forms and preserves author mappings for those readers. The checkout-launcher regression failed before the fix and passes afterwards for all eight forms; author metadata, serve and repository guard tests run (156 tests, one skipped; nine serve socket errors also reproduced with the pre-edit native code). pdfmd.py remains 17,203 lines. No new setting or behavioural threshold.
