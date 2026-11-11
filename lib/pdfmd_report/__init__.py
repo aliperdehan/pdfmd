@@ -310,6 +310,10 @@ def run(core, *,
                     cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
+                if is_tex_target:
+                    cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
+                cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, target_format)
+                cmd += typst_filter_args(target_format)
                 cmd += report_office_arguments.filter_arguments
                 cmd += chem_filter_args(list(files), metadata_files,
                                         list(report_preambles or ([] if discovery_disabled(report_no_auto, "preamble")

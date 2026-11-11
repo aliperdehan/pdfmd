@@ -103,8 +103,20 @@ class ThroughPdfmd(unittest.TestCase):
         environment = {**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"), "XDG_CONFIG_HOME": str(root / "config"),
                        "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"}
         environment.pop(pdfmd_paragraph.ENV, None)
-        return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *args], cwd=root, capture_output=True, text=True,
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args], cwd=root, capture_output=True, text=True,
                               stdin=subprocess.DEVNULL, env=environment)
+
+    def test_report_patch_latex_and_typst_spacing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "a.md").write_text("---\npdfmd-options:\n  report-build: patch\n  paragraph-spacing: 6pt\n---\n\nOne.\n", encoding="utf-8")
+            (root / "b.md").write_text("Two.\n", encoding="utf-8")
+            for target, suffix, expected in (("latex", "tex", "\\setlength{\\parskip}{6pt}"),
+                                             ("typst", "typ", "spacing: 0.5317em + 6pt")):
+                with self.subTest(target=target):
+                    done = self.run_pdfmd(root, "-r", "a.md", "b.md", "--to", target, "-s", "-o", "out." + suffix)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertIn(expected, (root / ("out." + suffix)).read_text(encoding="utf-8"))
 
     def test_latex_and_typst_sources(self):
         with tempfile.TemporaryDirectory() as folder:

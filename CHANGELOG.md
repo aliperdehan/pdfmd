@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.155 — 2026-11-11
+
+Pre-edit state: commit `73e41d5`. Patch-built reports to LaTeX and Typst omitted paragraph spacing because their non-PDF route did not add the spacing arguments and Typst filter. The route now applies the same settings as ordinary builds. Checkout regressions for both targets failed before the fix and pass afterwards; paragraph spacing and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
+
 ## v3.33.154 — 2026-11-11
 
 Pre-edit state: commit `d9696a1`. The global Pandoc check rejected Quarto HTML inputs before their dedicated renderer could run, even though Quarto supplies its own Pandoc. Dependency gating now selects the single-file Quarto route first; other inputs retain their standalone Pandoc requirement. Checkout regressions failed before the fix and pass afterwards for explicit and output-inferred HTML targets and a missing-Quarto diagnostic, with a Markdown dependency control. Quarto-route, rewrite, batch-path, native and repository guard tests run. Route selection lives in pdfmd_routing; pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
