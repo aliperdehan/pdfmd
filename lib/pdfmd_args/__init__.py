@@ -1018,3 +1018,20 @@ def build_parser() -> argparse.ArgumentParser:
                              "report.md.09-24_09-15-00.bak) or a template using {name}/{stem}/{ext} "
                              "plus strftime codes. Overrides pdfmd-options.backup.format")
     return parser
+
+
+def metadata_keys(arguments: list[str]) -> set[str]:
+    """Keys explicitly set by Pandoc's command-line metadata options."""
+    keys = set()
+    tokens = iter(arguments)
+    for token in tokens:
+        if token in ("-M", "--metadata"):
+            value = next(tokens, "")
+        elif token.startswith("--metadata="):
+            value = token[len("--metadata="):]
+        elif token.startswith("-M"):
+            value = token[2:]
+        else:
+            continue
+        keys.add(value.split(":", 1)[0].split("=", 1)[0])
+    return keys

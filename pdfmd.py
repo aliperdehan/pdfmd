@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.142"
+PDFMD_VERSION = "3.33.143"
 import argparse
 import atexit
 import contextlib
@@ -4187,7 +4187,7 @@ def metadata_layers(sources: list[Path], metadata_files: list[Path]) -> list[tup
     return layers
 
 
-def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options=()) -> list[str]:
     """The metadata file with the finished values and ``--lua-filter metadata_append.lua``, only when some key appends; [] otherwise
     (every other build is untouched). Goes before every other filter."""
     files = sources if isinstance(sources, list) else [sources]
@@ -4196,6 +4196,8 @@ def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path])
     append = metadata_append_keys(files[0], metadata_files)
     layers = metadata_layers(files, metadata_files)
     merged = merge_metadata_layers(layers, append, display_path(files[0]))
+    for key in load_package("pdfmd_args").metadata_keys(pandoc_options):
+        merged.pop(key, None)
     if not merged:
         return []
     try:
@@ -4424,7 +4426,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     `inputs` are the files whose text is searched for the syntax (the document, or all the files of a joined build), `md_path` the
     document itself (a report's files, for report mode); `cellalign_early` puts the cell filter here (the office route), where the
     others put it after the writer's own. `label` names the document in a message (report mode: `REPORT`); `md_path` by default."""
-    args = metadata_append_args(inputs, metadata_files)
+    args = metadata_append_args(inputs, metadata_files, pandoc_options)
     args += md_macro_args(inputs, metadata_files)
     args += calc_filter_args(inputs, metadata_files)
     args += csv_table_filter_args(inputs, no_auto, csv_filter, metadata_files)

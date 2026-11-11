@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.143 — 2026-11-11
+
+Pre-edit state: commit `5a97ee8`. Appending a document metadata value could overwrite an explicit command-line value because the append filter replaced Pandoc’s resolved metadata. Append replacements now exclude keys explicitly supplied with command-line metadata, preserving unrelated appends. Checkout regressions for separate and attached -M forms, with equals and colon separators, failed before the fix and pass afterwards; metadata-append and repository guard tests run. Option scanning lives in the argument package; pdfmd.py grows from 17,204 to 17,206 lines to remove those keys from its existing merge. No new setting or behavioural threshold.
+
 ## v3.33.142 — 2026-11-11
 
 Pre-edit state: commit `9aede11`. Disabled aliases such as files, blanket no-auto and explicit-only survived precedence resolution and were expanded again, defeating a stronger per-kind on setting. Alias expansion now produces concrete kinds before resolving layers, including blanket disabling. Regressions failed before the fix and pass afterwards, including a checkout HTML build that restores document-requested Lua discovery; automatic-kind, setup, Unicode, serve and repository guard tests run. pdfmd.py remains 17,204 lines; no new setting or behavioural threshold.

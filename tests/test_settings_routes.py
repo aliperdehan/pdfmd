@@ -87,3 +87,17 @@ class AutoAliasPrecedence(RouteCase):
         (self.root / "d.lua").write_text('function Str(el) if el.text == "TOKEN" then return pandoc.Str("RESTORED") end end\n')
         self.run_pdfmd("--to", "html", "-o", str(self.root / "d.html"))
         self.assertIn("RESTORED", (self.root / "d.html").read_text())
+
+
+class CommandMetadataPrecedence(RouteCase):
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_checkout_cli_metadata_wins_without_stopping_other_appends(self):
+        self.source.write_text('---\nauthor+: [Partner]\nkeywords+: [Extra]\n---\nText.\n')
+        (self.root / "base.yaml").write_text('author: [Base]\nkeywords: [Original]\n')
+        (self.root / "template.html").write_text('$for(author)$$author$$sep$|$endfor$:$for(keywords)$$keywords$$sep$|$endfor$\n')
+        for arguments in (("-M", "author=CLI Author"), ("-M", "author:CLI Author"),
+                          ("-Mauthor=CLI Author",)):
+            with self.subTest(arguments=arguments):
+                self.run_pdfmd("--to", "html", "-o", str(self.root / "d.html"), "-y", str(self.root / "base.yaml"),
+                               "--standalone", "--template", str(self.root / "template.html"), *arguments)
+                self.assertEqual((self.root / "d.html").read_text().strip(), 'CLI Author:Original|Extra')
