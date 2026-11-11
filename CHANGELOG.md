@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185c — 2026-11-12
+
+Pre-edit state: commit `f754bf9`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.11: identify the watched source by path.** A watcher for a namesake in another project suppressed a build because detection matched a basename substring. It now reads process arguments and working directories and compares resolved source paths, including relative names and spaces.
+
+Regression: `tests/test_colophon_watcher_match.py` checks a namesake in another project and a live scratch watcher with a relative path; the original false positive fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185b — 2026-11-12
 
 Pre-edit state: commit `7a4649c`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.10: restore a missing file's watcher.** Deleting a file for longer than the disk-change pause left the editor permanently unwatched after it was recreated. A parent-directory watch now reattaches the file watch when it returns, and replacement events remain pending through a burst of notifications.

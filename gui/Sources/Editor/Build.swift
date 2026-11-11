@@ -132,26 +132,14 @@ enum PdfmdBuild {
     /// A pdfmd that is already rebuilding this file on every save (`pdfmd -w FILE`, or the watcher that `pdfmd --edit --editor` starts):
     /// building again beside it would run two TeX builds on the same files. The command line of the process, or nil.
     static func watcher(for file: URL, listing: String? = nil) -> String? {
-        var text = listing ?? ""
-        if listing == nil {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/bin/ps")
-            p.arguments = ["-axww", "-o", "command="]
-            let pipe = Pipe()
-            p.standardOutput = pipe
-            p.standardError = FileHandle.nullDevice
-            guard (try? p.run()) != nil else { return nil }
-            text = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            p.waitUntilExit()
+        if let listing {
+            for line in listing.split(whereSeparator: \.isNewline) {
+                let args = line.split(whereSeparator: \.isWhitespace).map(String.init)
+                if BuildWatcher.matches(args, directory: file.deletingLastPathComponent(), file: file) { return String(line) }
+            }
+            return nil
         }
-        let name = file.lastPathComponent
-        for raw in text.split(whereSeparator: \.isNewline) {
-            let line = String(raw)
-            guard line.contains("pdfmd"), line.contains(name) else { continue }
-            let words = line.split(separator: " ").map(String.init)
-            if words.contains("--watch") || words.contains("-w") || words.contains(where: { $0.hasPrefix("--watch=") }) { return line }
-        }
-        return nil
+        return BuildWatcher.find(file)
     }
 }
 

@@ -30,7 +30,7 @@ dispatchMain()
 '''
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            (root / 'main.swift').write_text('import Foundation\nimport Darwin\nenum Settings { struct Item { let key: String; let value: Double }; static let items = [Item(key: "buildStopGrace", value: 0.3)]; static func number(_ key: String) -> Double { 0.3 } }\n' + runner + main)
+            (root / 'main.swift').write_text('import Foundation\nimport Darwin\nenum Settings { struct Item { let key: String; let value: Double }; static let items = [Item(key: "buildStopGrace", value: 0.3)]; static func number(_ key: String) -> Double { 0.3 } }\n' + (ROOT / 'gui/Sources/Editor/BuildWatcher.swift').read_text() + runner + main)
             env = os.environ.copy()
             env['CLANG_MODULE_CACHE_PATH'] = str(root / 'clang')
             subprocess.run(['swiftc', '-module-cache-path', str(root / 'modules'), str(root / 'main.swift'), '-o', str(root / 'test')], check=True, capture_output=True, env=env, timeout=120)
