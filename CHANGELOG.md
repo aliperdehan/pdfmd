@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185a — 2026-11-12
+
+Pre-edit state: commit `2ebeddd`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.9: bound build stopping and output draining.** A build whose child ignored SIGTERM and retained the output pipe could prevent further builds and exports. The new Build stop grace preference (positive seconds, default 3) bounds the final drain and the wait before SIGKILL; process birth times prevent signalling a reused PID. Invalid values use the default. `buildTimeout` still controls when a build is stopped.
+
+Regression: `tests/test_colophon_build_stop.py` runs the build runner without a window with a child that ignores SIGTERM and retains the pipe; it hung before the fix and finishes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185 — 2026-11-12
 
 Pre-edit state: commit `a3e4022`. **Colophon 0.3.8.** Two regressions of v3.33.184: `exec $PDFMD_CMD` failed (status 127) when the

@@ -60,19 +60,22 @@ enum PdfmdBuild {
         let lock = NSLock()
         var collected = Data()
         var timedOut = false
+        let drained = DispatchSemaphore(value: 0)
+        let configuredGrace = Settings.number("buildStopGrace")
+        let grace = configuredGrace.isFinite && configuredGrace > 0 ? configuredGrace : Settings.items.first { $0.key == "buildStopGrace" }!.value
         let started = Date()
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            guard !chunk.isEmpty else { drained.signal(); return }
             lock.lock(); collected.append(chunk); lock.unlock()
             let text = String(decoding: chunk, as: UTF8.self)
             DispatchQueue.main.async { output(text) }
         }
         p.terminationHandler = { proc in
+            _ = drained.wait(timeout: .now() + grace)
             pipe.fileHandleForReading.readabilityHandler = nil
-            let rest = pipe.fileHandleForReading.readDataToEndOfFile()
-            lock.lock(); collected.append(rest); let all = collected; let stopped = timedOut; lock.unlock()
-            if !rest.isEmpty { let text = String(decoding: rest, as: UTF8.self); DispatchQueue.main.async { output(text) } }
+            try? pipe.fileHandleForReading.close()
+            lock.lock(); let all = collected; let stopped = timedOut; lock.unlock()
             let text = String(decoding: all, as: UTF8.self)
             var result = Result(status: proc.terminationStatus, output: text, seconds: Date().timeIntervalSince(started), timedOut: stopped)
             if result.ok { result.made = madeFile(output: text, source: file) }
@@ -88,14 +91,14 @@ enum PdfmdBuild {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 guard p.isRunning else { return }
                 lock.lock(); timedOut = true; lock.unlock()
-                killTree(p.processIdentifier)
+                killTree(p.processIdentifier, grace: grace)
             }
         }
         return p
     }
 
     /// The process and everything it started (a build runs python, pandoc and lualatex below the shell), the newest first.
-    static func killTree(_ pid: pid_t) {
+    static func killTree(_ pid: pid_t, grace: Double? = nil) {
         func children(of pid: pid_t) -> [pid_t] {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
@@ -109,7 +112,21 @@ enum PdfmdBuild {
             return String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline).compactMap { pid_t($0) }
         }
         func order(_ pid: pid_t) -> [pid_t] { children(of: pid).flatMap(order) + [pid] }
-        for target in order(pid) { kill(target, SIGTERM) }
+        // A PID may have been reused by the time the grace expires: compare its birth time before signalling again.
+        func birth(_ pid: pid_t) -> (UInt64, UInt64)? {
+            var info = proc_bsdinfo()
+            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { return nil }
+            return (info.pbi_start_tvsec, info.pbi_start_tvusec)
+        }
+        let targets = order(pid).map { ($0, birth($0)) }
+        for (target, _) in targets { kill(target, SIGTERM) }
+        if let grace {
+            DispatchQueue.global().asyncAfter(deadline: .now() + grace) {
+                for (target, original) in targets {
+                    if let original, let current = birth(target), original == current { kill(target, SIGKILL) }
+                }
+            }
+        }
     }
 
     /// A pdfmd that is already rebuilding this file on every save (`pdfmd -w FILE`, or the watcher that `pdfmd --edit --editor` starts):
