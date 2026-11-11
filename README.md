@@ -148,8 +148,26 @@ copied from an old shell history, or a Makefile in every folder. `pdfmd` turns t
 pipx install pdfmd-cli
 ```
 
-That puts a `pdfmd` command on your PATH, with its Python dependencies, in
-its own isolated environment. The same with uv:
+That installs the `pdfmd` and `pdfmd-cli` commands in their own isolated environment.
+The default installation needs no C/C++ compiler or Windows Build Tools on any supported Python:
+YAML parsing is bundled as pure Python, and `pypdf` is the only required dependency.
+Python 3.9+ is supported; the tested versions are listed in the [CI matrix](.github/workflows/test.yml).
+`pip install "pdfmd-cli[yaml]"` optionally adds installed PyYAML for its LibYAML speed-up;
+that extra may need a compiler when PyYAML has no wheel for your Python.
+
+With pip on Windows:
+
+```powershell
+py -m pip install pdfmd-cli
+py -m pdfmd --setup
+```
+
+Pip installs both commands into Python's `Scripts` folder, which is often absent from Windows PATH;
+`py -m pip` warns when it is. Until that folder is on PATH, use `py -m pdfmd`.
+In `--setup`, choose **Windows user PATH** and add the `Scripts` folder named by pip's warning,
+or run `py -m pdfmd --user-path add "C:\path\to\Python\Scripts"`. Reopen the terminal afterwards.
+
+The same installation with uv:
 
 ```sh
 uv tool install pdfmd-cli        # install; update with: uv tool upgrade pdfmd-cli
@@ -269,8 +287,8 @@ Office files.
 
 `pdfmd.py` needs Python 3.9+ and runs straight from a clone, with the `lib/` folder beside it (the `pdfmd_*` packages
 it is split into; a copy of `pdfmd.py` without them stops and says so). It also runs
-directly, and `pyyaml`/`pypdf` are optional (features that need them are
-skipped with a warning):
+directly: YAML support is bundled, with installed `pyyaml` preferred when available.
+`pypdf` is optional for a checkout (PDF stamping is skipped with a warning without it):
 
 ```sh
 git clone https://github.com/aliperdehan/pdfmd.git ~/pdfmd
@@ -476,7 +494,7 @@ the numbers go.
 Where `pip install pdfmd-cli` cannot reach the network (a sandbox with no DNS that only takes an upload), two ways:
 
 ```sh
-python3 scripts/build_zipapp.py          # on a machine with pdfmd's source: dist/pdfmd.pyz, 1.4 MB, PyYAML and pypdf inside
+python3 scripts/build_zipapp.py          # on a machine with pdfmd's source: dist/pdfmd.pyz, bundled pure-Python YAML and pypdf inside
 python3 pdfmd.pyz report.md              # on the other: needs Python 3.9+, Pandoc and a PDF engine; unpacks itself once
                                          # into ~/.cache/pdfmd/pyz/ because Pandoc has to open the Lua filters as files
 

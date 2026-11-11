@@ -77,7 +77,10 @@ class PyprojectTests(unittest.TestCase):
 
     def test_runtime_dependencies_are_declared(self):
         declared = {requirement_name(item) for item in self.project.get("dependencies", [])}
-        self.assertTrue({"pyyaml", "pypdf"} <= declared, f"declared: {sorted(declared)}")
+        self.assertEqual(declared, {"pypdf"})
+
+    def test_yaml_acceleration_is_an_optional_extra(self):
+        self.assertEqual(self.project["optional-dependencies"].get("yaml"), ["pyyaml"])
 
     @unittest.skipIf(tomllib is None, "needs tomllib (3.11+)")
     def test_the_command_is_installed_under_both_names(self):

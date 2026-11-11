@@ -100,7 +100,7 @@ Older Pandoc, and no network (v3.25.11):
     does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
     pandoc.log (Pandoc 3.2); a pandoc-crossref built for another Pandoc than the running one is not run (it would leave
     ?? for the numbers) and a WARN says which release to get. scripts/build_zipapp.py makes dist/pdfmd.pyz, pdfmd and
-    its packages with PyYAML and pypdf in one file for a machine with no network (it unpacks itself once into
+    its packages with bundled pure-Python YAML and pypdf in one file for a machine with no network (it unpacks itself once into
     ~/.cache/pdfmd/pyz/), and a folder of wheels does the same with pip's --no-index --find-links.
 
 Packages a document's commands need (v3.27.16; auto kind `texpackages`):
@@ -586,7 +586,7 @@ Stopping early (--stop-at, v3.19.0):
     build, and -V/command-line options. A document with no front matter and
     a bare leading `# Title` keeps its preamble out of the file (a new
     front-matter block would stop the title being promoted), with a
-    warning. YAML is re-written by PyYAML (YAML 1.1 rules, comments lost: an
+    warning. YAML is re-written by PyYAML (bundled fallback; YAML 1.1 rules, comments lost: an
     ambiguous scalar like `007` comes back as `7`). A report/book build
     applies no discovered Lua filter, so none is embedded there.
 
@@ -1284,8 +1284,8 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     LaTeX-only geometry/monofont defaults already are; a document that
     sets it but ends up on a fallback chain with no LaTeX-family engine
     available at all gets one clear WARN and `--citeproc` instead. All
-    three keys require PyYAML and a document that already has a `---`
-    block; silently ignored (not an error) if PyYAML isn't installed.
+    three keys require YAML support and a document that already has a `---`
+    block; silently ignored (not an error) if the YAML installation is broken.
 
 The history file (v3.25.8; the package pdfmd_history). In `pdfmd-options` the setting is `stamp:`, and `history:` is an alias for it (v3.30.24; where
     both give a field, `stamp` wins):
@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.166"
+PDFMD_VERSION = "3.33.167"
 import argparse
 import atexit
 import contextlib
@@ -2269,7 +2269,7 @@ def frontmatter_pdfmd_options(md_path: Path) -> dict:
     nested mapping -- ``no-auto: [monofont, margin]`` and
     ``no-auto: true`` both have to parse correctly, not just be detected.
     Returns {} if there's no front matter, no ``pdfmd-options`` key, the
-    front matter doesn't parse as YAML, or PyYAML isn't installed --
+    front matter doesn't parse as YAML, or YAML support is unavailable --
     document-level pdfmd-options are optional sugar, not a hard dependency
     of the rest of the script. Also {} for a binary office document
     (OFFICE_INPUT_EXTENSIONS) without even trying to read it as text --
@@ -7180,12 +7180,12 @@ def document_header_includes(text: str) -> str | None:
     safeguard for any document using it: the block-scalar-only regex below
     simply never matched, so `active` calculations based on this function
     looked right while the document's actual header-includes kept vanishing
-    anyway. A real YAML parse (PyYAML, already an optional/soft dependency
-    elsewhere in this file -- see `frontmatter_pdfmd_options`) handles the
+    anyway. A real YAML parse (installed PyYAML or the bundled fallback;
+    see `frontmatter_pdfmd_options`) handles the
     sequence shape correctly, one raw LaTeX line per list item, joined with
     newlines, matching how Pandoc's own template concatenates such a list.
     Falls back to the original block-scalar-only regex when PyYAML isn't
-    installed -- worse than a real parse, but not a new limitation; a
+    available -- worse than a real parse, but not a new limitation; a
     sequence-style document with no PyYAML available is simply back to the
     pre-2026-09-20 (bugged) behavior for this one shape, same as it always
     was.
@@ -8242,7 +8242,7 @@ def frontmatter_margin_geometry_options(md_path: Path, variables: list[str],
     has_geometry().
 
     Returns None when: no ``margin:`` in any source; a real ``geometry:``
-    is set anywhere; PyYAML isn't installed (falls back to the
+    is set anywhere; YAML support is unavailable (falls back to the
     scalar-only regex this function used before parse_margin_sides()
     existed, since a real parse is needed for the mapping case -- checked
     per source, same order); or every ``margin:`` found uses Typst's
