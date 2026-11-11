@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import builtins
+
 from .registry import Setting, from_stored, read, shown, to_stored, write
 
 
@@ -226,7 +228,7 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
         if setting is None:
             break
         if setting.kind == "action":                   # leave the full screen, do it on the terminal, then come back
-            actions[setting.key](print, input)
+            actions[setting.key](print, builtins.input)
             continue
         # a text setting: leave the full screen for a prompt, then come back
         current = read(stores, setting)

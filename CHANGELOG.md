@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.139 — 2026-11-11
+
+Pre-edit state: commit `85e665f`. **Repair the full-screen Windows PATH action.** Selecting the action passed
+the screen input object as a prompt, causing a TypeError and losing unsaved edits. The menu now receives the terminal
+input function; a real menu regression and PATH, setup and repository guard tests run.
+
 ## v3.33.138 — 2026-11-11
 
 Pre-edit state: commit `5edb820`. **Validate table counts in setup.** Both editors rejected zero and accepted

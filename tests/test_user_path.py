@@ -280,6 +280,15 @@ class FancyRow(unittest.TestCase):
         self.assertTrue(self.drive("\rs", {"user-path": lambda say, read_line: ran.append(1)}))
         self.assertEqual(ran, [1])
 
+    def test_path_menu_receives_a_callable_prompt(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            context = dict(backend=Fake(), record=Path(directory) / "added.json", found=lambda: [], version="test")
+            with patch("builtins.input", return_value="") as prompt:
+                self.assertTrue(self.drive("\rs", {"user-path": lambda say, read_line:
+                                                   userpath.menu(say, read_line, **context)}))
+            prompt.assert_called_once()
+
     def test_without_an_action_the_row_is_not_on_the_screen(self):
         from prompt_toolkit.input import create_pipe_input
         from prompt_toolkit.output import DummyOutput
