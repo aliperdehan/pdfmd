@@ -404,7 +404,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         # file, since it has no --input-directory flag of its own.
         bib_env = (engine_env or os.environ).copy()
         bib_env["BIBINPUTS"] = f"{work_dir}{os.pathsep}{tex_path.parent}{os.pathsep}{bib_env.get('BIBINPUTS', '')}"
-        bib_cmd = (["biber", f"--input-directory={work_dir}", tex_path.stem] if bib_tool == "biber"
+        bib_cmd = (["biber", f"--input-directory={work_dir}", str((output_dir / f"{tex_path.stem}.bcf").resolve())] if bib_tool == "biber"
                    else ["bibtex", tex_path.stem])
         bib_result = run(bib_cmd, output_dir, env=bib_env)
         if bib_result.returncode != 0:

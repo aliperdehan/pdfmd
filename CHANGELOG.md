@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.136 — 2026-11-11
+
+Pre-edit state: commit `4ab9c62`. **Use the fresh Biber control file.** A stale control file beside a direct TeX
+source could override the fresh scratch copy, producing outdated citations. Biber now receives the absolute scratch
+control path while retaining bibliography lookup; a checkout regression and TeX and repository guard tests run.
+
 ## v3.33.135 — 2026-11-11
 
 Pre-edit state: commit `6f6dfd2`. **Keep native Calibre image paths usable.** Moving normalised Markdown to
