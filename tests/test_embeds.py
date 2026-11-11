@@ -157,7 +157,7 @@ class Build(unittest.TestCase):
     def test_in_a_vault_the_picture_is_found_by_name_and_sized_in_points(self):
         html, said = self.build("vault/notes", "# N\n\nA ![[Pasted image 1.png|300]] B\n")
         self.assertIn('src="../img/Pasted%20image%201.png"', html)
-        self.assertIn("width:225pt", html)
+        self.assertRegex(html, r"width:(225pt|3\.125in)\b")          # 300 px; Pandoc 3.1.3 writes the same length in inches
         self.assertIn("max-width: 100%", html)
         self.assertNotIn("WARN", said)
 
@@ -166,7 +166,8 @@ class Build(unittest.TestCase):
         self.assertIn('src="pic.png"', html)
         self.assertIn("<figcaption", html)
         html, _ = self.build("plain", "---\npdfmd-options:\n  flavour: pandoc\n---\n\n![[pic.png|100]]\n")
-        self.assertIn("![[pic.png|100]]", html)
+        self.assertIn("[[pic.png|100]]", html)          # as text; Pandoc 3.1.3's Markdown reader drops the `!` before a bracket that is no image
+        self.assertNotIn("<img", html)
 
     def test_a_missing_picture_is_a_placeholder_and_a_warning(self):
         html, said = self.build("plain", "# N\n\n![[nope.png]]\n")
@@ -175,7 +176,7 @@ class Build(unittest.TestCase):
 
     def test_the_settings_change_the_size_and_the_cap(self):
         html, _ = self.build("plain", "---\npdfmd-options:\n  embed-px-to-pt: 1\n  embed-fit: none\n---\n\n![[pic.png|120]]\n")
-        self.assertIn("width:120pt", html)
+        self.assertRegex(html, r"width:(120pt|1\.66667in)\b")        # the same length, as Pandoc 3.1.3 spells it
         self.assertNotIn("max-width", html)
 
     def test_a_latex_build_keeps_a_wide_picture_within_the_text(self):
