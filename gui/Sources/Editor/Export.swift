@@ -139,8 +139,15 @@ enum ExportArguments {
         var tokens: [String] = []
         var current = ""
         var quote: Character?
+        var escaped = false
         for ch in text {
-            if let q = quote {
+            if escaped {
+                current.append(ch)
+                escaped = false
+            } else if ch == "\\" && quote != "'" {
+                current.append(ch)
+                escaped = true
+            } else if let q = quote {
                 current.append(ch)
                 if ch == q { quote = nil }
             } else if ch == "'" || ch == "\"" {

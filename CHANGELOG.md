@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185d — 2026-11-12
+
+Pre-edit state: commit `e1f4139`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.12: preserve escaped export arguments.** A build output name containing an escaped space was split when export removed `-o`, leaving a stray input. The scanner now keeps shell escapes with their words, including escaped quotes, while respecting single quotes.
+
+Regression: `tests/test_colophon_export_arguments.py` exercises escaped spaces and quotes and complete option/value removal; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185c — 2026-11-12
 
 Pre-edit state: commit `f754bf9`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.11: identify the watched source by path.** A watcher for a namesake in another project suppressed a build because detection matched a basename substring. It now reads process arguments and working directories and compares resolved source paths, including relative names and spaces.
