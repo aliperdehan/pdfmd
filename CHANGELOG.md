@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.169c — 2026-11-11
+
+Pre-edit state: commit `754b939`. Parser-only tests still imported optional installed PyYAML, causing kit-selection import, template round-trip and attachment-restore errors and skipping setup, folder, automatic-state and attachment-layer coverage on native CI. They now use pdfmd_yaml_support.yaml, matching shipped code; parser-only skips are removed while Pandoc, prompt_toolkit and pypdf requirements remain. With installed yaml hidden before core import, the three reported regressions fail before the fix and pass afterwards; touched modules pass normally and with the installed package hidden (226 tests, one skipped in each run), and repository guards pass (97 tests, one skipped). The installed-source regeneration/version skip in test_pyyaml remains because that test's subject is installed PyYAML itself. Tests only, no shipped-code version bump, constant, setting or behavioural threshold.
+
 ## v3.33.169b — 2026-11-11
 
 Pre-edit state: commit `c425e90`. The lint job inspected generated bundled PyYAML and reported 378 findings; an Office-margin test's core import also triggered F401 despite adding lib/ to sys.path for the following import. Ruff now excludes pdfmd_yaml alongside pdfmd_inkmd, with the workflow comment updated; the side-effect import is explicitly marked. The lint command fails before the fix (379 errors) and prints All checks passed afterwards. Office-margin and repository guard tests pass (99 tests, one skipped). Workflow/tests only, no shipped-code version bump, constant, setting or behavioural threshold.

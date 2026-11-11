@@ -21,13 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
+from pdfmd_yaml_support import yaml  # noqa: E402
 import pdfmd_setup  # noqa: E402
 from pdfmd_setup import registry  # noqa: E402
 
-try:
-    import yaml
-except ImportError:                                         # pragma: no cover
-    yaml = None
 
 PANDOC = shutil.which("pandoc")
 SCREEN, _ = pdfmd_setup.folder_settings(pdfmd_setup.settings_for(pdfmd.NO_AUTO_KINDS))
@@ -65,7 +62,6 @@ class Tree(unittest.TestCase):
         return target / name
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Reading(Tree):
     def test_the_folders_metadata_sits_between_the_files_and_the_global_one(self):
         self.config.write_text("options: {}\n", encoding="utf-8")
@@ -146,7 +142,6 @@ class Reading(Tree):
         self.assertEqual([options for _, options in layers], [{"fallback": "char"}])
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Screen(Tree):
     def run_setup(self, lines: list[str], where: Path | str | None = None, *flags: str):
         target = str(self.root / "a" if where is None else where)
@@ -220,7 +215,7 @@ class Screen(Tree):
         self.assertIn("global setup", done.stderr)
 
 
-@unittest.skipUnless(yaml and PANDOC, "needs PyYAML and Pandoc")
+@unittest.skipUnless(PANDOC, "needs Pandoc")
 class Build(Tree):
     def test_a_document_is_built_with_its_folders_settings(self):
         self.put("a", "metadata.yaml", "author: The Folder Author\n")

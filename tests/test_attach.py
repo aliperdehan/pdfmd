@@ -23,10 +23,6 @@ try:
     import pypdf
 except ImportError:                                  # pragma: no cover
     pypdf = None
-try:
-    import yaml
-except ImportError:                                  # pragma: no cover
-    yaml = None
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -39,6 +35,7 @@ _os.environ["XDG_CONFIG_HOME"] = _tempfile.mkdtemp(prefix="pdfmd-test-config-")
 _os.environ["APPDATA"] = _os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
+from pdfmd_yaml_support import yaml  # noqa: E402
 from pandoc_support import tex_tree_env  # noqa: E402
 
 strip = pdfmd.strip_markdown_comments

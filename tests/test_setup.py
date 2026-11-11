@@ -17,13 +17,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
+from pdfmd_yaml_support import yaml  # noqa: E402
 from source_support import source_text  # noqa: E402
 from pdfmd_setup import fancy, inventory, registry, settings_for  # noqa: E402
 
-try:
-    import yaml
-except ImportError:                                         # pragma: no cover
-    yaml = None
 
 SETTINGS = settings_for(pdfmd.NO_AUTO_KINDS)
 
@@ -33,7 +30,6 @@ def number(key: str) -> int:
         if False else [setting.key for setting in SETTINGS].index(key) + 1
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Plain(unittest.TestCase):
     def run_setup(self, lines: list[str], config: str | None = None, *flags: str):
         directory = tempfile.mkdtemp(prefix="pdfmd-setup-")
@@ -350,7 +346,6 @@ class Plain(unittest.TestCase):
             pdfmd.load_config.cache_clear()
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class ConfigLayer(unittest.TestCase):
     """What `pdfmd --setup` writes under `options:` is honoured: below the document, above the built-in default."""
 
@@ -395,7 +390,6 @@ class ConfigLayer(unittest.TestCase):
         self.assertFalse(pdfmd.unicode_forced(document))
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class NewRows(unittest.TestCase):
     """The rows added in 3.27.0 reach a build: each value as `--setup` stores it, read by the function pdfmd uses."""
 
@@ -486,7 +480,6 @@ class NewRows(unittest.TestCase):
         self.assertIs(pdfmd.first_pdfmd_option(document, [], "bundle-packages"), True)
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class FieldByField(unittest.TestCase):
     """v3.27.1: a mapping-valued option is merged field by field down document > metadata files > config, and a
     config mapping says only what it says (a detail row does not switch stamping or backups on)."""
@@ -630,7 +623,6 @@ class Completeness(unittest.TestCase):
                 self.assertIn(pdfmd.flag_names()[dest], text, dest)
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class SwitchedOff(unittest.TestCase):
     """`disabled:` in the config (v3.27.8): whole features leave --help, completion and --setup, and the command line
     refuses them unless --disabled is given."""
@@ -766,7 +758,7 @@ class Registry(unittest.TestCase):
         self.assertEqual(registry.shown(by_key["mainfont"], "Georgia"), "Georgia")
 
 
-@unittest.skipUnless(fancy.available() and yaml, "needs prompt_toolkit")
+@unittest.skipUnless(fancy.available(), "needs prompt_toolkit")
 class Fancy(unittest.TestCase):
     def drive(self, keys: str, stores: dict, ask=None):
         from prompt_toolkit.input import create_pipe_input

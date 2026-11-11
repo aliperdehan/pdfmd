@@ -86,7 +86,7 @@ class CommandLine(unittest.TestCase):
         self.assertIn("already exist", again.stderr)
 
     def test_quoted_front_matter_values_round_trip(self):
-        import yaml
+        from pdfmd_yaml_support import yaml
         title = 'The "quoted" paper \\ draft'
         done = self.run_pdfmd("--init", "article", "quoted", "-V", "title=" + title)
         self.assertEqual(done.returncode, 0, done.stderr)

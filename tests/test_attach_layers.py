@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
+from pdfmd_yaml_support import yaml  # noqa: E402
 
 try:
     import pypdf
-    import yaml
 except ImportError:                                      # pragma: no cover
-    pypdf = yaml = None
+    pypdf = None
 
 
 def write(path: Path, text: str) -> Path:
@@ -32,7 +32,7 @@ def write(path: Path, text: str) -> Path:
     return path
 
 
-@unittest.skipIf(pypdf is None, "needs pypdf and PyYAML")
+@unittest.skipIf(pypdf is None, "needs pypdf")
 class Layers(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

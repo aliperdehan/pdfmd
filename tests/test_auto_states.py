@@ -24,10 +24,6 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: E402
 from pdfmd_setup import registry  # noqa: E402
 
-try:
-    import yaml
-except ImportError:                                         # pragma: no cover
-    yaml = None
 
 PANDOC = shutil.which("pandoc")
 PREAMBLE = "\\usepackage{xcolor}\n"
@@ -69,7 +65,6 @@ class Tree(unittest.TestCase):
         return pdfmd.effective_no_auto(self.doc, cli)
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Layers(Tree):
     def test_the_old_spellings_mean_what_they_did(self):
         self.assertIsNone(self.off())
@@ -181,7 +176,6 @@ class Layers(Tree):
         self.assertEqual(match.group("kinds").split(","), ["margin", "explicit:lua"])
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Discovery(Tree):
     def setUp(self):
         super().setUp()
@@ -215,7 +209,7 @@ class Discovery(Tree):
         self.assertFalse(pdfmd.discovery_disabled(found, "margin"))
 
 
-@unittest.skipUnless(yaml and PANDOC, "needs PyYAML and Pandoc")
+@unittest.skipUnless(PANDOC, "needs Pandoc")
 class Builds(Tree):
     def run_pdfmd(self, *args: str) -> str:
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), str(self.doc), "-o", str(self.root / "o.html"), "--verbose", *args],
@@ -272,7 +266,6 @@ class Builds(Tree):
         self.assertIn("d.lua", self.run_pdfmd())
 
 
-@unittest.skipUnless(yaml, "needs PyYAML")
 class Rows(unittest.TestCase):
     def setUp(self):
         self.settings = {setting.key: setting for setting in registry.settings_for(pdfmd.NO_AUTO_KINDS)}
