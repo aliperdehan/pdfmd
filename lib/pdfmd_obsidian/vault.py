@@ -203,3 +203,24 @@ def embed_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
         return []
     shipped = pdfmd_lua.path("embed_fit")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
+def figure_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """``--lua-filter figures.lua`` for a Markdown document with a picture in it, in a flavour that reads its gfm files with
+    `implicit_figures` (pdfmd, obsidian). An older Pandoc (3.1.3) takes the extension's name on the gfm reader and makes no figure;
+    the filter makes it, only when the reader of the run was asked for figures, and changes nothing where the reader made them (it
+    is told by what the reader left, not by a version number)."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or files[0].suffix.lower() not in (".md", ".markdown"):
+        return []
+    preset = core.FLAVOUR_PRESETS.get(core.flavour_of(files[0], metadata_files))
+    if preset is None or "implicit_figures" not in preset.gfm_plus:
+        return []
+    try:
+        if "![" not in files[0].read_text(encoding="utf-8-sig"):
+            return []
+        import pdfmd_lua
+    except (OSError, ImportError):
+        return []
+    shipped = pdfmd_lua.path("figures")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []

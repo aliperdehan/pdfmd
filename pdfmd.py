@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.172"
+PDFMD_VERSION = "3.33.173"
 import argparse
 import atexit
 import contextlib
@@ -1852,6 +1852,7 @@ single_newline_mode = deferred("pdfmd_obsidian.vault", "single_newline_mode")
 find_embedded_image = deferred("pdfmd_obsidian.vault", "find_embedded_image")
 embed_source = deferred("pdfmd_obsidian.vault", "embed_source")
 embed_filter_args = deferred("pdfmd_obsidian.vault", "embed_filter_args")
+figure_filter_args = deferred("pdfmd_obsidian.vault", "figure_filter_args")
 DEFERRED_NAMES.update(_VAULT_ROOTS="pdfmd_obsidian.vault", _EMBED_INDEX="pdfmd_obsidian.vault")   # tests empty them with .clear()
 check_command = deferred("pdfmd_check.command", "check_command")                # move 16 (v3.33.17)
 ranking_layers = deferred("pdfmd_ranking.choice", "ranking_layers")             # move 17 (v3.33.19); read by lib/pdfmd_serve too
@@ -3263,7 +3264,7 @@ def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
     """``--lua-filter markup.lua`` with the kinds that take part (`-M pdfmd-markup=callouts`), when any."""
     files = sources if isinstance(sources, list) else [sources]
-    fit = embed_filter_args(sources, metadata_files)           # before markup.lua, so a markup filter stays the last argument
+    fit = embed_filter_args(sources, metadata_files) + figure_filter_args(sources, metadata_files)   # before markup.lua, so a markup filter stays the last argument
     kinds = markup_kinds(files[0], metadata_files) if files else []
     if not kinds:
         return fit

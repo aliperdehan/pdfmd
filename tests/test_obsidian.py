@@ -223,6 +223,26 @@ class CommandLine(unittest.TestCase):
         self.assertIn("-- and ---", html)               # strict gfm: no smart typography, no figures
         self.assertNotIn("<figcaption", html)
 
+    def test_a_figure_is_made_where_the_gfm_reader_does_not_make_it(self):
+        """Pandoc 3.1.3's gfm reader takes `+implicit_figures` and makes no figure: lib/pdfmd_lua/figures.lua makes it, in the shape a
+        newer reader gives (where the reader made it, the filter finds nothing to do), and only when the reader was asked for figures."""
+        source = self.directory / "plain" / "f.md"
+        source.write_text("![The *cap*](pic.png)\n\nBeside ![inline](pic.png) text.\n\n![](pic.png)\n", encoding="utf-8")
+        import pdfmd_lua
+
+        def run(reader):
+            done = subprocess.run(["pandoc", "-f", reader, "-t", "html", "--lua-filter", str(pdfmd_lua.path("figures")), str(source)],
+                                  capture_output=True, text=True, encoding="utf-8", env=self.env)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return done.stdout
+        asked = run("gfm+implicit_figures")
+        self.assertEqual(asked.count("<figure"), 1, asked)
+        self.assertIn("<figcaption", asked)
+        self.assertIn("The <em>cap</em></figcaption>", asked)
+        self.assertIn('<p>Beside <img src="pic.png" alt="inline" /> text.</p>', asked)
+        self.assertIn('<p><img src="pic.png" /></p>', asked)                     # no caption: no figure
+        self.assertNotIn("<figure", run("gfm"))                                  # figures not asked for: none made
+
     def test_a_note_with_properties_is_cleaned_too(self):
         html, _ = self.build("vault", "---\ntags: [a]\n---\n\nOne %%hidden%% two\n")
         self.assertNotIn("hidden", html)
