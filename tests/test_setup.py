@@ -90,6 +90,28 @@ class Plain(unittest.TestCase):
             self.assertTrue(plain.edit(stores, setting, lambda prompt: "-", lambda line: None))
             self.assertIsNone(registry.read(stores, setting))
 
+    def test_table_counts_accept_zero_and_reject_all(self):
+        from pdfmd_setup import plain
+        for key in ("options.table-keep", "options.table-caption-colon-words"):
+            setting = next(item for item in SETTINGS if item.key == key)
+            stores = {"config": {}}
+            self.assertTrue(plain.edit(stores, setting, lambda prompt: "0", lambda line: None))
+            self.assertEqual(registry.read(stores, setting), 0)
+            self.assertFalse(plain.edit(stores, setting, lambda prompt: "all", lambda line: None))
+            self.assertEqual(registry.read(stores, setting), 0)
+        with tempfile.TemporaryDirectory(prefix="pdfmd-setup-count-") as directory:
+            root = Path(directory)
+            (root / "doc.md").write_text("Hello.\n", encoding="utf-8")
+            config = root / ".pdfmd"
+            config.mkdir()
+            (config / "config.yaml").write_text(yaml.safe_dump(stores["config"]), encoding="utf-8")
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                   "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"),
+                   "XDG_DATA_HOME": str(root / "data")}
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--to", "html"],
+                                  cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_editing_details_keeps_disabled_calc_and_csv_off(self):
         from pdfmd_setup import plain
         stores = {"config": {"options": {"calc": False, "csv": False}}}
@@ -788,6 +810,16 @@ class Fancy(unittest.TestCase):
                     doc.write_text("---\n" + yaml.safe_dump({"pdfmd-options": stores["config"]["options"]}) + "---\n", encoding="utf-8")
                     reader = pdfmd.calc_is_off if feature == "calc" else pdfmd.csv_is_off
                     self.assertTrue(reader(doc, []))
+
+    def test_table_counts_accept_zero_and_reject_all(self):
+        for key in ("options.table-keep", "options.table-caption-colon-words"):
+            setting = next(item for item in SETTINGS if item.key == key)
+            down = "j" * [item.key for item in SETTINGS].index(key)
+            stores = {"config": {}}
+            self.assertTrue(self.drive(down + "\rs", stores, ask=lambda setting, now: "0"))
+            self.assertEqual(registry.read(stores, setting), 0)
+            self.assertTrue(self.drive(down + "\rs", stores, ask=lambda setting, now: "all"))
+            self.assertEqual(registry.read(stores, setting), 0)
 
     def test_q_quits_without_saving(self):
         stores: dict = {}

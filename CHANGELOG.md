@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.138 — 2026-11-11
+
+Pre-edit state: commit `5edb820`. **Validate table counts in setup.** Both editors rejected zero and accepted
+`all` for table keep and caption word counts, although the build readers require non-negative integers. The rows now
+validate accordingly; editor regressions and setup and repository guard tests run.
+
 ## v3.33.137 — 2026-11-11
 
 Pre-edit state: commit `b0ea9d2`. **Keep a report’s sole later title.** When only a later file supplied a title,

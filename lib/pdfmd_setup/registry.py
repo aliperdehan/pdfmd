@@ -21,7 +21,7 @@ class Setting:
     section: str = ""
     store: str = "config"             # which file: "config" (config.yaml) or "metadata" (metadata.yaml beside it)
     check: str = ""                   # "number" for a text that must be one, "list" for a comma-separated list,
-                                      # "count" for a whole number or `all`
+                                      # "count" for a positive whole number or `all`; "nonnegative" for a whole number including zero
     unset: str = ""                   # what pdfmd does when the key is not set, in words (see UNSET); the screens show it
     scope: str = "any"                # "machine": this computer only, never a folder's setup (see MACHINE)
 
@@ -321,7 +321,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Tables", "config", "count"),
         text("options.table-keep", "Rows a table keeps on one page",
              "A whole number, 0 to let every table break. For a Lua filter that reads tablekeep (nulabreport.lua). Per run: --table-keep.",
-             "Tables", "config", "count"),
+             "Tables", "config", "nonnegative"),
         choice("options.table-ascii", "A text table Pandoc cannot read (ASCII without inner `+`, box-drawing, psql, MySQL, Org-mode), as a pipe table",
                (("repair", "rewrite it as a pipe table (a temporary copy, the file is not touched), with a WARN for each"),
                 ("note", "leave it, and say so"), ("off", "leave it, silently")), "repair",
@@ -372,7 +372,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "on", "Off also takes a bold sub-heading above a table, so try it with table-captions: note first.", "Tables"),
         text("options.table-caption-colon-words", "Also a short `: Results` line as a caption (words)",
              "A whole number: a paragraph that starts with `: ` and has at most that many words, next to a table, is its caption "
-             "(gfm has no caption syntax; Pandoc Markdown reads it itself). 0 is off; 2 is a good start.", "Tables", "config", "count"),
+             "(gfm has no caption syntax; Pandoc Markdown reads it itself). 0 is off; 2 is a good start.", "Tables", "config", "nonnegative"),
         text("options.table-caption-words", "More label words for such captions",
              "Words separated by commas, added to the document language's own word and to Table (the list is in "
              "pdfmd_tables/captions.py).", "Tables"),

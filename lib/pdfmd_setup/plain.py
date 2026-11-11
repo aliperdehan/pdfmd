@@ -102,6 +102,12 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
             answer = int(value) if value == int(value) else value
         elif setting.check == "list":
             answer = [item.strip() for item in answer.split(",") if item.strip()]
+        elif setting.check == "nonnegative":
+            if answer.isdecimal():
+                answer = int(answer)
+            else:
+                say("A non-negative whole number, please.")
+                return False
         elif setting.check == "count":
             if answer.strip().lower() == "all":
                 answer = "all"

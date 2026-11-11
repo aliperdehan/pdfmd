@@ -245,6 +245,12 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                         continue
                 elif setting.check == "list":
                     value = [item.strip() for item in value.split(",") if item.strip()]
+                elif setting.check == "nonnegative":
+                    if value.isdecimal():
+                        value = int(value)
+                    else:
+                        state["message"] = "A non-negative whole number, please."
+                        continue
                 elif setting.check == "count":
                     if value.lower() == "all":
                         value = "all"
