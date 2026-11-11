@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.146"
+PDFMD_VERSION = "3.33.147"
 import argparse
 import atexit
 import contextlib
@@ -8041,7 +8041,7 @@ def has_font_setting(key: str, md_path: Path, variables: list[str], metadata_fil
     if any(variable.startswith(f"{key}=") for variable in variables):
         return True
     text = md_path.read_text(encoding="utf-8-sig")
-    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    front_matter = LEADING_FRONT_MATTER_RE.match(text)
     if front_matter and re.search(rf"^{key}\s*:", front_matter.group(1), re.MULTILINE):
         return True
     return any(metadata_file_yaml(path).get(key) not in (None, "") for path in metadata_files)
@@ -8087,7 +8087,7 @@ def has_geometry(md_path: Path, variables: list[str], metadata_files: list[Path]
            for variable in variables):
         return True
     text = md_path.read_text(encoding="utf-8-sig")
-    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    front_matter = LEADING_FRONT_MATTER_RE.match(text)
     if front_matter and re.search(r"^(?:geometry|margin)\s*:", front_matter.group(1), re.MULTILINE):
         return True
     if any(re.search(r"(?m)^(?:geometry|margin)\s*:", metadata_file.read_text(encoding="utf-8-sig"))
@@ -8250,7 +8250,7 @@ def frontmatter_margin_geometry_options(md_path: Path, variables: list[str],
     if any(variable.startswith(("geometry=", "geometry:")) for variable in variables):
         return None
     text = md_path.read_text(encoding="utf-8-sig")
-    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    front_matter = LEADING_FRONT_MATTER_RE.match(text)
     blocks = [front_matter.group(1)] if front_matter else []
     for metadata_file in metadata_files_by_priority(metadata_files):
         meta_text = metadata_file.read_text(encoding="utf-8-sig")
@@ -8260,7 +8260,7 @@ def frontmatter_margin_geometry_options(md_path: Path, variables: list[str],
         # second YAML document, "expected a single document in the
         # stream"), so unwrap it the same way md_path's own front matter
         # is, and only fall back to the raw text when it isn't fenced.
-        meta_front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", meta_text, re.DOTALL)
+        meta_front_matter = LEADING_FRONT_MATTER_RE.match(meta_text)
         blocks.append(meta_front_matter.group(1) if meta_front_matter else meta_text)
     if any(re.search(r"^geometry\s*:", block, re.MULTILINE) for block in blocks):
         return None
@@ -8505,7 +8505,7 @@ def fix_typst_margin(text: str, is_metadata: bool = False) -> str:
     that's markdown BODY text, never YAML, and must never be parsed as
     such.
     """
-    front_matter = re.match(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", text, re.DOTALL)
+    front_matter = LEADING_FRONT_MATTER_RE.match(text)
     if front_matter:
         block = front_matter.group(1)
         prefix = text[:front_matter.start(1)]
@@ -11235,7 +11235,7 @@ def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list
 # plan_scaffold: lib/pdfmd_parts/__init__.py (v3.33.30)
 
 
-LEADING_FRONT_MATTER_RE = re.compile(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", re.DOTALL)
+LEADING_FRONT_MATTER_RE = re.compile(r"^---[ \t]*\r?\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*\r?(?:\n|$)", re.DOTALL)
 
 
 def strip_part_front_matter(text: str) -> str:
@@ -15446,7 +15446,7 @@ def comments_note(manifest: dict) -> str:
 
 
 def front_matter_dict(text: str) -> dict:
-    front = re.match(r"^---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", text, re.DOTALL)
+    front = LEADING_FRONT_MATTER_RE.match(text)
     if not front or yaml is None:
         return {}
     try:

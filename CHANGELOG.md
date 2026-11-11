@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.147 — 2026-11-11
+
+Pre-edit state: commit `420d3fb`. Front matter closed with ... was recognised by Pandoc but missed by font and margin handling, allowing defaults to override document settings and leaving scalar Typst margins invalid. Font detection, geometry detection, LaTeX margin translation and Typst margin rewriting now share the front-matter fence matcher, which captures the YAML block and preserves either terminator. Regressions failed before the fix and pass afterwards, including checkout LaTeX and Typst output, body preservation and operation without PyYAML; metadata-append, kit-carry, Unicode, paper, math-font and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.146 — 2026-11-11
 
 Pre-edit state: commit `3a8f506`. Font lookup inspected metadata files in input order rather than winning order; a managed font found in the weaker file could then be injected with -V over the stronger file. Lookup now follows metadata_files_by_priority, retaining document and command-line priority and the first-file precedence setting. Lookup and checkout regressions with a scratch managed font failed before the fix and pass afterwards; Unicode and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.

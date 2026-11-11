@@ -186,3 +186,60 @@ class FontMetadataPrecedence(RouteCase):
                     self.assertNotIn('Earlier.ttf', text)
                 else:
                     self.assertIn('Earlier.ttf', text)
+
+
+class DotsFrontMatter(RouteCase):
+    def document(self, ending='...', newline='\n'):
+        text = ('---\nmainfont: DejaVu Serif\nmonofont: DejaVu Sans Mono\nmargin: 2cm\n'
+                + ending + '\n\nBody.\n\nmargin: 9cm\n')
+        self.source.write_text(text.replace('\n', newline))
+        return text.replace('\n', newline)
+
+    def test_font_detection_accepts_both_end_markers(self):
+        for ending in ('---', '...'):
+            with self.subTest(ending=ending):
+                self.document(ending)
+                self.assertTrue(pdfmd.has_mainfont(self.source, []))
+                self.assertTrue(pdfmd.has_monofont(self.source, []))
+
+    def test_margin_detection_and_latex_translation_accept_both_end_markers(self):
+        for ending in ('---', '...'):
+            with self.subTest(ending=ending):
+                self.document(ending)
+                self.assertTrue(pdfmd.has_geometry(self.source, []))
+                self.assertEqual(pdfmd.frontmatter_margin_geometry_options(self.source, []), ['margin=2cm'])
+
+    def test_typst_conversion_preserves_the_end_marker_and_body(self):
+        for ending in ('---', '...'):
+            with self.subTest(ending=ending):
+                text = self.document(ending)
+                fixed = pdfmd.fix_typst_margin(text)
+                self.assertEqual(pdfmd.front_matter_dict(fixed)['margin'], {'x': '2cm', 'y': '2cm'})
+                self.assertTrue(fixed.endswith(ending + '\n\nBody.\n\nmargin: 9cm\n'))
+
+    def test_crlf_front_matter_keeps_margin_and_body(self):
+        for ending in ('---', '...'):
+            with self.subTest(ending=ending):
+                fixed = pdfmd.fix_typst_margin(self.document(ending, '\r\n'))
+                self.assertEqual(pdfmd.front_matter_dict(fixed)['margin'], {'x': '2cm', 'y': '2cm'})
+                self.assertTrue(fixed.endswith(ending + '\r\n\r\nBody.\r\n\r\nmargin: 9cm\r\n'))
+
+    def test_detection_and_scalar_translation_work_without_yaml(self):
+        self.document()
+        with patch.object(pdfmd, 'yaml', None):
+            self.assertTrue(pdfmd.has_mainfont(self.source, []))
+            self.assertTrue(pdfmd.has_geometry(self.source, []))
+            self.assertEqual(pdfmd.frontmatter_margin_geometry_options(self.source, []), ['margin=2cm'])
+            self.assertIn('  x: 2cm\n  y: 2cm', pdfmd.fix_typst_margin(self.source.read_text()))
+
+    @unittest.skipUnless(shutil.which('pandoc'), 'needs Pandoc')
+    def test_checkout_latex_and_typst_keep_document_fonts_and_margins(self):
+        self.document()
+        self.run_pdfmd('--to', 'latex', '-o', str(self.root / 'd.tex'), '--no-auto', 'unicode')
+        text = (self.root / 'd.tex').read_text()
+        self.assertIn('\\setmainfont[]{DejaVu Serif}', text)
+        self.assertIn('\\setmonofont[]{DejaVu Sans Mono}', text)
+        self.assertIn('\\usepackage[margin=2cm]{geometry}', text)
+        self.run_pdfmd('--to', 'typst', '--standalone', '-o', str(self.root / 'd.typ'), '--no-auto', 'unicode')
+        text = (self.root / 'd.typ').read_text()
+        self.assertRegex(text, r'margin:\s*\([^)]*x:\s*2cm[^)]*y:\s*2cm')
