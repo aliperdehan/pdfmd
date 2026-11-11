@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185g — 2026-11-12
+
+Pre-edit state: commit `4d85aef`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.15: retain quoted alias commands.** Parsing zsh's printable alias definition added escaping around already quoted paths, so an otherwise working alias could not be probed or used. Discovery now reads the raw alias value from zsh's alias table.
+
+Regression: `tests/test_colophon_alias.py` discovers and probes an alias whose script path contains a space; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185f — 2026-11-12
 
 Pre-edit state: commit `2a42b0e`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.14: wait for a dedicated open instance.** `colophon open -w` attached to an already-running app and waited for that app to quit even after the requested document closed. It now opens a separate instance that quits when its last window closes; a wait without files opens an untitled document. Missing files are reported before starting it.

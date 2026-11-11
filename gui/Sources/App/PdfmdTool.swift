@@ -5,7 +5,7 @@ import Foundation
 /// `pdfmdCommand` names one: then that one, whatever its version.
 ///
 /// Everything is asked of a login shell, because an app started from the Dock has almost no PATH: `whence -ap pdfmd` lists every
-/// `pdfmd` on the shell's PATH, `alias pdfmd` the terminal's own alias.
+/// `pdfmd` on the shell's PATH, and zsh's alias table gives the terminal's own alias.
 enum PdfmdTool {
     struct Found: Codable {
         let command: String   // as a shell runs it
@@ -35,15 +35,14 @@ enum PdfmdTool {
 
     /// Every pdfmd command the shell knows, the alias first.
     static func candidates(timeout: Double = 8) -> [(command: String, shown: String)] {
-        let out = run("alias pdfmd 2>/dev/null; whence -ap pdfmd 2>/dev/null", command: "", interactive: true, timeout: timeout)
+        let out = run(#"if (( ${+aliases[pdfmd]} )); then print -r -- "pdfmd=${aliases[pdfmd]}"; fi; whence -ap pdfmd 2>/dev/null"#, command: "", interactive: true, timeout: timeout)
         var list: [(String, String)] = []
         var seen = Set<String>()
         let home = NSHomeDirectory()
         for raw in out.split(separator: "\n") {
-            let line = raw.trimmingCharacters(in: .whitespaces)
+            let line = String(raw)
             if line.hasPrefix("pdfmd=") {
-                var cmd = String(line.dropFirst("pdfmd=".count))
-                if cmd.count >= 2, cmd.hasPrefix("'"), cmd.hasSuffix("'") { cmd = String(cmd.dropFirst().dropLast()) }
+                let cmd = String(line.dropFirst("pdfmd=".count))
                 if !cmd.isEmpty, seen.insert(cmd).inserted { list.append((cmd, cmd)) }
             } else if line.hasPrefix("/") {
                 let real = (line as NSString).resolvingSymlinksInPath
