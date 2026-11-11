@@ -1,0 +1,44 @@
+# Colophon, the Mac app in gui/: builds it as gui/build.sh does (swift build -c release and the app bundle; nothing is launched or
+# installed) and runs its in-binary checks that never show a window. Started by hand, and on a pull request that changes gui/; not part
+# of a release (publish.yml), as nothing of gui/ ships in the wheel.
+# Left out: the checks that put a window on screen (--smoke-web, --smoke-tabs, --live-*) and the ones that need Pandoc, TeX or an installed
+# pdfmd (--smoke-studio, --smoke-export, --smoke-cli, --smoke-build, --smoke-pdf); --smoke-pop skips its TeX renders when there is no TeX.
+name: gui
+
+on:
+  workflow_dispatch:        # adds a "Run workflow" button in the Actions tab
+  pull_request:
+    paths:
+      - "gui/**"
+
+permissions:
+  contents: read
+
+jobs:
+  colophon:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Colophon.app
+        working-directory: gui
+        run: ./build.sh
+
+      - name: In-binary checks (headless)
+        working-directory: gui
+        run: |
+          set -euo pipefail
+          app=build.noindex/Colophon.app/Contents/MacOS/pdfmdedit
+          work="$RUNNER_TEMP/colophon"
+          mkdir -p "$work"
+          "$app" --version
+          printf '# Title\n\nSome *text*, `code` and $x^2$.\n\n```\nfence\n```\n' > "$work/small.md"
+          "$app" --gen 1 "$work/gen.md"           # a generated document of 1 MB: the settings check jumps to its middle
+          "$app" --smoke-syntax
+          "$app" --smoke "$work/small.md"
+          "$app" --smoke-prefs "$work/gen.md"
+          "$app" --smoke-untitled
+          "$app" --smoke-save "$work/save"
+          "$app" --smoke-html
+          "$app" --smoke-pop

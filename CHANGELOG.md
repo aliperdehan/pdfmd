@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.183c — 2026-11-12
+
+Pre-edit state: commit `8e8fe53`. A workflow only, so no `PDFMD_VERSION` bump and no Colophon one. Scout item 3 (approved by the
+author): nothing built or checked Colophon (`gui/`) outside the author's Mac. `.github/workflows/gui.yml`, started by hand and on
+a pull request that changes `gui/`, builds the app on `macos-latest` as `gui/build.sh` does (nothing launched or installed) and runs
+the in-binary checks that never show a window and need no Pandoc, TeX or installed pdfmd: `--smoke-syntax`, `--smoke` (a small
+file), `--smoke-prefs` (a generated 1 MB document, as its line-number checks jump to the middle), `--smoke-untitled`, `--smoke-save`,
+`--smoke-html` and `--smoke-pop` (which skips its TeX renders without TeX). Left out: `--smoke-web` and `--smoke-tabs` (they put or
+may put a window on screen) and `--smoke-studio`, `--smoke-export`, `--smoke-cli`, `--smoke-build` and `--smoke-pdf` (Pandoc, an
+installed pdfmd or a PDF); there is no launch-and-survive window test. Each listed check passed locally with the debug build before
+it went in; the workflow itself has not run yet. Not part of a release: `publish.yml` does not call it.
+
 ## v3.33.183b — 2026-11-12
 
 Pre-edit state: commit `01556cf`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.6: the editor
