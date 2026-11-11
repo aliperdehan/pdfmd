@@ -317,6 +317,24 @@ enum Smoke {
         check("no extension: the name is proposed as it is", doc.prepareSavePanel(bare) && bare.nameFieldStringValue == "Note", bare.nameFieldStringValue)
         Settings.store.removeObject(forKey: "newFileName"); Settings.store.removeObject(forKey: "newFileExtension")
         doc.close()
+        // the hand-over of an unsaved new file to the studio (control-command-S): the window closes only when it still holds what the
+        // studio took; text typed while the studio was starting keeps it open, edited
+        for typedMeanwhile in [false, true] {
+            guard let d = (try? NSDocumentController.shared.openUntitledDocumentAndDisplay(false)) as? EditorDocument else { check("an untitled document for the hand-over", false); continue }
+            if d.windowControllers.isEmpty { d.makeWindowControllers() }
+            guard let tv = d.controller?.parts.textView else { check("an editor for the hand-over", false); continue }
+            tv.insertText("Handed over.", replacementRange: NSRange(location: 0, length: 0))
+            spin(0.3)
+            let sent = d.controller?.currentString() ?? ""
+            if typedMeanwhile { tv.insertText(" Typed meanwhile.", replacementRange: NSRange(location: (tv.string as NSString).length, length: 0)); spin(0.3) }
+            let closed = AppDelegate.finishHandover(d, sent: sent, taken: true, quiet: true)
+            if typedMeanwhile {
+                check("hand-over: text typed while the studio started keeps the window open and edited", !closed && !d.windowControllers.isEmpty && d.isDocumentEdited && tv.string.hasSuffix("Typed meanwhile."), "closed \(closed)")
+                d.updateChangeCount(.changeCleared); d.close()
+            } else {
+                check("hand-over: an unchanged window closes", closed && d.windowControllers.isEmpty, "closed \(closed)")
+            }
+        }
         print(failures == 0 ? "UNTITLED SMOKE OK" : "UNTITLED SMOKE FAILED (\(failures))")
         exit(failures == 0 ? 0 : 1)
     }

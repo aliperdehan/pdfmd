@@ -194,10 +194,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard let folder = rememberedStudioFolder() ?? pickStudioFolder() else { return }
         let studio = WebStudioController.open(folder: folder)
         if text.isEmpty { doc.updateChangeCount(.changeCleared); doc.close(); return }
-        studio.adopt(text: text) { ok in
-            if ok { doc.updateChangeCount(.changeCleared); doc.close() }
-            else { let a = NSAlert(); a.messageText = "The studio did not take the text over."; a.informativeText = "It stays in the editor window."; a.runModal() }
+        studio.adopt(text: text) { ok in AppDelegate.finishHandover(doc, sent: text, taken: ok) }
+    }
+
+    /// The end of that hand-over. The editor window closes only when the studio took the text AND the window still holds that very text:
+    /// what was typed while the studio was starting is not in the studio's tab, so such a window stays open, edited, and says so. A window
+    /// that was closed meanwhile is left alone. `quiet` (the smoke test) shows no alert. True when the window was closed.
+    @discardableResult
+    static func finishHandover(_ doc: EditorDocument, sent text: String, taken ok: Bool, quiet: Bool = false) -> Bool {
+        guard !doc.windowControllers.isEmpty else { return false }
+        let message: String
+        if !ok { message = "The studio did not take the text over." }
+        else if (doc.controller?.currentString() ?? doc.text) != text { message = "The text was changed while the studio was starting." }
+        else { doc.updateChangeCount(.changeCleared); doc.close(); return true }
+        if !quiet {
+            let a = NSAlert(); a.messageText = message
+            a.informativeText = ok ? "The studio has a new tab with the text as it was at the switch; the editor window keeps the newer text, unsaved." : "It stays in the editor window."
+            a.runModal()
         }
+        return false
     }
 
     /// Back from the studio: the page saves its file, the file opens in an editor window, the studio closes (it asks first when another

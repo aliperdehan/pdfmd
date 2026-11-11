@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.181a — 2026-11-12
+
+Pre-edit state: commit `fb02b26`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.2: the
+hand-over to the studio keeps what was typed meanwhile.** Review finding G2.2: switching an unsaved new editor window to the
+studio (control-command-S) took its text at once, and when the studio, still starting `pdfmd --serve`, had made a tab of it,
+the editor window's change count was cleared and the window closed unconditionally; anything typed in it during the wait was
+lost. `AppDelegate.finishHandover` now closes the window only when it still holds the very text that was handed over; when it
+does not, the window stays open and edited, and an alert says that the studio's new tab has the text as it was at the switch.
+A window closed meanwhile is left alone. Regression: `--smoke-untitled` (headless) hands over an unchanged window (closed) and
+one typed in afterwards (kept, edited, with the new text); checked failing with the old unconditional close and passing now.
+
 ## v3.33.181 — 2026-11-12
 
 Pre-edit state: commit `b2ad299`. **Colophon 0.3.1.** Review findings G2.1 and G4.1 (one fix): quitting Colophon (⌘Q, a logout)
