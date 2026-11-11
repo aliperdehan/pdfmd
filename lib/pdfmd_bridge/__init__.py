@@ -330,7 +330,7 @@ def drop_calibre_author(pdf: Path, verbose: bool) -> None:
         writer = core.pypdf.PdfWriter(clone_from=reader)          # clone_from keeps Calibre's outline (see stamp_pdf_metadata_posthoc)
         changed = info.pop("/Author", None) is not None
         if changed:
-            writer.metadata = info
+            core.deferred("pdfmd_polish.info", "add_metadata")(writer, info, replace=True)
         stream = writer._root_object.get("/Metadata")
         if stream is not None:
             stream = stream.get_object()

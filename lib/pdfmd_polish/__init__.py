@@ -322,7 +322,8 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
                 if added:
                     done.append(f"{len(added)} linked file" + ("s" if len(added) != 1 else "") + " attached")
             if options.get("info"):
-                writer.add_metadata(dict(options["info"]))
+                from .info import add_metadata
+                add_metadata(writer, dict(options["info"]))
                 done.append("properties")
             core.atomic_write_pdf(writer, pdf_path)
         if done:

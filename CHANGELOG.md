@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.177 — 2026-11-12
+
+Pre-edit state: commit `fb5f1b8`. FINDING F1: stamping or removing Calibre's placeholder author passed the existing Info dictionary through pypdf's text conversion, changing `/Trapped /False` into the invalid string `(/False)`. A shared pdfmd_polish.info helper now preserves name-valued entries, while ordinary strings remain strings; polishing uses it too. Regression: pypdf-made inputs retain NameObject values through stamping, polishing, author removal, attachments and hybrid attachments; stamp and author-removal checks failed before and pass after. A native build through scripts/pdfmd checks stamping and polishing together. pdfmd.py stays at 17,211 lines.
+
 ## v3.33.176 — 2026-11-12
 
 Pre-edit state: commit `acca9b8`. DECISION 54: an ordinary HTML fragment inherited Pandoc's maths default, so older Pandoc left some formulae as raw TeX with a warning. Every HTML target now explicitly names MathML in the installed Pandoc's spelling unless html.math, a Pandoc maths flag or a passed defaults file chooses a method. The helper lives in pdfmd_bridge; the two calc tests no longer inject a MathML header. Regression: test_html_math checks default and explicit methods, defaults files and a fragment through the checkout launcher; checked failing before and passing after. pdfmd.py shrinks from 17,217 to 17,211 lines.
