@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.187 — 2026-11-12
+
+Pre-edit state: commit `129a3c7`. Project images in a live preview used their unchanged Markdown URLs, which requested the web application's files instead of the project and lost the document's folder. The render API now resolves local image paths beside the document, checks project containment, follows the existing project-root fallback, and rewrites supported images to encoded `/api/raw` URLs; remote and outside paths are left alone.
+
+Regression: `tests/test_serve.py` renders an image from a nested document and checks containment, escaping and remote URLs; the nested-image case fails before the fix and passes afterwards. The same render is checked through `scripts/pdfmd --api`. pdfmd.py changes only its version line.
+
 ## v3.33.186 — 2026-11-12
 
 Pre-edit state: commit `b7df125`. Filesystem errors while reading or saving through `--serve` and `--api` escaped the JSON contract, producing tracebacks or dropped HTTP requests. The dispatch and raw-file route now translate missing files, permission failures and other filesystem errors into structured API responses.

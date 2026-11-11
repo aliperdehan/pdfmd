@@ -271,6 +271,34 @@ class PreviewCopies(Folder):
 
 
 class Render(Folder):
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_project_images_are_resolved_relative_to_the_document(self):
+        (self.root / "figs").mkdir()
+        (self.root / "figs" / "bird plot.png").write_bytes(b"image bytes")
+        text = '![plot](../figs/bird%20plot.png)\n\n![remote](https://example.org/a.png)\n'
+        status, answer = self.core.handle("POST", "/api/render", {"path": "sub/n.md", "text": text})
+        self.assertEqual(status, 200, answer)
+        self.assertIn('/api/raw?path=figs%2Fbird+plot.png', answer["html"])
+        self.assertIn('https://example.org/a.png', answer["html"])
+        self.assertEqual(self.core.raw({"path": "figs/bird plot.png"})[0], b"image bytes")
+        status, answer = self.core.handle("POST", "/api/render", {"path": "sub/n.md", "text": '![plot](figs/bird%20plot.png)'})
+        self.assertEqual(status, 200, answer)
+        self.assertIn('/api/raw?path=figs%2Fbird+plot.png', answer["html"])
+
+    def test_preview_image_rewriting_respects_attributes_and_containment(self):
+        outside = self.root.parent / "outside.png"
+        outside.write_bytes(b"outside")
+        (self.root / "escape.png").symlink_to(outside)
+        markup = ('<img alt="src=\'decoy.png\'" src="figs/a.png?x=1&amp;y=2#part">'
+                  '<img src="escape.png"><img src="../outside.png">'
+                  '<script>const x = \"<img src=\"fake.png\">\";</script><!-- <img src="fake.png"> -->')
+        result = self.core.preview_images(markup, self.root)
+        self.assertIn('alt="src=\'decoy.png\'"', result)
+        self.assertIn('src="/api/raw?x=1&amp;y=2&amp;path=figs%2Fa.png#part"', result)
+        self.assertIn('src="escape.png"', result)
+        self.assertIn('src="../outside.png"', result)
+        self.assertEqual(result.count('fake.png'), 2)
+
     def test_without_pandoc_the_answer_says_so(self):
         core = Core(self.root, which=lambda name: None)
         status, answer = core.handle("POST", "/api/render", {"text": "# x"})

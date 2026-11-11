@@ -11,6 +11,7 @@ in by pdfmd.py as functions, so this package imports nothing from it.
 from __future__ import annotations
 
 import contextlib
+import html as html_lib
 import io
 import json
 import os
@@ -20,9 +21,10 @@ import subprocess
 import tempfile
 import threading
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from .contain import contained
 
@@ -334,10 +336,74 @@ class Core:
             raise ApiError(422, "render_failed", errors.splitlines()[0] if errors else f"pandoc exited with {done.returncode}",
                            log=errors, seconds=seconds)
         html = strip_wrappers(done.stdout.decode("utf-8", "replace"))
+        html = self.preview_images(html, folder)
         html = POSITION.sub(lambda m: f'data-pos="{source}@{m.group(1)}"', html)
         # pandoc 3.13 prefers --math-method, older ones do not know it; pandoc 3.1.3 gives a list item two positions and warns about its own second one
         warnings = notes + [line for line in errors.splitlines() if not any(noise in line for noise in PANDOC_NOISE)]
         return 200, {"html": html, "seconds": seconds, "engine": "pandoc", "warnings": warnings}
+
+    def preview_images(self, markup: str, folder: Path) -> str:
+        """Point local image sources at the contained project-file endpoint, preserving other markup."""
+        attributes = re.compile(r"(\s+)([^\s=/>]+)(\s*=\s*)(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))", re.S)
+
+        def image(tag: str) -> str:
+            def attribute(match: re.Match) -> str:
+                if match.group(2).lower() != "src":
+                    return match.group(0)
+                original = next(value for value in match.groups()[3:] if value is not None)
+                try:
+                    url = urlsplit(html_lib.unescape(original))
+                    if url.scheme or url.netloc or not url.path or url.path.startswith("/"):
+                        return match.group(0)
+                    target = (folder / unquote(url.path)).resolve()
+                    name = target.relative_to(self.root).as_posix()
+                    self.resolve(name)  # also excludes the repository's private .git directory
+                    if not target.is_file() and folder != self.root:
+                        try:
+                            root_target = (self.root / unquote(url.path)).resolve()
+                            root_name = root_target.relative_to(self.root).as_posix()
+                            self.resolve(root_name)
+                            if root_target.is_file():
+                                target, name = root_target, root_name
+                        except (ValueError, OSError, ApiError):
+                            pass
+                    if target.suffix.lower() not in RAW_TYPES:
+                        return match.group(0)
+                except (ValueError, OSError, ApiError):
+                    return match.group(0)
+                query = (url.query + "&" if url.query else "") + urlencode({"path": name})
+                rewritten = "/api/raw?" + query + ("#" + url.fragment if url.fragment else "")
+                return "".join(match.group(i) for i in (1, 2, 3)) + '"' + html_lib.escape(rewritten, quote=True) + '"'
+
+            return attributes.sub(attribute, tag)
+
+        offsets = [0]
+        for line in markup.splitlines(keepends=True):
+            offsets.append(offsets[-1] + len(line))
+
+        class Images(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=False)
+                self.edits = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "img":
+                    raw = self.get_starttag_text()
+                    line, column = self.getpos()
+                    start = offsets[line - 1] + column
+                    self.edits.append((start, start + len(raw), image(raw)))
+
+            def handle_startendtag(self, tag, attrs):
+                self.handle_starttag(tag, attrs)
+
+        parser = Images()
+        parser.feed(markup)
+        parser.close()
+        pieces, previous = [], 0
+        for start, end, replacement in parser.edits:
+            pieces.extend((markup[previous:start], replacement))
+            previous = end
+        return "".join([*pieces, markup[previous:]])
 
     # ---- helpers ----------------------------------------------------------------------------------------------------------------
 
