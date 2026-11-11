@@ -142,7 +142,7 @@ class Layers(Tree):
         found = self.off()
         self.assertNotIn("margin", found)
         self.assertIn("lua", found)
-        self.assertEqual(sorted(set(found) | {"margin"}), sorted(pdfmd.NO_AUTO_KINDS))
+        self.assertEqual(sorted(set(found) | {"margin"}), sorted(pdfmd.NO_AUTO_KINDS - pdfmd.NO_AUTO_ALIASES.keys()))
 
     def test_the_command_line_only_switches_off_and_is_the_strongest(self):
         self.write_doc("pdfmd-options:\n  auto: {lua: on, margin: on}\n")

@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.141"
+PDFMD_VERSION = "3.33.142"
 import argparse
 import atexit
 import contextlib
@@ -2355,7 +2355,7 @@ AUTO_STATES = {"on": "on", "true": "on", "yes": "on", "off": "off", "false": "of
 
 
 def auto_expand(kind: str) -> set[str]:
-    return {kind} | set(NO_AUTO_ALIASES.get(kind, ()))
+    return set(NO_AUTO_ALIASES.get(kind, {kind}))
 
 
 def discovery_disabled(no_auto: list[str] | None, kind: str) -> bool:
@@ -2461,7 +2461,7 @@ def resolve_auto(layers: list[tuple[object, dict]], folders: int = 0) -> list[st
                 states.append(named.get(kind, "off" if everything else "on"))
             decided[kind] = max(states, key=AUTO_STRICTNESS.get)
     if blanket:
-        for kind in NO_AUTO_KINDS:
+        for kind in NO_AUTO_KINDS - NO_AUTO_ALIASES.keys():
             decided.setdefault(kind, "off")
         if all(state == "off" for state in decided.values()):
             return []

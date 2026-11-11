@@ -65,3 +65,25 @@ class ReferenceNumberRoutes(RouteCase):
                                '\\begin{equation}a=1\\label{x}\\end{equation}\n\nSee \\ref{x}.\n')
         self.run_pdfmd("--to", "html", "-o", str(self.root / "d.html"))
         self.assertIn('class="pdfmd-ref">1</a>', (self.root / "d.html").read_text())
+
+
+class AutoAliasPrecedence(RouteCase):
+    def test_resolved_states_contain_only_concrete_kinds(self):
+        for lower in ({"no-auto": ["files"]}, {"no-auto": True}, {"auto": {"files": "explicit-only"}}):
+            with self.subTest(lower=lower):
+                result = pdfmd.resolve_auto([("document", {"auto": {"lua": "on"}}), ("config", lower)])
+                self.assertFalse(pdfmd.auto_disabled(result, "lua"), result)
+                self.assertFalse(pdfmd.discovery_disabled(result, "lua"), result)
+                self.assertFalse(set(result or []) & set(pdfmd.NO_AUTO_ALIASES), result)
+                self.assertNotIn("explicit:files", result or [])
+                self.assertTrue(pdfmd.discovery_disabled(result, "preamble"), result)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_checkout_document_reenables_lua_under_disabled_files(self):
+        config = self.root / "config.yaml"
+        config.write_text('options: {no-auto: [files]}\n')
+        self.env["PDFMD_CONFIG"] = str(config)
+        self.source.write_text('---\npdfmd-options: {auto: {lua: on}}\n---\nTOKEN\n')
+        (self.root / "d.lua").write_text('function Str(el) if el.text == "TOKEN" then return pandoc.Str("RESTORED") end end\n')
+        self.run_pdfmd("--to", "html", "-o", str(self.root / "d.html"))
+        self.assertIn("RESTORED", (self.root / "d.html").read_text())
