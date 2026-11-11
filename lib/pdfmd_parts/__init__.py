@@ -22,8 +22,9 @@ import sys
 import unicodedata
 from collections import namedtuple
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from decimal import Decimal, InvalidOperation
+from io import StringIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -291,14 +292,63 @@ def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str) -> N
     """
     if setting != "auto":
         return
-    others = [item.name for item in sorted(scaffold.parent.glob("*.md"))
-              if item != scaffold and not item.name.startswith(".")
-              and core.parts_setting(item, core.scaffold_metadata_files(item, None)) == "auto"]
+    others = []
+    for item in sorted(scaffold.parent.glob("*.md")):
+        if item == scaffold or item.name.startswith("."):
+            continue
+        probed = _probe_scaffold(item, directory, None)
+        if probed is not None and probed[1] == "auto":
+            others.append(item.name)
     if others:
         print(f"WARN  {core.display_path(scaffold)}: {core.display_path(directory)} also sits beside "
               f"{', '.join(others)}, which `parts: auto` builds from it too; put "
               "`pdfmd-options: {parts: false}` in the files that are not the report",
               file=sys.stderr)
+
+
+def _probe_scaffold(
+    candidate: Path, ancestor: Path, requested: list[str] | None,
+) -> tuple[list[Path], str, Path, list[Path]] | None:
+    """An upward candidate is speculative: keep its diagnostics only if it belongs to this build.
+
+    Validate YAML here because the ordinary settings readers deliberately ignore malformed YAML.
+    Catch SystemExit as well as ordinary probe errors, but leave interrupts and actual section selection alone.
+    """
+    output, errors = StringIO(), StringIO()
+    try:
+        with redirect_stdout(output), redirect_stderr(errors):
+            text = candidate.read_text(encoding="utf-8-sig")
+            front = core.LEADING_FRONT_MATTER_RE.match(text)
+            if front and core.yaml is not None:
+                core.yaml.safe_load(front.group("yaml"))
+            if requested is None:
+                requested = core.option_names(core.frontmatter_pdfmd_options(candidate), "yaml") or None
+            found = core.find_metadata(candidate.parent.resolve(), requested,
+                                       document_stem=candidate.stem, document=candidate)
+            metadata = ([] if found is None or found is core.AUTO_METADATA_DISABLED
+                        else found if isinstance(found, list) else [found])
+            for path in metadata:
+                text = path.read_text(encoding="utf-8-sig")
+                front = core.LEADING_FRONT_MATTER_RE.match(text)
+                if core.yaml is not None:
+                    core.yaml.safe_load(front.group("yaml") if front else text)
+            setting = core.parts_setting(candidate, metadata)
+            if not setting:
+                return None
+            directory = parts_directory(candidate, setting)
+            if directory is None:
+                raise ValueError("no parts folder found")
+            if directory != ancestor.resolve():
+                return None
+            parts = collect_parts(directory)
+    except (Exception, SystemExit) as error:
+        if core.VERBOSE_OUTPUT:
+            reason = " ".join(str(error).split()) or type(error).__name__
+            print(f"NOTE  skipped scaffold candidate {core.display_path(candidate)}: {reason}")
+        return None
+    print(output.getvalue(), end="")
+    print(errors.getvalue(), end="", file=sys.stderr)
+    return metadata, setting, directory, parts
 
 
 def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | None,
@@ -327,11 +377,9 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
         if root == ancestor:
             break
         for candidate in sorted(root.glob("*.md")):
-            candidate_meta = core.scaffold_metadata_files(candidate, requested_metadata)
-            candidate_setting = core.parts_setting(candidate, candidate_meta)
-            candidate_dir = parts_directory(candidate, candidate_setting) if candidate_setting else None
-            if candidate_dir is not None and candidate_dir == ancestor.resolve():
-                parts = collect_parts(candidate_dir)
+            probed = _probe_scaffold(candidate, ancestor, requested_metadata)
+            if probed is not None:
+                candidate_meta, candidate_setting, candidate_dir, parts = probed
                 warn_shared_parts_folder(candidate, candidate_dir, candidate_setting)
                 more, cuts = select_parts_and_sections(parts, candidate_dir, sections) if sections else ([], {})
                 chosen = {source, *more}

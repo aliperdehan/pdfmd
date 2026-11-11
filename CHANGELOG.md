@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.168 — 2026-11-11
+
+Pre-edit state: commit `af49b45`. An unrelated Markdown file above a document could stop its build when the parts-scaffold probe could not resolve its kit, read its content or find its parts folder. The author chose to retain the upward search: failed candidates are now skipped, with a note naming the candidate and reason only under --verbose. Speculative diagnostics are captured so a failed probe emits no WARN; malformed candidate and metadata YAML are rejected during the probe. The shared-parts warning uses the same isolation for neighbouring candidates, while a matching scaffold retains its kit settings, parts selection and diagnostics. Seven checkout-launcher pipeline tests pass, with ten failing regression cases checked against the pre-edit implementation and the valid kit-scaffold control passing before and after. Area and repository guard tests pass (259 tests, three skipped, including two LibreOffice sandbox skips). pdfmd.py remains 17,207 lines (version only). No new setting, constant or behavioural threshold; the existing four-folder search is unchanged.
+
 ## v3.33.167b — 2026-11-11
 
 Pre-edit state: commit `f8b94f2`. The install-and-test matrix did not exercise Python 3.15, where missing PyYAML wheels exposed the compiler requirement. The native job now includes Python 3.15 on Windows, macOS and Linux; its md2pdf step remains restricted to Python 3.13. The matrix regression failed before the change and passes afterwards; packaging and repository guard tests pass locally (97 tests, one skipped). Workflow/tests only, no version bump; CI was not run or dispatched. pdfmd.py remains 17,207 lines. No new setting or behavioural threshold.
