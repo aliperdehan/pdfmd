@@ -943,7 +943,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
     Found as a PDF build finds them (`document_preambles`, with the run's Pandoc options: an `--include-in-header` still
     stops the search), for the kept source only: the Markdown written is as before."""
     if not preamble_files:
-        preamble_files = core.document_preambles(md_path, list(pandoc_options or []), no_auto)
+        preamble_files = core.document_preambles(md_path, list(pandoc_options or []), no_auto, metadata_files)
     try:
         import pdfmd_flat.keep as keep
     except ImportError:

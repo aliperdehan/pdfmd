@@ -721,14 +721,16 @@ def strip_embedded_option_names(options: dict, kinds: frozenset[str], lua_mode: 
         else:
             options.pop("metadata", None)
     if "preamble" in kinds:
-        options.pop("preamble", None)
-        if isinstance(grouped, dict):
-            grouped.pop("preamble", None)
+        for suffix in ("", "+", "+="):
+            options.pop("preamble" + suffix, None)
+            if isinstance(grouped, dict):
+                grouped.pop("preamble" + suffix, None)
     if "lua" in kinds and lua_mode != "off":
-        options.pop("lua-filter", None)
-        if isinstance(grouped, dict):
-            grouped.pop("lua-filter", None)
-            grouped.pop("lua", None)
+        for suffix in ("", "+", "+="):
+            options.pop("lua-filter" + suffix, None)
+            if isinstance(grouped, dict):
+                grouped.pop("lua-filter" + suffix, None)
+                grouped.pop("lua" + suffix, None)
     if isinstance(grouped, dict) and not grouped:
         del options["metadata"]
 
@@ -763,6 +765,9 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
     (no --citeproc here), are not reproduced. Pandoc re-writes the text
     (tables, footnotes and line breaks may come out formatted differently).
     """
+    filters[:] = core.check_lua_filters(first, filters, core.resolve_strict(first, metadata_files))
+    if not filters:
+        return body
     folder = Path(mkdtemp(prefix="pdfmd-apply-"))
     try:
         source = folder / "input.md"

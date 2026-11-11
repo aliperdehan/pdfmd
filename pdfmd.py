@@ -1256,8 +1256,8 @@ Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block:
     particular moved here rather than staying a bare top-level key -- the
     older bare spelling still works for documents already using it),
     `preamble` (a bare string or a YAML list -- one or more LaTeX preamble
-    files to `--include-in-header`, resolved relative to the document's own
-    directory; merged with, not a replacement for, whatever
+    files to `--include-in-header`, read through every option layer relative
+    to the file naming them; added to whatever
     PREAMBLE_FILENAMES auto-discovery already finds beside it, and subject
     to the same `--no-auto preamble` gate -- see
     frontmatter_extra_preambles()'s own docstring for why an explicit `-H`
@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.178"
+PDFMD_VERSION = "3.33.179"
 import argparse
 import atexit
 import contextlib
@@ -5852,12 +5852,13 @@ def header_argument_positions(cmd: list[str]) -> list[tuple[int, bool]]:
 # kit_header_insert: lib/pdfmd_kits/locate.py (v3.33.22)
 
 
-def kit_explicit_sources(document: Path, paths: list[Path], pandoc_options: list[str]) -> list[bool]:
+def kit_explicit_sources(document: Path, paths: list[Path], pandoc_options: list[str],
+                         metadata_files: list[Path] = ()) -> list[bool]:
     """For each of ``paths`` (header files of a build): whether it was asked for (`-H`, a named `preamble:`), not found by
     discovery. A found one yields to the kit where they contradict; an explicit one stops the build."""
     auto = {path.resolve() for path in ([] if has_header_include_option(pandoc_options) else
                                         find_preambles(document.parent, document.stem, []))}
-    named = {path.resolve() for path in frontmatter_extra_preambles(document)}
+    named = {path.resolve() for path in frontmatter_extra_preambles(document, metadata_files)}
     flags = []
     for path in paths:
         try:
@@ -5881,7 +5882,7 @@ def kit_embedded_preambles(document: Path, metadata_files: list[Path], preamble_
     kits = kit_preamble_kits(document, metadata_files)
     if not kits:
         return files
-    explicit = kit_explicit_sources(document, files, [])
+    explicit = kit_explicit_sources(document, files, [], metadata_files)
     body, texts, _ = kit_header_settle(document, kits, [(path, display_path(path), flag) for path, flag in zip(files, explicit)])
     settled = [kit_cache_tex(f"kit-{path.stem}-", text, 12) if text != read_text_best_effort(path) else path
                for path, text in zip(files, texts)]
@@ -6888,10 +6889,11 @@ def find_preambles(directory: Path, document_stem: str, options: list[str]) -> l
             if is_latex_preamble(path)]
 
 
-def document_preambles(md_path: Path, pandoc_options: list[str], no_auto: list[str] | None) -> list[Path]:
+def document_preambles(md_path: Path, pandoc_options: list[str], no_auto: list[str] | None,
+                       metadata_files: list[Path] = ()) -> list[Path]:
     """The preambles of a document: the ones found beside it (not for off or explicit-only) and the ones it names (not for off)."""
     found = [] if discovery_disabled(no_auto, "preamble") else find_preambles(md_path.parent, md_path.stem, pandoc_options)
-    named = [] if auto_disabled(no_auto, "preamble") else frontmatter_extra_preambles(md_path)
+    named = [] if auto_disabled(no_auto, "preamble") else frontmatter_extra_preambles(md_path, metadata_files)
     return found + named
 
 
@@ -9339,98 +9341,18 @@ def option_names(options: dict, kind: str) -> list[str]:
     return names
 
 
-def frontmatter_extra_preambles(md_path: Path) -> list[Path]:
-    """Read ``pdfmd-options: preamble: ...`` -- a document naming its own
-    LaTeX preamble file(s) explicitly, instead of relying on the fixed
-    ``preamble.tex``/``latex-preamble.tex`` auto-discovered names
-    (PREAMBLE_FILENAMES) or a project's own conventions elsewhere.
-
-    Accepts a bare string or a YAML list of strings; each path is resolved
-    relative to `md_path`'s own directory (not cwd -- a document should be
-    runnable from any directory). A path that doesn't exist is a hard
-    SystemExit, not a silent skip: the whole point of naming a preamble
-    explicitly is that it's required, unlike auto-discovery's own
-    best-effort search.
-
-    Merged with (not a replacement for) whatever find_preambles() already
-    discovered by name -- see its call sites, all of which now do
-    ``find_preambles(...) + frontmatter_extra_preambles(md_path)`` -- and
-    appended AFTER them, so an explicit pdfmd-options.preamble can override
-    a same-named auto-discovered definition. Reuses the existing "preamble"
-    --no-auto KIND at every call site (both calls sit behind the same
-    ``not auto_disabled(no_auto, "preamble")`` guard) -- unlike an explicit
-    CLI -H, which always wins over --no-auto per this file's own documented
-    rule, a pdfmd-options.preamble key is written IN the document, so
-    --no-auto preamble (or a bare --no-auto) suppresses it the same as
-    auto-discovery. Use an actual -H on the command line instead when a
-    preamble truly must survive --no-auto preamble.
-
-    Added 2026-09-20, directly requested alongside a real use case that
-    turned out NOT to need it after all (a preamble whose own
-    \\setchemfig/\\usetikzlibrary calls need chemfig/tikz loaded first,
-    which only \\input from inside a document's own header-includes -- not
-    any --include-in-header ordering, explicit-named or auto-discovered
-    alike -- guarantees; see midterm_preamble.tex's own header comment for
-    that specific case) -- but is still useful in general for a preamble
-    with no such ordering dependency, and for naming one under any filename
-    rather than only the two PREAMBLE_FILENAMES.
+def frontmatter_extra_preambles(md_path: Path, metadata_files: list[Path] = ()) -> list[Path]:
+    """Named preambles through every option layer, relative to the file naming each one.
+    Added after discovery; --no-auto preamble suppresses them, unlike CLI -H.
     """
-    names = option_names(frontmatter_pdfmd_options(md_path), "preamble")
-    resolved = []
-    for name in names:
-        path = (md_path.parent / name).resolve()
-        if not path.is_file():
-            raise SystemExit(f"{md_path}: pdfmd-options.preamble names {name!r}, "
-                             f"which doesn't exist at {path}")
-        resolved.append(path)
-    return resolved
+    return deferred("pdfmd_assemble.named", "files")(md_path, metadata_files, "preamble")
 
 
-def frontmatter_extra_lua_filters(md_path: Path) -> list[Path]:
-    """Read ``pdfmd-options: lua-filter: ...`` -- a document naming its own
-    Pandoc Lua filter(s) explicitly, instead of relying on
-    find_lua_filters()'s fixed auto-discovery names (``<doc-stem>.lua`` or
-    ``nulabreport.lua``).
-
-    Accepts a bare string or a YAML list of strings; each path is resolved
-    relative to `md_path`'s own directory (not cwd -- a document should be
-    runnable from any directory), same convention as
-    frontmatter_extra_preambles. A path that doesn't exist is a hard
-    SystemExit, not a silent skip: naming a filter explicitly means it's
-    required, unlike auto-discovery's own best-effort search.
-
-    Merged with (not a replacement for) whatever find_lua_filters() already
-    auto-discovered -- see this function's one call site in convert_one,
-    which appends these AFTER the auto-discovered ones and dedupes by
-    resolved path. Both land on the command line after --citeproc (see
-    run()'s own comment on that ordering) -- required for a filter, like
-    fullcite.lua, that consumes citeproc's resolved bibliography div.
-
-    Reuses the existing "lua" --no-auto KIND, same as
-    frontmatter_extra_preambles reuses "preamble": a pdfmd-options.lua-filter
-    key is written IN the document, so --no-auto lua (or a bare --no-auto)
-    suppresses it the same as auto-discovery.
-
-    Added 2026-09-28 for a real case: an annotated-bibliography.md using a
-    citeproc-dependent filter (fullcite.lua) that isn't named after the
-    document's own stem, so find_lua_filters() alone never picked it up --
-    the document had to name it explicitly instead.
+def frontmatter_extra_lua_filters(md_path: Path, metadata_files: list[Path] = ()) -> list[Path]:
+    """Named Lua filters through every option layer; --no-auto lua suppresses them.
+    The build applies check_lua_filters to these together with discovered filters.
     """
-    names = option_names(frontmatter_pdfmd_options(md_path), "lua-filter")
-    resolved = []
-    for name in names:
-        path = (md_path.parent / name).resolve()
-        if not path.is_file():
-            if is_assembled_document(md_path):
-                # --lua-mode ref: the file names the filter, the filter may
-                # not be where it was; build without it rather than stop.
-                print(f"WARN  {display_path(md_path)}: the Lua filter it names, {name!r}, was not found "
-                      f"at {path}; building without it", file=sys.stderr)
-                continue
-            raise SystemExit(f"{md_path}: pdfmd-options.lua-filter names {name!r}, "
-                             f"which doesn't exist at {path}")
-        resolved.append(path)
-    return resolved
+    return deferred("pdfmd_assemble.named", "files")(md_path, metadata_files, "lua-filter")
 
 
 # --stamp / pdfmd-options.stamp: appends (or updates) a "BUILD NOTES" HTML
@@ -14592,7 +14514,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         note("READER", reader_reason)
     lua_filters = [] if discovery_disabled(no_auto, "lua") else find_lua_filters(md_path, metadata_files, no_auto)
     if not auto_disabled(no_auto, "lua"):
-        for extra_filter in frontmatter_extra_lua_filters(md_path):
+        for extra_filter in frontmatter_extra_lua_filters(md_path, metadata_files):
             if extra_filter not in lua_filters:
                 lua_filters.append(extra_filter)
     lua_filters = check_lua_filters(md_path, lua_filters, resolve_strict(md_path, metadata_files))
@@ -15277,7 +15199,7 @@ def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: l
     discovered_lua = ([] if (discovery_disabled(no_auto, "lua") or "lua" not in kinds)
                       else find_lua_filters(md_path, metadata_files, no_auto))
     if not auto_disabled(no_auto, "lua") and "lua" in kinds:
-        for extra_filter in frontmatter_extra_lua_filters(md_path):
+        for extra_filter in frontmatter_extra_lua_filters(md_path, metadata_files):
             if extra_filter not in discovered_lua:
                 discovered_lua.append(extra_filter)
     plan = EmbedPlan(kinds, lua_mode, list(metadata_files), kit_embedded_preambles(md_path, metadata_files, preamble_files), discovered_lua)
@@ -17004,11 +16926,11 @@ def run_main() -> None:
                 metadata = metadata_for(source, document_class=document_class)
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
+            engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             preambles = []
             if target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(source):
-                preambles = document_preambles(source, pandoc_options, effective_no_auto(source, args.no_auto))
+                preambles = document_preambles(source, pandoc_options, effective_no_auto(source, args.no_auto), engine_metadata_files)
                 announce_preambles(preambles)
-            engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
             file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
             results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),

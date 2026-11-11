@@ -47,7 +47,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
     output = output_path(core, args, target_format)
     preambles: list[Path] = []
     if target_format in {"pdf", *core.TEX_STANDALONE_FORMATS}:
-        preambles = core.document_preambles(files[0], pandoc_options, no_auto)
+        preambles = core.document_preambles(files[0], pandoc_options, no_auto, metadata_files)
         core.announce_preambles(preambles)
     for note in notes:
         print(f"NOTE  {note}")

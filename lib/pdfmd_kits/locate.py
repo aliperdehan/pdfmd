@@ -206,7 +206,7 @@ def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path
         path = Path(raw)
         if not (path.name.startswith(core.KIT_HEADER_PREFIX) or path.name == "code_wrap.tex" or not path.is_file()):
             found.append((index, equals, path))
-    explicit = core.kit_explicit_sources(document, [path for _, _, path in found], pandoc_options)
+    explicit = core.kit_explicit_sources(document, [path for _, _, path in found], pandoc_options, metadata_files)
     places = [(path, core.display_path(path), flag) for (_, _, path), flag in zip(found, explicit)]
     body, texts, events = kit_header_settle(document, kits, places)
     for event in events:

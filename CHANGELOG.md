@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.179 — 2026-11-12
+
+Pre-edit state: commit `f8d120d`. DECISION 53 item 4: named Lua filters and preambles were read only from the document, silently ignoring metadata and setup layers. The shared pdfmd_assemble.named resolver now follows document > metadata files > folder layers > global setup, retaining each naming file as the base for relative paths. As with other list-valued options, the nearest ordinary list replaces lower lists; `key+:` (and `key+=:`) explicitly appends from lower to higher layers. Flat and grouped spellings still add within one layer. Effective missing files remain hard errors, with the existing assembled Lua-reference exception; Lua trust checks include filters run during assembly. Global/folder setup gains both list rows and inventory coverage. Batch, report, kit, CSS and kept-source callers pass their actual metadata files; embedded append names are cleared once their files are included. Regression: metadata-relative, folder, global, document, grouped, replacement, append, missing-file and trust checks; the initial layer tests failed before and pass after, including real scripts/pdfmd HTML/LaTeX builds and an assembly. pdfmd.py shrinks from 17,211 to 17,133 lines.
+
 ## v3.33.178 — 2026-11-12
 
 Pre-edit state: commit `2f9290c`. FINDING F2: pypdf's clone default labelled engine PDFs as `%PDF-1.3`, even when their input declared 1.7. All five finishing paths now use one shared clone helper that copies the reader's header, with guards for older pypdf interfaces. Object-stream handling is unchanged (DECISION 51 remains separate). Regression: 1.7 fixtures failed in all five paths before and pass after; older header interfaces are covered too, alongside the native launcher build. pdfmd.py stays at 17,211 lines.

@@ -148,7 +148,7 @@ def run(core, *,
             kinds, lua_mode = report_embed
             report_plan = EmbedPlan(
                 kinds, lua_mode, list(metadata_files),
-                ([] if "preamble" not in kinds else document_preambles(files[0], pandoc_options, report_no_auto)),
+                ([] if "preamble" not in kinds else document_preambles(files[0], pandoc_options, report_no_auto, metadata_files)),
                 [])  # a report build applies no discovered Lua filter
             if "lua" in kinds:
                 print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
@@ -178,7 +178,7 @@ def run(core, *,
             # report_no_auto/report_from/documentclass above), just
             # without an engine ever actually running.
             is_tex_target = target_format in TEX_STANDALONE_FORMATS
-            report_preambles = ([] if not is_tex_target else document_preambles(files[0], pandoc_options, report_no_auto))
+            report_preambles = ([] if not is_tex_target else document_preambles(files[0], pandoc_options, report_no_auto, metadata_files))
             if report_preambles:
                 announce_preambles(report_preambles)
             stamp_preambles = report_preambles
@@ -328,7 +328,7 @@ def run(core, *,
                     result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
                 office_finish(report_office_arguments, files[0], args.verbose)
         else:
-            preambles = document_preambles(files[0], pandoc_options, report_no_auto)
+            preambles = document_preambles(files[0], pandoc_options, report_no_auto, metadata_files)
             announce_preambles(preambles)
             stamp_preambles = preambles
             report_pdf_meta_options = resolve_stamp_options(files[0], metadata_files, stamp_overrides)

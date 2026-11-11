@@ -211,7 +211,7 @@ def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], var
     kept = core.pandoc_header_includes(files, metadata_files)
     if kept:
         own.append(("header-includes", kept[0]))
-    for path in core.document_preambles(files[0], [], no_auto):
+    for path in core.document_preambles(files[0], [], no_auto, metadata_files):
         own.append((path.name, core.read_text_best_effort(path)))
     for where, text in own:
         found = CSS_HEADING_OWN_RE.search(text)

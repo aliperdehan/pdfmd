@@ -52,6 +52,7 @@ UNSET = {
     "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "lines", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
+    "options.lua-filter": "none", "options.preamble": "none",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.flavour": "auto: obsidian in a vault, pdfmd elsewhere", "options.embed-px-to-pt": "0.75 (1 CSS pixel)", "options.embed-fit": "text-width", "options.embed-search": "vault", "options.single-newline": "the flavour's: a line break in obsidian (or as the vault says), a space elsewhere", "options.unclosed-comment": "hide in an Obsidian vault (the rest of the note, as Obsidian does), keep elsewhere",
     "options.page-folder": "on", "options.report-build": "route", "options.report-titles": "chapters", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds", "options.diagram-timeout": "120 seconds",
@@ -742,6 +743,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "`diagram-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
         text("options.check-ignore", "Codes `pdfmd --check` leaves out", "Comma-separated, e.g. heading-skip, link-anchor.",
              "Checks and limits", "config", "list"),
+        text("options.lua-filter", "Named Lua filters",
+             "Comma-separated paths, relative to this settings file. Nearest list replaces; lua-filter+: appends. "
+             "The ordinary Lua trust check applies.", "Automatic behaviour", "config", "list"),
+        text("options.preamble", "Named LaTeX preambles",
+             "Comma-separated paths, relative to this settings file. Nearest list replaces; preamble+: appends. "
+             "Added after discovered preambles.", "Automatic behaviour", "config", "list"),
         Setting("options.no-auto", "Automatic behaviour to switch off", "multi",
                 tuple((kind, AUTO_HELP.get(kind, "")) for kind in sorted(no_auto_kinds)), "",
                 "What pdfmd does by itself, off for every document (`--no-auto`).", "Automatic behaviour"),

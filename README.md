@@ -1513,6 +1513,14 @@ pdfmd-options:
   embed: {lua: ref}        # what --assemble-only embeds without the flag
 ```
 
+Named `pdfmd-options.lua-filter` and `preamble` files are read from the document,
+its metadata files, folder layers and the global setup. Each path is relative to
+the file that names it. The nearest list replaces lower lists; `lua-filter+:`
+and `preamble+:` append instead (`key+=:` is also accepted). Missing effective
+files are errors, and the ordinary Lua trust check applies. `--setup` has rows
+for both lists; unset, neither adds a named file. Discovered files still precede
+the named files, and `--no-auto lua` / `--no-auto preamble` suppress them.
+
 Plain HTML output is a fragment with MathML maths by default; an explicit
 `html.math`, Pandoc maths flag or passed defaults file chooses the method. For a finished page, or one file with
 everything (images, CSS) inlined, ask for it, on the command line or in the
