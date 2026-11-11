@@ -493,3 +493,20 @@ def init_reference(kind: str) -> bool:
     print(f"Wrote {target.name}: Pandoc's styles with pdfmd's look. Edit the styles in Word or LibreOffice "
           f"(Heading 1, Body Text, Title, Table...); pdfmd uses it for every .{kind} it writes beside or below it.")
     return True
+
+
+def build_reference_numbers(md_path, metadata_files, variables, no_auto, note, scratch):
+    """Collect LaTeX counters without inheriting a non-LaTeX route or entering Office conversion again."""
+    engines = [engine for engine in core.installed_engines()
+               if engine in core.LATEX_ENGINES and engine != "context"]
+    if not engines:
+        return
+    disabled = [] if no_auto == [] else [*(no_auto or ["officeref"]), "officelatex"]
+    command = core.office_pdfmd_command(md_path, metadata_files, variables, disabled,
+                                       "-e", ",".join(engines), "-o", str(scratch / f"{md_path.stem}.pdf"), "--cache")
+    note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
+    done = core.timed("PDF for reference numbers")(subprocess.run)(
+        command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+    if done.returncode != 0:
+        print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
+              "instead (build the PDF to see why)", file=sys.stderr)

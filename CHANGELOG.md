@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.141 — 2026-11-11
+
+Pre-edit state: commit `1016a0c`. Reference-number PDF builds inherited a non-LaTeX engine and could recursively launch pdfmd when Office LaTeX conversion was enabled. The helper now selects installed LaTeX engines, excludes ConTeXt (which has no LaTeX counters), and disables nested Office conversion; without a suitable engine it retains counted numbers. Regressions failed before the fix and pass afterwards; a checkout HTML build with a Typst document setting, Office tests and the repository guards are checked. The helper lives in the Office package; pdfmd.py shrinks from 17,211 to 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.140 — 2026-11-11
 
 Pre-edit state: commit `81f311a`. Inputs such as `a.md` and an earlier `a.html` could both build to `a.pdf`, silently

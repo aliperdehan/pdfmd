@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.140"
+PDFMD_VERSION = "3.33.141"
 import argparse
 import atexit
 import contextlib
@@ -6132,15 +6132,8 @@ def office_label_data(md_path: Path, metadata_files: list[Path], variables: list
         sources = [md_path, *parts, *metadata_files, *preambles]
         newest = max((item.stat().st_mtime for item in sources if item.is_file()), default=0)
         if not (aux.is_file() and aux.stat().st_mtime >= newest):
-            note("OFFICE", f"{md_path}: building the PDF once for its equation, figure and table numbers")
-            command = office_pdfmd_command(md_path, metadata_files, variables, no_auto,
-                                           "-o", str(scratch / f"{md_path.stem}.pdf"), "--cache")
-            # a whole LaTeX build: a step of its own in the times of --verbose (v3.33.54), not part of "the rest"
-            done = timed("PDF for reference numbers")(subprocess.run)(command, capture_output=True, encoding="utf-8",
-                                                                       errors="replace")
-            if done.returncode != 0:
-                print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
-                      "instead (build the PDF to see why)", file=sys.stderr)
+            load_package("pdfmd_office.build").build_reference_numbers(
+                md_path, metadata_files, variables, no_auto, note, scratch)
         if aux.is_file():
             data["labels"] = module.parse_aux(aux.read_text(encoding="utf-8", errors="replace"))
             (scratch / "labels.aux").write_text(
