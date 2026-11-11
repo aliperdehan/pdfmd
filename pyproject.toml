@@ -11,7 +11,7 @@ description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper
 readme = "README.md"
 # pdfmd is MIT; lib/pdfmd_mhchem/ is a port of mhchemParser and keeps its Apache licence
 license = "MIT AND Apache-2.0"
-license-files = ["LICENSE", "lib/pdfmd_inkmd/LICENSE", "lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "lib/pdfmd_mhchem/LICENSE"]
+license-files = ["LICENSE", "lib/pdfmd_inkmd/LICENSE", "lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "lib/pdfmd_mhchem/LICENSE", "lib/pdfmd_yaml/LICENSE"]
 authors = [{ name = "Ali Perdekhan" }]
 requires-python = ">=3.9"
 # Both are optional inside pdfmd.py (it degrades with a WARN without them);
@@ -65,7 +65,7 @@ pan-tec = "pdfmd:pan_tec_main"
 
 [tool.setuptools]
 py-modules = ["pdfmd"]
-packages = ["pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd_batch", "pdfmd_bridge", "pdfmd_buildinfo", "pdfmd_cache", "pdfmd_chain", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_doctor", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid", "pdfmd_images", "pdfmd_inkmd", "pdfmd_install", "pdfmd_kits", "pdfmd_labels", "pdfmd_lookup", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_native", "pdfmd_obsidian", "pdfmd_office", "pdfmd_paragraph", "pdfmd_parts", "pdfmd_pdfimages", "pdfmd_polish", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_restore", "pdfmd_routing", "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_tex", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web"]
+packages = ["pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd_batch", "pdfmd_bridge", "pdfmd_buildinfo", "pdfmd_cache", "pdfmd_chain", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_doctor", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid", "pdfmd_images", "pdfmd_inkmd", "pdfmd_install", "pdfmd_kits", "pdfmd_labels", "pdfmd_lookup", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_native", "pdfmd_obsidian", "pdfmd_office", "pdfmd_paragraph", "pdfmd_parts", "pdfmd_pdfimages", "pdfmd_polish", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_restore", "pdfmd_routing", "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_tex", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web", "pdfmd_yaml"]
 
 # the packages live in lib/ (the root held thirty folders); pdfmd.py itself stays in the root
 [tool.setuptools.package-dir]
@@ -124,7 +124,10 @@ pdfmd_view = "lib/pdfmd_view"
 pdfmd_watch = "lib/pdfmd_watch"
 pdfmd_web = "lib/pdfmd_web"
 
+pdfmd_yaml = "lib/pdfmd_yaml"
+
 [tool.setuptools.package-data]
+pdfmd_yaml = ["LICENSE", "VENDORED.md"]
 pdfmd_docs = ["*.md"]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]
 pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]

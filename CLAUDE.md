@@ -98,6 +98,11 @@ reads too, stay in `pdfmd.py`. md2pdf (`pymd2pdf`) is an optional dependency, no
 `python3 -m unittest discover -s tests` runs everything; the end-to-end tests run
 `pdfmd` with an empty PATH, which is how to test "no Pandoc" without removing it.
 
+`lib/pdfmd_yaml/` is a generated pure-Python copy of PyYAML, with its MIT
+licence. Never edit it by hand: change `scripts/vendor_pyyaml.py` and re-run
+it against the installed PyYAML (`--version X.Y.Z`; `--check` reports drift).
+It is private and never shadows an installed `yaml`; C extensions are omitted.
+
 ## This is a shared dependency
 
 `pdfmd` is used across multiple, unrelated Markdown-to-PDF pipelines (the

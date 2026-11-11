@@ -2,14 +2,14 @@
 """Build dist/pdfmd.pyz: pdfmd as ONE file, for a machine that cannot `pip install` (no network: a sandbox that only
 takes an upload).
 
-    python3 scripts/build_zipapp.py                 # dist/pdfmd.pyz, with PyYAML and pypdf copied in from this Python
+    python3 scripts/build_zipapp.py                 # dist/pdfmd.pyz, with vendored PyYAML and pypdf copied in from this Python
     python3 scripts/build_zipapp.py -o /tmp/x.pyz   # elsewhere
     python3 pdfmd.pyz report.md                     # on the other machine: needs Python 3.9+, Pandoc and a PDF engine
 
 The file is a zip with a small launcher. A zip cannot hold what Pandoc has to open as real files (the Lua filters, the
 LaTeX headers), so the first run unpacks it into ~/.cache/pdfmd/pyz/<hash>/ and every run after that uses that folder.
-PyYAML and pypdf are pure Python and are taken from the Python this script runs in (PyYAML's C speedup is left out);
-with neither, pdfmd still builds, but without front matter parsing and PDF stamping.
+PyYAML is always included as the private pure-Python pdfmd_yaml package. pypdf is taken from the Python this script
+runs in; without it, pdfmd still builds, but without PDF stamping.
 """
 
 from __future__ import annotations
@@ -25,12 +25,12 @@ ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "lib"
 PACKAGES = ("pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd_batch", "pdfmd_bridge", "pdfmd_buildinfo", "pdfmd_cache", "pdfmd_chain", "pdfmd_check", "pdfmd_chem", "pdfmd_comments", "pdfmd_compat", "pdfmd_crop", "pdfmd_css", "pdfmd_direct", "pdfmd_docs", "pdfmd_doctor", "pdfmd_edit", "pdfmd_flat", "pdfmd_flavours", "pdfmd_help", "pdfmd_history", "pdfmd_hybrid",
             "pdfmd_images", "pdfmd_inkmd", "pdfmd_install", "pdfmd_kits", "pdfmd_labels", "pdfmd_lookup", "pdfmd_lua", "pdfmd_mhchem", "pdfmd_native", "pdfmd_obsidian", "pdfmd_office", "pdfmd_paragraph", "pdfmd_parts", "pdfmd_pdfimages", "pdfmd_polish", "pdfmd_ranking", "pdfmd_raw", "pdfmd_report", "pdfmd_restore", "pdfmd_routing",
-            "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_tex", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web")      # = pyproject.toml's packages (test_packaging)
+            "pdfmd_serve", "pdfmd_setup", "pdfmd_smiles", "pdfmd_tables", "pdfmd_templates", "pdfmd_tex", "pdfmd_unicode", "pdfmd_view", "pdfmd_watch", "pdfmd_web", "pdfmd_yaml")      # = pyproject.toml's packages (test_packaging)
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's lib/pdfmd_docs/ holds no .md
 # file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
              ("docs/agents.md", "agents.md"))
-DEPENDENCIES = ("yaml", "pypdf")
+DEPENDENCIES = ("pypdf",)
 SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}
 SKIP_SUFFIXES = (".so", ".pyd", ".dylib", ".pyc", ".pyo")
 # the web UI's page is the files `pdfmd --serve` sends (package-data in pyproject.toml); the rest of its folder is for the maintainer
@@ -80,7 +80,7 @@ def add_tree(bundle: zipfile.ZipFile, source: Path, root: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-o", "--output", type=Path, default=ROOT / "dist" / "pdfmd.pyz")
-    parser.add_argument("--no-dependencies", action="store_true", help="do not copy PyYAML and pypdf in")
+    parser.add_argument("--no-dependencies", action="store_true", help="do not copy pypdf in")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, "w", zipfile.ZIP_DEFLATED) as bundle:
