@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.154 — 2026-11-11
+
+Pre-edit state: commit `d9696a1`. The global Pandoc check rejected Quarto HTML inputs before their dedicated renderer could run, even though Quarto supplies its own Pandoc. Dependency gating now selects the single-file Quarto route first; other inputs retain their standalone Pandoc requirement. Checkout regressions failed before the fix and pass afterwards for explicit and output-inferred HTML targets and a missing-Quarto diagnostic, with a Markdown dependency control. Quarto-route, rewrite, batch-path, native and repository guard tests run. Route selection lives in pdfmd_routing; pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
+
 ## v3.33.153 — 2026-11-11
 
 Pre-edit state: commit `98f2b21`. Python API calls passed relative output paths into a child with a different working directory. The result could be deleted with the temporary directory, rejected as missing, or mistaken for a stale caller-side file. The API command now resolves the output against the caller’s directory before spawning, matching its existing checks and returned path. Checkout-launcher regressions failed before the fix and pass afterwards for file and text APIs, absent and stale destinations, and explicit child working directories; API and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.

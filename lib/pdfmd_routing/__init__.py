@@ -29,6 +29,12 @@ from tempfile import mkdtemp
 core = None
 
 
+def quarto_input(args) -> bool:
+    """Select the dedicated Quarto route before enforcing standalone Pandoc dependencies."""
+    paths = args.path or []
+    return not args.batch and not args.report and len(paths) == 1 and paths[0].suffix.lower() == ".qmd"
+
+
 def tessdata_environment(extra: list[str]) -> dict[str, str] | None:
     """The environment for batchocr: TESSDATA_PREFIX at pdfmd's own language folder when the user has
     not set one and the folder has every language `--lang` asks for (English when it does not)."""
