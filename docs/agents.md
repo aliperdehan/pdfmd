@@ -53,6 +53,8 @@ With two paths, a skipped PDF beside a selected input adds `to name the output, 
 - `PDFMD_CONFIG=` (empty) ignores the user's config file, so a run does not depend on this machine's settings;
   `PDFMD_CONFIG=file.yaml` names another. A `.pdfmd/` folder in the document's folder or above it still applies (it is a
   project's own setting; `--verbose` lists it as `AUTO SETTINGS`, the closing `FOUND` line as `.pdfmd`).
+  Kits: the config's `kits:` entries and the `kits/` folder beside the config are off too; a `kits/` folder in the
+  document's folder or above it still applies (`--no-auto kit` turns that off).
 - The output goes beside the document, or where `-o` says; pdfmd also keeps a cache (`~/.cache/pdfmd`) and a data folder
   for what `--install` fetches (`~/.local/share/pdfmd`). `pdfmd --clear-cache` empties the cache and is always safe; `pdfmd --cache-info` shows its parts, `pdfmd --clear-cache stale` clears what belongs to documents that are gone.
   `--no-backup` forces backups of replaced files off for a run.

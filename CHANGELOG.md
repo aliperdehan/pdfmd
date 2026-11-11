@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.159b — 2026-11-11
+
+Pre-edit state: commit `9767456`. Docs only, no version bump. `docs/agents.md` now says what an empty `PDFMD_CONFIG=` does to
+kits: the config's `kits:` entries and the `kits/` folder beside the config are off too, while a `kits/` folder in the
+document's folder or above it still applies, like a `.pdfmd/` folder (`--no-auto kit` turns it off); the behaviour is
+unchanged. The v3.33.73 entry's check of a seven-page report is reworded to describe the test document neutrally.
+
 ## v3.33.159 — 2026-11-11
 
 Pre-edit state: commit `368074a`. The image scanner missed nested brackets in alt text and reference definitions whose destination starts on the next line, although Pandoc reads both. It now balances alt-text brackets and reads a following definition line. The scanner regression failed before the fix and passes afterwards against Pandoc's JSON; image and repository guard tests run. pdfmd.py remains 17,203 lines. No new setting or behavioural threshold.
@@ -717,8 +724,8 @@ size11.clo, size12.clo: 12, 13.6 and 14.5 TeX points), in any font. Pandoc's Typ
   (28.89 / 57.78) with 1, in both; with `indent: true` a paragraph break is one pitch in both, with `6pt` the pitch + 5.98
   (LaTeX, 6 TeX points) and + 6.0 (Typst). `-r` (two parts, `metadata.yaml` with 12 pt, 2): 28.89 in both parts. A page of
   each looked at side by side: the same lines at the same heights.
-- The author's seven-page report (`linestretch: 2`, 12 pt Times New Roman, A4, Typst), a scratch copy: its `references.bib`
-  (a link into OneDrive) could not be read (the file provider timed out on every try), so the copy was built without
+- A seven-page test report (`linestretch: 2`, 12 pt Times New Roman, A4, Typst): its `references.bib` (behind a cloud
+  file provider) could not be read (the provider timed out on every try), so it was built without
   `bibliography:` (the citations print as `(key?)`, the References heading has no entries). Body text: Typst 8 pages (7
   before), LuaLaTeX 9; the same A4 page and text width, the same 28.9 pt between lines in both, Typst 24 to 25 lines a
   full page, LaTeX 22 to 23. What is left is not the line spacing: LaTeX's title block and section headings take more room
