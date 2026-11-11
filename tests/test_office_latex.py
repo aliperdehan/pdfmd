@@ -714,6 +714,17 @@ class OtherOutputs(unittest.TestCase):
         self.assertEqual(self.run_pdfmd(said_no, "-e", "typst").returncode, 0)
         self.assertFalse(list((said_no / "cache").rglob("*.svg")))
 
+    WRITES = re.compile(r""" -o (?:'[^']*[\\/]|"[^"]*[\\/]|\S*[\\/])?([^\\/'" ]+)['"]?(?: |$)""")     # the file name after -o
+
+    def test_the_output_of_a_logged_command_is_read_in_both_quotings(self):
+        for line, name in ((r"CMD  pandoc 'C:\Users\RUNNER~1\Temp\pdfmd-office-filter-x\pass1.docx.md' -o "
+                            r"'C:\Users\runneradmin\Temp\pdfmd-verbose-x\d.docx' --from markdown", "d.docx"),
+                           (r"CMD  pandoc 'C:\t\d.md' -o 'C:\t\pdfmd-office-filter-x\pass1.docx' -t docx", "pass1.docx"),
+                           ("CMD  pandoc /tmp/v/d.md -o /tmp/v/d.docx --from markdown", "d.docx"),
+                           ("CMD  pandoc d.md -o d.pdf", "d.pdf")):
+            with self.subTest(line=line):
+                self.assertEqual(self.WRITES.search(line).group(1), name)
+
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_verbose_names_the_command_that_writes_the_file(self):
         # v3.33.60: through the LaTeX filter with nothing to draw, --verbose printed only the first run's command (the
@@ -728,8 +739,9 @@ class OtherOutputs(unittest.TestCase):
                 self.assertEqual(done.returncode, 0, done.stderr)
                 commands = [line for line in done.stderr.splitlines() if line.startswith("CMD  pandoc ")]
                 self.assertTrue(any("pass1." in line for line in commands), commands)
-                self.assertEqual(len([line for line in commands if re.search(r" -o \S*" + re.escape(output) + " ", line)]), 1,
-                                 commands)
+                # (on Windows the path is quoted, for its backslashes: -o 'C:\Users\...\d.docx')
+                written = [found.group(1) for found in map(self.WRITES.search, commands) if found]
+                self.assertEqual(written.count(output), 1, commands)
 
     @unittest.skipUnless(TYPST, "needs Typst")
     def test_typst_after_latex_failed_gets_the_filter(self):
