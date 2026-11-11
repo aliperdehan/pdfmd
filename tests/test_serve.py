@@ -88,6 +88,29 @@ class Handlers(Folder):
         # no mtime at all is the same as a stale one
         self.assertEqual(self.core.handle("PUT", "/api/file", {"path": "report.md", "text": "x"})[0], 409)
 
+    def test_a_file_replaced_while_it_is_read_is_not_overwritten_by_the_next_save(self):
+        # another program replaces the file between the read of its bytes and the version the answer carries (review finding G4.2)
+        target = self.root / "report.md"
+        old_text = target.read_text(encoding="utf-8")
+        real_read_bytes = Path.read_bytes
+
+        def read_then_replaced(path):
+            data = real_read_bytes(path)
+            if path == target:
+                replacement = target.with_name("report.md.new")
+                replacement.write_text("# Written by another program\n", encoding="utf-8")
+                stamp = target.stat().st_mtime_ns + 5_000_000_000      # a clearly newer mtime, whatever the clock's resolution
+                os.utime(replacement, ns=(stamp, stamp))
+                os.replace(replacement, target)
+            return data
+
+        with mock.patch.object(Path, "read_bytes", read_then_replaced):
+            status, read = self.get("/api/file?path=report.md")
+        self.assertEqual((status, read["text"]), (200, old_text), "the bytes read are the old file's")
+        status, refused = self.core.handle("PUT", "/api/file", {"path": "report.md", "text": "edited old text", "mtime": read["mtime"]})
+        self.assertEqual((status, refused.get("code")), (409, "conflict"), "the version must not authorise overwriting the replacement")
+        self.assertEqual(target.read_text(encoding="utf-8"), "# Written by another program\n")
+
     def test_a_save_keeps_the_line_endings_and_the_bom(self):
         (self.root / "win.md").write_bytes(b"\xef\xbb\xbf# A\r\n\r\ntext\r\n")
         _, read = self.get("/api/file?path=win.md")

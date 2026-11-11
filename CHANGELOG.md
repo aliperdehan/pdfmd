@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.182 — 2026-11-12
+
+Pre-edit state: commit `18e7d8c`. Review finding G4.2: `GET /api/file` of `pdfmd --serve` (and `--api`) read a file's bytes
+first and took the mtime it answers with afterwards. A file replaced between the two came back as the old text with the new
+file's mtime, and a save sending that mtime back was accepted: the replacement, which nobody had seen, was overwritten. This
+needs no coarse timestamps, only a write landing during the read. The mtime is now taken before the bytes are read, so it can be
+older than the text but never newer: a change during the read makes the next save a 409 conflict (the page then says the file
+changed on disk) instead of an overwrite. No retry loop and no new setting; the API's shape and meaning are unchanged.
+Regression: `tests/test_serve.py` replaces the file, with a clearly newer mtime, right after its bytes are read, and checks that
+the save is refused and the replacement kept; checked failing before (200) and passing after (409). A read and a save through
+`scripts/pdfmd --api` still round-trip. pdfmd.py stays at 17,136 lines.
+
 ## v3.33.181c — 2026-11-12
 
 Pre-edit state: commit `5b329f4`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.4: the

@@ -191,6 +191,10 @@ class Core:
         path, name = self.resolve(query.get("path"))
         if not path.is_file():
             raise ApiError(404, "no_file", f"{name} is not a file of this project")
+        # the version a save sends back is the mtime from BEFORE the bytes were read: a file replaced while it is being read then has a
+        # newer mtime than the answer, so the save is refused (409); taken after the read, it would name the new file and authorise
+        # overwriting a text nobody saw
+        version = path.stat().st_mtime_ns
         data = path.read_bytes()
         bom = data.startswith(b"\xef\xbb\xbf")
         try:
@@ -199,7 +203,7 @@ class Core:
             raise ApiError(415, "not_text", f"{name} is not UTF-8 text") from None
         crlf = "\r\n" in text
         return 200, {"path": name, "text": text.replace("\r\n", "\n"), "encoding": "utf-8-sig" if bom else "utf-8",
-                     "lineEnding": "crlf" if crlf else "lf", "mtime": str(path.stat().st_mtime_ns)}
+                     "lineEnding": "crlf" if crlf else "lf", "mtime": str(version)}
 
     def raw(self, query: dict) -> tuple[bytes, str]:
         """`GET /api/raw?path=NAME`: a picture or a PDF of the project, byte for byte, and its type. The one answer that is not JSON (the HTTP
