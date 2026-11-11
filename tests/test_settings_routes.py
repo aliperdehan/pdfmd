@@ -166,7 +166,14 @@ class FontMetadataPrecedence(RouteCase):
     @unittest.skipUnless(shutil.which('pandoc'), 'needs Pandoc')
     def test_checkout_managed_earlier_font_cannot_override_later_metadata(self):
         self.source.write_text('Text.\n')
-        managed = Path(self.env['XDG_DATA_HOME']) / 'pdfmd' / 'fonts'
+        # The managed fonts sit in data_root(): under XDG_DATA_HOME, and under %LOCALAPPDATA% on Windows.
+        data = Path(self.env['XDG_DATA_HOME'])
+        self.env['LOCALAPPDATA'] = str(data)
+        with patch.dict(os.environ, self.env):
+            managed = pdfmd.data_root() / 'fonts'
+            with patch.object(sys, 'platform', 'win32'):
+                self.assertEqual(pdfmd.data_root(), data / 'pdfmd')
+        self.assertEqual(managed, data / 'pdfmd' / 'fonts')         # never the real folder
         managed.mkdir(parents=True)
         # Give the shipped test font a private family name, only in this scratch copy.
         font = (ROOT / 'lib' / 'pdfmd_inkmd' / 'assets' / 'fonts' / 'DejaVuSans.ttf').read_bytes()
