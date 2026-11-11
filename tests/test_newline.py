@@ -132,7 +132,8 @@ class Build(Base):
         self.assertIn("line one line two", self.build("plain", "html", self.SOURCE))
         text = "---\npdfmd-options:\n  single-newline: hard\n---\nline one\nline two\n"
         self.assertIn("line one\\\\\nline two", self.build("plain", "latex", text))
-        self.assertIn("line one \\ line two", self.build("plain", "typst", text))
+        # Typst's line break is a backslash before white space: Pandoc writes a space after it, Pandoc 3.1.3 a new line
+        self.assertRegex(self.build("plain", "typst", text), r"line one \\[ \n]line two")
 
 
 if __name__ == "__main__":
