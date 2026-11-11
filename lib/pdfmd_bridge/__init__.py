@@ -240,10 +240,10 @@ def plain_author_names(names: list[str]) -> list[str]:
 
     source = "---\nauthor: " + json.dumps(names, ensure_ascii=False) + "\n---\n"
     try:
-        result = subprocess.run(["pandoc", "-f", "markdown", "-t", "html", "-s"], input=source,
-                                capture_output=True, text=True, check=True)
+        result = subprocess.run(["pandoc", "-f", "markdown", "-t", "html", "-s"], input=source.encode("utf-8"),
+                                capture_output=True, check=True)
         parser = Authors()
-        parser.feed(result.stdout)
+        parser.feed(result.stdout.decode("utf-8", errors="replace"))
         return parser.names if len(parser.names) == len(names) else []
     except (OSError, subprocess.SubprocessError):
         return []

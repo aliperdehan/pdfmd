@@ -50,9 +50,9 @@ def template_source(name: str, directory: Path, command: list[str], suffix: str 
         data_args = [word for path in option_values(command, "--data-dir") for word in ("--data-dir", path)]
         done = subprocess.run(["pandoc", *data_args,
                                "--print-default-data-file", kind + "/" + item.as_posix()],
-                              capture_output=True, text=True, cwd=directory)
+                              capture_output=True, cwd=directory, timeout=core.PROBE_TIMEOUT)
         if done.returncode == 0:
-            return done.stdout, directory / item
+            return done.stdout.decode("utf-8", errors="replace"), directory / item
     raise FileNotFoundError(name)
 
 
@@ -132,10 +132,12 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
             template, origin = template_source(custom, directory, command)
             template = copy_partials(template, origin, command, folder, frozenset({origin}))
         else:
-            template = subprocess.run(["pandoc", "-D", "typst"], capture_output=True, text=True, check=True).stdout
+            template = subprocess.run(["pandoc", "-D", "typst"], capture_output=True, check=True,
+                                      timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
             if "$template.typst()$" in template:
                 partial = subprocess.run(["pandoc", "--print-default-data-file", "templates/template.typst"],
-                                         capture_output=True, text=True, check=True).stdout
+                                         capture_output=True, check=True,
+                                         timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
                 template = template.replace("$template.typst()$", partial)
             original = "leading: linestretch * 0.65em"
             if original not in template:

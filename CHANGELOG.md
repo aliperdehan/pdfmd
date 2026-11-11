@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.169 — 2026-11-11
+
+Pre-edit state: commit `2a32f71`. Typst's Pandoc template/data-file queries had no probe timeout, and those queries plus Prince's plain-author conversion left subprocess decoding to the console code page. Template queries now use the existing core.PROBE_TIMEOUT; all four calls exchange bytes and decode Pandoc's output as UTF-8 with replacement. The two source regressions fail before the fix and pass afterwards. Probe, author, paragraph-spacing and engine-filter coverage plus repository guards run 178 tests (five skipped); guards pass after adding this entry. Isolated checkout-launcher builds pass for default Typst templates and Pandoc data-file fallback with a Unicode title. Startup imports are unchanged and --version takes 0.106 s. pdfmd.py remains 17,207 lines (version only). No new constant, setting or behavioural threshold.
+
 ## v3.33.168 — 2026-11-11
 
 Pre-edit state: commit `af49b45`. An unrelated Markdown file above a document could stop its build when the parts-scaffold probe could not resolve its kit, read its content or find its parts folder. The author chose to retain the upward search: failed candidates are now skipped, with a note naming the candidate and reason only under --verbose. Speculative diagnostics are captured so a failed probe emits no WARN; malformed candidate and metadata YAML are rejected during the probe. The shared-parts warning uses the same isolation for neighbouring candidates, while a matching scaffold retains its kit settings, parts selection and diagnostics. Seven checkout-launcher pipeline tests pass, with ten failing regression cases checked against the pre-edit implementation and the valid kit-scaffold control passing before and after. Area and repository guard tests pass (259 tests, three skipped, including two LibreOffice sandbox skips). pdfmd.py remains 17,207 lines (version only). No new setting, constant or behavioural threshold; the existing four-folder search is unchanged.
