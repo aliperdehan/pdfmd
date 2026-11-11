@@ -79,6 +79,14 @@ class PyprojectTests(unittest.TestCase):
         declared = {requirement_name(item) for item in self.project.get("dependencies", [])}
         self.assertEqual(declared, {"pypdf"})
 
+    def test_ci_covers_python_315_and_keeps_md2pdf_on_313(self):
+        from pdfmd_yaml_support import yaml
+        workflow = yaml.safe_load((ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+        native = workflow["jobs"]["native"]
+        self.assertIn("3.15", native["strategy"]["matrix"]["python"])
+        math = next(step for step in native["steps"] if step.get("name", "").startswith("With md2pdf and math"))
+        self.assertEqual(math["if"], "matrix.python == '3.13'")
+
     def test_yaml_acceleration_is_an_optional_extra(self):
         self.assertEqual(self.project["optional-dependencies"].get("yaml"), ["pyyaml"])
 

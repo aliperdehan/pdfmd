@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.167b — 2026-11-11
+
+Pre-edit state: commit `f8b94f2`. The install-and-test matrix did not exercise Python 3.15, where missing PyYAML wheels exposed the compiler requirement. The native job now includes Python 3.15 on Windows, macOS and Linux; its md2pdf step remains restricted to Python 3.13. The matrix regression failed before the change and passes afterwards; packaging and repository guard tests pass locally (97 tests, one skipped). Workflow/tests only, no version bump; CI was not run or dispatched. pdfmd.py remains 17,207 lines. No new setting or behavioural threshold.
+
 ## v3.33.167 — 2026-11-11
 
 Pre-edit state: commit `27d4f70`. Requiring PyYAML still made pip build its C extension on Python versions without a wheel, notably Python 3.15 on Windows. pypdf is now the only required dependency; the yaml extra adds installed PyYAML for optional LibYAML acceleration. Installation documentation explains the compiler-free default, both command names, Windows Scripts/PATH recovery through setup or --user-path, and the tested versions' CI matrix. Checkout documentation now describes bundled YAML. Both dependency regressions failed before the fix and pass afterwards; packaging, YAML pipeline, formula, Scoop and repository guard tests pass (116 tests, one skipped). Docker and Scoop install the default package and need no changes. Homebrew's pinned PyYAML/libyaml resources are retained because their removal cannot be verified offline against its pinned release. pdfmd.py remains 17,207 lines; only its version and existing documentation change. No new setting or behavioural threshold.
