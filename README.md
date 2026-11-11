@@ -3199,7 +3199,9 @@ the later file.
 the document folder's own metadata files, the document's front matter. A key set higher up replaces the value below it,
 lists too. To add instead, write the key with a plus: `author+: [B. Partner]` is the value the layers below hold, then
 `B. Partner`. It works in any layer (a course folder's `author+` adds to the global author), a single value counts as a list
-of one, nothing below means just the names written, and `author:` and `author+:` in one place are taken in that order. The
+of one, nothing below means just the names written, and `author:` and `author+:` in one place are taken in that order.
+The command line is the top layer: `-M author+=Charlie` (also `--metadata author+:Charlie`) appends, while
+`-M author=Charlie` replaces. The
 setting `pdfmd-options: {metadata-append: [author]}` (a name or a list; the document, a metadata file, `.pdfmd/config.yaml`
 or `pdfmd --setup`) makes the document's own `author:` add as well, which suits a course that rotates its lab partners.
 Only a plain value or a list can be added to (a mapping stops with a message), and `header-includes` is left out because

@@ -1020,6 +1020,46 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def normalise_metadata_options(arguments: list[str]) -> list[str]:
+    """Preserve Pandoc's --metadata spelling despite pdfmd's similarly named options."""
+    before, separator, after = arguments, [], []
+    if "--" in arguments:
+        index = arguments.index("--")
+        before, separator, after = arguments[:index], ["--"], arguments[index + 1:]
+    return ["-M" if token == "--metadata" else "-M" + token[len("--metadata="):]
+            if token.startswith("--metadata=") else token for token in before] + separator + after
+
+
+def metadata_command_layers(arguments: list[str]) -> list[tuple[dict, bool]]:
+    """Command-line metadata as one layer, retaining repeated values as Pandoc does."""
+    import re
+
+    values = {}
+    tokens = iter(arguments)
+    for token in tokens:
+        if token in ("-M", "--metadata"):
+            value = next(tokens, "")
+        elif token.startswith("--metadata="):
+            value = token[len("--metadata="):]
+        elif token.startswith("-M"):
+            value = token[2:]
+        else:
+            continue
+        match = re.match(r"^([^:=]+)(?:[:=](.*))?$", value, re.DOTALL)
+        if match:
+            values.setdefault(match.group(1), []).append(match.group(2) if match.group(2) is not None else True)
+    return [({key: items[0] if len(items) == 1 else items for key, items in values.items()}, False)]
+
+
+def merged_cli_metadata(core, layers, append, where, arguments):
+    command_layers = metadata_command_layers(arguments)
+    cli_appends = {key[:-1] for layer, _ in command_layers for key in layer if core.metadata_plus_key(key)}
+    merged = core.merge_metadata_layers([*layers, *command_layers], append, where)
+    for key in metadata_keys(arguments) - cli_appends:
+        merged.pop(key, None)
+    return merged
+
+
 def metadata_keys(arguments: list[str]) -> set[str]:
     """Keys explicitly set by Pandoc's command-line metadata options."""
     keys = set()

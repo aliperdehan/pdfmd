@@ -56,6 +56,37 @@ class Layers(unittest.TestCase):
         self.assertTrue(found, tex[:600])
         return [part.strip() for part in found.group(1).split("\\and")]
 
+    def test_command_line_append_is_the_top_layer(self):
+        write(self.folder / "d.md", "---\nauthor+: Doc\n---\n\nText.\n")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.root / "config"), "XDG_CACHE_HOME": str(self.root / "cache"),
+                       "XDG_DATA_HOME": str(self.root / "data")}
+        for args in (("-M", "author+=Charlie"), ("--metadata", "author+:Charlie"),
+                     ("-Mauthor+=Charlie",), ("--metadata=author+=Charlie",)):
+            with self.subTest(args=args):
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "d.md", "--to", "native", "-s",
+                                       "-o", "out.native", *args], cwd=self.folder, env=environment,
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                result = (self.folder / "out.native").read_text(encoding="utf-8")
+                for name in ('Str "Course"', 'Str "A"', 'Str "B"', 'Str "Doc"', 'Str "Charlie"'):
+                    self.assertIn(name, result)
+                self.assertNotIn('author+', result)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "d.md", "--to", "native", "-s", "-o", "out.native",
+                               "-M", "author=Replacement"], cwd=self.folder, env=environment,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        result = (self.folder / "out.native").read_text(encoding="utf-8")
+        self.assertIn("Replacement", result)
+        self.assertNotIn("Course A", result)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "d.md", "--to", "native", "-s", "-o", "out.native",
+                               "-M", "author=First", "-M", "author=Second", "-M", "author+=Third"],
+                              cwd=self.folder, env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        result = (self.folder / "out.native").read_text(encoding="utf-8")
+        self.assertLess(result.index('"First"'), result.index('"Second"'))
+        self.assertLess(result.index('"Second"'), result.index('"Third"'))
+
     def test_the_order_is_course_then_documents_folder_then_the_document(self):
         self.assertEqual(self.authors(), ["Course A", "Course B"])
         self.assertEqual(self.authors(extra_files={"metadata.yaml": "author: [Folder X]\n"}), ["Folder X"])

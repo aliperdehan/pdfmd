@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.158 — 2026-11-11
+
+Pre-edit state: commit `2b043bb`. Command-line metadata append keys reached Pandoc without being merged, so their values were lost or ignored. They now join the metadata layers at the top, while ordinary command-line metadata still replaces, and the README documents the syntax. Checkout regressions for the short and long forms failed before the fix and pass afterwards; metadata and repository guard tests run. The merge logic lives in pdfmd_args; pdfmd.py shrinks from 17,205 to 17,203 lines. No new setting or behavioural threshold.
+
 ## v3.33.157 — 2026-11-11
 
 Pre-edit state: commit `a80937a`. Prince received Markdown markup literally in its combined PDF author when a name contained formatting. The author option now uses the plain text of Pandoc's own HTML author tags, retaining its handling of links and formatting. The regression failed before the fix and passes afterwards; author metadata and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.

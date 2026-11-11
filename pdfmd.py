@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.157"
+PDFMD_VERSION = "3.33.158"
 import argparse
 import atexit
 import contextlib
@@ -4193,9 +4193,7 @@ def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path],
         return []
     append = metadata_append_keys(files[0], metadata_files)
     layers = metadata_layers(files, metadata_files)
-    merged = merge_metadata_layers(layers, append, display_path(files[0]))
-    for key in load_package("pdfmd_args").metadata_keys(pandoc_options):
-        merged.pop(key, None)
+    merged = load_package("pdfmd_args").merged_cli_metadata(sys.modules[__name__], layers, append, display_path(files[0]), pandoc_options)
     if not merged:
         return []
     try:
@@ -16248,7 +16246,7 @@ def main() -> None:
 
 def run_main() -> None:
     parser, hidden = command_line_parser()
-    args, pandoc_options = parser.parse_known_args()
+    args, pandoc_options = parser.parse_known_args(load_package("pdfmd_args").normalise_metadata_options(sys.argv[1:]))
     refuse_disabled(args, hidden, parser)
     if args.bopen is not None:
         try:
