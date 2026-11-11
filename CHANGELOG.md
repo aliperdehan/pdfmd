@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.175c — 2026-11-12
+
+Pre-edit state: commit `12abf9d`. Tests only, from the second CI run on the branch (Linux with Pandoc latest and 3.1.3).
+`test_setup.Plain.test_fonts_a_metadata_file_names_are_not_replaced_by_pdfmds_defaults` expected "font STIX Two Text"
+where the runner has no STIX (pdfmd named its stand-in, DejaVu Serif): it now expects the fonts `preferred_font()` and
+`default_monofont()` choose, as `test_autolog` does since v3.33.174f. Two `test_calc.Switches` tests expected MathML in an
+HTML fragment, which is Pandoc's default HTML maths only on a recent Pandoc; 3.1.3 writes its plain-text maths and leaves
+`{\sqrt{\rho}}^{2}/{3\times 10^{-5}}` as TeX with a warning of its own. pdfmd's TeX is not at fault: 3.1.3 converts the
+same formulas with `--mathml`. On a Pandoc whose default is not MathML, the tests now ask for it by name
+(`pdfmd-options: {html: {math: mathml}}`), so they still check that every formula pdfmd writes becomes MathML.
+
 ## v3.33.175b — 2026-11-12
 
 Pre-edit state: commit `912eb13`. Tests only. Three tests of `test_setup.Plain` (`test_no_families_are_disabled_and_a_separate_reset_restores_defaults`, `test_table_counts_accept_zero_and_reject_all`, `test_editing_details_keeps_disabled_calc_and_csv_off`) check a saved `--setup` answer by building `doc.md --to html`, which needs Pandoc, and failed with "Pandoc was not found on PATH" in all twelve `native` CI jobs of the second run. They were hidden until v3.33.169c: the module did not import without PyYAML. Each now carries the module's usual `needs Pandoc` skip; the skip covers the whole test, its first assertions on `plain.edit()` included, which the jobs with Pandoc still run.

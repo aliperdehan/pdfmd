@@ -262,8 +262,13 @@ class Plain(unittest.TestCase):
         self.assertIn("global metadata", shown)
         (project / "metadata.yaml").unlink()
         shown, tex = build("b.md", "")
-        self.assertIn("font STIX Two Text", shown)       # pdfmd's own default, named like its other defaults
-        self.assertIn("code in JetBrains Mono", shown)
+        # pdfmd's own defaults, named like its other defaults: the fonts it chooses on this machine (its own two where they are
+        # installed, else a stand-in, as in test_autolog since 3.33.174f)
+        pdfmd.reset_font_caches()
+        with __import__("contextlib").redirect_stderr(__import__("io").StringIO()):
+            main, mono = pdfmd.preferred_font(), pdfmd.default_monofont()
+        self.assertIn(f"font {main}", shown)
+        self.assertIn(f"code in {mono}", shown)
 
     def test_a_later_metadata_file_wins_as_in_pandoc(self):
         directory = Path(tempfile.mkdtemp(prefix="pdfmd-setup-"))
