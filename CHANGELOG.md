@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.179a — 2026-11-12
+
+Pre-edit state: commit `9459f2b`. A test only, from the third CI run of the 3.33.17x fixes (`native`, Windows, Python 3.9,
+3.10 and 3.13: one failure each, the only one left there). `test_batch_paths.Checkout.test_same_pdf_destination_prefers_markdown`
+builds a document named in Cyrillic and looks for its name in pdfmd's NOTE line. The test reads the child's output as UTF-8,
+but on Windows outside Python's UTF-8 mode a pipe is in the code page (cp1252 on the runner), where pdfmd since v3.33.175
+prints `?` for a character the page cannot show instead of ending the run: the run worked, and the line said
+`NOTE  skipped (same output as ???????? ? ????????.md)`. Python 3.15, in UTF-8 mode by default, passed. The class's child
+processes now get `PYTHONIOENCODING=utf-8`, so they write what the test reads; the assertion is unchanged. A user's console
+is unaffected (Python writes to a Windows console in Unicode).
+
 ## v3.33.179 — 2026-11-12
 
 Pre-edit state: commit `f8d120d`. DECISION 53 item 4: named Lua filters and preambles were read only from the document, silently ignoring metadata and setup layers. The shared pdfmd_assemble.named resolver now follows document > metadata files > folder layers > global setup, retaining each naming file as the base for relative paths. As with other list-valued options, the nearest ordinary list replaces lower lists; `key+:` (and `key+=:`) explicitly appends from lower to higher layers. Flat and grouped spellings still add within one layer. Effective missing files remain hard errors, with the existing assembled Lua-reference exception; Lua trust checks include filters run during assembly. Global/folder setup gains both list rows and inventory coverage. Batch, report, kit, CSS and kept-source callers pass their actual metadata files; embedded append names are cleared once their files are included. Regression: metadata-relative, folder, global, document, grouped, replacement, append, missing-file and trust checks; the initial layer tests failed before and pass after, including real scripts/pdfmd HTML/LaTeX builds and an assembly. pdfmd.py shrinks from 17,211 to 17,133 lines.

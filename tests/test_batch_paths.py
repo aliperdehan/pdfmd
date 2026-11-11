@@ -106,7 +106,9 @@ class Checkout(unittest.TestCase):
         self.folder = Path(self.scratch.name)
         self.work = self.folder / "work"
         self.work.mkdir()
-        self.environment = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1",
+        # PYTHONIOENCODING: run_pdfmd and run_compat read the child's output as UTF-8, so the child writes UTF-8; on a Windows
+        # pipe in the code page (Python 3.9-3.14 outside UTF-8 mode) pdfmd prints "?" for a name the page cannot show (3.33.175)
+        self.environment = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1", PYTHONIOENCODING="utf-8",
                                 XDG_CONFIG_HOME=str(self.folder / "config"),
                                 XDG_CACHE_HOME=str(self.folder / "cache"),
                                 XDG_DATA_HOME=str(self.folder / "data"))
