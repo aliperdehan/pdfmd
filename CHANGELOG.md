@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.169b — 2026-11-11
+
+Pre-edit state: commit `c425e90`. The lint job inspected generated bundled PyYAML and reported 378 findings; an Office-margin test's core import also triggered F401 despite adding lib/ to sys.path for the following import. Ruff now excludes pdfmd_yaml alongside pdfmd_inkmd, with the workflow comment updated; the side-effect import is explicitly marked. The lint command fails before the fix (379 errors) and prints All checks passed afterwards. Office-margin and repository guard tests pass (99 tests, one skipped). Workflow/tests only, no shipped-code version bump, constant, setting or behavioural threshold.
+
 ## v3.33.169 — 2026-11-11
 
 Pre-edit state: commit `2a32f71`. Typst's Pandoc template/data-file queries had no probe timeout, and those queries plus Prince's plain-author conversion left subprocess decoding to the console code page. Template queries now use the existing core.PROBE_TIMEOUT; all four calls exchange bytes and decode Pandoc's output as UTF-8 with replacement. The two source regressions fail before the fix and pass afterwards. Probe, author, paragraph-spacing and engine-filter coverage plus repository guards run 178 tests (five skipped); guards pass after adding this entry. Isolated checkout-launcher builds pass for default Typst templates and Pandoc data-file fallback with a Unicode title. Startup imports are unchanged and --version takes 0.106 s. pdfmd.py remains 17,207 lines (version only). No new constant, setting or behavioural threshold.

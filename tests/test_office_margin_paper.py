@@ -17,7 +17,7 @@ import isolation_support  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pdfmd  # noqa: E402
+import pdfmd  # noqa: E402,F401  (adds lib/ to sys.path for pdfmd_office)
 from pdfmd_office import docx, patch_reference, spec_from_metadata  # noqa: E402
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
