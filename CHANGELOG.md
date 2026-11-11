@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.187b — 2026-11-12
+
+Pre-edit state: commit `ad03ad5`. A test only, from the fifth CI run of the 3.33.17x-18x fixes (every `native` job and
+`windows-latex` ran into it). `test_serve.Http.test_a_body_over_the_limit_or_a_negative_length_is_refused_unread`
+(v3.33.184) read the server's refusal with one `recv()`, which on a fast runner returned the status line and headers
+without the JSON body that names `serve-max-request-mb`. The test's raw request now reads until the server closes the
+connection, as it does after refusing a body; the assertions are unchanged.
+
 ## v3.33.187a — 2026-11-12
 
 Pre-edit state: commit `8a394ce`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.19: render a reopened Studio preview.** Hiding and showing a preview made a new empty pane, but an earlier render made the controller think it was already populated. A pane with no HTML URL now triggers a render even when the text has not changed.

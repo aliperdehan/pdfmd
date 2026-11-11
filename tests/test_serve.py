@@ -474,11 +474,21 @@ class Http(Folder):
         return {"Authorization": "Bearer tok-123"}
 
     def raw_request(self, port, head: str) -> bytes:
-        """Headers sent with no body; the answer read as far as the server sends it (a server waiting for the body times out)."""
+        """Headers sent with no body; the answer read until the server closes the connection (it does after refusing a
+        body), since the status line and the JSON body can arrive in separate packets (a server waiting for the body times out)."""
         import socket
+        answer = b""
         with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
             sock.sendall(head.encode("ascii"))
-            return sock.recv(65536)
+            while True:
+                try:
+                    chunk = sock.recv(65536)
+                except (socket.timeout, ConnectionResetError):
+                    break
+                if not chunk:
+                    break
+                answer += chunk
+        return answer
 
     def test_a_body_over_the_limit_or_a_negative_length_is_refused_unread(self):
         server = Server(self.core, WEB, "tok-123", max_body=64)
