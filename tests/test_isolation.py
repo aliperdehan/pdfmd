@@ -48,6 +48,23 @@ class EveryModule(unittest.TestCase):
 
 
 class TheRun(unittest.TestCase):
+    def test_sandbox_disables_libreoffice_in_inherited_config_only(self):
+        for sandbox in ("seatbelt", None):
+            with self.subTest(sandbox=sandbox), tempfile.TemporaryDirectory() as folder:
+                env = {**os.environ, "PDFMD_TESTS_SCRATCH": "", "PDFMD_CONFIG": "",
+                       "XDG_CONFIG_HOME": folder, "XDG_CACHE_HOME": folder, "XDG_DATA_HOME": folder,
+                       "APPDATA": folder, "LOCALAPPDATA": folder}
+                if sandbox is None:
+                    env.pop("CODEX_SANDBOX", None)
+                else:
+                    env["CODEX_SANDBOX"] = sandbox
+                code = ("import sys; sys.path[:0] = %r; import isolation_support; import pdfmd; "
+                        "print(pdfmd.config_options().get('soffice-timeout'))" % [str(TESTS), str(ROOT)])
+                done = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                                      stdin=subprocess.DEVNULL)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.strip(), "0" if sandbox else "None")
+
     def test_the_variables_point_at_the_runs_own_folder(self):
         self.assertTrue(Path(os.environ[isolation_support.MARK]).is_dir())
         self.assertTrue(isolation_support.REAL)

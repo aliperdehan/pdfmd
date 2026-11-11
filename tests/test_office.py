@@ -283,6 +283,7 @@ class Discovery(unittest.TestCase):
 
 
 @unittest.skipUnless(PANDOC and SOFFICE and shutil.which("pdfinfo"), "needs Pandoc, LibreOffice and pdfinfo")
+@unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
 class Rendered(unittest.TestCase):
     """LibreOffice stands in for Word: the page it prints is the page the file asked for."""
 

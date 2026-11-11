@@ -163,6 +163,14 @@ def _isolate() -> None:
     os.environ[MARK] = scratch
     if os.environ.get("PDFMD_CONFIG"):                # a config file named by path is a real one
         del os.environ["PDFMD_CONFIG"]
+    if os.environ.get("CODEX_SANDBOX"):
+        # AppKit aborts even headless LibreOffice under Seatbelt, raising crash dialogues.
+        # Children inherit these folders; tests that explicitly need LibreOffice skip.
+        os.environ.pop("PDFMD_CONFIG", None)
+        for name in ("config", "roaming"):
+            config = Path(scratch, name, "pdfmd", "config.yaml")
+            config.parent.mkdir()
+            config.write_text("options:\n  soffice-timeout: 0\n", encoding="utf-8")
     os.environ.setdefault("PDFMD_BUILD_LOG", "off")   # a record for each of the documents the tests build is no use (the tests of
     #                                                   the record switch it on in their own cache folder)
     atexit.register(_check, folders, before, scratch)

@@ -96,6 +96,7 @@ class HybridStructure(Env):
 
 
 @unittest.skipUnless(pypdf and SOFFICE and PANDOC and LATEX, "needs pypdf, LibreOffice, Pandoc and a LaTeX engine")
+@unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
 class HybridEndToEnd(Env):
     def test_a_markdown_pdf_opens_in_libreoffice_as_its_editable_document(self):
         (self.directory / "a.md").write_text("---\ntitle: Hybrid Doc\n---\n\nHello **world** from the source.\n", encoding="utf-8")

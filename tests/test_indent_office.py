@@ -126,6 +126,7 @@ class Built(unittest.TestCase):
 
     @unittest.skipUnless(SOFFICE.is_file() or shutil.which("soffice"), "needs LibreOffice")
     @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    @unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
     def test_libreoffice_draws_the_first_line_flush_and_indented(self):
         for target in ("docx", "odt"):
             with self.subTest(target=target):

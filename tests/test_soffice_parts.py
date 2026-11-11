@@ -20,6 +20,7 @@ SOFFICE = shutil.which("soffice") or ("/Applications/LibreOffice.app/Contents/Ma
 
 @unittest.skipUnless(shutil.which("pandoc") and SOFFICE and shutil.which("pdftotext"),
                      "needs Pandoc, LibreOffice and pdftotext")
+@unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
 class SofficeParts(unittest.TestCase):
     def setUp(self):
         self._directory = tempfile.TemporaryDirectory()

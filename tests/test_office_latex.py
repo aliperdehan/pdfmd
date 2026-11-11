@@ -692,6 +692,7 @@ class OtherOutputs(unittest.TestCase):
         self.assertIn("<img", (asked / "d.html").read_text(encoding="utf-8"))
 
     @unittest.skipUnless(SOFFICE_PATH, "needs LibreOffice")
+    @unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
     def test_the_soffice_fallback_keeps_the_page_and_draws_what_it_can(self):
         root = self.folder()
         done = self.run_pdfmd(root, "-e", "soffice")

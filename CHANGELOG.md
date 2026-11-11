@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.147b — 2026-11-11
+
+Pre-edit state: commit `3814f05`. LibreOffice aborts inside the Codex sandbox even in headless mode, raising crash dialogues during tests. The test isolation helper now writes soffice-timeout: 0 into its temporary user configuration when CODEX_SANDBOX is set; tests that explicitly require LibreOffice skip with the reason. Outside the sandbox the configuration is unchanged. The inherited-configuration regression failed before the fix and passes afterwards; Office modules and the repository guards run, with read-only crash-report name counts checked before and afterwards. Product code and its version are unchanged; no new setting or behavioural threshold.
+
 ## v3.33.147 — 2026-11-11
 
 Pre-edit state: commit `420d3fb`. Front matter closed with ... was recognised by Pandoc but missed by font and margin handling, allowing defaults to override document settings and leaving scalar Typst margins invalid. Font detection, geometry detection, LaTeX margin translation and Typst margin rewriting now share the front-matter fence matcher, which captures the YAML block and preserves either terminator. Regressions failed before the fix and pass afterwards, including checkout LaTeX and Typst output, body preservation and operation without PyYAML; metadata-append, kit-carry, Unicode, paper, math-font and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.

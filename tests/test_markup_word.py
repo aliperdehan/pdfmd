@@ -139,6 +139,7 @@ class Build(unittest.TestCase):
         self.assertEqual(landscape_sections(document), [False, True, False])
 
     @unittest.skipUnless(SOFFICE, "needs LibreOffice to draw the pages")
+    @unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice crashes under the Codex sandbox")
     def test_the_pages_are_what_was_asked_when_drawn(self):
         try:
             import pypdf
