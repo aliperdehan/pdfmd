@@ -293,7 +293,8 @@ class Checkout(unittest.TestCase):
         done = self.run_pdfmd("z/same.md", "a/same.md", "-e", "inkmd", "-o", "out")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
-        self.assertIn("NOTE  skipped (same output as a/same.md): z/same.md", done.stdout)
+        # (display_path() writes the system's separator: `a\same.md` on Windows)
+        self.assertIn("NOTE  skipped (same output as a/same.md): z/same.md".replace("/", os.sep), done.stdout)
         self.assertTrue((self.work / "out/same.pdf").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")

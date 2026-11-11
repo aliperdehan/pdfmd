@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.169f — 2026-11-11
+
+Pre-edit state: commit `507bdc0`. **The name-tiebreak test of the batch paths expects the note in the system's spelling.** `test_batch_paths.Checkout.test_same_destination_in_output_folder_uses_name_tiebreak` looked for `NOTE skipped (same output as a/same.md): z/same.md`; on Windows pdfmd prints `a\same.md` and `z\same.md`, because `display_path()` writes a path with the system's separator in every message, and the other tests that read a displayed path already replace `/` with `os.sep` (`test_auto_states`, `test_backup_summary`, `test_cache_manage`). The message is right and the test was wrong: it failed in every Windows job of the first CI run of the 3.33 line (the four `native` Windows jobs and `windows-latex`) and nowhere else. The expectation now has `/` replaced by `os.sep`; on macOS and Linux the test is unchanged and passes.
+
 ## v3.33.169e — 2026-11-11
 
 Pre-edit state: commit `9131720`. The YAML provenance test read UTF-8 project metadata with the platform default encoding, failing under Windows cp1252, and the LuaLaTeX highlight test imported optional Pillow without a skip. Every read_text in test_pyyaml now explicitly requests UTF-8; the highlight test checks Pillow before building and skips with needs Pillow when absent. The existing tests fail before the fix with a simulated cp1252 default and with Pillow hidden, and pass afterwards (the missing-Pillow case skips). YAML/highlight area tests and repository guards pass (117 tests, one skipped), as does lint. The simulated-default-encoding regression passes and the hidden-Pillow regression skips with the required reason. Tests only, no shipped-code version bump, constant, setting or behavioural threshold.
