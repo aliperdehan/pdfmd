@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.183b — 2026-11-12
+
+Pre-edit state: commit `01556cf`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.6: the editor
+answers a changed file once.** Scout item 2 (approved by the author): `EditorDocument` left `presentedItemDidChange` to NSDocument,
+which reverts an unedited document by itself when another program writes its file. With `reloadOnDiskChange` on, that revert raced
+the `DiskWatcher`'s own reload (the one that keeps the caret and asks when the window is edited); with it off, it reloaded anyway,
+against the setting's "the window keeps what it has until you revert". The document now overrides it without calling super, as
+CotEditor does and as the PDF and HTML viewers here already did, so the watcher is the only one to answer. Regression:
+`--smoke-save` (headless) turns the setting off for the run, rewrites an open file through a file coordinator (which notifies the
+document as another program's write does) and checks that the window keeps its text; checked failing without the override (the
+window showed the new text) and passing with it.
+
 ## v3.33.183a — 2026-11-12
 
 Pre-edit state: commit `919f5b2`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.5: a file that

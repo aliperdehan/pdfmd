@@ -546,6 +546,28 @@ enum Smoke {
             doc.updateChangeCount(.changeCleared)
             doc.close()
         }
+        // with reloadOnDiskChange off, a coordinated write by "another program" leaves the window alone: NSDocument's own revert is not called
+        // (it reverted an unedited document by itself, against the setting, and raced the watcher's reload when the setting is on)
+        let still = base.appendingPathComponent("still.md")
+        try! "first\n".write(to: still, atomically: true, encoding: .utf8)
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        let before = arguments["reloadOnDiskChange"]
+        arguments["reloadOnDiskChange"] = 0
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+        if let doc = open(still), let controller = doc.controller {
+            spin(0.5)
+            var error: NSError?
+            NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: still, options: .forReplacing, error: &error) { url in
+                try? "second\n".write(to: url, atomically: false, encoding: .utf8)
+            }
+            spin(2.5)
+            let ok = controller.currentString() == "first\n" && (try? String(contentsOf: still, encoding: .utf8)) == "second\n"
+            print("\(ok ? "ok  " : "FAIL") reloadOnDiskChange 0: the window keeps its text when the file is rewritten \(ok ? "" : controller.currentString().debugDescription)")
+            if !ok { failures += 1 }
+            doc.close()
+        }
+        arguments["reloadOnDiskChange"] = before
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
         print(failures == 0 ? "SAVE OK" : "SAVE FAILED (\(failures))")
         exit(failures == 0 ? 0 : 1)
     }

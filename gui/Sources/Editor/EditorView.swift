@@ -141,6 +141,11 @@ final class EditorDocument: NSDocument {
         }
     }
 
+    /// NSFilePresenter: another program changed the file. NSDocument's own answer is not called (CotEditor does the same, and so do the PDF
+    /// and HTML viewers here): it reverts an unedited document by itself, which raced the DiskWatcher's reload when `reloadOnDiskChange`
+    /// is on and went against the setting when it is off ("the window keeps what it has until you revert").
+    override func presentedItemDidChange() {}
+
     /// The file was written by someone. Our own save is no change (the same bytes); an unedited window loads the new text with its caret where it
     /// was; an edited one asks which version to keep.
     func diskChanged() {
