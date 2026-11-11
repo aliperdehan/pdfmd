@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.173"
+PDFMD_VERSION = "3.33.174"
 import argparse
 import atexit
 import contextlib
@@ -13379,15 +13379,22 @@ def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, s
             if done.returncode == 0:
                 seen: set[str] = set()
                 prose = strip_code_text(raw)
-                for run in inline_text_runs(json.loads(done.stdout)):
+                runs = list(inline_text_runs(json.loads(done.stdout)))
+                for run in runs:
                     for match in NONMATH_DOLLAR_RE.finditer(run):
                         inner = match.group(1)
                         if not MATH_LOOKING_RE.search(inner) or match.group(0) in seen:
                             continue
                         seen.add(match.group(0))
                         # where it stands in the file, as written: a soft break is any white space, and an escaped `$` does not match
-                        written = re.compile(r"(?<!\\)" + r"\s+".join(re.escape(word) for word in match.group(0).split(" ")))
-                        for line in sorted({prose.count("\n", 0, position.start()) + 1 for position in written.finditer(prose)}):
+                        words = [re.escape(word) for word in match.group(0).split(" ")]
+                        written = [position.start() for position in re.finditer(r"(?<!\\)" + r"\s+".join(words), prose)]
+                        # the same text with a dollar escaped (`\$\geq\$3`) is the same text to the reader: when those copies account
+                        # for every one it gave, the unescaped ones were read as math (Pandoc 3.1.3's gfm reader has no digit rule)
+                        any_way = len(re.findall(r"\s+".join(word.replace(r"\$", r"\\?\$") for word in words), prose))
+                        if sum(text.count(match.group(0)) for text in runs) <= any_way - len(written):
+                            continue
+                        for line in sorted({prose.count("\n", 0, start) + 1 for start in written}):
                             found.append((line, match.group(0), f"${inner} {match.group(2)}$"))
         except (OSError, ValueError, subprocess.SubprocessError, UnicodeDecodeError):
             found = []

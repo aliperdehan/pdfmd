@@ -55,8 +55,32 @@ class FindingThem(unittest.TestCase):
         self.assertEqual(found[1][2], "$\\pm 10$")
 
     def test_the_gfm_reader_keeps_the_whole_thing_as_one_word(self):
+        """Where it does: the gfm reader of an older Pandoc (3.1.3) has no digit rule and reads `$\\geq$3` as math, so there is nothing
+        to say there, although the escaped copy in the document (`\\$\\geq\\$3`) is the same text in what the reader gives."""
+        import subprocess
+        read = subprocess.run(["pandoc", "-f", "gfm+smart", "-t", "native"], input="a $\\geq$3 b\n", capture_output=True, text=True,
+                              encoding="utf-8", check=True).stdout
         path = self.document(BODY)
-        self.assertEqual([line for line, _, _ in pdfmd.nonmath_dollars(path, "gfm+smart")], [1, 5, 11])
+        self.assertEqual([line for line, _, _ in pdfmd.nonmath_dollars(path, "gfm+smart")], [] if "Math" in read else [1, 5, 11])
+
+    def test_an_escaped_copy_is_not_taken_for_the_unescaped_one(self):
+        """The reader gives `\\$\\geq\\$3` as the text `$\\geq$3`. With no failed span beside it in what the reader gave, the unescaped
+        copy was read as math (no Pandoc needed: the reader's answer is given)."""
+        import json
+        from unittest import mock
+        path = self.document("a $\\geq$3 b\n\nwritten \\$\\geq\\$3 here\n")
+
+        def answer(*inlines):
+            done = mock.Mock(returncode=0)
+            done.stdout = json.dumps({"pandoc-api-version": [1, 23], "meta": {}, "blocks": [{"t": "Para", "c": list(inlines)}]})
+            return done
+        text, math = {"t": "Str", "c": "$\\geq$3"}, {"t": "Math", "c": [{"t": "InlineMath"}, "\\geq"]}
+        with mock.patch.object(pdfmd, "which", return_value="pandoc"), mock.patch.object(pdfmd.subprocess, "run") as run:
+            run.return_value = answer(math, {"t": "Str", "c": "3"}, {"t": "Space"}, text)        # the unescaped one is math
+            self.assertEqual(pdfmd.nonmath_dollars(path, "gfm"), [])
+            pdfmd._NONMATH_DOLLARS.clear()
+            run.return_value = answer(text, {"t": "Space"}, text)                                # both are text
+            self.assertEqual([line for line, _, _ in pdfmd.nonmath_dollars(path, "gfm")], [1])
 
     def test_a_reader_without_dollar_math_has_nothing_to_say(self):
         path = self.document(FRONT + BODY)
