@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185h — 2026-11-12
+
+Pre-edit state: commit `746b79e`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.16: ignore searches from replaced PDFs.** A PDF reloaded during a search could receive old matches or an old completion in the new search. Replacement now cancels and detaches the old document, and callbacks are accepted only from the current document.
+
+Regression: `tests/test_colophon_pdf_search.py` delivers old and current callbacks without a window; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185g — 2026-11-12
 
 Pre-edit state: commit `4d85aef`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.15: retain quoted alias commands.** Parsing zsh's printable alias definition added escaping around already quoted paths, so an otherwise working alias could not be probed or used. Discovery now reads the raw alias value from zsh's alias table.

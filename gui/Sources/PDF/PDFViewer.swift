@@ -446,6 +446,10 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
             if hadFocus { window?.makeFirstResponder(fresh) }
             leaving = old
         }
+        if let previous = old.document, previous !== doc {
+            previous.cancelFindString()
+            previous.delegate = nil
+        }
         let view = pdfView
         doc.delegate = self
         view.document = doc
@@ -644,7 +648,8 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     func didMatchString(_ instance: PDFSelection) {
         let handle = { [self] in
-            guard searching else { return }
+            guard searching, let current = pdfView.document, !instance.pages.isEmpty,
+                  instance.pages.allSatisfy({ $0.document === current }) else { return }
             instance.color = Palette.parse(Settings.string("pdfFindColor")) ?? .systemYellow
             matches.append(instance)
             if matches.count == 1, jumpToFirst { select(0) }
@@ -659,6 +664,7 @@ final class PDFWindowController: NSWindowController, NSToolbarDelegate, NSSplitV
 
     func documentDidEndDocumentFind(_ notification: Notification) {
         let handle = { [self] in
+            guard searching, let source = notification.object as? PDFDocument, source === pdfView.document else { return }
             searching = false
             pdfView.highlightedSelections = matches
             placeChanged()
