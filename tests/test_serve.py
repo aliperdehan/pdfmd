@@ -242,6 +242,16 @@ class Render(Folder):
         self.assertIn("<math", answer["html"])
         self.assertEqual(answer["warnings"], [])
 
+    def test_the_word_wrappers_of_an_older_pandoc_go_too(self):
+        """Pandoc 3.1.3 does not mark a wrapper (`data-wrapper="1"`): it is the span with a position and nothing else. A span of the
+        author's own keeps its tag on both, and so does the block that carries the position."""
+        from pdfmd_serve.core import strip_wrappers
+        old = ('<div data-pos="3:1-4:1">\n<p><span data-pos="3:1-3:4">See</span><span data-pos="3:4-3:5"> </span><span data-pos="3:5-3:11">'
+               '<em><span data-pos="3:6-3:10">this</span></em></span> <span class="x" data-pos="3:12-3:15">own</span></p>\n</div>')
+        self.assertEqual(strip_wrappers(old), '<div data-pos="3:1-4:1">\n<p>See <em>this</em> <span class="x" data-pos="3:12-3:15">own</span></p>\n</div>')
+        new = '<p data-pos="3:1-4:1"><span data-wrapper="1" data-pos="3:1-3:4">See</span> <span class="x" data-pos="3:5-3:8">own</span></p>'
+        self.assertEqual(strip_wrappers(new), '<p data-pos="3:1-4:1">See <span class="x" data-pos="3:5-3:8">own</span></p>')
+
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_a_csv_block_is_a_table_when_the_core_is_given_pdfmds_filters(self):
         import pdfmd

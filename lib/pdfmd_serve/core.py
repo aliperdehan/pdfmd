@@ -42,6 +42,8 @@ SKIPPED_DIRS = {"__pycache__", "node_modules"}
 # a position from pandoc reading standard input has no file name (`5:1-6:1`); the page's source mirror wants `name@5:1-6:1`
 HIDDEN_COPY = re.compile(r"[^\s:]*\.pdfmd-live-")      # the name of the copy of an unsaved text (see document_file): a note names the document instead
 POSITION = re.compile(r'data-pos="(\d+:\d+-\d+:\d+)"')      # beside every name that starts with a dot
+# lines of Pandoc's that say nothing about the document: the option's newer name, and its own second position on a list item (3.1.3)
+PANDOC_NOISE = ("Deprecated: --mathml", "Ignoring duplicate attribute data-pos=")
 
 
 def _remove_preview_copy(path: Path, identity: os.stat_result) -> None:
@@ -65,8 +67,9 @@ def kind_of(name: str) -> str:
 
 
 def strip_wrappers(html: str) -> str:
-    """Pandoc's `sourcepos` wraps every word in a span of its own; the blocks keep their position, the word wrappers go."""
-    pattern = re.compile(r'<span data-wrapper="1"[^>]*>((?:(?!<span).)*?)</span>', re.S)
+    """Pandoc's `sourcepos` wraps every word in a span of its own; the blocks keep their position, the word wrappers go. A wrapper is
+    marked `data-wrapper="1"`; an older Pandoc (3.1.3) does not mark it, and there it is the span whose only attribute is its position."""
+    pattern = re.compile(r'<span (?:data-wrapper="1"[^>]*|data-pos="[^"]*")>((?:(?!<span).)*?)</span>', re.S)
     while True:
         html, n = pattern.subn(r"\1", html)
         if not n:
@@ -307,7 +310,8 @@ class Core:
                            log=errors, seconds=seconds)
         html = strip_wrappers(done.stdout.decode("utf-8", "replace"))
         html = POSITION.sub(lambda m: f'data-pos="{source}@{m.group(1)}"', html)
-        warnings = notes + [line for line in errors.splitlines() if "Deprecated: --mathml" not in line]   # pandoc 3.13 prefers --math-method; older ones do not know it
+        # pandoc 3.13 prefers --math-method, older ones do not know it; pandoc 3.1.3 gives a list item two positions and warns about its own second one
+        warnings = notes + [line for line in errors.splitlines() if not any(noise in line for noise in PANDOC_NOISE)]
         return 200, {"html": html, "seconds": seconds, "engine": "pandoc", "warnings": warnings}
 
     # ---- helpers ----------------------------------------------------------------------------------------------------------------
