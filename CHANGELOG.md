@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.148 — 2026-11-11
+
+Pre-edit state: commit `3c702e5`. Parts builds scanned only the scaffold for hand-typed table captions and line breaks, so syntax present only in a part lost its filters. Both detectors now scan the complete input list and retain its first file, the scaffold, as their settings source. Checkout regressions failed before the fix for both filters and pass afterwards, including disabled scaffold settings; caption, line-break, parts and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.147b — 2026-11-11
 
 Pre-edit state: commit `3814f05`. LibreOffice aborts inside the Codex sandbox even in headless mode, raising crash dialogues during tests. The test isolation helper now writes soffice-timeout: 0 into its temporary user configuration when CODEX_SANDBOX is set; tests that explicitly require LibreOffice skip with the reason. Outside the sandbox the configuration is unchanged. The inherited-configuration regression failed before the fix and passes afterwards; Office modules and the repository guards run, with read-only crash-report name counts checked before and afterwards. Product code and its version are unchanged; no new setting or behavioural threshold.

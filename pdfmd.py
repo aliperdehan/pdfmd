@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.147"
+PDFMD_VERSION = "3.33.148"
 import argparse
 import atexit
 import contextlib
@@ -4431,8 +4431,8 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += pagebreak_filter_args(md_path, metadata_files)
     args += indent_filter_args(inputs, metadata_files)
     args += markup_filter_args(md_path, metadata_files)
-    args += table_caption_args(md_path, metadata_files)
-    args += linebreak_args(md_path, metadata_files)
+    args += table_caption_args(inputs, metadata_files)
+    args += linebreak_args(inputs, metadata_files)
     if cellalign_early:
         args += cellalign_args(md_path, metadata_files)
     args += title_filter_args(md_path, metadata_files, pandoc_options, no_auto)
