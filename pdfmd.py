@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.152"
+PDFMD_VERSION = "3.33.153"
 import argparse
 import atexit
 import contextlib
@@ -17132,7 +17132,7 @@ def pdfmd_version() -> str:
 
 def _api_command(source: Path, to: str | None, output: Path, extra_args, metadata, variables, stamp: bool,
                  backup: bool) -> list[str]:
-    command = [sys.executable, str(Path(__file__).resolve()), str(source), "-o", str(output), "--rewrite"]
+    command = [sys.executable, str(Path(__file__).resolve()), str(source), "-o", str(output.resolve()), "--rewrite"]
     if to and to.lower() not in ("pdf", output.suffix.lstrip(".").lower()):
         command += ["--to", to]
     if not stamp:

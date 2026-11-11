@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.153 — 2026-11-11
+
+Pre-edit state: commit `98f2b21`. Python API calls passed relative output paths into a child with a different working directory. The result could be deleted with the temporary directory, rejected as missing, or mistaken for a stale caller-side file. The API command now resolves the output against the caller’s directory before spawning, matching its existing checks and returned path. Checkout-launcher regressions failed before the fix and pass afterwards for file and text APIs, absent and stale destinations, and explicit child working directories; API and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
+
 ## v3.33.152 — 2026-11-11
 
 Pre-edit state: commit `c26fc88`. Uncached natbib and biblatex builds ran the markup filter without its LaTeX header, leaving callouts and highlighted text undefined at compilation. The native bibliography command now adds the shared markup header before preserving document headers, as the ordinary LaTeX routes do. Checkout regressions failed before the fix for both bibliography engines and pass afterwards, checking definitions, rendered markup and resolved bibliography text; callout, highlight, comment, Biber and repository guard tests run. pdfmd.py grows from 17,204 to 17,205 lines for the missing header call. No new setting or behavioural threshold.
