@@ -545,11 +545,13 @@ def author_names_in_place(md_path: Path, metadata_files: list[Path], authors, pa
     """Whether `pdfmd_lua/title_meta.lua` may write each author written as a mapping with a `name` as that name (v3.33.69): Pandoc's
     LaTeX and HTML templates print such an author as `true` (`\\author{true \\and Bob}`, `<p class="author">true</p>`), as they
     read no `name`. Only where nothing after pdfmd's filters reads the mapping: no chosen kit (apa7's and nulabreport's filters
-    build their title pages from it), no own template or defaults file, no Lua filter of the document's own (`<name>.lua`, a
-    loaded package's, `pdfmd-options.lua-filter`, an assembled file's). Elsewhere the title is left as Pandoc writes it."""
+    build their title pages from it), no own template or defaults file, no caller-supplied filter (`--lua-filter`/`-L`,
+    `--filter`/`-F`), no Lua filter of the document's own (`<name>.lua`, a loaded package's, `pdfmd-options.lua-filter`, an
+    assembled file's). Elsewhere the title is left as Pandoc writes it."""
     if not any(isinstance(item, dict) and item.get("name") is not None for item in (authors if isinstance(authors, list) else [authors])):
         return False
-    if any(item in ("--template", "-d", "--defaults") or item.startswith(("--template=", "--defaults="))
+    if any(item in ("--template", "-d", "--defaults", "--lua-filter", "--filter")
+           or item.startswith(("--template=", "--defaults=", "--lua-filter=", "--filter=", "-L", "-F"))
            for item in pandoc_options or []):
         return False
     if core.active_kits(md_path, metadata_files, None):

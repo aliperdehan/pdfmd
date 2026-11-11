@@ -309,6 +309,33 @@ class TitleBlock(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn('<p class="author">Alice Able</p>', (self.root / "doc.html").read_text(encoding="utf-8"))
 
+    def test_command_line_filters_keep_author_mappings(self):
+        (self.root / "doc.md").write_text(f"---\ntitle: T\n{MAPS}---\n\nx\n", encoding="utf-8")
+        lua = self.root / "reader.lua"
+        lua.write_text("function Meta(m) m.title = pandoc.MetaString("
+                       "pandoc.utils.stringify(m.author[1].affiliation)) return m end\n", encoding="utf-8")
+        external = self.root / "reader.py"
+        external.write_text("#!" + sys.executable + "\nimport json, sys\n"
+                            "doc = json.load(sys.stdin)\n"
+                            "doc['meta']['title'] = doc['meta']['author']['c'][0]['c']['affiliation']\n"
+                            "json.dump(doc, sys.stdout)\n", encoding="utf-8")
+        external.chmod(0o755)
+        forms = (["--lua-filter", str(lua)], ["--lua-filter=" + str(lua)],
+                 ["-L", str(lua)], ["-L" + str(lua)],
+                 ["--filter", str(external)], ["--filter=" + str(external)],
+                 ["-F", str(external)], ["-F" + str(external)])
+        for options in forms:
+            with self.subTest(options=options):
+                done = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--to", "html", "-s",
+                     "-o", "filtered.html", "--no-stamp", "--no-backup", *options],
+                    cwd=self.root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                    env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                         "XDG_CONFIG_HOME": str(self.root / "config"), "XDG_CACHE_HOME": str(self.root / "cache"),
+                         "XDG_DATA_HOME": str(self.root / "data")})
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn("<title>NU</title>", (self.root / "filtered.html").read_text(encoding="utf-8"))
+
     def test_strings_alone_get_no_flag(self):
         for front in (STRINGS, "author: Bob\n", NAMELESS.replace("  - name: Bob Baker\n", "  - Bob Baker\n"), ""):
             (self.root / "doc.md").write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
