@@ -108,6 +108,8 @@ class Steps(unittest.TestCase):
             pdfmd.backup_pdf_after_success(Path("d.md"), Path("d.pdf"), [], None, False)
         self.assertEqual([step.name for step in timer.steps], ["backup (source)", "backup (PDF)"])
 
+    @unittest.skipUnless(any(engine in pdfmd.LATEX_ENGINES and engine != "context"
+                             for engine in pdfmd.installed_engines()), "needs a LaTeX engine other than ConTeXt")
     def test_the_pdf_built_for_reference_numbers_is_a_step(self):
         # v3.33.54: the LaTeX build a Calibre, Typst or Word build runs for its \ref numbers was under "the rest"
         import contextlib

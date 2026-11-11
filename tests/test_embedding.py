@@ -227,6 +227,7 @@ class FilesEndToEnd(Env):
             "![red](img/red.png){width=2cm}\n\nRaw LaTeX: \\includegraphics[width=2cm]{img/raw.png}\n", encoding="utf-8")
         return source
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_assemble_and_unpack_keep_trailing_bytes(self):
         payloads = [b"x\n\n", b"\n", b" \t\n", b"x\r\n\r\n", b"\r\n", b"x\r\n", b"x\n"]
         source = self.directory / "source"
@@ -374,6 +375,7 @@ class UnpackPaths(Env):
         self.assertEqual(list(outside.iterdir()), [])
         self.assertFalse((target / "valid.txt").exists())
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_cli_unpack_refuses_metadata_and_preamble_origins(self):
         target = self.directory / "out"
         env = {**self.env, **{key: str(self.directory / key) for key in

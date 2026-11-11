@@ -105,6 +105,8 @@ class OtherRoutes(unittest.TestCase):
     def test_all_routes_protect_the_final_output_once(self):
         for route in ("azw3", "mobi", "typst", "html", "quarto"):
             with self.subTest(route=route), tempfile.TemporaryDirectory(prefix="pdfmd-rewrite-") as directory:
+                if route == "html" and not shutil.which("pandoc"):
+                    self.skipTest("needs Pandoc")
                 folder = Path(directory)
                 binary = folder / "bin"
                 binary.mkdir()

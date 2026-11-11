@@ -247,6 +247,8 @@ class Checkout(unittest.TestCase):
                                (("--section", "intro"), "take one document")):
             for prefix in (("-b",), ()):
                 with self.subTest(prefix=prefix, flags=flags):
+                    if flags == ("--watch",) and not shutil.which("pandoc"):
+                        self.skipTest("needs Pandoc")
                     done = self.run_pdfmd(*prefix, *self.names, *flags)
                     self.assertNotEqual(done.returncode, 0)
                     self.assertIn(message, done.stderr)

@@ -226,6 +226,7 @@ class Prince(unittest.TestCase):
             document.write_text(f"---\ntitle: T\n{front}---\n\nx\n", encoding="utf-8")
             return pdfmd.prince_author_options(document, [], [])
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_two_names_or_more_are_given_joined_as_weasyprint_joins_them(self):
         self.assertEqual(self.options(STRINGS), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
         self.assertEqual(self.options(MAPS), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
