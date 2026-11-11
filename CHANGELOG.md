@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.174d — 2026-11-11
+
+Pre-edit state: commit `cc64ef0`. `test_celltags.Sizes.test_latex_gets_widths_heights_and_the_tiers` and `test_celltags.Vertical.test_latex_gets_a_longtblr_with_the_tabularray_words_for_top_middle_bottom` expected `\begin{longtblr}[caption={...},label={tbl:...}]` from a table whose caption ends in `{#tbl:...}`. Pandoc takes that as the table's identifier only from 3.8.2 on (the two older tests of it, in test_tables and test_office_latex, are skipped below that version); Pandoc 3.1.3 leaves it in the caption as text, in its own longtable as well, so pdfmd has no label to write and the caption reads `caption={Sized \{\#tbl:sized\}}`. Both tests failed in the linux-pandoc job for 3.1.3. They are not skipped, as everything else they check (the column specification, the widths and heights, the cells' alignment words) holds on the old Pandoc too: a helper, `longtblr_start`, gives the opening line for the Pandoc that runs. They failed on 3.1.3 before and pass on 3.1.3 and on 3.13 now.
+
 ## v3.33.174c — 2026-11-11
 
 Pre-edit state: commit `c475d69`. `test_author_meta.TitleBlock.test_the_filter_writes_the_names_in_latex_beamer_and_html` looked for `\texorpdfstring{Alice Able \and Bob Baker}` in a Beamer document, which is how a newer Pandoc's Beamer template writes `\author` (the names, then the PDF string); the template of Pandoc 3.1.3 writes `\author{Alice Able \and Bob Baker}`, the same names from the same filter, so the test failed in the linux-pandoc job for 3.1.3 (the oldest Pandoc CI tests) while pdfmd's output was right. The test now takes the names in either spelling (`\author{` followed by an optional `\texorpdfstring{`, then the names and the closing brace). It failed on Pandoc 3.1.3 before and passes on 3.1.3 and on 3.13 now.

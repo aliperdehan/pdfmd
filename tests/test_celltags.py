@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "lib"))
 
 import pdfmd  # noqa: E402
-from pandoc_support import needs_pandoc  # noqa: E402
+from pandoc_support import PANDOC_VERSION, needs_pandoc  # noqa: E402
 from pdfmd_tables.celltags import DEFAULT_KINDS, normalise, parse_attribute_line, parse_tokens  # noqa: E402
 
 HEAD = "| h | i | j |\n|---|---|---|\n"
@@ -33,6 +33,14 @@ def cell(text: str, kinds=DEFAULT_KINDS):
     """The canonical text of a one-cell body row `| text |` in a one-column table."""
     out = normalise("| h |\n|---|\n| " + text + " |\n", kinds).text.splitlines()[2]
     return out.strip("| ").strip()
+
+
+def longtblr_start(caption: str, label: str) -> str:
+    """How a captioned longtblr begins. A caption's `{#id}` is the table's identifier from Pandoc 3.8.2 on; an older Pandoc leaves
+    it in the caption as text (in its own longtable too), so there is no label for pdfmd to write."""
+    if PANDOC_VERSION >= (3, 8, 2):
+        return f"\\begin{{longtblr}}[caption={{{caption}}},label={{{label}}}]"
+    return f"\\begin{{longtblr}}[caption={{{caption} \\{{\\#{label}\\}}}}]"
 
 
 class Tokens(unittest.TestCase):
@@ -335,7 +343,7 @@ class Vertical(unittest.TestCase):
     def test_latex_gets_a_longtblr_with_the_tabularray_words_for_top_middle_bottom(self):
         done, tex = self.build(VERTICAL)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("\\begin{longtblr}[caption={A caption},label={tbl:v}]", tex)
+        self.assertIn(longtblr_start("A caption", "tbl:v"), tex)
         self.assertIn("\\usepackage{tabularray}", tex)
         for key in ("cell{2}{2}={}{valign=h}", "cell{2}{3}={}{valign=m}", "cell{2}{4}={}{valign=f}", "cell{3}{2}={}{halign=c,valign=m}"):
             self.assertIn(key, tex)
@@ -523,7 +531,7 @@ class Sizes(unittest.TestCase):
         self.assertIn("width=\\linewidth", tex)
         self.assertIn("row{2}={ht=1.8cm}", tex)
         self.assertIn("cell{2}{2}={}{halign=l,valign=m}", tex)          # the column's alignment words, the table's valign
-        self.assertIn("\\begin{longtblr}[caption={Sized},label={tbl:sized}]", tex)
+        self.assertIn(longtblr_start("Sized", "tbl:sized"), tex)
         self.assertNotIn("<pt", tex)
         self.assertNotIn("{widths=", tex)
 
