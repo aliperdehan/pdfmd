@@ -11,6 +11,7 @@ wait for an answer before any code.
 ## Decide first
 
 - [ ] **decide** Multi-path builds (`pdfmd *`, `-b a.md dir/`, 3.33.140): revise the guesses that skip non-inputs, earlier outputs and same-output clashes (e.g. a record of what pdfmd wrote, instead of guessing) [3fi D33]
+- [ ] **decide** Parts-scaffold search above the document: keep probing every *.md (b, built 3.33.168) or only conventional/named parts folders (a) [3fi D39]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
 - [ ] **decide** a Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`; default off or on, and the value [3en]
