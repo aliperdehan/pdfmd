@@ -290,7 +290,8 @@ class TitleBlock(unittest.TestCase):
         self.assertIn(r"\author{Alice Able \and Bob Baker}", self.convert(MAPS, "latex"))
         self.assertIn(r"\author{Alice Able \and Bob Baker}", self.convert(MIXED, "latex"))
         self.assertIn(r"\author{Bob Baker}", self.convert("author:\n  name: Bob Baker\n  affiliation: NU\n", "latex"))
-        self.assertIn(r"\texorpdfstring{Alice Able \and Bob Baker}", self.convert(MAPS, "beamer"))
+        # a newer Pandoc's Beamer template wraps the names in \texorpdfstring{names}{PDF string}; 3.1.3's writes them bare
+        self.assertRegex(self.convert(MAPS, "beamer"), r"\\author\{(\\texorpdfstring\{)?Alice Able \\and Bob Baker\}")
         page = self.convert(MAPS, "html5")
         self.assertIn('<p class="author">Alice Able</p>\n<p class="author">Bob Baker</p>', page)
         self.assertNotIn(">true<", page)

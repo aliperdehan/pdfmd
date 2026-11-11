@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.174c — 2026-11-11
+
+Pre-edit state: commit `c475d69`. `test_author_meta.TitleBlock.test_the_filter_writes_the_names_in_latex_beamer_and_html` looked for `\texorpdfstring{Alice Able \and Bob Baker}` in a Beamer document, which is how a newer Pandoc's Beamer template writes `\author` (the names, then the PDF string); the template of Pandoc 3.1.3 writes `\author{Alice Able \and Bob Baker}`, the same names from the same filter, so the test failed in the linux-pandoc job for 3.1.3 (the oldest Pandoc CI tests) while pdfmd's output was right. The test now takes the names in either spelling (`\author{` followed by an optional `\texorpdfstring{`, then the names and the closing brace). It failed on Pandoc 3.1.3 before and passes on 3.1.3 and on 3.13 now.
+
 ## v3.33.174b — 2026-11-11
 
 Pre-edit state: commit `de6dc1a`. `test_newline.Build.test_outside_a_vault_a_newline_is_a_space_and_every_writer_takes_the_break` failed on the CI job `linux-pandoc (Pandoc 3.1.3)`, where it had never run: it asked for the Typst text `line one \ line two`, and Pandoc 3.1.3's Typst writer puts a new line after the backslash where a newer one puts a space. Both are Typst's line break (a backslash before white space), so the build is right on both and only the expectation was one version's spelling; it now takes the backslash followed by a space or by a new line, and nothing else. Passes on 3.1.3 and on 3.13.
