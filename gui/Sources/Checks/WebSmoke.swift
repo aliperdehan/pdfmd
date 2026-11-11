@@ -78,6 +78,20 @@ enum WebSmoke {
         check("closing the window with unsaved changes asks (and can say no)", c.windowShouldClose(c.window!) == false)
         c.dialogAnswer = true
         check("... and can say yes", c.windowShouldClose(c.window!) == true)
+        // quitting asks too (the studio is no NSDocument, so the document controller's review does not see it); the page is asked, not
+        // the state it posted last
+        var quit: Bool?
+        c.quitAnswer = .cancel
+        WebStudioController.reviewBeforeQuit { quit = $0 }
+        check("quitting with unsaved changes asks, and Cancel keeps the app", PDFSmoke.wait(5) { quit != nil } && quit == false, "\(quit.map(String.init) ?? "nil")")
+        c.quitAnswer = .discard; quit = nil
+        WebStudioController.reviewBeforeQuit { quit = $0 }
+        check("... Don't Save lets it quit", PDFSmoke.wait(5) { quit != nil } && quit == true, "\(quit.map(String.init) ?? "nil")")
+        var asked: Bool?
+        c.state["dirty"] = false   // as if the page's last message were a key press late
+        c.askDirty { asked = $0 }
+        check("... and the page itself says what is unsaved", PDFSmoke.wait(5) { asked != nil } && asked == true, "\(asked.map(String.init) ?? "nil")")
+        c.quitAnswer = nil
         c.dialogAnswer = false
         _ = js(c, "window.appCommand('closeTab'); 0"); spin(0.3)
         check("a tab with changes stays when the page's confirm() is answered no", state() == 3, "\(state()) tabs")
@@ -162,6 +176,15 @@ enum WebSmoke {
         _ = PDFSmoke.wait(8) { saved != nil }
         let untitled = (live.state["cur"] as? String).map { dir.appendingPathComponent($0) }
         check("the page saves it when the window leaves (the file is on the disk with the text)", saved == true && untitled.flatMap { try? String(contentsOf: $0) } == "Text from the plain editor.\n", untitled?.lastPathComponent ?? "nil")
+        // quitting with Save writes every tab that has changes, then lets the app quit
+        _ = js(live, "window.appOpen('report.md').then(() => window.__app.editor.replaceSelection('Saved at the quit. ', false)); 0")
+        _ = PDFSmoke.wait(5) { (live.state["dirty"] as? Bool) == true }
+        var quitSaved: Bool?
+        live.quitAnswer = .save
+        WebStudioController.reviewBeforeQuit { quitSaved = $0 }
+        _ = PDFSmoke.wait(8) { quitSaved != nil }
+        check("quitting with Save writes the changes and lets the app quit", quitSaved == true && (try? String(contentsOf: dir.appendingPathComponent("report.md")))?.contains("Saved at the quit.") == true, "\(quitSaved.map(String.init) ?? "nil")")
+        live.quitAnswer = nil
         let same = WebStudioController.open(folder: dir)
         check("the same folder again brings the same window forward", same === live)
         let pid = live.server?.lastPid

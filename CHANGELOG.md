@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.181 — 2026-11-12
+
+Pre-edit state: commit `b2ad299`. **Colophon 0.3.1.** Review findings G2.1 and G4.1 (one fix): quitting Colophon (⌘Q, a logout)
+discarded the studio window's unsaved edits without a word. The studio is a window controller, not an `NSDocument`, so the
+document controller's review before quitting never saw it; its own question lived in `windowShouldClose`, which quitting
+bypasses, and the only quit handler stopped the servers. The app delegate now answers `applicationShouldTerminate`: with a
+studio window open it waits (`terminateLater`) while each studio asks its page whether anything is unsaved (the page itself,
+since the state it last posted can be a key press late) and, if so, asks Save, Don't Save or Cancel. Save writes every tab
+with changes; a refused save (the file changed on disk) or Cancel keeps the app running. The page gains `window.appDirty()`
+and `window.appSaveAll()` for this (`lib/pdfmd_web/js/app.js`, hence the version); a page served by an older pdfmd has
+neither, and the window then goes by the state it was told and refuses the quit on Save. Regression: `tests/test_web.py`
+drives `appSaveAll` over changed, unchanged, refused and picture tabs (checked failing before, passing after); `--smoke-web`
+gains the quit checks (Cancel, Don't Save, the page asked over a stale state, Save writing a real file through
+`pdfmd --serve`), to be run by hand as it puts a window on screen. pdfmd.py stays at 17,136 lines.
+
 ## v3.33.180 — 2026-11-12
 
 Pre-edit state: commit `2cf014b`. DECISION 50: `.odt` used Pandoc's OpenDocument writer by default, dropping raw Word blocks

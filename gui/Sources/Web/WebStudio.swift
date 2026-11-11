@@ -172,6 +172,77 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
         }
     }
 
+    // MARK: quitting
+
+    /// The answer to the quit question, for the smoke test (no alert).
+    enum QuitChoice { case save, discard, cancel }
+    var quitAnswer: QuitChoice?
+
+    /// Whether the page has changes that are not saved, asked of the page itself (the state it posted can be a key press late); what it
+    /// posted last when the page cannot answer (still starting, or served by a pdfmd older than `appDirty`).
+    func askDirty(_ done: @escaping (Bool) -> Void) {
+        let told = (state["dirty"] as? Bool) == true
+        web.callAsyncJavaScript("return window.appDirty ? window.appDirty() : null", arguments: [:], in: nil, in: .page) { r in
+            if case .success(let v) = r, let dirty = v as? Bool { done(dirty) } else { done(told) }
+        }
+    }
+
+    /// The page saves every tab that has changes; `done(true)` when nothing is unsaved afterwards.
+    func saveAll(_ done: @escaping (Bool) -> Void) {
+        web.callAsyncJavaScript("return window.appSaveAll ? await window.appSaveAll() : null", arguments: [:], in: nil, in: .page) { [weak self] r in
+            if case .success(let v) = r, let o = v as? [String: Any], let dirty = o["dirty"] as? Bool {
+                self?.state["dirty"] = dirty
+                done(!dirty)
+            } else { done(false) }
+        }
+    }
+
+    /// Before the app quits (`AppDelegate.applicationShouldTerminate`; a studio window is no NSDocument, so the document controller's own
+    /// review does not see it): each studio window with changes that are not saved asks in turn: Save (every tab of the page), Don't Save,
+    /// or Cancel. `done(false)` keeps the app running: Cancel, or a save that did not go through.
+    static func reviewBeforeQuit(_ done: @escaping (Bool) -> Void) {
+        var queue = all
+        func next() {
+            guard !queue.isEmpty else { done(true); return }
+            let c = queue.removeFirst()
+            c.askDirty { dirty in
+                guard dirty else { next(); return }
+                switch c.askQuit() {
+                case .discard: next()
+                case .cancel: done(false)
+                case .save:
+                    c.saveAll { saved in
+                        if saved { next(); return }
+                        if c.quitAnswer == nil {
+                            let a = NSAlert()
+                            a.messageText = "Some files of “\(c.projectName)” could not be saved."
+                            a.informativeText = "Colophon stays open; the studio says why."
+                            a.runModal()
+                        }
+                        done(false)
+                    }
+                }
+            }
+        }
+        next()
+    }
+
+    private var projectName: String { (state["project"] as? String) ?? folder?.lastPathComponent ?? window?.title ?? "the studio" }
+
+    private func askQuit() -> QuitChoice {
+        if let answer = quitAnswer { return answer }
+        showWindow(nil); window?.makeKeyAndOrderFront(nil)
+        let a = NSAlert()
+        a.messageText = "Do you want to save the changes made in “\(projectName)”?"
+        a.informativeText = "Your changes will be lost if you don't save them."
+        a.addButton(withTitle: "Save"); a.addButton(withTitle: "Cancel"); a.addButton(withTitle: "Don't Save")
+        switch a.runModal() {
+        case .alertFirstButtonReturn: return .save
+        case .alertThirdButtonReturn: return .discard
+        default: return .cancel
+        }
+    }
+
     /// Opens a file of the project in a tab of the page that is running.
     func openInPage(_ path: String) {
         web.evaluateJavaScript("window.appOpen && window.appOpen(\(JSONEncoder.quoted(path)))", completionHandler: nil)

@@ -242,6 +242,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let url = pickStudioFolder() { WebStudioController.open(folder: url) }
     }
 
+    /// Quitting asks about the studio windows' changes that are not saved (the documents' own were asked about before this is called).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !WebStudioController.all.isEmpty else { return .terminateNow }
+        WebStudioController.reviewBeforeQuit { sender.reply(toApplicationShouldTerminate: $0) }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ note: Notification) {
         for c in WebStudioController.all { c.server?.stop() }
     }

@@ -118,6 +118,38 @@ class WebApp(unittest.TestCase):
 })().catch(e => {console.error(e); process.exitCode = 1;});
 ''')
 
+    def test_the_native_quit_saves_every_changed_tab_and_says_what_stays_unsaved(self):
+        # Colophon asks the page before the app quits (appDirty) and saves it all (appSaveAll): a refused save keeps the app open
+        self.run_js(r'''
+(async () => {
+  let text = "a edited";
+  const writes = [];
+  S.tabs = ["a.md", "b.md", "c.md", "pic.png", "d.md"]; S.cur = "a.md";
+  S.files["a.md"] = {text: "a", saved: "a"};
+  S.files["b.md"] = {text: "b edited", saved: "b"};
+  S.files["c.md"] = {text: "c edited", saved: "c"};
+  S.files["pic.png"] = {view: "image", text: "", saved: ""};
+  S.files["d.md"] = {text: "d", saved: "d"};
+  S.editor = {getText: () => text};
+  context.api.writeFile = async (p, t) => {
+    writes.push([p, t]);
+    if (p === "c.md") { const e = new Error("changed on disk"); e.status = 409; throw e; }
+    return {};
+  };
+  assert.equal(typeof window.appDirty, "function");
+  assert.equal(window.appDirty(), true, "the current tab counts by the editor's text");
+  const first = await window.appSaveAll();
+  assert.deepEqual(writes, [["a.md", "a edited"], ["b.md", "b edited"], ["c.md", "c edited"]], "only the tabs with changes are written");
+  assert.equal(S.files["a.md"].saved, "a edited");
+  assert.equal(S.files["b.md"].saved, "b edited");
+  assert.equal(S.files["c.md"].stale, true);
+  assert.equal(first.dirty, true, "a refused save leaves something unsaved");
+  context.api.writeFile = async () => ({});
+  assert.equal((await window.appSaveAll()).dirty, false);
+  assert.equal(window.appDirty(), false);
+})().catch(e => {console.error(e); process.exitCode = 1;});
+''')
+
 
 @unittest.skipUnless(NODE and shutil.which("pandoc"), "needs node and Pandoc")
 class LivePreview(unittest.TestCase):
