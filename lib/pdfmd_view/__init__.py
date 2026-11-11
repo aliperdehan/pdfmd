@@ -38,6 +38,22 @@ BINARY_TARGETS = frozenset({"pdf", "docx", "odt", "pptx", "epub", "epub2", "epub
 VIEW_PAGER = "less -FRX"
 
 
+def tolerant_streams(streams=None) -> None:
+    """Make standard output and standard error unable to raise `UnicodeEncodeError`: a stream whose error handler is
+    `strict` (Python's default for standard output) gets `replace`, so a character its encoding lacks prints as `?`, the
+    way `--help` has printed it since v3.25.19. A Windows pipe, or a console that is not UTF-8, is cp1252 or another code
+    page before Python 3.15, and `NATIVE  <a Cyrillic file name> via inkmd` ended the build with a traceback there. The
+    encoding is not changed (the reader of a pipe expects the code page), nor is a handler somebody chose
+    (`PYTHONIOENCODING=utf-8:surrogateescape`, standard error's `backslashreplace`). Called at the start of `main()` and
+    of every `-j` worker; a stream that cannot be reconfigured (a `StringIO` in a test) is left alone."""
+    for stream in (sys.stdout, sys.stderr) if streams is None else streams:
+        if getattr(stream, "errors", None) == "strict" and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="replace")
+            except (OSError, ValueError):      # closed or detached: whatever is printed to it fails for another reason
+                pass
+
+
 def view_child_arguments(argv: list[str], paths: list[Path]) -> list[str]:
     """The command line of the run, less what `terminal_view` sets itself and the input paths."""
     wanted = list(paths)

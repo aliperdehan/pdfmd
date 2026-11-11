@@ -357,5 +357,53 @@ class Checkout(unittest.TestCase):
         self.assertEqual(len(list(self.work.glob("*.html"))), 1)
 
 
+class CodePageStreams(unittest.TestCase):
+    """A stream in a Windows code page (a pipe, or a console that is not UTF-8, before Python 3.15) never ends a run."""
+
+    def code_page_stream(self, errors="strict"):
+        raw = io.BytesIO()
+        return raw, io.TextIOWrapper(raw, encoding="cp1252", errors=errors, write_through=True)
+
+    def test_a_strict_stream_prints_a_question_mark_for_what_it_lacks(self):
+        import pdfmd_view
+        raw, stream = self.code_page_stream()
+        with self.assertRaises(UnicodeEncodeError):
+            stream.write("NATIVE  Документ.md via inkmd\n")
+        raw, stream = self.code_page_stream()
+        pdfmd_view.tolerant_streams([stream])
+        self.assertEqual((stream.encoding, stream.errors), ("cp1252", "replace"))
+        tee = pdfmd._WarningTee(stream, [])                    # the wrapper a build prints through
+        print("NATIVE  Документ.md via inkmd — é", file=tee)
+        self.assertEqual(raw.getvalue().decode("cp1252").rstrip("\r\n"), "NATIVE  ????????.md via inkmd — é")
+
+    def test_a_chosen_error_handler_and_a_plain_text_buffer_are_left_alone(self):
+        import pdfmd_view
+        _, stream = self.code_page_stream("backslashreplace")
+        text = io.StringIO()
+        pdfmd_view.tolerant_streams([stream, text, None])
+        self.assertEqual(stream.errors, "backslashreplace")
+        closed = self.code_page_stream()[1]
+        closed.close()
+        pdfmd_view.tolerant_streams([closed])                  # no exception
+
+    def test_a_build_with_cp1252_output_names_a_cyrillic_file(self):
+        folder = Path(tempfile.mkdtemp(prefix="pdfmd-codepage-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        (folder / "work").mkdir()
+        (folder / "work" / "Документ с пробелом.md").write_text("# Example\n\nSome text.\n", encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1", "PYTHONIOENCODING": "cp1252",
+                       "XDG_CONFIG_HOME": str(folder / "config"), "XDG_CACHE_HOME": str(folder / "cache"),
+                       "XDG_DATA_HOME": str(folder / "data")}
+        for jobs in ((), ("-b", "-j", "2")):
+            with self.subTest(jobs=jobs):
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), *jobs, "Документ с пробелом.md",
+                                       "-e", "inkmd"], cwd=folder / "work", env=environment, stdin=subprocess.DEVNULL,
+                                      capture_output=True, encoding="cp1252", errors="replace", timeout=180)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertNotIn("UnicodeEncodeError", done.stdout + done.stderr)
+                self.assertIn("NATIVE  ???????? ? ????????.md via inkmd", done.stdout)
+                self.assertTrue((folder / "work" / "Документ с пробелом.pdf").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.169"
+PDFMD_VERSION = "3.33.170"
 import argparse
 import atexit
 import contextlib
@@ -16171,6 +16171,7 @@ def worker_state() -> dict:
 
 def restore_worker_state(state: dict) -> None:
     globals().update(state)
+    pdfmd_view.tolerant_streams()
     AUTO_LOG.quiet = True      # the parent prints what a batch found; a worker's summary would repeat per file (v3.28.16)
 
 
@@ -16237,6 +16238,7 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 def main() -> None:
     """The command: Ctrl-C ends it with one line and the usual exit status 130, not a traceback (v3.30.14). Pandoc and the
     engines are in the same terminal group and get the signal too; the temporary folders are removed on the way out."""
+    pdfmd_view.tolerant_streams()      # a character the console's code page lacks prints as `?`, never a traceback
     try:
         run_main()
     except KeyboardInterrupt:
