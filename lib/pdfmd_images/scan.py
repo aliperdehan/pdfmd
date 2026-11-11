@@ -7,7 +7,7 @@ import html
 import re
 from dataclasses import dataclass
 
-IMAGE_RE = re.compile(r"!\[((?:[^\]\\]|\\.)*)\]")
+IMAGE_RE = re.compile(r"!\[")
 DEFINITION_RE = re.compile(r"^ {0,3}\[((?:[^\]\\]|\\.)+)\]:\s*")
 GRAPHICS_RE = re.compile(r"""\\includegraphics\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}""")
 SVG_RE = re.compile(r"""\\includesvg\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}""")
@@ -104,27 +104,48 @@ def _destination(text: str, start: int, inline: bool) -> tuple[str, int] | None:
     return html.unescape(path).replace(" ", "%20"), end
 
 
+def _image_labels(line: str):
+    """Read image labels with balanced, escapable brackets."""
+    for match in IMAGE_RE.finditer(line):
+        start, position, depth = match.end(), match.end(), 1
+        while position < len(line):
+            character = line[position]
+            if character == "\\" and position + 1 < len(line):
+                position += 2
+                continue
+            if character == "[":
+                depth += 1
+            elif character == "]":
+                depth -= 1
+                if not depth:
+                    yield line[start:position], position + 1
+                    break
+            position += 1
+
+
 def find_references(text: str) -> list[ImageReference]:
     """Every image the text refers to, in order."""
     found: list[ImageReference] = []
     lines = list(_content_lines(text.split("\n")))
     definitions = {}
-    for _, line in lines:
+    for offset, (index, line) in enumerate(lines):
         match = DEFINITION_RE.match(line)
         if match:
             destination = _destination(line, match.end(), False)
+            if destination is None and not line[match.end():].strip() and offset + 1 < len(lines):
+                next_index, next_line = lines[offset + 1]
+                if next_index == index + 1:
+                    destination = _destination(next_line, 0, False)
             if destination:
                 definitions.setdefault(_label(match.group(1)), destination[0])
     for index, line in lines:
-        for match in IMAGE_RE.finditer(line):
-            position = match.end()
+        for label, position in _image_labels(line):
             path = None
             if position < len(line) and line[position] == "(":
                 destination = _destination(line, position + 1, True)
                 if destination:
                     path = destination[0]
             else:
-                label = match.group(1)
                 if position < len(line) and line[position] == "[":
                     end = line.find("]", position + 1)
                     if end < 0:

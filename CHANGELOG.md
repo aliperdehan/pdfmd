@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.159 — 2026-11-11
+
+Pre-edit state: commit `368074a`. The image scanner missed nested brackets in alt text and reference definitions whose destination starts on the next line, although Pandoc reads both. It now balances alt-text brackets and reads a following definition line. The scanner regression failed before the fix and passes afterwards against Pandoc's JSON; image and repository guard tests run. pdfmd.py remains 17,203 lines. No new setting or behavioural threshold.
+
 ## v3.33.158 — 2026-11-11
 
 Pre-edit state: commit `2b043bb`. Command-line metadata append keys reached Pandoc without being merged, so their values were lost or ignored. They now join the metadata layers at the top, while ordinary command-line metadata still replaces, and the README documents the syntax. Checkout regressions for the short and long forms failed before the fix and pass afterwards; metadata and repository guard tests run. The merge logic lives in pdfmd_args; pdfmd.py shrinks from 17,205 to 17,203 lines. No new setting or behavioural threshold.

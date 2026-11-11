@@ -60,9 +60,47 @@ class Scan(unittest.TestCase):
                          ["plot(1).svg", "https://example.test/plot.svg", "short.svg", "other%20plot.svg"])
         self.assertEqual([item.line for item in found], [1, 1, 1, 1])
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_nested_alt_and_multiline_reference_match_pandoc(self):
+        import json
+        text = "![a [b] c](x.png)\n\n![ref][id]\n\n[id]:\n  y.png\n"
+        parsed = json.loads(subprocess.run([PANDOC, "-f", "markdown", "-t", "json"], input=text,
+                                           capture_output=True, text=True, check=True).stdout)
+        def destinations(node):
+            if isinstance(node, dict):
+                if node.get("t") == "Image":
+                    return [node["c"][2][0]]
+                return [item for value in node.values() for item in destinations(value)]
+            if isinstance(node, list):
+                return [item for value in node for item in destinations(value)]
+            return []
+        self.assertEqual([item.path for item in images.find_references(text)], destinations(parsed))
+
     def test_a_raster_is_not_an_svg(self):
         [item] = images.find_references("![p](photo.PNG)")
         self.assertFalse(item.is_svg)
+
+    @unittest.skipUnless(PANDOC and os.name != "nt", "needs Pandoc and symlinks")
+    def test_checkout_converts_both_svg_references(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bindir = root / "bin"
+            bindir.mkdir()
+            (bindir / "pandoc").symlink_to(PANDOC)
+            fake(bindir, "inkscape", 'for a; do case "$a" in --export-filename=*) printf "%%PDF-1.4" > "${a#--export-filename=}";; esac; done')
+            (root / "x.svg").write_text(SVG, encoding="utf-8")
+            (root / "y.svg").write_text(SVG.replace("#c33", "#c34"), encoding="utf-8")
+            (root / "doc.md").write_text("![a [b] c](x.svg)\n\n![ref][id]\n\n[id]:\n  y.svg\n", encoding="utf-8")
+            env = {**os.environ, "PATH": str(bindir) + os.pathsep + "/usr/bin:/bin", "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                   "XDG_CONFIG_HOME": str(root / "config"), "XDG_CACHE_HOME": str(root / "cache"), "XDG_DATA_HOME": str(root / "data")}
+            done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "doc.md", "--to", "latex", "-o", "out.tex", "--verbose"],
+                                  cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            maps = list((root / "cache").rglob("maps/*.yaml"))
+            self.assertEqual(len(maps), 1, done.stdout + done.stderr)
+            contents = maps[0].read_text(encoding="utf-8")
+            self.assertIn("x.svg", contents)
+            self.assertIn("y.svg", contents)
 
 
 @unittest.skipIf(os.name == "nt", "the stand-in programs are sh scripts")
