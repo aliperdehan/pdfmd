@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.165"
+PDFMD_VERSION = "3.33.166"
 import argparse
 import atexit
 import contextlib
@@ -1643,7 +1643,7 @@ except (OSError, RuntimeError):          # a home that cannot be read, or none a
     pass
 
 try:
-    import yaml
+    from pdfmd_yaml_support import yaml
 except ImportError:
     yaml = None
 

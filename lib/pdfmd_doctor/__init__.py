@@ -244,10 +244,11 @@ def doctor_report(deep: bool = False) -> bool:
     has_rdkit = importlib.util.find_spec("rdkit") is not None
     line(None, "chemical structures (```smiles blocks) are drawn with: "
          + ("RDKit" if has_rdkit else "nothing installed (pip install rdkit)"))
-    for module in ("yaml", "pypdf"):
-        found = importlib.util.find_spec(module) is not None
-        line(found, f"python package {module}", "pip install pyyaml pypdf",
-             f"the Python package {module} (front matter / PDF stamping are skipped without it)")
+    from pdfmd_yaml_support import description
+    line(core.yaml is not None, "YAML: " + description(core.yaml), "pip install --force-reinstall pdfmd-cli",
+         "YAML support (installation is incomplete)")
+    found = importlib.util.find_spec("pypdf") is not None
+    line(found, "python package pypdf", "pip install pypdf", "the Python package pypdf (PDF stamping is skipped without it)")
 
     print("\nFonts and scripts:")
     module = core.unicode_module()

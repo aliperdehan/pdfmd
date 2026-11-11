@@ -21,7 +21,7 @@ from pathlib import Path, PurePosixPath
 from tempfile import mkdtemp
 
 try:
-    import yaml
+    from pdfmd_yaml_support import yaml
 except ImportError:
     yaml = None
 

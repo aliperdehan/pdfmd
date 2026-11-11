@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.166 — 2026-11-11
+
+Pre-edit state: commit `cb0a60b`. Without installed PyYAML, pdfmd and several feature packages skipped YAML settings despite the bundled parser. All YAML import sites now share one backend selector, preferring installed yaml and falling back to pdfmd_yaml; the existing unavailable paths remain for incomplete installations. --doctor names the selected source, version and implementation; --version still prints only pdfmd's version. Five regressions failed before the fix and pass afterwards, including checkout-launcher front matter, metadata, setup-written configuration, doctor and shared feature imports with installed PyYAML hidden. Startup adds only pdfmd_yaml_support and no heavy imports; five isolated --version runs have median 0.105 s before and 0.099 s afterwards. Area and guard coverage totals 532 tests (six skipped); the Calibre PDF failure also occurs before the change. Corrected YAML/code-block regressions (22 tests) and repository guards (95 tests, one skipped) pass. pdfmd.py remains 17,207 lines; the only new launchpad code is the replacement import. No new setting or behavioural threshold.
+
 ## v3.33.165 — 2026-11-11
 
 Pre-edit state: commit `2a7d57c`. Python releases without a PyYAML wheel could require a compiler to install YAML support. The author chose a private pure-Python fallback: an offline generator now copies installed PyYAML 6.0.3 and its MIT licence, removes C imports and records source hashes; --check reports drift. The wheel and zipapp ship pdfmd_yaml without shadowing yaml, and the zipapp no longer copies installed PyYAML. Regressions failed before the fix and pass afterwards for private parsing, licence/provenance, drift and archive contents; packaging, compatibility and repository guard tests pass (106 tests, one skipped), including a scratch zipapp build. Fallback routing and dependency removal follow separately. pdfmd.py remains 17,207 lines. No new setting or behavioural threshold.

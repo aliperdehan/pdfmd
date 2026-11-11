@@ -59,7 +59,7 @@ def kit_files(folder: Path, wanted: str | None = None) -> list[Path]:
 
 def _declared_name(path: Path) -> str | None:
     try:
-        import yaml
+        from pdfmd_yaml_support import yaml
         data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     except Exception:       # a kit that cannot be read is reported when it is loaded, not here
         return None

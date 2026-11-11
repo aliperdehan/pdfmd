@@ -33,8 +33,8 @@ from datetime import datetime
 from pathlib import Path
 
 try:
-    import yaml
-except ImportError:                                # pragma: no cover -- PyYAML is optional
+    from pdfmd_yaml_support import yaml
+except ImportError:                                # pragma: no cover -- incomplete installation
     yaml = None
 
 core = None

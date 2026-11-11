@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    import yaml
-except ImportError:                                # pragma: no cover -- PyYAML is optional
+    from pdfmd_yaml_support import yaml
+except ImportError:                                # pragma: no cover -- incomplete installation
     yaml = None
 
 # code -> (severity, what it means). The README table is this one.

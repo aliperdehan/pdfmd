@@ -144,9 +144,11 @@ def _files(value, folder: Path, where: str, problems: list[str]) -> tuple[Path, 
 
 def _yaml(path: Path):
     try:
-        import yaml
+        from pdfmd_yaml_support import yaml
     except ImportError:
         raise KitError(f"{path}: reading a .kit file needs PyYAML (pip install pyyaml)", path) from None
+    if yaml is None:
+        raise KitError(f"{path}: reading a .kit file needs YAML support (reinstall pdfmd-cli)", path)
     try:
         return yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     except OSError as error:
