@@ -37,6 +37,29 @@ enum WebSmoke {
         exit(done ? 0 : 1)
     }
 
+    /// A link of the live view (a studio on the real folder `dir`, on `parts/10-intro.md`): a file of the project opens in a tab and the
+    /// page stays with its unsaved edits; a link to nothing, or a script leaving the page, does not replace it.
+    static func links(_ live: WebStudioController, _ dir: URL, _ check: (String, Bool, String) -> Void) {
+        func click(_ href: String) { _ = js(live, "(() => { const a = document.createElement('a'); a.href = \(JSONEncoder.quoted(href)); document.querySelector('#live').append(a); a.click(); a.remove(); })(); 0") }
+        _ = js(live, "window.__app.editor.replaceSelection('Unsaved before the link. ', false); 0")
+        _ = PDFSmoke.wait(5) { (live.state["dirty"] as? Bool) == true }
+        let page = js(live, "location.href") as? String
+        click("report.md")
+        check("a link to a file of the project opens it in a tab of the page", PDFSmoke.wait(5) { (live.state["cur"] as? String) == "report.md" }, "\(live.state["cur"] ?? "")")
+        check("... and the page stays, with its unsaved edits", js(live, "location.href") as? String == page && (live.state["dirty"] as? Bool) == true, (js(live, "location.href") as? String) ?? "nil")
+        click("missing.md")
+        spin(0.5)
+        check("a link to a file that is not there leaves the page alone", js(live, "location.href") as? String == page && live.loaded, (js(live, "location.href") as? String) ?? "nil")
+        live.dialogAnswer = false
+        _ = js(live, "location.href = '/elsewhere'; 0")
+        spin(0.5)
+        check("a script leaving the page asks while something is unsaved (and can say no)", js(live, "location.href") as? String == page, (js(live, "location.href") as? String) ?? "nil")
+        live.dialogAnswer = nil
+        check("a link of a file in parts/ is tried beside it first", WebStudioController.projectFile(for: URL(string: "http://127.0.0.1:1/10-intro.md")!, folder: dir, current: "parts/10-intro.md") == "parts/10-intro.md", "")
+        check("... then from the top of the folder", WebStudioController.projectFile(for: URL(string: "http://127.0.0.1:1/report.md")!, folder: dir, current: "parts/10-intro.md") == "report.md", "")
+        check("... and nothing outside the folder is a file of the project", WebStudioController.projectFile(for: URL(string: "http://127.0.0.1:1/../../etc/hosts")!, folder: dir, current: nil) == nil, "")
+    }
+
     static func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
         var failures = 0
@@ -166,6 +189,7 @@ enum WebSmoke {
         try? "# Intro part\n\nRewritten by another program.\n".write(to: dir.appendingPathComponent("parts/10-intro.md"), atomically: true, encoding: .utf8)
         live.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
         check("the page shows a file again that another program rewrote", PDFSmoke.wait(8) { (js(live, "window.__app.editor.getText()") as? String)?.contains("Rewritten by another program.") == true })
+        WebSmoke.links(live, dir, check)
         // the mode switch's hand-over: the text of an unsaved new file arrives as a new unsaved tab, and the page saves it when asked
         var adopted: Bool?
         live.adopt(text: "Text from the plain editor.\n") { adopted = $0 }

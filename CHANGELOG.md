@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.181b — 2026-11-12
+
+Pre-edit state: commit `d1731fc`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.3: a link in
+the studio's live view no longer replaces the page.** Review finding G4.3: a preview link such as `[notes](notes.md)` resolves
+against the page's address (`http://127.0.0.1:PORT/notes.md`), and the navigation policy let every address of host `127.0.0.1`
+load in the window: the whole studio page, unsaved edits included, was replaced, usually by a 404. The policy now treats only
+same-page anchors and the frames inside the page as navigation; a link to the studio's own server opens the project file it names
+in a tab of the page (`WebStudioController.projectFile`: tried beside the current file first, as a file of `parts/` resolves
+against the folder's top, then from the top; never a folder or a path outside the project), any other link that is not to the web
+does nothing (a beep), and a script or form leaving the page asks first while something is unsaved. A web link still opens in the
+browser, now also one to another local port. Regression: `--smoke-web` gains the link checks (a project file opens in a tab and
+the page keeps its edits, a missing file and a script leave the page alone, the name lookups); run headless on a window that was
+never shown, they failed with the old policy (the page went to `/report.md`) and pass now; `--smoke-web` itself puts a window on
+screen and is for the reviewer to run.
+
 ## v3.33.181a — 2026-11-12
 
 Pre-edit state: commit `fb02b26`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.2: the

@@ -267,13 +267,59 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
     /// Coming back to the window (or to the app): the page looks at the files on disk, which another program may have changed meanwhile.
     func windowDidBecomeKey(_ notification: Notification) { if folder != nil { command("checkDisk") } }
 
-    /// Links to the web open in the browser; the page's own files stay in the window.
+    /// Links to the web open in the browser. The window itself never leaves the page by a link: a link of the live view to a file of the
+    /// project (`[notes](notes.md)`, which the page's address turns into `http://127.0.0.1:PORT/notes.md`) opens that file in a tab of the
+    /// page, and any other link that is not to the web (the studio's own server, a `file:` address of the demo) does nothing: it would
+    /// replace the page, and its unsaved edits, with a 404. Any other way out of the page (a script, a form) asks first while something is
+    /// unsaved. An anchor of the page and the frames inside it (the PDF view) are left alone.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = action.request.url, action.navigationType == .linkActivated, url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto",
-           url.host != "127.0.0.1" {   // the studio's own server stays in the window
+        guard let url = action.request.url else { decisionHandler(.allow); return }
+        let own = pageURL.map { url.scheme == $0.scheme && url.host == $0.host && url.port == $0.port } ?? false
+        if action.navigationType == .linkActivated, ["http", "https", "mailto"].contains(url.scheme ?? ""), !own {
             NSWorkspace.shared.open(url); decisionHandler(.cancel); return
         }
-        decisionHandler(.allow)
+        guard action.targetFrame?.isMainFrame ?? true else { decisionHandler(.allow); return }
+        if let here = webView.url, Self.withoutFragment(url) == Self.withoutFragment(here) { decisionHandler(.allow); return }
+        if action.navigationType == .linkActivated {
+            if own, let folder, let file = Self.projectFile(for: url, folder: folder, current: state["cur"] as? String) { openInPage(file) } else { NSSound.beep() }
+            decisionHandler(.cancel); return
+        }
+        decisionHandler(mayLeavePage() ? .allow : .cancel)
+    }
+
+    private static func withoutFragment(_ url: URL) -> String {
+        guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url.absoluteString }
+        c.fragment = nil
+        return c.string ?? url.absoluteString
+    }
+
+    /// The file of the project a link of the live view points at, as the page names it (relative to `folder`), or nil when there is no
+    /// such file inside the folder. A relative link is resolved by WebKit against the page's address, the folder's top, so for a file in
+    /// a subfolder (`parts/`) the name is tried beside that file first, then from the top.
+    static func projectFile(for url: URL, folder: URL, current: String?) -> String? {
+        let name = url.path.hasPrefix("/") ? String(url.path.dropFirst()) : url.path
+        guard !name.isEmpty else { return nil }
+        var candidates = [name]
+        if let current, current.contains("/") { candidates.insert((current as NSString).deletingLastPathComponent + "/" + name, at: 0) }
+        let root = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        for candidate in candidates {
+            let target = folder.appendingPathComponent(candidate).standardizedFileURL.resolvingSymlinksInPath().path
+            var isFolder: ObjCBool = false
+            guard target.hasPrefix(root + "/"), FileManager.default.fileExists(atPath: target, isDirectory: &isFolder), !isFolder.boolValue else { continue }
+            return String(target.dropFirst(root.count + 1))
+        }
+        return nil
+    }
+
+    /// Whether the window may leave the page: yes when nothing is unsaved, else the author is asked (`dialogAnswer` for the smoke test).
+    private func mayLeavePage() -> Bool {
+        guard (state["dirty"] as? Bool) == true else { return true }
+        if let answer = dialogAnswer { return answer }
+        let a = NSAlert()
+        a.messageText = "This project has changes that are not saved."
+        a.informativeText = "Leaving the studio's page discards them."
+        a.addButton(withTitle: "Cancel"); a.addButton(withTitle: "Discard Changes")
+        return a.runModal() == .alertSecondButtonReturn
     }
 
     // The page's alert, confirm and prompt (without these WKWebView answers "no" and says nothing).
