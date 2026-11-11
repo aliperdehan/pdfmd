@@ -112,7 +112,8 @@ class Filter(unittest.TestCase):
         (`pdfmd-paragraph-spacing`) is added to it; v3.33.73: the leading is LaTeX's line pitch less the line box, and
         without either Typst's own room (1.2em - 0.65em) is added to it."""
         def rules(front: str, *extra: str) -> list[str]:
-            return [line for line in self.standalone_typst(front, *extra).splitlines() if "spacing" in line and "#" in line]
+            # the `#set` rules only: Pandoc 3.1.3 defines an `endnote` with a `#stack(dir: ltr, spacing: 3pt, ...)` in every standalone document
+            return [line for line in self.standalone_typst(front, *extra).splitlines() if "spacing" in line and line.startswith("#set ")]
 
         self.assertEqual(rules(""), ["#set par(leading: 0.5317em, spacing: 0.5317em + 0.55em)"])
         self.assertEqual(rules("indent: false\n"), ["#set par(leading: 0.5317em, spacing: 0.5317em + 0.55em)"])

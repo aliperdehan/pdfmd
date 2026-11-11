@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.174e — 2026-11-11
+
+Pre-edit state: commit `bab6795`. `test_engine_filters.Filter.test_the_space_between_paragraphs` collected every line of a standalone Typst document that holds `spacing` and a `#`, and expected only pdfmd's `#set par(leading: ..., spacing: ...)`. Pandoc 3.1.3 defines an `endnote` function in every standalone Typst document, with a `#stack(dir: ltr, spacing: 3pt, super[#num], contents)` line, so the list had two entries and the test failed in the linux-pandoc job for 3.1.3; pdfmd's own rule was there, unchanged. The test now collects the lines that begin with `#set ` and hold `spacing`, which is what it is about (a second rule that sets the spacing would still fail it). It failed on 3.1.3 before and passes on 3.1.3 and on 3.13 now.
+
 ## v3.33.174d — 2026-11-11
 
 Pre-edit state: commit `cc64ef0`. `test_celltags.Sizes.test_latex_gets_widths_heights_and_the_tiers` and `test_celltags.Vertical.test_latex_gets_a_longtblr_with_the_tabularray_words_for_top_middle_bottom` expected `\begin{longtblr}[caption={...},label={tbl:...}]` from a table whose caption ends in `{#tbl:...}`. Pandoc takes that as the table's identifier only from 3.8.2 on (the two older tests of it, in test_tables and test_office_latex, are skipped below that version); Pandoc 3.1.3 leaves it in the caption as text, in its own longtable as well, so pdfmd has no label to write and the caption reads `caption={Sized \{\#tbl:sized\}}`. Both tests failed in the linux-pandoc job for 3.1.3. They are not skipped, as everything else they check (the column specification, the widths and heights, the cells' alignment words) holds on the old Pandoc too: a helper, `longtblr_start`, gives the opening line for the Pandoc that runs. They failed on 3.1.3 before and pass on 3.1.3 and on 3.13 now.
