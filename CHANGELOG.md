@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.144 — 2026-11-11
+
+Pre-edit state: commit `8849549`. Global code settings skipped linked metadata files and were emitted as overrides, so a metadata-file line-numbers: false could still produce numbered blocks. Every code-filter route now receives metadata files and resolves each key through the normal option sources below the command line. Checkout regressions failed before the fix and pass afterwards for metadata disabling global numbering, document enabling it with a metadata-file step, and command-line overrides; code-block and repository guard tests run. pdfmd.py shrinks from 17,206 to 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.143 — 2026-11-11
 
 Pre-edit state: commit `5a97ee8`. Appending a document metadata value could overwrite an explicit command-line value because the append filter replaced Pandoc’s resolved metadata. Append replacements now exclude keys explicitly supplied with command-line metadata, preserving unrelated appends. Checkout regressions for separate and attached -M forms, with equals and colon separators, failed before the fix and pass afterwards; metadata-append and repository guard tests run. Option scanning lives in the argument package; pdfmd.py grows from 17,204 to 17,206 lines to remove those keys from its existing merge. No new setting or behavioural threshold.

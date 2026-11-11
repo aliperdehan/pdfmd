@@ -101,3 +101,24 @@ class CommandMetadataPrecedence(RouteCase):
                 self.run_pdfmd("--to", "html", "-o", str(self.root / "d.html"), "-y", str(self.root / "base.yaml"),
                                "--standalone", "--template", str(self.root / "template.html"), *arguments)
                 self.assertEqual((self.root / "d.html").read_text().strip(), 'CLI Author:Original|Extra')
+
+
+class CodeMetadataPrecedence(RouteCase):
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_checkout_metadata_code_settings_beat_global_and_yield_to_cli_and_document(self):
+        config = self.root / "config.yaml"
+        config.write_text('options: {line-numbers: true, line-number-step: 5}\n')
+        self.env["PDFMD_CONFIG"] = str(config)
+        (self.root / "base.yaml").write_text('pdfmd-options: {line-numbers: false, line-number-step: 9}\n')
+        for options, arguments, numbered, step in (
+                ('{}', (), False, None),
+                ('{}', ('--line-numbers', '4'), True, 4),
+                ('{line-numbers: true}', (), True, 9)):
+            with self.subTest(options=options, arguments=arguments):
+                self.source.write_text(f'---\npdfmd-options: {options}\n---\n\n```\na\nb\nc\n```\n')
+                self.run_pdfmd("--to", "latex", "-o", str(self.root / "d.tex"),
+                               "-y", str(self.root / "base.yaml"), *arguments)
+                result = (self.root / "d.tex").read_text()
+                self.assertEqual('numbers=left' in result, numbered)
+                if step:
+                    self.assertIn(f'stepnumber={step}', result)

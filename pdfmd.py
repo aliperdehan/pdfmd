@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.143"
+PDFMD_VERSION = "3.33.144"
 import argparse
 import atexit
 import contextlib
@@ -2650,7 +2650,7 @@ def has_code_block(text: str) -> bool:
     return False
 
 
-def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str]:
+def code_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_files=()) -> list[str]:
     """What a LaTeX build needs for code blocks (pdfmd_lua/code.lua; wrapping and optional line numbers): the filter
     and, when the document has code and wrapping is not off, the header that loads fvextra. The settings of the
     command line and the global config reach the filter as metadata; a document's own `pdfmd-options` through the
@@ -2665,11 +2665,9 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str
         return []
     if shipped is None or not any(has_code_block(read_text_best_effort(source)) for source in sources):
         return []
-    configured = config_options(sources[0] if sources else None)
-    own = frontmatter_pdfmd_options(sources[0]) if sources else {}
     settings = {}
     for key in ("code-wrap", "line-numbers", "line-number-step"):
-        for where in (CODE_CLI, own, configured):
+        for where in (CODE_CLI, *(options for _, options in option_sources(sources[0], metadata_files))):
             if where.get(key) is not None:
                 settings[key] = where[key]
                 break
@@ -14340,7 +14338,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += width_filter_args(width_filter)
             cmd += cellalign_args(md_path, metadata_files)
             cmd += tblr_header_args(md_path, metadata_files)
-            cmd += code_filter_args(no_auto, [md_path, title_source]) + image_filter_args(no_auto, [md_path, title_source])
+            cmd += code_filter_args(no_auto, [md_path, title_source], metadata_files) + image_filter_args(no_auto, [md_path, title_source])
             hoist_code_header(cmd)
             keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
             for lua_filter in lua_filters:
@@ -14863,7 +14861,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                 if is_tex_target:
                     cmd += tblr_header_args([md_path, *parts_inputs], metadata_files)
-                    cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
+                    cmd += code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + image_filter_args(no_auto, [md_path, *parts_inputs])
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                 for lua_filter in lua_filters:
@@ -15123,7 +15121,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in LATEX_ENGINES:
                         cmd += tblr_header_args([md_path, *parts_inputs], metadata_files)
-                        cmd += code_filter_args(no_auto, [md_path, *parts_inputs]) + image_filter_args(no_auto, [md_path, *parts_inputs])
+                        cmd += code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + image_filter_args(no_auto, [md_path, *parts_inputs])
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:
