@@ -232,6 +232,11 @@ class Prince(unittest.TestCase):
         self.assertEqual(self.options(MIXED), ["--pdf-engine-opt=--pdf-author=Alice Able, Bob Baker"])
         self.assertEqual(self.options(UNICODE), ["--pdf-engine-opt=--pdf-author=Ərlan Şükürov, 李雷, Zoë Ångström"])
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_markdown_names_are_plain_text(self):
+        self.assertEqual(self.options('author:\n  - "*Alice* [Able](https://example.com)"\n  - Bob\n'),
+                         ["--pdf-engine-opt=--pdf-author=Alice Able, Bob"])
+
     def test_one_name_its_own_author_meta_and_latex_are_left_to_the_page(self):
         for front in ("author: Bob\n", "author:\n  name: Bob\n", NAMELESS, STRINGS + "author-meta: Mine\n",
                       "author:\n  - Jane \\emph{x} Doe\n  - Bob\n", ""):

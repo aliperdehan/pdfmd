@@ -219,7 +219,34 @@ def prince_author_options(md_path: Path, metadata_files: list[Path], variables: 
     names = core.author_names(metadata.get("author"))
     if len(names) < 2 or any("\\" in name for name in names):
         return []
-    return ["--pdf-engine-opt=--pdf-author=" + ", ".join(names)]
+    names = plain_author_names(names)
+    return ["--pdf-engine-opt=--pdf-author=" + ", ".join(names)] if names else []
+
+
+def plain_author_names(names: list[str]) -> list[str]:
+    """Ask Pandoc for the same plain-text author tags it gives its HTML template."""
+    import json
+    from html.parser import HTMLParser
+
+    class Authors(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.names = []
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if tag == "meta" and attributes.get("name") == "author":
+                self.names.append(attributes.get("content", ""))
+
+    source = "---\nauthor: " + json.dumps(names, ensure_ascii=False) + "\n---\n"
+    try:
+        result = subprocess.run(["pandoc", "-f", "markdown", "-t", "html", "-s"], input=source,
+                                capture_output=True, text=True, check=True)
+        parser = Authors()
+        parser.feed(result.stdout)
+        return parser.names if len(parser.names) == len(names) else []
+    except (OSError, subprocess.SubprocessError):
+        return []
 
 
 def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: list[str]) -> list[str]:

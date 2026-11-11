@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.157 — 2026-11-11
+
+Pre-edit state: commit `a80937a`. Prince received Markdown markup literally in its combined PDF author when a name contained formatting. The author option now uses the plain text of Pandoc's own HTML author tags, retaining its handling of links and formatting. The regression failed before the fix and passes afterwards; author metadata and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
+
 ## v3.33.156 — 2026-11-11
 
 Pre-edit state: commit `b5cb5a6`. Calibre pages with reordered or spaced author attributes could be mistaken for authorless pages, and cleanup could delete a real PDF author. HTML attribute parsing now recognises the author regardless of order and spacing, and cleanup removes only the Unknown placeholder. Regressions failed before the fix and pass afterwards; Calibre and repository guard tests run. pdfmd.py remains 17,205 lines. No new setting or behavioural threshold.
