@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185e — 2026-11-12
+
+Pre-edit state: commit `7078730`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.13: stop timed-out tool probes and drain their output.** A shell child that ignored SIGTERM could survive tool discovery and hold its output reader indefinitely. Discovery now stops the process tree, escalates after the existing Build stop grace, and bounds the output drain without leaving a blocking reader. The setting also controls these probe delays.
+
+Regression: `tests/test_colophon_tool_timeout.py` starts a child that ignores SIGTERM and checks it is gone; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185d — 2026-11-12
 
 Pre-edit state: commit `e1f4139`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.12: preserve escaped export arguments.** A build output name containing an escaped space was split when export removed `-o`, leaving a stray input. The scanner now keeps shell escapes with their words, including escaped quotes, while respecting single quotes.

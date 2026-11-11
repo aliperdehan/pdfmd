@@ -182,14 +182,26 @@ enum PdfmdTool {
         p.standardOutput = pipe
         p.standardError = FileHandle.nullDevice
         p.standardInput = FileHandle.nullDevice
-        do { try p.run() } catch { return "" }
+        let lock = NSLock()
         var data = Data()
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async { data = pipe.fileHandleForReading.readDataToEndOfFile(); done.signal() }
-        let deadline = Date().addingTimeInterval(timeout)
-        while p.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
-        if p.isRunning { p.terminate() }
-        _ = done.wait(timeout: .now() + 1)
-        return String(decoding: data, as: UTF8.self)
+        let drained = DispatchSemaphore(value: 0)
+        let ended = DispatchSemaphore(value: 0)
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty { drained.signal(); return }
+            lock.lock(); data.append(chunk); lock.unlock()
+        }
+        p.terminationHandler = { _ in ended.signal() }
+        do { try p.run() } catch { pipe.fileHandleForReading.readabilityHandler = nil; return "" }
+        let configuredGrace = Settings.number("buildStopGrace")
+        let grace = configuredGrace.isFinite && configuredGrace > 0 ? configuredGrace : Settings.items.first { $0.key == "buildStopGrace" }!.value
+        if ended.wait(timeout: .now() + timeout) == .timedOut, p.isRunning {
+            PdfmdBuild.killTree(p.processIdentifier, grace: grace)
+        }
+        _ = drained.wait(timeout: .now() + grace)
+        pipe.fileHandleForReading.readabilityHandler = nil
+        try? pipe.fileHandleForReading.close()
+        lock.lock(); let result = data; lock.unlock()
+        return String(decoding: result, as: UTF8.self)
     }
 }
