@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.149 — 2026-11-11
+
+Pre-edit state: commit `15dd600`. Batch builds omitted the command-line cache override when calling the converter, allowing document settings to defeat both --cache and --no-cache in sequential and parallel runs. Both calls now pass cache_cli=args.cache. Checkout regressions failed before the fix in all four switch/worker combinations and pass afterwards, checking persistent cache manifests as well as PDFs; batch-path, cache-location and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.148 — 2026-11-11
 
 Pre-edit state: commit `3c702e5`. Parts builds scanned only the scaffold for hand-typed table captions and line breaks, so syntax present only in a part lost its filters. Both detectors now scan the complete input list and retain its first file, the scaffold, as their settings source. Checkout regressions failed before the fix for both filters and pass afterwards, including disabled scaffold settings; caption, line-break, parts and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.

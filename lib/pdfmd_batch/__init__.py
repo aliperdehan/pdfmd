@@ -199,7 +199,7 @@ def run(core, *,
     def work(file):
         need_engines(file_target(file))
         metadata, file_engines = file_metadata_and_engines(file)
-        return convert_one(file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained)
+        return convert_one(file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache)
     results = []
     if jobs > 1:
         with ProcessPoolExecutor(max_workers=jobs, initializer=restore_worker_state,
@@ -211,7 +211,7 @@ def run(core, *,
                 file_preambles = preamble_for(file)
                 if not args.verbose:
                     AUTO_LOG.flush()           # what the parent found for this file, before its worker's output
-                futures.append(executor.submit(convert_one, file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained))
+                futures.append(executor.submit(convert_one, file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache))
             results = [future.result() for future in as_completed(futures)]
             results.sort(key=lambda result: result[0].name.casefold())
     else:
