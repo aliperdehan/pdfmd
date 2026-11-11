@@ -83,7 +83,8 @@ def serve_core(folder: Path):
         main, why = serve_main_document(root)
         return main, why
     return Core(folder, pick_main=pick, discover=serve_discovered, write_bytes=core.atomic_write_bytes,
-                display=lambda path: str(path).replace(str(Path.home()), "~", 1), filters=serve_live_filters)
+                display=lambda path: str(path).replace(str(Path.home()), "~", 1), filters=serve_live_filters,
+                places=lambda: [core.cache_root()])
 
 
 def serve_command(args) -> int:

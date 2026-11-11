@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
 
+from .contain import contained
+
 API_VERSION = 1
 
 # Seconds one render may take. A live render is pandoc on a few pages (0.05 s measured); the limit only keeps a hung process from holding a
@@ -105,11 +107,12 @@ def headings(text: str) -> list[dict]:
 class Core:
     """One project folder. `pick_main(root)` -> (relative path or None, why); `discover(root, main)` -> [{"role", "file"}];
     `write_bytes(path, data)` is an atomic write; `filters(source, metadata)` is a context manager that yields the Pandoc arguments (the
-    filters) pdfmd puts on the document in ``source``, a file holding the text being rendered: the very list a build writes (entry 3do)."""
+    filters) pdfmd puts on the document in ``source``, a file holding the text being rendered: the very list a build writes (entry 3do);
+    `places()` names the folders outside the project that those filters may open (pdfmd's cache; see contain.py)."""
 
     def __init__(self, root: Path, pick_main: Optional[Callable] = None, discover: Optional[Callable] = None,
                  write_bytes: Optional[Callable] = None, which: Callable = shutil.which, display: Optional[Callable] = None,
-                 filters: Optional[Callable] = None):
+                 filters: Optional[Callable] = None, places: Optional[Callable] = None):
         self.root = Path(root).resolve()
         self.pick_main = pick_main or (lambda root: (None, "not asked"))
         self.discover = discover or (lambda root, main: [])
@@ -117,6 +120,7 @@ class Core:
         self.which = which
         self.display = display or str
         self.filters = filters or self._no_filters
+        self.places = places or (lambda: [])
         self.lock = threading.Lock()
 
     # ---- dispatch ---------------------------------------------------------------------------------------------------------------
@@ -302,7 +306,10 @@ class Core:
                     warning_text = warning_text.replace(str(document), original).replace(document.name, original)
                 notes = [HIDDEN_COPY.sub("", line) for line in warning_text.splitlines() if line.strip()]
                 command += [str(item) for item in (arguments or [])]
-                done = subprocess.run(command, input=text.encode("utf-8"), capture_output=True, cwd=str(folder), timeout=RENDER_TIMEOUT)
+                # the filters open only what is inside the project (and pdfmd's own places): a name in the text is not a way out of it
+                extra, environment = stack.enter_context(contained(self.root, command, list(self.places())))
+                done = subprocess.run(command + extra, input=text.encode("utf-8"), capture_output=True, cwd=str(folder),
+                                      timeout=RENDER_TIMEOUT, env=environment)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "timeout", f"pandoc did not answer in {RENDER_TIMEOUT} s") from None
         except OSError as error:

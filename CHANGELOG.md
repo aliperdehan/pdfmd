@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.183 — 2026-11-12
+
+Pre-edit state: commit `6ab9c87`. Review finding G4.4: `/api/render` of `pdfmd --serve` checked the document's own path but ran
+pdfmd's filters on whatever the TEXT names, so `::: {.csv file="../private.txt"}` (or an absolute path, or a link in the project
+pointing out of it) had `csv_table.lua` open a file outside the project and put it in the page, against the documented boundary.
+Pandoc runs the `init.lua` of its data folder before every Lua filter, so each live render now gets a data folder of its own
+(`lib/pdfmd_serve/contain.py`) whose `init.lua` wraps the Lua functions that open a file by name (`io.open`, `io.lines`, `io.input`,
+`io.output`, `dofile`, `loadfile`, `os.remove`, `os.rename`, `pandoc.mediabag.fetch`). A path is let through when it lies in the
+folder of one of the render's filters, in pdfmd's cache (named by the server: `Core(places=...)`, the pictures of diagrams, LaTeX
+pieces and structures) or in the render's own temporary folder (TMPDIR points there); otherwise only when its real path, resolved by
+the operating system through a small Python check (symlinks and `..` after a link included), is inside the project and not in `.git`.
+A refused file fails as a missing one does, with one warning the page shows. Not covered, and said so in the README: a program a
+filter starts (a LaTeX picture's `\input`, a diagram tool's include) reads what it is told. What it costs: a file outside the project
+that a setting names (a shared LaTeX preamble) is not read by the live view's filters either, a file of the project costs one short
+Python start the first time a filter opens it, and the live view no longer uses Pandoc's user data folder (no templates are used there;
+an `init.lua` of the user's own is not run). Regression: `tests/test_serve.py` renders `../secret.csv`, its absolute path,
+`sub/../../secret.csv`, a file link, a folder link and `..` after a link that stays inside (the links where symlinks exist): none
+reaches the page and each warns; `../inside.csv` from `sub/` and an absolute path inside still are tables. Checked failing without the
+guard (the secret in the table) and passing with it; `scripts/pdfmd --api POST /api/render` in a scratch project refuses a secret beside
+it while a CSV of the project and a Graphviz diagram (through the cache) still render. pdfmd.py stays at 17,136 lines.
+
 ## v3.33.182 — 2026-11-12
 
 Pre-edit state: commit `18e7d8c`. Review finding G4.2: `GET /api/file` of `pdfmd --serve` (and `--api`) read a file's bytes

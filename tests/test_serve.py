@@ -291,6 +291,34 @@ class Render(Folder):
         self.assertIn(f"<caption>{caption}</caption>", with_filter["html"])
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_the_live_views_filters_open_nothing_outside_the_project(self):
+        """Review finding G4.4: the text names the files a filter opens (`::: {.csv file=...}`). A name that leads out of the project, by
+        `..`, by an absolute path or through a symlink, is refused with a warning; a file of the project is still a table."""
+        import pdfmd
+        secret = self.root.parent / "secret.csv"
+        secret.write_text("k,v\nSECRET-OUTSIDE,1\n", encoding="utf-8")
+        (self.root / "inside.csv").write_text("k,v\ninside-value,2\n", encoding="utf-8")
+        core = Core(self.root, filters=pdfmd.serve_live_filters, places=lambda: [pdfmd.cache_root()])
+        names = ["../secret.csv", secret.as_posix(), "sub/../../secret.csv"]
+        if os.name != "nt":
+            (self.root / "link.csv").symlink_to(secret)
+            (self.root / "out").symlink_to(self.root.parent, target_is_directory=True)
+            (self.root / "sub" / "up").symlink_to(self.root, target_is_directory=True)     # a link that stays inside, then `..` out
+            names += ["link.csv", "out/secret.csv", "sub/up/../secret.csv"]
+        for name in names:
+            with self.subTest(name=name):
+                status, answer = core.handle("POST", "/api/render", {"path": "report.md", "text": f'::: {{.csv file="{name}"}}\n:::\n'})
+                self.assertEqual(status, 200, answer)
+                self.assertNotIn("SECRET-OUTSIDE", answer["html"])
+                self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer["warnings"])
+        for document, name in (("sub/n.md", "../inside.csv"), ("report.md", (self.root / "inside.csv").as_posix())):
+            with self.subTest(inside=name):
+                status, answer = core.handle("POST", "/api/render", {"path": document, "text": f'::: {{.csv file="{name}"}}\n:::\n'})
+                self.assertEqual(status, 200, answer)
+                self.assertIn("inside-value", answer["html"])
+                self.assertFalse(any("outside the project folder" in line for line in answer["warnings"]), answer["warnings"])
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_view_shows_pdfmds_syntax_as_a_build_does(self):
         """Calc (an inline `{=}` and a `::: calc` div: both need the document as the reader gives it, which `sourcepos` changes), callouts and
         page breaks come from the one list every build uses, and what is not saved yet is read from the text, not from the file."""
