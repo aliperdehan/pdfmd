@@ -57,6 +57,7 @@ class Plain(unittest.TestCase):
         self.assertIs(data["options"]["unicode"], True)
         self.assertEqual(len(data["options"]["no-auto"]), 2)                   # two kinds toggled on
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_no_families_are_disabled_and_a_separate_reset_restores_defaults(self):
         from pdfmd_setup import plain
         stores = {"config": {"options": {}}}
@@ -86,6 +87,7 @@ class Plain(unittest.TestCase):
             self.assertTrue(plain.edit(stores, setting, lambda prompt: "-", lambda line: None))
             self.assertIsNone(registry.read(stores, setting))
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_table_counts_accept_zero_and_reject_all(self):
         from pdfmd_setup import plain
         for key in ("options.table-keep", "options.table-caption-colon-words"):
@@ -108,6 +110,7 @@ class Plain(unittest.TestCase):
                                   cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
+    @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_editing_details_keeps_disabled_calc_and_csv_off(self):
         from pdfmd_setup import plain
         stores = {"config": {"options": {"calc": False, "csv": False}}}

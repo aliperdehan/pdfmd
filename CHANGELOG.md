@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.175b — 2026-11-12
+
+Pre-edit state: commit `912eb13`. Tests only. Three tests of `test_setup.Plain` (`test_no_families_are_disabled_and_a_separate_reset_restores_defaults`, `test_table_counts_accept_zero_and_reject_all`, `test_editing_details_keeps_disabled_calc_and_csv_off`) check a saved `--setup` answer by building `doc.md --to html`, which needs Pandoc, and failed with "Pandoc was not found on PATH" in all twelve `native` CI jobs of the second run. They were hidden until v3.33.169c: the module did not import without PyYAML. Each now carries the module's usual `needs Pandoc` skip; the skip covers the whole test, its first assertions on `plain.edit()` included, which the jobs with Pandoc still run.
+
 ## v3.33.175 — 2026-11-12
 
 Pre-edit state: commit `46f159c`. v3.33.170's `tolerant_streams()` did not help on Windows itself: the second CI run still ended `pdfmd "Документ с пробелом.md" …` with a `UnicodeEncodeError` traceback on Python 3.9, 3.10 and 3.13 (the `native (windows-latest, …)` jobs, five tests of `test_batch_paths.Checkout`; 3.15 passes because its output is UTF-8). The cause: the function replaced only the `strict` error handler, but Python on Windows gives a piped standard output `surrogateescape`, which in a code page raises for a missing character exactly as `strict` does; v3.33.170's tests simulated the pipe with a strict stream. `lib/pdfmd_view`'s new `raises_for_missing()` names both cases: `strict` always, `surrogateescape` unless the encoding is a UTF (there it never raises for a real character and passes undecodable file-name bytes through, so it is kept). Such a stream gets `replace`, as before. Test: `test_batch_paths.CodePageStreams.test_the_handler_windows_gives_a_pipe_is_replaced_in_a_code_page_only` (the handler stayed `surrogateescape` before; a UTF-8 stream keeps it). `pdfmd.py` is unchanged (17,217 lines).
