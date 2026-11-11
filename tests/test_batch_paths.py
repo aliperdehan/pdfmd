@@ -376,6 +376,20 @@ class CodePageStreams(unittest.TestCase):
         print("NATIVE  Документ.md via inkmd — é", file=tee)
         self.assertEqual(raw.getvalue().decode("cp1252").rstrip("\r\n"), "NATIVE  ????????.md via inkmd — é")
 
+    def test_the_handler_windows_gives_a_pipe_is_replaced_in_a_code_page_only(self):
+        import pdfmd_view
+        raw, stream = self.code_page_stream("surrogateescape")   # Python's default for a Windows pipe
+        with self.assertRaises(UnicodeEncodeError):
+            stream.write("NOTE  skipped: Документ.md\n")
+        raw, stream = self.code_page_stream("surrogateescape")
+        pdfmd_view.tolerant_streams([stream])
+        self.assertEqual((stream.encoding, stream.errors), ("cp1252", "replace"))
+        print("NOTE  skipped: Документ.md", file=stream)
+        self.assertEqual(raw.getvalue().decode("cp1252").rstrip("\r\n"), "NOTE  skipped: ????????.md")
+        unicode_stream = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="surrogateescape")
+        pdfmd_view.tolerant_streams([unicode_stream])
+        self.assertEqual(unicode_stream.errors, "surrogateescape")
+
     def test_a_chosen_error_handler_and_a_plain_text_buffer_are_left_alone(self):
         import pdfmd_view
         _, stream = self.code_page_stream("backslashreplace")

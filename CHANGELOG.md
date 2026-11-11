@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.175 — 2026-11-12
+
+Pre-edit state: commit `46f159c`. v3.33.170's `tolerant_streams()` did not help on Windows itself: the second CI run still ended `pdfmd "Документ с пробелом.md" …` with a `UnicodeEncodeError` traceback on Python 3.9, 3.10 and 3.13 (the `native (windows-latest, …)` jobs, five tests of `test_batch_paths.Checkout`; 3.15 passes because its output is UTF-8). The cause: the function replaced only the `strict` error handler, but Python on Windows gives a piped standard output `surrogateescape`, which in a code page raises for a missing character exactly as `strict` does; v3.33.170's tests simulated the pipe with a strict stream. `lib/pdfmd_view`'s new `raises_for_missing()` names both cases: `strict` always, `surrogateescape` unless the encoding is a UTF (there it never raises for a real character and passes undecodable file-name bytes through, so it is kept). Such a stream gets `replace`, as before. Test: `test_batch_paths.CodePageStreams.test_the_handler_windows_gives_a_pipe_is_replaced_in_a_code_page_only` (the handler stayed `surrogateescape` before; a UTF-8 stream keeps it). `pdfmd.py` is unchanged (17,217 lines).
+
 ## v3.33.174g — 2026-11-11
 
 Pre-edit state: commit `da30ede`. `test_markup_guarded.Builds.test_lualatex_builds_after_a_preambles_soul` and `test_lualatex_highlights_after_a_preambles_soul_or_bare_lua_ul` put `\usepackage{soul}` in a preamble and failed in both linux-pandoc jobs with "LaTeX Error: File `soul.sty' not found": on Ubuntu 24.04 soul.sty is in texlive-plain-generic (`tex/generic/soul/`), which the job's packages, texlive-latex-extra among them, do not bring. The apt line of the linux-pandoc job in test.yml now names texlive-plain-generic, and the two tests skip with "needs LaTeX's soul package (kpsewhich finds no soul.sty)" on a machine without it, instead of failing on a missing package that is no fault of pdfmd's. In windows-latex both tests ran and passed (MiKTeX fetches a package on demand). Locally, with soul installed, the module passes as before; that the apt package cures the runner is shown only by the next CI run.

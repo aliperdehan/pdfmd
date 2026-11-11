@@ -13,6 +13,7 @@ the pdfmd names the code uses (`ANSI_COLOR_ENV`, `ANSI_FALLBACK_WIDTH`, `ANSI_LI
 from __future__ import annotations
 
 import atexit
+import codecs
 import os
 import shlex
 import shutil
@@ -38,16 +39,30 @@ BINARY_TARGETS = frozenset({"pdf", "docx", "odt", "pptx", "epub", "epub2", "epub
 VIEW_PAGER = "less -FRX"
 
 
+def raises_for_missing(stream) -> bool:
+    """Whether printing a character the stream's encoding lacks raises: `strict` always, `surrogateescape` in anything
+    but a UTF."""
+    errors = getattr(stream, "errors", None)
+    if errors != "surrogateescape":
+        return errors == "strict"
+    try:
+        return not codecs.lookup(stream.encoding).name.startswith("utf")
+    except (LookupError, TypeError):
+        return True
+
+
 def tolerant_streams(streams=None) -> None:
     """Make standard output and standard error unable to raise `UnicodeEncodeError`: a stream whose error handler is
     `strict` (Python's default for standard output) gets `replace`, so a character its encoding lacks prints as `?`, the
     way `--help` has printed it since v3.25.19. A Windows pipe, or a console that is not UTF-8, is cp1252 or another code
-    page before Python 3.15, and `NATIVE  <a Cyrillic file name> via inkmd` ended the build with a traceback there. The
-    encoding is not changed (the reader of a pipe expects the code page), nor is a handler somebody chose
-    (`PYTHONIOENCODING=utf-8:surrogateescape`, standard error's `backslashreplace`). Called at the start of `main()` and
-    of every `-j` worker; a stream that cannot be reconfigured (a `StringIO` in a test) is left alone."""
+    page before Python 3.15, and `NATIVE  <a Cyrillic file name> via inkmd` ended the build with a traceback there.
+    `surrogateescape` is what Windows gives a pipe by default, and in a code page it raises for a missing character
+    exactly as `strict` does, so it is replaced too unless the encoding is a UTF (where it never raises for a real
+    character and passes undecodable file-name bytes through). The encoding is not changed (the reader of a pipe expects
+    the code page), nor is another handler somebody chose (standard error's `backslashreplace`). Called at the start of
+    `main()` and of every `-j` worker; a stream that cannot be reconfigured (a `StringIO` in a test) is left alone."""
     for stream in (sys.stdout, sys.stderr) if streams is None else streams:
-        if getattr(stream, "errors", None) == "strict" and hasattr(stream, "reconfigure"):
+        if raises_for_missing(stream) and hasattr(stream, "reconfigure"):
             try:
                 stream.reconfigure(errors="replace")
             except (OSError, ValueError):      # closed or detached: whatever is printed to it fails for another reason
