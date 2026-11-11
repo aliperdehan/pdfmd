@@ -111,6 +111,20 @@ class Builds(unittest.TestCase):
         self.assertRegex(tex, r"\\chapter\{Alpha heading\}")
         self.assertNotIn("report-titles", done.stdout)
 
+    def test_later_sole_title_and_subtitle_become_the_book_title(self):
+        self.write("a.md", "---\nauthor: Ann\n---\n\nFirst.\n")
+        self.write("b.md", "---\ntitle: Only Title\nsubtitle: Only Subtitle\n---\n\nSecond.\n")
+        env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               "XDG_CONFIG_HOME": str(self.root / "config"), "XDG_CACHE_HOME": str(self.root / "cache"),
+               "XDG_DATA_HOME": str(self.root / "data")}
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-r", "a.md", "b.md",
+                               "--no-stamp", "--no-backup", "--to", "tex"], cwd=self.root,
+                              env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        tex = (self.root / "book.tex").read_text(encoding="utf-8")
+        self.assertIn(r"\title{Only Title", tex)
+        self.assertIn("Only Subtitle", tex)
+
     def test_first_and_last_keep_one_title_as_the_books(self):
         for policy, title in (("first", "Alpha"), ("last", "Beta")):
             done, tex = self.report(options=f"report-titles: {policy}")

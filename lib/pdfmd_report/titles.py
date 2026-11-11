@@ -78,11 +78,18 @@ def book_value(core, key: str, files: list[Path], metadata_files: list[Path]) ->
 
 
 def plan(core, files: list[Path], metadata_files: list[Path], policy: str) -> tuple[dict[Path, Chapter], list[str]]:
-    """({file: what is done to it}, notes). Nothing is done (an empty dict) unless two files have a title."""
+    """({file: what is done to it}, notes). Preserve a sole later title as the book title."""
     fronts = {path: own_front_matter(core, path) for path in files}
     titled = [path for path in files if flatten(fronts[path].get("title"))]
     notes: list[str] = []
     chapters: dict[Path, Chapter] = {}
+    if len(titled) == 1 and titled[0] != files[0]:
+        final = titled[0]
+        put = {key: flatten(fronts[final].get(key)) for key in ("title", "subtitle")
+               if flatten(fronts[final].get(key))}
+        chapters[files[0]] = Chapter(drop=("title", "subtitle"), put=put)
+        chapters[final] = Chapter(drop=("title", "subtitle"))
+        return chapters, notes
     if len(titled) < 2:
         return chapters, notes
     if policy == "first":
@@ -209,6 +216,8 @@ def apply(core, text: str, chapter: Chapter) -> str:
         head = put_keys(drop_keys(head, chapter.drop), chapter.put)
         if not [line for line in head.rstrip("\n").split("\n")[1:-1] if line.strip()]:
             head = ""                                       # nothing is left of the front matter: no empty block
+    elif chapter.put:
+        head = put_keys("---\n---\n", chapter.put)
     if chapter.heading:
         body = drop_repeated_heading(core, body, chapter.title)
         if chapter.shift:

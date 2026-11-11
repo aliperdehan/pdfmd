@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.137 — 2026-11-11
+
+Pre-edit state: commit `b0ea9d2`. **Keep a report’s sole later title.** When only a later file supplied a title,
+report assembly stripped it with that file’s front matter. The title and subtitle now move to the first file; a
+checkout report regression and report and repository guard tests run.
+
 ## v3.33.136 — 2026-11-11
 
 Pre-edit state: commit `4ab9c62`. **Use the fresh Biber control file.** A stale control file beside a direct TeX
