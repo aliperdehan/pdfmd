@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.144"
+PDFMD_VERSION = "3.33.145"
 import argparse
 import atexit
 import contextlib
@@ -9190,9 +9190,8 @@ def frontmatter_value(md_path: Path, key: str) -> str | None:
 def metadata_file_yaml(path: Path) -> dict:
     """Parse a --metadata-file's own YAML content as a plain dict.
 
-    Unlike a document's front matter, a --metadata-file has no ``---``/
-    ``...`` fence to find first -- the whole file already IS the YAML
-    mapping Pandoc's own ``--metadata-file`` reads. Returns {} on a parse
+    A --metadata-file accepts bare YAML or a front-matter fence ending
+    in ``---`` or ``...``, as Pandoc does. Returns {} on a parse
     error, a non-mapping top level, or no PyYAML -- same permissiveness as
     frontmatter_pdfmd_options, since a metadata file's pdfmd-only settings
     are optional sugar, never a hard dependency.
@@ -9200,7 +9199,8 @@ def metadata_file_yaml(path: Path) -> dict:
     if yaml is None:
         return {}
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+        text = path.read_text(encoding="utf-8-sig")
+        data = front_matter_dict(text) if LEADING_FRONT_MATTER_RE.match(text) else yaml.safe_load(text)
     except (yaml.YAMLError, OSError):
         return {}
     return data if isinstance(data, dict) else {}

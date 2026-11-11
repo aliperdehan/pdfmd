@@ -122,3 +122,29 @@ class CodeMetadataPrecedence(RouteCase):
                 self.assertEqual('numbers=left' in result, numbered)
                 if step:
                     self.assertIn(f'stepnumber={step}', result)
+
+
+class FencedMetadataSettings(RouteCase):
+    def test_metadata_settings_and_engine_survive_supported_fences(self):
+        self.source.write_text('Text.\n')
+        metadata = self.root / "base.yaml"
+        expected = {"pdfmd-options": {"engine": "typst", "line-numbers": True}}
+        for ending in ('---', '...', None):
+            with self.subTest(ending=ending):
+                body = 'pdfmd-options: {engine: typst, line-numbers: true}\n'
+                metadata.write_text(f'---\n{body}{ending}\n' if ending else body)
+                self.assertEqual(pdfmd.metadata_file_yaml(metadata), expected)
+                self.assertEqual(pdfmd.frontmatter_engine(self.source, [metadata]), 'typst')
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_checkout_fenced_metadata_settings_beat_global_defaults(self):
+        self.source.write_text('```\na\nb\nc\n```\n')
+        config = self.root / "config.yaml"
+        config.write_text('options: {line-numbers: false}\n')
+        self.env["PDFMD_CONFIG"] = str(config)
+        metadata = self.root / "base.yaml"
+        metadata.write_text('---\npdfmd-options: {line-numbers: true, line-number-step: 3}\n---\n')
+        self.run_pdfmd('--to', 'latex', '-o', str(self.root / 'd.tex'), '-y', str(metadata))
+        text = (self.root / 'd.tex').read_text()
+        self.assertIn('numbers=left', text)
+        self.assertIn('stepnumber=3', text)

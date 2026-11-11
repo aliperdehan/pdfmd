@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.145 — 2026-11-11
+
+Pre-edit state: commit `cfa9016`. Metadata files closed with a valid --- fence were parsed as multiple YAML documents, silently losing pdfmd settings while Pandoc still read its metadata. The metadata reader now uses the shared front-matter parser for supported fences and retains bare YAML parsing. Engine-setting and checkout code-numbering regressions failed before the fix and pass afterwards, covering both fence terminators and bare files; configuration, engine-chain and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
+
 ## v3.33.144 — 2026-11-11
 
 Pre-edit state: commit `8849549`. Global code settings skipped linked metadata files and were emitted as overrides, so a metadata-file line-numbers: false could still produce numbered blocks. Every code-filter route now receives metadata files and resolves each key through the normal option sources below the command line. Checkout regressions failed before the fix and pass afterwards for metadata disabling global numbering, document enabling it with a metadata-file step, and command-line overrides; code-block and repository guard tests run. pdfmd.py shrinks from 17,206 to 17,204 lines. No new setting or behavioural threshold.
